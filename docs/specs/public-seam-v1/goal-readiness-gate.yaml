@@ -68,12 +68,16 @@ current_implementation_truth:
       fact: Contains agentic stage adapter scaffolding, but not this locked external-language worker seam.
     - path: crates/leaven-run
       fact: Requires Score output at the run/scoring layer, but that is not by itself the public-seam result receipt proof.
-  missing_before_product_claim:
-    - fact: No implemented Rust owner has been selected for the full public-seam wire contract.
-    - fact: No contract test currently proves every active schema/example pair as the implementation denominator.
-    - fact: No ACP extension-method bridge currently proves the worker callback contract.
-    - fact: Names goal handoff concepts that are scaffold until backed by code and tests.
-      path: crates/leaven-agentic/AGENTS.md
+  implemented_owner_path:
+    - path: crates/leaven-public-seam
+      fact: Owns the locked V1 public seam wire contract, active package loading, schema/profile validation, conformance matrix harness, capability checks, Plan IR execution harness, Plan Result receipt validation, stage/evidence/evaluator envelopes, public maturity classification, and hard-cutover markers.
+    - path: crates/leaven-acp
+      fact: Owns the hot ACP stdio process/session boundary for external-language workers, with black-box subprocess tests for JSON-RPC transport, Leaven extension-result envelopes, lifecycle/backpressure, and cancellation.
+    - path: crates/leaven-run
+      fact: Projects runtime assessment/evaluation evidence into the public seam where rows require RunContext/run-layer production proof.
+  remaining_completion_gates:
+    - fact: Final completion still requires the repository `just check` gate to pass without lowering coverage ratchets.
+    - fact: Concrete provider runtimes and workspace backends remain owner routes outside the public-seam wire-contract crate unless a future V1.x spec row explicitly requires them.
 
 goal_launch_gate:
   purpose: Prepare a broad implementation goal without replacing user intent with a nearby proxy.
