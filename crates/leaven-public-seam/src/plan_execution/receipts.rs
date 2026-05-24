@@ -618,7 +618,7 @@ fn validate_sandbox_stream_value(
     Ok(())
 }
 
-fn validate_agent_session_value(
+pub fn validate_agent_session_value(
     call_kind: &str,
     value: &Map<String, Value>,
     receipt_id: &str,
@@ -642,6 +642,7 @@ fn validate_agent_session_value(
     }
     for command in commands {
         let command = object(command, "agent_run command record")?;
+        validate_agent_command_record(command)?;
         let command_receipt = required_string(command.get("receipt"), "agent_run command receipt")?;
         if command_receipt != receipt_id {
             return Err(invalid_plan(format!(
@@ -655,7 +656,24 @@ fn validate_agent_session_value(
     Ok(())
 }
 
-fn validate_sandbox_exec_value(
+fn validate_agent_command_record(command: &Map<String, Value>) -> Result<(), PublicSeamError> {
+    let argv = command
+        .get("argv")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_plan("agent_run command record must carry argv"))?;
+    if argv.is_empty() {
+        return Err(invalid_plan(
+            "agent_run command record argv must not be empty",
+        ));
+    }
+    for arg in argv {
+        required_string(Some(arg), "agent_run command argv")?;
+    }
+    required_string(command.get("status"), "agent_run command status")?;
+    Ok(())
+}
+
+pub fn validate_sandbox_exec_value(
     call_kind: &str,
     value: &Map<String, Value>,
 ) -> Result<(), PublicSeamError> {

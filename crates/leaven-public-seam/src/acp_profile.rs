@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 use crate::{
     CapabilityDocument, CapabilityGrantRequest, CapabilityLimitUsage, CapabilityRegistry,
     PublicSeamError,
+    plan_execution::{validate_agent_session_value, validate_sandbox_exec_value},
 };
 
 /// Schema-valid Leaven ACP profile document with V1 semantic checks.
@@ -600,6 +601,10 @@ impl AcpExtensionResultDocument {
         }
         validate_receipts_for_method(&method, receipts)?;
         validate_primary_result_hash(&method, primary_value, receipts)?;
+        let expected_receipt = expected_receipt_for_method(&method, receipts)?;
+        let expected_receipt_id =
+            required_string(expected_receipt.get("receipt"), "receipt.receipt")?;
+        validate_effect_primary_audit(&method, primary, expected_receipt_id)?;
         if let Some(primary_receipt) = primary.get("receipt").and_then(Value::as_str) {
             ensure_primary_receipt_is_carried(primary_receipt, receipts)?;
         }
@@ -1020,6 +1025,34 @@ fn validate_primary_result_hash(
         )));
     }
     Ok(())
+}
+
+fn validate_effect_primary_audit(
+    method: &str,
+    primary: &serde_json::Map<String, Value>,
+    expected_receipt_id: &str,
+) -> Result<(), PublicSeamError> {
+    match method {
+        "leaven/agent.run" => {
+            let primary_receipt = required_string(primary.get("receipt"), "primary.receipt")?;
+            if primary_receipt != expected_receipt_id {
+                return Err(invalid_acp(format!(
+                    "ACP extension result primary receipt `{primary_receipt}` does not match expected receipt `{expected_receipt_id}`"
+                )));
+            }
+            validate_agent_session_value("agent_run", primary, expected_receipt_id)
+        }
+        "leaven/sandbox.exec" => {
+            let primary_receipt = required_string(primary.get("receipt"), "primary.receipt")?;
+            if primary_receipt != expected_receipt_id {
+                return Err(invalid_acp(format!(
+                    "ACP extension result primary receipt `{primary_receipt}` does not match expected receipt `{expected_receipt_id}`"
+                )));
+            }
+            validate_sandbox_exec_value("sandbox_exec", primary)
+        }
+        _ => Ok(()),
+    }
 }
 
 fn expected_receipt_for_method<'a>(

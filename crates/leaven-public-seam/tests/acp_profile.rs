@@ -635,6 +635,179 @@ fn acp_extension_results_reject_agent_and_sandbox_blob_ref_data_class_gaps() {
 }
 
 #[test]
+fn acp_extension_results_reject_agent_audit_gaps() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    for (primary, expected) in [
+        (
+            agent_session_primary_without("transcript_ref"),
+            "agent_run result value must carry transcript_ref",
+        ),
+        (
+            agent_session_primary_without("commands"),
+            "agent_run result value must carry commands",
+        ),
+        (
+            agent_session_primary_with_command(json!({
+                "status": "completed",
+                "receipt": "agentrec_acp"
+            })),
+            "agent_run command record must carry argv",
+        ),
+        (
+            agent_session_primary_with_command(json!({
+                "argv": [],
+                "status": "completed",
+                "receipt": "agentrec_acp"
+            })),
+            "agent_run command record argv must not be empty",
+        ),
+        (
+            agent_session_primary_with_command(json!({
+                "argv": ["codex", 42],
+                "status": "completed",
+                "receipt": "agentrec_acp"
+            })),
+            "agent_run command argv",
+        ),
+        (
+            agent_session_primary_with_command(json!({
+                "argv": ["codex"],
+                "receipt": "agentrec_acp"
+            })),
+            "agent_run command status",
+        ),
+        (
+            agent_session_primary_with_command(json!({
+                "argv": ["codex"],
+                "status": "completed",
+                "receipt": "agentrec_other"
+            })),
+            "agent_run command record receipt",
+        ),
+        (
+            agent_session_primary_without("cost"),
+            "agent_run result value must carry cost",
+        ),
+    ] {
+        let error = package
+            .validate_acp_extension_result_document(&extension_result_for(
+                "leaven/agent.run",
+                &primary,
+                &call_receipt("agent_run", "agentrec_acp"),
+                &["public", "transcript.raw"],
+            ))
+            .unwrap_err();
+        assert!(
+            error.to_string().contains(expected),
+            "unexpected ACP agent audit error for {primary:?}: {error:?}"
+        );
+    }
+
+    let mut missing_primary_receipt = agent_session_primary();
+    missing_primary_receipt
+        .as_object_mut()
+        .unwrap()
+        .remove("receipt");
+    let error = package
+        .validate_acp_extension_result_document(&extension_result_for(
+            "leaven/agent.run",
+            &missing_primary_receipt,
+            &call_receipt("agent_run", "agentrec_acp"),
+            &["public", "transcript.raw"],
+        ))
+        .unwrap_err();
+    assert!(error.to_string().contains("primary.receipt"));
+
+    let mut mismatched_primary_receipt = agent_session_primary();
+    mismatched_primary_receipt["receipt"] = json!("agentrec_other");
+    let mut mismatched_result = extension_result_for(
+        "leaven/agent.run",
+        &mismatched_primary_receipt,
+        &call_receipt("agent_run", "agentrec_acp"),
+        &["public", "transcript.raw"],
+    );
+    push_receipt_bound_to_primary(
+        &mut mismatched_result,
+        call_receipt("agent_run", "agentrec_other"),
+    );
+    let error = package
+        .validate_acp_extension_result_document(&mismatched_result)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("does not match expected receipt")
+    );
+}
+
+#[test]
+fn acp_extension_results_reject_sandbox_audit_gaps() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    for (primary, expected) in [
+        (
+            sandbox_exec_primary_without("cost"),
+            "sandbox_exec result value must carry cost",
+        ),
+        (
+            sandbox_exec_primary_without("exit_code"),
+            "completed sandbox_exec result value must carry exit_code",
+        ),
+        (
+            sandbox_exec_primary_with_file("/tmp/out.txt"),
+            "sandbox_exec result file path must be relative workspace path",
+        ),
+        (
+            sandbox_exec_primary_with_file("../out.txt"),
+            "sandbox_exec result file path must be relative workspace path",
+        ),
+        (
+            sandbox_exec_primary_with_file(""),
+            "sandbox_exec result file path must be relative workspace path",
+        ),
+        (
+            sandbox_exec_primary_with_file("out//log.txt"),
+            "sandbox_exec result file path must be relative workspace path",
+        ),
+    ] {
+        let error = package
+            .validate_acp_extension_result_document(&extension_result_for(
+                "leaven/sandbox.exec",
+                &primary,
+                &call_receipt("sandbox_exec", "execrec_acp"),
+                &["public", "workspace.file"],
+            ))
+            .unwrap_err();
+        assert!(
+            error.to_string().contains(expected),
+            "unexpected ACP sandbox audit error for {primary:?}: {error:?}"
+        );
+    }
+
+    let mut mismatched_primary_receipt = sandbox_exec_primary();
+    mismatched_primary_receipt["receipt"] = json!("execrec_other");
+    let mut mismatched_result = extension_result_for(
+        "leaven/sandbox.exec",
+        &mismatched_primary_receipt,
+        &call_receipt("sandbox_exec", "execrec_acp"),
+        &["public"],
+    );
+    push_receipt_bound_to_primary(
+        &mut mismatched_result,
+        call_receipt("sandbox_exec", "execrec_other"),
+    );
+    let error = package
+        .validate_acp_extension_result_document(&mismatched_result)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("does not match expected receipt")
+    );
+}
+
+#[test]
 fn acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
@@ -642,7 +815,7 @@ fn acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_
         "leaven/lm.complete",
         &agent_session_primary(),
         &call_receipt("lm_complete", "lmrec_acp"),
-        &["public"],
+        &["public", "transcript.raw"],
     );
     assert!(matches!(
         package
@@ -668,13 +841,14 @@ fn acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_
             | PublicSeamError::InvalidScope { .. }
     ));
 
-    let mut unbound_receipt = extension_result_for(
+    let mut unbound_primary = agent_session_primary();
+    unbound_primary["receipt"] = json!("agentrec_acp");
+    let unbound_receipt = extension_result_for(
         "leaven/agent.run",
-        &agent_session_primary(),
+        &unbound_primary,
         &call_receipt("agent_run", "other_agentrec"),
-        &["public"],
+        &["public", "transcript.raw"],
     );
-    unbound_receipt["primary"]["receipt"] = json!("agentrec_acp");
     assert!(matches!(
         package
             .validate_acp_extension_result_document(&unbound_receipt)
@@ -1137,6 +1311,25 @@ fn extension_result_for(
     result
 }
 
+fn push_receipt_bound_to_primary(result: &mut Value, mut receipt: Value) {
+    let schema_version = match receipt["kind"].as_str().unwrap() {
+        "query" => "leaven.plan_query_result.v1",
+        "call" => "leaven.plan_call_result.v1",
+        "write" => "leaven.plan_write_result.v1",
+        other => panic!("unexpected receipt kind {other}"),
+    };
+    let op_name = receipt["op_var"].as_str().unwrap_or("primary");
+    receipt["result_hash"] = json!(prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &json!({
+            "schema_version": schema_version,
+            "name": op_name,
+            "value": result["primary"]
+        }),
+    ));
+    result["receipts"].as_array_mut().unwrap().push(receipt);
+}
+
 fn extension_primary(op: &str) -> Value {
     json!({
         "kind": "extension",
@@ -1221,11 +1414,30 @@ fn agent_session_primary() -> Value {
     json!({
         "kind": "agent_session",
         "status": "completed",
+        "transcript_ref": acp_blob_ref("blob_agent_transcript", &["transcript.raw"]),
+        "commands": [{
+            "argv": ["codex"],
+            "status": "completed",
+            "receipt": "agentrec_acp"
+        }],
+        "cost": {"usd_micro": 1000, "agent_calls": 1},
         "graph_revision": "rev_acp",
-        "data_classes": ["public"],
+        "data_classes": ["public", "transcript.raw"],
         "replayability": "fully_managed",
         "receipt": "agentrec_acp"
     })
+}
+
+fn agent_session_primary_without(field: &str) -> Value {
+    let mut primary = agent_session_primary();
+    primary.as_object_mut().unwrap().remove(field);
+    primary
+}
+
+fn agent_session_primary_with_command(command: Value) -> Value {
+    let mut primary = agent_session_primary();
+    primary["commands"] = Value::Array(vec![command]);
+    primary
 }
 
 fn sandbox_exec_primary() -> Value {
@@ -1233,11 +1445,27 @@ fn sandbox_exec_primary() -> Value {
         "kind": "sandbox_exec",
         "status": "completed",
         "exit_code": 0,
+        "cost": {"usd_micro": 10, "sandbox_calls": 1},
         "graph_revision": "rev_acp",
         "data_classes": ["public"],
         "replayability": "fully_managed",
         "receipt": "execrec_acp"
     })
+}
+
+fn sandbox_exec_primary_without(field: &str) -> Value {
+    let mut primary = sandbox_exec_primary();
+    primary.as_object_mut().unwrap().remove(field);
+    primary
+}
+
+fn sandbox_exec_primary_with_file(path: &str) -> Value {
+    let mut primary = sandbox_exec_primary();
+    primary["data_classes"] = json!(["public", "workspace.file"]);
+    primary["files"] = json!({
+        path: acp_blob_ref("blob_sandbox_file", &["workspace.file"])
+    });
+    primary
 }
 
 fn acp_blob_ref(id: &str, data_classes: &[&str]) -> Value {
