@@ -5,6 +5,13 @@ use serde_json::{Value, json};
 use crate::PublicSeamError;
 use crate::evidence::EvidenceEnvelopeDocument;
 
+mod helpers;
+
+use helpers::{
+    array_len, invalid_result, optional_string_set, prefixed_jcs_hash, required_replayability,
+    required_string, required_string_set,
+};
+
 /// Schema-valid public-seam Plan Result classified by replayability facts.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanResultDocument {
@@ -1011,68 +1018,4 @@ where
     I: IntoIterator<Item = Replayability>,
 {
     items.into_iter().max().unwrap_or(Replayability::PureRead)
-}
-
-fn required_replayability(value: Option<&Value>) -> Result<Replayability, PublicSeamError> {
-    let raw = required_string(value, "replayability")?;
-    Replayability::parse(raw)
-        .ok_or_else(|| invalid_result(format!("unknown replayability `{raw}`")))
-}
-
-fn required_string<'a>(value: Option<&'a Value>, field: &str) -> Result<&'a str, PublicSeamError> {
-    value
-        .and_then(Value::as_str)
-        .ok_or_else(|| invalid_result(format!("{field} must be a string")))
-}
-
-fn required_string_set(
-    value: Option<&Value>,
-    field: &str,
-) -> Result<BTreeSet<String>, PublicSeamError> {
-    let values = value
-        .and_then(Value::as_array)
-        .ok_or_else(|| invalid_result(format!("{field} must be an array")))?;
-    let mut set = BTreeSet::new();
-    for value in values {
-        let item = value
-            .as_str()
-            .ok_or_else(|| invalid_result(format!("{field} entries must be strings")))?;
-        if !set.insert(item.to_owned()) {
-            return Err(invalid_result(format!("{field} entries must be unique")));
-        }
-    }
-    Ok(set)
-}
-
-fn optional_string_set(
-    value: Option<&Value>,
-    field: &str,
-) -> Result<BTreeSet<String>, PublicSeamError> {
-    match value {
-        Some(value) => required_string_set(Some(value), field),
-        None => Ok(BTreeSet::new()),
-    }
-}
-
-fn array_len(
-    object: &serde_json::Map<String, Value>,
-    field: &str,
-) -> Result<usize, PublicSeamError> {
-    object
-        .get(field)
-        .and_then(Value::as_array)
-        .map(Vec::len)
-        .ok_or_else(|| invalid_result(format!("plan result {field} must be an array")))
-}
-
-fn invalid_result(message: impl Into<String>) -> PublicSeamError {
-    PublicSeamError::InvalidPlanResult {
-        message: message.into(),
-    }
-}
-
-fn prefixed_jcs_hash(prefix: &str, value: &Value) -> Result<String, PublicSeamError> {
-    let digest = jcs_canonicalize::sha256_jcs_hex(value)
-        .map_err(|error| invalid_result(format!("plan result hash failed: {error}")))?;
-    Ok(format!("{prefix}{digest}"))
 }
