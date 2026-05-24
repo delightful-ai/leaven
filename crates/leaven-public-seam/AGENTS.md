@@ -317,9 +317,11 @@ When non-target evidence declares top-level `data_classes`, that declaration
 must still cover public, private, and trace projection classes, so declared
 envelope classes cannot shrink the visible propagation set. Private
 `payload_ref` blob data classes must be covered by the private projection data
-classes before the envelope can pass. This is not evaluator evidence
-production, redaction execution, receipt persistence, or data-class propagation
-through runtime stages.
+classes before the envelope can pass. When those envelope source receipts are
+embedded in a Plan Result as object-form receipt refs, their fingerprints must
+match the actual carried receipt objects instead of stale or decorative receipt
+metadata. This is not evaluator evidence production, redaction execution,
+receipt persistence, or data-class propagation through runtime stages.
 
 Crate-root exports for `EvaluationJobDocument`, `EvaluationJobKind`, and
 `EvaluationRequestReceiptDocument` are advanced public seam contracts. They
@@ -513,10 +515,11 @@ backpressure, or runtime watch support.
 - `tests/plan_result_evidence.rs` proves Plan Result values semantically inspect
   nested `Score.output` and `EvidenceEnvelope` payloads, require value data
   classes to cover score outputs and evidence projections, and reject evidence
-  source receipt refs that are missing or categorized as the wrong
-  query/call/write receipt kind. It does not prove evaluator evidence
-  production, runtime receipt persistence, or full data-class propagation across
-  query/call/write execution.
+  source receipt refs that are missing, categorized as the wrong
+  query/call/write receipt kind, or carry stale object-form receipt
+  fingerprints. It does not prove evaluator evidence production, runtime
+  receipt persistence, or full data-class propagation across query/call/write
+  execution.
 - `tests/capability_document.rs` proves opaque token handles resolve to
   structured capability documents and reject bare, missing, expired, revoked,
   or binding-mismatched tokens. It also proves grant-envelope authorization and
