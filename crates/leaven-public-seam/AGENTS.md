@@ -144,10 +144,12 @@ forgeries and host filesystem paths as workspace handles. `PlanWorkspaceQueryReq
 representative schema-valid `workspace_query` reads through typed host requests,
 requires a live materialization-proven `workspace_handle` dependency before the
 host can read, and emits typed `workspace_file`, `workspace_listing`,
-`workspace_snapshot`, or `workspace_diff` values with query receipts. It is not
-workspace backend execution and still leaves stat/digest/git_log plus full
-artifact/snapshot backend proof pending, so it is not full workspace row
-closeout. The
+`workspace_snapshot`, or `workspace_diff` values with query receipts. `stat`
+projects as a `workspace_listing`, `digest` as a `workspace_snapshot`, and
+`git_log` as a `workspace_diff` because the locked result schema has those
+workspace-read value families rather than separate stat/digest/log value kinds.
+It is not workspace backend execution and still leaves full artifact/snapshot
+backend proof pending, so it is not full workspace row closeout. The
 `PublicSeamPackage::execute_plan_document_with_capability` route
 requires capability-authorized evaluator request scope before a `case_query.load`
 host read can run. The
@@ -263,8 +265,8 @@ backpressure, or runtime watch support.
   substitution, provenance tracking that rejects literal forged handles and
   reuse after release, release lifecycle state, call receipts, and refusal of
   unmaterialized or host-path workspace substitutes. This is public-seam
-  lifecycle proof only; read, list, stat, digest, git, artifact-capture, and
-  snapshot behavior remain pending.
+  lifecycle proof only; concrete workspace backend execution and full
+  artifact/snapshot behavior remain pending.
 - `tests/call_authority.rs` proves schema-valid Call ops are checked against
   capability-granted input data classes and call-local forbidden data-class
   intersections before execution. It rejects `case.target` and other forbidden

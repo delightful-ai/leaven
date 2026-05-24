@@ -319,14 +319,10 @@ pub(super) fn workspace_query_expected_value_kind(
     request: PlanWorkspaceQueryRequest<'_>,
 ) -> Result<&'static str, PublicSeamError> {
     match request.op_kind()? {
-        "snapshot" => Ok("workspace_snapshot"),
-        "list" | "capture_artifacts" => Ok("workspace_listing"),
+        "snapshot" | "digest" => Ok("workspace_snapshot"),
+        "list" | "stat" | "capture_artifacts" => Ok("workspace_listing"),
         "read_file" => Ok("workspace_file"),
-        "git_diff" | "git_status" => Ok("workspace_diff"),
-        "stat" | "digest" | "git_log" => Err(invalid_plan(format!(
-            "representative Plan IR harness does not execute `{}` workspace_query ops yet",
-            request.op_kind()?
-        ))),
+        "git_log" | "git_diff" | "git_status" => Ok("workspace_diff"),
         other => Err(invalid_plan(format!(
             "unknown workspace_query op `{other}`"
         ))),
