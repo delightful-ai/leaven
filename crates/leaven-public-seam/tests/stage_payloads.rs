@@ -228,6 +228,20 @@ fn reflection_result_rejects_unproven_diagnosis_without_sources() {
 }
 
 #[test]
+fn score_context_rejects_target_handle_for_unrelated_case() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut mismatched_target = score_context();
+    mismatched_target["target_handle"] = json!("case_unrelated");
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&mismatched_target)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+}
+
+#[test]
 fn propose_request_requires_reflection_result_and_change_schema_authority() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 

@@ -11,12 +11,21 @@ fn evidence_envelope_preserves_visibility_data_classes_and_receipts() {
     assert!(envelope.is_target_derived());
     assert_eq!(
         envelope.data_classes(),
-        &["case.target".to_owned(), "scorer.private".to_owned()]
+        &[
+            "case.target".to_owned(),
+            "prompt.raw".to_owned(),
+            "scorer.private".to_owned(),
+            "transcript.raw".to_owned()
+        ]
     );
     assert_eq!(envelope.public_data_classes(), &["case.target".to_owned()]);
     assert_eq!(
         envelope.private_data_classes(),
         Some(&["scorer.private".to_owned()][..])
+    );
+    assert_eq!(
+        envelope.trace_data_classes(),
+        &["prompt.raw".to_owned(), "transcript.raw".to_owned()]
     );
     assert_eq!(envelope.read_receipts(), &["qrec_target".to_owned()]);
     assert_eq!(envelope.effect_receipts(), &["lmrec_score".to_owned()]);
@@ -44,6 +53,25 @@ fn evidence_envelope_rejects_target_derived_data_class_gaps() {
     assert!(matches!(
         package
             .validate_evidence_envelope_document(&missing_private_projection)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvidence { .. }
+    ));
+
+    let mut missing_trace_projection = target_derived_envelope();
+    missing_trace_projection["data_classes"] = json!(["case.target", "scorer.private"]);
+    assert!(matches!(
+        package
+            .validate_evidence_envelope_document(&missing_trace_projection)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvidence { .. }
+    ));
+
+    let mut missing_top_level_trace_projection = target_derived_envelope();
+    missing_top_level_trace_projection["data_classes"] =
+        json!(["case.target", "scorer.private", "transcript.raw"]);
+    assert!(matches!(
+        package
+            .validate_evidence_envelope_document(&missing_top_level_trace_projection)
             .unwrap_err(),
         PublicSeamError::InvalidEvidence { .. }
     ));
@@ -88,10 +116,19 @@ fn target_derived_envelope() -> Value {
     json!({
         "schema_version": "leaven.evidence_envelope.v1",
         "target_derived": true,
-        "data_classes": ["case.target", "scorer.private"],
+        "data_classes": ["case.target", "prompt.raw", "scorer.private", "transcript.raw"],
         "public": {
             "feedback": "matched expected answer",
-            "data_classes": ["case.target"]
+            "data_classes": ["case.target"],
+            "trace_refs": [
+                {
+                    "kind": "judge_trace",
+                    "id": "trace_score",
+                    "visibility": "redacted_transcript",
+                    "data_classes": ["transcript.raw"],
+                    "receipt": "lmrec_score"
+                }
+            ]
         },
         "private": {
             "visibility": "scorer_private",
@@ -100,6 +137,15 @@ fn target_derived_envelope() -> Value {
             },
             "data_classes": ["scorer.private"]
         },
+        "trace_refs": [
+            {
+                "kind": "prompt_trace",
+                "id": "trace_prompt",
+                "visibility": "redacted_prompt",
+                "data_classes": ["prompt.raw"],
+                "receipt": "lmrec_score"
+            }
+        ],
         "redaction_policy": {
             "optimizer": "score_only",
             "reflector": "score_and_feedback",

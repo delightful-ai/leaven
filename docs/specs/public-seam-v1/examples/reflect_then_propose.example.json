@@ -62,7 +62,10 @@
       {
         "label": "empty_input_guard",
         "description": "No early return for empty user input.",
-        "severity": "high"
+        "severity": "high",
+        "source_refs": [
+          "cand_parent"
+        ]
       }
     ],
     "surface_suggestions": [
@@ -70,7 +73,10 @@
         "surface_fingerprint": "fp_surface_sha256_skill",
         "part_label": "input_validation",
         "diagnosis": "guard missing",
-        "suggested_direction": "add explicit empty input guard"
+        "suggested_direction": "add explicit empty input guard",
+        "source_refs": [
+          "cand_parent"
+        ]
       }
     ],
     "source_refs": [
@@ -99,7 +105,10 @@
         {
           "label": "empty_input_guard",
           "description": "No early return for empty user input.",
-          "severity": "high"
+          "severity": "high",
+          "source_refs": [
+            "cand_parent"
+          ]
         }
       ],
       "surface_suggestions": [
@@ -107,7 +116,10 @@
           "surface_fingerprint": "fp_surface_sha256_skill",
           "part_label": "input_validation",
           "diagnosis": "guard missing",
-          "suggested_direction": "add explicit empty input guard"
+          "suggested_direction": "add explicit empty input guard",
+          "source_refs": [
+            "cand_parent"
+          ]
         }
       ],
       "source_refs": [

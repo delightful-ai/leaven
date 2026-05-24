@@ -606,6 +606,8 @@ rows:
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_preserves_value_visibility_data_classes
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_output_data_class_gaps
+      - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_blob_ref_data_class_gaps
+      - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_trace_ref_data_class_gaps
     implementation_evidence:
       - crates/leaven-public-seam/src/call_authority.rs::CallAuthorityReport
       - crates/leaven-public-seam/src/call_authority.rs::validate
@@ -615,13 +617,17 @@ rows:
       - crates/leaven-public-seam/src/result.rs::validate_value_visibility
       - crates/leaven-public-seam/src/result.rs::collect_score_output_data_classes_from_value
       - crates/leaven-public-seam/src/result.rs::collect_evidence_data_classes_from_value
+      - crates/leaven-public-seam/src/result.rs::collect_output_record_data_classes
+      - crates/leaven-public-seam/src/result.rs::collect_trace_ref_data_classes
       - crates/leaven-public-seam/src/result.rs::collect_workspace_listing_data_classes
       - crates/leaven-public-seam/src/evidence.rs::EvidenceEnvelopeDocument
+      - crates/leaven-public-seam/src/evidence.rs::EvidenceEnvelopeDocument::trace_data_classes
       - crates/leaven-public-seam/AGENTS.md
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-23-evidence-visibility-current-blocker-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-effect-call-authority-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-visibility-trace-stage-provenance-partial-review.md
     status: pending
 
   - id: ps1.visibility.reflector_target_safe
@@ -688,16 +694,23 @@ rows:
       - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_rejects_unreceipted_target_derived_evidence
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_output_data_class_gaps
+      - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_blob_ref_data_class_gaps
+      - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_trace_ref_data_class_gaps
     implementation_evidence:
       - crates/leaven-public-seam/src/evidence.rs::EvidenceEnvelopeDocument
       - crates/leaven-public-seam/src/evidence.rs::EvidenceEnvelopeDocument::from_schema_valid_value
+      - crates/leaven-public-seam/src/evidence.rs::EvidenceEnvelopeDocument::trace_data_classes
+      - crates/leaven-public-seam/src/evidence.rs::collect_trace_data_classes
       - crates/leaven-public-seam/src/result.rs::validate_value_visibility
       - crates/leaven-public-seam/src/result.rs::collect_score_output_data_classes_from_value
       - crates/leaven-public-seam/src/result.rs::collect_evidence_data_classes_from_value
+      - crates/leaven-public-seam/src/result.rs::collect_output_record_data_classes
+      - crates/leaven-public-seam/src/result.rs::collect_trace_ref_data_classes
       - crates/leaven-public-seam/src/result.rs::validate_evidence_source_receipts
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-23-evidence-visibility-current-blocker-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-visibility-trace-stage-provenance-partial-review.md
     status: pending
 
   - id: ps1.stage.reflection_proposal_split
@@ -731,6 +744,7 @@ rows:
       - crates/leaven-public-seam/AGENTS.md
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-stage-payload-current-blocker-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-visibility-trace-stage-provenance-partial-review.md
     status: pending
 
   - id: ps1.stage.payload_receipts

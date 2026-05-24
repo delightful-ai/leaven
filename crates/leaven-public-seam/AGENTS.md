@@ -222,10 +222,11 @@ production, graph mutation, or cache replay behavior.
 Crate-root export `EvidenceEnvelopeDocument` is an advanced public seam
 contract. It proves active-schema evidence-envelope visibility, data-class, and
 source-receipt preservation plus target-derived data-class coverage at the
-wire-envelope layer only. Target-derived evidence must also carry a read receipt
-so target-derived facts cannot pass as unreceipted policy metadata. This is not
-evaluator evidence production, redaction execution, receipt persistence, or
-data-class propagation through runtime stages.
+wire-envelope layer only. Envelope-level and public trace-ref data classes are
+part of that coverage, and target-derived evidence must also carry a read
+receipt so target-derived facts cannot pass as unreceipted policy metadata.
+This is not evaluator evidence production, redaction execution, receipt
+persistence, or data-class propagation through runtime stages.
 
 Crate-root exports for `EvaluationJobDocument`, `EvaluationJobKind`, and
 `EvaluationRequestReceiptDocument` are advanced public seam contracts. They
@@ -248,13 +249,13 @@ Crate-root exports for `StagePayloadDocument`, `StagePayloadRole`, and
 active-schema stage-payload validation for role-specific reflector,
 reflection-result, proposer, runner, scorer, judge, callback, and adapter
 payloads, including target-safe reflector examples, receipted reflection
-results whose top-level source refs back the diagnosis, non-empty nested
-diagnosis source refs when the optional nested field is present, proposal
-reflection/result separation that preserves reflection source refs, allowed
-change schema declarations,
-output contexts, and payload-schema fingerprints. They are not an agent runtime,
-LM prompt renderer, ACP delivery path, proposal application engine, or proof
-that every optimizer/runtime producer emits these payloads.
+results whose top-level source refs and any declared nested source refs back
+the diagnosis, proposal/reflection separation that preserves reflection source
+refs, allowed change schema declarations, target-aware scorer context binding
+to the scored case, output contexts, and payload-schema fingerprints. They are
+not an agent runtime, LM prompt renderer, ACP delivery path, proposal
+application engine, or proof that every optimizer/runtime producer emits these
+payloads.
 
 Crate-root export `DeferredWatchReplacement` is an advanced public seam
 contract. It proves that the V1 deferred watch marker can route only to a finite
