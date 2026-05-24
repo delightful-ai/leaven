@@ -558,19 +558,19 @@ fn agent_run_and_sandbox_exec_lower_to_owned_runtime_primitives_and_emit_receipt
     let mut agent_host = RecordingPlanHost::default();
     let agent_report = package
         .execute_plan_document(
-            &execute_external_call_plan(agent_run_call()),
+            &agent_run_workspace_plan(&agent_run_call()),
             &plan_execution_context(),
             &mut agent_host,
         )
         .unwrap();
-    assert_eq!(agent_host.calls, vec!["agent"]);
-    assert_eq!(agent_report.document().receipt_kinds(), &["call"]);
+    assert_eq!(agent_host.calls, vec!["workspace_materialize", "agent"]);
+    assert_eq!(agent_report.document().receipt_kinds(), &["call", "call"]);
     assert_eq!(
         agent_report.value()["values"]["completion"]["kind"].as_str(),
         Some("agent_session")
     );
     assert_eq!(
-        agent_report.value()["receipts"][0]["receipt"].as_str(),
+        agent_report.value()["receipts"][1]["receipt"].as_str(),
         Some("agentrec_completion")
     );
 
@@ -592,6 +592,58 @@ fn agent_run_and_sandbox_exec_lower_to_owned_runtime_primitives_and_emit_receipt
         sandbox_report.value()["receipts"][1]["receipt"].as_str(),
         Some("execrec_completion")
     );
+}
+
+#[test]
+fn agent_run_rejects_unmaterialized_released_and_host_path_workspaces() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut unmaterialized = agent_run_workspace_plan(&agent_run_call());
+    unmaterialized["ops"][1]["call"]["workspace"] = json!("ws_unmaterialized");
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document(&unmaterialized, &plan_execution_context(), &mut host)
+        .unwrap_err();
+    assert_eq!(host.calls, vec!["workspace_materialize"]);
+    assert!(
+        error
+            .to_string()
+            .contains("agent_run refused unmaterialized workspace"),
+        "unexpected error: {error:?}"
+    );
+
+    let mut released = workspace_materialize_release_plan();
+    released["ops"].as_array_mut().unwrap().push(json!({
+        "kind": "call",
+        "name": "completion",
+        "deps": ["release"],
+        "idempotency_key": "plan-agent-workspace-0003",
+        "call": agent_run_call()
+    }));
+    released["return"] = json!(["workspace", "release", "completion"]);
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document(&released, &plan_execution_context(), &mut host)
+        .unwrap_err();
+    assert_eq!(
+        host.calls,
+        vec!["workspace_materialize", "workspace_release"]
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("agent_run refused already released workspace"),
+        "unexpected error: {error:?}"
+    );
+
+    let mut host_path = agent_run_workspace_plan(&agent_run_call());
+    host_path["ops"][1]["call"]["workspace"] = json!("/tmp/leaven-workspace");
+    assert!(matches!(
+        package
+            .validate_plan_document(&host_path)
+            .expect_err("host paths are not WorkspaceRef values"),
+        PublicSeamError::ExampleValidation { .. }
+    ));
 }
 
 #[test]
@@ -937,39 +989,41 @@ fn workspace_query_rejects_unmaterialized_released_and_mismatched_results() {
 #[test]
 fn agent_run_lowering_preserves_json_schema_output_contract() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
-    let mut plan = execute_external_call_plan(agent_run_call());
-    plan["ops"][1]["call"]["output"] = json!({
+    let mut call = agent_run_call();
+    call["output"] = json!({
         "kind": "json_schema",
         "schema_fingerprint": "fp_schema_sha256_agentoutput",
         "schema": {
             "type": "object"
         }
     });
+    let plan = agent_run_workspace_plan(&call);
     let mut host = RecordingPlanHost::default();
 
     package
         .execute_plan_document(&plan, &plan_execution_context(), &mut host)
         .unwrap();
 
-    assert_eq!(host.calls, vec!["agent"]);
+    assert_eq!(host.calls, vec!["workspace_materialize", "agent"]);
 }
 
 #[test]
 fn agent_run_lowering_preserves_workspace_diff_surface_fingerprint() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
-    let mut plan = execute_external_call_plan(agent_run_call());
-    plan["ops"][1]["call"]["output"] = json!({
+    let mut call = agent_run_call();
+    call["output"] = json!({
         "kind": "workspace_diff",
         "surface_fingerprint": "fp_surface_sha256_agentdiff",
         "max_bytes": 4096
     });
+    let plan = agent_run_workspace_plan(&call);
     let mut host = RecordingPlanHost::default();
 
     package
         .execute_plan_document(&plan, &plan_execution_context(), &mut host)
         .unwrap();
 
-    assert_eq!(host.calls, vec!["agent"]);
+    assert_eq!(host.calls, vec!["workspace_materialize", "agent"]);
 }
 
 #[test]
@@ -1486,12 +1540,6 @@ fn require_cached_external_call_plan(call: Value) -> Value {
     plan
 }
 
-fn execute_external_call_plan(call: Value) -> Value {
-    let mut plan = require_cached_external_call_plan(call);
-    plan["mode"] = json!({"kind": "execute"});
-    plan
-}
-
 fn workspace_materialize_release_plan() -> Value {
     json!({
         "schema_version": "leaven.plan.v1",
@@ -1625,6 +1673,34 @@ fn workspace_materialize_call_op(idempotency_key: &str) -> Value {
     })
 }
 
+fn agent_run_workspace_plan(call: &Value) -> Value {
+    json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "planagentworkspace001",
+        "consistency": {
+            "kind": "latest_at_start"
+        },
+        "mode": {
+            "kind": "execute"
+        },
+        "ops": [
+            workspace_materialize_call_op("plan-agent-workspace-0001"),
+            {
+                "kind": "call",
+                "name": "completion",
+                "deps": ["workspace"],
+                "idempotency_key": "plan-agent-workspace-0002",
+                "call": call
+            }
+        ],
+        "return": ["workspace", "completion"],
+        "commit": {
+            "kind": "graph_writes_atomic",
+            "on_stale": "reject"
+        }
+    })
+}
+
 fn sandbox_exec_workspace_plan() -> Value {
     json!({
         "schema_version": "leaven.plan.v1",
@@ -1674,7 +1750,7 @@ fn agent_run_call() -> Value {
     json!({
         "kind": "agent_run",
         "runtime": "codex",
-        "workspace": "ws_planexec",
+        "workspace": "ws_planexec_materialized",
         "instructions": {
             "system": "Stay within the workspace.",
             "task": "Inspect the plan output."
@@ -2095,6 +2171,11 @@ impl PlanExecutionHost for RecordingPlanHost {
     ) -> Result<PlanAgentRunOutcome, PublicSeamError> {
         assert_eq!(request.name(), "completion");
         assert_eq!(request.call()["kind"].as_str(), Some("agent_run"));
+        assert_eq!(request.live_workspace()?, "ws_planexec_materialized");
+        assert_eq!(
+            request.deps()["workspace"]["workspace"].as_str(),
+            Some("ws_planexec_materialized")
+        );
         let agent_request = request.to_agent_run_request()?;
         assert_eq!(
             agent_request.instructions.system.as_deref(),
