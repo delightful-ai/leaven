@@ -122,6 +122,26 @@ fn acp_profile_rejects_mcp_latest_nonstdio_human_granting_and_unbounded_updates(
             .unwrap_err(),
         PublicSeamError::InvalidScope { .. }
     ));
+
+    let mut wrong_params_schema = acp_profile();
+    wrong_params_schema["extension_methods"][0]["params_schema"] =
+        json!("archived.worker_protocol.v1.schema.json");
+    assert!(matches!(
+        package
+            .validate_acp_profile_document(&wrong_params_schema)
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    let mut wrong_result_schema = acp_profile();
+    wrong_result_schema["extension_methods"][0]["result_schema"] =
+        json!("bare.worker_result.schema.json");
+    assert!(matches!(
+        package
+            .validate_acp_profile_document(&wrong_result_schema)
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
 }
 
 #[test]
@@ -441,39 +461,18 @@ fn acp_extension_results_require_receipts_capability_fingerprint_and_data_classe
 fn acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
-    for (method, primary, receipt) in [
-        (
-            "leaven/workspace.materialize",
-            workspace_handle_primary(),
-            call_receipt("workspace_materialize", "wrec_materialize"),
-        ),
-        (
-            "leaven/workspace.read_file",
-            workspace_file_primary(),
-            query_receipt("qrec_workspace_file"),
-        ),
-        (
-            "leaven/lm.complete",
-            lm_response_primary(),
-            call_receipt("lm_complete", "lmrec_acp"),
-        ),
-        (
-            "leaven/agent.run",
-            agent_session_primary(),
-            call_receipt("agent_run", "agentrec_acp"),
-        ),
-        (
-            "leaven/sandbox.exec",
-            sandbox_exec_primary(),
-            call_receipt("sandbox_exec", "execrec_acp"),
-        ),
-    ] {
+    for (method, primary, receipt) in extension_result_cases() {
+        let data_classes = primary
+            .get("data_classes")
+            .and_then(Value::as_array)
+            .and_then(|items| items.iter().map(Value::as_str).collect::<Option<Vec<_>>>())
+            .unwrap_or_else(|| vec!["public"]);
         let result = package
             .validate_acp_extension_result_document(&extension_result_for(
                 method,
                 &primary,
                 &receipt,
-                &["workspace.file", "completion.raw", "public"],
+                &data_classes,
             ))
             .unwrap();
 
@@ -554,6 +553,23 @@ fn acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_
             .unwrap_err(),
         PublicSeamError::InvalidPlanResult { .. }
     ));
+
+    let mut malformed_extension_primary = extension_result_for(
+        "leaven/graph.query",
+        &extension_primary("graph.query"),
+        &query_receipt("qrec_graph"),
+        &["public"],
+    );
+    malformed_extension_primary["primary"]
+        .as_object_mut()
+        .unwrap()
+        .remove("namespace");
+    assert!(matches!(
+        package
+            .validate_acp_extension_result_document(&malformed_extension_primary)
+            .unwrap_err(),
+        PublicSeamError::ExampleValidation { .. }
+    ));
 }
 
 fn acp_profile() -> Value {
@@ -611,6 +627,160 @@ fn locked_profile_methods() -> Vec<Value> {
         extension_method("leaven/assessment.submit", "assessment.submit"),
         extension_method("leaven/evaluation.request", "evaluation.request"),
         extension_method("leaven/event.emit", "event.emit"),
+    ]
+}
+
+fn extension_result_cases() -> Vec<(&'static str, Value, Value)> {
+    let mut cases = Vec::new();
+    cases.extend(query_extension_result_cases());
+    cases.extend(workspace_extension_result_cases());
+    cases.extend(effect_extension_result_cases());
+    cases.extend(write_extension_result_cases());
+    cases
+}
+
+fn query_extension_result_cases() -> Vec<(&'static str, Value, Value)> {
+    vec![
+        (
+            "leaven/graph.query",
+            extension_primary("graph.query"),
+            query_receipt("qrec_graph"),
+        ),
+        (
+            "leaven/case.load",
+            extension_primary("case.load"),
+            query_receipt("qrec_case_load"),
+        ),
+        (
+            "leaven/case.input",
+            extension_primary("case.input"),
+            query_receipt("qrec_case_input"),
+        ),
+        (
+            "leaven/case.target",
+            extension_primary("case.target"),
+            query_receipt("qrec_case_target"),
+        ),
+        (
+            "leaven/case.metadata",
+            extension_primary("case.metadata"),
+            query_receipt("qrec_case_metadata"),
+        ),
+    ]
+}
+
+fn workspace_extension_result_cases() -> Vec<(&'static str, Value, Value)> {
+    vec![
+        (
+            "leaven/workspace.materialize",
+            workspace_handle_primary(),
+            call_receipt("workspace_materialize", "wrec_materialize"),
+        ),
+        (
+            "leaven/workspace.snapshot",
+            workspace_snapshot_primary(),
+            query_receipt("qrec_workspace_snapshot"),
+        ),
+        (
+            "leaven/workspace.list",
+            workspace_listing_primary(),
+            query_receipt("qrec_workspace_list"),
+        ),
+        (
+            "leaven/workspace.read_file",
+            workspace_file_primary(),
+            query_receipt("qrec_workspace_file"),
+        ),
+        (
+            "leaven/workspace.stat",
+            workspace_listing_primary(),
+            query_receipt("qrec_workspace_stat"),
+        ),
+        (
+            "leaven/workspace.digest",
+            workspace_snapshot_primary(),
+            query_receipt("qrec_workspace_digest"),
+        ),
+        (
+            "leaven/workspace.git_log",
+            workspace_diff_primary(),
+            query_receipt("qrec_workspace_git_log"),
+        ),
+        (
+            "leaven/workspace.git_diff",
+            workspace_diff_primary(),
+            query_receipt("qrec_workspace_git_diff"),
+        ),
+        (
+            "leaven/workspace.git_status",
+            workspace_diff_primary(),
+            query_receipt("qrec_workspace_git_status"),
+        ),
+        (
+            "leaven/workspace.capture_artifacts",
+            workspace_listing_primary(),
+            query_receipt("qrec_workspace_capture"),
+        ),
+        (
+            "leaven/workspace.release",
+            extension_primary("workspace.release"),
+            call_receipt("workspace_release", "wrec_release"),
+        ),
+    ]
+}
+
+fn effect_extension_result_cases() -> Vec<(&'static str, Value, Value)> {
+    vec![
+        (
+            "leaven/lm.complete",
+            lm_response_primary(),
+            call_receipt("lm_complete", "lmrec_acp"),
+        ),
+        (
+            "leaven/agent.run",
+            agent_session_primary(),
+            call_receipt("agent_run", "agentrec_acp"),
+        ),
+        (
+            "leaven/sandbox.exec",
+            sandbox_exec_primary(),
+            call_receipt("sandbox_exec", "execrec_acp"),
+        ),
+        (
+            "leaven/human.review",
+            extension_primary("human.review"),
+            call_receipt("human_review", "humanrec_acp"),
+        ),
+    ]
+}
+
+fn write_extension_result_cases() -> Vec<(&'static str, Value, Value)> {
+    vec![
+        (
+            "leaven/proposal.submit_batch",
+            proposal_batch_primary(),
+            write_receipt("submit_proposal_batch", "wrec_proposal_submit"),
+        ),
+        (
+            "leaven/proposal.apply",
+            apply_receipt_primary(),
+            write_receipt("apply_proposal_batch", "wrec_proposal_apply"),
+        ),
+        (
+            "leaven/assessment.submit",
+            assessment_batch_primary(),
+            write_receipt("submit_assessments", "wrec_assessment_submit"),
+        ),
+        (
+            "leaven/evaluation.request",
+            evaluation_request_primary(),
+            write_receipt("request_evaluation", "wrec_evaluation_request"),
+        ),
+        (
+            "leaven/event.emit",
+            extension_primary("event.emit"),
+            write_receipt("emit_run_event", "wrec_event_emit"),
+        ),
     ]
 }
 
@@ -765,6 +935,16 @@ fn extension_result_for(
     result
 }
 
+fn extension_primary(op: &str) -> Value {
+    json!({
+        "kind": "extension",
+        "namespace": "leaven",
+        "op": op,
+        "schema_fingerprint": "fp_schema_sha256_acpextension",
+        "payload": {"status": "ok"}
+    })
+}
+
 fn lm_response_primary() -> Value {
     json!({
         "kind": "lm_response",
@@ -792,6 +972,27 @@ fn workspace_handle_primary() -> Value {
     })
 }
 
+fn workspace_snapshot_primary() -> Value {
+    json!({
+        "kind": "workspace_snapshot",
+        "workspace": "ws_acp",
+        "digest": "sha256:workspace",
+        "graph_revision": "rev_acp",
+        "data_classes": ["workspace.file"],
+        "replayability": "pure_read"
+    })
+}
+
+fn workspace_listing_primary() -> Value {
+    json!({
+        "kind": "workspace_listing",
+        "entries": [{"path": "src/lib.rs", "kind": "file", "data_classes": ["workspace.file"]}],
+        "graph_revision": "rev_acp",
+        "data_classes": ["workspace.file"],
+        "replayability": "pure_read"
+    })
+}
+
 fn workspace_file_primary() -> Value {
     json!({
         "kind": "workspace_file",
@@ -801,6 +1002,16 @@ fn workspace_file_primary() -> Value {
         "data_classes": ["workspace.file"],
         "replayability": "pure_read",
         "receipt": "qrec_workspace_file"
+    })
+}
+
+fn workspace_diff_primary() -> Value {
+    json!({
+        "kind": "workspace_diff",
+        "text": " M src/lib.rs",
+        "graph_revision": "rev_acp",
+        "data_classes": ["workspace.file"],
+        "replayability": "pure_read"
     })
 }
 
@@ -827,6 +1038,62 @@ fn sandbox_exec_primary() -> Value {
     })
 }
 
+fn proposal_batch_primary() -> Value {
+    json!({
+        "kind": "proposal_batch_receipt",
+        "batch_id": "pb_acp",
+        "proposal_ids": ["prop_acp"],
+        "status": "committed",
+        "graph_revision": "rev_acp",
+        "data_classes": ["public"],
+        "replayability": "fully_managed",
+        "receipt": "wrec_proposal_submit"
+    })
+}
+
+fn apply_receipt_primary() -> Value {
+    json!({
+        "kind": "apply_receipt",
+        "created_candidates": ["cand_acp_created"],
+        "status": "committed",
+        "graph_revision": "rev_acp",
+        "data_classes": ["public"],
+        "replayability": "fully_managed",
+        "receipt": "wrec_proposal_apply"
+    })
+}
+
+fn assessment_batch_primary() -> Value {
+    json!({
+        "kind": "assessment_batch_receipt",
+        "assessment_ids": ["assess_acp"],
+        "evaluation_request_id": "evalreq_acp",
+        "per_assessment": [
+            {
+                "assessment": "assess_acp",
+                "replayability": "fully_managed"
+            }
+        ],
+        "status": "committed",
+        "graph_revision": "rev_acp",
+        "data_classes": ["public"],
+        "replayability": "fully_managed",
+        "receipt": "wrec_assessment_submit"
+    })
+}
+
+fn evaluation_request_primary() -> Value {
+    json!({
+        "kind": "evaluation_request_receipt",
+        "evaluation_request_id": "evalreq_acp",
+        "status": "recorded",
+        "graph_revision": "rev_acp",
+        "data_classes": ["public"],
+        "replayability": "fully_managed",
+        "receipt": "wrec_evaluation_request"
+    })
+}
+
 fn call_receipt(call_kind: &str, receipt: &str) -> Value {
     json!({
         "kind": "call",
@@ -840,6 +1107,51 @@ fn call_receipt(call_kind: &str, receipt: &str) -> Value {
         "runtime_fingerprint": "fp_runtime_sha256_acp",
         "status": "succeeded"
     })
+}
+
+fn write_receipt(write_kind: &str, receipt: &str) -> Value {
+    let mut value = json!({
+        "kind": "write",
+        "receipt": receipt,
+        "op_var": "primary",
+        "started_at": "2026-05-23T00:00:00Z",
+        "completed_at": "2026-05-23T00:00:01Z",
+        "write_kind": write_kind,
+        "request_hash": "fp_request_sha256_acp",
+        "result_hash": "fp_result_sha256_acp",
+        "base_revision": "rev_acp",
+        "committed_revision": "rev_acp",
+        "status": "succeeded"
+    });
+    match write_kind {
+        "submit_proposal_batch" => {
+            value["proposal_batch_id"] = json!("pb_acp");
+            value["proposal_ids"] = json!(["prop_acp"]);
+        }
+        "apply_proposal_batch" => {
+            value["created_candidates"] = json!(["cand_acp_created"]);
+        }
+        "submit_assessments" => {
+            value["evaluation_request_id"] = json!("evalreq_acp");
+            value["assessment_ids"] = json!(["assess_acp"]);
+            value["request_hash"] = json!(prefixed_jcs_hash(
+                "fp_request_sha256_",
+                &json!({
+                    "schema_version": "leaven.submit_assessments_request.v1",
+                    "evaluation_request_id": "evalreq_acp",
+                    "assessment_ids": ["assess_acp"]
+                }),
+            ));
+        }
+        "request_evaluation" => {
+            value["evaluation_request_id"] = json!("evalreq_acp");
+        }
+        "emit_run_event" => {
+            value["event_id"] = json!("event_acp");
+        }
+        other => panic!("unexpected write kind {other}"),
+    }
+    value
 }
 
 fn query_receipt(receipt: &str) -> Value {
