@@ -50,7 +50,10 @@ pub struct ConformanceRow {
     /// Partial implementation evidence paths for pending rows.
     #[serde(default)]
     pub partial_contract_implementation_evidence: Vec<String>,
-    /// Review evidence paths for proven rows.
+    /// Review evidence paths for row status and evidence provenance.
+    ///
+    /// Proven rows must carry review evidence. Pending and blocked rows may
+    /// carry review evidence only to document partial evidence or blockers.
     #[serde(default)]
     pub review_evidence: Vec<String>,
     /// Missing decisions or dependencies that prevent row closeout.
