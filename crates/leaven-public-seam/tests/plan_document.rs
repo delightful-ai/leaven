@@ -877,6 +877,7 @@ fn capability_execution_denies_calls_that_drop_literal_expr_data_classes() {
         )
         .unwrap_err();
 
+    assert_call_authority_denied_redactions(&error, &["external.secret"]);
     assert!(
         error
             .to_string()
@@ -5513,4 +5514,22 @@ fn workspace_root() -> std::path::PathBuf {
         .and_then(std::path::Path::parent)
         .unwrap()
         .to_path_buf()
+}
+
+fn assert_call_authority_denied_redactions(error: &PublicSeamError, expected: &[&str]) {
+    match error {
+        PublicSeamError::CallAuthorityDenied {
+            kind, redactions, ..
+        } => {
+            assert_eq!(kind, "data_class");
+            assert_eq!(
+                redactions,
+                &expected
+                    .iter()
+                    .map(|redaction| (*redaction).to_owned())
+                    .collect::<Vec<_>>()
+            );
+        }
+        other => panic!("expected call authority denial, got {other:?}"),
+    }
 }

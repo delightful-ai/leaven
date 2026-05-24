@@ -97,6 +97,17 @@ pub enum PublicSeamError {
         message: String,
     },
 
+    /// Plan call authority denied an operation and preserved redaction facts.
+    #[error("public seam call authority denied by {kind}: {message}")]
+    CallAuthorityDenied {
+        /// Denial category.
+        kind: String,
+        /// Human-readable reason.
+        message: String,
+        /// Data classes redacted by the denial.
+        redactions: Vec<String>,
+    },
+
     /// A schema-valid plan result violates a public-seam semantic constraint.
     #[error("invalid public seam plan result: {message}")]
     InvalidPlanResult {
