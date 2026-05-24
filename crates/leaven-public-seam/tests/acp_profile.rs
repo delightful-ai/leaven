@@ -1306,6 +1306,22 @@ fn acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_
 fn acp_extension_results_reject_forged_result_hashes_for_extension_and_receiptless_primaries() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
+    let wrong_extension_op = extension_result_for(
+        "leaven/graph.query",
+        &extension_primary("case.target"),
+        &query_receipt("qrec_graph"),
+        &["public"],
+    );
+    let error = package
+        .validate_acp_extension_result_document(&wrong_extension_op)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("must return extension op `graph.query`"),
+        "unexpected wrong extension op error: {error:?}"
+    );
+
     let mut forged_same_kind_receipt = extension_result();
     forged_same_kind_receipt["receipts"][0]["result_hash"] =
         json!("fp_result_sha256_same_kind_unbound");
