@@ -984,6 +984,7 @@ impl AcpExtensionResultDocument {
         validate_receipts_for_method(&method, receipts)?;
         validate_primary_result_hash(&method, primary_value, receipts)?;
         let expected_receipt = expected_receipt_for_method(&method, receipts)?;
+        validate_extension_primary_op(&method, primary)?;
         validate_effect_primary_audit(&method, primary, expected_receipt)?;
         if let Some(primary_receipt) = primary.get("receipt").and_then(Value::as_str) {
             ensure_primary_receipt_is_carried(primary_receipt, receipts)?;
@@ -1429,6 +1430,34 @@ fn validate_effect_primary_audit(
             validate_effect_primary_cost("sandbox_exec", primary, expected_receipt)
         }
         _ => Ok(()),
+    }
+}
+
+fn validate_extension_primary_op(
+    method: &str,
+    primary: &serde_json::Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    if primary.get("kind").and_then(Value::as_str) != Some("extension") {
+        return Ok(());
+    }
+    let expected = match method {
+        "leaven/graph.query" => "graph.query",
+        "leaven/case.load" => "case.load",
+        "leaven/case.input" => "case.input",
+        "leaven/case.target" => "case.target",
+        "leaven/case.metadata" => "case.metadata",
+        "leaven/workspace.release" => "workspace.release",
+        "leaven/human.review" => "human.review",
+        "leaven/event.emit" => "event.emit",
+        _ => return Ok(()),
+    };
+    let actual = required_string(primary.get("op"), "primary.op")?;
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(invalid_acp(format!(
+            "ACP extension result method `{method}` must return extension op `{expected}`, got `{actual}`"
+        )))
     }
 }
 

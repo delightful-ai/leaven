@@ -1221,6 +1221,7 @@ rows:
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument::synthetic_plan_result
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
       - crates/leaven-public-seam/src/acp_profile.rs::validate_primary_kind
+      - crates/leaven-public-seam/src/acp_profile.rs::validate_extension_primary_op
       - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
       - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_audit
       - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_receipt
