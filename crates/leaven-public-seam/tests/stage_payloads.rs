@@ -110,6 +110,18 @@ fn stage_payloads_preserve_object_form_info_and_receipt_refs() {
     propose["source_refs"] = json!([object_form_candidate_ref()]);
     propose["reflection_result"] = reflection;
     package.validate_stage_payload_document(&propose).unwrap();
+
+    let mut object_parent_string_source = reflect_request();
+    object_parent_string_source["parent"] = object_form_candidate_ref();
+    package
+        .validate_stage_payload_document(&object_parent_string_source)
+        .unwrap();
+
+    let mut string_parent_object_source = propose_request();
+    string_parent_object_source["source_refs"] = json!([object_form_candidate_ref()]);
+    package
+        .validate_stage_payload_document(&string_parent_object_source)
+        .unwrap();
 }
 
 #[test]
