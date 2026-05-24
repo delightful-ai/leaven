@@ -1251,15 +1251,15 @@ rows:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_jsonrpc_requests_and_responses_bind_plan_ir_and_extension_results
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_jsonrpc_rejects_in_process_or_cross_method_fakes
     partial_contract_implementation_evidence:
-      - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
-      - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument::synthetic_plan_result
-      - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
-      - crates/leaven-public-seam/src/acp_profile.rs::validate_primary_kind
-      - crates/leaven-public-seam/src/acp_profile.rs::validate_extension_primary_op
-      - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
-      - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_audit
-      - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_receipt
-      - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_cost
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::AcpExtensionResultDocument
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::AcpExtensionResultDocument::synthetic_plan_result
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::extension_result_contract
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::validate_primary_kind
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::validate_extension_primary_op
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::validate_receipts_for_method
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::validate_effect_primary_audit
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::validate_effect_primary_receipt
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::validate_effect_primary_cost
       - crates/leaven-public-seam/src/acp_profile.rs::AcpJsonRpcResponseDocument
       - crates/leaven-public-seam/src/acp_profile.rs::require_jsonrpc_members
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_acp_extension_result_document
@@ -1303,17 +1303,17 @@ rows:
       - crates/leaven-public-seam/src/acp_profile.rs::AcpProfileDocument::backpressure
       - crates/leaven-public-seam/src/acp_profile.rs::AcpBackpressure
       - crates/leaven-public-seam/src/acp_profile.rs::AcpWorkerSession
-      - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionLifecycle
-      - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionLifecycle::from_profile
-      - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionState
-      - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionLifecycle::enqueue_progress
-      - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionLifecycle::offer_progress
-      - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionLifecycle::cancel_with_error
-      - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionCancellation::receipt
-      - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionCancellation::error
-      - crates/leaven-public-seam/src/acp_profile.rs::validate_cancellation_error
-      - crates/leaven-public-seam/src/acp_profile.rs::AcpProgressPriority
-      - crates/leaven-public-seam/src/acp_profile.rs::AcpProgressDisposition
+      - crates/leaven-public-seam/src/acp_profile/lifecycle.rs::AcpSessionLifecycle
+      - crates/leaven-public-seam/src/acp_profile/lifecycle.rs::AcpSessionLifecycle::from_profile
+      - crates/leaven-public-seam/src/acp_profile/lifecycle.rs::AcpSessionState
+      - crates/leaven-public-seam/src/acp_profile/lifecycle.rs::AcpSessionLifecycle::enqueue_progress
+      - crates/leaven-public-seam/src/acp_profile/lifecycle.rs::AcpSessionLifecycle::offer_progress
+      - crates/leaven-public-seam/src/acp_profile/lifecycle.rs::AcpSessionLifecycle::cancel_with_error
+      - crates/leaven-public-seam/src/acp_profile/lifecycle.rs::AcpSessionCancellation::receipt
+      - crates/leaven-public-seam/src/acp_profile/lifecycle.rs::AcpSessionCancellation::error
+      - crates/leaven-public-seam/src/acp_profile/lifecycle.rs::validate_cancellation_error
+      - crates/leaven-public-seam/src/acp_profile/lifecycle.rs::AcpProgressPriority
+      - crates/leaven-public-seam/src/acp_profile/lifecycle.rs::AcpProgressDisposition
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-lifecycle-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-backpressure-strategy-review.md
@@ -1421,9 +1421,9 @@ rows:
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::update_call_workspace_provenance
       - crates/leaven-public-seam/src/plan_execution.rs::record_workspace_materialize_outcome
       - crates/leaven-public-seam/src/plan_execution.rs::record_workspace_release_outcome
-      - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
-      - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
-      - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::extension_result_contract
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::validate_receipts_for_method
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::AcpExtensionResultDocument
       - crates/leaven-public-seam/src/result.rs::collect_value_blob_ref_data_classes
       - crates/leaven-public-seam/src/acp_profile.rs::AcpPermissionRequest
       - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::authorize_grant
@@ -1503,10 +1503,10 @@ rows:
       - crates/leaven-lm/src/sampling.rs::SamplingOptions
       - crates/leaven-lm/src/output.rs::OutputMode
       - crates/leaven-lm-openai/src/client.rs::OpenAiLm::to_wire_request
-      - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
-      - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
-      - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_receipt
-      - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::extension_result_contract
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::validate_receipts_for_method
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::validate_effect_primary_receipt
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::AcpExtensionResultDocument
       - crates/leaven-public-seam/src/acp_profile.rs::AcpPermissionRequest
       - crates/leaven-public-seam/src/capability.rs::CapabilityGrantRequest
     review_evidence:
@@ -1588,12 +1588,12 @@ rows:
       - crates/leaven-agent/src/session.rs::AgentToolPolicy
       - crates/leaven-agent/src/session.rs::OutputContract
       - crates/leaven-agent/AGENTS.md
-      - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
-      - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
-      - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_audit
-      - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_receipt
-      - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_cost
-      - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::extension_result_contract
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::validate_receipts_for_method
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::validate_effect_primary_audit
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::validate_effect_primary_receipt
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::validate_effect_primary_cost
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::AcpExtensionResultDocument
       - crates/leaven-public-seam/src/result.rs::collect_value_blob_ref_data_classes
       - crates/leaven-public-seam/src/proposal_authority.rs::ProposalAuthorityReport
       - crates/leaven-public-seam/src/call_authority.rs::validate_execution_policy
@@ -1673,16 +1673,16 @@ rows:
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_external_call_cost_binding
       - crates/leaven-workspace/src/command.rs::Command
       - crates/leaven-workspace/src/command.rs::CommandLimits
-      - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
-      - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
-      - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_audit
-      - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_receipt
-      - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_cost
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::extension_result_contract
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::validate_receipts_for_method
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::validate_effect_primary_audit
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::validate_effect_primary_receipt
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::validate_effect_primary_cost
       - crates/leaven-public-seam/src/call_authority.rs::validate_execution_policy
       - crates/leaven-public-seam/src/call_authority.rs::validate_sandbox_execution_policy
       - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::execution_policy_subprocess
       - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::execution_policy_filesystem
-      - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
+      - crates/leaven-public-seam/src/acp_profile/extension_result.rs::AcpExtensionResultDocument
       - crates/leaven-public-seam/src/acp_profile.rs::AcpPermissionRequest
       - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::authorize_grant
       - crates/leaven-public-seam/src/capability.rs::CapabilityGrantRequest
