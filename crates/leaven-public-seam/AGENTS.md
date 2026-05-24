@@ -171,7 +171,9 @@ and `replay` mode side-effect surfaces: dry-run validates without host effects,
 require-cached refuses cache misses without live provider calls, and replay
 loads supplied receipts without live call/write host effects. The call-authority
 route checks plan Call `input_classes` against call-local and
-capability-declared forbidden classes before execution. The proposal authority
+capability-declared forbidden classes before execution, and refuses reflector
+LM calls that carry `case.target` input classes even when a grant is too broad.
+The proposal authority
 route checks `submit_proposal_batch` and `apply_proposal_batch` writes against
 capability-granted effects, surfaces, schemas, and apply permission. They are
 not ACP delivery, provider runtime execution, general cache

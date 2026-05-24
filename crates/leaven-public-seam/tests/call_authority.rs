@@ -49,6 +49,25 @@ fn call_authority_rejects_declared_forbidden_intersections_even_when_grant_allow
     ));
 }
 
+#[test]
+fn call_authority_rejects_reflector_lm_call_input_classes_include_case_target() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let capability = CapabilityDocument::from_value(call_capability_allowing_target()).unwrap();
+    let mut plan = call_authority_plan();
+    plan["ops"][0]["call"]["input_classes"] = json!(["case.input", "case.target"]);
+    plan["ops"][0]["call"]["forbidden_input_classes"] = json!([]);
+
+    let error = package
+        .validate_call_authority_document(&plan, &capability)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("reflector lm_complete calls must not carry case.target"),
+        "unexpected error: {error:?}"
+    );
+}
+
 fn call_authority_plan() -> Value {
     json!({
         "schema_version": "leaven.plan.v1",

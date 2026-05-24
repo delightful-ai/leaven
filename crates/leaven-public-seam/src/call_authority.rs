@@ -68,6 +68,14 @@ pub fn validate(
                 "call `{call_kind}` input class `{data_class}` intersects declared forbidden_input_classes"
             )));
         }
+        if call_kind == "lm_complete"
+            && capability.subject_stage_role() == Some("reflector")
+            && input_classes.contains("case.target")
+        {
+            return Err(invalid_authority(
+                "reflector lm_complete calls must not carry case.target input classes",
+            ));
+        }
         let mut request = CapabilityGrantRequest::for_action(action_for_call(call_kind)?);
         for data_class in &input_classes {
             report.checked_input_classes.insert(data_class.clone());
