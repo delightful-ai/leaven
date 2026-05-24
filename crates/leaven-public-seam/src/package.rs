@@ -867,6 +867,36 @@ impl PublicSeamPackage {
         crate::AcpProfileDocument::from_schema_valid_value(value)
     }
 
+    /// Validates an ACP JSON-RPC request carrying locked Plan IR params.
+    pub fn validate_acp_jsonrpc_request_document(
+        &self,
+        profile: &crate::AcpProfileDocument,
+        value: &Value,
+    ) -> Result<crate::AcpJsonRpcRequestDocument, PublicSeamError> {
+        let params = value
+            .get("params")
+            .ok_or_else(|| PublicSeamError::InvalidScope {
+                message: "ACP JSON-RPC request must carry Plan IR params".to_owned(),
+            })?;
+        self.validate_plan_document(params)?;
+        crate::AcpJsonRpcRequestDocument::from_plan_valid_value(profile, value)
+    }
+
+    /// Validates an ACP JSON-RPC response carrying a locked extension result.
+    pub fn validate_acp_jsonrpc_response_document(
+        &self,
+        request: &crate::AcpJsonRpcRequestDocument,
+        value: &Value,
+    ) -> Result<crate::AcpJsonRpcResponseDocument, PublicSeamError> {
+        let result = value
+            .get("result")
+            .ok_or_else(|| PublicSeamError::InvalidScope {
+                message: "ACP JSON-RPC response must carry extension result".to_owned(),
+            })?;
+        let extension = self.validate_acp_extension_result_document(result)?;
+        crate::AcpJsonRpcResponseDocument::from_extension_result_value(request, &extension, value)
+    }
+
     /// Answers an ACP permission request through programmatic capability grant checks.
     pub fn authorize_acp_permission(
         &self,

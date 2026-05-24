@@ -1137,14 +1137,20 @@ rows:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_worker_session_uses_engine_client_worker_agent_inversion_and_bounded_updates
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_profile_rejects_mcp_latest_nonstdio_human_granting_and_unbounded_updates
       - crates/leaven-public-seam/tests/contract_package.rs::acp_profile_rejects_mcp_bridge_legacy_worker_protocol_and_watch_runtime
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_jsonrpc_requests_and_responses_bind_plan_ir_and_extension_results
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_jsonrpc_rejects_in_process_or_cross_method_fakes
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/acp_profile.rs::AcpProfileDocument
       - crates/leaven-public-seam/src/acp_profile.rs::AcpBackpressure
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionMethod
       - crates/leaven-public-seam/src/acp_profile.rs::AcpWorkerSession
       - crates/leaven-public-seam/src/acp_profile.rs::AcpStdioWorkerLaunch
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpJsonRpcRequestDocument
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpJsonRpcResponseDocument
       - crates/leaven-public-seam/src/acp_profile.rs::extension_methods
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_acp_profile_document
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_acp_jsonrpc_request_document
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_acp_jsonrpc_response_document
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::v1_scope
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-lifecycle-partial-review.md
@@ -1219,6 +1225,8 @@ rows:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_agent_and_sandbox_blob_ref_data_class_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_forged_result_hashes_for_extension_and_receiptless_primaries
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_jsonrpc_requests_and_responses_bind_plan_ir_and_extension_results
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_jsonrpc_rejects_in_process_or_cross_method_fakes
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument::synthetic_plan_result
@@ -1229,7 +1237,9 @@ rows:
       - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_audit
       - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_receipt
       - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_cost
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpJsonRpcResponseDocument
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_acp_extension_result_document
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_acp_jsonrpc_response_document
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-acp-workspace-partial-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-value-visibility-partial-review.md

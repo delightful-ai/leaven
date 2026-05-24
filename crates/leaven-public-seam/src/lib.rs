@@ -22,9 +22,10 @@ mod watch;
 
 pub use acp_profile::{
     AcpAuthenticateRequest, AcpAuthenticatedSession, AcpBackpressure, AcpExtensionMethod,
-    AcpExtensionResultDocument, AcpPermissionDecision, AcpPermissionRequest, AcpProfileDocument,
-    AcpProgressDisposition, AcpProgressPriority, AcpSessionCancellation, AcpSessionLifecycle,
-    AcpSessionState, AcpSessionUpdate, AcpStdioWorkerLaunch, AcpWorkerSession,
+    AcpExtensionResultDocument, AcpJsonRpcRequestDocument, AcpJsonRpcResponseDocument,
+    AcpPermissionDecision, AcpPermissionRequest, AcpProfileDocument, AcpProgressDisposition,
+    AcpProgressPriority, AcpSessionCancellation, AcpSessionLifecycle, AcpSessionState,
+    AcpSessionUpdate, AcpStdioWorkerLaunch, AcpWorkerSession,
 };
 pub use call_authority::CallAuthorityReport;
 pub use capability::{

@@ -1080,6 +1080,116 @@ impl AcpExtensionResultDocument {
     }
 }
 
+/// ACP JSON-RPC request envelope for one Leaven extension method.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AcpJsonRpcRequestDocument {
+    id: String,
+    method: String,
+}
+
+impl AcpJsonRpcRequestDocument {
+    pub(crate) fn from_plan_valid_value(
+        profile: &AcpProfileDocument,
+        value: &Value,
+    ) -> Result<Self, PublicSeamError> {
+        let object = value
+            .as_object()
+            .ok_or_else(|| invalid_acp("ACP JSON-RPC request must be an object"))?;
+        require_jsonrpc_2(object)?;
+        if object.contains_key("result") || object.contains_key("error") {
+            return Err(invalid_acp(
+                "ACP JSON-RPC request must not carry response result or error fields",
+            ));
+        }
+        let id = jsonrpc_id(object.get("id"))?;
+        let method = required_string(object.get("method"), "method")?.to_owned();
+        if profile.method(&method).is_none() {
+            return Err(invalid_acp(format!(
+                "ACP JSON-RPC request method `{method}` is not in the locked Leaven profile"
+            )));
+        }
+        object
+            .get("params")
+            .ok_or_else(|| invalid_acp("ACP JSON-RPC request must carry Plan IR params"))?;
+        Ok(Self { id, method })
+    }
+
+    /// JSON-RPC request id, normalized to a string for request/response binding.
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    /// Leaven ACP extension method.
+    pub fn method(&self) -> &str {
+        &self.method
+    }
+}
+
+/// ACP JSON-RPC response envelope for one Leaven extension method result.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AcpJsonRpcResponseDocument {
+    id: String,
+    method: String,
+    primary_kind: String,
+}
+
+impl AcpJsonRpcResponseDocument {
+    pub(crate) fn from_extension_result_value(
+        request: &AcpJsonRpcRequestDocument,
+        extension: &AcpExtensionResultDocument,
+        value: &Value,
+    ) -> Result<Self, PublicSeamError> {
+        let object = value
+            .as_object()
+            .ok_or_else(|| invalid_acp("ACP JSON-RPC response must be an object"))?;
+        require_jsonrpc_2(object)?;
+        if object.contains_key("method") || object.contains_key("params") {
+            return Err(invalid_acp(
+                "ACP JSON-RPC response must not carry request method or params fields",
+            ));
+        }
+        let id = jsonrpc_id(object.get("id"))?;
+        if id != request.id() {
+            return Err(invalid_acp(
+                "ACP JSON-RPC response id must match the extension request id",
+            ));
+        }
+        if object.contains_key("error") {
+            return Err(invalid_acp(
+                "ACP JSON-RPC extension success response must carry result, not error",
+            ));
+        }
+        object
+            .get("result")
+            .ok_or_else(|| invalid_acp("ACP JSON-RPC response must carry extension result"))?;
+        if extension.method() != request.method() {
+            return Err(invalid_acp(
+                "ACP JSON-RPC extension result method must match the request method",
+            ));
+        }
+        Ok(Self {
+            id,
+            method: extension.method().to_owned(),
+            primary_kind: extension.primary_kind().to_owned(),
+        })
+    }
+
+    /// JSON-RPC response id, normalized to a string for request/response binding.
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    /// Leaven ACP extension method answered by this response.
+    pub fn method(&self) -> &str {
+        &self.method
+    }
+
+    /// Primary result kind returned by the extension result.
+    pub fn primary_kind(&self) -> &str {
+        &self.primary_kind
+    }
+}
+
 pub fn authorize_permission(
     profile: &AcpProfileDocument,
     capability: &CapabilityDocument,
@@ -1651,6 +1761,28 @@ fn required_string<'a>(value: Option<&'a Value>, field: &str) -> Result<&'a str,
     value
         .and_then(Value::as_str)
         .ok_or_else(|| invalid_acp(format!("ACP profile field `{field}` must be a string")))
+}
+
+fn require_jsonrpc_2(object: &serde_json::Map<String, Value>) -> Result<(), PublicSeamError> {
+    match object.get("jsonrpc").and_then(Value::as_str) {
+        Some("2.0") => Ok(()),
+        _ => Err(invalid_acp(
+            "ACP JSON-RPC envelope must declare jsonrpc 2.0",
+        )),
+    }
+}
+
+fn jsonrpc_id(value: Option<&Value>) -> Result<String, PublicSeamError> {
+    match value {
+        Some(Value::String(id)) if !id.trim().is_empty() => Ok(id.clone()),
+        Some(Value::Number(number)) => Ok(number.to_string()),
+        Some(Value::Null) | None => Err(invalid_acp(
+            "ACP JSON-RPC extension calls must carry a non-null id",
+        )),
+        Some(_) => Err(invalid_acp(
+            "ACP JSON-RPC id must be a string or number for request/response binding",
+        )),
+    }
 }
 
 fn required_array<'a>(

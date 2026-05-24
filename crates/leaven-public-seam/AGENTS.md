@@ -91,19 +91,21 @@ session lifecycle, authentication handshake, permission loop, or worker runtime.
 
 Crate-root exports for `AcpProfileDocument`, `AcpExtensionMethod`,
 `AcpAuthenticateRequest`, `AcpAuthenticatedSession`, `AcpPermissionRequest`,
-`AcpPermissionDecision`, and `AcpExtensionResultDocument` are advanced public
-seam contracts. They prove locked Leaven ACP profile semantics, including the
-exact V1 extension-method set; authenticate resolution from opaque capability
-tokens through the capability registry; authenticated-session binding for
-programmatic permission decisions against capability grants; typed denial
-envelopes; locked Plan IR/Plan Result schema binding for profile methods; and
-schema-backed, hash-bound extension-result envelopes at the wire-contract layer
-only. Generic ACP `extension` primaries are checked against the locked schema
-branch and ACP envelope fields, while concrete PlanResult value kinds still run
-the full PlanResult semantic validator. LM, agent, and sandbox ACP extension
-primaries additionally bind their cost object to the carried call receipt cost,
-so ACP envelopes cannot shrink or omit cost provenance while retaining a
-hash-bound primary. They are not an ACP process
+`AcpPermissionDecision`, `AcpExtensionResultDocument`,
+`AcpJsonRpcRequestDocument`, and `AcpJsonRpcResponseDocument` are advanced
+public seam contracts. They prove locked Leaven ACP profile semantics,
+including the exact V1 extension-method set; authenticate resolution from
+opaque capability tokens through the capability registry; authenticated-session
+binding for programmatic permission decisions against capability grants; typed
+denial envelopes; locked Plan IR/Plan Result schema binding for profile
+methods; JSON-RPC 2.0 request/response envelope binding for Leaven extension
+methods; and schema-backed, hash-bound extension-result envelopes at the
+wire-contract layer only. Generic ACP `extension` primaries are checked against
+the locked schema branch and ACP envelope fields, while concrete PlanResult
+value kinds still run the full PlanResult semantic validator. LM, agent, and
+sandbox ACP extension primaries additionally bind their cost object to the
+carried call receipt cost, so ACP envelopes cannot shrink or omit cost
+provenance while retaining a hash-bound primary. They are not an ACP process
 implementation, engine-client runtime, worker-agent runtime, provider call, or
 graph mutation route.
 
