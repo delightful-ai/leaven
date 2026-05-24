@@ -45,9 +45,11 @@ pub use preflight::{
 };
 pub use proposer::{AgenticProposer, AgenticProposerConfig};
 pub use public_seam_stage::{
-    ProposeRequestPayload, PublicStagePayloadError, PublicStagePayloadIdentity,
-    PublicStagePayloadIdentityFields, ReflectProposeHandoffPayload, ReflectRequestPayload,
-    ReflectionResultPayload,
+    AdapterPayloadRole, AdapterRequestPayload, CallbackRequestPayload, JudgeContextPayload,
+    JudgeContextPayloadFields, ProposeRequestPayload, PublicStagePayloadError,
+    PublicStagePayloadIdentity, PublicStagePayloadIdentityFields, ReflectProposeHandoffPayload,
+    ReflectRequestPayload, ReflectionResultPayload, RunnerRequestPayload, ScorerContextPayload,
+    ScorerContextPayloadFields,
 };
 pub use repair::{
     PROPOSAL_REPAIR_ATTEMPTS_METADATA_KEY, ProposalRepairAttemptOutcome,
