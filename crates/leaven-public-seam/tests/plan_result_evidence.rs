@@ -113,6 +113,30 @@ fn plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind()
         PublicSeamError::InvalidPlanResult { .. }
     ));
 
+    let mut stale_effect_fingerprint = evidence_backed_result();
+    let mut stale_ref = receipt_ref_for_result(&stale_effect_fingerprint, "lmrec_score");
+    stale_ref["fingerprint"] = json!("fp_receipt_sha256_stale");
+    stale_effect_fingerprint["values"]["assessment_rows"]["items"][0]["evidence"]["source_receipts"]
+        ["effect"] = json!([stale_ref]);
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&stale_effect_fingerprint)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+
+    let mut stale_write_fingerprint = evidence_backed_result();
+    let mut stale_ref = receipt_ref_for_result(&stale_write_fingerprint, "wrec_assessment");
+    stale_ref["fingerprint"] = json!("fp_receipt_sha256_stale");
+    stale_write_fingerprint["values"]["assessment_rows"]["items"][0]["evidence"]["source_receipts"]
+        ["write"] = json!([stale_ref]);
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&stale_write_fingerprint)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+
     let mut undeclared_trace_receipt = evidence_backed_result();
     undeclared_trace_receipt["values"]["assessment_rows"]["items"][0]["evidence"]["source_receipts"]
         ["effect"] = json!([]);

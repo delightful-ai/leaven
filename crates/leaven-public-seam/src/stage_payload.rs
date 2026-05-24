@@ -1158,7 +1158,12 @@ fn candidate_ref_key(value: &Value) -> Result<Option<String>, PublicSeamError> {
         return Ok(None);
     }
     let id = required_string(object.get("id"), "candidate ref id")?;
-    Ok(Some(format!("candidate:{id}")))
+    let run = object
+        .get("run")
+        .and_then(Value::as_str)
+        .map(|run| format!("run:{run}:"))
+        .unwrap_or_default();
+    Ok(Some(format!("candidate:{run}{id}")))
 }
 
 fn receipt_ref_ids(value: Option<&Value>, field: &str) -> Result<Vec<String>, PublicSeamError> {
