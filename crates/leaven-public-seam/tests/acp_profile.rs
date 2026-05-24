@@ -1,6 +1,6 @@
 use leaven_public_seam::{
-    AcpAuthenticateRequest, AcpPermissionRequest, CapabilityDocument, CapabilityRegistry,
-    PublicSeamError, PublicSeamPackage,
+    AcpAuthenticateRequest, AcpPermissionRequest, AcpSessionLifecycle, AcpWorkerSession,
+    CapabilityDocument, CapabilityRegistry, PublicSeamError, PublicSeamPackage,
 };
 use serde_json::{Value, json};
 
@@ -41,6 +41,68 @@ fn acp_profile_validates_pinned_stdio_leaven_methods_and_bounded_updates() {
             .unwrap()
             .produces_receipt()
     );
+}
+
+#[test]
+fn acp_worker_session_uses_engine_client_worker_agent_inversion_and_bounded_updates() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let profile = package
+        .validate_acp_profile_document(&acp_profile())
+        .unwrap();
+    let mut session = AcpWorkerSession::start(&profile).unwrap();
+
+    assert_eq!(session.pinned_acp_version(), "0.4.0");
+    assert_eq!(session.transport(), "stdio_jsonrpc");
+    assert_eq!(session.engine_role(), "engine_client");
+    assert_eq!(session.worker_role(), "worker_agent");
+    assert_eq!(session.lifecycle().max_inflight_updates(), 32);
+
+    let update = session
+        .lifecycle_mut()
+        .enqueue_progress("scorer started")
+        .unwrap();
+    assert_eq!(update.sequence(), 0);
+    assert_eq!(update.message(), "scorer started");
+    assert_eq!(session.lifecycle().inflight_updates(), 1);
+    assert_eq!(
+        session
+            .lifecycle_mut()
+            .acknowledge_oldest_update()
+            .unwrap()
+            .message(),
+        "scorer started"
+    );
+
+    let cancellation = session.lifecycle_mut().cancel("operator cancelled");
+    assert_eq!(cancellation.reason(), "operator cancelled");
+    assert!(session.lifecycle().is_cancelled());
+    assert!(matches!(
+        session
+            .lifecycle_mut()
+            .enqueue_progress("late progress")
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+}
+
+#[test]
+fn acp_lifecycle_rejects_unbounded_or_overproducing_progress_queues() {
+    assert!(matches!(
+        AcpSessionLifecycle::bounded(0).unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    let mut lifecycle = AcpSessionLifecycle::bounded(1).unwrap();
+    lifecycle.enqueue_progress("first").unwrap();
+    assert!(matches!(
+        lifecycle.enqueue_progress("second").unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+    assert_eq!(
+        lifecycle.acknowledge_oldest_update().unwrap().message(),
+        "first"
+    );
+    lifecycle.enqueue_progress("after ack").unwrap();
 }
 
 #[test]
