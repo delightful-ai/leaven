@@ -1,4 +1,6 @@
-use leaven_public_seam::{CapabilityDocument, PublicSeamError, PublicSeamPackage};
+use leaven_public_seam::{
+    CallAuthorityDenialKind, CallAuthorityError, CapabilityDocument, PublicSeamPackage,
+};
 use serde_json::{Value, json};
 
 #[test]
@@ -23,14 +25,15 @@ fn call_authority_rejects_forbidden_input_classes_before_execution() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let capability = CapabilityDocument::from_value(call_capability()).unwrap();
     let mut plan = call_authority_plan();
-    plan["ops"][0]["call"]["input_classes"] = json!(["case.input", "case.target"]);
+    plan["ops"][1]["call"]["input_classes"] = json!(["workspace.file", "external.secret"]);
 
-    assert!(matches!(
+    let denial = call_authority_denial(
         package
             .validate_call_authority_document(&plan, &capability)
             .unwrap_err(),
-        PublicSeamError::InvalidPlan { .. }
-    ));
+    );
+    assert_eq!(denial.kind(), CallAuthorityDenialKind::DataClass);
+    assert_eq!(denial.redactions(), &["external.secret"]);
 }
 
 #[test]
@@ -41,12 +44,13 @@ fn call_authority_rejects_declared_forbidden_intersections_even_when_grant_allow
     plan["ops"][0]["call"]["input_classes"] = json!(["case.input", "case.target"]);
     plan["ops"][0]["call"]["forbidden_input_classes"] = json!(["case.target"]);
 
-    assert!(matches!(
+    let denial = call_authority_denial(
         package
             .validate_call_authority_document(&plan, &capability)
             .unwrap_err(),
-        PublicSeamError::InvalidPlan { .. }
-    ));
+    );
+    assert_eq!(denial.kind(), CallAuthorityDenialKind::DataClass);
+    assert_eq!(denial.redactions(), &["case.target"]);
 }
 
 #[test]
@@ -60,12 +64,32 @@ fn call_authority_rejects_reflector_lm_call_input_classes_include_case_target() 
     let error = package
         .validate_call_authority_document(&plan, &capability)
         .unwrap_err();
+    let denial = call_authority_denial(error);
+    assert_eq!(denial.kind(), CallAuthorityDenialKind::DataClass);
+    assert_eq!(denial.redactions(), &["case.target"]);
     assert!(
-        error
-            .to_string()
-            .contains("reflector lm_complete calls must not carry case.target"),
-        "unexpected error: {error:?}"
+        denial.message().contains("reflector lm_complete calls"),
+        "unexpected denial: {denial:?}"
     );
+}
+
+#[test]
+fn call_authority_rejects_reflector_model_role_case_target_with_non_reflector_subject() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut capability_value = call_capability_allowing_target();
+    capability_value["subject"]["role"] = json!("proposer");
+    let capability = CapabilityDocument::from_value(capability_value).unwrap();
+    let mut plan = call_authority_plan();
+    plan["ops"][0]["call"]["input_classes"] = json!(["case.input", "case.target"]);
+    plan["ops"][0]["call"]["forbidden_input_classes"] = json!([]);
+
+    let denial = call_authority_denial(
+        package
+            .validate_call_authority_document(&plan, &capability)
+            .unwrap_err(),
+    );
+    assert_eq!(denial.kind(), CallAuthorityDenialKind::DataClass);
+    assert_eq!(denial.redactions(), &["case.target"]);
 }
 
 #[test]
@@ -355,4 +379,13 @@ fn workspace_root() -> std::path::PathBuf {
         .and_then(std::path::Path::parent)
         .unwrap()
         .to_path_buf()
+}
+
+fn call_authority_denial(error: CallAuthorityError) -> leaven_public_seam::CallAuthorityDenial {
+    match error {
+        CallAuthorityError::Denied(denial) => denial,
+        other @ CallAuthorityError::InvalidPlan(_) => {
+            panic!("expected call authority denial, got {other:?}")
+        }
+    }
 }

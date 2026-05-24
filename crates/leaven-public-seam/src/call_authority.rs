@@ -3,11 +3,74 @@ use std::collections::BTreeSet;
 use serde_json::{Value, json};
 
 use crate::{
-    CapabilityDocument, CapabilityGrantRequest, PublicSeamError,
+    CapabilityDenial, CapabilityDenialKind, CapabilityDocument, CapabilityGrantRequest,
+    PublicSeamError,
     execution_authority::{
         invalid_authority, limit_usage, output_authority, required_string, workspace_ref_id,
     },
 };
+
+/// Call-authority denial category.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CallAuthorityDenialKind {
+    /// Requested or derived data classes violate local or capability policy.
+    DataClass,
+}
+
+/// Typed call-authority denial with redaction facts.
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+#[error("call authority denied by {kind:?}: {message}")]
+pub struct CallAuthorityDenial {
+    kind: CallAuthorityDenialKind,
+    message: String,
+    redactions: Vec<String>,
+}
+
+impl CallAuthorityDenial {
+    fn data_class(message: impl Into<String>, redactions: Vec<String>) -> Self {
+        Self {
+            kind: CallAuthorityDenialKind::DataClass,
+            message: message.into(),
+            redactions,
+        }
+    }
+
+    /// Denial category.
+    pub const fn kind(&self) -> CallAuthorityDenialKind {
+        self.kind
+    }
+
+    /// Human-readable denial detail.
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+
+    /// Data classes that must be redacted for this denial.
+    pub fn redactions(&self) -> &[String] {
+        &self.redactions
+    }
+}
+
+/// Error raised while validating call authority.
+#[derive(Debug, thiserror::Error)]
+pub enum CallAuthorityError {
+    /// The document is not a valid public-seam plan or call-authority shape.
+    #[error(transparent)]
+    InvalidPlan(#[from] PublicSeamError),
+
+    /// A semantically valid call request was denied by call authority.
+    #[error(transparent)]
+    Denied(#[from] CallAuthorityDenial),
+}
+
+impl From<CallAuthorityError> for PublicSeamError {
+    fn from(error: CallAuthorityError) -> Self {
+        match error {
+            CallAuthorityError::InvalidPlan(error) => error,
+            CallAuthorityError::Denied(denial) => invalid_authority(denial.to_string()),
+        }
+    }
+}
 
 /// Semantic call-authority facts validated from a Plan IR document.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -52,7 +115,7 @@ impl CallAuthorityReport {
 pub fn validate(
     plan: &Value,
     capability: &CapabilityDocument,
-) -> Result<CallAuthorityReport, PublicSeamError> {
+) -> Result<CallAuthorityReport, CallAuthorityError> {
     let mut report = CallAuthorityReport::default();
     let ops = plan
         .get("ops")
@@ -69,17 +132,16 @@ pub fn validate(
             "forbidden_input_classes",
         )?;
         if let Some(data_class) = input_classes.intersection(&forbidden).next() {
-            return Err(invalid_authority(format!(
-                "call `{call_kind}` input class `{data_class}` intersects declared forbidden_input_classes"
-            )));
+            return Err(forbidden_input_class_denial(call_kind, data_class).into());
         }
-        if call_kind == "lm_complete"
-            && capability.subject_stage_role() == Some("reflector")
+        if is_reflector_lm_call(capability, call_kind, call)
             && input_classes.contains("case.target")
         {
-            return Err(invalid_authority(
+            return Err(CallAuthorityDenial::data_class(
                 "reflector lm_complete calls must not carry case.target input classes",
-            ));
+                vec!["case.target".to_owned()],
+            )
+            .into());
         }
         validate_execution_policy(capability, call_kind, call)?;
         let mut request = CapabilityGrantRequest::for_action(action_for_call(call_kind)?);
@@ -90,7 +152,7 @@ pub fn validate(
         request = add_call_dimensions(request, call_kind, call)?;
         capability
             .authorize_grant(request)
-            .map_err(|denial| invalid_authority(format!("call `{call_kind}` denied: {denial}")))?;
+            .map_err(|denial| call_denial_from_capability(call_kind, &denial))?;
         match call_kind {
             "lm_complete" => report.lm_calls += 1,
             "agent_run" => report.agent_calls += 1,
@@ -118,9 +180,13 @@ pub fn validate_call_with_dependency_classes(
     if declares_input_classes {
         for data_class in &dependency_input_classes {
             if !declared_input_classes.contains(data_class) {
-                return Err(invalid_authority(format!(
-                    "call `{call_kind}` omitted dependency data class `{data_class}` from input_classes"
-                )));
+                return Err(CallAuthorityError::from(CallAuthorityDenial::data_class(
+                    format!(
+                        "call `{call_kind}` omitted dependency data class `{data_class}` from input_classes"
+                    ),
+                    vec![data_class.clone()],
+                ))
+                .into());
             }
         }
     }
@@ -137,17 +203,18 @@ pub fn validate_call_with_dependency_classes(
         "forbidden_input_classes",
     )?;
     if let Some(data_class) = effective_input_classes.intersection(&forbidden).next() {
-        return Err(invalid_authority(format!(
-            "call `{call_kind}` input class `{data_class}` intersects declared forbidden_input_classes"
-        )));
+        return Err(
+            CallAuthorityError::from(forbidden_input_class_denial(call_kind, data_class)).into(),
+        );
     }
-    if call_kind == "lm_complete"
-        && capability.subject_stage_role() == Some("reflector")
+    if is_reflector_lm_call(capability, call_kind, call)
         && effective_input_classes.contains("case.target")
     {
-        return Err(invalid_authority(
+        return Err(CallAuthorityError::from(CallAuthorityDenial::data_class(
             "reflector lm_complete calls must not carry case.target input classes",
-        ));
+            vec!["case.target".to_owned()],
+        ))
+        .into());
     }
     validate_execution_policy(capability, call_kind, call)?;
     let mut request = CapabilityGrantRequest::for_action(action_for_call(call_kind)?);
@@ -157,8 +224,38 @@ pub fn validate_call_with_dependency_classes(
     request = add_call_dimensions(request, call_kind, call)?;
     capability
         .authorize_grant(request)
-        .map_err(|denial| invalid_authority(format!("call `{call_kind}` denied: {denial}")))?;
+        .map_err(|denial| PublicSeamError::from(call_denial_from_capability(call_kind, &denial)))?;
     Ok(())
+}
+
+fn forbidden_input_class_denial(call_kind: &str, data_class: &str) -> CallAuthorityDenial {
+    CallAuthorityDenial::data_class(
+        format!(
+            "call `{call_kind}` input class `{data_class}` intersects declared forbidden_input_classes"
+        ),
+        vec![data_class.to_owned()],
+    )
+}
+
+fn call_denial_from_capability(call_kind: &str, denial: &CapabilityDenial) -> CallAuthorityError {
+    if denial.kind() == CapabilityDenialKind::DataClass && !denial.redactions().is_empty() {
+        return CallAuthorityDenial::data_class(
+            format!("call `{call_kind}` denied: {denial}"),
+            denial.redactions().to_vec(),
+        )
+        .into();
+    }
+    invalid_authority(format!("call `{call_kind}` denied: {denial}")).into()
+}
+
+fn is_reflector_lm_call(
+    capability: &CapabilityDocument,
+    call_kind: &str,
+    call: &serde_json::Map<String, Value>,
+) -> bool {
+    call_kind == "lm_complete"
+        && (capability.subject_stage_role() == Some("reflector")
+            || call.get("model_role").and_then(Value::as_str) == Some("reflector"))
 }
 
 fn dependency_data_classes(

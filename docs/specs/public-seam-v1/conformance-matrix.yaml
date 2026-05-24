@@ -614,6 +614,7 @@ rows:
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_forbidden_input_classes_before_execution
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_declared_forbidden_intersections_even_when_grant_allows
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_reflector_lm_call_input_classes_include_case_target
+      - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_reflector_model_role_case_target_with_non_reflector_subject
       - crates/leaven-public-seam/tests/plan_document.rs::capability_execution_denies_calls_that_drop_dependency_data_classes
       - crates/leaven-public-seam/tests/plan_document.rs::capability_execution_denies_calls_that_drop_nested_agent_command_data_classes
       - crates/leaven-public-seam/tests/plan_document.rs::capability_execution_denies_calls_that_drop_nested_graph_row_data_classes
@@ -638,8 +639,13 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_outcome_propagates_stream_and_file_blob_data_classes
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/call_authority.rs::CallAuthorityReport
+      - crates/leaven-public-seam/src/call_authority.rs::CallAuthorityError
+      - crates/leaven-public-seam/src/call_authority.rs::CallAuthorityDenial
+      - crates/leaven-public-seam/src/call_authority.rs::CallAuthorityDenialKind
       - crates/leaven-public-seam/src/call_authority.rs::validate
       - crates/leaven-public-seam/src/call_authority.rs::validate_call_with_dependency_classes
+      - crates/leaven-public-seam/src/call_authority.rs::call_denial_from_capability
+      - crates/leaven-public-seam/src/call_authority.rs::is_reflector_lm_call
       - crates/leaven-public-seam/src/call_authority.rs::collect_data_classes
       - crates/leaven-public-seam/src/call_authority.rs::collect_workspace_listing_entry_data_classes
       - crates/leaven-public-seam/src/call_authority.rs::is_seam_data_class_carrier
@@ -688,6 +694,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-public-seam-tranche-plato-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-assessment-evidence-galileo-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-data-class-dependency-carriers-linnaeus-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-call-authority-redaction-denials-cicero-review.md
     status: pending
 
   - id: ps1.visibility.reflector_target_safe
