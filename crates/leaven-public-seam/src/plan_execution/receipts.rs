@@ -6,8 +6,9 @@ use super::{
     PlanExecutionContext, PlanWorkspaceQueryRequest, case_query_projection, dependency_values,
     effects::{LiveWorkspaceHandle, require_live_workspace, workspace_ref_id},
     graph_read_scope, graph_read_scope_value, invalid_plan, nested_kind, object, prefixed_jcs_hash,
-    required_string, validate_workspace_query_value_shape, workspace_query_expected_value_kind,
-    workspace_query_projection, workspace_query_request_from_values,
+    required_string, validate_json_schema_output_payload, validate_workspace_query_value_shape,
+    workspace_query_expected_value_kind, workspace_query_projection,
+    workspace_query_request_from_values,
 };
 use crate::PublicSeamError;
 
@@ -521,11 +522,13 @@ fn validate_structured_output_value(
             .and_then(|output| output.get("kind"))
             .and_then(Value::as_str)
             == Some("json_schema")
-        && !value.contains_key("parsed")
     {
-        return Err(invalid_plan(format!(
-            "{call_kind} json_schema result value must carry parsed payload"
-        )));
+        let parsed = value.get("parsed").ok_or_else(|| {
+            invalid_plan(format!(
+                "{call_kind} json_schema result value must carry parsed payload"
+            ))
+        })?;
+        validate_json_schema_output_payload(call_kind, call, parsed)?;
     }
     Ok(())
 }

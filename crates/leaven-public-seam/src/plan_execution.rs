@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value, json};
 
-use crate::{PlanResultDocument, PublicSeamError};
+use crate::{PlanResultDocument, PublicSeamError, SchemaFingerprint};
 
 mod effects;
 mod queries;
@@ -554,6 +554,7 @@ fn execute_call<H: PlanExecutionHost>(
     )?;
     match call_kind {
         "lm_complete" => {
+            validate_structured_output_contract(call, "lm_complete")?;
             let request = PlanLmCompleteRequest {
                 name: &name,
                 call,
@@ -570,7 +571,7 @@ fn execute_call<H: PlanExecutionHost>(
                     (outcome, Some("hit"))
                 }
             };
-            validate_structured_output_outcome(call, outcome.parsed.is_some(), "lm_complete")?;
+            validate_structured_output_outcome(call, outcome.parsed.as_ref(), "lm_complete")?;
             record_lm_call_outcome(
                 name,
                 call_kind,
@@ -640,9 +641,10 @@ fn execute_agent_run_call<H: PlanExecutionHost>(
         deps: &deps.values,
         live_workspaces: &deps.live_workspaces,
     };
+    validate_structured_output_contract(call, "agent_run")?;
     request.live_workspace()?;
     let outcome = host.agent_run(request)?;
-    validate_structured_output_outcome(call, outcome.parsed.is_some(), "agent_run")?;
+    validate_structured_output_outcome(call, outcome.parsed.as_ref(), "agent_run")?;
     record_agent_call_outcome(name, outcome, request_hash, context, state)
 }
 
@@ -669,22 +671,103 @@ fn execute_sandbox_exec_call<H: PlanExecutionHost>(
 
 fn validate_structured_output_outcome(
     call: &Value,
-    has_parsed: bool,
+    parsed: Option<&Value>,
     call_kind: &str,
 ) -> Result<(), PublicSeamError> {
-    if call
-        .get("output")
-        .and_then(Value::as_object)
-        .and_then(|output| output.get("kind"))
-        .and_then(Value::as_str)
-        == Some("json_schema")
-        && !has_parsed
-    {
+    if json_schema_output_schema(call, call_kind)?.is_some() {
+        let parsed = parsed.ok_or_else(|| {
+            invalid_plan(format!(
+                "{call_kind} json_schema output must return parsed result payload"
+            ))
+        })?;
+        validate_json_schema_output_payload(call_kind, call, parsed)?;
+    }
+    Ok(())
+}
+
+fn validate_structured_output_contract(
+    call: &Value,
+    call_kind: &str,
+) -> Result<(), PublicSeamError> {
+    if let Some((schema, schema_fingerprint)) = json_schema_output_schema(call, call_kind)? {
+        validate_json_schema_fingerprint(call_kind, schema, schema_fingerprint)?;
+        jsonschema::draft202012::options()
+            .build(schema)
+            .map_err(|error| {
+                invalid_plan(format!(
+                    "{call_kind} json_schema output schema is invalid: {error}"
+                ))
+            })?;
+    }
+    Ok(())
+}
+
+fn json_schema_output_schema<'a>(
+    call: &'a Value,
+    call_kind: &str,
+) -> Result<Option<(&'a Value, &'a str)>, PublicSeamError> {
+    let Some(output) = call.get("output").and_then(Value::as_object) else {
+        return Ok(None);
+    };
+    if output.get("kind").and_then(Value::as_str) != Some("json_schema") {
+        return Ok(None);
+    }
+    let schema_fingerprint = required_string(
+        output.get("schema_fingerprint"),
+        "output.schema_fingerprint",
+    )?;
+    let schema = output.get("schema").ok_or_else(|| {
+        invalid_plan(format!(
+            "{call_kind} json_schema output must carry inline schema for execution validation"
+        ))
+    })?;
+    if schema.is_null() {
         return Err(invalid_plan(format!(
-            "{call_kind} json_schema output must return parsed result payload"
+            "{call_kind} json_schema output must carry inline schema for execution validation"
+        )));
+    }
+    Ok(Some((schema, schema_fingerprint)))
+}
+
+fn validate_json_schema_fingerprint(
+    call_kind: &str,
+    schema: &Value,
+    schema_fingerprint: &str,
+) -> Result<(), PublicSeamError> {
+    let computed = SchemaFingerprint::for_json_value(schema).map_err(|error| {
+        invalid_plan(format!(
+            "{call_kind} json_schema output schema fingerprinting failed: {error}"
+        ))
+    })?;
+    if computed.as_str() != schema_fingerprint {
+        return Err(invalid_plan(format!(
+            "{call_kind} json_schema output schema_fingerprint does not match inline schema"
         )));
     }
     Ok(())
+}
+
+fn validate_json_schema_output_payload(
+    call_kind: &str,
+    call: &Value,
+    parsed: &Value,
+) -> Result<(), PublicSeamError> {
+    let Some((schema, schema_fingerprint)) = json_schema_output_schema(call, call_kind)? else {
+        return Ok(());
+    };
+    validate_json_schema_fingerprint(call_kind, schema, schema_fingerprint)?;
+    let validator = jsonschema::draft202012::options()
+        .build(schema)
+        .map_err(|error| {
+            invalid_plan(format!(
+                "{call_kind} json_schema output schema is invalid: {error}"
+            ))
+        })?;
+    validator.validate(parsed).map_err(|error| {
+        invalid_plan(format!(
+            "{call_kind} parsed result payload failed json_schema output contract: {error}"
+        ))
+    })
 }
 
 fn validate_sandbox_stream_outcome(

@@ -1,4 +1,4 @@
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::{CapabilityDocument, CapabilityGrantRequest, CapabilityLimitUsage, PublicSeamError};
 
@@ -22,6 +22,8 @@ fn validate_writes(plan: &Value, capability: &CapabilityDocument) -> Result<(), 
                     .authorize_grant(CapabilityGrantRequest::for_action("event.emit"))
                     .map_err(|denial| invalid_authority(format!("event emit denied: {denial}")))?;
             }
+            "submit_assessments" => validate_submit_assessments(write, capability)?,
+            "request_evaluation" => validate_request_evaluation(write, capability)?,
             "submit_proposal_batch" | "apply_proposal_batch" => {
                 crate::proposal_authority::validate(plan, capability)?;
             }
@@ -32,6 +34,56 @@ fn validate_writes(plan: &Value, capability: &CapabilityDocument) -> Result<(), 
             }
         }
     }
+    Ok(())
+}
+
+fn validate_submit_assessments(
+    write: &serde_json::Map<String, Value>,
+    capability: &CapabilityDocument,
+) -> Result<(), PublicSeamError> {
+    let assessments = write
+        .get("assessments")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_authority("submit_assessments must carry assessments"))?;
+    capability
+        .authorize_grant(
+            CapabilityGrantRequest::for_action("assessment.submit")
+                .with_resource(
+                    "evaluation_request_id",
+                    json!(required_string(
+                        write.get("evaluation_request_id"),
+                        "evaluation_request_id"
+                    )?),
+                )
+                .with_limits(CapabilityLimitUsage {
+                    rows: Some(assessments.len() as u64),
+                    ..CapabilityLimitUsage::default()
+                }),
+        )
+        .map_err(|denial| invalid_authority(format!("assessment submit denied: {denial}")))?;
+    Ok(())
+}
+
+fn validate_request_evaluation(
+    write: &serde_json::Map<String, Value>,
+    capability: &CapabilityDocument,
+) -> Result<(), PublicSeamError> {
+    let request_object = write
+        .get("request")
+        .and_then(Value::as_object)
+        .ok_or_else(|| invalid_authority("request_evaluation must carry request"))?;
+    let candidates = request_object
+        .get("candidates")
+        .cloned()
+        .ok_or_else(|| invalid_authority("request_evaluation must carry request.candidates"))?;
+    let mut request = CapabilityGrantRequest::for_action("evaluation.request")
+        .with_resource("candidate_ids", candidates);
+    if let Some(purpose) = request_object.get("purpose").and_then(Value::as_str) {
+        request = request.with_purpose(purpose);
+    }
+    capability
+        .authorize_grant(request)
+        .map_err(|denial| invalid_authority(format!("evaluation request denied: {denial}")))?;
     Ok(())
 }
 
