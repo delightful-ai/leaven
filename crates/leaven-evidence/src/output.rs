@@ -93,6 +93,12 @@ impl DataClassSet {
         Self::new([DataClass::candidate_output(), DataClass::public()])
     }
 
+    /// Public reportable candidate-artifact data-class set.
+    #[must_use]
+    pub fn public_candidate_artifact() -> Self {
+        Self::new([DataClass::candidate_artifact(), DataClass::public()])
+    }
+
     /// Returns the classes in stable order.
     pub fn iter(&self) -> impl Iterator<Item = &DataClass> {
         self.0.iter()
@@ -157,6 +163,15 @@ impl OutputMetadata {
         Self {
             visibility: OutputVisibility::Public,
             data_classes: DataClassSet::public_candidate_output(),
+        }
+    }
+
+    /// Publicly visible candidate artifact metadata.
+    #[must_use]
+    pub fn public_candidate_artifact() -> Self {
+        Self {
+            visibility: OutputVisibility::Public,
+            data_classes: DataClassSet::public_candidate_artifact(),
         }
     }
 
@@ -305,6 +320,16 @@ impl OutputRecord {
             text: text.into(),
             truncated: false,
             metadata: OutputMetadata::public_candidate_output(),
+        }
+    }
+
+    /// Builds an untruncated public candidate-artifact inline record.
+    #[must_use]
+    pub fn candidate_artifact_inline(text: impl Into<String>) -> Self {
+        Self::Inline {
+            text: text.into(),
+            truncated: false,
+            metadata: OutputMetadata::public_candidate_artifact(),
         }
     }
 

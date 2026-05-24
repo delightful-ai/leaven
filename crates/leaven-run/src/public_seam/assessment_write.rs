@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use leaven_core::OptimizationProblem;
 use leaven_engine::AssessmentView;
@@ -365,11 +365,14 @@ where
             .map_err(
                 |source| PublicAssessmentWriteReceiptProjectionError::EvidenceLoad { source },
             )?;
-        let source_receipts = evidence_source_read_receipts(&assessment, &evidence);
+        let source_receipts = evidence_source_read_receipts(&evidence);
+        if source_receipts.is_empty() {
+            return Err(PublicAssessmentWriteReceiptProjectionError::MissingEvidenceSourceReceipts);
+        }
+        let source_receipt_ids = source_receipt_ids(&source_receipts);
         data_classes.extend(assessment_summary_data_classes(&assessment, &evidence)?);
         query_receipts.extend(evidence_query_receipts(
             &source_receipts,
-            &evidence_data_classes(&evidence),
             base_revision,
             started_at,
             completed_at,
@@ -377,7 +380,7 @@ where
         items.push(assessment_summary_item(
             &assessment,
             &evidence,
-            &source_receipts,
+            &source_receipt_ids,
         )?);
     }
     Ok(ProjectedAssessmentEvidenceRows {
@@ -412,6 +415,9 @@ pub enum PublicAssessmentWriteReceiptProjectionError {
         #[source]
         source: StoreError,
     },
+    /// Stored case-assessment evidence did not carry source read receipts.
+    #[error("assessment write projection requires real evidence source read receipts")]
+    MissingEvidenceSourceReceipts,
     /// The projection does not yet support the assessment shape.
     #[error("assessment write projection does not support this assessment shape")]
     UnsupportedAssessmentShape,
@@ -460,7 +466,7 @@ fn assessment_plan_entry(
 ) -> Result<Value, PublicAssessmentWriteReceiptProjectionError> {
     let shape = AssessmentPlanShape::from_assessment(assessment)?;
     let output = score_output(&shape, evidence)?;
-    let source_receipts = evidence_source_read_receipts(assessment, evidence);
+    let source_receipts = plan_document_source_read_receipts(assessment, evidence);
     let mut entry = json!({
         "kind": shape.kind(),
         "score": {
@@ -530,7 +536,36 @@ fn assessment_evidence_envelope(
     }))
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct EvidenceSourceReadReceipt {
+    id: String,
+    data_classes: Vec<String>,
+}
+
 fn evidence_source_read_receipts(
+    evidence: &CaseAssessmentEvidence,
+) -> Vec<EvidenceSourceReadReceipt> {
+    let mut by_receipt = BTreeMap::<String, BTreeSet<String>>::new();
+    for read in evidence.case_data_reads() {
+        let entry = by_receipt
+            .entry(read.receipt().to_owned())
+            .or_insert_with(|| BTreeSet::from(["public".to_owned()]));
+        entry.extend(read.data_classes().iter().cloned());
+    }
+    by_receipt
+        .into_iter()
+        .map(|(id, data_classes)| EvidenceSourceReadReceipt {
+            id,
+            data_classes: data_classes.into_iter().collect(),
+        })
+        .collect()
+}
+
+fn source_receipt_ids(receipts: &[EvidenceSourceReadReceipt]) -> Vec<String> {
+    receipts.iter().map(|receipt| receipt.id.clone()).collect()
+}
+
+fn plan_document_source_read_receipts(
     assessment: &AssessmentView<'_>,
     evidence: &CaseAssessmentEvidence,
 ) -> Vec<String> {
@@ -607,33 +642,32 @@ fn assessment_summary_data_classes(
 }
 
 fn evidence_query_receipts(
-    receipt_ids: &[String],
-    data_classes: &[String],
+    receipts: &[EvidenceSourceReadReceipt],
     graph_revision: &str,
     started_at: &str,
     completed_at: &str,
 ) -> Vec<Value> {
-    receipt_ids
+    receipts
         .iter()
         .map(|receipt| {
             json!({
                 "kind": "query",
-                "receipt": receipt,
+                "receipt": receipt.id,
                 "started_at": started_at,
                 "completed_at": completed_at,
-                "op_hash": format!("fp_query_sha256_{receipt}"),
-                "result_hash": format!("fp_result_sha256_{receipt}"),
+                "op_hash": format!("fp_query_sha256_{}", receipt.id),
+                "result_hash": format!("fp_result_sha256_{}", receipt.id),
                 "graph_revision": graph_revision,
                 "status": "succeeded",
-                "read_scope_fingerprint": format!("fp_scope_sha256_{receipt}"),
-                "projection_fingerprint": format!("fp_projection_sha256_{receipt}"),
+                "read_scope_fingerprint": format!("fp_scope_sha256_{}", receipt.id),
+                "projection_fingerprint": format!("fp_projection_sha256_{}", receipt.id),
                 "trace_refs": [
                     {
                         "kind": "assessment_evidence_visibility",
-                        "id": format!("trace_{receipt}"),
+                        "id": format!("trace_{}", receipt.id),
                         "visibility": "redacted_transcript",
-                        "data_classes": data_classes,
-                        "receipt": receipt
+                        "data_classes": receipt.data_classes,
+                        "receipt": receipt.id
                     }
                 ]
             })

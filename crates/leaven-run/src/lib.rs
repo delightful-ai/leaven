@@ -20,7 +20,7 @@ pub use error::OptimizeError;
 pub use evaluator::{JudgeCandidateOutput, JudgeScoreContext, JudgingEvaluator, ScoringEvaluator};
 pub use evidence::{
     IntoRunResult, ReportableOutput, RunCase, RunError, RunOutput, Score, ScoreCase, ScoreContext,
-    ScoreError, ScoreMetadataView,
+    ScoreError, ScoreMetadataView, artifact_identity_output,
 };
 pub use leaven_engine::CachePolicy;
 pub use public_seam::{

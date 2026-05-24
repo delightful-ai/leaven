@@ -528,6 +528,7 @@ fn target_derived_evidence() -> Value {
         "target_derived": true,
         "data_classes": ["case.target", "prompt.raw", "transcript.raw"],
         "public": {
+            "summary": "model answer matched target",
             "feedback": "matched target",
             "data_classes": ["case.target"],
             "trace_refs": [

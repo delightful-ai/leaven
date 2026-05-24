@@ -10,13 +10,14 @@ use leaven_core::{
 use leaven_engine::{CachePolicy, EvaluationContext, EvaluationError, Evaluator};
 use leaven_eval::{Case, NoTarget};
 use leaven_evidence::{
-    CandidateAssessmentOutput, CaseAssessmentEvidence, OutputRecord, ScalarEvidence,
+    CandidateAssessmentOutput, CandidateAssessmentOutputError, CaseAssessmentEvidence,
+    OutputRecord, ScalarEvidence,
 };
 use leaven_kernel::{BudgetSnapshot, Cost, EvaluationSetId, EvaluatorId, Fingerprint, Metered};
 
 use crate::compatibility::ScoringEvaluatorIdentity;
-use crate::evidence::CaseDataReadLog;
-use crate::evidence::{ReportableOutputDeclaration, ReportableOutputScope};
+use crate::evidence::artifact_identity_output;
+use crate::evidence::{CaseDataReadLog, ReportableOutputDeclaration, ReportableOutputScope};
 use crate::{RunCase, RunError, RunOutput, RunProblem, Score, ScoreContext, ScoreError};
 
 type Runner<A, I, Out> = Arc<
@@ -150,6 +151,20 @@ impl<A, I, T, Out> JudgeScoreContext<A, I, T, Out> {
     #[must_use]
     pub fn report_text_output(&self, output: impl Into<String>) -> crate::ReportableOutput {
         self.report_output(leaven_evidence::OutputRecord::inline(output))
+    }
+
+    /// Reports the judged candidate artifact identities as the assessed output.
+    #[must_use]
+    pub fn report_artifact_identity_outputs(&self) -> crate::ReportableOutput
+    where
+        A: leaven_core::Artifact,
+    {
+        let output = grouped_artifact_identity_output(&self.outputs);
+        crate::ReportableOutput::new(
+            output.clone(),
+            self.output_scope.clone(),
+            Some(ReportableOutputDeclaration::derived(output)),
+        )
     }
 }
 
@@ -605,8 +620,19 @@ fn assessed_candidate_outputs<A, Out>(
                     "runner output did not declare reportable assessed output".to_owned(),
                 )
             })?;
-            CandidateAssessmentOutput::new(output.candidate, reportable.record().clone())
-                .map_err(|error| EvaluationError::Message(error.to_string()))
+            CandidateAssessmentOutput::new(output.candidate, reportable.record().clone()).map_err(
+                |error| match error {
+                    CandidateAssessmentOutputError::MissingAssessedDataClass => {
+                        EvaluationError::Message(
+                            "runner output did not declare candidate or artifact assessed output"
+                                .to_owned(),
+                        )
+                    }
+                    CandidateAssessmentOutputError::EmptyInlineOutput => {
+                        EvaluationError::Message(error.to_string())
+                    }
+                },
+            )
         })
         .collect()
 }
@@ -618,12 +644,10 @@ fn assessed_group_output<A, Out>(
     let mut truncated = false;
     let mut metadata = None;
     let mut unbound_explicit_assessed_output = false;
-    let mut bound_explicit_candidate_artifact = false;
     for output in outputs {
         let reportable = output.output.reportable_output()?;
         unbound_explicit_assessed_output |= reportable.is_unbound_explicit_candidate_output()
             || reportable.is_unbound_explicit_candidate_artifact();
-        bound_explicit_candidate_artifact |= reportable.is_bound_explicit_candidate_artifact();
         let OutputRecord::Inline {
             text,
             truncated: output_truncated,
@@ -649,13 +673,26 @@ fn assessed_group_output<A, Out>(
     };
     if unbound_explicit_assessed_output {
         Some(ReportableOutputDeclaration::explicit(record))
-    } else if bound_explicit_candidate_artifact {
-        Some(ReportableOutputDeclaration::explicit_candidate_artifact(
-            record,
-        ))
     } else {
         Some(ReportableOutputDeclaration::derived(record))
     }
+}
+
+fn grouped_artifact_identity_output<A, Out>(
+    outputs: &[JudgeCandidateOutput<A, Out>],
+) -> OutputRecord
+where
+    A: leaven_core::Artifact,
+{
+    let text = outputs
+        .iter()
+        .map(|output| match artifact_identity_output(&output.artifact) {
+            OutputRecord::Inline { text, .. } => text,
+            OutputRecord::BlobRef { .. } => unreachable!("artifact identity output is inline"),
+        })
+        .collect::<Vec<_>>()
+        .join("|");
+    OutputRecord::candidate_artifact_inline(text)
 }
 
 fn evaluate_jobs<A, I, T, Out>(
