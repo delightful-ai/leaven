@@ -495,6 +495,7 @@ fn validate_successful_call_result_value(
         )));
     }
     require_receipt_field(value, "receipt", receipt_id)?;
+    validate_lm_response_value(call_kind, call, value)?;
     validate_structured_output_value(call_kind, call, value)?;
     validate_sandbox_stream_value(call, value)?;
     validate_agent_session_value(call_kind, value, receipt_id)?;
@@ -511,6 +512,69 @@ fn expected_call_result_value_kind(call_kind: &str) -> Option<&'static str> {
         "human_review" => Some("human_review_result"),
         _ => None,
     }
+}
+
+fn validate_lm_response_value(
+    call_kind: &str,
+    call: &Value,
+    value: &Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    if call_kind != "lm_complete" {
+        return Ok(());
+    }
+    let message = value
+        .get("message")
+        .and_then(Value::as_object)
+        .ok_or_else(|| invalid_plan("lm_complete result value must carry message"))?;
+    let role = required_string(message.get("role"), "lm_complete result message role")?;
+    if role != "assistant" {
+        return Err(invalid_plan(format!(
+            "lm_complete result message role `{role}` must be assistant"
+        )));
+    }
+    if message.get("tool_call_id").is_some() || message.get("name").is_some() {
+        return Err(invalid_plan(
+            "lm_complete result message must not carry tool_call_id or name",
+        ));
+    }
+    let content = message
+        .get("content")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_plan("lm_complete result message must carry content"))?;
+    let mut text_bytes = 0usize;
+    for part in content {
+        let part = object(part, "lm_complete result content part")?;
+        match required_string(part.get("kind"), "lm_complete result content kind")? {
+            "text" => {
+                text_bytes += required_string(part.get("text"), "lm_complete result text")?.len();
+            }
+            other => {
+                return Err(invalid_plan(format!(
+                    "lm_complete result content kind `{other}` is not a V1 final response"
+                )));
+            }
+        }
+    }
+    if call
+        .get("output")
+        .and_then(Value::as_object)
+        .and_then(|output| output.get("kind"))
+        .and_then(Value::as_str)
+        == Some("final_message")
+        && let Some(max_bytes) = call
+            .get("output")
+            .and_then(Value::as_object)
+            .and_then(|output| output.get("max_bytes"))
+            .and_then(Value::as_u64)
+    {
+        let max_bytes = usize::try_from(max_bytes).unwrap_or(usize::MAX);
+        if text_bytes > max_bytes {
+            return Err(invalid_plan(format!(
+                "lm_complete final_message result exceeds max_bytes {max_bytes}"
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn validate_structured_output_value(
