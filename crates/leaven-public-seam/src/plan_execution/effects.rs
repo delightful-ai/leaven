@@ -768,6 +768,7 @@ fn invalid_lm_call(message: impl Into<String>) -> PublicSeamError {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanLmCompleteOutcome {
     pub(super) message: Value,
+    pub(super) parsed: Option<Value>,
     pub(super) data_classes: Vec<String>,
     pub(super) replayability: String,
     pub(super) runtime_fingerprint: String,
@@ -780,6 +781,7 @@ impl PlanLmCompleteOutcome {
     pub fn new(message: Value, runtime_fingerprint: impl Into<String>) -> Self {
         Self {
             message,
+            parsed: None,
             data_classes: vec!["public".to_owned()],
             replayability: "fully_managed".to_owned(),
             runtime_fingerprint: runtime_fingerprint.into(),
@@ -796,6 +798,7 @@ impl PlanLmCompleteOutcome {
     ) -> Self {
         Self {
             message: Value::Null,
+            parsed: None,
             data_classes: Vec::new(),
             replayability: "has_declared_external_effects".to_owned(),
             runtime_fingerprint: runtime_fingerprint.into(),
@@ -823,12 +826,20 @@ impl PlanLmCompleteOutcome {
         self.replayability = replayability.into();
         self
     }
+
+    /// Attaches the parsed payload required by JSON-schema output contracts.
+    #[must_use]
+    pub fn with_parsed(mut self, parsed: Value) -> Self {
+        self.parsed = Some(parsed);
+        self
+    }
 }
 
 /// Host outcome for a typed `agent_run` call.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanAgentRunOutcome {
     pub(super) status: String,
+    pub(super) parsed: Option<Value>,
     pub(super) transcript_ref: Option<Value>,
     pub(super) commands: Vec<Value>,
     pub(super) data_classes: Vec<String>,
@@ -843,6 +854,7 @@ impl PlanAgentRunOutcome {
     pub fn completed(runtime_fingerprint: impl Into<String>) -> Self {
         Self {
             status: "completed".to_owned(),
+            parsed: None,
             transcript_ref: None,
             commands: Vec::new(),
             data_classes: vec!["public".to_owned()],
@@ -856,6 +868,13 @@ impl PlanAgentRunOutcome {
     #[must_use]
     pub fn with_transcript_ref(mut self, transcript_ref: Value) -> Self {
         self.transcript_ref = Some(transcript_ref);
+        self
+    }
+
+    /// Attaches the parsed payload required by JSON-schema output contracts.
+    #[must_use]
+    pub fn with_parsed(mut self, parsed: Value) -> Self {
+        self.parsed = Some(parsed);
         self
     }
 
@@ -910,6 +929,13 @@ impl PlanSandboxExecOutcome {
     pub fn with_stream_refs(mut self, stdout_ref: Value, stderr_ref: Value) -> Self {
         self.stdout_ref = Some(stdout_ref);
         self.stderr_ref = Some(stderr_ref);
+        self
+    }
+
+    /// Attaches a captured output file blob reference.
+    #[must_use]
+    pub fn with_file_ref(mut self, path: impl Into<String>, blob_ref: Value) -> Self {
+        self.files.insert(path.into(), blob_ref);
         self
     }
 

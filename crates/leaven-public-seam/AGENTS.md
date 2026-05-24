@@ -120,20 +120,28 @@ receipts. The `PlanLmCompleteRequest::to_lm_request` route lowers
 schema-valid `lm_complete` calls into provider-neutral `leaven-lm` vocabulary
 while preserving developer/user/tool messages, tool-result ids, tool
 definitions, model role, sampling stop sequences, provider hints, final-message
-output, and JSON-schema output; it rejects extension/multimodal content rather
-than silently downgrading it to text. It still requires a concrete model before
-provider execution and is not provider runtime execution, streaming, ACP
-delivery, or full `ps1.lm.contract` closeout. The `PlanAgentRunRequest` and
+output, and JSON-schema output. JSON-schema LM outputs must return a parsed
+Plan Result payload, and successful call-result validation requires an
+`lm_complete` result to be an `lm_response` value carrying the matching call
+receipt; extension/multimodal content is rejected rather than silently
+downgraded to text. It still requires a concrete model before provider
+execution and is not provider runtime execution, streaming, ACP delivery, or
+full `ps1.lm.contract` closeout. The `PlanAgentRunRequest` and
 `PlanSandboxExecRequest` routes lower schema-valid `agent_run` and
 `sandbox_exec` calls into provider-neutral `leaven-agent::AgentRunRequest` and
 backend-neutral `leaven-workspace::Command` primitives, and the representative
 harness can emit typed `agent_session` and `sandbox_exec` Plan Result values
-with call receipts. Both `agent_run` and `sandbox_exec` require a live
-unreleased, materialization-proven `workspace_handle` dependency before host
-execution, so host paths, bare workspace ids, and literal forged handles cannot
-satisfy either route. These routes are not agent provider execution, sandbox
-backend execution, ACP delivery, proposal parsing, streaming delivery, or full
-agent/sandbox row closeout. The
+with call receipts. JSON-schema agent outputs must return a parsed Plan Result
+payload, and successful call-result validation requires `agent_run` and
+`sandbox_exec` result values to carry the matching call receipt and expected
+value kind. `sandbox_exec` with `stream_policy: blob_refs_only` must return
+stdout/stderr blob refs, and sandbox outcomes can carry captured output-file
+blob refs. Both `agent_run` and `sandbox_exec` require a live unreleased,
+materialization-proven `workspace_handle` dependency before host execution, so
+host paths, bare workspace ids, and literal forged handles cannot satisfy
+either route. These routes are not agent provider execution, sandbox backend
+execution, ACP delivery, proposal parsing, `stream_updates` transport delivery,
+or full agent/sandbox row closeout. The
 `PlanWorkspaceMaterializeRequest` and
 `PlanWorkspaceReleaseRequest` routes lower schema-valid workspace lifecycle
 calls into typed public-seam requests and emit `workspace_handle` Plan Result

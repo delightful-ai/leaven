@@ -830,7 +830,7 @@ fn expected_receipt_kind(value_kind: &str) -> Option<&'static str> {
         "workspace_handle"
         | "lm_response"
         | "agent_session"
-        | "sandbox_exec_result"
+        | "sandbox_exec"
         | "human_review_result" => Some("call"),
         "proposal_batch_receipt"
         | "assessment_batch_receipt"

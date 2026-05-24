@@ -442,6 +442,13 @@ fn validate_call_receipt(
                     "succeeded call receipt for `{name}` must have a matching result value"
                 ))
             })?;
+            validate_successful_call_result_value(
+                name,
+                call_kind,
+                call,
+                value,
+                required_string(receipt.get("receipt"), "receipt.receipt")?,
+            )?;
             update_call_workspace_provenance(name, call_kind, call, value, &deps, state)?;
             state.bindings.insert(name.to_owned(), value.clone());
         }
@@ -462,6 +469,81 @@ fn validate_call_receipt(
             )?;
         }
         _ => {}
+    }
+    Ok(())
+}
+
+fn validate_successful_call_result_value(
+    name: &str,
+    call_kind: &str,
+    call: &Value,
+    value: &Value,
+    receipt_id: &str,
+) -> Result<(), PublicSeamError> {
+    let value = object(value, "call result value")?;
+    let value_kind = required_string(value.get("kind"), "call result value.kind")?;
+    let expected_kind = expected_call_result_value_kind(call_kind).ok_or_else(|| {
+        invalid_plan(format!(
+            "representative Plan IR receipt verifier does not inspect `{call_kind}` call results"
+        ))
+    })?;
+    if value_kind != expected_kind {
+        return Err(invalid_plan(format!(
+            "call operation `{name}` result value kind `{value_kind}` does not match `{expected_kind}` for `{call_kind}`"
+        )));
+    }
+    require_receipt_field(value, "receipt", receipt_id)?;
+    validate_structured_output_value(call_kind, call, value)?;
+    validate_sandbox_stream_value(call, value)?;
+    Ok(())
+}
+
+fn expected_call_result_value_kind(call_kind: &str) -> Option<&'static str> {
+    match call_kind {
+        "lm_complete" => Some("lm_response"),
+        "agent_run" => Some("agent_session"),
+        "sandbox_exec" => Some("sandbox_exec"),
+        "workspace_materialize" | "workspace_release" => Some("workspace_handle"),
+        "human_review" => Some("human_review_result"),
+        _ => None,
+    }
+}
+
+fn validate_structured_output_value(
+    call_kind: &str,
+    call: &Value,
+    value: &Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    if matches!(call_kind, "lm_complete" | "agent_run")
+        && call
+            .get("output")
+            .and_then(Value::as_object)
+            .and_then(|output| output.get("kind"))
+            .and_then(Value::as_str)
+            == Some("json_schema")
+        && !value.contains_key("parsed")
+    {
+        return Err(invalid_plan(format!(
+            "{call_kind} json_schema result value must carry parsed payload"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_sandbox_stream_value(
+    call: &Value,
+    value: &Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    if call
+        .get("stream_policy")
+        .and_then(Value::as_str)
+        .unwrap_or("buffer")
+        == "blob_refs_only"
+        && (!value.contains_key("stdout_ref") || !value.contains_key("stderr_ref"))
+    {
+        return Err(invalid_plan(
+            "sandbox_exec blob_refs_only result value must carry stdout_ref and stderr_ref",
+        ));
     }
     Ok(())
 }
