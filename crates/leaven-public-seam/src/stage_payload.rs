@@ -227,6 +227,8 @@ fn inspect_reflect_request(
             "reflector request must declare target_safe_projection",
         ));
     }
+    require_parent_source_ref(object)?;
+    require_reflect_surface_context(object)?;
     require_non_empty_array(object.get("source_refs"), "source_refs")?;
     let top_level_source_refs = source_ref_set(object.get("source_refs"), "source_refs")?;
     let examples = required_array(object.get("examples"), "examples")?;
@@ -317,6 +319,8 @@ fn inspect_propose_request(
 ) -> Result<(Vec<StageProposalEffect>, usize), PublicSeamError> {
     require_field(object, "capability_fingerprint")?;
     require_field(object, "query_policy_fingerprint")?;
+    require_field(object, "surface_fingerprint")?;
+    require_parent_source_ref(object)?;
     require_non_empty_array(object.get("source_refs"), "source_refs")?;
     let reflection_value = object
         .get("reflection_result")
@@ -355,6 +359,34 @@ fn inspect_propose_request(
         ));
     }
     Ok((effects, change_schema_count))
+}
+
+fn require_parent_source_ref(
+    object: &serde_json::Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    let parent = object
+        .get("parent")
+        .ok_or_else(|| invalid_stage_payload("stage payload must carry `parent`"))?;
+    let parent_ref = source_ref_key(parent)?;
+    let source_refs = source_ref_set(object.get("source_refs"), "source_refs")?;
+    if !source_refs.contains(&parent_ref) {
+        return Err(invalid_stage_payload(
+            "stage payload source_refs must include the parent candidate",
+        ));
+    }
+    Ok(())
+}
+
+fn require_reflect_surface_context(
+    object: &serde_json::Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    require_field(object, "surface_fingerprint")?;
+    if object.get("part").is_none() && object.get("part_label").is_none() {
+        return Err(invalid_stage_payload(
+            "reflector request must carry part or part_label context",
+        ));
+    }
+    Ok(())
 }
 
 fn validate_reflection_diagnosis_sources(
