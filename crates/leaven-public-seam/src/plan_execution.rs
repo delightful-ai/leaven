@@ -11,6 +11,8 @@ mod receipts;
 pub use effects::{
     PlanAgentRunOutcome, PlanAgentRunRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest,
     PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome, PlanSandboxExecRequest,
+    PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceReleaseOutcome,
+    PlanWorkspaceReleaseRequest,
 };
 pub use queries::{
     PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanGraphQueryOutcome, PlanGraphQueryRequest,
@@ -160,6 +162,28 @@ pub trait PlanExecutionHost {
         let _ = request;
         Err(invalid_plan(
             "Plan execution host does not provide sandbox_exec calls",
+        ))
+    }
+
+    /// Executes a typed `workspace_materialize` call.
+    fn workspace_materialize(
+        &mut self,
+        request: PlanWorkspaceMaterializeRequest<'_>,
+    ) -> Result<PlanWorkspaceMaterializeOutcome, PublicSeamError> {
+        let _ = request;
+        Err(invalid_plan(
+            "Plan execution host does not provide workspace_materialize calls",
+        ))
+    }
+
+    /// Executes a typed `workspace_release` call.
+    fn workspace_release(
+        &mut self,
+        request: PlanWorkspaceReleaseRequest<'_>,
+    ) -> Result<PlanWorkspaceReleaseOutcome, PublicSeamError> {
+        let _ = request;
+        Err(invalid_plan(
+            "Plan execution host does not provide workspace_release calls",
         ))
     }
 
@@ -555,6 +579,32 @@ fn execute_call<H: PlanExecutionHost>(
             })?;
             record_sandbox_call_outcome(name, outcome, &request_hash, context, state)
         }
+        "workspace_materialize" => {
+            if mode == EffectMode::RequireCached {
+                return Err(invalid_plan(
+                    "require_cached mode cannot prove cached execution for `workspace_materialize` calls",
+                ));
+            }
+            let outcome = host.workspace_materialize(PlanWorkspaceMaterializeRequest {
+                name: &name,
+                call,
+                deps: dep_values,
+            })?;
+            record_workspace_materialize_outcome(name, outcome, &request_hash, context, state)
+        }
+        "workspace_release" => {
+            if mode == EffectMode::RequireCached {
+                return Err(invalid_plan(
+                    "require_cached mode cannot prove cached execution for `workspace_release` calls",
+                ));
+            }
+            let outcome = host.workspace_release(PlanWorkspaceReleaseRequest {
+                name: &name,
+                call,
+                deps: dep_values,
+            })?;
+            record_workspace_release_outcome(name, outcome, &request_hash, context, state)
+        }
         _ => Err(invalid_plan(format!(
             "representative Plan IR harness does not execute `{call_kind}` calls"
         ))),
@@ -691,6 +741,76 @@ fn record_sandbox_call_outcome(
     record_successful_external_call(
         name,
         "sandbox_exec",
+        value,
+        &runtime_fingerprint,
+        request_hash,
+        context,
+        state,
+    )
+}
+
+fn record_workspace_materialize_outcome(
+    name: String,
+    outcome: PlanWorkspaceMaterializeOutcome,
+    request_hash: &str,
+    context: &PlanExecutionContext,
+    state: &mut ExecutionState,
+) -> Result<(), PublicSeamError> {
+    let PlanWorkspaceMaterializeOutcome {
+        workspace,
+        lifetime,
+        data_classes,
+        replayability,
+        runtime_fingerprint,
+    } = outcome;
+    let receipt_id = format!("wrec_{name}");
+    let value = json!({
+        "kind": "workspace_handle",
+        "workspace": workspace,
+        "lifetime": lifetime,
+        "released": false,
+        "graph_revision": context.base_revision,
+        "data_classes": data_classes,
+        "replayability": replayability,
+        "receipt": receipt_id
+    });
+    record_successful_external_call(
+        name,
+        "workspace_materialize",
+        value,
+        &runtime_fingerprint,
+        request_hash,
+        context,
+        state,
+    )
+}
+
+fn record_workspace_release_outcome(
+    name: String,
+    outcome: PlanWorkspaceReleaseOutcome,
+    request_hash: &str,
+    context: &PlanExecutionContext,
+    state: &mut ExecutionState,
+) -> Result<(), PublicSeamError> {
+    let PlanWorkspaceReleaseOutcome {
+        workspace,
+        lifetime,
+        runtime_fingerprint,
+    } = outcome;
+    let receipt_id = format!("wrec_{name}");
+    let value = json!({
+        "kind": "workspace_handle",
+        "workspace": workspace,
+        "lifetime": lifetime,
+        "released": true,
+        "receipt": receipt_id,
+        "graph_revision": context.base_revision,
+        "data_classes": ["public"],
+        "replayability": "boundary_managed"
+    });
+    record_successful_external_call(
+        name,
+        "workspace_release",
         value,
         &runtime_fingerprint,
         request_hash,

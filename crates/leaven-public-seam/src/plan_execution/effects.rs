@@ -13,6 +13,103 @@ use serde_json::{Value, json};
 
 use crate::PublicSeamError;
 
+/// Lowered `workspace_materialize` request passed to a plan execution host.
+#[derive(Clone, Copy, Debug)]
+pub struct PlanWorkspaceMaterializeRequest<'a> {
+    pub(super) name: &'a str,
+    pub(super) call: &'a Value,
+    pub(super) deps: &'a BTreeMap<String, Value>,
+}
+
+impl<'a> PlanWorkspaceMaterializeRequest<'a> {
+    /// Operation binding name.
+    pub const fn name(&self) -> &'a str {
+        self.name
+    }
+
+    /// Typed `workspace_materialize` call body from the Plan IR.
+    pub const fn call(&self) -> &'a Value {
+        self.call
+    }
+
+    /// Resolved dependency bindings visible to this call.
+    pub const fn deps(&self) -> &'a BTreeMap<String, Value> {
+        self.deps
+    }
+
+    /// Candidate being materialized.
+    pub fn candidate(&self) -> Result<&'a str, PublicSeamError> {
+        self.call
+            .get("candidate")
+            .and_then(Value::as_str)
+            .ok_or_else(|| invalid_call("workspace_materialize must carry candidate"))
+    }
+
+    /// Optional surface selector.
+    #[must_use]
+    pub fn surface(&self) -> Option<&'a str> {
+        self.call.get("surface").and_then(Value::as_str)
+    }
+
+    /// Workspace materialization mode.
+    pub fn mode(&self) -> Result<&'a str, PublicSeamError> {
+        self.call
+            .get("mode")
+            .and_then(Value::as_str)
+            .ok_or_else(|| invalid_call("workspace_materialize must carry mode"))
+    }
+
+    /// Requested workspace lifetime.
+    pub fn lifetime(&self) -> Result<&'a str, PublicSeamError> {
+        self.call
+            .get("lifetime")
+            .and_then(Value::as_str)
+            .ok_or_else(|| invalid_call("workspace_materialize must carry lifetime"))
+    }
+}
+
+/// Lowered `workspace_release` request passed to a plan execution host.
+#[derive(Clone, Copy, Debug)]
+pub struct PlanWorkspaceReleaseRequest<'a> {
+    pub(super) name: &'a str,
+    pub(super) call: &'a Value,
+    pub(super) deps: &'a BTreeMap<String, Value>,
+}
+
+impl<'a> PlanWorkspaceReleaseRequest<'a> {
+    /// Operation binding name.
+    pub const fn name(&self) -> &'a str {
+        self.name
+    }
+
+    /// Typed `workspace_release` call body from the Plan IR.
+    pub const fn call(&self) -> &'a Value {
+        self.call
+    }
+
+    /// Resolved dependency bindings visible to this call.
+    pub const fn deps(&self) -> &'a BTreeMap<String, Value> {
+        self.deps
+    }
+
+    /// Workspace handle requested for release.
+    pub fn workspace(&self) -> Result<&'a str, PublicSeamError> {
+        self.call
+            .get("workspace")
+            .and_then(Value::as_str)
+            .ok_or_else(|| invalid_call("workspace_release must carry workspace"))
+    }
+
+    /// Whether release may force cleanup.
+    #[must_use]
+    pub fn force(&self) -> bool {
+        self.call
+            .get("force")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    }
+}
+
 /// Lowered `agent_run` request passed to a plan execution host.
 #[derive(Clone, Copy, Debug)]
 pub struct PlanAgentRunRequest<'a> {
@@ -656,6 +753,58 @@ impl PlanSandboxExecOutcome {
     pub fn with_cost(mut self, cost: Value) -> Self {
         self.cost = Some(cost);
         self
+    }
+}
+
+/// Host outcome for a typed `workspace_materialize` call.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanWorkspaceMaterializeOutcome {
+    pub(super) workspace: String,
+    pub(super) lifetime: String,
+    pub(super) data_classes: Vec<String>,
+    pub(super) replayability: String,
+    pub(super) runtime_fingerprint: String,
+}
+
+impl PlanWorkspaceMaterializeOutcome {
+    /// Creates a live workspace handle outcome.
+    #[must_use]
+    pub fn new(
+        workspace: impl Into<String>,
+        lifetime: impl Into<String>,
+        runtime_fingerprint: impl Into<String>,
+    ) -> Self {
+        Self {
+            workspace: workspace.into(),
+            lifetime: lifetime.into(),
+            data_classes: vec!["public".to_owned()],
+            replayability: "boundary_managed".to_owned(),
+            runtime_fingerprint: runtime_fingerprint.into(),
+        }
+    }
+}
+
+/// Host outcome for a typed `workspace_release` call.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanWorkspaceReleaseOutcome {
+    pub(super) workspace: String,
+    pub(super) lifetime: String,
+    pub(super) runtime_fingerprint: String,
+}
+
+impl PlanWorkspaceReleaseOutcome {
+    /// Creates a workspace release outcome.
+    #[must_use]
+    pub fn new(
+        workspace: impl Into<String>,
+        lifetime: impl Into<String>,
+        runtime_fingerprint: impl Into<String>,
+    ) -> Self {
+        Self {
+            workspace: workspace.into(),
+            lifetime: lifetime.into(),
+            runtime_fingerprint: runtime_fingerprint.into(),
+        }
     }
 }
 

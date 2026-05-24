@@ -106,6 +106,8 @@ Crate-root exports for `PlanDocument`, `PlanOperationKind`,
 `PlanCaseQueryRequest`, `PlanCaseQueryOutcome`, `PlanLmCompleteRequest`,
 `PlanLmCompleteOutcome`, `PlanAgentRunRequest`, `PlanAgentRunOutcome`,
 `PlanSandboxExecRequest`, `PlanSandboxExecOutcome`,
+`PlanWorkspaceMaterializeRequest`, `PlanWorkspaceMaterializeOutcome`,
+`PlanWorkspaceReleaseRequest`, `PlanWorkspaceReleaseOutcome`,
 `PlanEmitRunEventRequest`, `PlanEmitRunEventOutcome`, `CallAuthorityReport`, and
 `ProposalAuthorityReport` are advanced public seam contracts. They prove
 active-schema Plan IR document validation and Let/Call/Write family
@@ -126,7 +128,14 @@ backend-neutral `leaven-workspace::Command` primitives, and the representative
 harness can emit typed `agent_session` and `sandbox_exec` Plan Result values
 with call receipts. These routes are not agent provider execution, sandbox
 backend execution, ACP delivery, proposal parsing, streaming delivery, or full
-agent/sandbox row closeout. The
+agent/sandbox row closeout. The `PlanWorkspaceMaterializeRequest` and
+`PlanWorkspaceReleaseRequest` routes lower schema-valid workspace lifecycle
+calls into typed public-seam requests and emit `workspace_handle` Plan Result
+values with call receipts; they reject schema-valid unmaterialized release
+attempts through the host path instead of accepting made-up or host filesystem
+paths as workspace handles. They are not workspace backend execution, file
+read/list/stat/digest/git operations, artifact capture, snapshot production, or
+full workspace row closeout. The
 `PublicSeamPackage::execute_plan_document_with_capability` route
 requires capability-authorized evaluator request scope before a `case_query.load`
 host read can run. The
@@ -232,6 +241,12 @@ backpressure, or runtime watch support.
   `leaven-agent::OutputContract::JsonSchema` primitive. This is public-seam
   harness proof only; provider runtime, sandbox backend execution, streaming
   delivery, and proposal parsing remain pending.
+- `tests/plan_document.rs` also proves representative `workspace_materialize`
+  and `workspace_release` lowering, typed `workspace_handle` value emission,
+  release lifecycle state, call receipts, and refusal of unmaterialized or host-
+  path workspace substitutes. This is public-seam lifecycle proof only; read,
+  list, stat, digest, git, artifact-capture, and snapshot behavior remain
+  pending.
 - `tests/call_authority.rs` proves schema-valid Call ops are checked against
   capability-granted input data classes and call-local forbidden data-class
   intersections before execution. It rejects `case.target` and other forbidden
