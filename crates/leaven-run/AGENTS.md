@@ -118,13 +118,19 @@ persistence beyond the projected public-seam document.
   is a `String`-only constructor that returns `RunOutput<String>`).
 - Assessed output is runner-declared and scorer-carried: `RunOutput::new(...)`
   declares its `String` as public `candidate.output`, and typed runners must use
-  `RunOutput::typed(...).with_reportable_output(...)` or
-  `.with_reportable_text(...)` when the output is assessable; custom records
-  must carry `candidate.artifact`; explicit custom `candidate.output` records are
-  rejected because a data-class label alone does not prove they were derived from
-  the typed runner output. The runner's declaration is the metadata authority;
-  `ScoreContext` freezes that declaration before user scoring code can mutate its
-  public fields. Every successful score must then
+  `RunOutput::typed(...).with_reportable_text(...)` when generated candidate
+  output is assessable. If the score assesses the artifact rather than generated
+  output, typed runners must use
+  `RunOutput::typed(...).with_reportable_artifact_output(...)` with a record that
+  carries `candidate.artifact`; generic
+  `RunOutput::typed(...).with_reportable_output(...)` records are not sufficient
+  for assessed candidate/artifact output. This artifact-output API is still an
+  explicit runner declaration, not independent artifact provenance proof.
+  Explicit custom `candidate.output` records are rejected because a data-class
+  label alone does not prove they were derived from the typed runner output. The
+  runner's declaration is the metadata authority; `ScoreContext` freezes that
+  declaration before user scoring code can mutate its public fields. Every
+  successful score must then
   call `Score::with_output(...)` with a `ReportableOutput` minted by the current
   `ScoreContext` or `JudgeScoreContext` through `report_output(...)` or
   `report_text_output(...)`. A `Score` without `output` set fails the evaluator
@@ -132,9 +138,10 @@ persistence beyond the projected public-seam document.
   on the error). A score output minted by another scoring/judging context, a
   typed score output without a runner declaration, a runner declaration missing
   candidate/artifact output data classes, an explicit `candidate.output` dummy
-  declaration, a same-context dummy that differs from the frozen assessed output,
-  a mutable-context forgery, or a whitespace-only inline report output is
-  rejected. Reports, evidence stores, and GEPA reflection consume the
+  declaration, a generic explicit `candidate.artifact` declaration, a
+  same-context dummy that differs from the frozen assessed output, a
+  mutable-context forgery, or a whitespace-only inline report output is rejected.
+  Reports, evidence stores, and GEPA reflection consume the
   declared-and-carried `OutputRecord`, not `Out` itself. Do not add `Out` to
   `RunProblem`, `CaseAssessmentEvidence`, report payloads, or GEPA types.
   Scoring is also async and fallible: `.score(...)` receives owned

@@ -2114,6 +2114,10 @@ fn submit_assessments_accepts_candidate_artifact_score_output_class() {
     let mut document = submit_assessments_plan();
     document["ops"][0]["write"]["assessments"][0]["score"]["output"]["data_classes"] =
         json!(["candidate.artifact", "public"]);
+    document["ops"][0]["write"]["assessments"][0]["score"]["output"]["value"] = json!({
+        "candidate": "cand_a",
+        "artifact": "artifact snapshot for cand_a"
+    });
 
     let document = package.validate_plan_document(&document).unwrap();
 
@@ -2169,6 +2173,33 @@ fn submit_assessments_rejects_missing_or_placeholder_score_output() {
     assert!(matches!(
         package
             .validate_plan_document(&non_candidate_dummy)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
+
+    let mut candidate_labeled_dummy = submit_assessments_plan();
+    candidate_labeled_dummy["ops"][0]["write"]["assessments"][0]["score"]["output"] = json!({
+        "kind": "text",
+        "summary": "dummy output only present to satisfy schema",
+        "value": "dummy output only present to satisfy schema",
+        "visibility": "public",
+        "data_classes": ["candidate.output"]
+    });
+    candidate_labeled_dummy["ops"][0]["write"]["assessments"][0]["evidence"] =
+        evidence_envelope("dummy output only present to satisfy schema");
+    assert!(matches!(
+        package
+            .validate_plan_document(&candidate_labeled_dummy)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
+
+    let mut mismatched_candidate_binding = submit_assessments_plan();
+    mismatched_candidate_binding["ops"][0]["write"]["assessments"][1]["score"]["output"]["value"]
+        [0]["candidate"] = json!("cand_b");
+    assert!(matches!(
+        package
+            .validate_plan_document(&mismatched_candidate_binding)
             .unwrap_err(),
         PublicSeamError::InvalidPlan { .. }
     ));
@@ -2796,11 +2827,11 @@ fn submit_assessments_plan() -> Value {
                             "score": {
                                 "value": 0.5,
                                 "output": {
-                                    "kind": "json",
-                                    "value": {
-                                        "left": "answer a",
-                                        "right": "answer b"
-                                    },
+                                    "kind": "structured",
+                                    "value": [
+                                        {"candidate": "cand_a", "output": "answer a"},
+                                        {"candidate": "cand_b", "output": "answer b"}
+                                    ],
                                     "summary": "pairwise compared candidate outputs",
                                     "visibility": "public",
                                     "data_classes": ["candidate.output"]
@@ -2889,9 +2920,12 @@ fn score_with_output(summary: &'static str) -> Value {
     json!({
         "value": 1.0,
         "output": {
-            "kind": "text",
+            "kind": "structured",
             "summary": summary,
-            "value": summary,
+            "value": {
+                "candidate": "cand_a",
+                "output": summary
+            },
             "visibility": "public",
             "data_classes": ["candidate.output"]
         }

@@ -243,7 +243,8 @@ impl AssessmentScoreOutputUsage {
                 .ok_or_else(|| {
                     invalid_plan("submit_assessments score must carry a reportable output")
                 })?;
-            validate_score_output(object, output)?;
+            validate_assessment_candidates(kind, object)?;
+            validate_score_output(kind, object, output)?;
             match kind {
                 "independent" => self.independent += 1,
                 "pairwise" => self.pairwise += 1,
@@ -260,6 +261,7 @@ impl AssessmentScoreOutputUsage {
 }
 
 fn validate_score_output(
+    assessment_kind: &str,
     assessment: &serde_json::Map<String, Value>,
     output: &serde_json::Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
@@ -278,6 +280,7 @@ fn validate_score_output(
             "submit_assessments Score.output must carry candidate.output or candidate.artifact data class",
         ));
     }
+    validate_score_output_candidate_binding(assessment_kind, assessment, output)?;
     let summary = output
         .get("summary")
         .and_then(Value::as_str)
@@ -317,6 +320,135 @@ fn validate_score_output(
     Err(invalid_plan(
         "submit_assessments Score.output must carry reportable output content",
     ))
+}
+
+fn validate_assessment_candidates(
+    kind: &str,
+    assessment: &serde_json::Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    match kind {
+        "independent" => {
+            candidate_string(assessment, "candidate")?;
+        }
+        "pairwise" | "listwise" => {
+            candidate_array(assessment, "candidates")?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn validate_score_output_candidate_binding(
+    assessment_kind: &str,
+    assessment: &serde_json::Map<String, Value>,
+    output: &serde_json::Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    let Some(value) = output.get("value") else {
+        return Ok(());
+    };
+    match assessment_kind {
+        "independent" => {
+            let candidate = candidate_string(assessment, "candidate")?;
+            validate_candidate_output_entry(value, candidate)
+        }
+        "pairwise" | "listwise" => {
+            let candidates = candidate_array(assessment, "candidates")?;
+            let entries = value.as_array().ok_or_else(|| {
+                invalid_plan(
+                    "submit_assessments pairwise/listwise Score.output value must be candidate entries",
+                )
+            })?;
+            if entries.len() != candidates.len() {
+                return Err(invalid_plan(
+                    "submit_assessments Score.output candidate entries must match assessed candidates",
+                ));
+            }
+            for (entry, candidate) in entries.iter().zip(candidates) {
+                validate_candidate_output_entry(entry, candidate)?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+fn validate_candidate_output_entry(value: &Value, candidate: &str) -> Result<(), PublicSeamError> {
+    let entry = value.as_object().ok_or_else(|| {
+        invalid_plan("submit_assessments Score.output value must be a candidate-bound object")
+    })?;
+    if entry.get("candidate").and_then(Value::as_str) != Some(candidate) {
+        return Err(invalid_plan(
+            "submit_assessments Score.output candidate binding must match assessed candidate",
+        ));
+    }
+    let carries_output = entry
+        .get("output")
+        .or_else(|| entry.get("artifact"))
+        .is_some_and(has_reportable_content);
+    if carries_output {
+        Ok(())
+    } else {
+        Err(invalid_plan(
+            "submit_assessments Score.output candidate binding must carry output or artifact content",
+        ))
+    }
+}
+
+fn has_reportable_content(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::String(text) => !text.trim().is_empty(),
+        Value::Array(values) => !values.is_empty(),
+        Value::Object(object) => !object.is_empty(),
+        Value::Bool(_) | Value::Number(_) => true,
+    }
+}
+
+fn candidate_string<'a>(
+    assessment: &'a serde_json::Map<String, Value>,
+    field: &str,
+) -> Result<&'a str, PublicSeamError> {
+    assessment
+        .get(field)
+        .and_then(Value::as_str)
+        .filter(|candidate| !candidate.trim().is_empty())
+        .ok_or_else(|| {
+            invalid_plan(format!(
+                "submit_assessments assessment must carry non-empty `{field}`"
+            ))
+        })
+}
+
+fn candidate_array<'a>(
+    assessment: &'a serde_json::Map<String, Value>,
+    field: &str,
+) -> Result<Vec<&'a str>, PublicSeamError> {
+    let values = assessment
+        .get(field)
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            invalid_plan(format!(
+                "submit_assessments assessment must carry `{field}`"
+            ))
+        })?;
+    if values.is_empty() {
+        return Err(invalid_plan(format!(
+            "submit_assessments assessment `{field}` must not be empty"
+        )));
+    }
+    values
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .filter(|candidate| !candidate.trim().is_empty())
+                .ok_or_else(|| {
+                    invalid_plan(format!(
+                        "submit_assessments assessment `{field}` entries must be non-empty strings"
+                    ))
+                })
+        })
+        .collect()
 }
 
 fn validate_score_output_evidence_projection(

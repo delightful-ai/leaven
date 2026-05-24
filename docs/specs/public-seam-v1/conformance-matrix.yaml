@@ -920,6 +920,7 @@ rows:
       - crates/leaven-run/tests/scoring_evaluator.rs::runtime_score_outputs_project_through_public_seam_for_all_assessment_shapes
       - crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_preserves_pairwise_and_listwise_report_outputs
       - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_preserves_candidate_artifact_reportable_output
+      - crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_preserves_candidate_artifact_reportable_outputs
       - crates/leaven-run/tests/optimize_builder.rs::run_builder_typed_output_uses_score_supplied_report_output
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_score_outputs_cover_all_assessment_shapes
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_accepts_candidate_artifact_score_output_class
@@ -929,12 +930,14 @@ rows:
       - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_typed_score_output_without_runner_declaration
       - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_typed_runner_declaration_without_assessed_data_class
       - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_typed_runner_candidate_labeled_dummy_declaration
+      - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_generic_candidate_artifact_declaration
       - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_same_context_dummy_report_output
       - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_mutated_context_dummy_report_output
       - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_report_output_from_another_scoring_context
       - crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_rejects_missing_or_placeholder_group_scoped_reportable_output
       - crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_rejects_typed_runner_declaration_without_assessed_data_class
       - crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_rejects_typed_runner_candidate_labeled_dummy_declaration
+      - crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_rejects_generic_candidate_artifact_declarations
       - crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_rejects_same_context_dummy_report_output
       - crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_rejects_report_output_from_another_candidate_group
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_rejects_missing_or_placeholder_score_output
@@ -943,6 +946,7 @@ rows:
       - crates/leaven-run/src/evidence.rs::Score::with_output
       - crates/leaven-run/src/evidence.rs::ReportableOutput::into_record
       - crates/leaven-run/src/evidence.rs::ReportableOutputDeclaration
+      - crates/leaven-run/src/evidence.rs::RunOutput::with_reportable_artifact_output
       - crates/leaven-run/src/evidence.rs::ScoreContext::report_output
       - crates/leaven-run/src/evaluator.rs::JudgeScoreContext::report_output
       - crates/leaven-run/src/evaluator.rs::evaluate_job
@@ -956,6 +960,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-23-score-output-candidate-binding-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-23-score-output-current-blocker-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-structured-output-evaluator-authority-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-score-output-candidate-binding-partial-review.md
     status: pending
 
   - id: ps1.evaluator.assessment_scope

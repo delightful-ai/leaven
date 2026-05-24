@@ -642,14 +642,19 @@ fn assessment_arbitrary_values_with_prose_field_plan() -> Value {
                     "assessments": [
                         {
                             "kind": "independent",
+                            "candidate": "cand_dialect",
                             "target": {
                                 "field": "target prose, not a JsonPointer"
                             },
                             "score": {
                                 "value": 1.0,
                                 "output": {
-                                    "kind": "text",
+                                    "kind": "structured",
                                     "summary": "ok",
+                                    "value": {
+                                        "candidate": "cand_dialect",
+                                        "output": "ok"
+                                    },
                                     "visibility": "public",
                                     "data_classes": ["candidate.output", "public"]
                                 }
