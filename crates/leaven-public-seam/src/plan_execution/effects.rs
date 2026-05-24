@@ -774,10 +774,47 @@ fn lower_provider_hints(value: &Value) -> Result<ProviderHints, PublicSeamError>
     let object = value
         .as_object()
         .ok_or_else(|| invalid_lm_call("provider_hints must be an object"))?;
-    Ok(ProviderHints {
-        values: object.clone().into_iter().collect(),
-        ..ProviderHints::default()
-    })
+    let mut hints = ProviderHints::default();
+    for (key, value) in object {
+        match key.as_str() {
+            "prompt_cache_key" => {
+                hints.prompt_cache_key = Some(
+                    value
+                        .as_str()
+                        .ok_or_else(|| {
+                            invalid_lm_call("provider_hints.prompt_cache_key must be a string")
+                        })?
+                        .to_owned(),
+                );
+            }
+            "store" => {
+                hints.store =
+                    Some(value.as_bool().ok_or_else(|| {
+                        invalid_lm_call("provider_hints.store must be a boolean")
+                    })?);
+            }
+            "metadata" => {
+                let metadata = value
+                    .as_object()
+                    .ok_or_else(|| invalid_lm_call("provider_hints.metadata must be an object"))?;
+                hints.metadata = metadata
+                    .iter()
+                    .map(|(metadata_key, metadata_value)| {
+                        metadata_value
+                            .as_str()
+                            .map(|value| (metadata_key.clone(), value.to_owned()))
+                            .ok_or_else(|| {
+                                invalid_lm_call("provider_hints.metadata values must be strings")
+                            })
+                    })
+                    .collect::<Result<BTreeMap<_, _>, _>>()?;
+            }
+            _ => {
+                hints.values.insert(key.clone(), value.clone());
+            }
+        }
+    }
+    Ok(hints)
 }
 
 fn invalid_lm_call(message: impl Into<String>) -> PublicSeamError {
