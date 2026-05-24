@@ -94,9 +94,11 @@ seam contracts. They prove locked Leaven ACP profile semantics, including the
 exact V1 extension-method set; authenticate resolution from opaque capability
 tokens through the capability registry; authenticated-session binding for
 programmatic permission decisions against capability grants; typed denial
-envelopes; and schema-backed,
-hash-bound extension-result envelopes at the wire-contract layer only. They are
-not an ACP process
+envelopes; locked Plan IR/Plan Result schema binding for profile methods; and
+schema-backed, hash-bound extension-result envelopes at the wire-contract layer
+only. Generic ACP `extension` primaries are checked against the locked schema
+branch and ACP envelope fields, while concrete PlanResult value kinds still run
+the full PlanResult semantic validator. They are not an ACP process
 implementation, session lifecycle, transport backpressure loop, engine-client
 runtime, worker-agent runtime, provider call, or graph mutation route.
 
@@ -317,21 +319,21 @@ backpressure, or runtime watch support.
   provider calls, or proposal graph mutation.
 - `tests/acp_profile.rs` proves locked Leaven ACP profile semantics for pinned
   ACP version, stdio-first transport preference, Leaven-only extension methods,
-  capability-action mapping, bounded update declarations, programmatic
-  capability-grant permission decisions bound to authenticated sessions,
-  `PlanError`/redaction denials,
-  active-schema extension-result primary/receipt payloads, method-specific
-  primary value families, receipt-category binding, primary receipt binding,
-  JCS `result_hash` binding, and monotonic result data-class coverage. It
-  rejects MCP/private-process substitutes,
+  capability-action mapping, locked Plan IR/Plan Result schema bindings,
+  bounded update declarations, programmatic capability-grant permission
+  decisions bound to authenticated sessions, `PlanError`/redaction denials,
+  active-schema extension-result primary/receipt payloads across the full
+  locked callback surface, method-specific primary value families,
+  receipt-category binding, primary receipt binding, JCS `result_hash` binding,
+  and monotonic result data-class coverage. It rejects MCP/private-process substitutes,
   unpinned/latest ACP versions, non-stdio-first transport drift,
   human/always-grant permission substitutes, unbounded update declarations,
-  bare method-specific result payloads, cross-method payloads, wrong receipt
-  classes, unschematized primary/receipt payloads, unbound or forged result
-  hashes, unbound primary receipts, and result data-class gaps. It does not
-  prove ACP process startup, engine-client/worker-agent runtime inversion,
-  cancellation, progress updates, backpressure behavior, provider calls, or
-  worker lifecycle control.
+  archived/private schema bindings, bare method-specific result payloads,
+  cross-method payloads, wrong receipt classes, unschematized primary/receipt
+  payloads, unbound or forged result hashes, unbound primary receipts, and
+  result data-class gaps. It does not prove ACP process startup,
+  engine-client/worker-agent runtime inversion, cancellation, progress updates,
+  backpressure behavior, provider calls, or worker lifecycle control.
 - `tests/plan_result.rs` proves active-schema Plan Result envelopes carry typed
   success and failure values, query/call/write audit receipts, errors, charges,
   capability and policy fingerprints, receipt timing, data classes, and closed

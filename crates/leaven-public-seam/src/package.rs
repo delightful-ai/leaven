@@ -889,7 +889,9 @@ impl PublicSeamPackage {
             "/acp_extension_result",
             &synthetic,
         )?;
-        PlanResultDocument::from_schema_valid_value_allowing_request_evaluation(&synthetic)?;
+        if synthetic["values"]["primary"]["kind"].as_str() != Some("extension") {
+            PlanResultDocument::from_schema_valid_value_allowing_request_evaluation(&synthetic)?;
+        }
         crate::AcpExtensionResultDocument::from_value(value)
     }
 

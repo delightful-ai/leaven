@@ -389,13 +389,13 @@ impl AcpExtensionResultDocument {
             .ok_or_else(|| invalid_acp("ACP extension result must carry primary object"))?;
         let primary_kind = required_string(primary.get("kind"), "primary.kind")?.to_owned();
         validate_primary_kind(&method, &primary_kind)?;
-        let primary_data_classes =
-            string_array(primary.get("data_classes"), "primary.data_classes")?;
-        for data_class in &primary_data_classes {
-            if !data_classes.contains(data_class) {
-                return Err(invalid_acp(format!(
-                    "ACP extension result data_classes must cover primary data class `{data_class}`"
-                )));
+        if let Some(primary_data_classes) = primary.get("data_classes") {
+            for data_class in string_array(Some(primary_data_classes), "primary.data_classes")? {
+                if !data_classes.contains(&data_class) {
+                    return Err(invalid_acp(format!(
+                        "ACP extension result data_classes must cover primary data class `{data_class}`"
+                    )));
+                }
             }
         }
         validate_receipts_for_method(&method, receipts)?;
@@ -637,10 +637,24 @@ fn extension_methods(value: Option<&Value>) -> Result<Vec<AcpExtensionMethod>, P
                 "extension method `{method}` must produce receipts"
             )));
         }
+        let params_schema =
+            required_string(entry.get("params_schema"), "params_schema")?.to_owned();
+        if params_schema != "leaven.plan.v1.schema.json" {
+            return Err(invalid_acp(format!(
+                "extension method `{method}` params_schema must bind the locked Plan IR schema"
+            )));
+        }
+        let result_schema =
+            required_string(entry.get("result_schema"), "result_schema")?.to_owned();
+        if result_schema != "leaven.plan_result.v1.schema.json" {
+            return Err(invalid_acp(format!(
+                "extension method `{method}` result_schema must bind the locked Plan Result schema"
+            )));
+        }
         output.push(AcpExtensionMethod {
             method,
-            params_schema: required_string(entry.get("params_schema"), "params_schema")?.to_owned(),
-            result_schema: required_string(entry.get("result_schema"), "result_schema")?.to_owned(),
+            params_schema,
+            result_schema,
             required_action,
             produces_receipt,
         });
