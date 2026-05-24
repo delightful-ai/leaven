@@ -389,12 +389,14 @@ backpressure, or runtime watch support.
   placeholder `submit_assessments` score outputs before execution. Its
   `Score.output` checks require candidate/artifact data classes, a matching
   `evidence.public.summary` projection, an embedded evidence envelope that
-  passes the same semantic evidence checks as standalone evidence, assessment-
-  level declarations for every evidence read/effect source receipt, and either
-  a candidate-bound value matching the assessment's `candidate` / `candidates`
-  field or an explicit blob/trace output projection. This rejects unbound,
-  summary-only, mismatched-candidate, unreceipted-evidence, undeclared-receipt,
-  and assessment-write-receipt schema dummies, but it is
+  passes the same semantic evidence checks as standalone evidence, and either a
+  candidate-bound value matching the assessment's `candidate` / `candidates`
+  field or an explicit blob/trace output projection. The embedded evidence
+  source receipts are the receipt carrier for this locked Plan IR shape; the
+  optional assessment-level `read_receipts` and `effect_receipts` fields are
+  not required duplicate declarations. This rejects unbound, summary-only,
+  mismatched-candidate, unreceipted-evidence, and wrong-receipt-family schema
+  dummies, but it is
   still self-declared public-seam document validation, not proof that the value
   is the actual candidate/artifact output assessed, and not provider or ACP
   runtime proof. Its execution-result verifier

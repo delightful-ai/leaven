@@ -624,8 +624,10 @@ rows:
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_blob_ref_data_class_gaps
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_trace_ref_data_class_gaps
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_evidence_hidden_target_derivation_flag
+      - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_accepts_evidence_source_receipts_without_duplicate_assessment_declarations
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_rejects_schema_valid_but_semantically_invalid_evidence
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_assessment_summary_with_score_output_and_evidence_envelope
+      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_assessment_summary_structured_or_numeric_score_output_values
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_assessment_summary_without_score_output_or_evidence_truth
       - crates/leaven-public-seam/tests/agent_contract.rs::agent_run_can_project_provider_neutral_agent_session_into_plan_result
       - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_outcome_propagates_stream_and_file_blob_data_classes
@@ -665,6 +667,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-workspace-result-kind-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-public-seam-tranche-plato-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-assessment-evidence-galileo-review.md
     status: pending
 
   - id: ps1.visibility.reflector_target_safe
@@ -716,6 +719,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-workspace-result-kind-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-sartre-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-assessment-evidence-galileo-review.md
     status: pending
 
   - id: ps1.evidence.visibility_receipts
@@ -780,7 +784,6 @@ rows:
       - crates/leaven-public-seam/src/result.rs::ReceiptAudit
       - crates/leaven-public-seam/src/result.rs::receipt_index
       - crates/leaven-public-seam/src/plan.rs::validate_assessment_evidence
-      - crates/leaven-public-seam/src/plan.rs::validate_assessment_evidence_receipt_declarations
       - crates/leaven-public-seam/src/result.rs::validate_assessment_summary
       - crates/leaven-public-seam/src/result.rs::validate_optional_assessment_summary_evidence_projection
     review_evidence:
@@ -793,6 +796,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-evidence-jsonrpc-handoff-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-sartre-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-assessment-evidence-galileo-review.md
     status: pending
 
   - id: ps1.stage.reflection_proposal_split
@@ -848,6 +852,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-workspace-result-kind-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-evidence-jsonrpc-handoff-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-sartre-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-assessment-evidence-galileo-review.md
     status: pending
 
   - id: ps1.stage.payload_receipts
@@ -907,6 +912,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-public-seam-tranche-plato-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-sartre-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-assessment-evidence-galileo-review.md
     status: pending
 
   - id: ps1.proposal.surface_authority
@@ -1087,8 +1093,10 @@ rows:
       - crates/leaven-run/tests/public_seam.rs::assessment_score_output_plan_projection_rejects_unsupported_shapes_and_outputs
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_rejects_missing_or_placeholder_score_output
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_rejects_summary_only_score_output_dummies
+      - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_accepts_evidence_source_receipts_without_duplicate_assessment_declarations
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_rejects_schema_valid_but_semantically_invalid_evidence
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_assessment_summary_with_score_output_and_evidence_envelope
+      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_assessment_summary_structured_or_numeric_score_output_values
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_assessment_summary_without_score_output_or_evidence_truth
     partial_contract_implementation_evidence:
       - crates/leaven-run/src/evidence.rs::RunOutput::with_reportable_output
@@ -1118,7 +1126,6 @@ rows:
       - crates/leaven-public-seam/src/plan.rs::validate_score_output_candidate_binding
       - crates/leaven-public-seam/src/plan.rs::validate_score_output_evidence_projection
       - crates/leaven-public-seam/src/plan.rs::validate_assessment_evidence
-      - crates/leaven-public-seam/src/plan.rs::validate_assessment_evidence_receipt_declarations
       - crates/leaven-public-seam/src/result.rs::validate_graph_set_assessment_summaries
       - crates/leaven-public-seam/src/result.rs::validate_assessment_summary
       - crates/leaven-public-seam/src/result.rs::validate_assessment_summary_output
@@ -1133,6 +1140,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-score-output-summary-only-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-score-lm-agent-json-schema-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-sandbox-workspace-score-follow-up-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-assessment-evidence-galileo-review.md
     status: pending
 
   - id: ps1.evaluator.assessment_scope
