@@ -61,7 +61,12 @@ seam-lowering contracts. Crate-root exports for
 `PublicProposalWriteReceiptProjectionError` are advanced public seam-lowering
 contracts for projecting engine `RunContext` assessment submission,
 proposal-batch submission, and proposal application reports into locked Plan
-Result write receipts. They project
+Result write receipts. `PublicAssessmentWriteReceiptContext` also projects
+graph-backed independent assessment evidence from the configured evidence store
+into locked `submit_assessments` Plan IR so `Score.output` is sourced from the
+stored `CaseAssessmentEvidence` payload rather than a raw caller-supplied JSON
+row. Pairwise/listwise score-output Plan IR projection and blob-backed score
+output projection remain explicit scaffolding. These routes project
 engine-recorded evaluation request identity, `request_evaluation` Plan Result
 receipts, engine `RunContext` budget-charge/error event pairs, and graph-backed
 assessment/proposal write reports into locked public-seam wire documents for

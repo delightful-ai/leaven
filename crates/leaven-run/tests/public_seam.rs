@@ -8,9 +8,13 @@ use leaven_engine::{
     ApplyOutcome, BudgetLedger, CaseSet, EvaluationContext, EvaluationError, Evaluator,
     ProposalBatchReport, RunContext, RunGraph,
 };
+use leaven_evidence::{
+    CaseAssessmentEvidence, DataClass, DataClassSet, OutputMetadata, OutputRecord,
+    OutputVisibility, ScalarEvidence,
+};
 use leaven_kernel::{
-    AssessmentId, Budget, CandidateId, ContentId, Cost, EvaluatorId, Fingerprint, MetadataBag,
-    Metered, ProposalBatchId, ProposalId, RunId, StageId,
+    AssessmentId, Budget, CandidateId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint,
+    MetadataBag, Metered, ProposalBatchId, ProposalId, RunId, StageId,
 };
 use leaven_run::{
     PublicAssessmentWriteReceiptContext, PublicAssessmentWriteReceiptProjectionError,
@@ -173,6 +177,186 @@ fn runcontext_assessments_project_to_public_seam_submit_assessment_receipts() {
 }
 
 #[test]
+fn runcontext_assessment_score_outputs_project_to_public_seam_submit_assessments_plan() {
+    block_on(async {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(workspace_root())
+            .expect("public seam package loads from workspace");
+        let (mut graph, mut budget, candidate) = graph_with_run_eval_seed();
+        let case_set = CaseSet::new(vec![leaven_eval::Case::input(CaseId::new(0), "case")]);
+        let store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("inline");
+        let mut ctx =
+            RunContext::<RunProblem<TextArtifact, &'static str>>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_evidence_store(&store);
+        let report = ctx
+            .evaluate_with(&ScoreOutputEvaluator, independent_request(vec![candidate]))
+            .await
+            .unwrap();
+        let graph_view = ctx.graph();
+        let plan = assessment_receipt_context()
+            .submit_assessments_plan_document(&graph_view, &store, &report)
+            .expect("RunContext-backed assessment evidence projects to Plan IR");
+
+        let document = package
+            .validate_plan_document(&plan)
+            .expect("projected submit_assessments Plan IR validates through public seam owner");
+        assert_eq!(document.assessment_score_output_count(), 1);
+        assert_eq!(
+            plan["ops"][0]["write"]["assessments"][0]["score"]["output"]["value"]["candidate"],
+            json_candidate_ref(candidate)
+        );
+        assert_eq!(
+            plan["ops"][0]["write"]["assessments"][0]["score"]["output"]["value"]["output"],
+            "candidate-output"
+        );
+    });
+}
+
+#[test]
+fn runcontext_assessment_artifact_score_outputs_project_to_public_seam_submit_assessments_plan() {
+    block_on(async {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(workspace_root())
+            .expect("public seam package loads from workspace");
+        let (mut graph, mut budget, candidate) = graph_with_run_eval_seed();
+        let case_set = CaseSet::new(vec![leaven_eval::Case::input(CaseId::new(0), "case")]);
+        let store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("inline");
+        let mut ctx =
+            RunContext::<RunProblem<TextArtifact, &'static str>>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_evidence_store(&store);
+        let report = ctx
+            .evaluate_with(
+                &ArtifactScoreOutputEvaluator,
+                independent_request(vec![candidate]),
+            )
+            .await
+            .unwrap();
+        let graph_view = ctx.graph();
+        let plan = assessment_receipt_context()
+            .submit_assessments_plan_document(&graph_view, &store, &report)
+            .expect("RunContext-backed artifact evidence projects to Plan IR");
+
+        let document = package
+            .validate_plan_document(&plan)
+            .expect("projected artifact submit_assessments Plan IR validates");
+        assert_eq!(document.assessment_score_output_count(), 1);
+        assert_eq!(
+            plan["ops"][0]["write"]["assessments"][0]["score"]["output"]["value"]["candidate"],
+            json_candidate_ref(candidate)
+        );
+        assert_eq!(
+            plan["ops"][0]["write"]["assessments"][0]["score"]["output"]["value"]["artifact"],
+            "candidate-artifact"
+        );
+    });
+}
+
+#[test]
+fn assessment_score_output_plan_projection_rejects_missing_stored_evidence() {
+    block_on(async {
+        let (mut graph, mut budget, candidate) = graph_with_run_eval_seed();
+        let case_set = CaseSet::new(vec![leaven_eval::Case::input(CaseId::new(0), "case")]);
+        let store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("inline");
+        let mut ctx =
+            RunContext::<RunProblem<TextArtifact, &'static str>>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_evidence_store(&store);
+        let report = ctx
+            .evaluate_with(&ScoreOutputEvaluator, independent_request(vec![candidate]))
+            .await
+            .unwrap();
+        let empty_store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("empty");
+        let graph_view = ctx.graph();
+
+        let missing_evidence = assessment_receipt_context()
+            .submit_assessments_plan_document(&graph_view, &empty_store, &report)
+            .unwrap_err();
+        assert!(matches!(
+            missing_evidence,
+            PublicAssessmentWriteReceiptProjectionError::EvidenceLoad { .. }
+        ));
+    });
+}
+
+#[test]
+fn assessment_score_output_plan_projection_rejects_unsupported_shapes_and_outputs() {
+    block_on(async {
+        let (mut graph, mut budget, candidates) = graph_with_run_eval_seeds();
+        let case_set = CaseSet::new(vec![leaven_eval::Case::input(CaseId::new(0), "case")]);
+        let store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("inline");
+        let mut ctx =
+            RunContext::<RunProblem<TextArtifact, &'static str>>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_evidence_store(&store);
+        let pairwise = ctx
+            .evaluate_with(
+                &PairwiseScoreOutputEvaluator,
+                independent_request(candidates),
+            )
+            .await
+            .unwrap();
+        let graph_view = ctx.graph();
+        let unsupported_shape = assessment_receipt_context()
+            .submit_assessments_plan_document(&graph_view, &store, &pairwise)
+            .unwrap_err();
+        assert!(matches!(
+            unsupported_shape,
+            PublicAssessmentWriteReceiptProjectionError::UnsupportedAssessmentShape
+        ));
+    });
+
+    block_on(async {
+        let (mut graph, mut budget, candidate) = graph_with_run_eval_seed();
+        let case_set = CaseSet::new(vec![leaven_eval::Case::input(CaseId::new(0), "case")]);
+        let store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("inline");
+        let mut ctx =
+            RunContext::<RunProblem<TextArtifact, &'static str>>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_evidence_store(&store);
+        let blob_backed = ctx
+            .evaluate_with(
+                &BlobScoreOutputEvaluator,
+                independent_request(vec![candidate]),
+            )
+            .await
+            .unwrap();
+        let graph_view = ctx.graph();
+        let unsupported_output = assessment_receipt_context()
+            .submit_assessments_plan_document(&graph_view, &store, &blob_backed)
+            .unwrap_err();
+        assert!(matches!(
+            unsupported_output,
+            PublicAssessmentWriteReceiptProjectionError::UnsupportedScoreOutput
+        ));
+    });
+
+    block_on(async {
+        let (mut graph, mut budget, candidate) = graph_with_run_eval_seed();
+        let case_set = CaseSet::new(vec![leaven_eval::Case::input(CaseId::new(0), "case")]);
+        let store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("inline");
+        let mut ctx =
+            RunContext::<RunProblem<TextArtifact, &'static str>>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_evidence_store(&store);
+        let public_only = ctx
+            .evaluate_with(
+                &PublicOnlyScoreOutputEvaluator,
+                independent_request(vec![candidate]),
+            )
+            .await
+            .unwrap();
+        let graph_view = ctx.graph();
+        let unsupported_data_class = assessment_receipt_context()
+            .submit_assessments_plan_document(&graph_view, &store, &public_only)
+            .unwrap_err();
+        assert!(matches!(
+            unsupported_data_class,
+            PublicAssessmentWriteReceiptProjectionError::UnsupportedScoreOutput
+        ));
+    });
+}
+
+#[test]
 fn assessment_write_projection_rejects_global_bucket_assessment_ids() {
     block_on(async {
         let (mut graph, mut budget, candidate) = graph_with_eval_seed();
@@ -305,6 +489,39 @@ fn graph_with_eval_seeds() -> (RunGraph<TestProblem>, BudgetLedger, Vec<Candidat
     (graph, budget, candidates)
 }
 
+fn graph_with_run_eval_seed() -> (
+    RunGraph<RunProblem<TextArtifact, &'static str>>,
+    BudgetLedger,
+    CandidateId,
+) {
+    let mut graph = RunGraph::<RunProblem<TextArtifact, &'static str>>::new(RunId::new());
+    let mut budget = BudgetLedger::new(Budget::unlimited());
+    let candidate = {
+        let mut ctx =
+            RunContext::<RunProblem<TextArtifact, &'static str>>::new(&mut graph, &mut budget);
+        ctx.insert_seed(TextArtifact(1), 0).unwrap()
+    };
+    (graph, budget, candidate)
+}
+
+fn graph_with_run_eval_seeds() -> (
+    RunGraph<RunProblem<TextArtifact, &'static str>>,
+    BudgetLedger,
+    Vec<CandidateId>,
+) {
+    let mut graph = RunGraph::<RunProblem<TextArtifact, &'static str>>::new(RunId::new());
+    let mut budget = BudgetLedger::new(Budget::unlimited());
+    let candidates = {
+        let mut ctx =
+            RunContext::<RunProblem<TextArtifact, &'static str>>::new(&mut graph, &mut budget);
+        vec![
+            ctx.insert_seed(TextArtifact(1), 0).unwrap(),
+            ctx.insert_seed(TextArtifact(2), 1).unwrap(),
+        ]
+    };
+    (graph, budget, candidates)
+}
+
 fn independent_request(candidates: Vec<CandidateId>) -> EvaluationRequest {
     EvaluationRequest::Independent {
         candidates,
@@ -312,6 +529,10 @@ fn independent_request(candidates: Vec<CandidateId>) -> EvaluationRequest {
         granularity: AssessmentGranularity::PerCase,
         purpose: EvaluationPurpose::Validation,
     }
+}
+
+fn json_candidate_ref(candidate: CandidateId) -> serde_json::Value {
+    serde_json::Value::String(format!("cand_{}", candidate.as_uuid()))
 }
 
 fn workspace_root() -> std::path::PathBuf {
@@ -398,4 +619,221 @@ impl Evaluator<TestProblem> for OneAssessmentEvaluator {
             Cost::zero(),
         ))
     }
+}
+
+struct ScoreOutputEvaluator;
+
+impl Evaluator<RunProblem<TextArtifact, &'static str>> for ScoreOutputEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([41; 32])
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, RunProblem<TextArtifact, &'static str>>,
+    ) -> Result<Metered<Vec<Assessment<RunProblem<TextArtifact, &'static str>>>>, EvaluationError>
+    {
+        let leaven_core::ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message("unsupported request".to_owned()));
+        };
+        let score = ScalarEvidence::new(1.0)
+            .map_err(|error| EvaluationError::Message(error.to_string()))?;
+        Ok(Metered::new(
+            candidates
+                .into_iter()
+                .map(|candidate| Assessment::Independent {
+                    candidate,
+                    target: AssessmentTarget::Unscoped,
+                    evidence: CaseAssessmentEvidence::new(
+                        score,
+                        OutputRecord::candidate_inline("candidate-output"),
+                        "ok",
+                    ),
+                    cost: Cost::zero(),
+                    metadata: MetadataBag::new(),
+                })
+                .collect(),
+            Cost::zero(),
+        ))
+    }
+}
+
+struct ArtifactScoreOutputEvaluator;
+
+impl Evaluator<RunProblem<TextArtifact, &'static str>> for ArtifactScoreOutputEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([45; 32])
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, RunProblem<TextArtifact, &'static str>>,
+    ) -> Result<Metered<Vec<Assessment<RunProblem<TextArtifact, &'static str>>>>, EvaluationError>
+    {
+        let leaven_core::ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message("unsupported request".to_owned()));
+        };
+        Ok(Metered::new(
+            candidates
+                .into_iter()
+                .map(|candidate| {
+                    Ok(Assessment::Independent {
+                        candidate,
+                        target: AssessmentTarget::Unscoped,
+                        evidence: case_assessment_evidence(candidate_artifact_output(
+                            "candidate-artifact",
+                        ))?,
+                        cost: Cost::zero(),
+                        metadata: MetadataBag::new(),
+                    })
+                })
+                .collect::<Result<Vec<_>, EvaluationError>>()?,
+            Cost::zero(),
+        ))
+    }
+}
+
+struct PairwiseScoreOutputEvaluator;
+
+impl Evaluator<RunProblem<TextArtifact, &'static str>> for PairwiseScoreOutputEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([42; 32])
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, RunProblem<TextArtifact, &'static str>>,
+    ) -> Result<Metered<Vec<Assessment<RunProblem<TextArtifact, &'static str>>>>, EvaluationError>
+    {
+        let leaven_core::ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message("unsupported request".to_owned()));
+        };
+        let [left, right] = candidates.as_slice() else {
+            return Err(EvaluationError::Message("expected pair".to_owned()));
+        };
+        Ok(Metered::new(
+            vec![Assessment::Pairwise {
+                left: *left,
+                right: *right,
+                target: AssessmentTarget::Unscoped,
+                evidence: case_assessment_evidence(OutputRecord::candidate_inline(
+                    "candidate-output",
+                ))?,
+                cost: Cost::zero(),
+                metadata: MetadataBag::new(),
+            }],
+            Cost::zero(),
+        ))
+    }
+}
+
+struct BlobScoreOutputEvaluator;
+
+impl Evaluator<RunProblem<TextArtifact, &'static str>> for BlobScoreOutputEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([43; 32])
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, RunProblem<TextArtifact, &'static str>>,
+    ) -> Result<Metered<Vec<Assessment<RunProblem<TextArtifact, &'static str>>>>, EvaluationError>
+    {
+        let leaven_core::ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message("unsupported request".to_owned()));
+        };
+        Ok(Metered::new(
+            candidates
+                .into_iter()
+                .map(|candidate| {
+                    Ok(Assessment::Independent {
+                        candidate,
+                        target: AssessmentTarget::Unscoped,
+                        evidence: case_assessment_evidence(OutputRecord::blob(
+                            leaven_kernel::BlobRef {
+                                store: "inline".to_owned(),
+                                key: "output".to_owned(),
+                            },
+                        ))?,
+                        cost: Cost::zero(),
+                        metadata: MetadataBag::new(),
+                    })
+                })
+                .collect::<Result<Vec<_>, EvaluationError>>()?,
+            Cost::zero(),
+        ))
+    }
+}
+
+struct PublicOnlyScoreOutputEvaluator;
+
+impl Evaluator<RunProblem<TextArtifact, &'static str>> for PublicOnlyScoreOutputEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([44; 32])
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, RunProblem<TextArtifact, &'static str>>,
+    ) -> Result<Metered<Vec<Assessment<RunProblem<TextArtifact, &'static str>>>>, EvaluationError>
+    {
+        let leaven_core::ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message("unsupported request".to_owned()));
+        };
+        Ok(Metered::new(
+            candidates
+                .into_iter()
+                .map(|candidate| {
+                    Ok(Assessment::Independent {
+                        candidate,
+                        target: AssessmentTarget::Unscoped,
+                        evidence: case_assessment_evidence(OutputRecord::inline("public-only"))?,
+                        cost: Cost::zero(),
+                        metadata: MetadataBag::new(),
+                    })
+                })
+                .collect::<Result<Vec<_>, EvaluationError>>()?,
+            Cost::zero(),
+        ))
+    }
+}
+
+fn case_assessment_evidence(
+    output: OutputRecord,
+) -> Result<CaseAssessmentEvidence, EvaluationError> {
+    let score =
+        ScalarEvidence::new(1.0).map_err(|error| EvaluationError::Message(error.to_string()))?;
+    Ok(CaseAssessmentEvidence::new(score, output, "ok"))
+}
+
+fn candidate_artifact_output(text: impl Into<String>) -> OutputRecord {
+    OutputRecord::inline(text).with_metadata(OutputMetadata::new(
+        OutputVisibility::Public,
+        DataClassSet::new([DataClass::candidate_artifact(), DataClass::public()]),
+    ))
 }
