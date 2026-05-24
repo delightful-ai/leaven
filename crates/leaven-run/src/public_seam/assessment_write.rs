@@ -148,6 +148,112 @@ impl PublicAssessmentWriteReceiptContext {
         }))
     }
 
+    /// Projects graph-backed assessment evidence into a locked Plan Result.
+    ///
+    /// Unlike [`Self::submit_assessments_plan_result`], this includes
+    /// `assessment_summary` rows and the query receipts cited by each evidence
+    /// envelope. This is the producer-side proof path for result evidence
+    /// visibility: if stored assessment evidence carries audited case-data read
+    /// facts, their receipt ids and data classes are emitted into the result
+    /// receipt stream instead of remaining private policy metadata.
+    pub fn submit_assessments_plan_result_with_evidence<P>(
+        &self,
+        graph: &RunGraphView<'_, P>,
+        evidence_store: &dyn EvidenceStore<CaseAssessmentEvidence>,
+        report: &EvaluationReport,
+    ) -> Result<Value, PublicAssessmentWriteReceiptProjectionError>
+    where
+        P: OptimizationProblem<Evidence = CaseAssessmentEvidence>,
+    {
+        if report.assessment_ids.is_empty() {
+            return Err(PublicAssessmentWriteReceiptProjectionError::EmptyAssessmentBatch);
+        }
+        graph
+            .evaluation_request(report.request_id)
+            .ok_or(PublicAssessmentWriteReceiptProjectionError::RequestNotInGraph)?;
+        let started_at = self
+            .started_at
+            .as_deref()
+            .ok_or(PublicAssessmentWriteReceiptProjectionError::MissingTiming)?;
+        let completed_at = self
+            .completed_at
+            .as_deref()
+            .ok_or(PublicAssessmentWriteReceiptProjectionError::MissingTiming)?;
+        let projected = project_assessment_evidence_rows(
+            graph,
+            evidence_store,
+            report,
+            &self.base_revision,
+            started_at,
+            completed_at,
+        )?;
+
+        let assessment_rows = json!({
+            "kind": "graph_set",
+            "items": projected.items,
+            "graph_revision": self.final_revision,
+            "data_classes": projected.data_classes,
+            "replayability": "fully_managed"
+        });
+        let receipt = "wrec_submit_assessments".to_owned();
+        let evaluation_request_id = evaluation_request_ref(report.request_id);
+        let assessment_ids = sorted_assessment_refs(&report.assessment_ids);
+        let per_assessment = assessment_ids
+            .iter()
+            .map(|assessment| {
+                json!({
+                    "assessment": assessment,
+                    "replayability": "fully_managed"
+                })
+            })
+            .collect::<Vec<_>>();
+        let assessment_batch = json!({
+            "kind": "assessment_batch_receipt",
+            "assessment_ids": assessment_ids,
+            "evaluation_request_id": evaluation_request_id,
+            "per_assessment": per_assessment,
+            "status": "committed",
+            "graph_revision": self.final_revision,
+            "data_classes": ["public"],
+            "replayability": "fully_managed",
+            "receipt": receipt
+        });
+        let mut receipts = projected.query_receipts;
+        receipts.push(json!({
+            "kind": "write",
+            "receipt": receipt,
+            "op_var": "assessment_batch",
+            "started_at": started_at,
+            "completed_at": completed_at,
+            "write_kind": "submit_assessments",
+            "request_hash": Self::submit_assessments_request_hash(report)?,
+            "result_hash": plan_write_result_hash("assessment_batch", &assessment_batch)?,
+            "base_revision": self.base_revision,
+            "committed_revision": self.final_revision,
+            "status": "succeeded",
+            "evaluation_request_id": evaluation_request_id,
+            "assessment_ids": sorted_assessment_refs(&report.assessment_ids)
+        }));
+
+        Ok(json!({
+            "schema_version": "leaven.plan_result.v1",
+            "plan_id": self.plan_id,
+            "capability_fingerprint": self.capability_fingerprint,
+            "policy_fingerprint": self.policy_fingerprint,
+            "base_revision": self.base_revision,
+            "final_revision": self.final_revision,
+            "replayability_summary": "fully_managed",
+            "values": {
+                "assessment_rows": assessment_rows,
+                "assessment_batch": assessment_batch
+            },
+            "receipts": receipts,
+            "redactions": [],
+            "charges": [],
+            "errors": []
+        }))
+    }
+
     /// Projects graph-backed assessment evidence into a locked `submit_assessments` Plan document.
     ///
     /// This is the public-seam Plan IR counterpart to
@@ -227,6 +333,60 @@ impl PublicAssessmentWriteReceiptContext {
     }
 }
 
+struct ProjectedAssessmentEvidenceRows {
+    items: Vec<Value>,
+    query_receipts: Vec<Value>,
+    data_classes: Vec<String>,
+}
+
+fn project_assessment_evidence_rows<P>(
+    graph: &RunGraphView<'_, P>,
+    evidence_store: &dyn EvidenceStore<CaseAssessmentEvidence>,
+    report: &EvaluationReport,
+    base_revision: &str,
+    started_at: &str,
+    completed_at: &str,
+) -> Result<ProjectedAssessmentEvidenceRows, PublicAssessmentWriteReceiptProjectionError>
+where
+    P: OptimizationProblem<Evidence = CaseAssessmentEvidence>,
+{
+    let mut items = Vec::with_capacity(report.assessment_ids.len());
+    let mut query_receipts = Vec::with_capacity(report.assessment_ids.len());
+    let mut data_classes = BTreeSet::from(["public".to_owned()]);
+    for assessment_id in &report.assessment_ids {
+        let assessment = graph
+            .assessment(*assessment_id)
+            .ok_or(PublicAssessmentWriteReceiptProjectionError::AssessmentNotInGraph)?;
+        if assessment.request_id() != report.request_id {
+            return Err(PublicAssessmentWriteReceiptProjectionError::AssessmentRequestMismatch);
+        }
+        let evidence = evidence_store
+            .get(assessment.evidence_ref())
+            .map_err(
+                |source| PublicAssessmentWriteReceiptProjectionError::EvidenceLoad { source },
+            )?;
+        let source_receipts = evidence_source_read_receipts(&assessment, &evidence);
+        data_classes.extend(assessment_summary_data_classes(&assessment, &evidence)?);
+        query_receipts.extend(evidence_query_receipts(
+            &source_receipts,
+            &evidence_data_classes(&evidence),
+            base_revision,
+            started_at,
+            completed_at,
+        ));
+        items.push(assessment_summary_item(
+            &assessment,
+            &evidence,
+            &source_receipts,
+        )?);
+    }
+    Ok(ProjectedAssessmentEvidenceRows {
+        items,
+        query_receipts,
+        data_classes: data_classes.into_iter().collect(),
+    })
+}
+
 /// Errors raised while projecting `RunContext` assessment writes into V1 receipts.
 #[derive(Debug, Error)]
 pub enum PublicAssessmentWriteReceiptProjectionError {
@@ -300,36 +460,185 @@ fn assessment_plan_entry(
 ) -> Result<Value, PublicAssessmentWriteReceiptProjectionError> {
     let shape = AssessmentPlanShape::from_assessment(assessment)?;
     let output = score_output(&shape, evidence)?;
+    let source_receipts = evidence_source_read_receipts(assessment, evidence);
     let mut entry = json!({
         "kind": shape.kind(),
         "score": {
             "value": evidence.score().score(),
             "output": output
         },
-        "evidence": {
-            "schema_version": "leaven.evidence_envelope.v1",
-            "target_derived": false,
-            "public": {
-                "summary": output_summary(evidence.output())?,
-                "data_classes": ["public"]
-            },
-            "redaction_policy": {
-                "optimizer": "score_only",
-                "reflector": "score_only",
-                "operator": "score_only"
-            },
-            "producer": {
-                "stage_call_id": "sc_public_assessment_projection"
-            },
-            "source_receipts": {
-                "read": [],
-                "effect": []
-            }
-        },
+        "evidence": assessment_evidence_envelope(evidence, &source_receipts)?,
         "replayability": "fully_managed"
     });
     shape.insert_candidate_fields(&mut entry);
     Ok(entry)
+}
+
+fn assessment_summary_item(
+    assessment: &AssessmentView<'_>,
+    evidence: &CaseAssessmentEvidence,
+    source_receipts: &[String],
+) -> Result<Value, PublicAssessmentWriteReceiptProjectionError> {
+    let shape = AssessmentPlanShape::from_assessment(assessment)?;
+    Ok(json!({
+        "kind": "assessment_summary",
+        "assessment": assessment_ref(assessment.id()),
+        "score": {
+            "value": evidence.score().score(),
+            "output": score_output(&shape, evidence)?
+        },
+        "evidence": assessment_evidence_envelope(evidence, source_receipts)?
+    }))
+}
+
+fn assessment_evidence_envelope(
+    evidence: &CaseAssessmentEvidence,
+    source_receipts: &[String],
+) -> Result<Value, PublicAssessmentWriteReceiptProjectionError> {
+    let data_classes = evidence_data_classes(evidence);
+    let target_derived = data_classes
+        .iter()
+        .any(|data_class| data_class == "case.target");
+    let trace_refs = evidence_trace_refs(evidence);
+    let mut public = json!({
+        "summary": output_summary(evidence.output())?,
+        "data_classes": &data_classes
+    });
+    if !trace_refs.is_empty() {
+        public
+            .as_object_mut()
+            .expect("evidence public projection is object")
+            .insert("trace_refs".to_owned(), json!(trace_refs));
+    }
+    Ok(json!({
+        "schema_version": "leaven.evidence_envelope.v1",
+        "target_derived": target_derived,
+        "data_classes": data_classes,
+        "public": public,
+        "redaction_policy": {
+            "optimizer": "score_only",
+            "reflector": "score_only",
+            "operator": "score_only"
+        },
+        "producer": {
+            "stage_call_id": "sc_public_assessment_projection"
+        },
+        "source_receipts": {
+            "read": source_receipts,
+            "effect": []
+        }
+    }))
+}
+
+fn evidence_source_read_receipts(
+    assessment: &AssessmentView<'_>,
+    evidence: &CaseAssessmentEvidence,
+) -> Vec<String> {
+    let receipts = evidence
+        .case_data_reads()
+        .iter()
+        .map(|read| read.receipt().to_owned())
+        .collect::<BTreeSet<_>>();
+    if receipts.is_empty() {
+        vec![format!(
+            "qrec_assessment_evidence_{}",
+            assessment.id().as_uuid()
+        )]
+    } else {
+        receipts.into_iter().collect()
+    }
+}
+
+fn evidence_data_classes(evidence: &CaseAssessmentEvidence) -> Vec<String> {
+    let mut data_classes = BTreeSet::from(["public".to_owned()]);
+    for read in evidence.case_data_reads() {
+        data_classes.extend(read.data_classes().iter().cloned());
+    }
+    data_classes.into_iter().collect()
+}
+
+fn evidence_trace_refs(evidence: &CaseAssessmentEvidence) -> Vec<Value> {
+    evidence
+        .case_data_reads()
+        .iter()
+        .map(|read| {
+            json!({
+                "kind": read.operation(),
+                "id": format!("trace_{}", read.receipt()),
+                "visibility": "redacted_transcript",
+                "data_classes": read.data_classes(),
+                "receipt": read.receipt()
+            })
+        })
+        .collect()
+}
+
+fn assessment_summary_data_classes(
+    assessment: &AssessmentView<'_>,
+    evidence: &CaseAssessmentEvidence,
+) -> Result<Vec<String>, PublicAssessmentWriteReceiptProjectionError> {
+    let shape = AssessmentPlanShape::from_assessment(assessment)?;
+    let mut data_classes = BTreeSet::new();
+    for data_class in evidence.output().metadata().data_classes().iter() {
+        data_classes.insert(data_class.as_str().to_owned());
+    }
+    if let Some(blob_ref) = blob_ref_value(evidence.output())?
+        && let Some(blob_data_classes) = blob_ref.get("data_classes").and_then(Value::as_array)
+    {
+        data_classes.extend(
+            blob_data_classes
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned),
+        );
+    }
+    match &shape {
+        AssessmentPlanShape::Independent(_) => {}
+        AssessmentPlanShape::Pairwise(_) | AssessmentPlanShape::Listwise(_) => {
+            for output in evidence.candidate_outputs() {
+                for data_class in output.output().metadata().data_classes().iter() {
+                    data_classes.insert(data_class.as_str().to_owned());
+                }
+            }
+        }
+    }
+    data_classes.extend(evidence_data_classes(evidence));
+    Ok(data_classes.into_iter().collect())
+}
+
+fn evidence_query_receipts(
+    receipt_ids: &[String],
+    data_classes: &[String],
+    graph_revision: &str,
+    started_at: &str,
+    completed_at: &str,
+) -> Vec<Value> {
+    receipt_ids
+        .iter()
+        .map(|receipt| {
+            json!({
+                "kind": "query",
+                "receipt": receipt,
+                "started_at": started_at,
+                "completed_at": completed_at,
+                "op_hash": format!("fp_query_sha256_{receipt}"),
+                "result_hash": format!("fp_result_sha256_{receipt}"),
+                "graph_revision": graph_revision,
+                "status": "succeeded",
+                "read_scope_fingerprint": format!("fp_scope_sha256_{receipt}"),
+                "projection_fingerprint": format!("fp_projection_sha256_{receipt}"),
+                "trace_refs": [
+                    {
+                        "kind": "assessment_evidence_visibility",
+                        "id": format!("trace_{receipt}"),
+                        "visibility": "redacted_transcript",
+                        "data_classes": data_classes,
+                        "receipt": receipt
+                    }
+                ]
+            })
+        })
+        .collect()
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

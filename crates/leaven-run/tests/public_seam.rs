@@ -1,12 +1,14 @@
-use futures::executor::block_on;
+use std::sync::Arc;
+
+use futures::{FutureExt, executor::block_on};
 use leaven_core::{
     Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget,
     EvaluationPurpose, EvaluationRequest, EvaluationSet, Evidence, OptimizationProblem, Proposal,
     ProposalBatch, ProposalBatchSemantics, ResolvedEvaluationRequest,
 };
 use leaven_engine::{
-    ApplyOutcome, BudgetLedger, CaseSet, EvaluationContext, EvaluationError, Evaluator,
-    ProposalBatchReport, RunContext, RunGraph,
+    ApplyOutcome, BudgetLedger, CachePolicy, CaseSet, EvaluationContext, EvaluationError,
+    Evaluator, ProposalBatchReport, RunContext, RunGraph,
 };
 use leaven_evidence::{
     CandidateAssessmentOutput, CaseAssessmentEvidence, DataClass, DataClassSet, OutputBlobAudit,
@@ -18,7 +20,9 @@ use leaven_kernel::{
 };
 use leaven_run::{
     PublicAssessmentWriteReceiptContext, PublicAssessmentWriteReceiptProjectionError,
-    PublicProposalWriteReceiptContext, PublicProposalWriteReceiptProjectionError, RunProblem,
+    PublicProposalWriteReceiptContext, PublicProposalWriteReceiptProjectionError, RunCase,
+    RunOutput, RunProblem, RuntimeFingerprint, Score, ScoreContext, ScoringEvaluator,
+    ScoringEvaluatorIdentity,
 };
 use leaven_store_inline::InlineEvidenceStore;
 
@@ -208,6 +212,94 @@ fn runcontext_assessment_score_outputs_project_to_public_seam_submit_assessments
         assert_eq!(
             plan["ops"][0]["write"]["assessments"][0]["score"]["output"]["value"]["output"],
             "candidate-output"
+        );
+    });
+}
+
+#[test]
+fn runcontext_assessment_evidence_visibility_projects_to_public_seam_plan_result() {
+    block_on(async {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(workspace_root())
+            .expect("public seam package loads from workspace");
+        let (mut graph, mut budget, candidate) = graph_with_target_eval_seed();
+        let case = leaven_eval::Case::targeted(
+            CaseId::new(0),
+            PromptInput { addend: 2 },
+            AnswerTarget { answer: 3 },
+        );
+        let case_set = CaseSet::new(vec![case.clone()]);
+        let store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("inline");
+        let mut ctx = RunContext::<RunProblem<TextArtifact, PromptInput, AnswerTarget>>::new(
+            &mut graph,
+            &mut budget,
+        )
+        .with_case_set(&case_set)
+        .with_evidence_store(&store);
+        let evaluator = ScoringEvaluator::new(
+            Arc::new(vec![case]),
+            Arc::new(|artifact: TextArtifact, case: RunCase<PromptInput>| {
+                async move {
+                    Ok(RunOutput::new(
+                        (artifact.0 + case.input().addend).to_string(),
+                    ))
+                }
+                .boxed()
+            }),
+            Arc::new(
+                |ctx: ScoreContext<TextArtifact, PromptInput, AnswerTarget, String>| {
+                    async move {
+                        let target = ctx.load_target().expect("target is visible to scorer");
+                        let output = ctx.output.output.clone();
+                        Ok(Score::new(
+                            f64::from(u8::from(output == target.answer.to_string())),
+                            "target checked",
+                        )
+                        .with_output(ctx.report_text_output(output)))
+                    }
+                    .boxed()
+                },
+            ),
+            &scoring_identity("assessment-evidence-visibility"),
+        );
+        let report = ctx
+            .evaluate_with(&evaluator, independent_request(vec![candidate]))
+            .await
+            .unwrap();
+        let graph_view = ctx.graph();
+        let result = assessment_receipt_context()
+            .submit_assessments_plan_result_with_evidence(&graph_view, &store, &report)
+            .expect("RunContext-backed assessment evidence projects to Plan Result");
+
+        let document = package
+            .validate_plan_result_document(&result)
+            .expect("projected evidence Plan Result validates through public seam owner");
+        assert!(document.value_kinds().contains(&"graph_set".to_owned()));
+        assert_eq!(
+            result["values"]["assessment_rows"]["items"][0]["evidence"]["source_receipts"]["read"],
+            serde_json::json!(["qrec_case_0_target"])
+        );
+        assert_eq!(
+            result["receipts"][0]["trace_refs"][0]["data_classes"],
+            serde_json::json!(["case.target", "public"])
+        );
+        assert_eq!(
+            result["values"]["assessment_rows"]["items"][0]["evidence"]["target_derived"],
+            serde_json::json!(true)
+        );
+
+        let mut missing_receipt_visibility = result;
+        missing_receipt_visibility["receipts"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("trace_refs");
+        let error = package
+            .validate_plan_result_document(&missing_receipt_visibility)
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("must carry receipt trace data classes"),
+            "{error}"
         );
     });
 }
@@ -640,6 +732,24 @@ fn graph_with_run_eval_seeds() -> (
     (graph, budget, candidates)
 }
 
+fn graph_with_target_eval_seed() -> (
+    RunGraph<RunProblem<TextArtifact, PromptInput, AnswerTarget>>,
+    BudgetLedger,
+    CandidateId,
+) {
+    let mut graph =
+        RunGraph::<RunProblem<TextArtifact, PromptInput, AnswerTarget>>::new(RunId::new());
+    let mut budget = BudgetLedger::new(Budget::unlimited());
+    let candidate = {
+        let mut ctx = RunContext::<RunProblem<TextArtifact, PromptInput, AnswerTarget>>::new(
+            &mut graph,
+            &mut budget,
+        );
+        ctx.insert_seed(TextArtifact(1), 0).unwrap()
+    };
+    (graph, budget, candidate)
+}
+
 fn independent_request(candidates: Vec<CandidateId>) -> EvaluationRequest {
     EvaluationRequest::Independent {
         candidates,
@@ -661,8 +771,29 @@ fn workspace_root() -> std::path::PathBuf {
         .to_path_buf()
 }
 
+fn scoring_identity(label: &str) -> ScoringEvaluatorIdentity {
+    ScoringEvaluatorIdentity {
+        label: label.to_owned(),
+        runner: RuntimeFingerprint::new(Fingerprint::from_bytes([71; 32])),
+        scorer: RuntimeFingerprint::new(Fingerprint::from_bytes([72; 32])),
+        dataset: Fingerprint::from_bytes([73; 32]),
+        splits: Fingerprint::from_bytes([74; 32]),
+        cache_policy: CachePolicy::Never,
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct TextArtifact(i32);
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct PromptInput {
+    addend: i32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AnswerTarget {
+    answer: i32,
+}
 
 #[derive(Debug)]
 struct TextArtifactError;
