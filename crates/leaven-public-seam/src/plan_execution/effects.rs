@@ -801,7 +801,7 @@ impl PlanLmCompleteOutcome {
             lm_message_value(&value.assistant),
             format!("fp_runtime_sha256_{}", fingerprint_hex(runtime_fingerprint)),
         )
-        .with_cost(lm_cost_value(&cost))
+        .with_cost(cost_value(&cost))
     }
 
     /// Creates a failed paid LM outcome that still emits audit and charge receipts.
@@ -909,7 +909,7 @@ fn lm_content_part_value(part: &leaven_lm::MessageContentPart) -> Value {
     }
 }
 
-fn lm_cost_value(cost: &leaven_kernel::Cost) -> Value {
+fn cost_value(cost: &leaven_kernel::Cost) -> Value {
     let mut object = serde_json::Map::new();
     if cost.prompt_tokens > 0 {
         object.insert("input_tokens".to_owned(), json!(cost.prompt_tokens));
@@ -934,6 +934,35 @@ fn fingerprint_hex(fingerprint: leaven_kernel::Fingerprint) -> String {
         output.push(HEX[usize::from(byte & 0x0f)] as char);
     }
     output
+}
+
+fn agent_status_value(status: &leaven_agent::AgentStatus) -> &'static str {
+    match status {
+        leaven_agent::AgentStatus::Succeeded => "completed",
+        leaven_agent::AgentStatus::Failed { .. }
+        | leaven_agent::AgentStatus::OutputContractViolation { .. } => "failed",
+        leaven_agent::AgentStatus::Cancelled => "cancelled",
+        leaven_agent::AgentStatus::TimedOut => "timeout",
+    }
+}
+
+fn agent_command_value(command: &leaven_agent::CommandRecord, receipt: &str) -> Value {
+    let mut argv = Vec::with_capacity(command.command.args.len() + 1);
+    argv.push(command.command.program.clone());
+    argv.extend(command.command.args.clone());
+    json!({
+        "argv": argv,
+        "status": command_status_value(command.output.status),
+        "receipt": receipt
+    })
+}
+
+fn command_status_value(status: leaven_workspace::ExitStatus) -> &'static str {
+    if status.code == Some(0) {
+        "completed"
+    } else {
+        "failed"
+    }
 }
 
 /// Host outcome for a typed `agent_run` call.
@@ -965,6 +994,31 @@ impl PlanAgentRunOutcome {
         }
     }
 
+    /// Creates an agent session outcome from provider-neutral agent evidence.
+    #[must_use]
+    pub fn from_agent_session(
+        session: leaven_kernel::Metered<leaven_agent::AgentSession>,
+        runtime_fingerprint: leaven_kernel::Fingerprint,
+        transcript_ref: Value,
+        session_receipt: impl Into<String>,
+    ) -> Self {
+        let leaven_kernel::Metered { value, cost } = session;
+        let session_receipt = session_receipt.into();
+        Self::completed(format!(
+            "fp_runtime_sha256_{}",
+            fingerprint_hex(runtime_fingerprint)
+        ))
+        .with_status(agent_status_value(&value.status))
+        .with_transcript_ref(transcript_ref)
+        .with_commands(
+            value
+                .commands
+                .iter()
+                .map(|command| agent_command_value(command, &session_receipt)),
+        )
+        .with_cost(cost_value(&cost))
+    }
+
     /// Attaches a transcript blob reference.
     #[must_use]
     pub fn with_transcript_ref(mut self, transcript_ref: Value) -> Self {
@@ -990,6 +1044,12 @@ impl PlanAgentRunOutcome {
     #[must_use]
     pub fn with_cost(mut self, cost: Value) -> Self {
         self.cost = Some(cost);
+        self
+    }
+
+    #[must_use]
+    fn with_status(mut self, status: impl Into<String>) -> Self {
+        self.status = status.into();
         self
     }
 }

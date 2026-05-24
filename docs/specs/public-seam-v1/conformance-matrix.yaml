@@ -1420,6 +1420,7 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_lowering_preserves_json_schema_output_contract
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_lowering_preserves_workspace_diff_surface_fingerprint
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_rejects_schema_valid_sessions_without_audit_facts
+      - crates/leaven-public-seam/tests/agent_contract.rs::agent_run_can_project_provider_neutral_agent_session_into_plan_result
       - crates/leaven-public-seam/tests/plan_document.rs::call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes
       - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_rejects_agent_session_effect_without_matching_receipt
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
@@ -1429,11 +1430,13 @@ rows:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_agent_and_sandbox_blob_ref_data_class_gaps
       - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_rejects_submit_only_apply_and_ungranted_surface_or_effect
+      - crates/leaven-public-seam/tests/agent_contract.rs::agent_session_projection_preserves_invalid_command_argv_for_validation
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunRequest::live_workspace
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunRequest::to_agent_run_request
       - crates/leaven-public-seam/src/plan_execution/effects.rs::require_live_workspace
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunOutcome
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunOutcome::from_agent_session
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunOutcome::with_parsed
       - crates/leaven-public-seam/src/plan_execution.rs::validate_structured_output_contract
       - crates/leaven-public-seam/src/plan_execution.rs::validate_structured_output_outcome
@@ -1443,6 +1446,7 @@ rows:
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_successful_call_result_value
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_agent_session_value
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_agent_command_record
+      - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_external_call_cost_binding
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_structured_output_value
       - crates/leaven-public-seam/src/proposal_authority.rs::validate_agent_session_effect_receipts
       - crates/leaven-agent/src/session.rs::AgentRunRequest
@@ -1508,6 +1512,7 @@ rows:
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_successful_call_result_value
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_sandbox_stream_value
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_sandbox_exec_value
+      - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_external_call_cost_binding
       - crates/leaven-workspace/src/command.rs::Command
       - crates/leaven-workspace/src/command.rs::CommandLimits
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract

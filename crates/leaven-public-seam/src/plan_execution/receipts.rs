@@ -497,12 +497,33 @@ fn validate_successful_call_result_value(
         )));
     }
     require_receipt_field(value, "receipt", receipt_id)?;
+    validate_external_call_cost_binding(call_kind, value, receipt)?;
     validate_lm_response_value(call_kind, call, value, receipt)?;
     validate_structured_output_value(call_kind, call, value)?;
     validate_sandbox_stream_value(call, value)?;
     validate_agent_session_value(call_kind, value, receipt_id)?;
     validate_sandbox_exec_value(call_kind, value)?;
     Ok(())
+}
+
+fn validate_external_call_cost_binding(
+    call_kind: &str,
+    value: &Map<String, Value>,
+    receipt: &Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    if !matches!(call_kind, "agent_run" | "sandbox_exec") {
+        return Ok(());
+    }
+    match (value.get("cost"), receipt.get("cost")) {
+        (Some(value_cost), Some(receipt_cost)) if value_cost == receipt_cost => Ok(()),
+        (Some(_), _) => Err(invalid_plan(format!(
+            "{call_kind} result value cost must match call receipt cost"
+        ))),
+        (None, Some(_)) => Err(invalid_plan(format!(
+            "{call_kind} call receipt cost must have a matching result value cost"
+        ))),
+        (None, None) => Ok(()),
+    }
 }
 
 fn expected_call_result_value_kind(call_kind: &str) -> Option<&'static str> {

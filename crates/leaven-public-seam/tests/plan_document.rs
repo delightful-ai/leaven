@@ -2096,6 +2096,8 @@ fn sandbox_exec_rejects_schema_valid_results_without_audit_facts() {
         &no_stream_refs,
     );
 
+    assert_sandbox_exec_rejects_missing_receipt_cost(&package, &plan);
+
     let mut no_artifacts = package
         .execute_plan_document(
             &plan,
@@ -2113,6 +2115,28 @@ fn sandbox_exec_rejects_schema_valid_results_without_audit_facts() {
     package
         .validate_plan_execution_result(&plan, &plan_execution_context(), &no_artifacts)
         .unwrap();
+}
+
+fn assert_sandbox_exec_rejects_missing_receipt_cost(package: &PublicSeamPackage, plan: &Value) {
+    let mut missing_receipt_cost = package
+        .execute_plan_document(
+            plan,
+            &plan_execution_context(),
+            &mut RecordingPlanHost::default(),
+        )
+        .unwrap()
+        .value()
+        .clone();
+    missing_receipt_cost["receipts"][1]
+        .as_object_mut()
+        .unwrap()
+        .remove("cost");
+    assert_plan_execution_result_rejected(
+        package,
+        plan,
+        &plan_execution_context(),
+        &missing_receipt_cost,
+    );
 }
 
 #[test]
