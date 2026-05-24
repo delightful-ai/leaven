@@ -63,6 +63,34 @@ fn plan_result_accepts_assessment_summary_with_score_output_and_evidence_envelop
 }
 
 #[test]
+fn plan_result_accepts_assessment_summary_structured_or_numeric_score_output_values() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut structured = assessment_summary_result();
+    structured["values"]["rows"]["items"][0]["score"]["output"] = json!({
+        "kind": "structured",
+        "value": {
+            "answer": "candidate alpha answer",
+            "confidence": 0.9
+        },
+        "visibility": "public",
+        "data_classes": ["candidate.output"]
+    });
+    bind_result_hashes_in_place(&mut structured);
+    package.validate_plan_result_document(&structured).unwrap();
+
+    let mut numeric = assessment_summary_result();
+    numeric["values"]["rows"]["items"][0]["score"]["output"] = json!({
+        "kind": "json",
+        "value": 42,
+        "visibility": "public",
+        "data_classes": ["candidate.output"]
+    });
+    bind_result_hashes_in_place(&mut numeric);
+    package.validate_plan_result_document(&numeric).unwrap();
+}
+
+#[test]
 fn plan_result_rejects_generic_or_untyped_result_payloads() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 

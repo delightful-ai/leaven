@@ -3023,6 +3023,22 @@ fn submit_assessments_accepts_candidate_artifact_score_output_class() {
 }
 
 #[test]
+fn submit_assessments_accepts_evidence_source_receipts_without_duplicate_assessment_declarations() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut document = submit_assessments_plan();
+    document["ops"][0]["write"]["assessments"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("read_receipts");
+    document["ops"][0]["write"]["assessments"][0]["evidence"]["source_receipts"]["write"] =
+        json!(["wrec_prior_assessment_context"]);
+
+    let document = package.validate_plan_document(&document).unwrap();
+
+    assert_eq!(document.assessment_evidence_count(), 3);
+}
+
+#[test]
 fn submit_assessments_rejects_missing_or_placeholder_score_output() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
@@ -3204,37 +3220,14 @@ fn submit_assessments_rejects_schema_valid_but_semantically_invalid_evidence() {
         .unwrap_err();
     assert!(error.to_string().contains("target-derived evidence"));
 
-    let mut undeclared_read_receipt = submit_assessments_plan();
-    undeclared_read_receipt["ops"][0]["write"]["assessments"][0]["read_receipts"] =
-        json!(["qrec_other_source"]);
+    let mut wrong_source_receipt_family = submit_assessments_plan();
+    wrong_source_receipt_family["ops"][0]["write"]["assessments"][0]["evidence"]["source_receipts"]
+        ["effect"] = json!(["qrec_not_an_effect"]);
     let error = package
-        .validate_plan_document(&undeclared_read_receipt)
+        .validate_plan_document(&wrong_source_receipt_family)
         .unwrap_err();
     assert!(
-        error
-            .to_string()
-            .contains("must be declared by the assessment"),
-        "{error}"
-    );
-
-    let mut wrong_declared_family = submit_assessments_plan();
-    wrong_declared_family["ops"][0]["write"]["assessments"][0]["read_receipts"] =
-        json!(["lmrec_not_a_read"]);
-    let error = package
-        .validate_plan_document(&wrong_declared_family)
-        .unwrap_err();
-    assert!(error.to_string().contains("read receipt refs"), "{error}");
-
-    let mut undeclarable_write_receipt = submit_assessments_plan();
-    undeclarable_write_receipt["ops"][0]["write"]["assessments"][0]["evidence"]["source_receipts"]
-        ["write"] = json!(["wrec_hidden_write"]);
-    let error = package
-        .validate_plan_document(&undeclarable_write_receipt)
-        .unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("cannot be declared by an assessment"),
+        error.to_string().contains("source_receipts.effect"),
         "{error}"
     );
 }
@@ -3819,7 +3812,6 @@ fn submit_assessments_plan() -> Value {
                             },
                             "score": score_with_output("independent answer"),
                             "evidence": evidence_envelope("independent answer"),
-                            "read_receipts": ["qrec_score_output_source"],
                             "replayability": "pure_read"
                         },
                         {
@@ -3845,7 +3837,6 @@ fn submit_assessments_plan() -> Value {
                                 "winner": "cand_a"
                             },
                             "evidence": evidence_envelope("pairwise compared candidate outputs"),
-                            "read_receipts": ["qrec_score_output_source"],
                             "replayability": "pure_read"
                         },
                         {
@@ -3870,7 +3861,6 @@ fn submit_assessments_plan() -> Value {
                             },
                             "ranking": ["cand_a", "cand_b", "cand_c"],
                             "evidence": evidence_envelope("listwise ranked candidate outputs"),
-                            "read_receipts": ["qrec_score_output_source"],
                             "replayability": "pure_read"
                         }
                     ]

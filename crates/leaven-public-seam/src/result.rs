@@ -288,7 +288,11 @@ fn validate_assessment_summary_output(
             "assessment_summary Score.output must carry candidate.output or candidate.artifact data class",
         ));
     }
-    if reportable_output_summary(output).is_some()
+    if output
+        .get("summary")
+        .and_then(Value::as_str)
+        .is_some_and(|summary| !summary.trim().is_empty())
+        || output.get("value").is_some_and(has_reportable_content)
         || output.get("blob_ref").is_some()
         || output
             .get("trace_refs")
@@ -300,6 +304,16 @@ fn validate_assessment_summary_output(
     Err(invalid_result(
         "assessment_summary Score.output must carry reportable output content",
     ))
+}
+
+fn has_reportable_content(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::String(text) => !text.trim().is_empty(),
+        Value::Array(values) => !values.is_empty(),
+        Value::Object(object) => !object.is_empty(),
+        Value::Bool(_) | Value::Number(_) => true,
+    }
 }
 
 fn reportable_output_summary(output: &serde_json::Map<String, Value>) -> Option<&str> {
