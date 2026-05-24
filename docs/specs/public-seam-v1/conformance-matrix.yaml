@@ -1551,42 +1551,49 @@ rows:
       workspace values cannot leak unlabeled data classes.
     fake_pass_rejected: Passing host filesystem paths as trusted workspace handles.
     minimum_closeout_level: semantic_denial
-    partial_contract_test_evidence:
+    positive_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_materialize_and_release_emit_typed_handles_and_receipts
       - crates/leaven-public-seam/tests/workspace_ref_contract.rs::workspace_lifecycle_preserves_and_enforces_object_refs
       - crates/leaven-public-seam/tests/workspace_ref_contract.rs::workspace_lifecycle_does_not_collapse_same_id_distinct_object_refs
+      - crates/leaven-public-seam/tests/workspace_ref_contract.rs::workspace_query_preserves_object_ref_receipt_preimage
+      - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_reads_require_live_handles_and_emit_query_receipts
+      - crates/leaven-public-seam/tests/workspace_query_contract.rs::workspace_query_executes_finite_reads_through_workspace_view
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
+    negative_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_materialize_rejects_host_path_and_lifetime_substitution
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_handle_provenance_rejects_literal_forgery_and_released_reuse
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_release_rejects_unmaterialized_handles_and_host_path_substitutes
       - crates/leaven-public-seam/tests/workspace_ref_contract.rs::workspace_lifecycle_rejects_object_ref_run_substitution_before_release_host_work
       - crates/leaven-public-seam/tests/workspace_ref_contract.rs::workspace_lifecycle_rejects_bare_id_release_of_object_ref_handle
-      - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_reads_require_live_handles_and_emit_query_receipts
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_with_capability_denies_ungranted_workspace_queries_before_host_effects
+      - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_denies_no_capability_execution_route
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_rejects_unmaterialized_released_and_mismatched_results
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_rejects_file_listing_stat_and_digest_result_mismatches
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_rejects_snapshot_git_and_artifact_result_mismatches
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_result_rejects_workspace_query_value_forgery_with_valid_hashes
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_result_rejects_literal_workspace_handle_provenance_forgery
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_result_rejects_workspace_lifecycle_state_forgery_with_valid_hashes
-      - crates/leaven-public-seam/tests/workspace_query_contract.rs::workspace_query_executes_finite_reads_through_workspace_view
-      - crates/leaven-public-seam/tests/workspace_query_contract.rs::workspace_query_view_helper_enforces_bounded_controls
+      - crates/leaven-public-seam/tests/workspace_query_contract.rs::workspace_query_view_helper_rejects_unbounded_controls
       - crates/leaven-public-seam/tests/workspace_query_contract.rs::workspace_query_view_helper_rejects_git_queries_as_host_owned
-      - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
-      - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_deny_ungranted_models_workspace_ops_and_commands
       - crates/leaven-public-seam/tests/capability_document.rs::grant_enforcement_rejects_ungranted_models_workspace_ops_and_commands
-    partial_contract_implementation_evidence:
+    implementation_evidence:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanWorkspaceMaterializeRequest
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanWorkspaceMaterializeOutcome
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanWorkspaceReleaseRequest
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanWorkspaceReleaseOutcome
       - crates/leaven-public-seam/src/plan_execution/effects.rs::WorkspaceRefFacts
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::WorkspaceRefFacts::to_value
       - crates/leaven-public-seam/src/plan_execution/effects.rs::LiveWorkspaceHandle
       - crates/leaven-public-seam/src/plan_execution/effects.rs::LiveWorkspaceHandle::satisfies_workspace
       - crates/leaven-public-seam/src/plan_execution/effects.rs::require_live_workspace_ref
       - crates/leaven-public-seam/src/plan_execution/queries.rs::PlanWorkspaceQueryRequest
       - crates/leaven-public-seam/src/plan_execution/queries.rs::PlanWorkspaceQueryRequest::execute_on_workspace_view
       - crates/leaven-public-seam/src/plan_execution/queries.rs::PlanWorkspaceQueryOutcome
+      - crates/leaven-public-seam/src/plan_execution/queries.rs::plan_contains_workspace_query
+      - crates/leaven-public-seam/src/plan_execution/queries.rs::validate_workspace_query_authority
       - crates/leaven-public-seam/src/plan_execution/queries.rs::workspace_query_expected_value_kind
       - crates/leaven-public-seam/src/plan_execution/queries.rs::validate_workspace_query_request_op
       - crates/leaven-public-seam/src/plan_execution/queries.rs::validate_workspace_query_value_shape
@@ -1594,6 +1601,7 @@ rows:
       - crates/leaven-public-seam/src/plan_execution/queries.rs::validate_workspace_list_value
       - crates/leaven-public-seam/src/plan_execution/queries.rs::validate_workspace_snapshot_value
       - crates/leaven-public-seam/src/plan_execution/queries.rs::validate_workspace_diff_value
+      - crates/leaven-public-seam/src/plan_execution/queries.rs::require_external_source_ref
       - crates/leaven-public-seam/src/plan_execution/queries.rs::validate_workspace_capture_artifacts_value
       - crates/leaven-public-seam/src/plan_execution/queries.rs::workspace_capture_requested_paths
       - crates/leaven-public-seam/src/plan_execution/queries.rs::validate_workspace_path
@@ -1619,7 +1627,8 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-workspace-result-kind-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-sandbox-workspace-score-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-workspace-view-query-helper-review.md
-    status: pending
+      - docs/specs/public-seam-v1/reviews/2026-05-24-workspace-family-hooke-review.md
+    status: proven
 
   - id: ps1.lm.contract
     area: lm
@@ -1637,37 +1646,42 @@ rows:
       marked deferred rather than silently downgraded.
     fake_pass_rejected: Shelling out to a provider-specific API with lost request metadata.
     minimum_closeout_level: semantic_denial
-    partial_contract_test_evidence:
+    positive_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::plan_ir_family_lowers_and_executes_let_call_write_through_public_seam_owner
       - crates/leaven-public-seam/tests/plan_document.rs::lm_complete_lowering_preserves_json_schema_output_and_provider_hints
-      - crates/leaven-public-seam/tests/plan_document.rs::lm_complete_lowering_rejects_deferred_multimodal_or_extension_content
-      - crates/leaven-public-seam/tests/plan_document.rs::lm_complete_rejects_streaming_request_shapes_before_provider_call
-      - crates/leaven-public-seam/tests/plan_document.rs::lm_complete_rejects_schema_valid_non_final_or_oversized_responses
       - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_can_execute_through_provider_neutral_lm_trait_and_preserve_cost
       - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_json_schema_executes_through_provider_neutral_lm_trait
-      - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_rejects_failed_call_receipts_without_typed_error_and_charge_audit
-      - crates/leaven-public-seam/tests/plan_document.rs::call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes
       - crates/leaven-lm/tests/lm_contract.rs::request_builders_preserve_sampling_output_and_provider_hints
       - crates/leaven-lm-openai/tests/openai_mapping.rs::openai_request_lowers_developer_tool_messages_tools_and_final_message_output
       - crates/leaven-lm-openai/tests/openai_mapping.rs::openai_request_lowers_sampling_metadata_and_output_modes
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_lm_cost_audit_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/plan_document.rs::lm_complete_lowering_rejects_deferred_multimodal_or_extension_content
+      - crates/leaven-public-seam/tests/plan_document.rs::lm_complete_rejects_streaming_request_shapes_before_provider_call
+      - crates/leaven-public-seam/tests/plan_document.rs::lm_complete_rejects_schema_valid_non_final_or_oversized_responses
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_rejects_failed_call_receipts_without_typed_error_and_charge_audit
+      - crates/leaven-public-seam/tests/plan_document.rs::call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_deny_ungranted_models_workspace_ops_and_commands
       - crates/leaven-public-seam/tests/capability_document.rs::grant_enforcement_rejects_ungranted_models_workspace_ops_and_commands
       - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_trait_mapping_preserves_forbidden_result_tool_metadata_for_validation
       - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_json_schema_rejects_invalid_parsed_provider_payload
+      - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_json_schema_rejects_non_json_provider_text_in_public_seam_adapter
+      - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_provider_trait_error_is_not_success_receipted_by_host_json
       - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_rejects_tool_result_message_id_drift_before_provider_call
       - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_rejects_typed_provider_hint_shape_drift_before_provider_call
-    partial_contract_implementation_evidence:
+    implementation_evidence:
       - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::PlanLmCompleteRequest::lm_request
+      - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::PlanLmCompleteRequest::execute_with_lm
       - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::lower_lm_call
       - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::lower_lm_messages
       - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::lower_lm_tools
       - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::lower_lm_sampling
       - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::lower_lm_output
       - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::lower_provider_hints
+      - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::parsed_lm_json_schema_payload
       - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::PlanLmCompleteOutcome::from_lm_response
       - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::PlanLmCompleteOutcome::with_parsed
       - crates/leaven-public-seam/src/plan_execution.rs::validate_structured_output_contract
@@ -1693,6 +1707,7 @@ rows:
       - crates/leaven-public-seam/src/acp_profile/extension_result.rs::AcpExtensionResultDocument
       - crates/leaven-public-seam/src/acp_profile.rs::AcpPermissionRequest
       - crates/leaven-public-seam/src/capability.rs::CapabilityGrantRequest
+      - crates/leaven-public-seam/AGENTS.md
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-24-effect-call-authority-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-structured-output-evaluator-authority-review.md
@@ -1704,7 +1719,8 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-score-lm-agent-json-schema-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-lm-success-construction-hard-cutover-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-typed-effect-request-cutover-dewey-review.md
-    status: pending
+      - docs/specs/public-seam-v1/reviews/2026-05-24-lm-contract-provider-neutral-adapter-review.md
+    status: proven
 
   - id: ps1.agent.contract
     area: agent

@@ -201,7 +201,7 @@ fn extension_result_contract(method: &str) -> Result<ExtensionResultContract, Pu
             receipt: ReceiptExpectation::Query,
         }),
         "leaven/workspace.release" => Ok(ExtensionResultContract {
-            primary_kinds: EXTENSION,
+            primary_kinds: &["workspace_handle"],
             receipt: ReceiptExpectation::Call("workspace_release"),
         }),
         "leaven/lm.complete" => Ok(ExtensionResultContract {
@@ -330,6 +330,16 @@ fn validate_effect_primary_audit(
             validate_sandbox_exec_value("sandbox_exec", primary)?;
             validate_effect_primary_cost("sandbox_exec", primary, expected_receipt)
         }
+        "leaven/workspace.release" => {
+            validate_effect_primary_receipt(primary, expected_receipt_id)?;
+            if primary.get("released").and_then(Value::as_bool) == Some(true) {
+                Ok(())
+            } else {
+                Err(invalid_acp(
+                    "ACP extension result workspace.release primary must be a released workspace_handle",
+                ))
+            }
+        }
         _ => Ok(()),
     }
 }
@@ -347,7 +357,6 @@ fn validate_extension_primary_op(
         "leaven/case.input" => "case.input",
         "leaven/case.target" => "case.target",
         "leaven/case.metadata" => "case.metadata",
-        "leaven/workspace.release" => "workspace.release",
         "leaven/human.review" => "human.review",
         "leaven/event.emit" => "event.emit",
         _ => return Ok(()),

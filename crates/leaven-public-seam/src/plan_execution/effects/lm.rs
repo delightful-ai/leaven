@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use leaven_lm::{
-    JsonSchemaOutput, LmRequest, LmTool, Message, Messages, ModelName, OutputMode, ProviderHints,
-    Role, SamplingOptions,
+    JsonSchemaOutput, LmRequest, LmTool, Message, MessageContentPart, Messages, ModelName,
+    OutputMode, ProviderHints, Role, SamplingOptions,
 };
 use serde_json::{Value, json};
 
@@ -49,6 +49,35 @@ impl<'a> PlanLmCompleteRequest<'a> {
     /// already lowered by the public seam.
     pub fn into_lm_request(self) -> LmRequest {
         self.lm_request
+    }
+
+    /// Executes this already-lowered request through a provider-neutral
+    /// [`leaven_lm::Lm`] implementation.
+    ///
+    /// The public seam, not the host, owns the final step from Plan IR to
+    /// `LmRequest` to `PlanLmCompleteOutcome`: hosts supply the LM capability
+    /// and this method preserves the request, runtime fingerprint, metered
+    /// cost, and JSON-schema parsed payload shape required by the locked
+    /// result contract.
+    pub async fn execute_with_lm<L>(&self, lm: &L) -> Result<PlanLmCompleteOutcome, PublicSeamError>
+    where
+        L: leaven_lm::Lm + ?Sized,
+    {
+        let expects_json_schema = matches!(self.lm_request.output, OutputMode::JsonSchema(_));
+        let response = lm
+            .complete(self.lm_request.clone())
+            .await
+            .map_err(|error| invalid_lm_call(error.to_string()))?;
+        let parsed = if expects_json_schema {
+            Some(parsed_lm_json_schema_payload(&response.value.assistant)?)
+        } else {
+            None
+        };
+        let mut outcome = PlanLmCompleteOutcome::from_lm_response(response, lm.fingerprint());
+        if let Some(parsed) = parsed {
+            outcome = outcome.with_parsed(parsed);
+        }
+        Ok(outcome)
     }
 }
 
@@ -302,6 +331,19 @@ fn invalid_lm_call(message: impl Into<String>) -> PublicSeamError {
     PublicSeamError::InvalidPlan {
         message: message.into(),
     }
+}
+
+fn parsed_lm_json_schema_payload(message: &Message) -> Result<Value, PublicSeamError> {
+    let [MessageContentPart::Text { text }] = message.content_parts() else {
+        return Err(invalid_lm_call(
+            "lm_complete json_schema response must carry assistant text",
+        ));
+    };
+    serde_json::from_str(text).map_err(|error| {
+        invalid_lm_call(format!(
+            "lm_complete json_schema response was not JSON: {error}"
+        ))
+    })
 }
 
 /// Host outcome for a typed `lm_complete` call.

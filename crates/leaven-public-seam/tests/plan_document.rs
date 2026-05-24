@@ -216,6 +216,119 @@ fn plan_execution_with_capability_allows_workspace_lifecycle_calls() {
 }
 
 #[test]
+fn plan_execution_with_capability_denies_ungranted_workspace_queries_before_host_effects() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let plan = workspace_materialize_query_plan();
+
+    let mut host = RecordingPlanHost::default();
+    package
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &workspace_query_capability(
+                &[
+                    "read_file",
+                    "list",
+                    "stat",
+                    "digest",
+                    "snapshot",
+                    "git_log",
+                    "git_diff",
+                    "git_status",
+                    "capture_artifacts",
+                ],
+                &["candidate.artifact"],
+            ),
+            &mut host,
+        )
+        .unwrap();
+    assert_eq!(
+        host.calls,
+        vec![
+            "workspace_materialize",
+            "workspace_read_file",
+            "workspace_list",
+            "workspace_stat",
+            "workspace_digest",
+            "workspace_snapshot",
+            "workspace_git_log",
+            "workspace_git_diff",
+            "workspace_git_status",
+            "workspace_capture_artifacts"
+        ]
+    );
+
+    let mut ungranted_host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &workspace_lifecycle_capability(false),
+            &mut ungranted_host,
+        )
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("workspace_query `read_file` denied"),
+        "unexpected error: {error:?}"
+    );
+    assert!(ungranted_host.calls.is_empty());
+
+    let mut wrong_op_host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &workspace_query_capability(&["list"], &["candidate.artifact"]),
+            &mut wrong_op_host,
+        )
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("read_file"),
+        "unexpected error: {error:?}"
+    );
+    assert!(wrong_op_host.calls.is_empty());
+
+    let mut wrong_class_host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &workspace_query_capability(&["read_file"], &["public"]),
+            &mut wrong_class_host,
+        )
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("candidate.artifact"),
+        "unexpected error: {error:?}"
+    );
+    assert!(wrong_class_host.calls.is_empty());
+}
+
+#[test]
+fn workspace_query_denies_no_capability_execution_route() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut host = RecordingPlanHost::default();
+
+    let error = package
+        .execute_plan_document(
+            &workspace_materialize_query_plan(),
+            &plan_execution_context(),
+            &mut host,
+        )
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("workspace_query execution requires capability-authorized Plan execution"),
+        "unexpected error: {error:?}"
+    );
+    assert!(host.calls.is_empty());
+}
+
+#[test]
 fn plan_execution_with_capability_denies_sandbox_policy_before_host_effects() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut capability = sandbox_exec_capability_value();
@@ -408,7 +521,25 @@ fn plan_execution_result_rejects_workspace_query_value_forgery_with_valid_hashes
     let context = plan_execution_context();
     let plan = workspace_materialize_query_plan();
     let mut result = package
-        .execute_plan_document(&plan, &context, &mut RecordingPlanHost::default())
+        .execute_plan_document_with_capability(
+            &plan,
+            &context,
+            &workspace_query_capability(
+                &[
+                    "read_file",
+                    "list",
+                    "stat",
+                    "digest",
+                    "snapshot",
+                    "git_log",
+                    "git_diff",
+                    "git_status",
+                    "capture_artifacts",
+                ],
+                &["candidate.artifact"],
+            ),
+            &mut RecordingPlanHost::default(),
+        )
         .unwrap()
         .value()
         .clone();
@@ -431,11 +562,7 @@ fn plan_execution_result_rejects_workspace_query_value_forgery_with_valid_hashes
     ));
     assert_plan_execution_result_rejected(&package, &plan, &context, &result);
 
-    let mut missing_class = package
-        .execute_plan_document(&plan, &context, &mut RecordingPlanHost::default())
-        .unwrap()
-        .value()
-        .clone();
+    let mut missing_class = workspace_query_result_fixture(&package, &plan, &context);
     missing_class["values"]["file"]["data_classes"] = json!(["public"]);
     missing_class["receipts"][1]["result_hash"] = json!(test_prefixed_jcs_hash(
         "fp_result_sha256_",
@@ -447,11 +574,7 @@ fn plan_execution_result_rejects_workspace_query_value_forgery_with_valid_hashes
     ));
     assert_plan_execution_result_rejected(&package, &plan, &context, &missing_class);
 
-    let mut stat_wrong_path = package
-        .execute_plan_document(&plan, &context, &mut RecordingPlanHost::default())
-        .unwrap()
-        .value()
-        .clone();
+    let mut stat_wrong_path = workspace_query_result_fixture(&package, &plan, &context);
     stat_wrong_path["values"]["stat"]["entries"][0]["path"] = json!("src/lib.rs");
     stat_wrong_path["receipts"][3]["result_hash"] = json!(test_prefixed_jcs_hash(
         "fp_result_sha256_",
@@ -463,11 +586,7 @@ fn plan_execution_result_rejects_workspace_query_value_forgery_with_valid_hashes
     ));
     assert_plan_execution_result_rejected(&package, &plan, &context, &stat_wrong_path);
 
-    let mut digest_wrong_algorithm = package
-        .execute_plan_document(&plan, &context, &mut RecordingPlanHost::default())
-        .unwrap()
-        .value()
-        .clone();
+    let mut digest_wrong_algorithm = workspace_query_result_fixture(&package, &plan, &context);
     digest_wrong_algorithm["values"]["digest"]["digest"] = json!("blake3:readme");
     digest_wrong_algorithm["receipts"][4]["result_hash"] = json!(test_prefixed_jcs_hash(
         "fp_result_sha256_",
@@ -479,11 +598,7 @@ fn plan_execution_result_rejects_workspace_query_value_forgery_with_valid_hashes
     ));
     assert_plan_execution_result_rejected(&package, &plan, &context, &digest_wrong_algorithm);
 
-    let mut digest_wrong_workspace = package
-        .execute_plan_document(&plan, &context, &mut RecordingPlanHost::default())
-        .unwrap()
-        .value()
-        .clone();
+    let mut digest_wrong_workspace = workspace_query_result_fixture(&package, &plan, &context);
     digest_wrong_workspace["values"]["digest"]["workspace"] = json!("ws_planexec_other");
     digest_wrong_workspace["receipts"][4]["result_hash"] = json!(test_prefixed_jcs_hash(
         "fp_result_sha256_",
@@ -494,6 +609,36 @@ fn plan_execution_result_rejects_workspace_query_value_forgery_with_valid_hashes
         }),
     ));
     assert_plan_execution_result_rejected(&package, &plan, &context, &digest_wrong_workspace);
+}
+
+fn workspace_query_result_fixture(
+    package: &PublicSeamPackage,
+    plan: &Value,
+    context: &PlanExecutionContext,
+) -> Value {
+    package
+        .execute_plan_document_with_capability(
+            plan,
+            context,
+            &workspace_query_capability(
+                &[
+                    "read_file",
+                    "list",
+                    "stat",
+                    "digest",
+                    "snapshot",
+                    "git_log",
+                    "git_diff",
+                    "git_status",
+                    "capture_artifacts",
+                ],
+                &["candidate.artifact"],
+            ),
+            &mut RecordingPlanHost::default(),
+        )
+        .unwrap()
+        .value()
+        .clone()
 }
 
 #[test]
@@ -1737,7 +1882,12 @@ fn workspace_handle_provenance_rejects_literal_forgery_and_released_reuse() {
     let query = forged_workspace_handle_query_plan();
     let mut host = RecordingPlanHost::default();
     let error = package
-        .execute_plan_document(&query, &plan_execution_context(), &mut host)
+        .execute_plan_document_with_capability(
+            &query,
+            &plan_execution_context(),
+            &workspace_query_capability(&["read_file"], &["candidate.artifact"]),
+            &mut host,
+        )
         .unwrap_err();
     assert!(host.calls.is_empty());
     assert!(
@@ -1872,13 +2022,8 @@ fn workspace_query_reads_require_live_handles_and_emit_query_receipts() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut host = RecordingPlanHost::default();
 
-    let report = package
-        .execute_plan_document(
-            &workspace_materialize_query_plan(),
-            &plan_execution_context(),
-            &mut host,
-        )
-        .unwrap();
+    let report =
+        execute_workspace_query_plan(&package, &workspace_materialize_query_plan(), &mut host);
 
     assert_eq!(
         host.calls,
@@ -1955,9 +2100,30 @@ fn workspace_query_rejects_unmaterialized_released_and_mismatched_results() {
 
     let mut unmaterialized = workspace_materialize_query_plan();
     unmaterialized["ops"][1]["expr"]["workspace"] = json!("ws_unmaterialized");
+    unmaterialized["ops"].as_array_mut().unwrap().truncate(2);
+    unmaterialized["return"] = json!(["workspace", "file"]);
     let mut host = RecordingPlanHost::default();
     let error = package
-        .execute_plan_document(&unmaterialized, &plan_execution_context(), &mut host)
+        .execute_plan_document_with_capability(
+            &unmaterialized,
+            &plan_execution_context(),
+            &workspace_query_capability_for_workspace(
+                "ws_unmaterialized",
+                &[
+                    "read_file",
+                    "list",
+                    "stat",
+                    "digest",
+                    "snapshot",
+                    "git_log",
+                    "git_diff",
+                    "git_status",
+                    "capture_artifacts",
+                ],
+                &["candidate.artifact"],
+            ),
+            &mut host,
+        )
         .unwrap_err();
     assert_eq!(host.calls, vec!["workspace_materialize"]);
     assert!(
@@ -1985,7 +2151,12 @@ fn workspace_query_rejects_unmaterialized_released_and_mismatched_results() {
     released["return"] = json!(["workspace", "release", "file"]);
     let mut host = RecordingPlanHost::default();
     let error = package
-        .execute_plan_document(&released, &plan_execution_context(), &mut host)
+        .execute_plan_document_with_capability(
+            &released,
+            &plan_execution_context(),
+            &workspace_query_capability(&["read_file"], &["candidate.artifact"]),
+            &mut host,
+        )
         .unwrap_err();
     assert_eq!(
         host.calls,
@@ -2002,7 +2173,25 @@ fn workspace_query_rejects_unmaterialized_released_and_mismatched_results() {
     mismatch["ops"][1]["name"] = json!("wrong_kind");
     let mut host = RecordingPlanHost::default();
     let error = package
-        .execute_plan_document(&mismatch, &plan_execution_context(), &mut host)
+        .execute_plan_document_with_capability(
+            &mismatch,
+            &plan_execution_context(),
+            &workspace_query_capability(
+                &[
+                    "read_file",
+                    "list",
+                    "stat",
+                    "digest",
+                    "snapshot",
+                    "git_log",
+                    "git_diff",
+                    "git_status",
+                    "capture_artifacts",
+                ],
+                &["candidate.artifact"],
+            ),
+            &mut host,
+        )
         .unwrap_err();
     assert!(
         error
@@ -2130,6 +2319,15 @@ fn assert_digest_workspace_query_mismatches(package: &PublicSeamPackage) {
             }),
             "digest result workspace `ws_planexec_other` does not match requested `ws_planexec_materialized`",
         ),
+        (
+            "digest_wrong_source_path",
+            json!({
+                "kind": "digest",
+                "path": "README.md",
+                "algorithm": "sha256"
+            }),
+            "digest result source_refs must include external `leaven.workspace.path` id `README.md`",
+        ),
     ] {
         assert_workspace_query_mismatch(package, name, op, expected);
     }
@@ -2162,6 +2360,14 @@ fn workspace_query_rejects_snapshot_git_and_artifact_result_mismatches() {
             "git_log result must carry text or blob_ref",
         ),
         (
+            "git_log_wrong_source_limit",
+            json!({
+                "kind": "git_log",
+                "max_entries": 5
+            }),
+            "git_log result source_refs must include external `leaven.workspace.git_log.max_entries` id `5`",
+        ),
+        (
             "git_diff_missing_body",
             json!({
                 "kind": "git_diff",
@@ -2170,11 +2376,27 @@ fn workspace_query_rejects_snapshot_git_and_artifact_result_mismatches() {
             "git_diff result must carry text or blob_ref",
         ),
         (
+            "git_diff_wrong_source_against",
+            json!({
+                "kind": "git_diff",
+                "against": "seed"
+            }),
+            "git_diff result source_refs must include external `leaven.workspace.git_diff.against` id `seed`",
+        ),
+        (
             "git_status_missing_body",
             json!({
                 "kind": "git_status"
             }),
             "git_status result must carry text or blob_ref",
+        ),
+        (
+            "git_status_wrong_source_porcelain",
+            json!({
+                "kind": "git_status",
+                "porcelain": true
+            }),
+            "git_status result source_refs must include external `leaven.workspace.git_status.porcelain` id `true`",
         ),
         (
             "capture_unrequested_path",
@@ -2231,7 +2453,25 @@ fn assert_workspace_query_mismatch(
     mismatch["return"] = json!(["workspace", name]);
     let mut host = RecordingPlanHost::default();
     let error = package
-        .execute_plan_document(&mismatch, &plan_execution_context(), &mut host)
+        .execute_plan_document_with_capability(
+            &mismatch,
+            &plan_execution_context(),
+            &workspace_query_capability(
+                &[
+                    "read_file",
+                    "list",
+                    "stat",
+                    "digest",
+                    "snapshot",
+                    "git_log",
+                    "git_diff",
+                    "git_status",
+                    "capture_artifacts",
+                ],
+                &["candidate.artifact"],
+            ),
+            &mut host,
+        )
         .unwrap_err();
     assert!(
         error.to_string().contains(expected),
@@ -3710,6 +3950,34 @@ fn workspace_materialize_query_plan() -> Value {
     })
 }
 
+fn execute_workspace_query_plan(
+    package: &PublicSeamPackage,
+    plan: &Value,
+    host: &mut RecordingPlanHost,
+) -> leaven_public_seam::PlanExecutionReport {
+    package
+        .execute_plan_document_with_capability(
+            plan,
+            &plan_execution_context(),
+            &workspace_query_capability(
+                &[
+                    "read_file",
+                    "list",
+                    "stat",
+                    "digest",
+                    "snapshot",
+                    "git_log",
+                    "git_diff",
+                    "git_status",
+                    "capture_artifacts",
+                ],
+                &["candidate.artifact"],
+            ),
+            host,
+        )
+        .unwrap()
+}
+
 fn workspace_query_plan_ops() -> Vec<Value> {
     let workspace = json!("ws_planexec_materialized");
     vec![
@@ -5021,7 +5289,12 @@ impl RecordingPlanHost {
         Ok(workspace_query_outcome(json!({
             "kind": "workspace_snapshot",
             "workspace": "ws_planexec_materialized",
-            "digest": "sha256:readme"
+            "digest": "sha256:readme",
+            "source_refs": [{
+                "kind": "external",
+                "namespace": "leaven.workspace.path",
+                "id": "README.md"
+            }]
         })))
     }
 
@@ -5042,7 +5315,12 @@ impl RecordingPlanHost {
         self.calls.push("workspace_git_log");
         workspace_query_outcome(json!({
             "kind": "workspace_diff",
-            "text": "commit abc123 public-seam test"
+            "text": "commit abc123 public-seam test",
+            "source_refs": [{
+                "kind": "external",
+                "namespace": "leaven.workspace.git_log.max_entries",
+                "id": "5"
+            }]
         }))
     }
 
@@ -5050,7 +5328,12 @@ impl RecordingPlanHost {
         self.calls.push("workspace_git_diff");
         workspace_query_outcome(json!({
             "kind": "workspace_diff",
-            "text": "diff --git a/README.md b/README.md"
+            "text": "diff --git a/README.md b/README.md",
+            "source_refs": [{
+                "kind": "external",
+                "namespace": "leaven.workspace.git_diff.against",
+                "id": "seed"
+            }]
         }))
     }
 
@@ -5058,7 +5341,12 @@ impl RecordingPlanHost {
         self.calls.push("workspace_git_status");
         workspace_query_outcome(json!({
             "kind": "workspace_diff",
-            "text": " M README.md"
+            "text": " M README.md",
+            "source_refs": [{
+                "kind": "external",
+                "namespace": "leaven.workspace.git_status.porcelain",
+                "id": "true"
+            }]
         }))
     }
 
@@ -5156,23 +5444,33 @@ impl RecordingPlanHost {
                     ]
                 }))
             }
-            ("digest_wrong_algorithm", "digest") => {
-                self.calls.push("workspace_digest");
-                workspace_query_outcome(json!({
-                    "kind": "workspace_snapshot",
-                    "workspace": "ws_planexec_materialized",
-                    "digest": "blake3:readme"
-                }))
-            }
-            ("digest_wrong_workspace", "digest") => {
-                self.calls.push("workspace_digest");
-                workspace_query_outcome(json!({
-                    "kind": "workspace_snapshot",
-                    "workspace": "ws_planexec_other",
-                    "digest": "sha256:readme"
-                }))
-            }
+            (name, "digest") => self.workspace_digest_mismatch(name),
             other => panic!("unexpected workspace query: {other:?}"),
+        }
+    }
+
+    fn workspace_digest_mismatch(&mut self, name: &str) -> PlanWorkspaceQueryOutcome {
+        self.calls.push("workspace_digest");
+        match name {
+            "digest_wrong_algorithm" => workspace_query_outcome(json!({
+                "kind": "workspace_snapshot",
+                "workspace": "ws_planexec_materialized",
+                "digest": "blake3:readme",
+                "source_refs": [workspace_source_ref("leaven.workspace.path", "README.md")]
+            })),
+            "digest_wrong_workspace" => workspace_query_outcome(json!({
+                "kind": "workspace_snapshot",
+                "workspace": "ws_planexec_other",
+                "digest": "sha256:readme",
+                "source_refs": [workspace_source_ref("leaven.workspace.path", "README.md")]
+            })),
+            "digest_wrong_source_path" => workspace_query_outcome(json!({
+                "kind": "workspace_snapshot",
+                "workspace": "ws_planexec_materialized",
+                "digest": "sha256:readme",
+                "source_refs": [workspace_source_ref("leaven.workspace.path", "src/lib.rs")]
+            })),
+            other => panic!("unexpected workspace digest query: {other}"),
         }
     }
 
@@ -5204,13 +5502,49 @@ impl RecordingPlanHost {
                 self.calls.push("workspace_git_log");
                 workspace_query_outcome(json!({"kind": "workspace_diff"}))
             }
+            ("git_log_wrong_source_limit", "git_log") => {
+                self.calls.push("workspace_git_log");
+                workspace_query_outcome(json!({
+                    "kind": "workspace_diff",
+                    "text": "commit abc123 public-seam test",
+                    "source_refs": [{
+                        "kind": "external",
+                        "namespace": "leaven.workspace.git_log.max_entries",
+                        "id": "10"
+                    }]
+                }))
+            }
             ("git_diff_missing_body", "git_diff") => {
                 self.calls.push("workspace_git_diff");
                 workspace_query_outcome(json!({"kind": "workspace_diff"}))
             }
+            ("git_diff_wrong_source_against", "git_diff") => {
+                self.calls.push("workspace_git_diff");
+                workspace_query_outcome(json!({
+                    "kind": "workspace_diff",
+                    "text": "diff --git a/README.md b/README.md",
+                    "source_refs": [{
+                        "kind": "external",
+                        "namespace": "leaven.workspace.git_diff.against",
+                        "id": "parent"
+                    }]
+                }))
+            }
             ("git_status_missing_body", "git_status") => {
                 self.calls.push("workspace_git_status");
                 workspace_query_outcome(json!({"kind": "workspace_diff"}))
+            }
+            ("git_status_wrong_source_porcelain", "git_status") => {
+                self.calls.push("workspace_git_status");
+                workspace_query_outcome(json!({
+                    "kind": "workspace_diff",
+                    "text": " M README.md",
+                    "source_refs": [{
+                        "kind": "external",
+                        "namespace": "leaven.workspace.git_status.porcelain",
+                        "id": "false"
+                    }]
+                }))
             }
             ("capture_unrequested_path", "capture_artifacts") => {
                 self.calls.push("workspace_capture_artifacts");
@@ -5326,6 +5660,55 @@ fn workspace_lifecycle_capability(include_release: bool) -> CapabilityDocument {
         }));
     }
     CapabilityDocument::from_value(base_execution_capability(&grants)).unwrap()
+}
+
+fn workspace_query_capability(
+    read_ops: &[&str],
+    allowed_read_classes: &[&str],
+) -> CapabilityDocument {
+    workspace_query_capability_for_workspace(
+        "ws_planexec_materialized",
+        read_ops,
+        allowed_read_classes,
+    )
+}
+
+fn workspace_query_capability_for_workspace(
+    workspace_id: &str,
+    read_ops: &[&str],
+    allowed_read_classes: &[&str],
+) -> CapabilityDocument {
+    CapabilityDocument::from_value(base_execution_capability(&[
+        json!({
+            "action": "workspace.materialize",
+            "resource": {
+                "candidate_ids": ["cand_planexec"]
+            },
+            "constraints": {
+                "workspace_ops": ["materialize"]
+            }
+        }),
+        json!({
+            "action": "workspace.read",
+            "resource": {
+                "workspace_ids": [workspace_id]
+            },
+            "constraints": {
+                "allowed_input_classes": allowed_read_classes,
+                "workspace_ops": read_ops
+            }
+        }),
+        json!({
+            "action": "workspace.release",
+            "resource": {
+                "workspace_ids": [workspace_id]
+            },
+            "constraints": {
+                "workspace_ops": ["release"]
+            }
+        }),
+    ]))
+    .unwrap()
 }
 
 fn sandbox_exec_capability_value() -> Value {
@@ -5480,6 +5863,14 @@ fn blob_ref_with_hash_and_data_classes(
 fn workspace_query_outcome(value: Value) -> PlanWorkspaceQueryOutcome {
     PlanWorkspaceQueryOutcome::new(value, "rev_planexec_base")
         .with_data_classes(["candidate.artifact".to_owned(), "public".to_owned()])
+}
+
+fn workspace_source_ref(namespace: &str, id: &str) -> Value {
+    json!({
+        "kind": "external",
+        "namespace": namespace,
+        "id": id
+    })
 }
 
 fn workspace_listing_value() -> Value {

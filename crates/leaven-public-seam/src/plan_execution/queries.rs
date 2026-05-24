@@ -483,6 +483,12 @@ fn validate_workspace_digest_value(
             request.workspace()
         )));
     }
+    require_external_source_ref(
+        value,
+        "leaven.workspace.path",
+        requested_path,
+        "workspace_query digest result",
+    )?;
     Ok(())
 }
 
@@ -508,6 +514,42 @@ fn validate_workspace_diff_value(
             "workspace_query {} result must carry text or blob_ref",
             request.op_kind()?
         )));
+    }
+    match request.op_kind()? {
+        "git_log" => {
+            if let Some(max_entries) = request.op().get("max_entries").and_then(Value::as_u64) {
+                require_external_source_ref(
+                    value,
+                    "leaven.workspace.git_log.max_entries",
+                    &max_entries.to_string(),
+                    "workspace_query git_log result",
+                )?;
+            }
+        }
+        "git_diff" => {
+            let against = request
+                .op()
+                .get("against")
+                .and_then(Value::as_str)
+                .ok_or_else(|| invalid_plan("workspace_query git_diff must carry against"))?;
+            require_external_source_ref(
+                value,
+                "leaven.workspace.git_diff.against",
+                against,
+                "workspace_query git_diff result",
+            )?;
+        }
+        "git_status" => {
+            if let Some(porcelain) = request.op().get("porcelain").and_then(Value::as_bool) {
+                require_external_source_ref(
+                    value,
+                    "leaven.workspace.git_status.porcelain",
+                    if porcelain { "true" } else { "false" },
+                    "workspace_query git_status result",
+                )?;
+            }
+        }
+        _ => {}
     }
     Ok(())
 }
@@ -616,6 +658,32 @@ fn validate_workspace_snapshot_workspace(
     Ok(())
 }
 
+fn require_external_source_ref(
+    value: &Map<String, Value>,
+    namespace: &str,
+    id: &str,
+    context: &str,
+) -> Result<(), PublicSeamError> {
+    let refs = value
+        .get("source_refs")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_plan(format!("{context} must carry source_refs")))?;
+    let found = refs.iter().any(|source| {
+        source.as_object().is_some_and(|source| {
+            source.get("kind").and_then(Value::as_str) == Some("external")
+                && source.get("namespace").and_then(Value::as_str) == Some(namespace)
+                && source.get("id").and_then(Value::as_str) == Some(id)
+        })
+    });
+    if found {
+        Ok(())
+    } else {
+        Err(invalid_plan(format!(
+            "{context} source_refs must include external `{namespace}` id `{id}`"
+        )))
+    }
+}
+
 fn workspace_listing_entries<'a>(
     value: &'a Map<String, Value>,
     op: &str,
@@ -669,7 +737,7 @@ fn validate_workspace_path(field: &str, path: &str) -> Result<(), PublicSeamErro
 
 pub(super) fn workspace_query_projection(request: &PlanWorkspaceQueryRequest<'_>) -> Value {
     json!({
-        "workspace": request.workspace(),
+        "workspace": request.workspace_ref().to_value(),
         "op": request.op()
     })
 }
@@ -806,7 +874,12 @@ fn workspace_digest_value_from_view(
     Ok(json!({
         "kind": "workspace_snapshot",
         "workspace": request.workspace(),
-        "digest": digest
+        "digest": digest,
+        "source_refs": [{
+            "kind": "external",
+            "namespace": "leaven.workspace.path",
+            "id": path
+        }]
     }))
 }
 
@@ -1007,6 +1080,18 @@ pub(super) fn plan_contains_case_query(plan: &Value) -> Result<bool, PublicSeamE
     Ok(false)
 }
 
+pub(super) fn plan_contains_workspace_query(plan: &Value) -> Result<bool, PublicSeamError> {
+    for op in plan_ops(plan)? {
+        let Some(expr) = op.get("expr") else {
+            continue;
+        };
+        if nested_kind(expr, "expr")? == "workspace_query" {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 pub(super) fn validate_case_query_authority(
     plan: &Value,
     context: &PlanExecutionContext,
@@ -1035,6 +1120,67 @@ pub(super) fn validate_case_query_authority(
         authorize_case_query_load(query, context, capability)?;
     }
     Ok(())
+}
+
+pub(super) fn validate_workspace_query_authority(
+    plan: &Value,
+    context: &PlanExecutionContext,
+    capability: &CapabilityDocument,
+) -> Result<(), PublicSeamError> {
+    if context.capability_fingerprint != capability.capability_fingerprint() {
+        return Err(invalid_plan(
+            "Plan execution context capability fingerprint does not match capability document",
+        ));
+    }
+    for op in plan_ops(plan)? {
+        let Some(expr) = op.get("expr") else {
+            continue;
+        };
+        if nested_kind(expr, "expr")? != "workspace_query" {
+            continue;
+        }
+        let name = op
+            .get("name")
+            .and_then(Value::as_str)
+            .ok_or_else(|| invalid_plan("workspace_query op must carry name"))?;
+        let deps = BTreeMap::new();
+        let request = workspace_query_request_from_values(name, expr, &deps)?;
+        authorize_workspace_query_read(&request, capability)?;
+    }
+    Ok(())
+}
+
+fn authorize_workspace_query_read(
+    request: &PlanWorkspaceQueryRequest<'_>,
+    capability: &CapabilityDocument,
+) -> Result<(), PublicSeamError> {
+    let op_kind = request.op_kind()?;
+    let input_classes = workspace_query_authorized_input_classes(request)?;
+    let mut grant = CapabilityGrantRequest::for_action("workspace.read")
+        .with_resource("workspace_ids", json!(request.workspace()))
+        .with_workspace_op(op_kind);
+    for data_class in &input_classes {
+        grant = grant.with_input_class(data_class);
+    }
+    capability.authorize_grant(grant).map_err(|denial| {
+        invalid_plan(format!(
+            "workspace_query `{op_kind}` denied for input classes {input_classes:?}: {denial}"
+        ))
+    })?;
+    Ok(())
+}
+
+fn workspace_query_authorized_input_classes(
+    request: &PlanWorkspaceQueryRequest<'_>,
+) -> Result<BTreeSet<String>, PublicSeamError> {
+    if request.op_kind()? == "read_file" {
+        return Ok(request
+            .expected_data_classes()?
+            .into_iter()
+            .map(str::to_owned)
+            .collect());
+    }
+    Ok(BTreeSet::from(["candidate.artifact".to_owned()]))
 }
 
 fn authorize_case_query_load(

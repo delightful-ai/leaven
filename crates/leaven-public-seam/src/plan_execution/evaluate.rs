@@ -326,17 +326,18 @@ pub(super) fn execute_workspace_query_expr(
     value.insert("data_classes".to_owned(), json!(outcome.data_classes));
     value.insert("replayability".to_owned(), json!(outcome.replayability));
     let value = Value::Object(value);
+    let scope = json!({
+        "kind": "workspace_query",
+        "workspace": request.workspace_ref().to_value(),
+        "base_revision": context.base_revision
+    });
     let op_hash = prefixed_jcs_hash(
         "fp_query_sha256_",
         &json!({
             "schema_version": "leaven.plan_query_op.v1",
             "name": name,
             "expr": expr,
-            "scope": {
-                "kind": "workspace_query",
-                "workspace": request.workspace(),
-                "base_revision": context.base_revision
-            }
+            "scope": scope
         }),
     )?;
     let result_hash = prefixed_jcs_hash(
@@ -359,11 +360,7 @@ pub(super) fn execute_workspace_query_expr(
             "op_hash": op_hash,
             "result_hash": result_hash,
             "graph_revision": graph_revision,
-            "read_scope_fingerprint": prefixed_jcs_hash("fp_scope_sha256_", &json!({
-                "kind": "workspace_query",
-                "workspace": request.workspace(),
-                "base_revision": context.base_revision
-            }))?,
+            "read_scope_fingerprint": prefixed_jcs_hash("fp_scope_sha256_", &scope)?,
             "projection_fingerprint": prefixed_jcs_hash("fp_projection_sha256_", &workspace_query_projection(&request))?,
             "status": "succeeded"
         })),

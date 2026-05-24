@@ -1,7 +1,8 @@
 use leaven_public_seam::{
-    PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
-    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanWorkspaceMaterializeOutcome,
-    PlanWorkspaceMaterializeRequest, PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
+    CapabilityDocument, PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext,
+    PlanExecutionHost, PlanLmCompleteOutcome, PlanLmCompleteRequest,
+    PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome,
+    PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
     PublicSeamError, PublicSeamPackage,
 };
 use serde_json::{Value, json};
@@ -116,6 +117,34 @@ fn workspace_lifecycle_rejects_bare_id_release_of_object_ref_handle() {
     assert_eq!(host.calls, vec!["workspace_materialize"]);
 }
 
+#[test]
+fn workspace_query_preserves_object_ref_receipt_preimage() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut host = WorkspaceRefHost::default();
+
+    let report = package
+        .execute_plan_document_with_capability(
+            &workspace_object_ref_query_plan(&workspace_ref(RUN_ID, SNAPSHOT)),
+            &plan_execution_context(),
+            &workspace_ref_capability(),
+            &mut host,
+        )
+        .unwrap();
+
+    assert_eq!(
+        host.calls,
+        vec!["workspace_materialize", "workspace_read_file"]
+    );
+    assert_eq!(
+        report.value()["values"]["workspace"]["workspace"],
+        workspace_ref(RUN_ID, SNAPSHOT)
+    );
+    assert_eq!(
+        report.value()["values"]["file"]["path"].as_str(),
+        Some("README.md")
+    );
+}
+
 #[derive(Default)]
 struct WorkspaceRefHost {
     calls: Vec<&'static str>,
@@ -173,6 +202,25 @@ impl PlanExecutionHost for WorkspaceRefHost {
         .with_workspace_object_ref(Some(run), Some(snapshot)))
     }
 
+    fn workspace_query(
+        &mut self,
+        request: PlanWorkspaceQueryRequest<'_>,
+    ) -> Result<PlanWorkspaceQueryOutcome, PublicSeamError> {
+        assert_eq!(request.workspace(), WORKSPACE_ID);
+        assert_eq!(request.op_kind()?, "read_file");
+        assert_eq!(request.path()?, Some("README.md"));
+        self.calls.push("workspace_read_file");
+        Ok(PlanWorkspaceQueryOutcome::new(
+            json!({
+                "kind": "workspace_file",
+                "path": "README.md",
+                "content": "object ref read"
+            }),
+            "rev_workspaceobjectref_base",
+        )
+        .with_data_classes(["candidate.artifact".to_owned(), "public".to_owned()]))
+    }
+
     fn emit_run_event(
         &mut self,
         request: PlanEmitRunEventRequest<'_>,
@@ -223,6 +271,52 @@ fn workspace_object_ref_plan(release_workspace: &Value) -> Value {
             }
         ],
         "return": ["workspace", "release"],
+        "commit": {
+            "kind": "graph_writes_atomic",
+            "on_stale": "reject"
+        }
+    })
+}
+
+fn workspace_object_ref_query_plan(query_workspace: &Value) -> Value {
+    json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "planworkspaceobjectrefquery001",
+        "consistency": {
+            "kind": "latest_at_start"
+        },
+        "mode": {
+            "kind": "execute"
+        },
+        "ops": [
+            {
+                "kind": "call",
+                "name": "workspace",
+                "idempotency_key": "workspace-object-ref-query-materialize-0001",
+                "call": {
+                    "kind": "workspace_materialize",
+                    "candidate": "cand_object_ref",
+                    "surface": "program",
+                    "mode": "copy_on_write",
+                    "lifetime": "manual_release"
+                }
+            },
+            {
+                "kind": "let",
+                "name": "file",
+                "deps": ["workspace"],
+                "expr": {
+                    "kind": "workspace_query",
+                    "workspace": query_workspace,
+                    "op": {
+                        "kind": "read_file",
+                        "path": "README.md",
+                        "expected_data_classes": ["candidate.artifact"]
+                    }
+                }
+            }
+        ],
+        "return": ["workspace", "file"],
         "commit": {
             "kind": "graph_writes_atomic",
             "on_stale": "reject"
@@ -303,6 +397,80 @@ fn workspace_ref(run: &str, snapshot_fingerprint: &str) -> Value {
         "id": WORKSPACE_ID,
         "snapshot_fingerprint": snapshot_fingerprint
     })
+}
+
+fn workspace_ref_capability() -> CapabilityDocument {
+    CapabilityDocument::from_value(json!({
+        "schema_version": "leaven.capability.v1",
+        "jti": "jti_workspace_object_ref",
+        "capability_fingerprint": "fp_cap_sha256_workspaceobjectref",
+        "policy_fingerprint": "fp_policy_sha256_workspaceobjectref",
+        "subject_fingerprint": "fp_subject_sha256_workspaceobjectref",
+        "issuer": {
+            "kind": "run_engine",
+            "id": "engine_local"
+        },
+        "subject": {
+            "kind": "stage_call",
+            "run": "run_object_ref_contract",
+            "stage_call_id": "sc_workspace_object_ref",
+            "role": "runner"
+        },
+        "audience": ["leaven.acp.worker"],
+        "issued_at": "2026-05-24T00:00:00Z",
+        "expires_at": "2026-05-24T00:20:00Z",
+        "expiry_behavior": "drain_inflight_no_new_ops",
+        "token_binding": {
+            "kind": "opaque_lookup",
+            "token_id": "ltok_workspace_object_ref"
+        },
+        "revocation": {
+            "mode": "issuer_epoch",
+            "revocation_epoch": 7,
+            "check": "on_every_request"
+        },
+        "renewal": {
+            "mode": "renew_before_expiry",
+            "max_extensions": 2,
+            "max_total_lifetime_s": 3600
+        },
+        "grants": [
+            {
+                "action": "workspace.materialize",
+                "resource": {
+                    "candidate_ids": ["cand_object_ref"]
+                },
+                "constraints": {
+                    "workspace_ops": ["materialize"]
+                }
+            },
+            {
+                "action": "workspace.read",
+                "resource": {
+                    "workspace_ids": [WORKSPACE_ID]
+                },
+                "constraints": {
+                    "allowed_input_classes": ["candidate.artifact"],
+                    "workspace_ops": ["read_file"]
+                }
+            }
+        ],
+        "budgets": {},
+        "execution_policy": {
+            "profile": "managed_sandbox",
+            "network": "leaven_endpoint_only",
+            "subprocess": "deny_except_sandbox_exec",
+            "filesystem": "workspace_handles_only",
+            "byo_effects": "forbidden"
+        },
+        "delegation": {
+            "may_delegate": false,
+            "max_depth": 0,
+            "must_attenuate": true,
+            "allowed_actions": []
+        }
+    }))
+    .unwrap()
 }
 
 fn plan_execution_context() -> PlanExecutionContext {

@@ -631,7 +631,7 @@ impl WorkspaceRefFacts {
         &self.id
     }
 
-    fn to_value(&self) -> Value {
+    pub(super) fn to_value(&self) -> Value {
         if self.run.is_none() && self.snapshot_fingerprint.is_none() {
             return Value::String(self.id.clone());
         }
