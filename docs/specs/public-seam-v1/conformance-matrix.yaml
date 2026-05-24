@@ -712,6 +712,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-receipt-ref-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-workspace-result-kind-follow-up-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-sartre-review.md
     status: pending
 
   - id: ps1.evidence.visibility_receipts
@@ -784,6 +785,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-evidence-receipt-ref-trace-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-evidence-jsonrpc-handoff-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-sartre-review.md
     status: pending
 
   - id: ps1.stage.reflection_proposal_split
@@ -838,6 +840,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-workspace-result-kind-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-evidence-jsonrpc-handoff-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-sartre-review.md
     status: pending
 
   - id: ps1.stage.payload_receipts
@@ -896,6 +899,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-typed-data-class-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-public-seam-tranche-plato-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-sartre-review.md
     status: pending
 
   - id: ps1.proposal.surface_authority
