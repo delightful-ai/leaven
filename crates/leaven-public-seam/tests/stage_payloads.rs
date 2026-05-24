@@ -389,7 +389,7 @@ fn reflect_request_rejects_parent_source_or_surface_context_gaps() {
 }
 
 #[test]
-fn reflection_result_requires_receipted_source_visible_evidence() {
+fn reflection_result_rejects_missing_or_non_read_receipts() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
     let mut missing_receipt = reflection_result();

@@ -23,6 +23,13 @@ provider protocol details or optimizer-specific search rhythm.
   `ReflectProposeHandoffPayload` lower generic agentic reflection/proposal
   stages into the locked public-seam stage-payload wire contract without
   making this crate the public-seam validator or graph mutation authority.
+- `RunnerRequestPayload`, `ScorerContextPayload` with
+  `ScorerContextPayloadFields`, `JudgeContextPayload` with
+  `JudgeContextPayloadFields`, `CallbackRequestPayload`, and
+  `AdapterRequestPayload` lower generic runner, scorer, judge, callback,
+  artifact adapter, and dataset adapter dispatch payloads into the locked
+  public-seam role-specific wire contract without making this crate the
+  runtime, provider implementation, or schema validator.
 - `GoalLoop`, `GoalHandoff`, `GoalSpecCheck`, `GoalStagePlan`,
   `GoalSpecCheckRequest`, `GoalStagePlanRequest`, `GoalExecutionRequest`, and
   the `Goal*Signature` types are the typed pre-goal API for persistent agent
@@ -67,10 +74,13 @@ provider protocol details or optimizer-specific search rhythm.
 
 Crate-root exports for `PublicStagePayloadIdentity`,
 `ReflectRequestPayload`, `ReflectionResultPayload`,
-`ProposeRequestPayload`, and `ReflectProposeHandoffPayload` are advanced public
-seam-lowering contracts for adapter authors. They are intentionally not in
-`leaven_agentic::prelude`; they do not prove ACP transport, graph mutation,
-provider execution, or the broader `ps1.stage.payload_receipts` row.
+`ProposeRequestPayload`, `ReflectProposeHandoffPayload`,
+`RunnerRequestPayload`, `ScorerContextPayload`, `ScorerContextPayloadFields`,
+`JudgeContextPayload`, `JudgeContextPayloadFields`, `CallbackRequestPayload`,
+and `AdapterRequestPayload` are advanced public seam-lowering contracts for
+adapter authors. They are intentionally not in `leaven_agentic::prelude`; they
+do not prove ACP transport, graph mutation, provider execution, or concrete
+provider runtime behavior.
 
 ## Decision Cards
 - when: turning an agent session or workspace mutation into a proposal
@@ -109,10 +119,10 @@ provider execution, or the broader `ps1.stage.payload_receipts` row.
   the ACP profile that delivers Leaven extension methods to workers. The
   structural split between reflection (diagnosis) and proposal (graph mutation
   intent) is governing judgment; preserve it when shaping adapter parsers and
-  goal-loop handoff prompts. This crate now owns generic reflect/propose
-  stage-payload lowering helpers for adapter authors, but that is not ACP
-  transport, provider execution, graph mutation authority, or full payload-role
-  closeout.
+  goal-loop handoff prompts. This crate now owns generic producer-side
+  stage-payload lowering helpers for reflect/propose plus runner, scorer,
+  judge, callback, artifact adapter, and dataset adapter payload roles, but
+  that is not ACP transport, provider execution, or graph mutation authority.
 - Agent workspace mutation is not graph mutation. Only parser-produced
   proposals or assessments enter the graph through `RunContext`.
 - Agentic evaluators are nondeterministic by default. Do not make evaluation

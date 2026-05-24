@@ -943,12 +943,17 @@ rows:
       outside allowed_effects are rejected.
     fake_pass_rejected: Payload enums with no provenance or policy binding.
     minimum_closeout_level: semantic_denial
-    partial_contract_test_evidence:
+    positive_test_evidence:
       - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_validate_all_role_specific_payload_shapes_with_provenance
       - crates/leaven-public-seam/tests/stage_payloads.rs::active_reflect_then_propose_example_validates_through_semantic_stage_payloads
       - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_preserve_object_form_info_and_receipt_refs
+      - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_submission_binds_proposal_effects_to_cited_handoff
+      - crates/leaven-agentic/tests/public_seam_stage.rs::agentic_reflect_propose_handoff_lowers_through_locked_public_seam_owner
+      - crates/leaven-agentic/tests/public_seam_stage.rs::agentic_role_payloads_lower_remaining_stage_roles_through_locked_public_seam_owner
+      - crates/leaven-gepa-agentic-git/tests/git_reflection.rs::public_seam_reflect_then_propose_stage_projection_uses_separate_agent_sessions
+    negative_test_evidence:
       - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_reject_object_form_candidate_run_substitution
-      - crates/leaven-public-seam/tests/stage_payloads.rs::reflection_result_requires_receipted_source_visible_evidence
+      - crates/leaven-public-seam/tests/stage_payloads.rs::reflection_result_rejects_missing_or_non_read_receipts
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflection_result_rejects_unproven_diagnosis_without_sources
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_request_rejects_parent_source_or_surface_context_gaps
       - crates/leaven-public-seam/tests/stage_payloads.rs::propose_request_rejects_missing_reflection_result_and_change_schema_authority
@@ -957,17 +962,25 @@ rows:
       - crates/leaven-public-seam/tests/stage_payloads.rs::score_and_judge_contexts_reject_nested_output_data_class_gaps
       - crates/leaven-public-seam/tests/stage_payloads.rs::runner_request_rejects_case_target_material
       - crates/leaven-public-seam/tests/stage_payloads.rs::callback_and_adapter_payloads_reject_missing_payload_schema
-      - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_submission_binds_proposal_effects_to_cited_handoff
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_submission_rejects_mutation_without_cited_handoff
-      - crates/leaven-agentic/tests/public_seam_stage.rs::agentic_reflect_propose_handoff_lowers_through_locked_public_seam_owner
       - crates/leaven-agentic/tests/public_seam_stage.rs::agentic_reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fakes
-      - crates/leaven-gepa-agentic-git/tests/git_reflection.rs::public_seam_reflect_then_propose_stage_projection_uses_separate_agent_sessions
-    partial_contract_implementation_evidence:
+      - crates/leaven-agentic/tests/public_seam_stage.rs::agentic_runner_and_scorer_payload_builders_reject_target_and_output_fakes
+      - crates/leaven-agentic/tests/public_seam_stage.rs::agentic_judge_payload_builder_rejects_empty_and_public_only_outputs
+      - crates/leaven-agentic/tests/public_seam_stage.rs::agentic_callback_and_adapter_payload_builders_reject_schema_and_capability_fakes
+    implementation_evidence:
       - crates/leaven-agentic/src/public_seam_stage.rs::PublicStagePayloadIdentity
       - crates/leaven-agentic/src/public_seam_stage.rs::ReflectRequestPayload
       - crates/leaven-agentic/src/public_seam_stage.rs::ReflectionResultPayload
       - crates/leaven-agentic/src/public_seam_stage.rs::ProposeRequestPayload
       - crates/leaven-agentic/src/public_seam_stage.rs::ReflectProposeHandoffPayload
+      - crates/leaven-agentic/src/public_seam_stage.rs::RunnerRequestPayload
+      - crates/leaven-agentic/src/public_seam_stage.rs::ScorerContextPayload
+      - crates/leaven-agentic/src/public_seam_stage.rs::ScorerContextPayloadFields
+      - crates/leaven-agentic/src/public_seam_stage.rs::JudgeContextPayload
+      - crates/leaven-agentic/src/public_seam_stage.rs::JudgeContextPayloadFields
+      - crates/leaven-agentic/src/public_seam_stage.rs::CallbackRequestPayload
+      - crates/leaven-agentic/src/public_seam_stage.rs::AdapterPayloadRole
+      - crates/leaven-agentic/src/public_seam_stage.rs::AdapterRequestPayload
       - crates/leaven-agentic/AGENTS.md
       - crates/leaven-gepa-agentic-git/src/public_seam_stage.rs::GitProgramPublicSeamStageContext
       - crates/leaven-gepa-agentic-git/src/public_seam_stage.rs::GitProgramPublicSeamStageContext::reflect_request
@@ -1012,7 +1025,9 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-assessment-evidence-galileo-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-submission-binding-aquinas-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-reflect-propose-producer-lovelace-review.md
-    status: pending
+      - docs/specs/public-seam-v1/reviews/2026-05-24-stage-payload-roles-descartes-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-stage-payload-receipts-noether-review.md
+    status: proven
 
   - id: ps1.proposal.surface_authority
     area: proposal

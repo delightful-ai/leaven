@@ -17,6 +17,23 @@ pub enum PublicStagePayloadError {
     /// The proposer was built from a different reflection result.
     #[error("propose request must consume the exact ReflectionResult in the handoff")]
     ReflectionMismatch,
+    /// A runner payload tried to carry hidden target material.
+    #[error("public-seam stage payload `{field}` must not carry case.target material")]
+    TargetLeakage {
+        /// Field containing hidden target material.
+        field: &'static str,
+    },
+    /// A score or judge payload omitted assessed output data classes.
+    #[error(
+        "public-seam stage payload `{field}` must carry candidate output or artifact data class"
+    )]
+    MissingAssessedOutputClass {
+        /// Output field missing assessed data classes.
+        field: &'static str,
+    },
+    /// Scorer target access was not bound to the scored case.
+    #[error("scorer target_handle must match the scored case")]
+    TargetHandleMismatch,
     /// Stage payload fingerprinting failed.
     #[error("stage payload fingerprinting failed: {0}")]
     Fingerprint(String),
@@ -340,10 +357,427 @@ impl ReflectProposeHandoffPayload {
     }
 }
 
+/// Public-seam `RunnerRequest` payload for target-free runner execution.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RunnerRequestPayload {
+    value: Value,
+}
+
+impl RunnerRequestPayload {
+    /// Builds a target-free runner request payload.
+    pub fn new(
+        run: impl Into<String>,
+        stage_call_id: impl Into<String>,
+        candidate: impl Into<String>,
+        case_ref: impl Into<String>,
+        case_input: Value,
+    ) -> Result<Self, PublicStagePayloadError> {
+        reject_case_target_material(&case_input, "case_input")?;
+        let mut object = Map::new();
+        object.insert(
+            "schema_version".to_owned(),
+            json!("leaven.stage_payloads.v1"),
+        );
+        object.insert("role".to_owned(), json!("runner"));
+        object.insert("run".to_owned(), json!(non_empty(run.into(), "run")?));
+        object.insert(
+            "stage_call_id".to_owned(),
+            json!(non_empty(stage_call_id.into(), "stage_call_id")?),
+        );
+        object.insert(
+            "candidate".to_owned(),
+            json!(non_empty(candidate.into(), "candidate")?),
+        );
+        object.insert(
+            "case".to_owned(),
+            json!(non_empty(case_ref.into(), "case")?),
+        );
+        object.insert("case_input".to_owned(), case_input);
+        object.insert("target_forbidden".to_owned(), Value::Bool(true));
+        Ok(Self {
+            value: Value::Object(object),
+        })
+    }
+
+    /// Returns the public-seam wire payload.
+    #[must_use]
+    pub const fn value(&self) -> &Value {
+        &self.value
+    }
+}
+
+/// Public-seam `ScoreContext` payload for scorer execution.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ScorerContextPayload {
+    value: Value,
+}
+
+/// Constructor fields for [`ScorerContextPayload`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ScorerContextPayloadFields {
+    /// Public run reference.
+    pub run: String,
+    /// Stage call id for the scorer invocation.
+    pub stage_call_id: String,
+    /// Evaluation request being scored.
+    pub evaluation_request_id: String,
+    /// Candidate being scored.
+    pub candidate: String,
+    /// Case being scored.
+    pub case_ref: String,
+    /// Candidate output being assessed.
+    pub output: Value,
+    /// Optional target handle, only valid when bound to `case_ref`.
+    pub target_handle: Option<String>,
+    /// Capability fingerprint authorizing scorer access.
+    pub capability_fingerprint: String,
+}
+
+impl ScorerContextPayload {
+    /// Builds a scorer context payload with capability-bound target access.
+    pub fn new(fields: ScorerContextPayloadFields) -> Result<Self, PublicStagePayloadError> {
+        let case_ref = non_empty(fields.case_ref, "case")?;
+        if let Some(target_handle) = fields.target_handle.as_deref()
+            && target_handle != case_ref
+        {
+            return Err(PublicStagePayloadError::TargetHandleMismatch);
+        }
+        require_assessed_output_class(&fields.output, "output")?;
+        let mut object = Map::new();
+        object.insert(
+            "schema_version".to_owned(),
+            json!("leaven.stage_payloads.v1"),
+        );
+        object.insert("role".to_owned(), json!("scorer"));
+        object.insert("run".to_owned(), json!(non_empty(fields.run, "run")?));
+        object.insert(
+            "stage_call_id".to_owned(),
+            json!(non_empty(fields.stage_call_id, "stage_call_id")?),
+        );
+        object.insert(
+            "evaluation_request_id".to_owned(),
+            json!(non_empty(
+                fields.evaluation_request_id,
+                "evaluation_request_id"
+            )?),
+        );
+        object.insert(
+            "candidate".to_owned(),
+            json!(non_empty(fields.candidate, "candidate")?),
+        );
+        object.insert("case".to_owned(), json!(case_ref));
+        object.insert("output".to_owned(), fields.output);
+        if let Some(target_handle) = fields.target_handle {
+            object.insert("target_handle".to_owned(), json!(target_handle));
+        }
+        object.insert(
+            "capability_fingerprint".to_owned(),
+            json!(non_empty(
+                fields.capability_fingerprint,
+                "capability_fingerprint"
+            )?),
+        );
+        Ok(Self {
+            value: Value::Object(object),
+        })
+    }
+
+    /// Returns the public-seam wire payload.
+    #[must_use]
+    pub const fn value(&self) -> &Value {
+        &self.value
+    }
+}
+
+/// Public-seam `JudgeContext` payload for pairwise/listwise judging.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct JudgeContextPayload {
+    value: Value,
+}
+
+/// Constructor fields for [`JudgeContextPayload`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct JudgeContextPayloadFields {
+    /// Public run reference.
+    pub run: String,
+    /// Stage call id for the judge invocation.
+    pub stage_call_id: String,
+    /// Left candidate being compared.
+    pub left: String,
+    /// Right candidate being compared.
+    pub right: String,
+    /// Optional case being judged.
+    pub case_ref: Option<String>,
+    /// Assessed outputs being compared.
+    pub outputs: Vec<Value>,
+    /// Rubric visible to the judge.
+    pub rubric: Value,
+    /// Capability fingerprint authorizing judge access.
+    pub capability_fingerprint: String,
+}
+
+impl JudgeContextPayload {
+    /// Builds a judge context payload for assessed candidate outputs.
+    pub fn new(fields: JudgeContextPayloadFields) -> Result<Self, PublicStagePayloadError> {
+        if fields.outputs.is_empty() {
+            return Err(PublicStagePayloadError::EmptyField { field: "outputs" });
+        }
+        for output in &fields.outputs {
+            require_assessed_output_class(output, "outputs")?;
+        }
+        let mut object = Map::new();
+        object.insert(
+            "schema_version".to_owned(),
+            json!("leaven.stage_payloads.v1"),
+        );
+        object.insert("role".to_owned(), json!("judge"));
+        object.insert("run".to_owned(), json!(non_empty(fields.run, "run")?));
+        object.insert(
+            "stage_call_id".to_owned(),
+            json!(non_empty(fields.stage_call_id, "stage_call_id")?),
+        );
+        object.insert("left".to_owned(), json!(non_empty(fields.left, "left")?));
+        object.insert("right".to_owned(), json!(non_empty(fields.right, "right")?));
+        if let Some(case_ref) = fields.case_ref {
+            object.insert("case".to_owned(), json!(non_empty(case_ref, "case")?));
+        }
+        object.insert("outputs".to_owned(), json!(fields.outputs));
+        object.insert("rubric".to_owned(), fields.rubric);
+        object.insert(
+            "capability_fingerprint".to_owned(),
+            json!(non_empty(
+                fields.capability_fingerprint,
+                "capability_fingerprint"
+            )?),
+        );
+        Ok(Self {
+            value: Value::Object(object),
+        })
+    }
+
+    /// Returns the public-seam wire payload.
+    #[must_use]
+    pub const fn value(&self) -> &Value {
+        &self.value
+    }
+}
+
+/// Public-seam callback payload with a schema-bound event body.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CallbackRequestPayload {
+    value: Value,
+}
+
+impl CallbackRequestPayload {
+    /// Builds a callback request payload.
+    pub fn new(
+        run: impl Into<String>,
+        stage_call_id: impl Into<String>,
+        event: Value,
+        payload_schema: impl Into<String>,
+        capability_fingerprint: impl Into<String>,
+    ) -> Result<Self, PublicStagePayloadError> {
+        Ok(Self {
+            value: schema_bound_payload(
+                "callback",
+                run,
+                stage_call_id,
+                "event",
+                event,
+                payload_schema,
+                capability_fingerprint,
+            )?,
+        })
+    }
+
+    /// Returns the public-seam wire payload.
+    #[must_use]
+    pub const fn value(&self) -> &Value {
+        &self.value
+    }
+}
+
+/// Public-seam adapter role.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AdapterPayloadRole {
+    /// Artifact adapter payload.
+    Artifact,
+    /// Dataset adapter payload.
+    Dataset,
+}
+
+impl AdapterPayloadRole {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Artifact => "artifact_adapter",
+            Self::Dataset => "dataset_adapter",
+        }
+    }
+}
+
+/// Public-seam artifact or dataset adapter payload.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AdapterRequestPayload {
+    value: Value,
+}
+
+impl AdapterRequestPayload {
+    /// Builds an artifact adapter request payload.
+    pub fn artifact(
+        run: impl Into<String>,
+        stage_call_id: impl Into<String>,
+        payload: Value,
+        payload_schema: impl Into<String>,
+        capability_fingerprint: impl Into<String>,
+    ) -> Result<Self, PublicStagePayloadError> {
+        Self::new(
+            AdapterPayloadRole::Artifact,
+            run,
+            stage_call_id,
+            payload,
+            payload_schema,
+            capability_fingerprint,
+        )
+    }
+
+    /// Builds a dataset adapter request payload.
+    pub fn dataset(
+        run: impl Into<String>,
+        stage_call_id: impl Into<String>,
+        payload: Value,
+        payload_schema: impl Into<String>,
+        capability_fingerprint: impl Into<String>,
+    ) -> Result<Self, PublicStagePayloadError> {
+        Self::new(
+            AdapterPayloadRole::Dataset,
+            run,
+            stage_call_id,
+            payload,
+            payload_schema,
+            capability_fingerprint,
+        )
+    }
+
+    fn new(
+        role: AdapterPayloadRole,
+        run: impl Into<String>,
+        stage_call_id: impl Into<String>,
+        payload: Value,
+        payload_schema: impl Into<String>,
+        capability_fingerprint: impl Into<String>,
+    ) -> Result<Self, PublicStagePayloadError> {
+        Ok(Self {
+            value: schema_bound_payload(
+                role.as_str(),
+                run,
+                stage_call_id,
+                "payload",
+                payload,
+                payload_schema,
+                capability_fingerprint,
+            )?,
+        })
+    }
+
+    /// Returns the public-seam wire payload.
+    #[must_use]
+    pub const fn value(&self) -> &Value {
+        &self.value
+    }
+}
+
 fn stage_payload_fingerprint(value: &Value) -> Result<String, PublicStagePayloadError> {
     let digest = jcs_canonicalize::sha256_jcs_hex(value)
         .map_err(|error| PublicStagePayloadError::Fingerprint(error.to_string()))?;
     Ok(format!("fp_stage_payload_sha256_{digest}"))
+}
+
+fn schema_bound_payload(
+    role: &'static str,
+    run: impl Into<String>,
+    stage_call_id: impl Into<String>,
+    payload_field: &'static str,
+    payload: Value,
+    payload_schema: impl Into<String>,
+    capability_fingerprint: impl Into<String>,
+) -> Result<Value, PublicStagePayloadError> {
+    let mut object = Map::new();
+    object.insert(
+        "schema_version".to_owned(),
+        json!("leaven.stage_payloads.v1"),
+    );
+    object.insert("role".to_owned(), json!(role));
+    object.insert("run".to_owned(), json!(non_empty(run.into(), "run")?));
+    object.insert(
+        "stage_call_id".to_owned(),
+        json!(non_empty(stage_call_id.into(), "stage_call_id")?),
+    );
+    object.insert(payload_field.to_owned(), payload);
+    object.insert(
+        "payload_schema".to_owned(),
+        json!(non_empty(payload_schema.into(), "payload_schema")?),
+    );
+    object.insert(
+        "capability_fingerprint".to_owned(),
+        json!(non_empty(
+            capability_fingerprint.into(),
+            "capability_fingerprint"
+        )?),
+    );
+    Ok(Value::Object(object))
+}
+
+fn require_assessed_output_class(
+    output: &Value,
+    field: &'static str,
+) -> Result<(), PublicStagePayloadError> {
+    let carries_assessed_output = output
+        .get("data_classes")
+        .and_then(Value::as_array)
+        .is_some_and(|classes| {
+            classes.iter().any(|class| {
+                matches!(
+                    class.as_str(),
+                    Some("candidate.output" | "candidate.artifact")
+                )
+            })
+        });
+    if carries_assessed_output {
+        Ok(())
+    } else {
+        Err(PublicStagePayloadError::MissingAssessedOutputClass { field })
+    }
+}
+
+fn reject_case_target_material(
+    value: &Value,
+    field: &'static str,
+) -> Result<(), PublicStagePayloadError> {
+    match value {
+        Value::Object(object) => {
+            for (key, nested) in object {
+                if contains_case_target_marker(key) {
+                    return Err(PublicStagePayloadError::TargetLeakage { field });
+                }
+                reject_case_target_material(nested, field)?;
+            }
+            Ok(())
+        }
+        Value::Array(values) => {
+            for nested in values {
+                reject_case_target_material(nested, field)?;
+            }
+            Ok(())
+        }
+        Value::String(text) if contains_case_target_marker(text) => {
+            Err(PublicStagePayloadError::TargetLeakage { field })
+        }
+        _ => Ok(()),
+    }
+}
+
+fn contains_case_target_marker(text: &str) -> bool {
+    text.to_ascii_lowercase().contains("case.target")
 }
 
 fn non_empty(value: String, field: &'static str) -> Result<String, PublicStagePayloadError> {
