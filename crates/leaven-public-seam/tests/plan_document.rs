@@ -189,6 +189,52 @@ fn plan_execution_result_rejects_receipt_hashes_unbound_from_plan_preimages() {
 }
 
 #[test]
+fn plan_execution_result_rejects_workspace_query_value_forgery_with_valid_hashes() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let context = plan_execution_context();
+    let plan = workspace_materialize_query_plan();
+    let mut result = package
+        .execute_plan_document(&plan, &context, &mut RecordingPlanHost::default())
+        .unwrap()
+        .value()
+        .clone();
+
+    result["values"]["file"] = json!({
+        "kind": "workspace_listing",
+        "entries": [],
+        "receipt": "qrec_file",
+        "graph_revision": "rev_planexec_base",
+        "data_classes": ["candidate.artifact", "public"],
+        "replayability": "boundary_managed"
+    });
+    result["receipts"][1]["result_hash"] = json!(test_prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_query_result.v1",
+            "name": "file",
+            "value": result["values"]["file"]
+        }),
+    ));
+    assert_plan_execution_result_rejected(&package, &plan, &context, &result);
+
+    let mut missing_class = package
+        .execute_plan_document(&plan, &context, &mut RecordingPlanHost::default())
+        .unwrap()
+        .value()
+        .clone();
+    missing_class["values"]["file"]["data_classes"] = json!(["public"]);
+    missing_class["receipts"][1]["result_hash"] = json!(test_prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_query_result.v1",
+            "name": "file",
+            "value": missing_class["values"]["file"]
+        }),
+    ));
+    assert_plan_execution_result_rejected(&package, &plan, &context, &missing_class);
+}
+
+#[test]
 fn plan_execution_result_rejects_missing_operation_receipts() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let context = plan_execution_context();
@@ -411,6 +457,13 @@ fn assert_plan_execution_or_result_rejected(
             .unwrap_err(),
         PublicSeamError::InvalidPlan { .. } | PublicSeamError::InvalidPlanResult { .. }
     ));
+}
+
+fn test_prefixed_jcs_hash(prefix: &str, value: &Value) -> String {
+    format!(
+        "{prefix}{}",
+        jcs_canonicalize::sha256_jcs_hex(value).unwrap()
+    )
 }
 
 #[test]
