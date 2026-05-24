@@ -8,10 +8,12 @@ guardrails, and grant-envelope authorization checks needed before runtime
 owners spend budgets or execute effects.
 
 It is not a worker runtime, graph mutation layer, provider adapter, or schema
-code generator. Aggregate budget spending, data-class propagation across
-results, and runtime behavior must land in the owning engine, agent, workspace,
-LM, evaluator, or run crates and be exercised through this seam before any
-conformance row can claim integrated behavior.
+code generator. This crate may enforce seam-local monotonic data-class
+projection for the wire values it builds and validates; cross-stage/runtime
+data-class propagation, aggregate budget spending, and runtime behavior must
+land in the owning engine, agent, workspace, LM, evaluator, or run crates and
+be exercised through this seam before any conformance row can claim integrated
+behavior.
 
 ## Route Here
 
@@ -159,8 +161,12 @@ whose receipt is bound to the enclosing session receipt, and cost matched by
 the call receipt. `sandbox_exec` with `stream_policy: blob_refs_only` must
 return stdout/stderr blob refs; completed sandbox results must carry
 `exit_code`, must carry cost matched by the call receipt, and may carry captured
-output-file blob refs only at safe relative workspace paths. Both `agent_run`
-and `sandbox_exec` require a live unreleased,
+output-file blob refs only at safe relative workspace paths. Agent transcript
+blob refs and sandbox stdout/stderr/file blob refs are monotonically projected
+into the top-level Plan Result value `data_classes` by the seam-owned outcome
+builders, and forged results that drop those nested classes are rejected by
+Plan Result validation. Both `agent_run` and `sandbox_exec` require a live
+unreleased,
 materialization-proven `workspace_handle` dependency before host execution, so
 host paths, bare workspace ids, and literal forged handles cannot satisfy
 either route. These routes are not agent provider execution, sandbox backend

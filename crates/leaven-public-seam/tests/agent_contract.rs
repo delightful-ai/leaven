@@ -32,6 +32,7 @@ fn agent_run_can_project_provider_neutral_agent_session_into_plan_result() {
     assert_eq!(session["kind"], "agent_session");
     assert_eq!(session["status"], "completed");
     assert_eq!(session["transcript_ref"]["id"], "blob_agent_transcript");
+    assert_eq!(session["data_classes"], json!(["public", "transcript.raw"]));
     assert_eq!(
         session["commands"][0],
         json!({
@@ -59,6 +60,23 @@ fn agent_run_can_project_provider_neutral_agent_session_into_plan_result() {
         error
             .to_string()
             .contains("agent_run result value cost must match call receipt cost"),
+        "unexpected error: {error:?}"
+    );
+
+    let mut missing_transcript_class = report.value().clone();
+    missing_transcript_class["values"]["completion"]["data_classes"] = json!(["public"]);
+    rebind_call_result_hash(&mut missing_transcript_class, 1, "completion");
+    let error = package
+        .validate_plan_execution_result(
+            &agent_run_workspace_plan(),
+            &plan_execution_context(),
+            &missing_transcript_class,
+        )
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("data_classes must cover nested visibility data class `transcript.raw`"),
         "unexpected error: {error:?}"
     );
 }
@@ -228,8 +246,21 @@ fn blob_ref(id: &'static str) -> Value {
         "id": id,
         "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         "bytes": 12,
-        "data_classes": ["public"]
+        "data_classes": ["transcript.raw"]
     })
+}
+
+fn rebind_call_result_hash(result: &mut Value, receipt_index: usize, name: &str) {
+    let value = result["values"][name].clone();
+    result["receipts"][receipt_index]["result_hash"] = json!(format!(
+        "fp_result_sha256_{}",
+        jcs_canonicalize::sha256_jcs_hex(&json!({
+            "schema_version": "leaven.plan_call_result.v1",
+            "name": name,
+            "value": value
+        }))
+        .unwrap()
+    ));
 }
 
 fn plan_execution_context() -> PlanExecutionContext {

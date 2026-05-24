@@ -936,6 +936,25 @@ fn fingerprint_hex(fingerprint: leaven_kernel::Fingerprint) -> String {
     output
 }
 
+fn extend_data_classes_from_blob_ref(data_classes: &mut Vec<String>, blob_ref: &Value) {
+    let Some(blob_data_classes) = blob_ref
+        .as_object()
+        .and_then(|object| object.get("data_classes"))
+        .and_then(Value::as_array)
+    else {
+        return;
+    };
+    for data_class in blob_data_classes.iter().filter_map(Value::as_str) {
+        push_unique_data_class(data_classes, data_class);
+    }
+}
+
+fn push_unique_data_class(data_classes: &mut Vec<String>, data_class: &str) {
+    if !data_classes.iter().any(|existing| existing == data_class) {
+        data_classes.push(data_class.to_owned());
+    }
+}
+
 fn agent_status_value(status: &leaven_agent::AgentStatus) -> &'static str {
     match status {
         leaven_agent::AgentStatus::Succeeded => "completed",
@@ -1022,6 +1041,7 @@ impl PlanAgentRunOutcome {
     /// Attaches a transcript blob reference.
     #[must_use]
     pub fn with_transcript_ref(mut self, transcript_ref: Value) -> Self {
+        extend_data_classes_from_blob_ref(&mut self.data_classes, &transcript_ref);
         self.transcript_ref = Some(transcript_ref);
         self
     }
@@ -1088,6 +1108,8 @@ impl PlanSandboxExecOutcome {
     /// Attaches stdout and stderr blob references.
     #[must_use]
     pub fn with_stream_refs(mut self, stdout_ref: Value, stderr_ref: Value) -> Self {
+        extend_data_classes_from_blob_ref(&mut self.data_classes, &stdout_ref);
+        extend_data_classes_from_blob_ref(&mut self.data_classes, &stderr_ref);
         self.stdout_ref = Some(stdout_ref);
         self.stderr_ref = Some(stderr_ref);
         self
@@ -1096,6 +1118,7 @@ impl PlanSandboxExecOutcome {
     /// Attaches a captured output file blob reference.
     #[must_use]
     pub fn with_file_ref(mut self, path: impl Into<String>, blob_ref: Value) -> Self {
+        extend_data_classes_from_blob_ref(&mut self.data_classes, &blob_ref);
         self.files.insert(path.into(), blob_ref);
         self
     }

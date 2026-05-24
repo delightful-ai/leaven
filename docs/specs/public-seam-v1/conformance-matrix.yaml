@@ -598,6 +598,8 @@ rows:
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_preserves_value_visibility_data_classes
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_preserves_value_trace_and_blob_ref_data_classes
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_preserves_nested_evidence_visibility_data_classes_and_receipts
+      - crates/leaven-public-seam/tests/agent_contract.rs::agent_run_can_project_provider_neutral_agent_session_into_plan_result
+      - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_outcome_propagates_stream_and_file_blob_data_classes
     negative_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_with_capability_checks_call_authority_before_host_effects
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_with_capability_allows_workspace_lifecycle_calls
@@ -611,6 +613,8 @@ rows:
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_blob_ref_data_class_gaps
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_trace_ref_data_class_gaps
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_evidence_hidden_target_derivation_flag
+      - crates/leaven-public-seam/tests/agent_contract.rs::agent_run_can_project_provider_neutral_agent_session_into_plan_result
+      - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_outcome_propagates_stream_and_file_blob_data_classes
     implementation_evidence:
       - crates/leaven-public-seam/src/call_authority.rs::CallAuthorityReport
       - crates/leaven-public-seam/src/call_authority.rs::validate
@@ -625,6 +629,7 @@ rows:
       - crates/leaven-public-seam/src/result.rs::collect_output_record_data_classes
       - crates/leaven-public-seam/src/result.rs::collect_trace_ref_data_classes
       - crates/leaven-public-seam/src/result.rs::collect_workspace_listing_data_classes
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::extend_data_classes_from_blob_ref
       - crates/leaven-public-seam/src/evidence.rs::EvidenceEnvelopeDocument
       - crates/leaven-public-seam/src/evidence.rs::EvidenceEnvelopeDocument::trace_data_classes
       - crates/leaven-public-seam/src/evidence.rs::validate_private_payload_ref_classes
@@ -1437,6 +1442,8 @@ rows:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::require_live_workspace
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunOutcome
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunOutcome::from_agent_session
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunOutcome::with_transcript_ref
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::extend_data_classes_from_blob_ref
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunOutcome::with_parsed
       - crates/leaven-public-seam/src/plan_execution.rs::validate_structured_output_contract
       - crates/leaven-public-seam/src/plan_execution.rs::validate_structured_output_outcome
@@ -1490,6 +1497,7 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_rejects_unmaterialized_released_and_host_path_workspaces
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_handle_provenance_rejects_literal_forgery_and_released_reuse
       - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_blob_refs_only_requires_stream_blob_refs
+      - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_outcome_propagates_stream_and_file_blob_data_classes
       - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_rejects_schema_valid_results_without_audit_facts
       - crates/leaven-public-seam/tests/plan_document.rs::call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_modes_require_cached_rejects_agent_and_sandbox_live_work
@@ -1507,6 +1515,8 @@ rows:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::require_live_workspace
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecOutcome
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecOutcome::with_file_ref
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecOutcome::with_stream_refs
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::extend_data_classes_from_blob_ref
       - crates/leaven-public-seam/src/plan_execution.rs::validate_sandbox_stream_outcome
       - crates/leaven-public-seam/src/plan_execution.rs::record_sandbox_call_outcome
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_successful_call_result_value
