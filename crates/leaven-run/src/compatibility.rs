@@ -123,28 +123,19 @@ pub struct RunCompatibilityManifest {
 }
 
 impl RunCompatibilityManifest {
-    pub(crate) fn new(
-        dataset: DatasetCompatibility,
-        runner: RuntimeFingerprint,
-        scorer: RuntimeFingerprint,
-        evaluator: RuntimeFingerprint,
-        optimizer: Option<OptimizerCompatibility>,
-        lm_roles: BTreeMap<String, RuntimeFingerprint>,
-        cache_policy: CachePolicy,
-        budget: Budget,
-    ) -> Self {
+    pub(crate) fn new(inputs: RunCompatibilityInputs<'_>) -> Self {
         Self {
             schema: MANIFEST_SCHEMA.to_owned(),
             run_kind: "leaven-run.optimize".to_owned(),
             problem: problem_placeholder(),
-            dataset,
-            runner,
-            scorer,
-            evaluator,
-            optimizer,
-            lm_roles,
-            cache: cache_compatibility(&cache_policy),
-            budget: budget_compatibility(&budget),
+            dataset: inputs.dataset,
+            runner: inputs.runner,
+            scorer: inputs.scorer,
+            evaluator: inputs.evaluator,
+            optimizer: inputs.optimizer,
+            lm_roles: inputs.lm_roles,
+            cache: cache_compatibility(inputs.cache_policy),
+            budget: budget_compatibility(inputs.budget),
         }
     }
 
@@ -164,6 +155,17 @@ impl RunCompatibilityManifest {
             lm_role_count: self.lm_roles.len(),
         }
     }
+}
+
+pub struct RunCompatibilityInputs<'a> {
+    pub dataset: DatasetCompatibility,
+    pub runner: RuntimeFingerprint,
+    pub scorer: RuntimeFingerprint,
+    pub evaluator: RuntimeFingerprint,
+    pub optimizer: Option<OptimizerCompatibility>,
+    pub lm_roles: BTreeMap<String, RuntimeFingerprint>,
+    pub cache_policy: &'a CachePolicy,
+    pub budget: &'a Budget,
 }
 
 /// Durable dataset compatibility identity.
@@ -575,16 +577,15 @@ mod tests {
 
     #[test]
     fn manifest_cache_and_budget_are_derived_from_typed_inputs() {
-        let deterministic_seed = manifest_with_policy_and_budget(
-            CachePolicy::DeterministicWithSeed(7),
-            Budget::metric_calls(3),
-        );
+        let seeded_policy = CachePolicy::DeterministicWithSeed(7);
+        let deterministic_policy = CachePolicy::Deterministic;
+        let three_call_budget = Budget::metric_calls(3);
+        let unlimited_budget = Budget::unlimited();
+        let deterministic_seed =
+            manifest_with_policy_and_budget(&seeded_policy, &three_call_budget);
         let deterministic =
-            manifest_with_policy_and_budget(CachePolicy::Deterministic, Budget::metric_calls(3));
-        let unlimited = manifest_with_policy_and_budget(
-            CachePolicy::DeterministicWithSeed(7),
-            Budget::unlimited(),
-        );
+            manifest_with_policy_and_budget(&deterministic_policy, &three_call_budget);
+        let unlimited = manifest_with_policy_and_budget(&seeded_policy, &unlimited_budget);
 
         assert!(
             deterministic_seed
@@ -624,39 +625,41 @@ mod tests {
     fn manifest_with_roles(
         lm_roles: BTreeMap<String, RuntimeFingerprint>,
     ) -> RunCompatibilityManifest {
-        RunCompatibilityManifest::new(
-            DatasetCompatibility {
+        let cache_policy = CachePolicy::Never;
+        let budget = Budget::unlimited();
+        RunCompatibilityManifest::new(RunCompatibilityInputs {
+            dataset: DatasetCompatibility {
                 content: Fingerprint::from_bytes([9; 32]),
                 splits: Fingerprint::from_bytes([10; 32]),
                 case_set_version: "cases-v1".to_owned(),
             },
-            RuntimeFingerprint::new(Fingerprint::from_bytes([11; 32])),
-            RuntimeFingerprint::new(Fingerprint::from_bytes([12; 32])),
-            RuntimeFingerprint::new(Fingerprint::from_bytes([13; 32])),
-            None,
+            runner: RuntimeFingerprint::new(Fingerprint::from_bytes([11; 32])),
+            scorer: RuntimeFingerprint::new(Fingerprint::from_bytes([12; 32])),
+            evaluator: RuntimeFingerprint::new(Fingerprint::from_bytes([13; 32])),
+            optimizer: None,
             lm_roles,
-            CachePolicy::Never,
-            Budget::unlimited(),
-        )
+            cache_policy: &cache_policy,
+            budget: &budget,
+        })
     }
 
     fn manifest_with_policy_and_budget(
-        cache_policy: CachePolicy,
-        budget: Budget,
+        cache_policy: &CachePolicy,
+        budget: &Budget,
     ) -> RunCompatibilityManifest {
-        RunCompatibilityManifest::new(
-            DatasetCompatibility {
+        RunCompatibilityManifest::new(RunCompatibilityInputs {
+            dataset: DatasetCompatibility {
                 content: Fingerprint::from_bytes([9; 32]),
                 splits: Fingerprint::from_bytes([10; 32]),
                 case_set_version: "cases-v1".to_owned(),
             },
-            RuntimeFingerprint::new(Fingerprint::from_bytes([11; 32])),
-            RuntimeFingerprint::new(Fingerprint::from_bytes([12; 32])),
-            RuntimeFingerprint::new(Fingerprint::from_bytes([13; 32])),
-            None,
-            BTreeMap::new(),
+            runner: RuntimeFingerprint::new(Fingerprint::from_bytes([11; 32])),
+            scorer: RuntimeFingerprint::new(Fingerprint::from_bytes([12; 32])),
+            evaluator: RuntimeFingerprint::new(Fingerprint::from_bytes([13; 32])),
+            optimizer: None,
+            lm_roles: BTreeMap::new(),
             cache_policy,
             budget,
-        )
+        })
     }
 }
