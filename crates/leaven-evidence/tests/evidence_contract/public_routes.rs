@@ -28,6 +28,18 @@ fn prelude_does_not_export_reserved_placeholder_evidence_names() {
     }
 }
 
+#[test]
+fn crate_root_does_not_reserve_empty_placeholder_evidence_names() {
+    let lib = std::fs::read_to_string("src/lib.rs").expect("read evidence crate root");
+
+    for symbol in PLACEHOLDER_PRELUDE_EXPORTS {
+        assert!(
+            !lib.contains(symbol),
+            "`{symbol}` is inert scaffold; reintroduce it only with behavior and contract tests"
+        );
+    }
+}
+
 fn prelude_reexports(lib: &str) -> BTreeSet<String> {
     let prelude_start = lib
         .find("pub mod prelude {")

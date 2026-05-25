@@ -15,8 +15,8 @@
 /// or `attribution()` (`TextGrad` needs it; `KeepBest` doesn't) would push
 /// uniformity into a place where heterogeneity is the point.
 ///
-/// Capability traits — `AttributableEvidence`, `PairwiseEvidence`,
-/// `CommandEvidence`, `DiffEvidence`, etc. — live in `leaven-evidence`.
+/// Capability traits such as `AttributableEvidence` and evidence values such as
+/// `PairwiseJudgmentEvidence` or `CommandEvidence` live in `leaven-evidence`.
 /// Stages bind only what they need.
 ///
 /// # Run-wide enum convention

@@ -1,5 +1,5 @@
 ## Boundary
-This crate owns reusable evidence value shapes: scalar scores, pairwise judgments, paired rollout rewards, casewise outcomes, command/trajectory records, skill-use telemetry, analyst fan-out records, patch merge-tree records, feedback, attribution, and placeholder shapes for diff/json/list/vector/string evidence.
+This crate owns reusable evidence value shapes: scalar scores, pairwise judgments, paired rollout rewards, casewise outcomes, command/trajectory records, skill-use telemetry, analyst fan-out records, patch merge-tree records, feedback, and attribution.
 
 Evidence here is data a stage or evaluator can produce and another component can interpret. It is not a store, scorer, population, preference relation, graph event, or evaluator registry.
 
@@ -54,10 +54,10 @@ Evidence here is data a stage or evaluator can produce and another component can
   support counts, merge decisions, prompt/response payloads, parse-failure
   artifacts, per-node output patches, and optional final diff. It is not a
   merge scheduler, prevalence policy, patch parser, or skill-directory applier.
-- Public placeholders today: `diff`, `json`, `listwise`, `mixed`,
-  `score_vector`, and `string` are root-re-exported names without behavior laws.
-  They are not exported from `leaven_evidence::prelude::*` and must not be cited
-  as standard evidence until they carry fields, constructors, and tests.
+- Empty public placeholder modules for `diff`, `json`, `listwise`, `mixed`,
+  `score_vector`, and `string` were removed instead of kept as reserved public
+  names. Reintroduce any of those shapes only with fields, constructors, and
+  contract tests in the same change.
 - `CaseAssessmentEvidence` is the reusable scored case-output shape for the
   runner/scorer path: generated output, scalar score, natural-language
   feedback, and candidate-bound assessed outputs when a group judgment needs
@@ -117,11 +117,12 @@ Evidence here is data a stage or evaluator can produce and another component can
   lives in values and receipts per the architecture judgment, not only in
   policy. The wire bridge is not implemented yet.
 - Human prose fields such as rationales and notes are debug context. Algorithms should route on typed fields such as `ScalarEvidence::score`, `PairwiseJudgment`, and `CaseOutcome`, not require prose to exist.
-- Placeholder modules in `src/lib.rs` are naming reservations, not permission to hide real implementation in `lib.rs`. Move behavior into the named module first.
-- The crate docs and package metadata mirror the public-maturity split: some
-  exports are behavior-bearing reusable values, while `diff`, `json`,
-  `listwise`, `mixed`, `score_vector`, and `string` remain named scaffold until
-  they carry fields, constructors, and contract tests.
+- Do not reserve new public evidence names with empty structs in `src/lib.rs`.
+  Move behavior into a named module first, with a contract test that proves the
+  value's useful invariant.
+- The crate docs and package metadata should describe behavior-bearing reusable
+  values, not placeholders. If a shape is not implemented, leave it absent from
+  the public API until the owning invariant exists.
 
 ## Proof Anchors
 - `cargo nextest run -p leaven-evidence` proves scalar, pairwise, paired

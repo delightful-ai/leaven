@@ -5,11 +5,6 @@
 //! rewards, sparse casewise outcomes, command and trajectory records, output
 //! records, skill-use telemetry, attribution, and case assessment records.
 //!
-//! Some root-re-exported names are still explicit reservations. The `diff`,
-//! `json`, `listwise`, `mixed`, `score_vector`, and `string` modules are
-//! public scaffold until their values carry fields, constructors, and contract
-//! tests.
-
 pub mod attribution {
     use leaven_core::Evidence;
     use leaven_kernel::FiniteF64;
@@ -44,39 +39,12 @@ pub mod attribution {
 pub mod attachment;
 pub mod casewise;
 pub mod command;
-pub mod diff {
-    pub struct DiffEvidence;
-    pub struct RenderedDiff;
-}
 pub mod feedback;
-pub mod json {
-    pub struct JsonEvidence;
-}
-pub mod listwise {
-    pub struct ListwiseRankingEvidence;
-    pub struct RankingItem;
-}
-pub mod mixed {
-    pub struct MixedEvidence;
-}
 pub mod output;
 pub mod pairwise;
 pub mod rollout;
 pub mod scalar;
 pub mod skill_use;
-pub mod score_vector {
-    pub enum Direction {
-        Higher,
-        Lower,
-    }
-    pub struct RawScoreValue;
-    pub struct ScoreAxis;
-    pub struct ScorePoint;
-    pub struct ScoreVectorEvidence;
-}
-pub mod string {
-    pub struct StringEvidence;
-}
 pub use attachment::{Attachment, AttachmentKind};
 pub use attribution::{AttributableEvidence, Attribution, AttributionKey};
 pub use casewise::{CaseOutcome, CasewiseEvidence};
@@ -89,14 +57,10 @@ pub use command::{
     AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, CommandEvidence,
     CommandRecord,
 };
-pub use diff::{DiffEvidence, RenderedDiff};
 pub use feedback::{
     CandidateAssessmentOutput, CandidateAssessmentOutputError, CaseAssessmentEvidence,
     CaseDataReadEvidence,
 };
-pub use json::JsonEvidence;
-pub use listwise::{ListwiseRankingEvidence, RankingItem};
-pub use mixed::MixedEvidence;
 pub use output::{
     DataClass, DataClassError, DataClassSet, OutputBlobAudit, OutputBlobAuditError, OutputMetadata,
     OutputRecord, OutputVisibility,
@@ -104,12 +68,10 @@ pub use output::{
 pub use pairwise::{PairwiseJudgment, PairwiseJudgmentEvidence};
 pub use rollout::{PairedRolloutEvidence, PairedRolloutEvidenceError, RolloutGroupOutcome};
 pub use scalar::{ScalarEvidence, ScalarEvidenceError};
-pub use score_vector::{Direction, RawScoreValue, ScoreAxis, ScorePoint, ScoreVectorEvidence};
 pub use skill_use::{
     SkillTrajectoryUseEvidence, SkillTrajectoryUseEvidenceError, SkillUseConfidence, SkillUseEvent,
     SkillUseEvidence, SkillUseKind, SkillUseSource,
 };
-pub use string::StringEvidence;
 pub mod prelude {
     pub use crate::{
         AgentAnalystCallError, AgentAnalystCallEvidence, AgentAnalystCallEvidenceInput,
