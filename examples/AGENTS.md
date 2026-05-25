@@ -79,6 +79,16 @@ Each `pN_*` directory is a workspace package with a runnable binary. Keep reusab
   `skill_evolver/prompts` template material. This still does not execute an
   analyst model call, parse the response, run hierarchical merge, or claim
   live/paper proof.
+  `cargo test -p trace2skill_spreadsheetbench --test acp_external_worker`
+  proves a Python external worker launched through the locked Leaven ACP stdio
+  seam can solve the real materialized SpreadsheetBench-Verified case `13-1`,
+  write the output workbook, return a valid `leaven/agent.run` ACP result
+  envelope, and improve the host scorer from the unsolved workbook to exact
+  answer-range pass. The companion negative proves a valid ACP success envelope
+  without the output workbook does not clear the benchmark run. This is still a
+  deterministic local mechanics proof: it does not execute a live model,
+  Trace2Skill skill evolution, analyst fan-out, hierarchical merge, or paper
+  metric reproduction.
 
 ## Proof Classification
 - `product-proof`: an example that exercises the real public contract at the intended user layer, with no proxy substitution for the behavior being claimed.

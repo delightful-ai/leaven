@@ -210,7 +210,7 @@ fn prepares_stage2_analyst_fanout_from_scored_run_and_upstream_prompt_sources() 
     assert_eq!(fanout["calls"][0]["role"], "Success");
     assert_eq!(fanout["calls"][0]["status"], "Pending");
     assert!(
-        fanout["calls"][0]["prompt"]["BlobRef"]["key"]
+        fanout["calls"][0]["prompt"]["BlobRef"]["reference"]["key"]
             .as_str()
             .unwrap()
             .ends_with("stage2_analyst_prompt.md")
