@@ -1,4 +1,19 @@
-fn execute_agent_run_call<H: PlanExecutionHost>(
+use std::collections::{BTreeMap, BTreeSet};
+
+use serde_json::{Map, Value, json};
+
+use crate::{PublicSeamError, SchemaFingerprint};
+
+use super::{
+    ExecutionState, PlanAgentRunOutcome, PlanAgentRunRequest, PlanExecutionContext,
+    PlanExecutionHost, PlanGraphReadScope, PlanLmCompleteOutcome, PlanSandboxExecOutcome,
+    PlanSandboxExecRequest, PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest,
+    PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest, ResolvedDependencies, effects,
+    evaluate::{self, EvaluatedExpr},
+    outcomes,
+};
+
+pub(super) fn execute_agent_run_call<H: PlanExecutionHost>(
     host: &mut H,
     name: String,
     call: &Value,
@@ -24,7 +39,7 @@ fn execute_agent_run_call<H: PlanExecutionHost>(
     record_agent_call_outcome(name, outcome, request_hash, context, state)
 }
 
-fn execute_sandbox_exec_call<H: PlanExecutionHost>(
+pub(super) fn execute_sandbox_exec_call<H: PlanExecutionHost>(
     host: &mut H,
     name: String,
     call: &Value,
@@ -46,7 +61,7 @@ fn execute_sandbox_exec_call<H: PlanExecutionHost>(
     record_sandbox_call_outcome(name, outcome, request_hash, context, state)
 }
 
-fn validate_structured_output_outcome(
+pub(super) fn validate_structured_output_outcome(
     call: &Value,
     parsed: Option<&Value>,
     call_kind: &str,
@@ -62,7 +77,7 @@ fn validate_structured_output_outcome(
     Ok(())
 }
 
-fn validate_structured_output_contract(
+pub(super) fn validate_structured_output_contract(
     call: &Value,
     call_kind: &str,
 ) -> Result<(), PublicSeamError> {
@@ -124,7 +139,7 @@ fn validate_json_schema_fingerprint(
     Ok(())
 }
 
-fn validate_json_schema_output_payload(
+pub(super) fn validate_json_schema_output_payload(
     call_kind: &str,
     call: &Value,
     parsed: &Value,
@@ -187,7 +202,7 @@ fn validate_sandbox_stream_outcome(
     Ok(())
 }
 
-fn execute_workspace_materialize_call<H: PlanExecutionHost>(
+pub(super) fn execute_workspace_materialize_call<H: PlanExecutionHost>(
     host: &mut H,
     name: String,
     call: &Value,
@@ -218,7 +233,7 @@ fn execute_workspace_materialize_call<H: PlanExecutionHost>(
     record_workspace_materialize_outcome(name, outcome, request_hash, context, state)
 }
 
-fn execute_workspace_release_call<H: PlanExecutionHost>(
+pub(super) fn execute_workspace_release_call<H: PlanExecutionHost>(
     host: &mut H,
     name: String,
     call: &Value,
@@ -268,7 +283,7 @@ fn is_workspace_id(value: &str) -> bool {
     })
 }
 
-fn record_lm_call_outcome(
+pub(super) fn record_lm_call_outcome(
     name: String,
     call_kind: &str,
     outcome: PlanLmCompleteOutcome,
@@ -288,7 +303,7 @@ fn record_lm_call_outcome(
     )
 }
 
-fn record_agent_call_outcome(
+pub(super) fn record_agent_call_outcome(
     name: String,
     outcome: PlanAgentRunOutcome,
     request_hash: &str,
@@ -298,7 +313,7 @@ fn record_agent_call_outcome(
     outcomes::record_agent_call_outcome(name, outcome, request_hash, context, state)
 }
 
-fn record_sandbox_call_outcome(
+pub(super) fn record_sandbox_call_outcome(
     name: String,
     outcome: PlanSandboxExecOutcome,
     request_hash: &str,
@@ -308,7 +323,7 @@ fn record_sandbox_call_outcome(
     outcomes::record_sandbox_call_outcome(name, outcome, request_hash, context, state)
 }
 
-fn record_workspace_materialize_outcome(
+pub(super) fn record_workspace_materialize_outcome(
     name: String,
     outcome: PlanWorkspaceMaterializeOutcome,
     request_hash: &str,
@@ -318,7 +333,7 @@ fn record_workspace_materialize_outcome(
     outcomes::record_workspace_materialize_outcome(name, outcome, request_hash, context, state)
 }
 
-fn record_workspace_release_outcome(
+pub(super) fn record_workspace_release_outcome(
     name: String,
     outcome: PlanWorkspaceReleaseOutcome,
     requested_workspace: &effects::WorkspaceRefFacts,
@@ -336,14 +351,14 @@ fn record_workspace_release_outcome(
     )
 }
 
-fn record_failed_lm_call(
+pub(super) fn record_failed_lm_call(
     failure: outcomes::FailedLmCall<'_>,
     state: &mut ExecutionState,
 ) -> Result<(), PublicSeamError> {
     outcomes::record_failed_lm_call(failure, state)
 }
 
-fn execute_write<H: PlanExecutionHost>(
+pub(super) fn execute_write<H: PlanExecutionHost>(
     op_object: &Map<String, Value>,
     name: String,
     deps: &ResolvedDependencies,
@@ -362,7 +377,7 @@ fn execute_write<H: PlanExecutionHost>(
     )
 }
 
-fn execute_graph_query_expr(
+pub(super) fn execute_graph_query_expr(
     expr: &Value,
     name: &str,
     plan_document: &crate::PlanDocument,
@@ -372,7 +387,7 @@ fn execute_graph_query_expr(
     evaluate::execute_graph_query_expr(expr, name, plan_document, context, host)
 }
 
-fn execute_case_query_expr(
+pub(super) fn execute_case_query_expr(
     expr: &Value,
     name: &str,
     context: &PlanExecutionContext,
@@ -381,7 +396,7 @@ fn execute_case_query_expr(
     evaluate::execute_case_query_expr(expr, name, context, host)
 }
 
-fn execute_workspace_query_expr(
+pub(super) fn execute_workspace_query_expr(
     expr: &Value,
     name: &str,
     deps: &ResolvedDependencies,
@@ -391,14 +406,14 @@ fn execute_workspace_query_expr(
     evaluate::execute_workspace_query_expr(expr, name, deps, context, host)
 }
 
-fn dependency_values(
+pub(super) fn dependency_values(
     op: &Map<String, Value>,
     bindings: &BTreeMap<String, Value>,
 ) -> Result<BTreeMap<String, Value>, PublicSeamError> {
     evaluate::dependency_values(op, bindings)
 }
 
-fn graph_read_scope<'a>(
+pub(super) fn graph_read_scope<'a>(
     plan_document: &'a crate::PlanDocument,
     context: &'a PlanExecutionContext,
 ) -> Result<PlanGraphReadScope<'a>, PublicSeamError> {
@@ -427,7 +442,7 @@ fn graph_read_scope<'a>(
     }
 }
 
-fn graph_read_scope_value(scope: PlanGraphReadScope<'_>) -> Value {
+pub(super) fn graph_read_scope_value(scope: PlanGraphReadScope<'_>) -> Value {
     match scope {
         PlanGraphReadScope::LatestAtStart { revision } => json!({
             "kind": "latest_at_start",
@@ -445,13 +460,16 @@ fn graph_read_scope_value(scope: PlanGraphReadScope<'_>) -> Value {
     }
 }
 
-fn object<'a>(value: &'a Value, field: &str) -> Result<&'a Map<String, Value>, PublicSeamError> {
+pub(super) fn object<'a>(
+    value: &'a Value,
+    field: &str,
+) -> Result<&'a Map<String, Value>, PublicSeamError> {
     value
         .as_object()
         .ok_or_else(|| invalid_plan(format!("{field} must be an object")))
 }
 
-fn nested_kind<'a>(value: &'a Value, field: &str) -> Result<&'a str, PublicSeamError> {
+pub(super) fn nested_kind<'a>(value: &'a Value, field: &str) -> Result<&'a str, PublicSeamError> {
     value
         .as_object()
         .and_then(|object| object.get("kind"))
@@ -460,20 +478,23 @@ fn nested_kind<'a>(value: &'a Value, field: &str) -> Result<&'a str, PublicSeamE
         .ok_or_else(|| invalid_plan(format!("{field} must carry kind")))
 }
 
-fn required_string<'a>(value: Option<&'a Value>, field: &str) -> Result<&'a str, PublicSeamError> {
+pub(super) fn required_string<'a>(
+    value: Option<&'a Value>,
+    field: &str,
+) -> Result<&'a str, PublicSeamError> {
     value
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| invalid_plan(format!("{field} must be a string")))
 }
 
-fn prefixed_jcs_hash(prefix: &str, value: &Value) -> Result<String, PublicSeamError> {
+pub(super) fn prefixed_jcs_hash(prefix: &str, value: &Value) -> Result<String, PublicSeamError> {
     let digest = jcs_canonicalize::sha256_jcs_hex(value)
         .map_err(|error| invalid_plan(format!("plan execution hash failed: {error}")))?;
     Ok(format!("{prefix}{digest}"))
 }
 
-fn invalid_plan(message: impl Into<String>) -> PublicSeamError {
+pub(super) fn invalid_plan(message: impl Into<String>) -> PublicSeamError {
     PublicSeamError::InvalidPlan {
         message: message.into(),
     }

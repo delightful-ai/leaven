@@ -2,9 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value, json};
 
-use crate::{PlanResultDocument, PublicSeamError, SchemaFingerprint};
+use crate::{PlanResultDocument, PublicSeamError};
 
 mod effects;
+mod effects_tail;
 mod evaluate;
 mod outcomes;
 mod queries;
@@ -18,7 +19,15 @@ pub use effects::{
     PlanSandboxExecRequest, PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest,
     PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
 };
-use evaluate::{EvaluatedExpr, ResolvedDependencies, evaluate_expr, resolved_dependency_values};
+use effects_tail::{
+    dependency_values, execute_agent_run_call, execute_case_query_expr, execute_graph_query_expr,
+    execute_sandbox_exec_call, execute_workspace_materialize_call, execute_workspace_query_expr,
+    execute_workspace_release_call, execute_write, graph_read_scope, graph_read_scope_value,
+    invalid_plan, nested_kind, object, prefixed_jcs_hash, record_failed_lm_call,
+    record_lm_call_outcome, required_string, validate_json_schema_output_payload,
+    validate_structured_output_contract, validate_structured_output_outcome,
+};
+use evaluate::{ResolvedDependencies, evaluate_expr, resolved_dependency_values};
 pub use queries::{
     PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanGraphQueryOutcome, PlanGraphQueryRequest,
     PlanGraphReadScope, PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest,
@@ -656,5 +665,3 @@ fn execute_call<H: PlanExecutionHost>(
         ))),
     }
 }
-
-include!("plan_execution/effects_tail.rs");
