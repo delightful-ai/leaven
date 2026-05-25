@@ -1,12 +1,10 @@
-use crate::support::workspace_root;
-use leaven_public_seam::{
-    CallAuthorityDenialKind, CallAuthorityError, CapabilityDocument, PublicSeamPackage,
-};
+use crate::support::package;
+use leaven_public_seam::{CallAuthorityDenialKind, CallAuthorityError, CapabilityDocument};
 use serde_json::{Value, json};
 
 #[test]
 fn call_authority_accepts_lm_agent_and_sandbox_input_classes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let capability = CapabilityDocument::from_value(call_capability()).unwrap();
     let report = package
         .validate_call_authority_document(&call_authority_plan(), &capability)
@@ -23,7 +21,7 @@ fn call_authority_accepts_lm_agent_and_sandbox_input_classes() {
 
 #[test]
 fn call_authority_rejects_forbidden_input_classes_before_execution() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let capability = CapabilityDocument::from_value(call_capability()).unwrap();
     let mut plan = call_authority_plan();
     plan["ops"][1]["call"]["input_classes"] = json!(["workspace.file", "external.secret"]);
@@ -39,7 +37,7 @@ fn call_authority_rejects_forbidden_input_classes_before_execution() {
 
 #[test]
 fn call_authority_rejects_declared_forbidden_intersections_even_when_grant_allows() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let capability = CapabilityDocument::from_value(call_capability_allowing_target()).unwrap();
     let mut plan = call_authority_plan();
     plan["ops"][0]["call"]["input_classes"] = json!(["case.input", "case.target"]);
@@ -56,7 +54,7 @@ fn call_authority_rejects_declared_forbidden_intersections_even_when_grant_allow
 
 #[test]
 fn call_authority_rejects_reflector_lm_call_input_classes_include_case_target() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let capability = CapabilityDocument::from_value(call_capability()).unwrap();
     let mut plan = call_authority_plan();
     plan["ops"][0]["call"]["input_classes"] = json!(["case.input", "case.target"]);
@@ -76,7 +74,7 @@ fn call_authority_rejects_reflector_lm_call_input_classes_include_case_target() 
 
 #[test]
 fn call_authority_rejects_reflector_model_role_case_target_with_non_reflector_subject() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let capability = CapabilityDocument::from_value(call_capability_allowing_target()).unwrap();
     let mut plan = call_authority_plan();
     plan["ops"][0]["call"]["input_classes"] = json!(["case.input", "case.target"]);
@@ -93,7 +91,7 @@ fn call_authority_rejects_reflector_model_role_case_target_with_non_reflector_su
 
 #[test]
 fn call_authority_rejects_agent_shell_or_network_beyond_execution_policy() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let capability = CapabilityDocument::from_value(call_capability()).unwrap();
 
     let mut shell_plan = call_authority_plan();
@@ -125,7 +123,7 @@ fn call_authority_rejects_agent_shell_or_network_beyond_execution_policy() {
 
 #[test]
 fn call_authority_rejects_sandbox_exec_outside_workspace_execution_policy() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut subprocess_denied = call_capability();
     subprocess_denied["execution_policy"]["subprocess"] = json!("deny");
@@ -169,7 +167,7 @@ fn call_authority_rejects_sandbox_exec_outside_workspace_execution_policy() {
 
 #[test]
 fn call_authority_rejects_agent_allowed_commands_outside_grants() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut allowed_plan = call_authority_plan();
     allowed_plan["ops"][1]["call"]["tool_policy"] = json!({

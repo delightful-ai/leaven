@@ -1,3 +1,4 @@
+use crate::support::package;
 use crate::support::workspace_root;
 use std::collections::BTreeSet;
 use std::fs;
@@ -38,7 +39,7 @@ fn active_package_loader_accepts_only_locked_public_seam_v1_package() {
 
 #[test]
 fn manifest_inventory_drives_contract_file_loading() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let inventory = package.inventory().unwrap();
 
     assert_eq!(
@@ -88,7 +89,7 @@ fn manifest_inventory_drives_contract_file_loading() {
 
 #[test]
 fn active_schemas_compile_and_examples_validate_against_manifest_targets() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let report = package.validate_contract_package().unwrap();
 
     assert_eq!(
@@ -118,7 +119,7 @@ fn active_schemas_compile_and_examples_validate_against_manifest_targets() {
 
 #[test]
 fn acp_profile_routes_callbacks_without_mcp_negotiation() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let methods = package.acp_extension_methods().unwrap();
     let scope = package.v1_scope().unwrap();
 
@@ -141,7 +142,7 @@ fn acp_profile_routes_callbacks_without_mcp_negotiation() {
 
 #[test]
 fn acp_profile_rejects_mcp_bridge_legacy_worker_protocol_and_watch_runtime() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let scope = package.v1_scope().unwrap();
 
     assert!(matches!(
@@ -227,7 +228,7 @@ fn acp_profile_rejects_mcp_bridge_legacy_worker_protocol_and_watch_runtime() {
 
 #[test]
 fn deprecated_worker_protocol_marker_routes_to_acp_profile() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let marker = json!({
         "schema_version": "leaven.worker_protocol.v1.deprecated",
         "replacement": "leaven.acp_profile.v1"
@@ -256,7 +257,7 @@ fn deprecated_worker_protocol_marker_routes_to_acp_profile() {
 
 #[test]
 fn deprecated_worker_protocol_rejects_runtime_protocol_and_revival_claims() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let scope = package.v1_scope().unwrap();
 
     assert!(
@@ -305,7 +306,7 @@ fn deprecated_worker_protocol_rejects_runtime_protocol_and_revival_claims() {
 
 #[test]
 fn deferred_watch_marker_routes_to_since_revision_plan_diff() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let marker = json!({
         "schema_version": "leaven.watch.v1.deferred",
         "use_instead": "leaven.plan.v1 consistency.since_revision"
@@ -370,7 +371,7 @@ fn deferred_watch_marker_routes_to_since_revision_plan_diff() {
 
 #[test]
 fn deferred_watch_rejects_schema_valid_non_diff_replacements() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let marker = json!({
         "schema_version": "leaven.watch.v1.deferred",
         "use_instead": "leaven.plan.v1 consistency.since_revision"
@@ -435,7 +436,7 @@ fn deferred_watch_rejects_schema_valid_non_diff_replacements() {
 
 #[test]
 fn deferred_watch_rejects_runtime_subscription_and_success_claims() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let scope = package.v1_scope().unwrap();
 
     assert!(
@@ -511,7 +512,7 @@ fn deferred_watch_rejects_runtime_subscription_and_success_claims() {
 
 #[test]
 fn schema_fingerprints_reject_pretty_printed_hashing_and_track_semantic_changes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let common = package.schema_json("common.schema.json").unwrap();
     let pretty_common: Value =
         serde_json::from_str(&serde_json::to_string_pretty(&common).unwrap()).unwrap();
@@ -533,7 +534,7 @@ fn schema_fingerprints_reject_pretty_printed_hashing_and_track_semantic_changes(
 
 #[test]
 fn conformance_matrix_rows_are_unique_honest_and_reference_real_files() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let matrix = package.conformance_matrix().unwrap();
 
     assert_eq!(matrix.rows.len(), 39);
@@ -660,7 +661,7 @@ fn public_seam_routes_reject_ordinary_facade_leaks() {
 
 #[test]
 fn conformance_evidence_audit_rejects_fake_closeout_for_denial_rows() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut matrix = package.conformance_matrix().unwrap();
     let row = matrix
         .rows
@@ -688,7 +689,7 @@ fn conformance_evidence_audit_rejects_fake_closeout_for_denial_rows() {
 
 #[test]
 fn conformance_matrix_reference_check_rejects_stale_pending_test_symbols() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut matrix = package.conformance_matrix().unwrap();
     let row = matrix
         .rows
@@ -716,7 +717,7 @@ fn conformance_matrix_reference_check_rejects_stale_pending_test_symbols() {
 
 #[test]
 fn conformance_evidence_audit_rejects_pending_rows_with_closeout_evidence_fields() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut matrix = package.conformance_matrix().unwrap();
     let row = matrix
         .rows
@@ -740,7 +741,7 @@ fn conformance_evidence_audit_rejects_pending_rows_with_closeout_evidence_fields
 
 #[test]
 fn conformance_evidence_audit_rejects_blocked_rows_without_named_prerequisites() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut matrix = package.conformance_matrix().unwrap();
     let row = matrix
         .rows
@@ -771,7 +772,7 @@ fn conformance_evidence_audit_rejects_blocked_rows_without_named_prerequisites()
 
 #[test]
 fn conformance_evidence_audit_rejects_stale_blocked_on_for_non_blocked_rows() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut matrix = package.conformance_matrix().unwrap();
     let row = matrix
         .rows
@@ -795,7 +796,7 @@ fn conformance_evidence_audit_rejects_stale_blocked_on_for_non_blocked_rows() {
 
 #[test]
 fn conformance_evidence_audit_requires_positive_tests_for_structural_rows() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut matrix = package.conformance_matrix().unwrap();
     let row = matrix
         .rows
@@ -817,7 +818,7 @@ fn conformance_evidence_audit_requires_positive_tests_for_structural_rows() {
 
 #[test]
 fn conformance_evidence_audit_rejects_proven_rows_without_row_specific_review_signoff() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut matrix = package.conformance_matrix().unwrap();
     let row = matrix
         .rows
@@ -840,7 +841,7 @@ fn conformance_evidence_audit_rejects_proven_rows_without_row_specific_review_si
 
 #[test]
 fn conformance_evidence_audit_rejects_same_row_blocker_review_as_signoff() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut matrix = package.conformance_matrix().unwrap();
     let row = matrix
         .rows
@@ -865,7 +866,7 @@ fn conformance_evidence_audit_rejects_same_row_blocker_review_as_signoff() {
 
 #[test]
 fn conformance_evidence_audit_rejects_partial_review_preamble_signoff_language() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut matrix = package.conformance_matrix().unwrap();
     let row = matrix
         .rows
@@ -890,7 +891,7 @@ fn conformance_evidence_audit_rejects_partial_review_preamble_signoff_language()
 
 #[test]
 fn conformance_evidence_audit_rejects_negated_row_signoff_language() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut matrix = package.conformance_matrix().unwrap();
     let row = matrix
         .rows
@@ -914,7 +915,7 @@ fn conformance_evidence_audit_rejects_negated_row_signoff_language() {
 
 #[test]
 fn conformance_evidence_audit_rejects_provenance_substring_as_signoff() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut matrix = package.conformance_matrix().unwrap();
     let row = matrix
         .rows
@@ -939,7 +940,7 @@ fn conformance_evidence_audit_rejects_provenance_substring_as_signoff() {
 
 #[test]
 fn conformance_evidence_audit_rejects_signoff_section_pending_rows() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut matrix = package.conformance_matrix().unwrap();
     let row = matrix
         .rows
@@ -964,7 +965,7 @@ fn conformance_evidence_audit_rejects_signoff_section_pending_rows() {
 
 #[test]
 fn conformance_evidence_audit_rejects_signoff_section_remains_pending_rows() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut matrix = package.conformance_matrix().unwrap();
     let row = matrix
         .rows
@@ -993,7 +994,7 @@ fn conformance_evidence_audit_rejects_signoff_section_remains_pending_rows() {
 
 #[test]
 fn conformance_evidence_audit_rejects_happy_path_only_denial_rows() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut matrix = package.conformance_matrix().unwrap();
     let row = matrix
         .rows
@@ -1011,7 +1012,7 @@ fn conformance_evidence_audit_rejects_happy_path_only_denial_rows() {
 
 #[test]
 fn conformance_evidence_audit_rejects_matrix_only_closeout_even_with_test_links() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut matrix = package.conformance_matrix().unwrap();
     let row = matrix
         .rows
@@ -1030,7 +1031,7 @@ fn conformance_evidence_audit_rejects_matrix_only_closeout_even_with_test_links(
 
 #[test]
 fn conformance_evidence_audit_maps_every_note_case_to_matrix_rows() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let denominator = package.conformance_test_denominator().unwrap();
 
     assert_eq!(denominator.cases.len(), 17);
@@ -1061,7 +1062,7 @@ fn conformance_evidence_audit_maps_every_note_case_to_matrix_rows() {
 
 #[test]
 fn conformance_evidence_audit_rejects_weak_test_function_as_negative_evidence() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut matrix = package.conformance_matrix().unwrap();
     let row = matrix
         .rows
@@ -1086,7 +1087,7 @@ fn conformance_evidence_audit_rejects_weak_test_function_as_negative_evidence() 
 
 #[test]
 fn conformance_evidence_audit_requires_denial_evidence_for_integrated_surface_rows() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut matrix = package.conformance_matrix().unwrap();
     let row = matrix
         .rows
@@ -1116,7 +1117,7 @@ fn conformance_evidence_audit_requires_denial_evidence_for_integrated_surface_ro
 
 #[test]
 fn v1_scope_markers_refuse_mcp_watch_runtime_and_legacy_worker_protocol() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let scope = package.v1_scope().unwrap();
 
     assert!(!scope.mcp_over_acp_enabled);

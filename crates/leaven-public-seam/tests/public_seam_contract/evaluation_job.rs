@@ -1,10 +1,10 @@
-use crate::support::workspace_root;
-use leaven_public_seam::{EvaluationJobKind, PublicSeamError, PublicSeamPackage};
+use crate::support::package;
+use leaven_public_seam::{EvaluationJobKind, PublicSeamError};
 use serde_json::{Value, json};
 
 #[test]
 fn evaluation_job_preserves_identity_for_all_request_shapes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let independent = package
         .validate_evaluation_job_document(&evaluation_job(&json!({
@@ -72,7 +72,7 @@ fn evaluation_job_preserves_identity_for_all_request_shapes() {
 
 #[test]
 fn evaluation_job_rejects_missing_identity_deadline_or_capability() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut missing_deadline = evaluation_job(&json!({
         "kind": "independent",
@@ -140,7 +140,7 @@ fn evaluation_job_rejects_missing_identity_deadline_or_capability() {
 
 #[test]
 fn evaluation_job_rejects_unresolved_case_sets_and_invalid_pairs() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut mismatched_case_count = evaluation_job(&json!({
         "kind": "independent",
@@ -233,7 +233,7 @@ fn evaluation_job_rejects_unresolved_case_sets_and_invalid_pairs() {
 
 #[test]
 fn evaluation_request_receipt_binds_job_candidate_and_case_identity() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let job = package
         .validate_evaluation_job_document(&evaluation_job(&json!({
             "kind": "independent",
@@ -262,7 +262,7 @@ fn evaluation_request_receipt_binds_job_candidate_and_case_identity() {
 
 #[test]
 fn evaluation_request_receipt_rejects_decorative_or_unbound_hashes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let job = package
         .validate_evaluation_job_document(&evaluation_job(&json!({
             "kind": "independent",

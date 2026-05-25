@@ -1,10 +1,10 @@
-use crate::support::workspace_root;
-use leaven_public_seam::{CapabilityDocument, PublicSeamError, PublicSeamPackage};
+use crate::support::package;
+use leaven_public_seam::{CapabilityDocument, PublicSeamError};
 use serde_json::{Value, json};
 
 #[test]
 fn proposal_authority_accepts_effects_surfaces_schemas_and_apply_grants() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let capability = CapabilityDocument::from_value(proposal_capability()).unwrap();
     let report = package
         .validate_proposal_authority_document(&proposal_authority_plan(), &capability)
@@ -19,7 +19,7 @@ fn proposal_authority_accepts_effects_surfaces_schemas_and_apply_grants() {
 
 #[test]
 fn proposal_authority_rejects_submit_only_apply_and_ungranted_surface_or_effect() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let submit_only = CapabilityDocument::from_value(submit_only_capability()).unwrap();
     assert!(matches!(
         package
@@ -61,7 +61,7 @@ fn proposal_authority_rejects_submit_only_apply_and_ungranted_surface_or_effect(
 
 #[test]
 fn proposal_authority_rejects_schema_valid_change_without_granted_schema() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let capability = CapabilityDocument::from_value(proposal_capability()).unwrap();
     let mut wrong_schema = proposal_authority_plan();
     wrong_schema["ops"][0]["write"]["proposals"][1]["effect"]["change_schema"] =
@@ -77,7 +77,7 @@ fn proposal_authority_rejects_schema_valid_change_without_granted_schema() {
 
 #[test]
 fn proposal_authority_rejects_agent_session_effect_without_matching_receipt() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let capability = CapabilityDocument::from_value(proposal_capability()).unwrap();
 
     let mut missing_receipts = proposal_authority_plan();

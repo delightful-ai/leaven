@@ -1,6 +1,11 @@
 use std::path::PathBuf;
 
+use leaven_public_seam::PublicSeamPackage;
 use serde_json::Value;
+
+pub fn package() -> PublicSeamPackage {
+    PublicSeamPackage::active_from_repo(workspace_root()).unwrap()
+}
 
 pub fn workspace_root() -> PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

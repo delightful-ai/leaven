@@ -1,11 +1,11 @@
+use crate::support::package;
 use crate::support::prefixed_jcs_hash;
-use crate::support::workspace_root;
-use leaven_public_seam::{PublicSeamError, PublicSeamPackage};
+use leaven_public_seam::PublicSeamError;
 use serde_json::{Value, json};
 
 #[test]
 fn plan_result_accepts_typed_success_and_failure_envelopes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let success = package
         .validate_plan_result_document(&typed_success_result())
@@ -33,7 +33,7 @@ fn plan_result_accepts_typed_success_and_failure_envelopes() {
 
 #[test]
 fn plan_result_accepts_query_call_and_write_receipts_as_audit_currency() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let result = package
         .validate_plan_result_document(&audit_currency_result())
@@ -48,7 +48,7 @@ fn plan_result_accepts_query_call_and_write_receipts_as_audit_currency() {
 
 #[test]
 fn plan_result_accepts_assessment_summary_with_score_output_and_evidence_envelope() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let result = package
         .validate_plan_result_document(&assessment_summary_result())
@@ -66,7 +66,7 @@ fn plan_result_accepts_assessment_summary_with_score_output_and_evidence_envelop
 
 #[test]
 fn plan_result_accepts_assessment_summary_structured_or_numeric_score_output_values() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut structured = assessment_summary_result();
     structured["values"]["rows"]["items"][0]["score"]["output"] = json!({
@@ -96,7 +96,7 @@ fn plan_result_accepts_assessment_summary_structured_or_numeric_score_output_val
 
 #[test]
 fn plan_result_rejects_generic_or_untyped_result_payloads() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     assert!(matches!(
         package
@@ -155,7 +155,7 @@ fn plan_result_rejects_generic_or_untyped_result_payloads() {
 
 #[test]
 fn plan_result_rejects_assessment_summary_without_score_output_or_evidence_truth() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut missing_score = assessment_summary_result();
     missing_score["values"]["rows"]["items"][0]
@@ -260,7 +260,7 @@ fn plan_result_rejects_assessment_summary_without_score_output_or_evidence_truth
 
 #[test]
 fn plan_result_rejects_receipts_without_audit_timing() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut missing_started_at = typed_success_result();
     missing_started_at["receipts"][0]
@@ -289,7 +289,7 @@ fn plan_result_rejects_receipts_without_audit_timing() {
 
 #[test]
 fn plan_result_rejects_decorative_or_wrong_kind_receipt_refs() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut missing_receipt = typed_success_result();
     missing_receipt["values"]["rows"]["receipt"] = json!("qrec_missing");
@@ -339,7 +339,7 @@ fn plan_result_rejects_decorative_or_wrong_kind_receipt_refs() {
 
 #[test]
 fn plan_result_rejects_decorative_audit_currency_receipts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut missing_query_policy = typed_success_result();
     missing_query_policy["receipts"][0]
@@ -398,7 +398,7 @@ fn plan_result_rejects_decorative_audit_currency_receipts() {
 
 #[test]
 fn plan_result_rejects_same_prefix_result_hashes_that_do_not_bind_values() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut wrong_query_result_hash = audit_currency_result();
     wrong_query_result_hash["receipts"][0]["result_hash"] =
@@ -433,7 +433,7 @@ fn plan_result_rejects_same_prefix_result_hashes_that_do_not_bind_values() {
 
 #[test]
 fn plan_result_rejects_failed_call_costs_without_charge_receipts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut missing_charge_id = typed_failure_result();
     missing_charge_id["receipts"][0]
@@ -477,7 +477,7 @@ fn plan_result_rejects_failed_call_costs_without_charge_receipts() {
 
 #[test]
 fn plan_result_preserves_value_visibility_data_classes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let result = package
         .validate_plan_result_document(&workspace_listing_visibility_result())
@@ -503,7 +503,7 @@ fn plan_result_preserves_value_visibility_data_classes() {
 
 #[test]
 fn plan_result_preserves_value_trace_and_blob_ref_data_classes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut trace_backed = typed_success_result();
     trace_backed["values"]["rows"]["trace_refs"] = json!([
@@ -545,7 +545,7 @@ fn plan_result_preserves_value_trace_and_blob_ref_data_classes() {
 
 #[test]
 fn plan_result_rejects_value_trace_and_blob_ref_data_class_gaps() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut missing_value_trace_class = typed_success_result();
     missing_value_trace_class["values"]["rows"]["trace_refs"] = json!([

@@ -1,11 +1,11 @@
-use crate::support::workspace_root;
+use crate::support::package;
 use leaven_agent::{AgentSession, CommandRecord};
 use leaven_kernel::{AgentSessionId, Cost, Fingerprint, Metered};
 use leaven_public_seam::{
     AgentCommandOutputRefs, CapabilityDocument, PlanAgentRunOutcome, PlanAgentRunRequest,
     PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
     PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanWorkspaceMaterializeOutcome,
-    PlanWorkspaceMaterializeRequest, PublicSeamError, PublicSeamPackage, SchemaFingerprint,
+    PlanWorkspaceMaterializeRequest, PublicSeamError, SchemaFingerprint,
 };
 use leaven_workspace::{CapturedOutput, Command, CommandOutput, ExitStatus, WorkspacePath};
 use serde_json::{Value, json};
@@ -13,7 +13,7 @@ use sha2::{Digest, Sha256};
 
 #[test]
 fn agent_run_can_project_provider_neutral_agent_session_into_plan_result() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut host = AgentSessionHost::new(scripted_agent_session("codex"));
 
     let report = package
@@ -94,7 +94,7 @@ fn agent_run_can_project_provider_neutral_agent_session_into_plan_result() {
 
 #[test]
 fn agent_run_denies_no_capability_execution_before_host_effects() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut host = AgentSessionHost::new(scripted_agent_session("codex"));
 
     let error = package
@@ -116,7 +116,7 @@ fn agent_run_denies_no_capability_execution_before_host_effects() {
 
 #[test]
 fn agent_session_projection_rejects_invalid_command_argv_during_validation() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut host = AgentSessionHost::new(scripted_agent_session(""));
 
     let error = package
@@ -136,7 +136,7 @@ fn agent_session_projection_rejects_invalid_command_argv_during_validation() {
 
 #[test]
 fn agent_session_command_output_refs_reject_unbound_captured_bytes_and_files() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     for (session, fixture, expected) in [
         (
             scripted_agent_session("codex"),
@@ -204,7 +204,7 @@ fn agent_session_command_output_refs_reject_unbound_captured_bytes_and_files() {
 
 #[test]
 fn agent_run_json_schema_executes_through_provider_neutral_agent_contract() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut host =
         AgentSessionHost::new(scripted_agent_session("codex")).with_parsed(json!({"answer": "ok"}));
     let plan = agent_run_json_schema_plan();
@@ -231,7 +231,7 @@ fn agent_run_json_schema_executes_through_provider_neutral_agent_contract() {
 
 #[test]
 fn agent_run_json_schema_rejects_invalid_parsed_provider_payload() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut host =
         AgentSessionHost::new(scripted_agent_session("codex")).with_parsed(json!({"answer": 42}));
 

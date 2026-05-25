@@ -1,12 +1,11 @@
+use crate::support::package;
 use crate::support::workspace_root;
-use leaven_public_seam::{
-    PublicSeamError, PublicSeamPackage, StagePayloadRole, StageProposalEffect,
-};
+use leaven_public_seam::{PublicSeamError, StagePayloadRole, StageProposalEffect};
 use serde_json::{Value, json};
 
 #[test]
 fn stage_payloads_validate_all_role_specific_payload_shapes_with_provenance() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let reflect = package
         .validate_stage_payload_document(&reflect_request())
@@ -85,7 +84,7 @@ fn stage_payloads_validate_all_role_specific_payload_shapes_with_provenance() {
 
 #[test]
 fn stage_payloads_preserve_object_form_info_and_receipt_refs() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut reflect = reflect_request();
     reflect["parent"] = object_form_candidate_ref();
@@ -133,7 +132,7 @@ fn stage_payloads_preserve_object_form_info_and_receipt_refs() {
 
 #[test]
 fn stage_payloads_reject_object_form_candidate_run_substitution() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut reflect = reflect_request();
     reflect["parent"] = object_form_candidate_ref();
@@ -164,7 +163,7 @@ fn stage_payloads_reject_object_form_candidate_run_substitution() {
 
 #[test]
 fn reflect_request_rejects_case_target_projection() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut payload = reflect_request();
     payload["examples"][0]["data_classes"] = json!(["case.input", "case.target"]);
 
@@ -178,7 +177,7 @@ fn reflect_request_rejects_case_target_projection() {
 
 #[test]
 fn reflect_request_rejects_hidden_case_target_material() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut side_info_target = reflect_request();
     side_info_target["examples"][0]["side_info"]["case.target"] = json!("secret answer");
@@ -238,7 +237,7 @@ fn reflect_request_rejects_hidden_case_target_material() {
 
 #[test]
 fn reflect_request_rejects_missing_source_refs_or_query_policy() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut empty_examples = reflect_request();
     empty_examples["examples"] = json!([]);
@@ -351,7 +350,7 @@ fn reflect_request_rejects_missing_source_refs_or_query_policy() {
 
 #[test]
 fn reflect_request_rejects_parent_source_or_surface_context_gaps() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut parent_not_in_source_refs = reflect_request();
     parent_not_in_source_refs["source_refs"] = json!(["cand_unrelated"]);
@@ -391,7 +390,7 @@ fn reflect_request_rejects_parent_source_or_surface_context_gaps() {
 
 #[test]
 fn reflection_result_rejects_missing_or_non_read_receipts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut missing_receipt = reflection_result();
     missing_receipt["read_receipts"] = json!([]);
@@ -433,7 +432,7 @@ fn reflection_result_rejects_missing_or_non_read_receipts() {
 
 #[test]
 fn reflection_result_rejects_unproven_diagnosis_without_sources() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut no_source_backed_diagnosis = reflection_result();
     no_source_backed_diagnosis["failure_modes"] = json!([]);
@@ -499,7 +498,7 @@ fn reflection_result_rejects_unproven_diagnosis_without_sources() {
 
 #[test]
 fn score_context_rejects_target_handle_for_unrelated_case() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut mismatched_target = score_context();
     mismatched_target["target_handle"] = json!("case_unrelated");
@@ -513,7 +512,7 @@ fn score_context_rejects_target_handle_for_unrelated_case() {
 
 #[test]
 fn stage_score_contexts_reject_public_only_assessed_outputs() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut reflect_public_only = reflect_request();
     reflect_public_only["examples"][0]["data_classes"] = json!(["case.input", "public"]);
@@ -552,7 +551,7 @@ fn stage_score_contexts_reject_public_only_assessed_outputs() {
 
 #[test]
 fn score_and_judge_contexts_reject_nested_output_data_class_gaps() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut scorer_blob_gap = score_context();
     scorer_blob_gap["output"]["blob_ref"] = json!({
@@ -604,7 +603,7 @@ fn score_and_judge_contexts_reject_nested_output_data_class_gaps() {
 
 #[test]
 fn propose_request_rejects_missing_reflection_result_and_change_schema_authority() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut missing_source_refs = propose_request();
     missing_source_refs["source_refs"] = json!([]);
@@ -697,7 +696,7 @@ fn propose_request_rejects_missing_reflection_result_and_change_schema_authority
 
 #[test]
 fn propose_request_rejects_reflection_source_ref_drop() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut dropped_reflection_source = propose_request();
     dropped_reflection_source["source_refs"] = json!(["cand_unrelated"]);
@@ -711,7 +710,7 @@ fn propose_request_rejects_reflection_source_ref_drop() {
 
 #[test]
 fn reflect_propose_handoff_binds_distinct_stage_calls_and_exact_reflection_result() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let handoff = package
         .validate_reflect_propose_handoff_document(&reflect_propose_handoff())
@@ -751,7 +750,7 @@ fn reflect_propose_handoff_binds_distinct_stage_calls_and_exact_reflection_resul
 
 #[test]
 fn reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fakes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut same_stage_call = reflect_propose_handoff();
     same_stage_call["propose_request"]["stage_call_id"] = json!("sc_reflect_stagepayload");
@@ -850,7 +849,7 @@ fn reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fakes() {
 
 #[test]
 fn reflect_propose_handoff_rejects_missing_or_forged_stage_receipts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut missing_stage_receipts = reflect_propose_handoff();
     missing_stage_receipts
@@ -887,7 +886,7 @@ fn reflect_propose_handoff_rejects_missing_or_forged_stage_receipts() {
 
 #[test]
 fn reflect_propose_submission_binds_proposal_effects_to_cited_handoff() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let submission = package
         .validate_reflect_propose_submission_document(
@@ -969,7 +968,7 @@ fn reflect_propose_submission_rejects_mutation_without_cited_handoff() {
 }
 
 fn assert_reflect_propose_submission_rejected(handoff: &Value, proposal_plan: &Value) {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     assert!(matches!(
         package
             .validate_reflect_propose_submission_document(handoff, proposal_plan)
@@ -980,7 +979,7 @@ fn assert_reflect_propose_submission_rejected(handoff: &Value, proposal_plan: &V
 
 #[test]
 fn runner_request_rejects_case_target_material() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut hidden_target = runner_request();
     hidden_target["case_input"]["case.target"] = json!("secret answer");
@@ -1006,7 +1005,7 @@ fn runner_request_rejects_case_target_material() {
 
 #[test]
 fn callback_and_adapter_payloads_reject_missing_payload_schema() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut callback = callback_request();
     callback.as_object_mut().unwrap().remove("payload_schema");
@@ -1029,7 +1028,7 @@ fn callback_and_adapter_payloads_reject_missing_payload_schema() {
 
 #[test]
 fn active_reflect_then_propose_example_validates_through_semantic_stage_payloads() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let example: Value = serde_json::from_str(
         &std::fs::read_to_string(
             workspace_root()

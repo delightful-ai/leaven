@@ -1,4 +1,4 @@
-use crate::support::workspace_root;
+use crate::support::package;
 use std::collections::BTreeSet;
 
 use leaven_engine::BudgetLedger;
@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 
 #[test]
 fn opaque_token_resolves_to_structured_capability_document() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let document = CapabilityDocument::from_value(example_capability(&package)).unwrap();
     let mut registry = CapabilityRegistry::default();
     registry.insert(document).unwrap();
@@ -71,7 +71,7 @@ fn opaque_token_resolves_to_structured_capability_document() {
 
 #[test]
 fn capability_resolution_rejects_bare_missing_expired_revoked_and_mismatched_tokens() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let document = CapabilityDocument::from_value(example_capability(&package)).unwrap();
     let mut registry = CapabilityRegistry::default();
     registry.insert(document).unwrap();
@@ -128,7 +128,7 @@ fn capability_resolution_rejects_bare_missing_expired_revoked_and_mismatched_tok
 
 #[test]
 fn capability_documents_must_satisfy_locked_schema_not_partial_struct_shape() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     for field in ["issuer", "audience", "issued_at", "execution_policy"] {
         let mut value = example_capability(&package);
@@ -163,7 +163,7 @@ fn capability_documents_must_satisfy_locked_schema_not_partial_struct_shape() {
 
 #[test]
 fn capability_documents_reject_role_purpose_invariant_violations_at_mint_time() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut runner_target = example_capability(&package);
     runner_target["subject"] = json!({
@@ -206,7 +206,7 @@ fn capability_documents_reject_role_purpose_invariant_violations_at_mint_time() 
 
 #[test]
 fn allowed_grant_request_returns_capability_fingerprint_and_effective_limits() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let document = CapabilityDocument::from_value(example_capability(&package)).unwrap();
 
     let allowed = document
@@ -241,7 +241,7 @@ fn allowed_grant_request_returns_capability_fingerprint_and_effective_limits() {
 
 #[test]
 fn grant_enforcement_rejects_under_specified_requests() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let document = CapabilityDocument::from_value(enforcement_capability(&package)).unwrap();
 
     assert_denied(
@@ -305,7 +305,7 @@ fn grant_enforcement_rejects_under_specified_requests() {
 
 #[test]
 fn grant_enforcement_rejects_action_resource_case_schema_data_class_and_limits() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let document = CapabilityDocument::from_value(enforcement_capability(&package)).unwrap();
 
     assert_denied(
@@ -396,7 +396,7 @@ fn grant_enforcement_rejects_action_resource_case_schema_data_class_and_limits()
 
 #[test]
 fn grant_enforcement_rejects_timeout_and_row_limit_overruns() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let document = CapabilityDocument::from_value(enforcement_capability(&package)).unwrap();
 
     for limits in [
@@ -424,7 +424,7 @@ fn grant_enforcement_rejects_timeout_and_row_limit_overruns() {
 
 #[test]
 fn grant_enforcement_rejects_ungranted_models_workspace_ops_and_commands() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut value = enforcement_capability(&package);
     value["grants"][1]["constraints"]["models"] = json!(["gpt-test"]);
     value["grants"].as_array_mut().unwrap().push(json!({
@@ -494,7 +494,7 @@ fn grant_enforcement_rejects_ungranted_models_workspace_ops_and_commands() {
 
 #[test]
 fn aggregate_budget_ledger_enforces_cross_grant_totals_and_roles() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let document = CapabilityDocument::from_value(example_capability(&package)).unwrap();
     let mut ledger = CapabilityBudgetLedger::new(&document);
 
@@ -520,7 +520,7 @@ fn aggregate_budget_ledger_enforces_cross_grant_totals_and_roles() {
 
 #[test]
 fn aggregate_budget_ledger_rejects_role_and_concurrency_overruns() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let document = CapabilityDocument::from_value(example_capability(&package)).unwrap();
     let mut ledger = CapabilityBudgetLedger::new(&document);
 
@@ -551,7 +551,7 @@ fn aggregate_budget_ledger_rejects_role_and_concurrency_overruns() {
 
 #[test]
 fn aggregate_budget_ledger_rejects_role_spend_beyond_total_budget() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let document = CapabilityDocument::from_value(example_capability(&package)).unwrap();
     let mut ledger = CapabilityBudgetLedger::new(&document);
 
@@ -563,7 +563,7 @@ fn aggregate_budget_ledger_rejects_role_spend_beyond_total_budget() {
 
 #[test]
 fn aggregate_budget_runtime_projection_enforces_engine_cross_role_and_delegated_totals() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let parent = CapabilityDocument::from_value(delegable_parent_capability(&package)).unwrap();
     let child = CapabilityDocument::from_value(delegated_child_capability(&package)).unwrap();
     let mut ledger = BudgetLedger::new(parent.runtime_budget_limit().unwrap());
@@ -623,7 +623,7 @@ fn aggregate_budget_runtime_projection_enforces_engine_cross_role_and_delegated_
 #[test]
 fn aggregate_budget_runtime_projection_rejects_role_concurrency_delegation_and_precision_bypasses()
 {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut role_limited = example_capability(&package);
     role_limited["budgets"]["max_total_usd_micro"] = json!(500_000);
@@ -722,7 +722,7 @@ fn aggregate_budget_runtime_projection_rejects_role_concurrency_delegation_and_p
 
 #[test]
 fn valid_delegation_narrows_authority_and_records_parent_lineage() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let parent = CapabilityDocument::from_value(delegable_parent_capability(&package)).unwrap();
     let child = CapabilityDocument::from_value(delegated_child_capability(&package)).unwrap();
 
@@ -744,7 +744,7 @@ fn valid_delegation_narrows_authority_and_records_parent_lineage() {
 
 #[test]
 fn delegation_rejects_widened_action_resource_budget_data_class_schema_expiry_and_binding() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let parent = CapabilityDocument::from_value(delegable_parent_capability(&package)).unwrap();
 
     let mut no_lineage = delegated_child_capability(&package);

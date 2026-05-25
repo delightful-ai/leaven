@@ -1,17 +1,17 @@
-use crate::support::workspace_root;
+use crate::support::package;
 use leaven_kernel::{Cost, Fingerprint, Metered};
 use leaven_public_seam::{
     CapabilityDocument, PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext,
     PlanExecutionHost, PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome,
     PlanSandboxExecRequest, PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest,
-    PublicSeamError, PublicSeamPackage,
+    PublicSeamError,
 };
 use leaven_workspace::{CapturedOutput, CommandOutput, ExitStatus, WorkspacePath};
 use serde_json::{Value, json};
 
 #[test]
 fn sandbox_exec_can_project_provider_neutral_command_output_into_plan_result() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut host = SandboxHost::new(ExitStatus { code: Some(7) });
 
     let report = package
@@ -59,7 +59,7 @@ fn sandbox_exec_can_project_provider_neutral_command_output_into_plan_result() {
 
 #[test]
 fn sandbox_exec_denies_no_capability_execution_before_host_effects() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut host = SandboxHost::new(ExitStatus { code: Some(0) });
 
     let error = package
@@ -81,7 +81,7 @@ fn sandbox_exec_denies_no_capability_execution_before_host_effects() {
 
 #[test]
 fn sandbox_exec_command_output_projection_rejects_missing_exit_during_validation() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut host = SandboxHost::new(ExitStatus { code: None });
 
     let error = package
@@ -104,7 +104,7 @@ fn sandbox_exec_command_output_projection_rejects_missing_exit_during_validation
 
 #[test]
 fn sandbox_exec_command_output_projection_rejects_unbound_stream_blob_refs() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut host = SandboxHost::new(ExitStatus { code: Some(0) }).with_corrupt_stdout_ref();
 
     let error = package
@@ -127,7 +127,7 @@ fn sandbox_exec_command_output_projection_rejects_unbound_stream_blob_refs() {
 
 #[test]
 fn sandbox_exec_rejects_captured_file_refs_outside_output_contract() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut host = SandboxHost::new(ExitStatus { code: Some(0) }).with_wrong_output_path();
 
     let error = package
@@ -226,7 +226,7 @@ fn sandbox_exec_output_file_refs_reject_unbound_captured_bytes() {
 
 #[test]
 fn sandbox_exec_rejects_unsafe_output_contract_paths_before_host_execution() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     for path in ["/tmp/secret.txt", "../secret.txt", "", "out//secret.txt"] {
         let mut plan = sandbox_workspace_plan();
         plan["ops"][1]["call"]["output"]["paths"] = json!([path]);
