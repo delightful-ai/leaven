@@ -18,7 +18,6 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "crates/leaven-artifact-jj",
     "crates/leaven-artifact-skill",
     "crates/leaven-core",
-    "crates/leaven-derive",
     "crates/leaven-engine",
     "crates/leaven-eval",
     "crates/leaven-eval-parquet",
@@ -75,7 +74,6 @@ const EXPECTED_CRATES: &[&str] = &[
     "leaven-artifact-jj",
     "leaven-artifact-skill",
     "leaven-core",
-    "leaven-derive",
     "leaven-engine",
     "leaven-eval",
     "leaven-eval-parquet",
@@ -130,7 +128,6 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-artifact-jj",
             "leaven-artifact-skill",
             "leaven-core",
-            "leaven-derive",
             "leaven-engine",
             "leaven-eval",
             "leaven-gepa",
@@ -219,7 +216,6 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
         &["leaven-core", "leaven-kernel", "leaven-surface"],
     ),
     ("leaven-core", &["leaven-kernel"]),
-    ("leaven-derive", &[]),
     (
         "leaven-engine",
         &[

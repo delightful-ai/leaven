@@ -53,11 +53,3 @@ pub use leaven_run::Score;
 pub use leaven_run::ScoreError;
 pub use leaven_run::StandardRunSummary;
 pub use leaven_run::optimize;
-
-// --- Artifact derive macros, when the `derive` feature is on. ---
-
-#[cfg(feature = "derive")]
-pub use leaven_derive::{
-    Artifact as DeriveArtifact, ContentAddressed as DeriveContentAddressed,
-    EditSurface as DeriveEditSurface,
-};

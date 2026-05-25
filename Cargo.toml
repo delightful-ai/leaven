@@ -45,7 +45,6 @@ members = [
     "crates/leaven-workspace-firkin",
     "crates/leaven-workspace-git",
     "crates/leaven-workspace-local",
-    "crates/leaven-derive",
     "examples/p0_graph_skeleton",
     "examples/p1_keep_best",
     "examples/p2_pairwise_tournament",
@@ -129,7 +128,6 @@ leaven = { path = "crates/leaven", version = "0.0.0", default-features = false }
 leaven-engine = { path = "crates/leaven-engine", version = "0.0.0" }
 leaven-std = { path = "crates/leaven-std", version = "0.0.0" }
 leaven-workspace = { path = "crates/leaven-workspace", version = "0.0.0" }
-leaven-derive = { path = "crates/leaven-derive", version = "0.0.0" }
 leaven-agent = { path = "crates/leaven-agent", version = "0.0.0" }
 leaven-agent-command = { path = "crates/leaven-agent-command", version = "0.0.0" }
 leaven-agent-codex = { path = "crates/leaven-agent-codex", version = "0.0.0" }

@@ -24,7 +24,6 @@ leaven-agentic-skill = { workspace = true, optional = true }
 leaven-artifact-git = { workspace = true, optional = true }
 leaven-artifact-jj = { workspace = true, optional = true }
 leaven-artifact-skill = { workspace = true, optional = true }
-leaven-derive = { workspace = true, optional = true }
 leaven-gepa = { workspace = true, optional = true }
 leaven-lm-cache = { workspace = true, optional = true }
 leaven-lm-openai = { workspace = true, optional = true }
@@ -35,9 +34,8 @@ leaven-workspace-git = { workspace = true, optional = true }
 leaven-workspace-local = { workspace = true, optional = true }
 
 [features]
-default = ["std", "derive", "gepa"]
+default = ["std", "gepa"]
 std = ["dep:leaven-std"]
-derive = ["dep:leaven-derive"]
 gepa = ["dep:leaven-gepa"]
 workspace = ["dep:leaven-workspace"]
 agentic = ["workspace", "dep:leaven-agentic"]
