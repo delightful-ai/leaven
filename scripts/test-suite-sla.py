@@ -204,13 +204,8 @@ def rust_target_libdir(workspace_root: Path) -> Path:
 
 
 def discover_workspace_test_binaries(
-    workspace_root: Path, deadline: float
+    workspace_root: Path, build_timeout: float | None = None
 ) -> list[tuple[str, Path, Path]]:
-    remaining = deadline - time.perf_counter()
-    if remaining <= 0:
-        print("error: no SLA time remains before building workspace tests", flush=True)
-        raise SystemExit(1)
-
     print(
         "building workspace libtest binaries: " + " ".join(WORKSPACE_TEST_BUILD_COMMAND),
         flush=True,
@@ -222,13 +217,11 @@ def discover_workspace_test_binaries(
             check=False,
             stdout=subprocess.PIPE,
             text=True,
-            timeout=remaining,
+            timeout=build_timeout,
         )
     except subprocess.TimeoutExpired:
-        print(
-            f"error: workspace test build exceeded remaining suite SLA ({remaining:.2f}s)",
-            flush=True,
-        )
+        timeout = f"{build_timeout:.2f}s" if build_timeout is not None else "unbounded"
+        print(f"error: workspace test build exceeded build timeout ({timeout})", flush=True)
         raise SystemExit(1) from None
     if build.returncode != 0:
         raise SystemExit(build.returncode)
@@ -274,8 +267,11 @@ def terminate_process_group(process: subprocess.Popen[str]) -> None:
         return
 
 
-def run_workspace_test_binaries(workspace_root: Path, deadline: float) -> int:
-    binaries = discover_workspace_test_binaries(workspace_root, deadline)
+def run_workspace_test_binaries(
+    workspace_root: Path,
+    binaries: list[tuple[str, Path, Path]],
+    deadline: float,
+) -> int:
     if not binaries:
         print("skipping workspace libtest binaries: no test binaries found", flush=True)
         return 0
@@ -394,15 +390,23 @@ def main() -> int:
         "--sla-seconds",
         type=float,
         default=30.0,
-        help="maximum allowed wall-clock runtime for the full test suite",
+        help="maximum allowed wall-clock runtime for executing the full test suite",
+    )
+    parser.add_argument(
+        "--build-timeout",
+        type=float,
+        default=None,
+        help="optional timeout for compiling/discovering workspace test binaries",
     )
     args = parser.parse_args()
 
+    workspace_root = Path.cwd()
+    binaries = discover_workspace_test_binaries(workspace_root, args.build_timeout)
+
     started = time.perf_counter()
     deadline = started + args.sla_seconds
-    workspace_root = Path.cwd()
 
-    returncode = run_workspace_test_binaries(workspace_root, deadline)
+    returncode = run_workspace_test_binaries(workspace_root, binaries, deadline)
     if returncode != 0:
         return returncode
 
