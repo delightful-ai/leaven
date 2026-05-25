@@ -698,7 +698,7 @@ fn conformance_matrix_reference_check_rejects_stale_pending_test_symbols() {
     row.blocked_on.clear();
     assert_eq!(row.status, MatrixRowStatus::Pending);
     row.positive_test_evidence = vec![
-        "crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_preserve_object_form_info_refs"
+        "crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::stage_payloads_preserve_object_form_info_refs"
             .to_owned(),
     ];
 
@@ -726,7 +726,7 @@ fn conformance_evidence_audit_rejects_pending_rows_with_closeout_evidence_fields
     row.blocked_on.clear();
     assert_eq!(row.status, MatrixRowStatus::Pending);
     row.positive_test_evidence = vec![
-        "crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_validate_all_role_specific_payload_shapes_with_provenance"
+        "crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::stage_payloads_validate_all_role_specific_payload_shapes_with_provenance"
             .to_owned(),
     ];
 
@@ -871,7 +871,7 @@ fn conformance_evidence_audit_rejects_weak_test_function_as_negative_evidence() 
         .unwrap();
 
     row.negative_test_evidence = vec![
-        "crates/leaven-public-seam/tests/contract_package.rs::active_schemas_compile_and_examples_validate_against_manifest_targets"
+        "crates/leaven-public-seam/tests/public_seam_contract/contract_package.rs::active_schemas_compile_and_examples_validate_against_manifest_targets"
             .to_owned(),
     ];
 
@@ -903,7 +903,7 @@ fn conformance_evidence_audit_requires_denial_evidence_for_integrated_surface_ro
         "docs/specs/public-seam-v1/reviews/2026-05-23-initial-contract-owner-review.md".to_owned(),
     ];
     row.positive_test_evidence = vec![
-        "crates/leaven-public-seam/tests/contract_package.rs::v1_scope_markers_refuse_mcp_watch_runtime_and_legacy_worker_protocol"
+        "crates/leaven-public-seam/tests/public_seam_contract/contract_package.rs::v1_scope_markers_refuse_mcp_watch_runtime_and_legacy_worker_protocol"
             .to_owned(),
     ];
     row.negative_test_evidence.clear();
