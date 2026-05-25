@@ -1,15 +1,12 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::collections::{BTreeMap, BTreeSet};
 
-use chrono::{DateTime, FixedOffset};
-use jsonschema::{Retrieve, Uri};
 use serde::Deserialize;
 use serde_json::Value;
 
 mod budget;
 mod delegation;
 mod grant;
+mod grant_checks;
 mod registry;
 
 pub use budget::{
@@ -18,6 +15,11 @@ pub use budget::{
 };
 pub use delegation::CapabilityDelegation;
 pub use grant::{AuthorizedGrant, CapabilityLimitUsage};
+use grant_checks::{
+    DelegationPolicy, ExecutionPolicy, Issuer, ensure_constraints, ensure_limits, ensure_resource,
+    grant_receives_target, invalid_document, parse_timestamp, require_prefix, string_set,
+    validate_capability_schema, value_allows,
+};
 pub use registry::CapabilityRegistry;
 
 const ACTIVE_PACKAGE_RELATIVE: &str = "docs/specs/public-seam-v1";
@@ -691,5 +693,3 @@ impl CapabilityDenial {
         &self.redactions
     }
 }
-
-include!("capability/grant_checks.rs");

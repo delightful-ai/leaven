@@ -1,4 +1,18 @@
-fn ensure_resource(
+use std::collections::{BTreeSet, HashMap};
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use chrono::{DateTime, FixedOffset};
+use jsonschema::{Retrieve, Uri};
+use serde::Deserialize;
+use serde_json::Value;
+
+use super::{
+    ACTIVE_PACKAGE_RELATIVE, CAPABILITY_SCHEMA, CapabilityDenial, CapabilityDenialKind,
+    CapabilityError, CapabilityGrantRequest, CapabilityLimitUsage, Grant,
+};
+
+pub(super) fn ensure_resource(
     grant: &Grant,
     request: &CapabilityGrantRequest,
 ) -> Result<(), CapabilityDenial> {
@@ -27,7 +41,7 @@ fn ensure_resource(
     Ok(())
 }
 
-fn ensure_constraints(
+pub(super) fn ensure_constraints(
     grant: &Grant,
     request: &CapabilityGrantRequest,
 ) -> Result<(), CapabilityDenial> {
@@ -199,7 +213,10 @@ fn ensure_schema_constraint(
     }
 }
 
-fn ensure_limits(grant: &Grant, request: &CapabilityGrantRequest) -> Result<(), CapabilityDenial> {
+pub(super) fn ensure_limits(
+    grant: &Grant,
+    request: &CapabilityGrantRequest,
+) -> Result<(), CapabilityDenial> {
     for key in [
         "max_usd_micro",
         "max_calls",
@@ -290,7 +307,7 @@ fn ensure_limit(
     }
 }
 
-fn value_allows(allowed: &Value, requested: &Value) -> bool {
+pub(super) fn value_allows(allowed: &Value, requested: &Value) -> bool {
     match allowed {
         Value::Array(values) => match requested {
             Value::Array(requested_values) => requested_values
@@ -302,7 +319,7 @@ fn value_allows(allowed: &Value, requested: &Value) -> bool {
     }
 }
 
-fn string_set(value: Option<&Value>) -> BTreeSet<String> {
+pub(super) fn string_set(value: Option<&Value>) -> BTreeSet<String> {
     value
         .and_then(Value::as_array)
         .into_iter()
@@ -312,7 +329,7 @@ fn string_set(value: Option<&Value>) -> BTreeSet<String> {
         .collect()
 }
 
-fn grant_receives_target(grant: &Grant) -> bool {
+pub(super) fn grant_receives_target(grant: &Grant) -> bool {
     string_set(grant.constraints.get("case_fields")).contains("target")
         || string_set(grant.constraints.get("allowed_input_classes")).contains("case.target")
         || grant
@@ -322,38 +339,38 @@ fn grant_receives_target(grant: &Grant) -> bool {
             .is_some_and(|egress| !matches!(egress, "none" | "denied"))
 }
 
-fn invalid_document(message: impl Into<String>) -> CapabilityError {
+pub(super) fn invalid_document(message: impl Into<String>) -> CapabilityError {
     CapabilityError::InvalidDocument {
         message: message.into(),
     }
 }
 
 #[derive(Clone, Debug, Deserialize)]
-struct DelegationPolicy {
-    may_delegate: bool,
-    max_depth: u64,
-    must_attenuate: bool,
+pub(super) struct DelegationPolicy {
+    pub(super) may_delegate: bool,
+    pub(super) max_depth: u64,
+    pub(super) must_attenuate: bool,
     #[serde(default)]
-    allowed_actions: Vec<String>,
+    pub(super) allowed_actions: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-struct Issuer {
-    kind: String,
-    id: String,
+pub(super) struct Issuer {
+    pub(super) kind: String,
+    pub(super) id: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-struct ExecutionPolicy {
-    profile: String,
-    network: String,
-    subprocess: String,
-    filesystem: String,
+pub(super) struct ExecutionPolicy {
+    pub(super) profile: String,
+    pub(super) network: String,
+    pub(super) subprocess: String,
+    pub(super) filesystem: String,
     byo_effects: String,
 }
 
 impl ExecutionPolicy {
-    fn validate(&self) -> Result<(), CapabilityError> {
+    pub(super) fn validate(&self) -> Result<(), CapabilityError> {
         if self.profile.is_empty()
             || self.network.is_empty()
             || self.subprocess.is_empty()
@@ -369,7 +386,11 @@ impl ExecutionPolicy {
     }
 }
 
-fn require_prefix(field: &str, value: &str, prefix: &str) -> Result<(), CapabilityError> {
+pub(super) fn require_prefix(
+    field: &str,
+    value: &str,
+    prefix: &str,
+) -> Result<(), CapabilityError> {
     if value.starts_with(prefix) {
         Ok(())
     } else {
@@ -379,13 +400,13 @@ fn require_prefix(field: &str, value: &str, prefix: &str) -> Result<(), Capabili
     }
 }
 
-fn parse_timestamp(value: &str) -> Result<DateTime<FixedOffset>, CapabilityError> {
+pub(super) fn parse_timestamp(value: &str) -> Result<DateTime<FixedOffset>, CapabilityError> {
     DateTime::parse_from_rfc3339(value).map_err(|error| CapabilityError::InvalidDocument {
         message: format!("invalid timestamp `{value}`: {error}"),
     })
 }
 
-fn validate_capability_schema(value: &Value) -> Result<(), CapabilityError> {
+pub(super) fn validate_capability_schema(value: &Value) -> Result<(), CapabilityError> {
     let schema = read_schema(CAPABILITY_SCHEMA)?;
     let validator = jsonschema::draft202012::options()
         .with_retriever(CapabilitySchemaRetriever::active()?)
