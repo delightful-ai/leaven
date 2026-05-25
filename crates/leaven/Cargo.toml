@@ -21,8 +21,6 @@ leaven-surface = { workspace = true }
 leaven-agentic = { workspace = true, optional = true }
 leaven-agentic-git = { workspace = true, optional = true }
 leaven-agentic-skill = { workspace = true, optional = true }
-leaven-artifact-git = { workspace = true, optional = true }
-leaven-artifact-jj = { workspace = true, optional = true }
 leaven-artifact-skill = { workspace = true, optional = true }
 leaven-gepa = { workspace = true, optional = true }
 leaven-lm-cache = { workspace = true, optional = true }
@@ -31,7 +29,6 @@ leaven-std = { workspace = true, optional = true }
 leaven-workspace = { workspace = true, optional = true }
 leaven-workspace-firkin = { workspace = true, optional = true }
 leaven-workspace-git = { workspace = true, optional = true }
-leaven-workspace-local = { workspace = true, optional = true }
 
 [features]
 default = ["std", "gepa"]
@@ -39,12 +36,11 @@ std = ["dep:leaven-std"]
 gepa = ["dep:leaven-gepa"]
 workspace = ["dep:leaven-workspace"]
 agentic = ["workspace", "dep:leaven-agentic"]
-git = ["dep:leaven-artifact-git", "leaven-std?/git"]
-jj = ["dep:leaven-artifact-jj", "leaven-std?/jj"]
+git = ["std", "leaven-std/git"]
+jj = ["std", "leaven-std/jj"]
 skill = ["dep:leaven-artifact-skill", "leaven-std?/skill"]
 agentic-git = ["agentic", "workspace-git", "dep:leaven-agentic-git"]
 agentic-skill = ["agentic", "skill", "dep:leaven-agentic-skill"]
-workspace-local = ["workspace", "dep:leaven-workspace-local"]
 workspace-git = ["workspace", "git", "dep:leaven-workspace-git"]
 workspace-firkin = ["workspace", "dep:leaven-workspace-firkin"]
 lm-openai = ["dep:leaven-lm-openai"]
