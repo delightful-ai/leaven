@@ -1,0 +1,36 @@
+MANIFEST
+build
+dist
+*.py[cod]
+__pycache__
+*.egg-info
+*~
+*.bak
+.ipynb_checkpoints
+.tox
+.DS_Store
+\#*#
+.#*
+.coverage
+.cache
+absolute.json
+htmlcov/
+docs/changelog.md
+.mypy_cache
+Pipfile
+Pipfle.lock
+
+# Sphinx documentation
+_build
+docs/_build/
+docs/gh-pages
+
+# PyBuilder
+target/
+
+# PyCharm
+.idea/
+*.iml
+
+# Failing tests sometimes leave these behind:
+kernel-*.json
