@@ -84,6 +84,18 @@ def main() -> int:
     parser.add_argument("--line-floor", type=float, required=True)
     parser.add_argument("--branch-floor", type=float, required=True)
     parser.add_argument(
+        "--line-warn",
+        type=float,
+        default=None,
+        help="optional line coverage warning target above the hard floor",
+    )
+    parser.add_argument(
+        "--branch-warn",
+        type=float,
+        default=None,
+        help="optional branch coverage warning target above the hard floor",
+    )
+    parser.add_argument(
         "--output-path",
         default="target/llvm-cov/coverage-summary.json",
         help="where to write the llvm-cov JSON summary",
@@ -214,6 +226,11 @@ def main() -> int:
             f"({lines['percent']:.2f}% < {args.line_floor:.2f}%)"
         )
         return 1
+    if args.line_warn is not None and lines["percent"] < args.line_warn:
+        print(
+            "warning: line coverage below warning target "
+            f"({lines['percent']:.2f}% < {args.line_warn:.2f}%)"
+        )
     if branches["count"] == 0:
         print("error: branch coverage produced no branch denominator")
         return 1
@@ -223,6 +240,11 @@ def main() -> int:
             f"({branches['percent']:.2f}% < {args.branch_floor:.2f}%)"
         )
         return 1
+    if args.branch_warn is not None and branches["percent"] < args.branch_warn:
+        print(
+            "warning: branch coverage below warning target "
+            f"({branches['percent']:.2f}% < {args.branch_warn:.2f}%)"
+        )
     return 0
 
 

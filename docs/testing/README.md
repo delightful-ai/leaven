@@ -88,9 +88,11 @@ The SLA runner executes many libtest binaries concurrently and sets
 `RUST_TEST_THREADS=1` inside each binary. This keeps parallelism at the suite
 level and avoids nested libtest fanout dominating small integration binaries.
 
-Coverage is a ratchet. Raise `coverage_line_floor` and
-`coverage_branch_floor` in the root `Justfile` when coverage improves; do not
-lower either floor to land weaker tests.
+Coverage has hard failure floors plus warning targets. The current hard floors
+are 80% line and 80% branch so coverage does not outrank executable seam
+readiness work. The old ratchet values remain wired as `coverage_line_warn` and
+`coverage_branch_warn`; treat those warnings as debt to retire with real tests,
+not as a reason to block higher-priority V1 ACP proof.
 
 For hot-loop coverage feedback, use `just coverage-fast --package <crate>` and
 repeat `--package` for a small touched set. Add `--test <integration-test-name>`
@@ -107,18 +109,19 @@ does not produce or enforce line/branch percentages.
 
 The v0.2.1b topology cutover adds many spec-listed crate skeletons whose job is
 to enforce dependency direction before their behavior lands. The default
-coverage gate keeps the current `coverage_line_floor` and
-`coverage_branch_floor` over production/source behavior after excluding
-non-default milestone packages from workspace execution. It runs the workspace
-tests plus `xtask` under `cargo llvm-cov` before reporting. The enforced
-denominator excludes test harness files and `#[cfg(test)] mod ...` blocks after
-execution, so tests can exercise production code without becoming code that
-must itself be covered. Line and branch coverage are both enforced from the
-lcov report so generic monomorphizations do not create duplicate missed-line
-denominators. Empty map crates and unimplemented skeleton crates naturally add
-no executable denominator; once a crate gains runtime behavior, that behavior
-is part of the canonical coverage surface and needs contract tests in the same
-change. Coverage keeps the exercised surface honest; it does not promote proxy
+coverage gate keeps hard `coverage_line_floor` and `coverage_branch_floor`
+values over production/source behavior after excluding non-default milestone
+packages from workspace execution, and reports higher warning targets when the
+workspace falls below the desired ratchet. It runs the workspace tests plus
+`xtask` under `cargo llvm-cov` before reporting. The enforced denominator
+excludes test harness files and `#[cfg(test)] mod ...` blocks after execution,
+so tests can exercise production code without becoming code that must itself be
+covered. Line and branch coverage are both enforced from the lcov report so
+generic monomorphizations do not create duplicate missed-line denominators.
+Empty map crates and unimplemented skeleton crates naturally add no executable
+denominator; once a crate gains runtime behavior, that behavior is part of the
+canonical coverage surface and needs contract tests in the same change.
+Coverage keeps the exercised surface honest; it does not promote proxy
 examples or placeholder public names into mature product contracts.
 
 ## Test Shapes
