@@ -1,4 +1,9 @@
-//! Agentic stage adapters.
+//! Agentic stage adapters for Leaven runs.
+//!
+//! This crate turns provider-neutral agent sessions and materialized workspaces
+//! into typed proposals, assessments, workload records, repair attempts, and
+//! public-seam stage payloads. It does not own provider protocols or optimizer
+//! search policy.
 
 mod artifact_reflector;
 mod case;
