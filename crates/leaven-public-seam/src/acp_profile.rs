@@ -709,6 +709,7 @@ pub struct AcpJsonRpcResponseDocument {
     id: String,
     method: String,
     primary_kind: String,
+    result: Value,
 }
 
 impl AcpJsonRpcResponseDocument {
@@ -754,6 +755,10 @@ impl AcpJsonRpcResponseDocument {
             id,
             method: extension.method().to_owned(),
             primary_kind: extension.primary_kind().to_owned(),
+            result: object
+                .get("result")
+                .expect("result was required above")
+                .clone(),
         })
     }
 
@@ -770,6 +775,11 @@ impl AcpJsonRpcResponseDocument {
     /// Primary result kind returned by the extension result.
     pub fn primary_kind(&self) -> &str {
         &self.primary_kind
+    }
+
+    /// Validated ACP extension result payload carried by the JSON-RPC response.
+    pub fn result(&self) -> &Value {
+        &self.result
     }
 }
 

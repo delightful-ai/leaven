@@ -25,4 +25,5 @@ thiserror = { workspace = true }
 [dev-dependencies]
 leaven-acp = { workspace = true }
 leaven-public-seam = { workspace = true }
+sha2 = { workspace = true }
 tempfile = { workspace = true }
