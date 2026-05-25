@@ -1,4 +1,4 @@
-//! jj-backed artifact scaffolding.
+//! JJ-backed artifact vocabulary for materialized file snapshots.
 
 pub mod artifact {
     use std::collections::BTreeMap;
@@ -27,11 +27,6 @@ pub mod artifact {
         pub fn files(&self) -> &BTreeMap<WorkspacePath, Vec<u8>> {
             &self.files
         }
-    }
-
-    pub enum JjArtifactIdentityMode {
-        Change,
-        Commit,
     }
 
     impl Artifact for JjArtifact {
@@ -94,12 +89,6 @@ pub mod change {
     pub enum JjChange {
         Patch(String),
     }
-
-    pub struct JjOp;
-}
-pub mod conflict {
-    pub struct ConflictRegion;
-    pub struct ConflictRegionId;
 }
 pub mod error {
     #[derive(Debug, thiserror::Error)]
@@ -108,18 +97,6 @@ pub mod error {
         Message,
     }
 }
-pub mod operation_log {
-    pub struct OperationId;
-    pub struct OperationSummary;
-}
-pub mod surface {
-    pub struct JjChangesetSurface;
-    pub struct JjConflictSurface;
-    pub struct JjPathSurface;
-}
-pub use artifact::{JjArtifact, JjArtifactIdentityMode};
-pub use change::{JjChange, JjOp};
-pub use conflict::{ConflictRegion, ConflictRegionId};
+pub use artifact::JjArtifact;
+pub use change::JjChange;
 pub use error::JjArtifactError;
-pub use operation_log::{OperationId, OperationSummary};
-pub use surface::{JjChangesetSurface, JjConflictSurface, JjPathSurface};

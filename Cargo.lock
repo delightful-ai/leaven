@@ -3359,11 +3359,9 @@ name = "leaven-artifact-jj"
 version = "0.0.0"
 dependencies = [
  "futures",
- "leaven-artifacts",
  "leaven-core",
  "leaven-kernel",
  "leaven-stage",
- "leaven-surface",
  "leaven-workspace",
  "leaven-workspace-local",
  "serde",
