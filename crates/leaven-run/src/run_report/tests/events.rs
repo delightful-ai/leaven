@@ -1,5 +1,8 @@
 use super::*;
-use crate::{EvaluationCacheBackend, EvaluationCacheBypassReason, EvaluationCacheBypassSummary};
+use crate::{
+    EvaluationCacheBackend, EvaluationCacheBypassReason, EvaluationCacheBypassSummary,
+    RunResumability,
+};
 
 #[test]
 fn cache_summary_groups_hits_misses_and_bypasses_by_storage_status() {
