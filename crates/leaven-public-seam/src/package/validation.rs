@@ -261,22 +261,21 @@ pub(super) fn audit_conformance_evidence(
                 ),
             });
         }
+        if row.positive_test_evidence.is_empty() {
+            return Err(PublicSeamError::InvalidMatrix {
+                message: format!("row `{}` lacks positive test evidence", row.id),
+            });
+        }
+        for reference in &row.positive_test_evidence {
+            ensure_test_reference(package, &row.id, reference)?;
+        }
         if row.minimum_closeout_level.requires_denial_evidence() {
-            if row.positive_test_evidence.is_empty() {
-                return Err(PublicSeamError::InvalidMatrix {
-                    message: format!("row `{}` lacks positive test evidence", row.id),
-                });
-            }
             if row.negative_test_evidence.is_empty() {
                 return Err(PublicSeamError::InvalidMatrix {
                     message: format!("row `{}` lacks negative test evidence", row.id),
                 });
             }
-            for reference in row
-                .positive_test_evidence
-                .iter()
-                .chain(row.negative_test_evidence.iter())
-            {
+            for reference in &row.negative_test_evidence {
                 ensure_test_reference(package, &row.id, reference)?;
             }
             for reference in &row.negative_test_evidence {

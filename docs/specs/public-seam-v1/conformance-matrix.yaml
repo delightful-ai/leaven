@@ -75,6 +75,10 @@ rows:
       Removing or renaming a listed contract file fails the inventory test.
     fake_pass_rejected: A hand-maintained test list that silently diverges from the manifest.
     minimum_closeout_level: structural_contract
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/public_seam_contract/contract_package.rs::manifest_inventory_drives_contract_file_loading
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/public_seam_contract/contract_package.rs::manifest_inventory_drives_contract_file_loading
     implementation_evidence:
       - crates/leaven-public-seam/tests/public_seam_contract/contract_package.rs::manifest_inventory_drives_contract_file_loading
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::inventory
