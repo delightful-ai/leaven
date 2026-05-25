@@ -89,7 +89,7 @@ async def amain() -> None:
         train=lv.cases.from_jsonl(str(FIXTURE), name="train"),
         val=lv.cases.from_jsonl(str(FIXTURE), name="val", limit=2),
         optimizer=lv.optimizers.gepa(population_size=8),
-        environment=lv.environment(
+        runtime=lv.runtime(
             workspace=lv.workspace.local(),
             lm=lv.lm.anthropic(model="claude-opus-4-7", role="reflector"),
             agent=lv.agent.codex(model="gpt-5-codex"),

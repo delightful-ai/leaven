@@ -1,7 +1,7 @@
 """LM provider configs — `lv.lm.anthropic(...)`, `lv.lm.openai(...)`, etc.
 
 Each builder returns a typed `LmConfig` the engine instantiates. Multiple
-configs can be wired into one environment (`lm=[anthropic(...), openai(...)]`)
+configs can be wired into one runtime (`lm=[anthropic(...), openai(...)]`)
 or per-role (`lm={"grader": anthropic(...), "reflector": openai(...)}`).
 """
 

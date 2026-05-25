@@ -1,7 +1,7 @@
 """Example 03 — the canonical minimal sketch.
 
 The smallest meaningful Leaven program: optimize a prompt for an
-arithmetic QA task with GEPA against a local environment with a mock LM.
+arithmetic QA task with GEPA against a local runtime with a mock LM.
 
 ~25 lines of user code; everything else is composition of typed configs.
 This is the 200-line-target's lower bound: trivial problems write tiny.
@@ -48,7 +48,7 @@ async def amain() -> None:
         train=lv.cases.from_jsonl(str(FIXTURE), name="train", limit=6),
         val=lv.cases.from_jsonl(str(FIXTURE), name="val", limit=2),
         optimizer=lv.optimizers.gepa(population_size=8),
-        environment=lv.environment.local(budget=lv.budget(usd=20)),
+        runtime=lv.runtime.local(budget=lv.budget(usd=20)),
         runner=run,
         scorer=score,
     )

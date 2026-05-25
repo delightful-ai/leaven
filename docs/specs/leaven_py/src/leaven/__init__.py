@@ -54,13 +54,12 @@ from .decorators import (
     scorer,
     serve_stage,
 )
-from .environment import Cache, Environment, environment
 from .evolution import EvolutionBuilder, evolve
 from .optimize import OptimizeBuilder, optimize
 
 # ----- Result + inspection -------------------------------------------------
 from .result import Candidate, Optimized, ReplayResult, RunSummary, Split
-from .runtime import Runtime, runtime
+from .runtime import Cache, Runtime, runtime
 from .score import Score
 from .stages import Evaluate, Propose, Reflect, Rollout, ScoreStage, Stages
 from .task import Task
@@ -86,7 +85,7 @@ roles = AgentRoles
 # `sandbox`, `cases`, `optimizers`, `frontier`, `output`, `scoring`, `trust`,
 # `runs`, `x`, `data_class`, `layouts`, `setup`) are imported above with
 # `from . import ...` and stay.
-# NOTE: `budget`, `environment`, `optimize` are NOT in this list — they're
+# NOTE: `budget`, `optimize` are NOT in this list — they're
 # public top-level callables that share names with their owning submodules.
 # Deleting them would remove the function, not just the module attribute.
 for _leaky in (
@@ -109,7 +108,6 @@ __all__ = [
     "Case",
     "CaseSet",
     "CaseSplits",
-    "Environment",
     "Evaluate",
     "EvolutionBuilder",
     "OptimizeBuilder",
@@ -142,7 +140,6 @@ __all__ = [
     "dspy_acall",
     "dspy_call_context",
     "dspy_context",
-    "environment",
     # decorators + stage registration
     "evaluator",
     "evolve",

@@ -26,7 +26,7 @@ class Gepa(OptimizerConfig):
     """Strategy for picking which parent to reflect against next."""
 
     reflection_lm: LmConfig | None = None
-    """LM for reflection calls. Inherits environment LM if omitted."""
+    """LM for reflection calls. Inherits runtime LM if omitted."""
 
     minibatch_size: int = 4
     """Cases per reflection minibatch."""

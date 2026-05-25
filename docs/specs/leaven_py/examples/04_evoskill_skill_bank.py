@@ -59,8 +59,8 @@ async def score(output: str, case: lv.Case, cx) -> lv.Score:
 # ---- Composition ----------------------------------------------------------
 
 
-def build_environment() -> lv.Environment:
-    return lv.environment(
+def build_runtime() -> lv.Runtime:
+    return lv.runtime(
         workspace=lv.workspace.local(root=".agents"),
         lm=lv.lm.anthropic(model="claude-opus-4-7"),
         agent=lv.agent.codex(model="gpt-5-codex"),
@@ -85,7 +85,7 @@ async def amain() -> None:
         train=lv.cases.from_jsonl(str(FIXTURE), name="train", limit=6),
         val=lv.cases.from_jsonl(str(FIXTURE), name="val", limit=2),
         optimizer=build_optimizer(),
-        environment=build_environment(),
+        runtime=build_runtime(),
         runner=run,
         scorer=score,
     )

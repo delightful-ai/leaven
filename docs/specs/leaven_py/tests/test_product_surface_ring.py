@@ -15,6 +15,7 @@ def test_top_level_leaven_surface_is_product_only() -> None:
         "EvidenceEnvelope",
         "EvidencePrivate",
         "EvidencePublic",
+        "Environment",
         "OutputRecord",
         "ProposalBatch",
         "ProposalEffect",
@@ -35,6 +36,7 @@ def test_top_level_leaven_surface_is_product_only() -> None:
         "WorkspaceLifetime",
         "WorkspaceSurface",
         "WriteReceipt",
+        "environment",
     }
 
     assert forbidden.isdisjoint(lv.__all__)

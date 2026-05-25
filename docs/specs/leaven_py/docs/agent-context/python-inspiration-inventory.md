@@ -69,7 +69,7 @@ Inspect's `@solver`, `@scorer` decorators and `TaskState` are the most direct de
 **Type**: Single-package hyperparameter optimization framework  
 
 ### What shaped our design
-- Distributed optimization with gRPC storage backend — informs `lv.environment.Environment` and budget/worker model
+- Distributed optimization with gRPC storage backend — informs `lv.runtime.Runtime` and budget/worker model
 - Study/trial/sampler abstraction — partial echo in optimizer config registry (though Leaven's optimizers are Rust-native)
 - Worker/server split for distributed evaluation — relates to Leaven's engine/SDK separation philosophy
 
@@ -83,7 +83,7 @@ Inspect's `@solver`, `@scorer` decorators and `TaskState` are the most direct de
 **`subset:optuna/{samplers,study,trial,storages/rpc_storage.py}`** — Vendor only the core abstractions, not the full sampler/pruner implementations or database drivers. Excludes dashboard, examples, tests.
 
 ### Justification
-Optuna is too large for full vendoring (~200 MB) and most of the sampler/pruner ecosystem is not applicable to Leaven (our optimizers are Rust-native). But the Study/Trial/Sampler interface contract and the gRPC distributed-storage pattern are worth reading for agents implementing `lv.environment` and worker coordination. Subset vendoring keeps repo size reasonable.
+Optuna is too large for full vendoring (~200 MB) and most of the sampler/pruner ecosystem is not applicable to Leaven (our optimizers are Rust-native). But the Study/Trial/Sampler interface contract and the gRPC distributed-storage pattern are worth reading for agents implementing `lv.runtime` and worker coordination. Subset vendoring keeps repo size reasonable.
 
 ---
 
@@ -97,7 +97,7 @@ Optuna is too large for full vendoring (~200 MB) and most of the sampler/pruner 
 ### What shaped our design
 - `Trainable` API with `train()` + `save_checkpoint()` — loosely parallels `@lv.runner` + artifact materialization
 - `tune.report()` callback for incremental progress — echoes in our proposal/assessment submission model
-- Distributed training + tuning composition — relates to `lv.environment` worker/server model
+- Distributed training + tuning composition — relates to `lv.runtime` worker/server model
 
 ### Worth reading for our scaffold
 - `python/ray/tune/trainable/trainable.py` — Trainable API contract
@@ -283,7 +283,7 @@ CrewAI's role-based agent composition and decorator stacking are direct ancestor
 ### What shaped our design
 - Type-hint-driven validation + data-class generation — foundational to `lv.data_class.DataClass` and artifact type projection
 - Serialization/deserialization + field metadata — informs `lv.output_record.OutputRecord` and assessment records
-- Config + override patterns — echoes in `lv.environment.Cache` and stage-config registration
+- Config + override patterns — echoes in `lv.runtime.Cache` and stage-config registration
 
 ### Worth reading for our scaffold
 - `pydantic/main.py` — BaseModel type contract and validation
@@ -397,4 +397,3 @@ Harbor is the de facto harness for Terminal-Bench and many registry benchmarks. 
 4. **Version pinning**: Add a `vendors.lock` file to `docs/agent-context/` recording each vendored repo's branch/tag at vendoring time, for reproducibility.
 
 5. **Agent context discovery**: Add `docs/agent-context/README.md` explaining the vendor directory structure and how to search it (e.g., `grep -r "decorator"` to find decorator patterns across all repos).
-
