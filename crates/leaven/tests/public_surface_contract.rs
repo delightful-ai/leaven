@@ -45,8 +45,6 @@ const SURFACE: &[(&str, Route, &str)] = &[
     ("ArtifactIdentity", Route::Prelude, ""),
     ("OptimizationProblem", Route::Prelude, ""),
     ("Assessment", Route::Prelude, ""),
-    ("AssessmentGranularity", Route::Prelude, ""),
-    ("AssessmentTarget", Route::Prelude, ""),
     ("Evidence", Route::Prelude, ""),
     ("PairOrder", Route::Prelude, ""),
     ("Preference", Route::Prelude, ""),
@@ -57,7 +55,6 @@ const SURFACE: &[(&str, Route, &str)] = &[
     ("SurfaceError", Route::Prelude, ""),
     ("SurfaceFingerprint", Route::Prelude, ""),
     ("Budget", Route::Prelude, ""),
-    ("CandidateId", Route::Prelude, ""),
     ("Cost", Route::Prelude, ""),
     ("CostUnit", Route::Prelude, ""),
     ("BestCandidate", Route::Prelude, ""),
@@ -66,9 +63,7 @@ const SURFACE: &[(&str, Route, &str)] = &[
     ("OptimizeError", Route::Prelude, ""),
     ("RunEventSummary", Route::Prelude, ""),
     ("RunError", Route::Prelude, ""),
-    ("RunOutput", Route::Prelude, ""),
     ("Score", Route::Prelude, ""),
-    ("ScoreContext", Route::Prelude, ""),
     ("ScoreError", Route::Prelude, ""),
     ("StandardRunSummary", Route::Prelude, ""),
     ("optimize", Route::Prelude, ""),
@@ -232,6 +227,16 @@ const SURFACE: &[(&str, Route, &str)] = &[
         "proposer authors declare batch combination rules",
     ),
     (
+        "AssessmentGranularity",
+        Route::Extend,
+        "evaluator authors choose aggregate versus per-case output",
+    ),
+    (
+        "AssessmentTarget",
+        Route::Extend,
+        "evaluator authors choose which candidate shape to assess",
+    ),
+    (
         "EvaluationRequest",
         Route::Extend,
         "evaluator authors read which candidates to score",
@@ -256,6 +261,16 @@ const SURFACE: &[(&str, Route, &str)] = &[
         "IntoOptimizeStore",
         Route::Extend,
         "store wiring authors implement it",
+    ),
+    (
+        "RunOutput",
+        Route::Extend,
+        "runner adapter authors return it from product runner paths",
+    ),
+    (
+        "ScoreContext",
+        Route::Extend,
+        "scorer authors receive it in product runner/scorer paths",
     ),
     // --- extend: LM provider vocabulary. ---
     (
@@ -453,6 +468,25 @@ fn extend_and_plumbing_entries_name_a_consumer() {
                  name the concrete consumer that needs it, or make it pub(crate)"
             ),
         }
+    }
+}
+
+#[test]
+fn prelude_does_not_export_stage_context_or_engine_proof_nouns() {
+    let prelude = reexported_symbols(&umbrella_src().join("prelude.rs"));
+    let forbidden = [
+        "AssessmentGranularity",
+        "AssessmentTarget",
+        "CandidateId",
+        "RunOutput",
+        "ScoreContext",
+    ];
+
+    for symbol in forbidden {
+        assert!(
+            !prelude.contains(symbol),
+            "`{symbol}` is an engine/proof noun, not ordinary prelude vocabulary"
+        );
     }
 }
 
