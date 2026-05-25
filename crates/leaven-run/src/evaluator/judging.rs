@@ -9,17 +9,17 @@ use leaven_core::{
 };
 use leaven_engine::{CachePolicy, EvaluationContext, EvaluationError, Evaluator};
 use leaven_eval::{Case, NoTarget};
-use leaven_evidence::{
-    CandidateAssessmentOutput, CandidateAssessmentOutputError, CaseAssessmentEvidence,
-    OutputRecord, ScalarEvidence,
-};
+use leaven_evidence::{CaseAssessmentEvidence, ScalarEvidence};
 use leaven_kernel::{BudgetSnapshot, Cost, EvaluationSetId, EvaluatorId, Fingerprint, Metered};
 
 use super::{MissingReportableOutput, Runner, default_parallelism, evaluate_unordered_jobs};
 use crate::compatibility::ScoringEvaluatorIdentity;
-use crate::evidence::artifact_identity_output;
 use crate::evidence::{CaseDataReadLog, ReportableOutputDeclaration, ReportableOutputScope};
 use crate::{RunCase, RunOutput, RunProblem, Score, ScoreError};
+
+mod output;
+
+use output::{assessed_candidate_outputs, assessed_group_output, grouped_artifact_identity_output};
 
 type JudgeScorer<A, I, T, Out> = Arc<
     dyn Fn(JudgeScoreContext<A, I, T, Out>) -> BoxFuture<'static, Result<Score, ScoreError>>
@@ -427,197 +427,5 @@ where
     })
 }
 
-fn assessed_candidate_outputs<A, Out>(
-    outputs: &[JudgeCandidateOutput<A, Out>],
-) -> Result<Vec<CandidateAssessmentOutput>, EvaluationError> {
-    outputs
-        .iter()
-        .map(|output| {
-            let reportable = output.output.reportable_output().ok_or_else(|| {
-                EvaluationError::Message(
-                    "runner output did not declare reportable assessed output".to_owned(),
-                )
-            })?;
-            CandidateAssessmentOutput::new(output.candidate, reportable.record().clone()).map_err(
-                |error| match error {
-                    CandidateAssessmentOutputError::MissingAssessedDataClass => {
-                        EvaluationError::Message(
-                            "runner output did not declare candidate or artifact assessed output"
-                                .to_owned(),
-                        )
-                    }
-                    CandidateAssessmentOutputError::EmptyInlineOutput => {
-                        EvaluationError::Message(error.to_string())
-                    }
-                },
-            )
-        })
-        .collect()
-}
-
-fn assessed_group_output<A, Out>(
-    outputs: &[JudgeCandidateOutput<A, Out>],
-) -> Option<ReportableOutputDeclaration> {
-    let mut texts = Vec::with_capacity(outputs.len());
-    let mut truncated = false;
-    let mut metadata = None;
-    let mut unbound_explicit_assessed_output = false;
-    for output in outputs {
-        let reportable = output.output.reportable_output()?;
-        unbound_explicit_assessed_output |= reportable.is_unbound_explicit_candidate_output()
-            || reportable.is_unbound_explicit_candidate_artifact();
-        let OutputRecord::Inline {
-            text,
-            truncated: output_truncated,
-            metadata: output_metadata,
-        } = reportable.record()
-        else {
-            return None;
-        };
-        if let Some(metadata) = &metadata {
-            if metadata != output_metadata {
-                return None;
-            }
-        } else {
-            metadata = Some(output_metadata.clone());
-        }
-        truncated |= *output_truncated;
-        texts.push(text.clone());
-    }
-    let record = OutputRecord::Inline {
-        text: texts.join("|"),
-        truncated,
-        metadata: metadata.unwrap_or_else(leaven_evidence::OutputMetadata::public),
-    };
-    if unbound_explicit_assessed_output {
-        Some(ReportableOutputDeclaration::explicit(record))
-    } else {
-        Some(ReportableOutputDeclaration::derived(record))
-    }
-}
-
-fn grouped_artifact_identity_output<A, Out>(
-    outputs: &[JudgeCandidateOutput<A, Out>],
-) -> OutputRecord
-where
-    A: leaven_core::Artifact,
-{
-    let text = outputs
-        .iter()
-        .map(|output| match artifact_identity_output(&output.artifact) {
-            OutputRecord::Inline { text, .. } => text,
-            OutputRecord::BlobRef { .. } => unreachable!("artifact identity output is inline"),
-        })
-        .collect::<Vec<_>>()
-        .join("|");
-    OutputRecord::candidate_artifact_inline(text)
-}
-
 #[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use futures::{FutureExt, executor::block_on};
-    use leaven_core::{Artifact, ArtifactIdentity};
-    use leaven_eval::Case;
-    use leaven_evidence::OutputRecord;
-    use leaven_kernel::{BudgetSnapshot, CandidateId, CaseId, ContentId, Cost};
-
-    use super::{JudgeEvaluationJob, JudgeRequestKind, JudgeScoreContext, evaluate_judge_job};
-    use crate::{RunCase, RunOutput, Score};
-
-    #[test]
-    fn judge_job_preserves_group_scoped_reportable_output() {
-        block_on(async {
-            let left = CandidateId::new();
-            let right = CandidateId::new();
-            let runner: super::Runner<TestArtifact, i32, String> =
-                Arc::new(|artifact: TestArtifact, case: RunCase<i32>| {
-                    async move {
-                        Ok(RunOutput::new(format!("{}:{}", artifact.0, case.input()))
-                            .with_cost(Cost::metric_calls(2))
-                            .with_trace(format!("ran {}", artifact.0)))
-                    }
-                    .boxed()
-                });
-            let scorer: super::JudgeScorer<TestArtifact, i32, leaven_eval::NoTarget, String> =
-                Arc::new(
-                    |ctx: JudgeScoreContext<TestArtifact, i32, leaven_eval::NoTarget, String>| {
-                        async move {
-                            assert_eq!(ctx.outputs.len(), 2);
-                            let report = ctx.report_text_output(format!(
-                                "{}|{}",
-                                ctx.outputs[0].output.output, ctx.outputs[1].output.output
-                            ));
-                            Ok(Score::new(1.0, "left wins")
-                                .with_output(report)
-                                .with_trace("judged pair"))
-                        }
-                        .boxed()
-                    },
-                );
-            let outcome = evaluate_judge_job(
-                JudgeEvaluationJob {
-                    case_index: 0,
-                    request_kind: JudgeRequestKind::Pairwise { left, right },
-                    artifacts: vec![(left, TestArtifact(40)), (right, TestArtifact(41))],
-                    case: Case::input(CaseId::new(0), 2),
-                    budget: BudgetSnapshot::default(),
-                },
-                &runner,
-                &scorer,
-            )
-            .await
-            .unwrap();
-
-            assert_eq!(outcome.case_id, CaseId::new(0));
-            assert_eq!(outcome.cost.metric_calls, 5);
-            assert_eq!(outcome.evidence.feedback(), "left wins");
-            assert_eq!(
-                outcome.evidence.trace(),
-                &[
-                    "ran 40".to_owned(),
-                    "ran 41".to_owned(),
-                    "judged pair".to_owned()
-                ]
-            );
-            assert_eq!(
-                outcome.evidence.output(),
-                &candidate_output_record("40:2|41:2")
-            );
-        });
-    }
-
-    fn candidate_output_record(output: impl Into<String>) -> OutputRecord {
-        OutputRecord::candidate_inline(output)
-    }
-
-    #[derive(Clone, Debug)]
-    struct TestArtifact(i32);
-
-    #[derive(Debug)]
-    struct TestArtifactError;
-
-    impl std::fmt::Display for TestArtifactError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.write_str("test artifact error")
-        }
-    }
-
-    impl std::error::Error for TestArtifactError {}
-
-    impl Artifact for TestArtifact {
-        type Change = i32;
-        type ApplyError = TestArtifactError;
-
-        fn identity(&self) -> ArtifactIdentity {
-            let mut bytes = [0; ContentId::BYTES];
-            bytes[..std::mem::size_of::<i32>()].copy_from_slice(&self.0.to_le_bytes());
-            ArtifactIdentity::Content(ContentId::from_bytes(bytes))
-        }
-
-        fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
-            Ok(Self(*change))
-        }
-    }
-}
+mod tests;
