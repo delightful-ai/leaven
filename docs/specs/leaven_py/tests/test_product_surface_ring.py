@@ -56,3 +56,13 @@ def test_product_surface_keeps_small_user_vocabulary() -> None:
     }
 
     assert expected <= set(lv.__all__)
+
+
+def test_data_class_surface_has_no_pre_publish_compatibility_aliases() -> None:
+    """Data classes should expose locked seam names, not draft aliases."""
+
+    forbidden = {"ARTIFACT_OUTPUT", "TRACE_ONLY"}
+
+    assert forbidden.isdisjoint(lv.data_class.__all__)
+    assert lv.data_class.CANDIDATE_ARTIFACT == "candidate.artifact"
+    assert lv.data_class.TRANSCRIPT_RAW == "transcript.raw"

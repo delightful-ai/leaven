@@ -24,8 +24,6 @@ CASE_METADATA: Final = "case.metadata"
 # Candidate-derived classes
 CANDIDATE_OUTPUT: Final = "candidate.output"
 CANDIDATE_ARTIFACT: Final = "candidate.artifact"
-ARTIFACT_OUTPUT: Final = CANDIDATE_ARTIFACT
-"""Deprecated scaffold alias; use CANDIDATE_ARTIFACT."""
 
 # Workspace-derived classes
 WORKSPACE_FILE: Final = "workspace.file"
@@ -36,15 +34,13 @@ WORKSPACE_SECRET: Final = "workspace.secret"
 OPTIMIZER_VISIBLE: Final = "optimizer.visible"
 EVALUATOR_PRIVATE: Final = "evaluator.private"
 SCORER_PRIVATE: Final = "scorer.private"
-TRACE_ONLY: Final = "transcript.raw"
-"""Deprecated scaffold alias; use transcript/raw output visibility instead."""
+TRANSCRIPT_RAW: Final = "transcript.raw"
 
 # Extension namespace marker — `x.<adapter>.*` data classes follow the same
 # convention as the `x.*` schema namespace; e.g. `x.dspy.completion`.
 EXTENSION_PREFIX: Final = "x."
 
 __all__ = [
-    "ARTIFACT_OUTPUT",
     "CANDIDATE_ARTIFACT",
     "CANDIDATE_OUTPUT",
     "CASE_INPUT",
@@ -55,7 +51,7 @@ __all__ = [
     "OPTIMIZER_VISIBLE",
     "PUBLIC",
     "SCORER_PRIVATE",
-    "TRACE_ONLY",
+    "TRANSCRIPT_RAW",
     "WORKSPACE_DIFF",
     "WORKSPACE_FILE",
     "WORKSPACE_SECRET",
