@@ -36,8 +36,9 @@ provider protocols, or concrete host/container mechanics.
 ## Route Away
 - Concrete filesystem, Docker, E2B, Firecracker, git-worktree, Kubernetes, and
   local process behavior belongs in `leaven-workspace-*` backend crates.
-- Materializers, renderers, workspace proposal parsers, and agentic stage policy
-  belong in `leaven-render`, `leaven-agentic`, or shape-specific adapter crates.
+- Materializers, workspace proposal parsers, and agentic stage policy belong in
+  `leaven-engine`, `leaven-agentic`, or shape-specific adapter crates. A shared
+  render crate should return only with behavior-bearing renderer tests.
 - Agent sessions belong in `leaven-agent*`; they receive an already-materialized
   `WorkspaceView` and must not make this crate understand proposals or
   assessments.

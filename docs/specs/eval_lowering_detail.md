@@ -81,17 +81,14 @@ leaven-core
 leaven-engine
 leaven-run
 leaven-gepa
-leaven-mipro
-leaven-textgrad
-leaven-trace
+future optimizer crates
 leaven-agent
 leaven-agentic
 leaven-workspace
 leaven-workspace-*
 leaven-lm-*
 leaven-dsrs
-leaven-cuda
-leaven-python
+future domain adapter crates
 concrete provider/runtime crates
 ```
 

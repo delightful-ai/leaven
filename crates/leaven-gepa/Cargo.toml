@@ -18,7 +18,6 @@ leaven-engine = { workspace = true }
 leaven-evidence = { workspace = true }
 leaven-preference = { workspace = true }
 leaven-population = { workspace = true }
-leaven-render = { workspace = true }
 leaven-lm = { workspace = true }
 leaven-stage = { workspace = true }
 leaven-workspace = { workspace = true }

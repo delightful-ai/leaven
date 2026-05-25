@@ -18,8 +18,6 @@ members = [
     "crates/leaven-artifact-git",
     "crates/leaven-artifact-jj",
     "crates/leaven-artifact-skill",
-    "crates/leaven-artifacts",
-    "crates/leaven-cuda",
     "crates/leaven-core",
     "crates/leaven-engine",
     "crates/leaven-evidence",
@@ -33,12 +31,9 @@ members = [
     "crates/leaven-lm-cache",
     "crates/leaven-lm-mock",
     "crates/leaven-lm-openai",
-    "crates/leaven-mipro",
     "crates/leaven-population",
     "crates/leaven-preference",
     "crates/leaven-public-seam",
-    "crates/leaven-python",
-    "crates/leaven-render",
     "crates/leaven-run",
     "crates/leaven-stage",
     "crates/leaven-std",
@@ -46,8 +41,6 @@ members = [
     "crates/leaven-store-file",
     "crates/leaven-store-inline",
     "crates/leaven-surface",
-    "crates/leaven-textgrad",
-    "crates/leaven-trace",
     "crates/leaven-workspace",
     "crates/leaven-workspace-firkin",
     "crates/leaven-workspace-git",
@@ -150,8 +143,6 @@ leaven-agentic-skill = { path = "crates/leaven-agentic-skill", version = "0.0.0"
 leaven-artifact-git = { path = "crates/leaven-artifact-git", version = "0.0.0" }
 leaven-artifact-jj = { path = "crates/leaven-artifact-jj", version = "0.0.0" }
 leaven-artifact-skill = { path = "crates/leaven-artifact-skill", version = "0.0.0" }
-leaven-artifacts = { path = "crates/leaven-artifacts", version = "0.0.0" }
-leaven-cuda = { path = "crates/leaven-cuda", version = "0.0.0" }
 leaven-evidence = { path = "crates/leaven-evidence", version = "0.0.0" }
 leaven-eval = { path = "crates/leaven-eval", version = "0.0.0" }
 leaven-eval-parquet = { path = "crates/leaven-eval-parquet", version = "0.0.0" }
@@ -163,20 +154,15 @@ leaven-lm = { path = "crates/leaven-lm", version = "0.0.0" }
 leaven-lm-cache = { path = "crates/leaven-lm-cache", version = "0.0.0" }
 leaven-lm-mock = { path = "crates/leaven-lm-mock", version = "0.0.0" }
 leaven-lm-openai = { path = "crates/leaven-lm-openai", version = "0.0.0" }
-leaven-mipro = { path = "crates/leaven-mipro", version = "0.0.0" }
 leaven-population = { path = "crates/leaven-population", version = "0.0.0" }
 leaven-preference = { path = "crates/leaven-preference", version = "0.0.0" }
 leaven-public-seam = { path = "crates/leaven-public-seam", version = "0.0.0" }
-leaven-python = { path = "crates/leaven-python", version = "0.0.0" }
-leaven-render = { path = "crates/leaven-render", version = "0.0.0" }
 leaven-run = { path = "crates/leaven-run", version = "0.0.0" }
 leaven-stage = { path = "crates/leaven-stage", version = "0.0.0" }
 leaven-store = { path = "crates/leaven-store", version = "0.0.0" }
 leaven-store-file = { path = "crates/leaven-store-file", version = "0.0.0" }
 leaven-store-inline = { path = "crates/leaven-store-inline", version = "0.0.0" }
 leaven-surface = { path = "crates/leaven-surface", version = "0.0.0" }
-leaven-textgrad = { path = "crates/leaven-textgrad", version = "0.0.0" }
-leaven-trace = { path = "crates/leaven-trace", version = "0.0.0" }
 leaven-workspace-firkin = { path = "crates/leaven-workspace-firkin", version = "0.0.0" }
 leaven-workspace-git = { path = "crates/leaven-workspace-git", version = "0.0.0" }
 leaven-workspace-local = { path = "crates/leaven-workspace-local", version = "0.0.0" }

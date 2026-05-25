@@ -3277,7 +3277,6 @@ dependencies = [
  "leaven-engine",
  "leaven-kernel",
  "leaven-public-seam",
- "leaven-render",
  "leaven-store",
  "leaven-store-inline",
  "leaven-surface",
@@ -3324,7 +3323,6 @@ dependencies = [
 name = "leaven-artifact-git"
 version = "0.0.0"
 dependencies = [
- "leaven-artifacts",
  "leaven-core",
  "leaven-kernel",
  "leaven-surface",
@@ -3357,15 +3355,6 @@ dependencies = [
  "serde",
  "serde_yml",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "leaven-artifacts"
-version = "0.0.0"
-dependencies = [
- "leaven-core",
- "leaven-kernel",
- "leaven-surface",
 ]
 
 [[package]]
@@ -3402,17 +3391,6 @@ dependencies = [
  "proptest",
  "serde",
  "smol_str",
-]
-
-[[package]]
-name = "leaven-cuda"
-version = "0.0.0"
-dependencies = [
- "leaven-core",
- "leaven-engine",
- "leaven-kernel",
- "leaven-store",
- "leaven-workspace",
 ]
 
 [[package]]
@@ -3498,7 +3476,6 @@ dependencies = [
  "leaven-lm",
  "leaven-population",
  "leaven-preference",
- "leaven-render",
  "leaven-stage",
  "leaven-store-inline",
  "leaven-surface",
@@ -3618,17 +3595,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "leaven-mipro"
-version = "0.0.0"
-dependencies = [
- "leaven-core",
- "leaven-engine",
- "leaven-evidence",
- "leaven-kernel",
- "leaven-population",
-]
-
-[[package]]
 name = "leaven-population"
 version = "0.0.0"
 dependencies = [
@@ -3671,29 +3637,6 @@ dependencies = [
  "sha2",
  "tempfile",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "leaven-python"
-version = "0.0.0"
-dependencies = [
- "leaven-core",
- "leaven-engine",
- "leaven-kernel",
-]
-
-[[package]]
-name = "leaven-render"
-version = "0.0.0"
-dependencies = [
- "leaven-artifacts",
- "leaven-core",
- "leaven-engine",
- "leaven-evidence",
- "leaven-kernel",
- "leaven-store",
- "leaven-surface",
- "leaven-workspace",
 ]
 
 [[package]]
@@ -3744,11 +3687,9 @@ dependencies = [
  "leaven-artifact-git",
  "leaven-artifact-jj",
  "leaven-artifact-skill",
- "leaven-artifacts",
  "leaven-evidence",
  "leaven-population",
  "leaven-preference",
- "leaven-render",
  "leaven-surface",
 ]
 
@@ -3792,31 +3733,6 @@ dependencies = [
  "leaven-core",
  "leaven-kernel",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "leaven-textgrad"
-version = "0.0.0"
-dependencies = [
- "leaven-core",
- "leaven-engine",
- "leaven-evidence",
- "leaven-kernel",
- "leaven-lm",
- "leaven-population",
- "leaven-surface",
-]
-
-[[package]]
-name = "leaven-trace"
-version = "0.0.0"
-dependencies = [
- "leaven-core",
- "leaven-engine",
- "leaven-evidence",
- "leaven-kernel",
- "leaven-lm",
- "leaven-render",
 ]
 
 [[package]]

@@ -2,7 +2,7 @@
 
 *Topology/interface spec after fixing cold-core projection leaks, surface ownership, workspace materialization, and GEPA selector seams.*
 
-> Status: topology correction pass, pre-implementation.  
+> Status: historical topology correction pass, pre-implementation; current workspace truth lives in root `Cargo.toml` and `crates/leaven/tests/topology_contract.rs`. Several placeholder crates listed here were later removed instead of carried as reserved public names.  
 > Target spec: Leaven v0.2.3.  
 > This supersedes the v0.2.1b crate-topology draft.  
 > Purpose: make crate boundaries enforce the real knowledge graph before P0/P1 implementation.

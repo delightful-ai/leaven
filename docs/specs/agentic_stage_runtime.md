@@ -590,8 +590,9 @@ declares a stronger cache policy.
 ## 5. Agentic Stage Adapters
 
 `leaven-agentic` provides reusable glue. It may depend on `leaven-engine`,
-`leaven-agent`, `leaven-workspace`, and `leaven-render` because its job is to
-adapt agent sessions into stage outputs.
+`leaven-agent`, and `leaven-workspace` because its job is to adapt agent
+sessions into stage outputs. Shared render/materializer code should return only
+as a behavior-bearing crate with tests and topology rows.
 
 ### 5.1 Agentic proposer
 
@@ -899,8 +900,8 @@ leaven-workspace
   WorkspacePath
   Command / CommandOutput
 
-leaven-render
-  reusable Renderer and Materializer impls
+future render/materializer crate
+  reusable Renderer and Materializer impls, if behavior-bearing
   no provider runtime logic
 ```
 

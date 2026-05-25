@@ -180,7 +180,7 @@ The GEPA-facing API name is `candidate_selector`.
 | `leaven-eval` | lowered dataset/split/plan/report data and fingerprints | graph mutation, evaluator execution, GEPA rhythm, environments |
 | `leaven-evidence` | scalar/casewise/attribution/pairwise evidence shapes | graph mutation, GEPA rhythm |
 | `leaven-population` | `KeepBest`, `ParetoFrontier`, `TournamentPopulation`, population events | GEPA selectors, graph mutation internals |
-| `leaven-render` | renderers/materializers over typed values | optimizer rhythm, GEPA policy |
+| `leaven-engine`/optimizer-owned helpers | renderers/materializers over typed values until a behavior-bearing render crate exists | optimizer rhythm, GEPA policy |
 | `leaven-lm` | provider-neutral LM request/response vocabulary | GEPA, engine graph, response-cache stores |
 | `leaven-lm-cache` | reusable Leaven response-cache policy, keys, stores, and `CachedLm` wrapper | GEPA rhythm, engine evaluation cache, concrete providers |
 | `leaven-gepa` | GEPA optimizer, strategy slots, GEPA request/result types, LM-backed and agent-backed reflection adapters | concrete providers, concrete workspace backends, response-cache stores, domain internals |
@@ -199,7 +199,6 @@ leaven-eval
 leaven-evidence
 leaven-preference
 leaven-population
-leaven-render
 leaven-lm
 ```
 
@@ -213,8 +212,7 @@ leaven-agentic
 leaven-workspace-*
 leaven-artifact-*
 leaven-dsrs
-leaven-cuda
-leaven-python
+future domain adapter crates
 ```
 
 `leaven-engine` must not depend on `leaven-gepa`, `leaven-eval`, or

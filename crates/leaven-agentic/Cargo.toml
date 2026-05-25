@@ -19,7 +19,6 @@ leaven-store = { workspace = true }
 leaven-workspace = { workspace = true }
 leaven-engine = { workspace = true }
 leaven-agent = { workspace = true }
-leaven-render = { workspace = true }
 futures = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }

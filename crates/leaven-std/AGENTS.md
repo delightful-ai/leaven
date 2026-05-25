@@ -1,11 +1,16 @@
 ## Boundary
-This crate is a curated standard-library facade over reusable implementations. It re-exports artifacts, surfaces, evidence, preferences, populations, and render helpers under stable modules and optional feature gates.
+This crate is a curated standard-library facade over reusable implementations.
+It re-exports surfaces, evidence, preferences, populations, and optional
+behavior-bearing artifact crates under stable modules and feature gates.
 
 It is not an implementation bucket. New behavior belongs in the owning crate first, then may be re-exported here when it is a standard piece.
 
 ## Routing
-- `artifacts` re-exports `leaven-artifacts` plus optional `git`, `jj`, and `skill` artifact crates behind matching features.
-- `evidence`, `preferences`, `populations`, `render`, and `surfaces` re-export their owning crates.
+- Optional `git`, `jj`, and `skill` artifact crates are exposed through the
+  prelude behind matching features; the placeholder `leaven-artifacts` crate was
+  removed instead of kept as a standard facade.
+- `evidence`, `preferences`, `populations`, and `surfaces` re-export their
+  owning crates.
 - `prelude` should stay a practical import set, not a dumping ground for every public item.
 - Product-builder defaults belong in `leaven-run`; umbrella feature composition belongs in `leaven`.
 
@@ -19,7 +24,7 @@ It is not an implementation bucket. New behavior belongs in the owning crate fir
   the curated facade.
 - Optional artifact features are import promises. A feature named `skill`, `git`,
   or `jj` must expose a usable artifact crate before it is presented as
-  standard behavior; current placeholder artifact crates remain audit pressure.
+  standard behavior; do not add catch-all placeholder artifact features.
 
 ## Local Helper Stack
 - Prefer narrow `pub use` lists once a module mixes mature and scaffold names.

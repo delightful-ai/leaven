@@ -307,8 +307,8 @@ proposal.
 | Test work | `.test(cases)` | final-test policy | final-report-only partition by default | `leaven-run`, `leaven-eval` |
 | Candidate execution | `.runner(r)` / domain default | runner policy | evaluator adapter creates output/trace before score | `leaven-run`, domain crates |
 | Scoring | `.score(fn)` / `.evaluator(e)` | evaluator id/registry | `Evaluator<P>`, assessments, evidence store | `leaven-run`, `leaven-engine` |
-| Feedback/traces | `Score` feedback/attachments | reflector renderer | `Evidence`, `AttributableEvidence`, renderers | `leaven-evidence`, `leaven-render`, `leaven-gepa` |
-| Reflection | `.with_reflection_lm(lm)` | `.reflector(...)` / `.proposer(...)` | proposer stage, LM request/response, rendered feedback | `leaven-gepa`, `leaven-lm`, `leaven-render` |
+| Feedback/traces | `Score` feedback/attachments | reflector renderer | `Evidence`, `AttributableEvidence`, renderers | `leaven-evidence`, `leaven-gepa` |
+| Reflection | `.with_reflection_lm(lm)` | `.reflector(...)` / `.proposer(...)` | proposer stage, LM request/response, rendered feedback | `leaven-gepa`, `leaven-lm` |
 | Batch/minibatch | default by mode | `.batch_sampler(...)` | sampled evaluation requests | `leaven-gepa`, `leaven-eval` |
 | Acceptance | hidden default | `.acceptance(...)` | acceptance/preference relation over evidence | `leaven-gepa`, `leaven-preference` |
 | Population/frontier | default by mode | `.population(...)` | optimizer-owned archive/frontier state | `leaven-gepa`, `leaven-population` |

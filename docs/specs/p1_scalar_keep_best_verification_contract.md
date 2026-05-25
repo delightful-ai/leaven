@@ -275,16 +275,13 @@ Crates that should not be touched for this milestone unless a compile boundary
 forces it:
 
 - `leaven-gepa`
-- `leaven-mipro`
-- `leaven-textgrad`
-- `leaven-trace`
+- future MIPRO/TextGrad/trace optimizer crates
 - `leaven-lm-*`
 - `leaven-agent-*`
 - `leaven-agentic`
 - workspace backend crates
 - artifact backend crates
-- `leaven-cuda`
-- `leaven-python`
+- future CUDA/Python domain adapter crates
 - `leaven-dsrs`
 
 ## Follow-Up TODOs

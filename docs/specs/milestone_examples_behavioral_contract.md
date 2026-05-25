@@ -75,7 +75,7 @@ knowledge boundary.
 | Keep-best, tournament, Pareto population/frontier state | `leaven-population` | Engine mutation internals, evidence stores |
 | Edit surfaces and part/address vocabulary | `leaven-surface` | GEPA, graph, stores, workspace backends |
 | GEPA optimizer and GEPA policy values | `leaven-gepa` | Concrete LLM providers, concrete workspace backends |
-| Value renderers and workspace materializers | `leaven-render` | Engine graph mutation |
+| Value renderers and workspace materializers | `leaven-engine` today; future behavior-bearing render crate if introduced | Engine graph mutation |
 | Workspace substrate, `WorkspacePath`, cleanup contract | `leaven-workspace` | Artifacts, graph, stores, optimizers |
 | Example-only tiny artifacts/proposers/evaluators | `examples/p*/src/main.rs` | Reusable library behavior |
 
@@ -960,7 +960,7 @@ pub trait WorkspaceBackend;
 
 ### Required Materializer Trait
 
-`leaven-engine` or `leaven-render`, depending on final crate placement, owns:
+`leaven-engine`, or a future behavior-bearing render crate if introduced, owns:
 
 ```rust
 pub trait Materializer<P: OptimizationProblem, T>: Send + Sync {

@@ -1,6 +1,6 @@
 [package]
 name = "leaven-std"
-description = "Standard artifact, evidence, preference, and population implementations for leaven."
+description = "Standard evidence, preference, population, and surface imports for leaven."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,11 +14,9 @@ workspace = true
 leaven-artifact-git = { workspace = true, optional = true }
 leaven-artifact-jj = { workspace = true, optional = true }
 leaven-artifact-skill = { workspace = true, optional = true }
-leaven-artifacts = { workspace = true }
 leaven-evidence = { workspace = true }
 leaven-population = { workspace = true }
 leaven-preference = { workspace = true }
-leaven-render = { workspace = true }
 leaven-surface = { workspace = true }
 
 [features]
