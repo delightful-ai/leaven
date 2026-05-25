@@ -1,5 +1,3 @@
-mod support;
-
 use std::path::{Path, PathBuf};
 use std::sync::{
     Arc,
@@ -20,7 +18,7 @@ use leaven_kernel::{Cost, EvaluatorId, Fingerprint, MetadataBag, Metered, RunId,
 use leaven_store_inline::InlineEvidenceStore;
 use leaven_workspace::{Workspace, WorkspaceBackend, WorkspaceError, WorkspacePath, WorkspaceView};
 
-use support::{TestEvidence, TestProblem, TextArtifact, graph_and_budget, record_one};
+use super::support::{TestEvidence, TestProblem, TextArtifact, graph_and_budget, record_one};
 
 #[test]
 fn materializer_writes_are_deterministic_for_same_graph_view_and_input() {

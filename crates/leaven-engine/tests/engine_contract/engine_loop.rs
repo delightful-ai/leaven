@@ -1,5 +1,3 @@
-mod support;
-
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{
@@ -27,7 +25,7 @@ use leaven_kernel::{
 use leaven_store::{BlobStore, BlobWrite, CheckpointBytes, CheckpointStore, StoreError};
 use leaven_store_inline::InlineEvidenceStore;
 
-use support::{TestEvidence, TestProblem, TextArtifact, graph_and_budget, record_one};
+use super::support::{TestEvidence, TestProblem, TextArtifact, graph_and_budget, record_one};
 
 #[test]
 fn engine_getters_expose_read_only_state() {

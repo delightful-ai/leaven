@@ -1,5 +1,3 @@
-mod support;
-
 use leaven_core::{
     Assessment, AssessmentGranularity, AssessmentTarget, CausalInputs, EvaluationPurpose,
     EvaluationRequest, EvaluationSet, InfoRef, Proposal, ProposalEffect, ProposalProvenance,
@@ -16,7 +14,9 @@ use leaven_kernel::{
 use leaven_store_inline::InlineEvidenceStore;
 use proptest::prelude::*;
 
-use support::{TestEvidence, TestProblem, TextArtifact, TextChange, graph_and_budget, record_one};
+use super::support::{
+    TestEvidence, TestProblem, TextArtifact, TextChange, graph_and_budget, record_one,
+};
 
 #[test]
 fn create_proposal_creates_candidate_without_causal_parent() {

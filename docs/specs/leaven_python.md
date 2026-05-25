@@ -526,6 +526,44 @@ The implementation must honor:
   (snake_case, no `null` literals, JS-safe integers, opaque cursors,
   kind-discriminated unions) are tested by the multi-language audit
   at `docs/working-memory/leaven-py-research/2026-05-24-multi-language-future-proofing.md`.
+- **Don't add a ContextVar-based implicit current-context lookup.**
+  Pydantic-ai and BAML both expose `get_current_run_context()` via
+  `contextvars.ContextVar` so library code can reach the context without
+  explicit threading. We pass `cx` as an explicit parameter to every
+  stage function and library helper. The cost of implicit context isn't
+  worth it for an audit-first system: explicit `cx` makes capability
+  authorization, receipt threading, and replay determinism traceable
+  by reading the call site. Per the synthesis of vendored references
+  (`docs/specs/leaven_py/docs/agent-context/patterns/SYNTHESIS-2026-05-24.md`),
+  marvin's pattern agent surfaced this directly: *"implicit ContextVar
+  thread binding conflicts with Leaven's RunContext capability-token
+  model."*
+- **Don't add a Python sandbox at the stage level.** Temporal's sandbox
+  (RestrictedPython + builtins patching) has a large attack surface
+  with limited security benefit; per the vendored-references synthesis,
+  temporal's pattern agent recommended *"Current Leaven design (trusted
+  Python, no sandbox) avoids the risk entirely — keep it."* Trust
+  profiles are policy declarations the engine enforces at capability
+  boundaries (LM, agent, sandbox, workspace); the engine sandboxes
+  effects, not arbitrary Python code at the stage body.
+- **Don't put RunContext fields that are optional across execution
+  boundaries.** If `RunContext` carries a field that's present in some
+  context types and absent in others (e.g. pydantic-ai's `tool_manager`
+  which is present in `RunContext` but absent in `TemporalRunContext`),
+  user code that reads the field silently fails on the execution path
+  that omits it. Either every context type (`RunContext`, `StageContext`,
+  `EvalContext`) has the field, or it is not a context field — surface
+  it through a builder method that raises explicitly when unavailable
+  in the current execution mode.
+
+The opaque-Rust-refs-with-typed-payloads design of our receipts
+(`CallReceipt`, `QueryReceipt`, `WriteReceipt`) was independently
+validated as the right shape by parallax across BAML, temporal, and
+jupyter-client pattern observations. Temporal's pattern agent
+characterized it: *"PyO3 module boundary is request/reply, not shared
+state."* Python never holds Rust internals — only opaque handles plus
+serialized payloads. Forging a receipt is not possible; threading one
+through evidence and assessments is the only path.
 
 ## What governs disagreement
 

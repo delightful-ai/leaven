@@ -1,5 +1,3 @@
-mod support;
-
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -20,7 +18,8 @@ use leaven_kernel::{
 };
 use leaven_store::EvidenceStore;
 use leaven_store_inline::InlineEvidenceStore;
-use support::{TestEvidence, TestProblem, TextArtifact};
+
+use super::support::{TestEvidence, TestProblem, TextArtifact};
 
 #[test]
 fn engine_dispatches_registered_evaluator_through_run_context() {
