@@ -2,7 +2,7 @@
 
 use std::{future::Future, num::NonZeroUsize, sync::Arc};
 
-use futures::{FutureExt, future::BoxFuture, stream, stream::StreamExt, stream::TryStreamExt};
+use futures::future::BoxFuture;
 use leaven_core::{
     Assessment, AssessmentGranularity, AssessmentTarget, ResolvedEvaluationRequest,
     ResolvedRequestKind,
@@ -15,7 +15,7 @@ use leaven_evidence::{
 };
 use leaven_kernel::{BudgetSnapshot, Cost, EvaluationSetId, EvaluatorId, Fingerprint, Metered};
 
-use super::{MissingReportableOutput, Runner, default_parallelism};
+use super::{MissingReportableOutput, Runner, default_parallelism, evaluate_unordered_jobs};
 use crate::compatibility::ScoringEvaluatorIdentity;
 use crate::evidence::artifact_identity_output;
 use crate::evidence::{CaseDataReadLog, ReportableOutputDeclaration, ReportableOutputScope};
@@ -336,21 +336,13 @@ where
     T: Clone + Send + Sync + 'static,
     Out: Clone + Send + Sync + 'static,
 {
-    let parallelism = parallelism.get().min(jobs.len().max(1));
     let runner = Arc::clone(runner);
     let scorer = Arc::clone(scorer);
-    async move {
-        stream::iter(jobs)
-            .map(move |job| {
-                let runner = Arc::clone(&runner);
-                let scorer = Arc::clone(&scorer);
-                async move { evaluate_judge_job(job, &runner, &scorer).await }
-            })
-            .buffer_unordered(parallelism)
-            .try_collect::<Vec<_>>()
-            .await
-    }
-    .boxed()
+    evaluate_unordered_jobs(jobs, parallelism, move |job| {
+        let runner = Arc::clone(&runner);
+        let scorer = Arc::clone(&scorer);
+        async move { evaluate_judge_job(job, &runner, &scorer).await }
+    })
 }
 
 async fn evaluate_judge_job<A, I, T, Out>(
