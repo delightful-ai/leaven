@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use leaven_workspace::WorkspacePath;
 use serde_json::{Value, json};
@@ -8,10 +8,15 @@ use crate::PublicSeamError;
 mod agent;
 mod blob_ref;
 mod lm;
+mod outcomes;
 mod sandbox;
 
 pub use agent::{AgentCommandOutputRefs, PlanAgentRunOutcome, PlanAgentRunRequest};
 pub use lm::{PlanLmCompleteOutcome, PlanLmCompleteRequest};
+pub use outcomes::{
+    PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanWorkspaceMaterializeOutcome,
+    PlanWorkspaceReleaseOutcome,
+};
 pub use sandbox::{PlanSandboxExecOutcome, PlanSandboxExecRequest};
 
 /// Lowered `workspace_materialize` request passed to a plan execution host.
@@ -445,5 +450,3 @@ fn extend_data_classes_from_blob_ref(data_classes: &mut Vec<String>, blob_ref: &
         blob_ref::push_unique_data_class(data_classes, data_class);
     }
 }
-
-include!("effects/outcomes.rs");

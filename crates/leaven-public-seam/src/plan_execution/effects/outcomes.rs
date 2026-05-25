@@ -1,12 +1,18 @@
+use std::collections::{BTreeMap, BTreeSet};
+
+use serde_json::Value;
+
+use super::workspace_ref_object;
+
 /// Host outcome for a typed `workspace_materialize` call.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanWorkspaceMaterializeOutcome {
-    pub(super) workspace: String,
-    pub(super) workspace_ref: Value,
-    pub(super) lifetime: String,
-    pub(super) data_classes: Vec<String>,
-    pub(super) replayability: String,
-    pub(super) runtime_fingerprint: String,
+    pub(in crate::plan_execution) workspace: String,
+    pub(in crate::plan_execution) workspace_ref: Value,
+    pub(in crate::plan_execution) lifetime: String,
+    pub(in crate::plan_execution) data_classes: Vec<String>,
+    pub(in crate::plan_execution) replayability: String,
+    pub(in crate::plan_execution) runtime_fingerprint: String,
 }
 
 impl PlanWorkspaceMaterializeOutcome {
@@ -46,10 +52,10 @@ impl PlanWorkspaceMaterializeOutcome {
 /// Host outcome for a typed `workspace_release` call.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanWorkspaceReleaseOutcome {
-    pub(super) workspace: String,
-    pub(super) workspace_ref: Value,
-    pub(super) lifetime: String,
-    pub(super) runtime_fingerprint: String,
+    pub(in crate::plan_execution) workspace: String,
+    pub(in crate::plan_execution) workspace_ref: Value,
+    pub(in crate::plan_execution) lifetime: String,
+    pub(in crate::plan_execution) runtime_fingerprint: String,
 }
 
 impl PlanWorkspaceReleaseOutcome {
@@ -87,11 +93,11 @@ impl PlanWorkspaceReleaseOutcome {
 /// Lowered `emit_run_event` request passed to a plan execution host.
 #[derive(Clone, Copy, Debug)]
 pub struct PlanEmitRunEventRequest<'a> {
-    pub(super) name: &'a str,
-    pub(super) write: &'a Value,
-    pub(super) deps: &'a BTreeMap<String, Value>,
-    pub(super) dependency_data_classes: &'a BTreeSet<String>,
-    pub(super) base_revision: &'a str,
+    pub(in crate::plan_execution) name: &'a str,
+    pub(in crate::plan_execution) write: &'a Value,
+    pub(in crate::plan_execution) deps: &'a BTreeMap<String, Value>,
+    pub(in crate::plan_execution) dependency_data_classes: &'a BTreeSet<String>,
+    pub(in crate::plan_execution) base_revision: &'a str,
 }
 
 impl<'a> PlanEmitRunEventRequest<'a> {
@@ -125,8 +131,8 @@ impl<'a> PlanEmitRunEventRequest<'a> {
 /// Host outcome for a typed `emit_run_event` write.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanEmitRunEventOutcome {
-    pub(super) event_id: String,
-    pub(super) committed_revision: String,
+    pub(in crate::plan_execution) event_id: String,
+    pub(in crate::plan_execution) committed_revision: String,
 }
 
 impl PlanEmitRunEventOutcome {
