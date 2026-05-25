@@ -10,7 +10,7 @@ pub use leaven_gepa::*;
 /// Import this trait when a run was executed with [`Gepa`] and you want the
 /// typed GEPA detail report:
 ///
-/// ```ignore
+/// ```text
 /// use leaven::gepa::GepaOptimizedExt as _;
 ///
 /// let report = optimized.gepa_report();

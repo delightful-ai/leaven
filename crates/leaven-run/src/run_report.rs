@@ -235,88 +235,6 @@ where
     ))
 }
 
-#[cfg(test)]
-fn split_reports_for<A, I, T>(
-    view: &leaven_engine::RunGraphView<'_, RunProblem<A, I, T>>,
-    store: &dyn EvidenceStore<CaseAssessmentEvidence>,
-    splits: &DatasetSplits,
-) -> Result<Vec<SplitReport>, leaven_engine::OptimizerError>
-where
-    A: Artifact,
-    I: Clone + Send + Sync + 'static,
-    T: Clone + Send + Sync + 'static,
-{
-    use std::collections::BTreeMap;
-
-    use leaven_kernel::EvaluationRequestId;
-
-    let mut groups = BTreeMap::<
-        (PartitionId, SplitRole, EvaluationRequestId, CandidateId),
-        Vec<AssessmentId>,
-    >::new();
-    for assessment in view.all_assessments() {
-        let Some((partition, role)) = assessment_split(view, assessment.id()) else {
-            continue;
-        };
-        if splits.role(&partition).is_none() {
-            continue;
-        }
-        let candidate = assessment.independent_candidate().ok_or_else(|| {
-            leaven_engine::OptimizerError::Message(
-                "report expected independent assessment".to_owned(),
-            )
-        })?;
-        groups
-            .entry((partition, role, assessment.request_id(), candidate))
-            .or_default()
-            .push(assessment.id());
-    }
-
-    let mut reports = BTreeMap::<PartitionId, SplitReport>::new();
-    for ((partition, role, _, _), assessments) in groups {
-        let summary = assessment_summary(view, store, &assessments)?;
-        reports
-            .entry(partition.clone())
-            .or_insert_with(|| SplitReport {
-                role,
-                partition,
-                candidates: Vec::new(),
-            })
-            .candidates
-            .push(summary);
-    }
-    Ok(reports.into_values().collect())
-}
-
-#[cfg(test)]
-fn assessment_split<A, I, T>(
-    view: &leaven_engine::RunGraphView<'_, RunProblem<A, I, T>>,
-    assessment: AssessmentId,
-) -> Option<(PartitionId, SplitRole)>
-where
-    A: Artifact,
-    I: Clone + Send + Sync + 'static,
-    T: Clone + Send + Sync + 'static,
-{
-    let request_id = view.assessment(assessment)?.request_id();
-    let evaluation_request = view.evaluation_request(request_id)?;
-    let request = evaluation_request.request();
-    let partition = match request {
-        EvaluationRequest::Independent {
-            set: EvaluationSet::Partition(partition),
-            ..
-        } => partition.clone(),
-        _ => return None,
-    };
-    let role = match partition.0.as_str() {
-        "TRAIN" => SplitRole::Train,
-        "VALIDATION" => SplitRole::Validation,
-        "TEST" => SplitRole::Test,
-        other => SplitRole::Custom(other.to_owned().into()),
-    };
-    Some((partition, role))
-}
-
 fn assessment_summary<A, I, T>(
     view: &leaven_engine::RunGraphView<'_, RunProblem<A, I, T>>,
     store: &dyn EvidenceStore<CaseAssessmentEvidence>,
@@ -691,6 +609,43 @@ mod tests {
     }
 
     #[test]
+    fn budget_stop_summary_suppresses_only_the_synthetic_budget_error() {
+        let budget_error = leaven_engine::RunEvent::Error {
+            stage: None,
+            error: ErrorRecord::new(ErrorKind::Budget, "budget exhausted"),
+            policy: leaven_engine::ErrorPolicy::StoppedRun,
+        };
+        assert!(!should_include_event_summary(
+            &budget_error,
+            leaven_engine::StopReason::BudgetReached
+        ));
+        assert!(should_include_event_summary(
+            &budget_error,
+            leaven_engine::StopReason::BudgetExceeded
+        ));
+
+        let continued_budget_error = leaven_engine::RunEvent::Error {
+            stage: None,
+            error: ErrorRecord::new(ErrorKind::Budget, "budget warning"),
+            policy: leaven_engine::ErrorPolicy::Continued,
+        };
+        assert!(should_include_event_summary(
+            &continued_budget_error,
+            leaven_engine::StopReason::BudgetReached
+        ));
+
+        let internal_error = leaven_engine::RunEvent::Error {
+            stage: None,
+            error: ErrorRecord::new(ErrorKind::Internal, "runner failed"),
+            policy: leaven_engine::ErrorPolicy::StoppedRun,
+        };
+        assert!(should_include_event_summary(
+            &internal_error,
+            leaven_engine::StopReason::BudgetReached
+        ));
+    }
+
+    #[test]
     fn report_scores_preserve_inline_and_blob_outputs() {
         let inline = report_score(
             leaven_kernel::CaseId::new(1),
@@ -877,6 +832,67 @@ mod tests {
     }
 
     #[test]
+    fn build_summary_projects_final_scores_storage_cache_and_events() {
+        let harness = report_harness();
+        let train = report_summary(harness.first, 1.0);
+        let validation = report_summary(harness.first, 0.5);
+        let test = report_summary(harness.first, 0.25);
+        let final_evaluations = FinalEvaluations {
+            baseline_train: Some(train.clone()),
+            train: Some(train),
+            baseline_validation: Some(validation.clone()),
+            validation: Some(validation),
+            baseline_test: Some(test.clone()),
+            test: Some(test),
+            cost: Cost::metric_calls(3),
+        };
+        let dataset = Dataset::from_cases(vec![
+            Case::input(CaseId::from_index(0), "train"),
+            Case::input(CaseId::from_index(1), "audit"),
+        ])
+        .unwrap();
+        let storage = RunStorage::Stored {
+            run_id: RunId::new(),
+            run_dir: Some(".leaven/runs/report-test".into()),
+            latest_checkpoint: Some(leaven_kernel::CheckpointId::new()),
+            resumability: RunResumability::Resumable,
+        };
+
+        let (best, summary, events) = build_summary(
+            &harness.engine,
+            ReportInputs {
+                dataset: &dataset,
+                splits: &harness.splits,
+                best: Some(harness.first),
+                final_evaluations: &final_evaluations,
+                optimization_budget: BudgetSnapshot {
+                    spent: Cost::metric_calls(2),
+                    ..BudgetSnapshot::default()
+                },
+                storage,
+                reports: RunReportPaths {
+                    summary_json: Some(".leaven/runs/report-test/reports/summary.json".into()),
+                },
+                compatibility: None,
+                stop_reason: leaven_engine::StopReason::OptimizerDone,
+            },
+        );
+
+        assert_eq!(best.unwrap().id, harness.first);
+        assert_eq!(summary.optimization_cost, Cost::metric_calls(2));
+        assert_eq!(summary.final_report_cost, Cost::metric_calls(3));
+        assert_eq!(summary.baseline_train_score, Some(1.0));
+        assert_eq!(summary.optimized_train_score, Some(1.0));
+        assert_eq!(summary.baseline_validation_score, Some(0.5));
+        assert_eq!(summary.validation_score, Some(0.5));
+        assert_eq!(summary.baseline_test_score, Some(0.25));
+        assert_eq!(summary.test_score, Some(0.25));
+        assert_eq!(summary.evaluation.splits_reported.len(), 3);
+        assert!(summary.cache.evaluation.durable);
+        assert!(events.is_empty());
+    }
+
+    #[test]
     fn assessment_summary_refuses_bad_assessment_groups() {
         futures::executor::block_on(async {
             let mut harness = report_harness();
@@ -1030,6 +1046,82 @@ mod tests {
             cost,
             cache,
         }
+    }
+
+    fn split_reports_for<A, I, T>(
+        view: &leaven_engine::RunGraphView<'_, RunProblem<A, I, T>>,
+        store: &dyn EvidenceStore<CaseAssessmentEvidence>,
+        splits: &DatasetSplits,
+    ) -> Result<Vec<SplitReport>, leaven_engine::OptimizerError>
+    where
+        A: Artifact,
+        I: Clone + Send + Sync + 'static,
+        T: Clone + Send + Sync + 'static,
+    {
+        let mut groups = BTreeMap::<
+            (PartitionId, SplitRole, EvaluationRequestId, CandidateId),
+            Vec<AssessmentId>,
+        >::new();
+        for assessment in view.all_assessments() {
+            let Some((partition, role)) = assessment_split(view, assessment.id()) else {
+                continue;
+            };
+            if splits.role(&partition).is_none() {
+                continue;
+            }
+            let candidate = assessment.independent_candidate().ok_or_else(|| {
+                leaven_engine::OptimizerError::Message(
+                    "report expected independent assessment".to_owned(),
+                )
+            })?;
+            groups
+                .entry((partition, role, assessment.request_id(), candidate))
+                .or_default()
+                .push(assessment.id());
+        }
+
+        let mut reports = BTreeMap::<PartitionId, SplitReport>::new();
+        for ((partition, role, _, _), assessments) in groups {
+            let summary = assessment_summary(view, store, &assessments)?;
+            reports
+                .entry(partition.clone())
+                .or_insert_with(|| SplitReport {
+                    role,
+                    partition,
+                    candidates: Vec::new(),
+                })
+                .candidates
+                .push(summary);
+        }
+        Ok(reports.into_values().collect())
+    }
+
+    fn assessment_split<A, I, T>(
+        view: &leaven_engine::RunGraphView<'_, RunProblem<A, I, T>>,
+        assessment: AssessmentId,
+    ) -> Option<(PartitionId, SplitRole)>
+    where
+        A: Artifact,
+        I: Clone + Send + Sync + 'static,
+        T: Clone + Send + Sync + 'static,
+    {
+        let request_id = view.assessment(assessment)?.request_id();
+        let evaluation_request = view.evaluation_request(request_id)?;
+        let request = evaluation_request.request();
+        let partition = match request {
+            EvaluationRequest::Independent {
+                set: EvaluationSet::Partition(partition),
+                ..
+            } => partition.clone(),
+            _ => return None,
+        };
+        let role = match partition.0.as_str() {
+            "TRAIN" => SplitRole::Train,
+            "VALIDATION" => SplitRole::Validation,
+            "TEST" => SplitRole::Test,
+            other => SplitRole::Custom(other.to_owned().into()),
+        };
+        Some((partition, role))
     }
 
     struct ReportHarness {
