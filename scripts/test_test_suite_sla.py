@@ -102,6 +102,26 @@ class SuiteDeadlineTests(unittest.TestCase):
         self.assertEqual(result, 1)
         self.assertLess(time.perf_counter() - started, 3.0)
 
+    def test_workspace_binaries_start_known_slow_targets_first(self) -> None:
+        root = pathlib.Path.cwd()
+        binaries = [
+            ("tiny_target", root, root),
+            ("optimize_builder", root, root),
+            ("public_seam_contract", root, root),
+            ("agentic_contract", root, root),
+        ]
+
+        ordered = sorted(
+            binaries,
+            key=lambda binary: MODULE.SLOW_TEST_BINARY_PRIORITY.get(binary[0], 0),
+            reverse=True,
+        )
+
+        self.assertEqual(
+            [name for name, _, _ in ordered],
+            ["public_seam_contract", "agentic_contract", "optimize_builder", "tiny_target"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

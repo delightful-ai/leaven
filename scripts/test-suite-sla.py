@@ -40,6 +40,22 @@ WORKSPACE_TEST_BUILD_COMMAND = [
     "--tests",
 ]
 
+SLOW_TEST_BINARY_PRIORITY = {
+    "public_seam_contract": 100,
+    "agentic_contract": 95,
+    "leaven_run": 90,
+    "scoring_evaluator": 85,
+    "optimize_builder": 80,
+    "leaven_gepa_agentic_skill": 75,
+    "public_seam": 70,
+    "workspace_path": 65,
+    "leaven_store_file": 60,
+    "leaven_artifact_skill": 55,
+    "git_program_materializer": 50,
+    "git_workspace": 45,
+    "git_projection": 40,
+}
+
 NON_RUST_FENCE_LANGUAGES = {
     "console",
     "json",
@@ -281,7 +297,11 @@ def run_workspace_test_binaries(
         f"running workspace libtest binaries: {len(binaries)} binaries, {jobs} jobs",
         flush=True,
     )
-    queued = list(binaries)
+    queued = sorted(
+        binaries,
+        key=lambda binary: SLOW_TEST_BINARY_PRIORITY.get(binary[0], 0),
+        reverse=True,
+    )
     running: list[tuple[subprocess.Popen[str], str, float, tempfile._TemporaryFileWrapper[bytes]]] = []
     durations: list[tuple[float, str]] = []
     completed = 0
