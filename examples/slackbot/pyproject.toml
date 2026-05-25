@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling", "uv-dynamic-versioning>=0.7.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.uv-dynamic-versioning]
+vcs = "git"
+style = "pep440"
+bump = true
+
+[project]
+name = "slackbot"
+dynamic = ["version", "dependencies"]
+description = "Slackbot for Prefect"
+authors = [{ name = "Nathan Nowack", email = "nate@prefect.io" }]
+license = "MIT"
+readme = "README.md"
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: Unix",
+  "Operating System :: POSIX :: Linux",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+requires-python = ">=3.10"
+
+[tool.hatch.metadata.hooks.uv-dynamic-versioning]
+dependencies = [
+  "marvin",
+  "prefect>=3.6.12",
+  "numpy",
+  "raggy[tpuf] @ git+https://github.com/zzstoatzz/raggy.git",
+  "pretty-mod",
+  "claude-agent-sdk",
+]
+
+
+[dependency-groups]
+dev = []
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/slackbot"]
+
+[tool.uv.sources]
+marvin = { workspace = true }
