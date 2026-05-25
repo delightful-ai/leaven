@@ -90,6 +90,8 @@ under the SLA.
 The SLA runner executes libtest binaries concurrently while preserving each
 binary's normal libtest thread pool. Known slow libtest binaries start first so
 their runtime overlaps the rest of the suite instead of becoming the tail. The
+runner also uses quiet libtest output and a small launch stagger so progress
+formatting and process-start contention do not become the measured work. The
 default outer fanout is 6 so large contract binaries can use their internal
 parallelism without serializing hundreds of independent assertions.
 

@@ -44,7 +44,11 @@ SLOW_TEST_BINARY_PRIORITY = {
     "public_seam_contract": 100,
     "agentic_contract": 95,
     "leaven_run": 90,
-    "scoring_evaluator": 85,
+    "part_contract": 88,
+    "category_sampler": 87,
+    "codex_cli_runtime": 86,
+    "lm_contract": 85,
+    "scoring_evaluator": 84,
     "optimize_builder": 80,
     "leaven_gepa_agentic_skill": 75,
     "public_seam": 70,
@@ -54,6 +58,14 @@ SLOW_TEST_BINARY_PRIORITY = {
     "git_program_materializer": 50,
     "git_workspace": 45,
     "git_projection": 40,
+    "local_workspace": 39,
+    "stage_contract": 38,
+    "evidence_contract": 37,
+    "skill_artifact": 36,
+    "skill_token_profile": 35,
+    "split_contract": 34,
+    "aggregate_store": 32,
+    "scalar": 31,
 }
 
 NON_RUST_FENCE_LANGUAGES = {
@@ -302,6 +314,7 @@ def run_workspace_test_binaries(
         key=lambda binary: SLOW_TEST_BINARY_PRIORITY.get(binary[0], 0),
         reverse=True,
     )
+    launch_delay = float(os.environ.get("LEAVEN_TEST_BINARY_LAUNCH_DELAY_SECONDS", "0.02"))
     running: list[tuple[subprocess.Popen[str], str, float, tempfile._TemporaryFileWrapper[bytes]]] = []
     durations: list[tuple[float, str]] = []
     completed = 0
@@ -310,7 +323,7 @@ def run_workspace_test_binaries(
             target_name, executable, package_root = queued.pop(0)
             stderr_file = tempfile.TemporaryFile()
             process = subprocess.Popen(
-                [str(executable)],
+                [str(executable), "--quiet"],
                 cwd=package_root,
                 stdout=subprocess.DEVNULL,
                 stderr=stderr_file,
@@ -319,6 +332,8 @@ def run_workspace_test_binaries(
                 env=env,
             )
             running.append((process, target_name, time.perf_counter(), stderr_file))
+            if launch_delay:
+                time.sleep(launch_delay)
 
         remaining = deadline - time.perf_counter()
         if remaining <= 0:

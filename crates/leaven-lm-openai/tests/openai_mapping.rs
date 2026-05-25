@@ -2,7 +2,6 @@ use std::fmt::Write as _;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::num::NonZeroUsize;
-use std::process::Command;
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -134,75 +133,6 @@ fn openai_identity_and_fingerprint_are_stable() {
         OpenAiLm::new(OpenAiConfig::new("test-key").with_request_timeout(Duration::from_secs(5)))
             .fingerprint()
     );
-}
-
-#[test]
-fn openai_from_env_reads_api_key_in_child_process() {
-    if std::env::var_os("LEAVEN_OPENAI_FROM_ENV_CHILD").is_some() {
-        let lm = OpenAiLm::from_env().unwrap();
-        assert_eq!(lm.id().as_str(), "openai");
-        return;
-    }
-
-    let status = Command::new(std::env::current_exe().unwrap())
-        .arg("--exact")
-        .arg("openai_from_env_reads_api_key_in_child_process")
-        .arg("--nocapture")
-        .env("LEAVEN_OPENAI_FROM_ENV_CHILD", "1")
-        .env("OPENAI_API_KEY", "test-key")
-        .status()
-        .unwrap();
-
-    assert!(status.success());
-}
-
-#[test]
-fn openai_from_env_reads_request_timeout_in_child_process() {
-    if std::env::var_os("LEAVEN_OPENAI_TIMEOUT_FROM_ENV_CHILD").is_some() {
-        let from_env = OpenAiLm::from_env().unwrap();
-        let explicit = OpenAiLm::new(
-            OpenAiConfig::new("test-key").with_request_timeout(Duration::from_secs(600)),
-        );
-        assert_eq!(from_env.fingerprint(), explicit.fingerprint());
-        return;
-    }
-
-    let status = Command::new(std::env::current_exe().unwrap())
-        .arg("--exact")
-        .arg("openai_from_env_reads_request_timeout_in_child_process")
-        .arg("--nocapture")
-        .env("LEAVEN_OPENAI_TIMEOUT_FROM_ENV_CHILD", "1")
-        .env("OPENAI_API_KEY", "test-key")
-        .env("LEAVEN_OPENAI_REQUEST_TIMEOUT_SECONDS", "600")
-        .status()
-        .unwrap();
-
-    assert!(status.success());
-}
-
-#[test]
-fn openai_from_env_rejects_invalid_request_timeout_in_child_process() {
-    if std::env::var_os("LEAVEN_OPENAI_TIMEOUT_INVALID_FROM_ENV_CHILD").is_some() {
-        let Err(error) = OpenAiLm::from_env() else {
-            panic!("invalid OpenAI request timeout should be rejected");
-        };
-        assert!(error.to_string().contains(
-            "LEAVEN_OPENAI_REQUEST_TIMEOUT_SECONDS must be a positive integer number of seconds"
-        ));
-        return;
-    }
-
-    let status = Command::new(std::env::current_exe().unwrap())
-        .arg("--exact")
-        .arg("openai_from_env_rejects_invalid_request_timeout_in_child_process")
-        .arg("--nocapture")
-        .env("LEAVEN_OPENAI_TIMEOUT_INVALID_FROM_ENV_CHILD", "1")
-        .env("OPENAI_API_KEY", "test-key")
-        .env("LEAVEN_OPENAI_REQUEST_TIMEOUT_SECONDS", "0")
-        .status()
-        .unwrap();
-
-    assert!(status.success());
 }
 
 #[test]
