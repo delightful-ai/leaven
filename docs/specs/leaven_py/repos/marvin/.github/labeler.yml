@@ -1,0 +1,17 @@
+documentation:
+  - changed-files:
+      - any-glob-to-any-file: "docs/**"
+
+example:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "examples/**"
+          - "docs/examples/**"
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file: "tests/**"
+
+migrations:
+  - changed-files:
+      - any-glob-to-any-file: "migrations/versions/**"

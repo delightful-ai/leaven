@@ -1,0 +1,23 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Ruff version.
+    rev: v0.9.1
+    hooks:
+      # Run the linter.
+      - id: ruff
+        args: [--fix]
+      # Run the formatter.
+      - id: ruff-format
+  - repo: local
+    hooks:
+      - id: check-python-breakpoints
+        name: Check for Python breakpoints
+        entry: uv run scripts/check_for_breakpoints.py
+        language: system
+        files: ^src/.*\.py$
+      - id: update-mintlify-api-reference
+        name: Update Mintlify API Reference
+        entry: uv run scripts/create_mintlify_api_ref.py
+        language: system
+        files: ^src/.*\.py$
+        pass_filenames: false
