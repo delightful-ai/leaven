@@ -282,7 +282,7 @@ forces it:
 - workspace backend crates
 - artifact backend crates
 - future CUDA/Python domain adapter crates
-- `leaven-dsrs`
+- future DSRS interop crates
 
 ## Follow-Up TODOs
 

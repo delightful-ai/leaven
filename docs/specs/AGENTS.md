@@ -55,7 +55,7 @@ The top of the stack is:
 - `first_two_subsystems.md` is explicitly superseded. Read it only as historical context unless you first update it to current topology.
 - Specs marked `planning` or `pre-implementation` are design contracts, not proof that code exists. Verify current code before routing work from them.
 - Specs marked `implementation spec` can govern a slice even before the whole product story is solved, but still require code/test proof before public maturity claims.
-- Do not route from directory presence alone. `crates/leaven-dsrs` is currently an orphan placeholder rather than a workspace crate, while `crates/leaven/tests/topology_contract.rs` is the executable inventory guard.
+- Do not route from directory presence or historical diagrams alone. `crates/leaven/tests/topology_contract.rs` is the executable inventory guard for current workspace crates.
 - Provider-adapter specs such as Codex CLI/app-server own provider boundaries only. They do not move agent, engine, GEPA, or skill concepts into provider crates.
 - Codex app-server is a provider runtime path, not ACP public-seam proof. It can
   support an ACP worker only when routed through the locked public-seam ACP
@@ -99,7 +99,7 @@ The top of the stack is:
 - when: touching topology or crate inventory specs
   do: compare against root `Cargo.toml` and `crates/leaven/tests/topology_contract.rs`
   preserve: live workspace membership over stale directory/spec inventory
-  avoid: reintroducing `crates/leaven-dsrs` or skeleton provider/backend crates as real routing targets without full workspace/test updates
+  avoid: reintroducing DSRS interop or skeleton provider/backend crates as real routing targets without full workspace/test updates
   verify: `cargo test -p leaven --test topology_contract`
 
 - when: adding a public example or default import promise to a spec
