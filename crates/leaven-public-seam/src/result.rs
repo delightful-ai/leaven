@@ -1,15 +1,23 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::PublicSeamError;
 use crate::evidence::{EvidenceEnvelopeDocument, EvidenceReceiptRef};
 
+mod audit;
 mod helpers;
 
+pub use audit::Replayability;
+use audit::{
+    AssessmentBatchScope, ReceiptAudit, inspect_assessment_batch_value, inspect_receipts,
+    inspect_value_receipt, receipt_index, validate_failed_call_charges,
+    validate_replayability_rollups, validate_result_hash_bindings,
+    validate_submit_assessment_receipts,
+};
 use helpers::{
-    array_len, invalid_result, optional_string_set, prefixed_jcs_hash, required_replayability,
-    required_string, required_string_set,
+    array_len, invalid_result, optional_string_set, required_replayability, required_string,
+    required_string_set,
 };
 
 /// Schema-valid public-seam Plan Result classified by replayability facts.
@@ -706,27 +714,3 @@ fn evidence_data_class_set(envelope: &EvidenceEnvelopeDocument) -> BTreeSet<Stri
     data_classes.extend(envelope.trace_data_classes().iter().cloned());
     data_classes
 }
-
-fn inspect_value_receipt<'a>(
-    value: &'a serde_json::Map<String, Value>,
-    receipt_index: &BTreeMap<String, ReceiptAudit>,
-) -> Result<&'a str, PublicSeamError> {
-    let value_kind = required_string(value.get("kind"), "value.kind")?;
-    if let Some(receipt) = value.get("receipt") {
-        let receipt = receipt_id(receipt)?;
-        let Some(receipt_kind) = receipt_index.get(receipt) else {
-            return Err(invalid_result(format!(
-                "value references missing receipt `{receipt}`"
-            )));
-        };
-        if expected_receipt_kind(value_kind).is_some_and(|expected| receipt_kind.kind != expected) {
-            return Err(invalid_result(format!(
-                "value kind `{value_kind}` cannot reference `{}` receipt",
-                receipt_kind.kind
-            )));
-        }
-    }
-    Ok(value_kind)
-}
-
-include!("result/audit.rs");

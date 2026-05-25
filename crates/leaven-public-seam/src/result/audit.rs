@@ -1,4 +1,15 @@
-fn inspect_assessment_batch_value(
+use std::collections::{BTreeMap, BTreeSet};
+
+use serde_json::{Value, json};
+
+use crate::PublicSeamError;
+
+use super::helpers::{
+    invalid_result, prefixed_jcs_hash, required_replayability, required_string, required_string_set,
+};
+use super::{RequestEvaluationReceiptPolicy, collect_trace_ref_data_classes};
+
+pub(super) fn inspect_assessment_batch_value(
     batch: &serde_json::Map<String, Value>,
     replayability: &mut Vec<(String, Replayability)>,
     assessment_batches: &mut Vec<AssessmentBatchScope>,
@@ -14,7 +25,7 @@ fn inspect_assessment_batch_value(
     Ok(())
 }
 
-fn validate_replayability_rollups(
+pub(super) fn validate_replayability_rollups(
     summary: Replayability,
     value_replayability: &[Replayability],
     assessment_replayability: &[(String, Replayability)],
@@ -34,7 +45,7 @@ fn validate_replayability_rollups(
     Ok(())
 }
 
-fn inspect_receipts(receipts: &[Value]) -> Result<Vec<String>, PublicSeamError> {
+pub(super) fn inspect_receipts(receipts: &[Value]) -> Result<Vec<String>, PublicSeamError> {
     let mut receipt_kinds = Vec::with_capacity(receipts.len());
     for receipt in receipts {
         let receipt = receipt
@@ -101,7 +112,7 @@ fn validate_submit_assessments_request_hash(
     Ok(())
 }
 
-fn validate_result_hash_bindings(
+pub(super) fn validate_result_hash_bindings(
     values: &serde_json::Map<String, Value>,
     receipts: &[Value],
     request_evaluation_policy: RequestEvaluationReceiptPolicy,
@@ -207,7 +218,7 @@ fn required_hash_with_prefix(
     Ok(())
 }
 
-fn validate_submit_assessment_receipts(
+pub(super) fn validate_submit_assessment_receipts(
     receipts: &[Value],
     assessment_batches: &[AssessmentBatchScope],
 ) -> Result<(), PublicSeamError> {
@@ -227,7 +238,7 @@ fn validate_submit_assessment_receipts(
     Ok(())
 }
 
-fn validate_failed_call_charges(
+pub(super) fn validate_failed_call_charges(
     receipts: &[Value],
     charges: &[Value],
 ) -> Result<(), PublicSeamError> {
@@ -294,7 +305,7 @@ fn submit_assessment_receipts(
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct AssessmentBatchScope {
+pub(super) struct AssessmentBatchScope {
     evaluation_request_id: String,
     assessment_ids: BTreeSet<String>,
 }
@@ -384,13 +395,15 @@ fn has_nonzero_cost(cost: Option<&Value>) -> bool {
         .any(|value| value.as_i64().is_some_and(|n| n > 0))
 }
 
-struct ReceiptAudit {
-    kind: String,
-    fingerprint: String,
-    trace_data_classes: BTreeSet<String>,
+pub(super) struct ReceiptAudit {
+    pub(super) kind: String,
+    pub(super) fingerprint: String,
+    pub(super) trace_data_classes: BTreeSet<String>,
 }
 
-fn receipt_index(receipts: &[Value]) -> Result<BTreeMap<String, ReceiptAudit>, PublicSeamError> {
+pub(super) fn receipt_index(
+    receipts: &[Value],
+) -> Result<BTreeMap<String, ReceiptAudit>, PublicSeamError> {
     let mut index = BTreeMap::new();
     for receipt in receipts {
         let receipt = receipt
@@ -495,7 +508,7 @@ pub enum Replayability {
 }
 
 impl Replayability {
-    fn parse(value: &str) -> Option<Self> {
+    pub(super) fn parse(value: &str) -> Option<Self> {
         match value {
             "pure_read" => Some(Self::PureRead),
             "fully_managed" => Some(Self::FullyManaged),
@@ -505,6 +518,28 @@ impl Replayability {
             _ => None,
         }
     }
+}
+
+pub(super) fn inspect_value_receipt<'a>(
+    value: &'a serde_json::Map<String, Value>,
+    receipt_index: &BTreeMap<String, ReceiptAudit>,
+) -> Result<&'a str, PublicSeamError> {
+    let value_kind = required_string(value.get("kind"), "value.kind")?;
+    if let Some(receipt) = value.get("receipt") {
+        let receipt = receipt_id(receipt)?;
+        let Some(receipt_kind) = receipt_index.get(receipt) else {
+            return Err(invalid_result(format!(
+                "value references missing receipt `{receipt}`"
+            )));
+        };
+        if expected_receipt_kind(value_kind).is_some_and(|expected| receipt_kind.kind != expected) {
+            return Err(invalid_result(format!(
+                "value kind `{value_kind}` cannot reference `{}` receipt",
+                receipt_kind.kind
+            )));
+        }
+    }
+    Ok(value_kind)
 }
 
 fn inspect_assessment_batch(
