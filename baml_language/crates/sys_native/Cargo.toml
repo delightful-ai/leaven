@@ -1,0 +1,44 @@
+[package]
+name = "sys_native"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[features]
+default = [ "aws-crypto" ]
+aws-crypto = [ "dep:rustls", "reqwest/rustls", "rustls?/aws_lc_rs", "rustls?/std" ]
+ring-crypto = [ "dep:rustls", "reqwest/rustls-no-provider", "rustls?/ring", "rustls?/std" ]
+native-tls = [ "reqwest/native-tls" ]
+rustls = [ "aws-crypto" ]
+bundle-http = [ "dep:reqwest" ]
+
+[dependencies]
+baml_type = { workspace = true }
+bex_heap = { workspace = true }
+bex_resource_types = { workspace = true }
+sys_glob = { workspace = true }
+sys_ops = { workspace = true }
+sys_types = { workspace = true }
+futures = { workspace = true }
+indexmap = { workspace = true }
+reqwest = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = [
+  "sync",
+  "fs",
+  "net",
+  "process",
+  "io-util",
+  "io-std",
+  "time",
+] }
+walkdir = { workspace = true }
+
+[lints]
+workspace = true
+
+[package.metadata.ci]
+wasm_support = false

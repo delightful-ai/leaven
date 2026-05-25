@@ -1,0 +1,20 @@
+---
+title: LMStudio
+---
+
+[LMStudio](https://lmstudio.ai/docs) supports the OpenAI client, allowing you
+to use the [`openai-generic`](/docs/snippets/clients/providers/openai) provider
+with an overridden `base_url`.
+
+
+See https://lmstudio.ai/docs/developer/openai-compat/chat-completions for more information.
+
+```baml BAML
+client<llm> MyClient {
+  provider "openai-generic"
+  options {
+    base_url "http://localhost:1234/v1"
+    model "TheBloke/phi-2-GGUF"
+  }
+}
+```

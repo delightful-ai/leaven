@@ -1,0 +1,362 @@
+[workspace]
+members = [
+  "crates/*",
+  "sdks/go/codegen_go",
+  "sdks/nodejs/bridge_nodejs",
+  "sdks/nodejs/codegen_nodejs",
+  "sdks/python/rust/*",
+  "sdk_tests/harness_setup",
+  "sdk_tests/harness_runner",
+  "sdk_tests/crates/python_pydantic2",
+  # `sdk_tests/crates/nodejs_typescript`'s build.rs runs codegen +
+  # `pnpm install` but soft-fails into `$OUT_DIR/build_diagnostics.txt`
+  # if pnpm is missing or install fails (see
+  # `sdk_tests/harness_setup/src/lib.rs::BuildDiagnostics` —
+  # package name `sdk_test_harness_setup`), so a workspace
+  # `cargo build` / `cargo doc` succeeds without pnpm installed.
+  # The failures surface via `cargo test`'s
+  # `build_diagnostics::no_build_failures` test.
+  "sdk_tests/crates/nodejs_typescript",
+]
+exclude = [
+  # Generated Python rig-test outputs do not contain Cargo manifests, but the
+  # workspace member glob above would otherwise make cargo metadata fail.
+  "rig_tests/crates/python_empty",
+  "rig_tests/crates/python_literal_types",
+  "rig_tests/crates/python_map_types",
+  "rig_tests/crates/python_mixed_complex_types",
+  "rig_tests/crates/python_semantic_streaming",
+  "rig_tests/crates/python_union_types_extended",
+]
+resolver = "2"
+
+[workspace.package]
+# Please update rustfmt.toml when bumping the Rust edition
+edition = "2024"
+# This is the MSRV (Minimum Supported Rust Version) for the workspace
+rust-version = "1.91.1"
+authors = [ "Vaibhav Gupta <vbv@boundaryml.com>" ]
+homepage = "https://github.com/BoundaryML/baml"
+documentation = "https://docs.boundaryml.com"
+repository = "https://github.com/BoundaryML/baml"
+license = "Apache-2.0"
+# This needs to be updated manually when bumping the version
+version = "0.0.0-beta"
+
+[workspace.dependencies]
+#  Internal dependencies (baml_*)
+baml_base = { path = "crates/baml_base" }
+baml_type = { path = "crates/baml_type" }
+baml_builtins = { path = "crates/baml_builtins" }
+baml_builtins_codegen = { path = "crates/baml_builtins_codegen" }
+baml_builtins2 = { path = "crates/baml_builtins2" }
+baml_builtins2_codegen = { path = "crates/baml_builtins2_codegen" }
+baml_builtins_macros = { path = "crates/baml_builtins_macros" }
+codegen_go = { path = "sdks/go/codegen_go" }
+codegen_nodejs = { path = "sdks/nodejs/codegen_nodejs" }
+codegen_python = { path = "sdks/python/rust/codegen_python" }
+baml_codegen_types = { path = "crates/baml_codegen_types" }
+baml_compiler2_ast = { path = "crates/baml_compiler2_ast" }
+baml_compiler2_hir = { path = "crates/baml_compiler2_hir" }
+baml_compiler2_ppir = { path = "crates/baml_compiler2_ppir" }
+baml_compiler2_tir = { path = "crates/baml_compiler2_tir" }
+baml_compiler2_mir = { path = "crates/baml_compiler2_mir" }
+baml_compiler2_emit = { path = "crates/baml_compiler2_emit" }
+baml_compiler2_visualization = { path = "crates/baml_compiler2_visualization" }
+baml_compiler_diagnostics = { path = "crates/baml_compiler_diagnostics" }
+baml_compiler_lexer = { path = "crates/baml_compiler_lexer" }
+baml_compiler_parser = { path = "crates/baml_compiler_parser" }
+baml_compiler_syntax = { path = "crates/baml_compiler_syntax" }
+bex_project = { path = "crates/bex_project", default-features = false }
+bex_engine = { path = "crates/bex_engine", default-features = false }
+sys_glob = { path = "crates/sys_glob" }
+sys_jinja = { path = "crates/sys_jinja" }
+sys_jinja_types = { path = "crates/sys_jinja_types" }
+sys_llm = { path = "crates/sys_llm", default-features = false }
+sys_ops = { path = "crates/sys_ops", default-features = false }
+sys_types = { path = "crates/sys_types" }
+sys_native = { path = "crates/sys_native", default-features = false }
+baml_db = { path = "crates/baml_db" }
+baml_fmt = { path = "crates/baml_fmt" }
+baml_lsp2_actions = { path = "crates/baml_lsp2_actions" }
+baml_lsp_server = { path = "crates/baml_lsp_server", default-features = false }
+baml_lsp_types = { path = "crates/baml_lsp_types" }
+baml_project = { path = "crates/baml_project" }
+baml_tests = { path = "crates/baml_tests" }
+tools_onionskin = { path = "crates/tools_onionskin" }
+bex_vm = { path = "crates/bex_vm" }
+bex_vm_types = { path = "crates/bex_vm_types" }
+bex_external_types = { path = "crates/bex_external_types" }
+bex_heap = { path = "crates/bex_heap" }
+bex_sap = { path = "crates/bex_sap" }
+bridge_ctypes = { path = "crates/bridge_ctypes", default-features = false }
+bridge_cffi = { path = "crates/bridge_cffi", default-features = false }
+bridge_python = { path = "sdks/python/rust/bridge_python" }
+bridge_wasm = { path = "crates/bridge_wasm" }
+baml_exec = { path = "crates/baml_exec" }
+baml_pack_host = { path = "crates/baml_pack_host" }
+bex_events = { path = "crates/bex_events" }
+bex_events_native = { path = "crates/bex_events_native" }
+bex_resource_types = { path = "crates/bex_resource_types" }
+darwin-kperf = "0.1.0"
+darwin-kperf-events = "0.1.0"
+
+# External dependency for sys_llm jinja module
+minijinja = { git = "https://github.com/boundaryml/minijinja.git", branch = "value-cmp", default-features = false, features = [
+  "macros",
+  "builtins",
+  "debug",
+  "preserve_order",
+  "serde",
+  "unstable_machinery",
+] }
+minijinja-contrib = { git = "https://github.com/boundaryml/minijinja.git", branch = "value-cmp", features = [ "pycompat" ] }
+baml_workspace = { path = "crates/baml_workspace" }
+
+#  External dependencies
+anyhow = { version = "1" }
+arboard = "3.4"
+ariadne = { version = "0.6" }
+async-trait = "0.1"
+askama = { version = "0.14.0" }
+aws-config = { git = "https://github.com/boundaryml/aws-sdk-rust.git", rev = "28d4f67bac1214320320905c1f6908ea32b6b0ac", default-features = false, features = [ "behavior-version-latest" ] }
+google-cloud-auth = { git = "https://github.com/BoundaryML/google-cloud-rust.git", rev = "a18d3e42bd304de897990c3d0f3e90ffd4e428fd", package = "google-cloud-auth", default-features = false }
+aws-credential-types = { git = "https://github.com/boundaryml/aws-sdk-rust.git", rev = "28d4f67bac1214320320905c1f6908ea32b6b0ac" }
+aws-sdk-bedrockruntime = { git = "https://github.com/boundaryml/aws-sdk-rust.git", rev = "28d4f67bac1214320320905c1f6908ea32b6b0ac", default-features = false, features = [ "behavior-version-latest" ] }
+aws-sigv4 = { git = "https://github.com/boundaryml/aws-sdk-rust.git", rev = "28d4f67bac1214320320905c1f6908ea32b6b0ac", features = [ "sign-http" ] }
+aws-smithy-async = { git = "https://github.com/boundaryml/aws-sdk-rust.git", rev = "28d4f67bac1214320320905c1f6908ea32b6b0ac" }
+aws-smithy-runtime-api = { git = "https://github.com/boundaryml/aws-sdk-rust.git", rev = "28d4f67bac1214320320905c1f6908ea32b6b0ac", features = [ "client" ] }
+aws-smithy-types = { git = "https://github.com/boundaryml/aws-sdk-rust.git", rev = "28d4f67bac1214320320905c1f6908ea32b6b0ac" }
+aws-types = { git = "https://github.com/boundaryml/aws-sdk-rust.git", rev = "28d4f67bac1214320320905c1f6908ea32b6b0ac" }
+axum = { version = "0.8.4", features = [ "ws" ] }
+# `serde` mode rather than bitcode's native Encode/Decode: Program and its
+# transitive type graph (bex_vm_types + baml_type) are already serde-derived,
+# and Encode/Decode would require derives on ~60 types plus custom impls for
+# IndexMap (not built into bitcode-derive) and FunctionKind::Native (raw fn
+# pointer). Native would shave ~2-20 ms off packed-binary cold start and
+# ~30-50% off artifact size — worth it only when cold start or artifact size
+# becomes a measured user-facing complaint, not as a precautionary refactor.
+bitcode = { version = "0.6", features = [ "serde" ] }
+bytes = "1"
+cargo_metadata = { version = "0.23.1" }
+cbindgen = "0.28.0"
+clap = { version = "4.4.6", features = [ "cargo", "derive" ] }
+clap-cargo = "0.14.1"
+colored = { version = "2.1.0" }
+console = "0.16"
+console_error_panic_hook = "0.1"
+crossbeam = { version = "0.8.4", features = [ "crossbeam-channel" ] }
+crossterm = "0.28"
+ctrlc = "3.4"
+derive_more = { version = "2.1.1", features = [ "from" ] }
+divan = { package = "codspeed-divan-compat", version = "*" }
+eframe = "0.33.3"
+flate2 = { version = "1" }
+futures = { version = "0.3.30", features = [ "executor" ] }
+futures-timer = { version = "3.0.3", features = [ "wasm-bindgen" ] }
+graphviz-rust = { version = "0.9" }
+indexmap = { version = "2.1.0", features = [ "serde" ] }
+indicatif = "0.18"
+infer = "0.16.0"
+insta = { version = "1.34", features = [ "yaml", "redactions" ] }
+la-arena = { version = "0.3" }
+libc = "0.2.169"
+libsui = { version = "0.14" }
+log = "0.4.20"
+logos = { version = "0.15" }
+lsp-server = "0.7.6"
+lsp-types = "0.95.0"
+notify = "7.0"
+once_cell = "1.19"
+ouroboros = "0.18.5"
+parking_lot = { version = "0.12", features = [ "deadlock_detection" ] }
+paste = "1.0"
+percent-encoding = "2.3"
+pretty_assertions = { version = "1.4" }
+prettyplease = { version = "0.2" }
+proc-macro2 = { version = "1" }
+prost = "0.14"
+prost-build = "0.14.1"
+protoc-bin-vendored = "3"
+quote = { version = "1" }
+ratatui = "0.29"
+regex = { version = "1.10.2" }
+base64 = "0.22"
+reqwest = { version = "0.13.1", default-features = false, features = [
+  "json",
+  "stream",
+] }
+rowan = { version = "0.16" }
+rustls = { version = "0.23.37", default-features = false }
+rustc-hash = { version = "2.1" }
+salsa = { version = "0.26", default-features = false, features = [
+  "compact_str",
+  "macros",
+  "salsa_unstable",
+  "inventory",
+] }
+serde = { version = "1.0.197", features = [ "derive" ] }
+serde-wasm-bindgen = "0.6"
+serde_json = { version = "1.0.113", features = [ "preserve_order" ] }
+serde_yaml = "0.9"
+similar = { version = "2.4.0", features = [ "inline" ] }
+smol_str = { version = "0.3", features = [ "serde" ] }
+strsim = { version = "0.11.1" }
+syn = { version = "2", features = [ "full" ] }
+tar = "0.4"
+zip = { version = "2", default-features = false, features = [ "deflate" ] }
+taplo = { version = "0.13" }
+tempfile = { version = "3" }
+time = { version = "0.3", features = [ "formatting", "macros" ] }
+text-size = { version = "1.1", features = [ "serde" ] }
+thiserror = { version = "2.0.0" }
+toml = { version = "0.8" }
+toml_edit = { version = "0.22" }
+tokio = { version = "1.36" }
+tokio-tungstenite = { version = "0.28.0" }
+tokio-util = { version = "0.7" }
+tower-http = { version = "0.6.6", features = [ "fs", "cors" ] }
+tracing = { version = "0.1.40" }
+tracing-log = "0.2.0"
+tracing-subscriber = { version = "0.3.18", default-features = false, features = [
+  "env-filter",
+  "fmt",
+] }
+unicode-normalization = "0.1.25"
+url = "2.5.2"
+uuid = { version = "1", features = [ "v4" ] }
+walkdir = { version = "2.4" }
+tsify = { version = "0.5", features = [ "js" ] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+wasm-bindgen-test = "0.3"
+js-sys = "0.3"
+webbrowser = "1.0.5"
+strum = { version = "0.26", features = [ "derive" ] }
+pyo3 = { version = "0.28", default-features = false }
+pyo3-async-runtimes = { version = "0.28" }
+pyo3-build-config = "0.28"
+pyo3-stub-gen = { version = "0.22", default-features = false }
+napi = { version = "3.8.4", default-features = false }
+napi-derive = "3.5.3"
+napi-build = "2.3.1"
+wee_alloc = "0.4"
+wiremock = "0.6"
+vfs = "0.12"
+wasm-logger = "0.2.0"
+web-time = "1.1.0"
+getrandom = { version = "0.2" }
+rsa = { version = "0.9", default-features = false, features = [ "std", "pem" ] }
+sha2 = { version = "0.10", features = [ "oid" ] }
+
+[workspace.lints.rust]
+unsafe_code = "warn"
+unreachable_pub = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = [
+  "cfg(fuzzing)",
+  "cfg(codspeed)",
+] }
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -2 }
+# Enabled at the crate level
+disallowed_methods = "allow"
+# Used by clippy-wasm task (CLIPPY_CONF_DIR=clippy-wasm); config in clippy-wasm/clippy.toml
+disallowed_types = "warn"
+# Allowed pedantic lints
+char_lit_as_u8 = "allow"
+collapsible_else_if = "allow"
+collapsible_if = "allow"
+implicit_hasher = "allow"
+map_unwrap_or = "allow"
+match_same_arms = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+similar_names = "allow"
+single_match_else = "allow"
+too_many_lines = "allow"
+needless_continue = "allow"            # An explicit continue can be more readable, especially if the alternative is an empty block.
+unnecessary_debug_formatting = "allow" # too many instances, the display also doesn't quote the path which is often desired in logs where we use them the most often.
+# Without the hashes we run into a `rustfmt` bug in some snapshot tests, see #13250
+needless_raw_string_hashes = "allow"
+# Disallowed restriction lints
+ignore_without_reason = "allow"          # Too many exsisting instances, and there's no auto fix.
+print_stdout = "deny"                    # deny print! and println! (LSP requires stdout/stderr for communication)
+print_stderr = "deny"
+dbg_macro = "deny"                       # deny dbg! macro (LSP requires stdout/stderr for communication)
+empty_drop = "warn"
+empty_structs_with_brackets = "warn"
+exit = "warn"
+get_unwrap = "warn"
+rc_buffer = "warn"
+rc_mutex = "warn"
+rest_pat_in_fully_bound_structs = "warn"
+# nursery rules
+redundant_clone = "warn"
+debug_assert_with_mut_call = "warn"
+unused_peekable = "warn"
+# This lint sometimes flags code whose `if` and `else`
+# bodies could be flipped when a `!` operator is removed.
+# While perhaps sometimes a good idea, it is also often
+# not a good idea due to other factors impacting
+# readability. For example, if flipping the bodies results
+# in the `if` being an order of magnitude bigger than the
+# `else`, then some might consider that harder to read.
+if_not_else = "allow"
+
+# Diagnostics are not actionable: Enable once https://github.com/rust-lang/rust-clippy/issues/13774 is resolved.
+large_stack_arrays = "allow"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = "s"   # smallest; try "s" if perf matters
+strip = "symbols" # still keep your strip -x in packaging
+panic = "abort"
+
+# Some crates don't change as much but benefit more from
+# more expensive optimization passes, so we selectively
+# decrease codegen-units in some cases.
+[profile.release.package.salsa]
+codegen-units = 1
+
+[profile.dev.package.insta]
+opt-level = 3
+
+[profile.dev.package.similar]
+opt-level = 3
+
+# Salsa dominates our compile times, so we disable it in dev mode.
+[profile.dev.package.salsa]
+opt-level = 0
+
+# This profile is meant to mimic the `release` profile as closely as
+# possible, but using settings that are more beneficial for iterative
+# development. That is, the `release` profile is intended for actually
+# building the release, where as `profiling` is meant for building ty/ruff
+# for running benchmarks.
+#
+# The main differences here are to avoid stripping debug information
+# and disabling fat lto. This does result in a mismatch between our release
+# configuration and our benchmarking configuration, which is unfortunate.
+# But compile times with `lto = fat` are completely untenable.
+#
+# This setup does risk that we are measuring something in benchmarks
+# that we aren't shipping, but in order to make those two the same, we'd
+# either need to make compile times way worse for development, or take
+# a hit to binary size and a slight hit to runtime performance in our
+# release builds.
+#
+# Use the `--profile profiling` flag to show symbols in release mode.
+# e.g. `cargo build --profile profiling`
+[profile.profiling]
+inherits = "release"
+strip = false
+debug = "full"
+lto = "fat"
+
+# The profile that 'cargo dist' will build with.
+[profile.dist]
+inherits = "release"

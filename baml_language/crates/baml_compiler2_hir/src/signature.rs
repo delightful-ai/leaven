@@ -1,0 +1,515 @@
+//! Per-function signature queries.
+//!
+//! Reads from the `ItemTree` (full AST data stored in Phase 1) — no CST access
+//! needed. The semantic data (`TypeExpr`, no spans) and the source map (spans
+//! only) are split into separate queries for Salsa early-cutoff: whitespace
+//! changes re-run the source map query but NOT the signature query.
+
+use std::sync::Arc;
+
+use baml_base::Name;
+use baml_compiler2_ast::{FunctionDefaults, FunctionTypeParam, TypeExpr};
+use rustc_hash::FxHashSet;
+use text_size::TextRange;
+
+use crate::{item_tree::DefaultExprRef, loc::FunctionLoc};
+
+/// Compiler2 function signature — param names + unresolved `TypeExpr`.
+///
+/// No spans — those live in `SignatureSourceMap`.
+/// `TypeExpr` is already span-free (spans live in `SpannedTypeExpr` at the
+/// AST layer and are split out here).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FunctionSignature {
+    pub name: baml_base::Name,
+    /// Parameter names paired with their unresolved type expressions.
+    pub params: Vec<SignatureParam>,
+    /// Return type (None if omitted).
+    pub return_type: Option<TypeExpr>,
+    /// Declared throws contract type (None if omitted).
+    pub throws: Option<TypeExpr>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignatureParam {
+    pub name: Name,
+    pub ty: TypeExpr,
+    pub has_default: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FunctionParameterDefaults {
+    /// One default-expression reference per parameter, parallel to
+    /// `FunctionSignature::params`.
+    pub params: Vec<Option<DefaultExprRef>>,
+    /// The definition-local default expression arena and source map.
+    pub defaults: FunctionDefaults,
+}
+
+impl FunctionParameterDefaults {
+    pub fn param_default(&self, index: usize) -> Option<&DefaultExprRef> {
+        self.params.get(index).and_then(Option::as_ref)
+    }
+}
+
+/// Canonical callable-signature view used by TIR.
+///
+/// This keeps the user-written top-level throws contract optional, but makes
+/// every nested function-type throws surface explicit:
+/// - immediate callback parameter roots with omitted throws are opened to a
+///   fresh synthetic effect parameter
+/// - immediate function-valued return roots derive their omitted throws from
+///   any immediate callback parameters they expose
+/// - every other omitted nested function-type throws becomes `never`
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ElaboratedFunctionSignature {
+    pub name: Name,
+    pub user_generic_params: Vec<Name>,
+    pub synthetic_effect_params: Vec<Name>,
+    pub params: Vec<SignatureParam>,
+    pub return_type: Option<TypeExpr>,
+    pub throws: Option<TypeExpr>,
+}
+
+/// Parallel span storage for a signature.
+///
+/// Kept separate from `FunctionSignature` so that whitespace-only source
+/// changes only invalidate `function_signature_source_map`, not
+/// `function_signature`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignatureSourceMap {
+    /// One span per parameter, parallel to `FunctionSignature::params`.
+    pub param_spans: Vec<TextRange>,
+    /// One span per parameter's type expression (just the type, not the name).
+    /// `None` when the parameter has no explicit type annotation.
+    pub param_type_spans: Vec<Option<TextRange>>,
+    /// Span of the return type annotation, if present.
+    pub return_type_span: Option<TextRange>,
+    /// Span of the throws type annotation, if present.
+    pub throws_type_span: Option<TextRange>,
+}
+
+/// Shared implementation — reads from the `ItemTree` (full AST data),
+/// splits into semantic (`TypeExpr`, no spans) + source map (spans only).
+fn function_signature_with_source_map<'db>(
+    db: &'db dyn crate::Db,
+    function: FunctionLoc<'db>,
+) -> (Arc<FunctionSignature>, SignatureSourceMap) {
+    let file = function.file(db);
+    let item_tree = crate::file_item_tree(db, file);
+    let func_data = &item_tree[function.id(db)];
+
+    // Build semantic signature — strip spans, keep TypeExpr
+    let params: Vec<_> = func_data
+        .params
+        .iter()
+        .map(|p| {
+            let type_expr = p
+                .type_expr
+                .as_ref()
+                .map(|te| te.expr.clone())
+                .unwrap_or(TypeExpr::Unknown { attrs: vec![] });
+            SignatureParam {
+                name: p.name.clone(),
+                ty: type_expr,
+                has_default: p.default.is_some(),
+            }
+        })
+        .collect();
+
+    let return_type = func_data.return_type.as_ref().map(|te| te.expr.clone());
+
+    let sig = Arc::new(FunctionSignature {
+        name: func_data.name.clone(),
+        params,
+        return_type,
+        throws: func_data.throws.as_ref().map(|te| te.expr.clone()),
+    });
+
+    // Build source map — spans only (separate for early-cutoff)
+    let source_map = SignatureSourceMap {
+        param_spans: func_data.params.iter().map(|p| p.span).collect(),
+        param_type_spans: func_data
+            .params
+            .iter()
+            .map(|p| p.type_expr.as_ref().map(|te| te.span))
+            .collect(),
+        return_type_span: func_data.return_type.as_ref().map(|te| te.span),
+        throws_type_span: func_data.throws.as_ref().map(|te| te.span),
+    };
+
+    (sig, source_map)
+}
+
+fn type_expr_for_effect_param(name: Name) -> TypeExpr {
+    TypeExpr::Path {
+        segments: vec![name],
+        generic_args: Vec::new(),
+        attrs: Vec::new(),
+    }
+}
+
+fn never_type_expr() -> TypeExpr {
+    TypeExpr::Never { attrs: Vec::new() }
+}
+
+fn fresh_effect_param_name(used_names: &mut FxHashSet<Name>) -> Name {
+    let mut index = 0usize;
+    loop {
+        let candidate = Name::new(format!("__effect_param_{index}"));
+        if used_names.insert(candidate.clone()) {
+            return candidate;
+        }
+        index += 1;
+    }
+}
+
+fn fill_omitted_nested_throws_with_never(type_expr: TypeExpr) -> TypeExpr {
+    match type_expr {
+        TypeExpr::Path {
+            segments,
+            generic_args,
+            attrs,
+        } => TypeExpr::Path {
+            segments,
+            generic_args: generic_args
+                .into_iter()
+                .map(fill_omitted_nested_throws_with_never)
+                .collect(),
+            attrs,
+        },
+        TypeExpr::Optional { inner, attrs } => TypeExpr::Optional {
+            inner: Box::new(fill_omitted_nested_throws_with_never(*inner)),
+            attrs,
+        },
+        TypeExpr::List { inner, attrs } => TypeExpr::List {
+            inner: Box::new(fill_omitted_nested_throws_with_never(*inner)),
+            attrs,
+        },
+        TypeExpr::Map { key, value, attrs } => TypeExpr::Map {
+            key: Box::new(fill_omitted_nested_throws_with_never(*key)),
+            value: Box::new(fill_omitted_nested_throws_with_never(*value)),
+            attrs,
+        },
+        TypeExpr::Union { variants, attrs } => TypeExpr::Union {
+            variants: variants
+                .into_iter()
+                .map(fill_omitted_nested_throws_with_never)
+                .collect(),
+            attrs,
+        },
+        TypeExpr::Function {
+            params,
+            ret,
+            throws,
+            attrs,
+        } => TypeExpr::Function {
+            params: params
+                .into_iter()
+                .map(|param| FunctionTypeParam {
+                    name: param.name,
+                    optional: param.optional,
+                    ty: fill_omitted_nested_throws_with_never(param.ty),
+                })
+                .collect(),
+            ret: Box::new(fill_omitted_nested_throws_with_never(*ret)),
+            throws: Some(Box::new(
+                throws
+                    .map(|throws| fill_omitted_nested_throws_with_never(*throws))
+                    .unwrap_or_else(never_type_expr),
+            )),
+            attrs,
+        },
+        other => other,
+    }
+}
+
+fn elaborate_immediate_callback_param(
+    params: Vec<FunctionTypeParam>,
+    ret: TypeExpr,
+    attrs: Vec<baml_compiler2_ast::RawAttribute>,
+    effect_param: Name,
+) -> TypeExpr {
+    TypeExpr::Function {
+        params: params
+            .into_iter()
+            .map(|param| FunctionTypeParam {
+                name: param.name,
+                optional: param.optional,
+                ty: fill_omitted_nested_throws_with_never(param.ty),
+            })
+            .collect(),
+        ret: Box::new(fill_omitted_nested_throws_with_never(ret)),
+        throws: Some(Box::new(type_expr_for_effect_param(effect_param))),
+        attrs,
+    }
+}
+
+fn union_type_expr(members: Vec<TypeExpr>) -> TypeExpr {
+    match members.as_slice() {
+        [single] => single.clone(),
+        _ => TypeExpr::Union {
+            variants: members,
+            attrs: Vec::new(),
+        },
+    }
+}
+
+fn elaborate_immediate_function_return_root(
+    params: Vec<FunctionTypeParam>,
+    ret: TypeExpr,
+    attrs: Vec<baml_compiler2_ast::RawAttribute>,
+    used_names: &mut FxHashSet<Name>,
+    synthetic_effect_params: &mut Vec<Name>,
+) -> TypeExpr {
+    let mut immediate_effects = Vec::new();
+    let params = params
+        .into_iter()
+        .map(|param| {
+            let ty = match param.ty {
+                TypeExpr::Function {
+                    params,
+                    ret,
+                    throws,
+                    attrs,
+                } => {
+                    let callback_throws = match throws {
+                        Some(throws) => fill_omitted_nested_throws_with_never(*throws),
+                        None => {
+                            let effect_param = fresh_effect_param_name(used_names);
+                            synthetic_effect_params.push(effect_param.clone());
+                            type_expr_for_effect_param(effect_param)
+                        }
+                    };
+                    immediate_effects.push(callback_throws.clone());
+                    TypeExpr::Function {
+                        params: params
+                            .into_iter()
+                            .map(|param| FunctionTypeParam {
+                                name: param.name,
+                                optional: param.optional,
+                                ty: fill_omitted_nested_throws_with_never(param.ty),
+                            })
+                            .collect(),
+                        ret: Box::new(fill_omitted_nested_throws_with_never(*ret)),
+                        throws: Some(Box::new(callback_throws)),
+                        attrs,
+                    }
+                }
+                other => fill_omitted_nested_throws_with_never(other),
+            };
+            FunctionTypeParam {
+                name: param.name,
+                optional: param.optional,
+                ty,
+            }
+        })
+        .collect();
+
+    TypeExpr::Function {
+        params,
+        ret: Box::new(fill_omitted_nested_throws_with_never(ret)),
+        throws: Some(Box::new(if immediate_effects.is_empty() {
+            never_type_expr()
+        } else {
+            union_type_expr(immediate_effects)
+        })),
+        attrs,
+    }
+}
+
+pub fn elaborate_function_signature_parts(
+    name: Name,
+    user_generic_params: Vec<Name>,
+    reserved_effect_param_names: &[Name],
+    params: Vec<SignatureParam>,
+    return_type: Option<TypeExpr>,
+    throws: Option<TypeExpr>,
+) -> ElaboratedFunctionSignature {
+    let mut used_names: FxHashSet<Name> = user_generic_params.iter().cloned().collect();
+    used_names.extend(reserved_effect_param_names.iter().cloned());
+
+    let mut synthetic_effect_params = Vec::new();
+    let params = params
+        .into_iter()
+        .map(|param| {
+            let elaborated = match param.ty {
+                TypeExpr::Function {
+                    params,
+                    ret,
+                    throws: None,
+                    attrs,
+                } => {
+                    let effect_param = fresh_effect_param_name(&mut used_names);
+                    synthetic_effect_params.push(effect_param.clone());
+                    elaborate_immediate_callback_param(params, *ret, attrs, effect_param)
+                }
+                other => fill_omitted_nested_throws_with_never(other),
+            };
+            SignatureParam {
+                name: param.name,
+                ty: elaborated,
+                has_default: param.has_default,
+            }
+        })
+        .collect();
+    let return_type = return_type.map(|return_type| match return_type {
+        TypeExpr::Function {
+            params,
+            ret,
+            throws: None,
+            attrs,
+        } => elaborate_immediate_function_return_root(
+            params,
+            *ret,
+            attrs,
+            &mut used_names,
+            &mut synthetic_effect_params,
+        ),
+        other => fill_omitted_nested_throws_with_never(other),
+    });
+
+    ElaboratedFunctionSignature {
+        name,
+        user_generic_params,
+        synthetic_effect_params,
+        params,
+        return_type,
+        throws: throws.map(fill_omitted_nested_throws_with_never),
+    }
+}
+
+fn enclosing_class_generic_params(
+    item_tree: &crate::item_tree::ItemTree,
+    function_id: crate::ids::LocalItemId<crate::ids::FunctionMarker>,
+) -> Vec<Name> {
+    item_tree
+        .classes
+        .values()
+        .find(|class_data| class_data.methods.contains(&function_id))
+        .map(|class_data| class_data.generic_params.clone())
+        .unwrap_or_default()
+}
+
+fn elaborated_function_signature_with_source_map<'db>(
+    db: &'db dyn crate::Db,
+    function: FunctionLoc<'db>,
+) -> (Arc<ElaboratedFunctionSignature>, SignatureSourceMap) {
+    let file = function.file(db);
+    let item_tree = crate::file_item_tree(db, file);
+    let func_data = &item_tree[function.id(db)];
+
+    let params: Vec<_> = func_data
+        .params
+        .iter()
+        .map(|p| {
+            let type_expr = p
+                .type_expr
+                .as_ref()
+                .map(|te| te.expr.clone())
+                .unwrap_or(TypeExpr::Unknown { attrs: vec![] });
+            SignatureParam {
+                name: p.name.clone(),
+                ty: type_expr,
+                has_default: p.default.is_some(),
+            }
+        })
+        .collect();
+
+    let return_type = func_data.return_type.as_ref().map(|te| te.expr.clone());
+    let throws = func_data.throws.as_ref().map(|te| te.expr.clone());
+    let reserved_effect_param_names = enclosing_class_generic_params(&item_tree, function.id(db));
+    let signature = Arc::new(elaborate_function_signature_parts(
+        func_data.name.clone(),
+        func_data.generic_params.clone(),
+        &reserved_effect_param_names,
+        params,
+        return_type,
+        throws,
+    ));
+
+    let source_map = SignatureSourceMap {
+        param_spans: func_data.params.iter().map(|p| p.span).collect(),
+        param_type_spans: func_data
+            .params
+            .iter()
+            .map(|p| p.type_expr.as_ref().map(|te| te.span))
+            .collect(),
+        return_type_span: func_data.return_type.as_ref().map(|te| te.span),
+        throws_type_span: func_data.throws.as_ref().map(|te| te.span),
+    };
+
+    (signature, source_map)
+}
+
+/// Salsa query: semantic function signature (no spans).
+///
+/// Cached independently of the source map. Downstream type-checking queries
+/// depend on this and will NOT re-run on whitespace-only file changes.
+#[salsa::tracked]
+pub fn function_signature<'db>(
+    db: &'db dyn crate::Db,
+    function: FunctionLoc<'db>,
+) -> Arc<FunctionSignature> {
+    let (signature, _) = function_signature_with_source_map(db, function);
+    signature
+}
+
+/// Salsa query: function signature source map (spans only).
+///
+/// Re-runs on any file change (including whitespace), but because downstream
+/// type queries only depend on `function_signature`, they are unaffected.
+#[salsa::tracked]
+pub fn function_signature_source_map<'db>(
+    db: &'db dyn crate::Db,
+    function: FunctionLoc<'db>,
+) -> SignatureSourceMap {
+    let (_, source_map) = function_signature_with_source_map(db, function);
+    source_map
+}
+
+/// Salsa query: function parameter default-expression data.
+///
+/// Kept separate from `FunctionSignature` so changing a default expression does
+/// not invalidate consumers that only need callable shape or optionality.
+#[salsa::tracked]
+pub fn function_parameter_defaults<'db>(
+    db: &'db dyn crate::Db,
+    function: FunctionLoc<'db>,
+) -> Arc<FunctionParameterDefaults> {
+    let file = function.file(db);
+    let item_tree = crate::file_item_tree(db, file);
+    let func_data = &item_tree[function.id(db)];
+
+    Arc::new(FunctionParameterDefaults {
+        params: func_data
+            .params
+            .iter()
+            .map(|param| param.default.clone())
+            .collect(),
+        defaults: func_data.defaults.clone(),
+    })
+}
+
+/// Salsa query: elaborated callable signature used by TIR consumers.
+#[salsa::tracked]
+pub fn elaborated_function_signature<'db>(
+    db: &'db dyn crate::Db,
+    function: FunctionLoc<'db>,
+) -> Arc<ElaboratedFunctionSignature> {
+    let (signature, _) = elaborated_function_signature_with_source_map(db, function);
+    signature
+}
+
+/// Salsa query: source map for the elaborated callable signature.
+///
+/// The elaboration rewrites types but does not change source spans, so this is
+/// intentionally parallel to `function_signature_source_map`.
+#[salsa::tracked]
+pub fn elaborated_function_signature_source_map<'db>(
+    db: &'db dyn crate::Db,
+    function: FunctionLoc<'db>,
+) -> SignatureSourceMap {
+    let (_, source_map) = elaborated_function_signature_with_source_map(db, function);
+    source_map
+}

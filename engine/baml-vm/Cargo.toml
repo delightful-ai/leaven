@@ -1,0 +1,33 @@
+[package]
+edition = "2021"
+name = "baml-vm"
+version.workspace = true
+authors.workspace = true
+description = "BAML Virtual Machine"
+license-file.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+colored.workspace = true
+indexmap = { workspace = true }
+tokio = { workspace = true }
+baml-types = { path = "../baml-lib/baml-types" }
+internal-baml-diagnostics = { path = "../baml-lib/diagnostics" }
+baml-viz-events = { path = "../baml-viz-events" }
+
+[lints.clippy]
+new_without_default = "allow"
+
+[dev-dependencies]
+anyhow = { workspace = true }
+baml-compiler = { path = "../baml-compiler" }
+baml-runtime = { path = "../baml-runtime" }
+internal-baml-core = { path = "../baml-lib/baml-core" }
+internal-baml-diagnostics = { path = "../baml-lib/diagnostics" }
+internal-baml-parser-database = { path = "../baml-lib/parser-database" }
+divan = { package = "codspeed-divan-compat", version = "*" }
+indexmap = { workspace = true }
+
+[[bench]]
+name = "fib"
+harness = false
