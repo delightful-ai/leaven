@@ -1,8 +1,8 @@
 """`lv.optimize(...).run()` — the entry point for an optimization run.
 
-Composes a seed artifact, case sets, an optimizer config, an environment,
-and stage handlers into a runnable optimization. The builder is typed by
-the artifact type so `result.best.artifact` is fully typed.
+Composes a seed artifact, case sets, an optimizer config, a runtime, and stage
+handlers into a runnable optimization. The builder is typed by the artifact
+type so `result.best.artifact` is fully typed.
 """
 
 from __future__ import annotations
@@ -11,9 +11,9 @@ from typing import Any
 
 from .case import CaseSet
 from .decorators import RegisteredStage
-from .environment import Environment
 from .optimizers.config import OptimizerConfig
 from .result import Optimized
+from .runtime import Runtime
 
 
 class OptimizeBuilder[A]:
@@ -24,7 +24,7 @@ class OptimizeBuilder[A]:
     val: CaseSet | None
     test: CaseSet | None
     optimizer: OptimizerConfig
-    environment: Environment
+    runtime: Runtime
     runner: RegisteredStage[A, Any] | None
     scorer: RegisteredStage[A, Any] | None
     evaluator: RegisteredStage[A, Any] | None
@@ -55,7 +55,7 @@ def optimize[A](
     seed: A,
     train: CaseSet,
     optimizer: OptimizerConfig,
-    environment: Environment,
+    runtime: Runtime,
     val: CaseSet | None = None,
     test: CaseSet | None = None,
     runner: RegisteredStage[A, Any] | None = None,
@@ -67,7 +67,7 @@ def optimize[A](
 ) -> OptimizeBuilder[A]:
     """Compose an optimization run. Call `.run()` to execute.
 
-    Required: `seed`, `train`, `optimizer`, `environment`.
+    Required: `seed`, `train`, `optimizer`, `runtime`.
     Almost-always-required: `runner` + `scorer`, OR `evaluator`.
     Optional: `val`, `test`, `proposer` (overrides optimizer default),
     `reflector` (overrides optimizer default), `judge` (for
@@ -79,7 +79,7 @@ def optimize[A](
     b.val = val
     b.test = test
     b.optimizer = optimizer
-    b.environment = environment
+    b.runtime = runtime
     b.runner = runner
     b.scorer = scorer
     b.evaluator = evaluator

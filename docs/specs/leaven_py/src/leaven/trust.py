@@ -1,7 +1,7 @@
 """Trust profiles — execution policy + capability defaults bundled together.
 
 Pass to `@lv.runner(trust_profile=...)`, `@lv.evaluator(...)`, and
-`lv.environment(trust_profile=...)`. The engine lowers the profile into the
+`lv.runtime(trust_profile=...)`. The engine lowers the profile into the
 locked capability document; Python authors declare, Rust enforces.
 
 Spec: `docs/specs/leaven_python.md` · seam: public-seam-v1 trust bundles.
@@ -15,7 +15,7 @@ from enum import StrEnum
 
 
 class TrustProfile(StrEnum):
-    """Named trust bundles for stages and environments."""
+    """Named trust bundles for stages and runtimes."""
 
     TRUSTED_LOCAL_OPERATOR = "trusted_local_operator"
     """Operator machine — local sandbox backends allowed; broadest effects."""

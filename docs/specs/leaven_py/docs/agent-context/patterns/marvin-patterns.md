@@ -60,7 +60,7 @@ result = await lv.optimize(
     train=lv.cases.from_jsonl("train.jsonl"),
     val=lv.cases.from_jsonl("val.jsonl"),
     optimizer=lv.optimizers.gepa(population_size=8),
-    environment=lv.environment.local(budget=lv.budget(usd=20)),
+    runtime=lv.runtime.local(budget=lv.budget(usd=20)),
     runner=run, scorer=score,
 ).run()
 ```
@@ -288,4 +288,3 @@ Leaven is purely function + decorator (`@lv.runner`, `@lv.scorer`, etc.). This i
 - **Tool registration without capability proof** (`agent.py` L59–73) — acceptable for general-purpose agents, unsuitable for auditable optimization stages. Keep Leaven's capability-token model.
 
 **File Path**: `/Users/darin/src/personal/leaven/docs/specs/leaven_py/docs/agent-context/patterns/marvin-patterns.md`
-

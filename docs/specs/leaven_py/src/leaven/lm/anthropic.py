@@ -31,7 +31,7 @@ def anthropic(
     """Anthropic LM provider config builder.
 
     Example:
-        env = lv.environment(lm=lv.lm.anthropic(model="claude-opus-4-7"))
+        env = lv.runtime(lm=lv.lm.anthropic(model="claude-opus-4-7"))
     """
     return AnthropicLm(
         model=model,

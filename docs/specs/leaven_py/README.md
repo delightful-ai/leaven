@@ -16,12 +16,12 @@ import leaven as lv
 
 ## Examples
 
-Open [`examples/`](examples/README.md) — four short files that read like real programs:
+Open [`examples/`](examples/README.md) — the numbered tour files read like real programs:
 
-- **`prompt_optimize.py`** — the minimal ~25-line run
-- **`environment.py`** — how `lv.environment(...)` composes
-- **`gepa_skill_bank.py`** — GEPA + SkillBank config
-- **`evaluator.py`** — the full evaluator shape from the public seam
+- **`03_prompt_optimize.py`** — the minimal ~25-line run
+- **`01_runtime.py`** — how `lv.runtime(...)` composes
+- **`04_evoskill_skill_bank.py`** — GEPA + SkillBank config
+- **`05_evaluator_with_judge.py`** — the full evaluator shape from the public seam
 
 ## Verify
 

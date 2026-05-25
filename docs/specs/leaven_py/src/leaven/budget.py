@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class Budget(BaseModel):
-    """A budget envelope; pass via `lv.environment(budget=...)`."""
+    """A budget envelope; pass via `lv.runtime(budget=...)`."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

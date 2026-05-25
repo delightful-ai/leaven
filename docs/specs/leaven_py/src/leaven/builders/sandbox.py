@@ -48,7 +48,7 @@ class SandboxBuilder:
     ) -> SandboxExec:
         """Run a command in the configured sandbox against the workspace.
 
-        Sandbox configuration comes from the environment's `sandbox=` slot.
+        Sandbox configuration comes from the runtime's `sandbox=` slot.
         Output captures are bound to the receipt; the engine refuses captures
         outside the contract.
         """

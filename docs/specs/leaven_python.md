@@ -6,7 +6,7 @@ Created: 2026-05-24.
 ## What this is
 
 Leaven Python is the way you use Leaven. You write Python that configures
-and drives a full Leaven optimization run end-to-end — environment,
+and drives a full Leaven optimization run end-to-end — runtime,
 optimizer, stages, run, inspection — and the result is a typed, replayable,
 auditable optimization with every safety property of the locked public seam
 preserved across the wire. Capability tokens are real. Data-class
@@ -48,7 +48,7 @@ disagree about the wire, the seam wins.
 
 ## Why this exists
 
-In Rust, Leaven is currently hard to set up. Environment setup bugs.
+In Rust, Leaven is currently hard to set up. Runtime setup bugs.
 Topology that needs to be held in working memory. Trait bounds that fail
 in non-obvious places. The user surfaced this directly during the design
 conversation that produced this spec: *"in Rust, Leaven is not usable.
@@ -155,7 +155,7 @@ result = await lv.optimize(
     train=lv.cases.from_jsonl("train.jsonl"),
     val=lv.cases.from_jsonl("val.jsonl"),
     optimizer=lv.optimizers.gepa(population_size=8),
-    environment=lv.environment.local(budget=lv.budget(usd=20)),
+    runtime=lv.runtime.local(budget=lv.budget(usd=20)),
     runner=run, scorer=score,
 ).run()
 
@@ -163,7 +163,7 @@ print(result.best.artifact.template)
 ```
 
 The shape is the same at any scale. An EvoSkill-shaped paper repro is the
-same composition with more stages, a richer environment, and an agentic
+same composition with more stages, a richer runtime, and an agentic
 reflector. ~70 lines, including stage bodies. The composition glue does
 not grow with the paper's complexity; the stage bodies do.
 
@@ -357,10 +357,10 @@ the wire treats them as one transaction with one receipt root. Without
 it, every effect is a separate round-trip. With it, the user expresses
 intent declaratively and the wire is efficient.
 
-Environment composition takes a single call:
+Runtime composition takes a single call:
 
 ```python
-env = lv.environment(
+env = lv.runtime(
     workspace=lv.workspace.local(root=".agents"),
     lm=lv.lm.anthropic(model="claude-opus-4-7"),
     agent=lv.agent.codex(model="gpt-5-codex"),
@@ -402,7 +402,7 @@ result = await lv.optimize(
     seed=lv.SkillBank.empty(),
     train=officeqa.train, val=officeqa.val, test=officeqa.test,
     optimizer=opt,
-    environment=env,
+    runtime=env,
     runner=run, scorer=score,
     proposer=propose,  # optional; defaults to optimizer's built-in
     reflector=reflect,  # optional; defaults to optimizer's built-in
@@ -492,7 +492,7 @@ produces any of them, the spec has been compromised:
 - ACP conformance rows promoted to `proven` from in-process Rust tests
   labeled as ACP. The matrix explicitly names this as `fake_pass_rejected`.
 - A working `@lv.evaluator` decorator with no `lv.optimize()` /
-  `lv.environment()` / `lv.optimizers.gepa()`. The stage-only framing
+  `lv.runtime()` / `lv.optimizers.gepa()`. The stage-only framing
   this spec rejects.
 - Typed Python records that don't validate against the same JSON Schemas
   the Rust engine uses. Typed lipstick on schemaless drift; recreates
@@ -518,7 +518,7 @@ versions per a stated deprecation policy. Pydantic models in the public
 tier are frozen and `extra="forbid"`.
 
 **Private.** Everything else. Convention: leading underscore on file name
-(`_handles.py`, `_receipts.py`) or symbol name (`_EnvironmentBuilder`,
+(`_handles.py`, `_receipts.py`) or symbol name (`_RuntimeBuilder`,
 `_CacheNamespace`). Not listed in any `__all__`. Not documented here.
 May change between versions without notice.
 
