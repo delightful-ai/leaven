@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 use std::error::Error;
 use std::fs;
 use std::io::Write;
@@ -12,8 +12,15 @@ use chrono::Utc;
 use clap::{Args as ClapArgs, ValueEnum};
 use serde::Serialize;
 
+mod cases;
+mod report;
 mod util;
 
+use cases::{BenchCase, default_cases, parse_case};
+use report::{
+    BenchReport, CommandReport, HostReport, ResourceReport, SampleReport, TaskReport,
+    print_summary, summarize, write_report,
+};
 use util::{
     du_kib, git, git_no_cwd, git_output, git_success, half_parallelism, logical_cpus, mean,
     repo_root, run_command, seconds, u64_to_f64, usize_to_f64,
@@ -59,19 +66,6 @@ enum EnvironmentKind {
     Firkin,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-struct BenchCase {
-    name: String,
-    file_count: usize,
-    file_bytes: usize,
-}
-
-impl BenchCase {
-    const fn total_bytes(&self) -> usize {
-        self.file_count * self.file_bytes
-    }
-}
-
 #[derive(Clone, Debug)]
 struct GitTrustTask {
     environment: EnvironmentKind,
@@ -102,55 +96,6 @@ struct LocalGitSolver {
 
 #[derive(Clone, Copy, Debug)]
 struct TrustScorer;
-
-#[derive(Debug, Serialize)]
-struct BenchReport {
-    generated_at: String,
-    task: TaskReport,
-    host: HostReport,
-    commands: Vec<CommandReport>,
-    samples: Vec<SampleReport>,
-    summary: BTreeMap<String, SummaryReport>,
-    resource_usage: ResourceReport,
-}
-
-#[derive(Debug, Serialize)]
-struct TaskReport {
-    name: &'static str,
-    structure: &'static str,
-    environment: EnvironmentKind,
-    sample_count: usize,
-    intermediate_count: usize,
-}
-
-#[derive(Debug, Serialize)]
-struct HostReport {
-    logical_cpus: usize,
-    jobs: usize,
-    os: String,
-    arch: String,
-}
-
-#[derive(Debug, Serialize)]
-struct CommandReport {
-    command: Vec<String>,
-    seconds: f64,
-}
-
-#[derive(Clone, Debug, Serialize)]
-struct SampleReport {
-    case: BenchCase,
-    iteration: usize,
-    setup_seconds: f64,
-    projection_seconds: f64,
-    materialize_seconds: f64,
-    readback_seconds: f64,
-    durable_kib: u64,
-    workspace_kib: u64,
-    imported_child: String,
-    intermediate_chain: Option<IntermediateChainReport>,
-    score: TrustScore,
-}
 
 #[derive(Clone, Debug, Serialize)]
 struct IntermediateChainReport {
@@ -191,24 +136,6 @@ struct ProjectionTrustScore {
     hidden_ref_absent: bool,
     hidden_object_absent: bool,
     alternates_absent: bool,
-}
-
-#[derive(Debug, Serialize)]
-struct SummaryReport {
-    file_count: usize,
-    file_bytes: usize,
-    total_mib: f64,
-    setup_mean_seconds: f64,
-    projection_mean_seconds: f64,
-    materialize_mean_seconds: f64,
-    readback_mean_seconds: f64,
-    durable_kib_mean: f64,
-    workspace_kib_mean: f64,
-}
-
-#[derive(Debug, Serialize)]
-struct ResourceReport {
-    wall_seconds: f64,
 }
 
 struct SamplePaths {
@@ -854,74 +781,6 @@ fn seed(case_name: &str, index: usize) -> u64 {
     hash.max(1)
 }
 
-fn summarize(reports: &[SampleReport]) -> BTreeMap<String, SummaryReport> {
-    let mut grouped: BTreeMap<String, Vec<&SampleReport>> = BTreeMap::new();
-    for report in reports {
-        grouped
-            .entry(report.case.name.clone())
-            .or_default()
-            .push(report);
-    }
-    grouped
-        .into_iter()
-        .map(|(name, reports)| {
-            let first = reports[0];
-            (
-                name,
-                SummaryReport {
-                    file_count: first.case.file_count,
-                    file_bytes: first.case.file_bytes,
-                    total_mib: usize_to_f64(first.case.total_bytes()) / (1024.0 * 1024.0),
-                    setup_mean_seconds: mean(reports.iter().map(|report| report.setup_seconds)),
-                    projection_mean_seconds: mean(
-                        reports.iter().map(|report| report.projection_seconds),
-                    ),
-                    materialize_mean_seconds: mean(
-                        reports.iter().map(|report| report.materialize_seconds),
-                    ),
-                    readback_mean_seconds: mean(
-                        reports.iter().map(|report| report.readback_seconds),
-                    ),
-                    durable_kib_mean: mean(
-                        reports.iter().map(|report| u64_to_f64(report.durable_kib)),
-                    ),
-                    workspace_kib_mean: mean(
-                        reports
-                            .iter()
-                            .map(|report| u64_to_f64(report.workspace_kib)),
-                    ),
-                },
-            )
-        })
-        .collect()
-}
-
-fn print_summary(summary: &BTreeMap<String, SummaryReport>) {
-    println!("summary:");
-    println!(
-        "case,total_mib,project_mean_s,materialize_mean_s,readback_mean_s,durable_kib,workspace_kib"
-    );
-    for (name, report) in summary {
-        println!(
-            "{name},{:.2},{:.3},{:.3},{:.3},{:.0},{:.0}",
-            report.total_mib,
-            report.projection_mean_seconds,
-            report.materialize_mean_seconds,
-            report.readback_mean_seconds,
-            report.durable_kib_mean,
-            report.workspace_kib_mean
-        );
-    }
-}
-
-fn write_report(path: &Path, report: &BenchReport) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(path, serde_json::to_string_pretty(report)? + "\n")?;
-    Ok(())
-}
-
 fn samples(
     cases: Vec<BenchCase>,
     iterations: usize,
@@ -937,53 +796,4 @@ fn samples(
             })
         })
         .collect()
-}
-
-fn default_cases() -> Vec<BenchCase> {
-    vec![
-        BenchCase {
-            name: "small".to_owned(),
-            file_count: 100,
-            file_bytes: 1024,
-        },
-        BenchCase {
-            name: "medium".to_owned(),
-            file_count: 1000,
-            file_bytes: 4096,
-        },
-        BenchCase {
-            name: "large".to_owned(),
-            file_count: 5000,
-            file_bytes: 4096,
-        },
-    ]
-}
-
-fn parse_case(raw: &str) -> std::result::Result<BenchCase, String> {
-    let mut parts = raw.split(':');
-    let name = parts
-        .next()
-        .filter(|name| !name.is_empty())
-        .ok_or_else(|| "case name is required".to_owned())?;
-    let file_count = parts
-        .next()
-        .ok_or_else(|| "file count is required".to_owned())?
-        .parse::<usize>()
-        .map_err(|source| format!("invalid file count: {source}"))?;
-    let file_bytes = parts
-        .next()
-        .ok_or_else(|| "file bytes is required".to_owned())?
-        .parse::<usize>()
-        .map_err(|source| format!("invalid file bytes: {source}"))?;
-    if parts.next().is_some() {
-        return Err("case must be NAME:FILES:BYTES".to_owned());
-    }
-    if file_count == 0 || file_bytes == 0 {
-        return Err("file count and bytes must be positive".to_owned());
-    }
-    Ok(BenchCase {
-        name: name.to_owned(),
-        file_count,
-        file_bytes,
-    })
 }
