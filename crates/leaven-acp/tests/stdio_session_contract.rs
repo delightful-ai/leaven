@@ -128,6 +128,7 @@ print(json.dumps(response, sort_keys=True), flush=True)
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn stdio_session_runs_python_external_worker_program_across_v1_method_families() {
     let package = package();
     let profile = profile(&package, 32, "pause_worker");
