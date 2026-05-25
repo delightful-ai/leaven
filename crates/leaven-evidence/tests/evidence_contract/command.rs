@@ -43,6 +43,18 @@ fn command_output_can_be_blob_backed() {
 }
 
 #[test]
+fn output_record_projects_compact_report_text_for_inline_and_blob_outputs() {
+    let inline = OutputRecord::inline("short answer");
+    let blob = OutputRecord::blob(BlobRef {
+        store: "blob-store".to_owned(),
+        key: "stdout/0".to_owned(),
+    });
+
+    assert_eq!(inline.report_text(), "short answer");
+    assert_eq!(blob.report_text(), "blob:blob-store:stdout/0");
+}
+
+#[test]
 fn audited_blob_output_carries_public_audit_facts() {
     let output = OutputRecord::audited_blob(
         BlobRef {

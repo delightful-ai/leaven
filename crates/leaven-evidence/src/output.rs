@@ -394,6 +394,17 @@ impl OutputRecord {
         }
     }
 
+    /// Compact report text for inline output or a stable blob reference label.
+    #[must_use]
+    pub fn report_text(&self) -> String {
+        match self {
+            Self::Inline { text, .. } => text.clone(),
+            Self::BlobRef { reference, .. } => {
+                format!("blob:{}:{}", reference.store, reference.key)
+            }
+        }
+    }
+
     /// Output visibility.
     #[must_use]
     pub const fn visibility(&self) -> OutputVisibility {
