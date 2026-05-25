@@ -12,15 +12,13 @@ use std::{
 use leaven_core::CaseSetVersion;
 use leaven_engine::{CachePolicy, OptimizerCompatibility};
 use leaven_eval::{Case, DatasetSplits};
-use leaven_kernel::{Fingerprint, FingerprintBuilder};
+use leaven_kernel::{Budget, Fingerprint, FingerprintBuilder};
 use serde::{Deserialize, Serialize};
 
 use crate::result::RunCompatibilitySummary;
 
 const MANIFEST_FILE: &str = "compatibility.json";
-const MANIFEST_SCHEMA: &str = "leaven-run.compatibility.v3";
-const CACHE_PLACEHOLDER: &str = "cache:auto/eval-schema-pending/lm-schema-pending";
-const BUDGET_PLACEHOLDER: &str = "budget:ledger-compatibility-pending";
+const MANIFEST_SCHEMA: &str = "leaven-run.compatibility.v4";
 
 /// Runtime slot whose behavior must be explicitly fingerprinted for durable runs.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -118,9 +116,9 @@ pub struct RunCompatibilityManifest {
     pub optimizer: Option<OptimizerCompatibility>,
     /// Role-specific LM runtime fingerprints declared by product adapters.
     pub lm_roles: BTreeMap<String, RuntimeFingerprint>,
-    /// Cache semantic compatibility placeholder.
+    /// Cache semantic compatibility declaration.
     pub cache: String,
-    /// Budget semantic compatibility placeholder.
+    /// Budget limit compatibility declaration.
     pub budget: String,
 }
 
@@ -132,6 +130,8 @@ impl RunCompatibilityManifest {
         evaluator: RuntimeFingerprint,
         optimizer: Option<OptimizerCompatibility>,
         lm_roles: BTreeMap<String, RuntimeFingerprint>,
+        cache_policy: CachePolicy,
+        budget: Budget,
     ) -> Self {
         Self {
             schema: MANIFEST_SCHEMA.to_owned(),
@@ -143,8 +143,8 @@ impl RunCompatibilityManifest {
             evaluator,
             optimizer,
             lm_roles,
-            cache: CACHE_PLACEHOLDER.to_owned(),
-            budget: BUDGET_PLACEHOLDER.to_owned(),
+            cache: cache_compatibility(&cache_policy),
+            budget: budget_compatibility(&budget),
         }
     }
 
@@ -441,6 +441,16 @@ fn problem_placeholder() -> Fingerprint {
     fingerprint.finish()
 }
 
+fn cache_compatibility(policy: &CachePolicy) -> String {
+    let policy = serde_json::to_string(policy).expect("cache policy serializes");
+    format!("cache:evaluation-policy-json:{policy}")
+}
+
+fn budget_compatibility(budget: &Budget) -> String {
+    let limit = serde_json::to_string(budget).expect("budget serializes");
+    format!("budget:limit-json:{limit}")
+}
+
 fn fingerprint_hex(fingerprint: Fingerprint) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut out = String::with_capacity(64);
@@ -564,6 +574,29 @@ mod tests {
     }
 
     #[test]
+    fn manifest_cache_and_budget_are_derived_from_typed_inputs() {
+        let deterministic_seed = manifest_with_policy_and_budget(
+            CachePolicy::DeterministicWithSeed(7),
+            Budget::metric_calls(3),
+        );
+        let deterministic =
+            manifest_with_policy_and_budget(CachePolicy::Deterministic, Budget::metric_calls(3));
+        let unlimited = manifest_with_policy_and_budget(
+            CachePolicy::DeterministicWithSeed(7),
+            Budget::unlimited(),
+        );
+
+        assert!(
+            deterministic_seed
+                .cache
+                .starts_with("cache:evaluation-policy-json:")
+        );
+        assert!(deterministic_seed.budget.starts_with("budget:limit-json:"));
+        assert_ne!(deterministic_seed.cache, deterministic.cache);
+        assert_ne!(deterministic_seed.budget, unlimited.budget);
+    }
+
+    #[test]
     fn atomic_manifest_write_rejects_paths_without_file_names() {
         let error = write_atomic(Path::new(""), b"manifest")
             .expect_err("compatibility manifest writes require a file path");
@@ -602,6 +635,28 @@ mod tests {
             RuntimeFingerprint::new(Fingerprint::from_bytes([13; 32])),
             None,
             lm_roles,
+            CachePolicy::Never,
+            Budget::unlimited(),
+        )
+    }
+
+    fn manifest_with_policy_and_budget(
+        cache_policy: CachePolicy,
+        budget: Budget,
+    ) -> RunCompatibilityManifest {
+        RunCompatibilityManifest::new(
+            DatasetCompatibility {
+                content: Fingerprint::from_bytes([9; 32]),
+                splits: Fingerprint::from_bytes([10; 32]),
+                case_set_version: "cases-v1".to_owned(),
+            },
+            RuntimeFingerprint::new(Fingerprint::from_bytes([11; 32])),
+            RuntimeFingerprint::new(Fingerprint::from_bytes([12; 32])),
+            RuntimeFingerprint::new(Fingerprint::from_bytes([13; 32])),
+            None,
+            BTreeMap::new(),
+            cache_policy,
+            budget,
         )
     }
 }

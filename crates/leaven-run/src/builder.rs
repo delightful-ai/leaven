@@ -391,6 +391,7 @@ where
         self.order.check()?;
         let scorer = self.scorer.take().ok_or(OptimizeError::MissingScore)?;
         let budget = self.budget.take().ok_or(OptimizeError::MissingBudget)?;
+        let compatibility_budget = budget.clone();
         let metric_call_limit = budget.metric_calls;
         let engine_budget = search_ledger_budget(budget);
         if self.train.is_empty() && (!self.validation.is_empty() || !self.test.is_empty()) {
@@ -424,6 +425,8 @@ where
             evaluator_fingerprint,
             self.optimizer.optimizer_compatibility(),
             self.lm_role_fingerprints.clone(),
+            evaluation_cache_policy.clone(),
+            compatibility_budget,
         );
         let compatibility_summary = prepared_store
             .run_dir
