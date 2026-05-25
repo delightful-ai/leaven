@@ -11,13 +11,12 @@ frontier admission.
 
 ## Status
 
-Behavior-bearing bridge scaffold. The crate has a deterministic GEPA
+Behavior-bearing advanced bridge route. The crate has a deterministic GEPA
 GitProgram reflection test that materializes a parent repo, reads back a typed
 `GitProgramChange`, applies through `RunContext::propose` plus `apply_batch`,
 records tiny EvoSkill-shaped frontier admission state, and projects the
-reflect-then-propose handoff into the locked public-seam stage payloads. It
-remains an advanced bridge route, not an ordinary prelude/default-feature
-product route.
+reflect-then-propose handoff into the locked public-seam stage payloads. It is
+not an ordinary prelude/default-feature product route.
 
 ## Map
 

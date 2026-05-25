@@ -1,6 +1,6 @@
 //! GEPA agentic reflection adapter for Git program artifacts.
 //!
-//! Status: behavior-bearing bridge scaffold.
+//! Status: behavior-bearing advanced bridge route.
 //!
 //! The owning product-backend spec is
 //! `docs/specs/agentic_trace_reflection_product_backend.md`. This crate is the
