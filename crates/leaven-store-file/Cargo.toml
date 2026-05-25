@@ -1,6 +1,6 @@
 [package]
 name = "leaven-store-file"
-description = "Leaven crate skeleton for leaven-store-file."
+description = "Local filesystem backend for Leaven storage capabilities."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
