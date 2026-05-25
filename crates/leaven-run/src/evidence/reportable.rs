@@ -142,7 +142,7 @@ fn same_output_payload(reported: &OutputRecord, expected: &OutputRecord) -> bool
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct ReportableOutputScope {
+pub struct ReportableOutputScope {
     candidates: Vec<CandidateId>,
     case: CaseId,
 }

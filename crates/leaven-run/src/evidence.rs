@@ -9,8 +9,7 @@ use leaven_kernel::{BudgetSnapshot, CaseId, Cost};
 
 mod reportable;
 
-pub(crate) use reportable::ReportableOutputScope;
-pub use reportable::{ReportableOutput, ReportableOutputDeclaration};
+pub use reportable::{ReportableOutput, ReportableOutputDeclaration, ReportableOutputScope};
 
 /// Output produced by running one artifact on one case.
 ///
