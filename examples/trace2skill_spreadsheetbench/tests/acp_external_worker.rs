@@ -6,6 +6,7 @@ use std::{
 use leaven_acp::{AcpProcessCommand, AcpStdioProcessSession};
 use leaven_public_seam::{AcpProfileDocument, PublicSeamPackage};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 use trace2skill_spreadsheetbench::{
     Trace2SkillOneCaseComparisonInput, Trace2SkillOneCaseInput, Trace2SkillOneCaseRunInput,
@@ -47,6 +48,7 @@ fn acp_external_python_worker_solves_real_spreadsheetbench_case_and_scores_run()
     assert_eq!(response.method(), "leaven/agent.run");
     assert_eq!(response.primary_kind(), "agent_session");
     assert!(prepared.output_workbook.exists());
+    assert_workbook_bound_to_acp_result(response.result(), &prepared.output_workbook);
     let transcript_file = run_dir.join("agent_transcript.md");
     assert!(transcript_file.exists());
 
@@ -87,15 +89,21 @@ fn acp_external_python_worker_success_without_workbook_does_not_clear_benchmark_
     let package = package();
     let profile = profile(&package);
     let script = write_worker_script();
-    let mut session = spawn_worker(&package, &profile, &script, &run_dir, "fake_success");
+    let mut session = spawn_worker(&package, &profile, &script, &run_dir, "fake_artifact");
 
     let response = session
         .call_extension("leaven/agent.run", &agent_run_plan_params())
         .unwrap();
     assert_eq!(response.primary_kind(), "agent_session");
     assert!(
+        response
+            .result()
+            .pointer("/primary/commands/0/files/13-1_output.xlsx")
+            .is_some()
+    );
+    assert!(
         !prepared.output_workbook.exists(),
-        "a valid ACP success envelope is not enough to fake benchmark completion"
+        "a valid ACP success envelope with an advertised workbook artifact is not enough to fake benchmark completion"
     );
     let transcript_file = run_dir.join("agent_transcript.md");
     assert!(transcript_file.exists());
@@ -107,6 +115,24 @@ fn acp_external_python_worker_success_without_workbook_does_not_clear_benchmark_
         })
         .is_err()
     );
+}
+
+fn assert_workbook_bound_to_acp_result(result: &Value, output_workbook: &Path) {
+    let workbook_bytes = fs::read(output_workbook).unwrap();
+    let workbook_ref = result
+        .pointer("/primary/commands/0/files/13-1_output.xlsx")
+        .expect("agent command result must bind the output workbook artifact");
+    assert_eq!(workbook_ref["kind"], json!("blob_ref"));
+    assert_eq!(workbook_ref["bytes"], json!(workbook_bytes.len()));
+    assert_eq!(workbook_ref["sha256"], json!(sha256_hex(&workbook_bytes)));
+    assert_eq!(workbook_ref["data_classes"], json!(["workspace.file"]));
+    let data_classes = result["data_classes"].as_array().unwrap();
+    assert!(data_classes.contains(&json!("workspace.file")));
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 struct ExactCaseFixture {
@@ -392,46 +418,72 @@ def write_transcript(run_dir, solved):
     return transcript
 
 
-def primary(transcript, status):
+def blob_ref(path, blob_id, data_classes):
+    data = path.read_bytes()
+    return {
+        "kind": "blob_ref",
+        "id": blob_id,
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "bytes": len(data),
+        "data_classes": data_classes,
+    }
+
+
+def empty_blob_ref(blob_id):
+    return {
+        "kind": "blob_ref",
+        "id": blob_id,
+        "sha256": hashlib.sha256(b"").hexdigest(),
+        "bytes": 0,
+        "data_classes": ["transcript.raw"],
+    }
+
+
+def fake_workbook_ref():
+    return {
+        "kind": "blob_ref",
+        "id": "blob_trace2skill_output_workbook",
+        "sha256": "0" * 64,
+        "bytes": 0,
+        "data_classes": ["workspace.file"],
+    }
+
+
+def primary(transcript, status, solved=None, claim_artifact=False):
+    files = {}
+    if solved is not None:
+        files["13-1_output.xlsx"] = blob_ref(
+            solved,
+            "blob_trace2skill_output_workbook",
+            ["workspace.file"],
+        )
+    elif claim_artifact:
+        files["13-1_output.xlsx"] = fake_workbook_ref()
+    data_classes = ["public", "transcript.raw"]
+    if files:
+        data_classes.append("workspace.file")
     return {
         "kind": "agent_session",
         "status": status,
-        "transcript_ref": {
-            "kind": "blob_ref",
-            "id": "blob_trace2skill_transcript",
-            "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-            "bytes": transcript.stat().st_size,
-            "data_classes": ["transcript.raw"],
-        },
+        "transcript_ref": blob_ref(transcript, "blob_trace2skill_transcript", ["transcript.raw"]),
         "commands": [{
             "argv": ["python", "trace2skill_spreadsheetbench_solver"],
             "status": status,
             "receipt": "agentrec_trace2skill",
-            "stdout_ref": {
-                "kind": "blob_ref",
-                "id": "blob_trace2skill_stdout",
-                "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-                "bytes": 0,
-                "data_classes": ["transcript.raw"],
-            },
-            "stderr_ref": {
-                "kind": "blob_ref",
-                "id": "blob_trace2skill_stderr",
-                "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-                "bytes": 0,
-                "data_classes": ["transcript.raw"],
-            },
+            "stdout_ref": empty_blob_ref("blob_trace2skill_stdout"),
+            "stderr_ref": empty_blob_ref("blob_trace2skill_stderr"),
+            "files": files,
         }],
         "cost": {"usd_micro": 0, "agent_calls": 1},
         "graph_revision": "rev_trace2skill_acp",
-        "data_classes": ["public", "transcript.raw"],
+        "data_classes": data_classes,
         "replayability": "fully_managed",
         "receipt": "agentrec_trace2skill",
     }
 
 
-def extension_result(method, transcript, status):
-    value = primary(transcript, status)
+def extension_result(method, transcript, status, solved=None, claim_artifact=False):
+    value = primary(transcript, status, solved, claim_artifact)
     return {
         "method": method,
         "primary": value,
@@ -450,7 +502,7 @@ def extension_result(method, transcript, status):
         }],
         "redactions": [],
         "capability_fingerprint": os.environ["LEAVEN_CAPABILITY_FINGERPRINT"],
-        "data_classes": ["public", "transcript.raw"],
+        "data_classes": value["data_classes"],
     }
 
 
@@ -469,7 +521,10 @@ for line in sys.stdin:
     if mode == "solve":
         solved = solve_spreadsheet(run_dir)
         transcript = write_transcript(run_dir, solved)
+        claim_artifact = False
     else:
+        solved = None
+        claim_artifact = mode == "fake_artifact"
         transcript = run_dir / "agent_transcript.md"
         transcript.write_text("ACTION: claimed success without writing workbook\n", encoding="utf-8")
 
@@ -481,6 +536,6 @@ for line in sys.stdin:
     print(json.dumps({
         "jsonrpc": "2.0",
         "id": request["id"],
-        "result": extension_result(request["method"], transcript, "completed"),
+        "result": extension_result(request["method"], transcript, "completed", solved, claim_artifact),
     }, sort_keys=True), flush=True)
 "#;
