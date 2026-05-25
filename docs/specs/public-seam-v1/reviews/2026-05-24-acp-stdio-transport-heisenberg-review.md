@@ -12,7 +12,7 @@ Scope: `ps1.acp.transport_profile`, `ps1.acp.extension_results`,
 - `docs/specs/public-seam-v1/conformance-matrix.yaml`
 - `docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md`
 - `docs/specs/public-seam-v1/00_architecture_judgment_v0.3.md`
-- `docs/specs/public-seam-v1/CONFORMANCE_TESTS_v0.3.md`
+- `docs/specs/public-seam-v1/notes/CONFORMANCE_TESTS_v0.3.md`
 - `crates/leaven-acp/**`
 - `crates/leaven-public-seam/AGENTS.md`
 - Root and `crates/` topology docs/tests touched by the new crate.
