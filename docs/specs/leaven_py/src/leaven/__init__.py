@@ -93,6 +93,28 @@ from .x.dspy.invoke import dspy_acall
 # Roles convention alias (used as `lv.roles.EXECUTOR` in evaluator code).
 roles = AgentRoles
 
+# ----- Hide leak-y submodule names -----------------------------------------
+# Submodules whose public types we re-export at the top level (e.g. `case`,
+# `assessment`, `decorators`, `evaluation_job`, ...) get attached to `leaven`
+# as a side-effect of `from .X import Y`. We delete them so `dir(leaven)`
+# only shows the deliberate surface — the convention in AGENTS.md is that
+# users access these types as `lv.Case`, `lv.Assessment`, not `lv.case.Case`.
+# Submodules INTENDED as namespaces (`agent`, `lm`, `workspace`, `sandbox`,
+# `cases`, `optimizers`, `frontier`, `output`, `scoring`, `trust`, `runs`,
+# `x`, `data_class`) are imported above with `from . import ...` and stay.
+# NOTE: `budget`, `environment`, `optimize` are NOT in this list — they're
+# public top-level callables that share names with their owning submodules.
+# Deleting them would remove the function, not just the module attribute.
+for _leaky in (
+    "agent_instructions", "artifacts", "assessment", "builders",
+    "case", "context", "decorators", "evaluation_job",
+    "evidence", "output_record", "proposal", "result",
+    "score", "stage_payloads",
+):
+    if _leaky in globals():
+        del globals()[_leaky]
+del _leaky
+
 __all__ = [
     # records
     "AgentInstructions",

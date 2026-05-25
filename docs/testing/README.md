@@ -13,8 +13,8 @@ just check
 ```
 
 `just check` runs formatting, the production line-count lint, clippy with
-workspace library/tool targets, the nextest workspace suite, doctests, and the
-line/branch coverage summary. The default gate excludes milestone example
+workspace library/tool targets, the SLA-enforced workspace libtest suite,
+doctests, and the line/branch coverage summary. The default gate excludes milestone example
 packages; use the explicit milestone recipes when an example workflow is the
 claim under test. Use narrower recipes only while iterating:
 
@@ -74,14 +74,15 @@ just test must finish in <30s
 ```
 
 `just test` enforces this directly. The SLA covers workspace libtest binaries
-whose source contains test markers and workspace doctests for library/tool
-packages that contain Rust doctest fences. Milestone examples stay out of the
-default SLA and run through explicit `just milestone-*` recipes. Empty
-library, binary, proc-macro, and doctest harnesses are skipped because they
-prove nothing while adding process-startup cost. If the suite crosses the line,
-do not add a second slow lane; reduce fixture cost, property-test case count,
-setup work, doctest harness fan-out, or assertion altitude until the default
-suite is back under the SLA.
+whose source contains test markers, including conventional sibling module
+directories for consolidated integration harnesses, and workspace doctests for
+library/tool packages that contain Rust doctest fences. Milestone examples stay
+out of the default SLA and run through explicit `just milestone-*` recipes.
+Empty library, binary, proc-macro, and doctest harnesses are skipped because
+they prove nothing while adding process-startup cost. If the suite crosses the
+line, do not add a second slow lane; reduce fixture cost, property-test case
+count, setup work, doctest harness fan-out, or assertion altitude until the
+default suite is back under the SLA.
 
 The SLA runner executes many libtest binaries concurrently and sets
 `RUST_TEST_THREADS=1` inside each binary. This keeps parallelism at the suite
@@ -159,7 +160,8 @@ Use the narrowest layer that proves the claim.
   assessment queries, and graph-backed evidence lookup.
 - `crates/leaven-engine/tests/budget_laws.rs`: budget axis and sub-stage
   charging laws, including typed refusal of invalid seconds amounts.
-- `crates/leaven-kernel/tests/cost_amount.rs`: property and regression coverage
+- `crates/leaven-kernel/tests/kernel_contract.rs`: consolidated kernel
+  contract harness covering property and regression coverage
   for finite, non-negative `Amount` construction, serde round trips, and
   saturating cost combination.
 - `crates/leaven-engine/tests/case_set_resolution.rs`: evaluation-set
@@ -216,15 +218,13 @@ Use the narrowest layer that proves the claim.
   command/trajectory, analyst fan-out, patch merge-tree, attribution evidence,
   scalar preference, keep-best, and inline store behavior now covered by the
   canonical coverage gate.
-- `crates/leaven-population/tests/pareto_frontier.rs` and
+- `crates/leaven-population/tests/population_contract.rs` and
   `crates/leaven-gepa/tests/gepa_smoke.rs`: P3 casewise Pareto frontier laws,
   partition filtering, GEPA surface ownership, surface-edit lowering, candidate
   selector separation, and proposer read-scope coverage.
 - `crates/leaven-core/tests/proposal_contract.rs`: cold proposal constructors,
   causal lineage, informational references, clone behavior, and batch semantics.
-- `crates/leaven-kernel/tests/finite_f64.rs`,
-  `crates/leaven-kernel/tests/cost_amount.rs`, and
-  `crates/leaven-kernel/tests/identity_metadata.rs`: finite signed floats,
+- `crates/leaven-kernel/tests/kernel_contract.rs`: finite signed floats,
   amount/cost conversions, metered mapping, fingerprint ordering, durable error
   records, metadata ordering, typed IDs, and stage attribution display.
 - `crates/leaven-workspace/tests/workspace_path.rs`: workspace path examples

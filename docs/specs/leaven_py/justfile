@@ -3,10 +3,31 @@
 default:
     @just --list
 
+# Install / sync dependencies via uv.
 sync:
     uv sync
 
+# Run the full tour (8 examples).
+examples:
+    uv run python examples/run_all.py
+
+# Run a single example by number prefix (e.g. `just example 03`).
+example NUM:
+    @set -e; \
+    script=$(ls examples/{{NUM}}_*.py 2>/dev/null | head -1); \
+    if [ -z "$script" ]; then echo "no example matching {{NUM}}_*.py" >&2; exit 1; fi; \
+    uv run python "$script"
+
+# Lint + type-check the public surface and examples.
 check:
     uv run ruff check src/leaven examples
-    uv run ty src/leaven
-    uv run python -c "import leaven; import py_compile; from pathlib import Path; [py_compile.compile(p) for p in Path('examples').glob('*.py')]"
+    uv run ty check src/leaven
+
+# Verify every example file at least compiles (no execution).
+compile-examples:
+    uv run python -c "import py_compile; from pathlib import Path; [py_compile.compile(str(p), doraise=True) for p in Path('examples').glob('*.py')]"
+    @echo "all example files compile"
+
+# Everything: deps + lint + type + compile.
+all: sync check compile-examples
+    @echo "ok"

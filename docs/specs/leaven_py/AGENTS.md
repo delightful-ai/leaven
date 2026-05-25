@@ -75,6 +75,45 @@ enumerate explicitly, surface the proposed shape and the spec section it
 extends as a question before writing the module. The scaffold should not
 grow beyond what the spec describes.
 
+## Vendored Repositories
+
+This scaffold vendors external repositories under `repos/` for agent
+reference only. They are read-only inspiration; they are **not** runtime
+dependencies of `leaven`.
+
+Discipline:
+
+- Use vendored repos as read-only reference when refining the scaffold's
+  shape against real-world API ergonomics, idioms, tests, and known
+  failure modes.
+- Prefer examples and patterns from vendored source over guesses.
+- Do not edit files under `repos/`.
+- Do not import from `repos/` in `leaven` source or `examples/`.
+- Do not include `repos/**` in broad formatter, linter, or codegen
+  passes. `pyproject.toml`'s ruff `extend-per-file-ignores` exempts
+  `repos/**` from linting.
+- If a vendored repo carries `AGENTS.md`, `CLAUDE.md`, `LLMS.md`, or
+  developer docs, read those first when writing code against that
+  library's idioms.
+
+The full vendored inventory plus add/update commands and "what to read
+first" hints live at
+[`docs/agent-context/vendored-repositories.md`](docs/agent-context/vendored-repositories.md).
+
+Per-dependency pattern notes (what we'd steal, what we'd avoid, what's
+surprising) live at
+[`docs/agent-context/patterns/`](docs/agent-context/patterns/).
+
+Phase 1 vendored (2026-05-24):
+
+- `repos/dspy/` — `dspy.BaseLM` + decorator patterns. Read when working
+  on `leaven.lm` or `lv.x.dspy.LeavenDSPyLM`.
+- `repos/inspect_ai/` — `@solver`/`@scorer`/`@task` decorators + context
+  injection. Read when working on stage decorators or context objects.
+- `repos/mcp-python-sdk/` — stdio JSON-RPC + FastMCP idioms + known
+  failure modes. Read when working on `lv.serve_stage` shape or
+  considering wire-level decisions in the `leaven-acp` Rust crate.
+
 ## Verification
 
 - `uv sync` succeeds.
