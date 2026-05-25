@@ -809,7 +809,7 @@ fn string_array(value: Option<&Value>, field: &str) -> Result<Vec<String>, Publi
         .collect()
 }
 
-pub(super) fn invalid_acp(message: impl Into<String>) -> PublicSeamError {
+pub fn invalid_acp(message: impl Into<String>) -> PublicSeamError {
     PublicSeamError::InvalidScope {
         message: message.into(),
     }

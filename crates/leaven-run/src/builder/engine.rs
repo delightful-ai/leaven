@@ -1,6 +1,15 @@
 use serde::{Serialize, de::DeserializeOwned};
 
-use super::*;
+use super::{
+    Artifact, Budget, BudgetSnapshot, CachePolicy, Callback, CandidateId, Case, CheckpointId,
+    Dataset, DatasetSplits, Fingerprint, OptimizationProblem, OptimizeBuilder, OptimizeError,
+    Optimized, Optimizer, PartitionId, PreparedStore, ReportInputs, RunCompatibilityManifest,
+    RunId, RunProblem, RuntimeFingerprint, RuntimeKind, ScoringEvaluator, ScoringEvaluatorIdentity,
+    StoreConfig, StoreSource, StoreStart, build_summary, compare_stored_manifest,
+    final_evaluation_inputs, has_persistence, latest_checkpoint, mark_latest_checkpoint,
+    prepare_store, report_paths_for, run_final_evaluations, run_storage, store_fresh_manifest,
+    write_summary_report,
+};
 use leaven_engine::TrustPolicy;
 
 pub(super) fn prepare_run_store<P>(
@@ -458,6 +467,7 @@ mod tests {
     use std::convert::Infallible;
 
     use leaven_core::{ArtifactIdentity, CacheIdentity};
+    use leaven_eval::NoTarget;
     use leaven_kernel::ContentId;
 
     use super::*;
