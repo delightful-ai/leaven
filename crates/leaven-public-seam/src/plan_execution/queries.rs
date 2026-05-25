@@ -1,15 +1,12 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt::Write as _,
-};
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value, json};
-use sha2::{Digest, Sha256};
 
-use crate::{CapabilityDocument, CapabilityGrantRequest, PublicSeamError};
+use crate::PublicSeamError;
 
 mod case;
 mod graph;
+mod workspace_values;
 
 pub use case::{PlanCaseQueryOutcome, PlanCaseQueryRequest};
 pub use graph::{PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope};
@@ -17,6 +14,11 @@ pub use graph::{PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope
 pub(super) use case::{
     case_query_include, case_query_projection, require_included_case_fields,
     require_requested_case_field,
+};
+use workspace_values::workspace_query_value_from_view;
+pub(super) use workspace_values::{
+    plan_contains_case_query, plan_contains_workspace_query, validate_case_query_authority,
+    validate_workspace_query_authority,
 };
 
 use super::{
@@ -586,5 +588,3 @@ pub(super) fn workspace_query_projection(request: &PlanWorkspaceQueryRequest<'_>
         "op": request.op()
     })
 }
-
-include!("queries/workspace_values.rs");

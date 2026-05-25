@@ -1,4 +1,20 @@
-fn workspace_query_value_from_view(
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Write as _,
+};
+
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
+
+use crate::{CapabilityDocument, CapabilityGrantRequest, PublicSeamError};
+
+use super::{
+    PlanExecutionContext, PlanWorkspaceQueryRequest, case_query_include, invalid_plan, nested_kind,
+    object, validate_workspace_path, workspace_capture_requested_paths,
+    workspace_query_request_from_values,
+};
+
+pub(super) fn workspace_query_value_from_view(
     request: &PlanWorkspaceQueryRequest<'_>,
     view: &leaven_workspace::WorkspaceView<'_>,
     data_classes: &[String],
@@ -283,7 +299,9 @@ fn hex_bytes(bytes: &[u8]) -> String {
     hex
 }
 
-pub(super) fn plan_contains_case_query(plan: &Value) -> Result<bool, PublicSeamError> {
+pub(in crate::plan_execution) fn plan_contains_case_query(
+    plan: &Value,
+) -> Result<bool, PublicSeamError> {
     for op in plan_ops(plan)? {
         let Some(expr) = op.get("expr") else {
             continue;
@@ -295,7 +313,9 @@ pub(super) fn plan_contains_case_query(plan: &Value) -> Result<bool, PublicSeamE
     Ok(false)
 }
 
-pub(super) fn plan_contains_workspace_query(plan: &Value) -> Result<bool, PublicSeamError> {
+pub(in crate::plan_execution) fn plan_contains_workspace_query(
+    plan: &Value,
+) -> Result<bool, PublicSeamError> {
     for op in plan_ops(plan)? {
         let Some(expr) = op.get("expr") else {
             continue;
@@ -307,7 +327,7 @@ pub(super) fn plan_contains_workspace_query(plan: &Value) -> Result<bool, Public
     Ok(false)
 }
 
-pub(super) fn validate_case_query_authority(
+pub(in crate::plan_execution) fn validate_case_query_authority(
     plan: &Value,
     context: &PlanExecutionContext,
     capability: &CapabilityDocument,
@@ -337,7 +357,7 @@ pub(super) fn validate_case_query_authority(
     Ok(())
 }
 
-pub(super) fn validate_workspace_query_authority(
+pub(in crate::plan_execution) fn validate_workspace_query_authority(
     plan: &Value,
     context: &PlanExecutionContext,
     capability: &CapabilityDocument,
