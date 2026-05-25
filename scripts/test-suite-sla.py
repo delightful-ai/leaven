@@ -11,6 +11,7 @@ import re
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 
 
@@ -101,11 +102,27 @@ def rust_source_has_test_marker(path: Path) -> bool:
         return False
 
 
+def rust_tree_has_test_marker(path: Path) -> bool:
+    if path.is_file():
+        if rust_source_has_test_marker(path):
+            return True
+        module_dir = path.with_suffix("")
+        if module_dir.is_dir():
+            return any(
+                rust_source_has_test_marker(module_path)
+                for module_path in module_dir.rglob("*.rs")
+            )
+        return False
+    if path.is_dir():
+        return any(rust_source_has_test_marker(module_path) for module_path in path.rglob("*.rs"))
+    return False
+
+
 def package_source_has_test_marker(package_root: Path) -> bool:
     src = package_root / "src"
     if not src.exists():
         return False
-    return any(rust_source_has_test_marker(path) for path in src.rglob("*.rs"))
+    return rust_tree_has_test_marker(src)
 
 
 def target_has_tests(message: dict[str, object], package_root: Path) -> bool:
@@ -114,7 +131,7 @@ def target_has_tests(message: dict[str, object], package_root: Path) -> bool:
     kinds = set(target.get("kind", []))
     src_path = target.get("src_path")
     if "test" in kinds:
-        return isinstance(src_path, str) and rust_source_has_test_marker(Path(src_path))
+        return isinstance(src_path, str) and rust_tree_has_test_marker(Path(src_path))
     if kinds.intersection({"lib", "bin", "proc-macro"}):
         return package_source_has_test_marker(package_root)
     return True
@@ -270,28 +287,29 @@ def run_workspace_test_binaries(workspace_root: Path, deadline: float) -> int:
         flush=True,
     )
     queued = list(binaries)
-    running: list[tuple[subprocess.Popen[str], str, float]] = []
+    running: list[tuple[subprocess.Popen[str], str, float, tempfile._TemporaryFileWrapper[bytes]]] = []
     completed = 0
     while queued or running:
         while queued and len(running) < jobs:
             target_name, executable, package_root = queued.pop(0)
+            stderr_file = tempfile.TemporaryFile()
             process = subprocess.Popen(
                 [str(executable)],
                 cwd=package_root,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
+                stderr=stderr_file,
                 text=True,
                 start_new_session=True,
                 env=env,
             )
-            running.append((process, target_name, time.perf_counter()))
+            running.append((process, target_name, time.perf_counter(), stderr_file))
 
         remaining = deadline - time.perf_counter()
         if remaining <= 0:
             slow_running = sorted(
                 (
                     (time.perf_counter() - started_at, target_name)
-                    for _, target_name, started_at in running
+                    for _, target_name, started_at, _ in running
                 ),
                 reverse=True,
             )
@@ -306,16 +324,20 @@ def run_workspace_test_binaries(workspace_root: Path, deadline: float) -> int:
             )
             if running_summary:
                 print(f"slowest running binaries: {running_summary}", flush=True)
-            for process, _, _ in running:
+            for process, _, _, stderr_file in running:
                 terminate_process_group(process)
+                stderr_file.close()
             return 1
 
         for item in list(running):
-            process, target_name, started = item
+            process, target_name, started, stderr_file = item
             returncode = process.poll()
             if returncode is None:
                 continue
-            _, stderr = process.communicate()
+            process.wait()
+            stderr_file.seek(0)
+            stderr = stderr_file.read().decode("utf-8", errors="replace")
+            stderr_file.close()
             running.remove(item)
             completed += 1
             if returncode != 0:
@@ -326,8 +348,9 @@ def run_workspace_test_binaries(workspace_root: Path, deadline: float) -> int:
                     f"{returncode} after {elapsed:.2f}s",
                     flush=True,
                 )
-                for other, _, _ in running:
+                for other, _, _, other_stderr_file in running:
                     terminate_process_group(other)
+                    other_stderr_file.close()
                 return returncode
         time.sleep(0.01)
     return 0
