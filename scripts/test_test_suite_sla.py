@@ -57,6 +57,11 @@ class DoctestDetectionTests(unittest.TestCase):
 
 
 class SuiteDeadlineTests(unittest.TestCase):
+    def test_test_binary_env_preserves_libtest_parallelism_by_default(self) -> None:
+        env = MODULE.test_binary_env(pathlib.Path.cwd(), [])
+
+        self.assertNotIn("RUST_TEST_THREADS", env)
+
     def test_workspace_build_timeout_is_separate_from_runtime_sla(self) -> None:
         with mock.patch.object(
             MODULE,

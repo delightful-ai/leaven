@@ -256,7 +256,6 @@ def test_binary_env(workspace_root: Path, binaries: list[tuple[str, Path, Path]]
     joined = os.pathsep.join(deduped_paths)
     env["DYLD_FALLBACK_LIBRARY_PATH"] = joined
     env["DYLD_LIBRARY_PATH"] = joined
-    env.setdefault("RUST_TEST_THREADS", "1")
     return env
 
 
@@ -277,7 +276,7 @@ def run_workspace_test_binaries(
         return 0
 
     env = test_binary_env(workspace_root, binaries)
-    jobs = max(1, int(os.environ.get("LEAVEN_TEST_BINARY_JOBS", "8")))
+    jobs = max(1, int(os.environ.get("LEAVEN_TEST_BINARY_JOBS", "4")))
     print(
         f"running workspace libtest binaries: {len(binaries)} binaries, {jobs} jobs",
         flush=True,
