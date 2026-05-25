@@ -283,47 +283,6 @@ fn hex_bytes(bytes: &[u8]) -> String {
     hex
 }
 
-pub(super) fn require_requested_case_field(
-    include: &BTreeSet<&str>,
-    field: &'static str,
-) -> Result<(), PublicSeamError> {
-    if include.contains(field) {
-        Ok(())
-    } else {
-        Err(invalid_plan(format!(
-            "case_query.load host returned unrequested `{field}` material"
-        )))
-    }
-}
-
-pub(super) fn require_included_case_fields(
-    value: &Value,
-    include: &BTreeSet<&str>,
-) -> Result<(), PublicSeamError> {
-    for field in include {
-        if value.get(*field).is_none() {
-            return Err(invalid_plan(format!(
-                "case_query.load host omitted requested `{field}` material"
-            )));
-        }
-    }
-    Ok(())
-}
-
-pub(super) fn case_query_projection(query: &Value) -> Result<Value, PublicSeamError> {
-    Ok(json!({
-        "case": query
-            .get("case")
-            .cloned()
-            .ok_or_else(|| invalid_plan("case_query.load must carry case"))?,
-        "include": query
-            .get("include")
-            .cloned()
-            .ok_or_else(|| invalid_plan("case_query.load must carry include"))?,
-        "projection_schema": query.get("projection_schema").cloned().unwrap_or(Value::Null)
-    }))
-}
-
 pub(super) fn plan_contains_case_query(plan: &Value) -> Result<bool, PublicSeamError> {
     for op in plan_ops(plan)? {
         let Some(expr) = op.get("expr") else {
