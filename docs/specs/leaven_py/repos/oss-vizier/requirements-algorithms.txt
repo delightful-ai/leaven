@@ -1,0 +1,15 @@
+# For BOCS.
+cvxpy
+cvxopt
+
+# For Harmonica.
+scikit-learn
+
+# For CMA-ES.
+evojax
+
+# For PyCMAES.
+cma
+
+# For regression utils.
+lightgbm
