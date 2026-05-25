@@ -815,6 +815,182 @@ fn conformance_evidence_audit_requires_positive_tests_for_structural_rows() {
 }
 
 #[test]
+fn conformance_evidence_audit_requires_row_specific_review_signoff_for_proven_rows() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut matrix = package.conformance_matrix().unwrap();
+    let row = matrix
+        .rows
+        .iter_mut()
+        .find(|row| row.id == "ps1.evaluator.assessment_scope")
+        .unwrap();
+
+    row.review_evidence =
+        vec!["docs/specs/public-seam-v1/reviews/2026-05-23-assessment-scope-review.md".to_owned()];
+
+    let error = package.audit_conformance_evidence(&matrix).unwrap_err();
+    assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
+    assert!(error.to_string().contains("ps1.evaluator.assessment_scope"));
+    assert!(
+        error
+            .to_string()
+            .contains("row-specific adversarial sign-off")
+    );
+}
+
+#[test]
+fn conformance_evidence_audit_rejects_same_row_blocker_review_as_signoff() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut matrix = package.conformance_matrix().unwrap();
+    let row = matrix
+        .rows
+        .iter_mut()
+        .find(|row| row.id == "ps1.acp.auth_permissions")
+        .unwrap();
+
+    row.review_evidence = vec![
+        "docs/specs/public-seam-v1/reviews/2026-05-23-acp-auth-permissions-blocker-review.md"
+            .to_owned(),
+    ];
+
+    let error = package.audit_conformance_evidence(&matrix).unwrap_err();
+    assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
+    assert!(error.to_string().contains("ps1.acp.auth_permissions"));
+    assert!(
+        error
+            .to_string()
+            .contains("row-specific adversarial sign-off")
+    );
+}
+
+#[test]
+fn conformance_evidence_audit_rejects_partial_review_preamble_signoff_language() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut matrix = package.conformance_matrix().unwrap();
+    let row = matrix
+        .rows
+        .iter_mut()
+        .find(|row| row.id == "ps1.lm.contract")
+        .unwrap();
+
+    row.review_evidence = vec![
+        "docs/specs/public-seam-v1/reviews/2026-05-24-lm-result-contract-partial-review.md"
+            .to_owned(),
+    ];
+
+    let error = package.audit_conformance_evidence(&matrix).unwrap_err();
+    assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
+    assert!(error.to_string().contains("ps1.lm.contract"));
+    assert!(
+        error
+            .to_string()
+            .contains("row-specific adversarial sign-off")
+    );
+}
+
+#[test]
+fn conformance_evidence_audit_rejects_negated_row_signoff_language() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut matrix = package.conformance_matrix().unwrap();
+    let row = matrix
+        .rows
+        .iter_mut()
+        .find(|row| row.id == "ps1.receipts.audit_currency")
+        .unwrap();
+
+    row.review_evidence = vec![
+        "docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md".to_owned(),
+    ];
+
+    let error = package.audit_conformance_evidence(&matrix).unwrap_err();
+    assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
+    assert!(error.to_string().contains("ps1.receipts.audit_currency"));
+    assert!(
+        error
+            .to_string()
+            .contains("row-specific adversarial sign-off")
+    );
+}
+
+#[test]
+fn conformance_evidence_audit_rejects_provenance_substring_as_signoff() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut matrix = package.conformance_matrix().unwrap();
+    let row = matrix
+        .rows
+        .iter_mut()
+        .find(|row| row.id == "ps1.stage.payload_receipts")
+        .unwrap();
+
+    row.review_evidence = vec![
+        "docs/specs/public-seam-v1/reviews/2026-05-23-stage-payload-current-blocker-review.md"
+            .to_owned(),
+    ];
+
+    let error = package.audit_conformance_evidence(&matrix).unwrap_err();
+    assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
+    assert!(error.to_string().contains("ps1.stage.payload_receipts"));
+    assert!(
+        error
+            .to_string()
+            .contains("row-specific adversarial sign-off")
+    );
+}
+
+#[test]
+fn conformance_evidence_audit_rejects_signoff_section_pending_rows() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut matrix = package.conformance_matrix().unwrap();
+    let row = matrix
+        .rows
+        .iter_mut()
+        .find(|row| row.id == "ps1.acp.extension_results")
+        .unwrap();
+
+    row.review_evidence = vec![
+        "docs/specs/public-seam-v1/reviews/2026-05-24-agent-sandbox-receipt-stream-review.md"
+            .to_owned(),
+    ];
+
+    let error = package.audit_conformance_evidence(&matrix).unwrap_err();
+    assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
+    assert!(error.to_string().contains("ps1.acp.extension_results"));
+    assert!(
+        error
+            .to_string()
+            .contains("row-specific adversarial sign-off")
+    );
+}
+
+#[test]
+fn conformance_evidence_audit_rejects_signoff_section_remains_pending_rows() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut matrix = package.conformance_matrix().unwrap();
+    let row = matrix
+        .rows
+        .iter_mut()
+        .find(|row| row.id == "ps1.workspace.handles_lifecycle")
+        .unwrap();
+
+    row.review_evidence = vec![
+        "docs/specs/public-seam-v1/reviews/2026-05-24-workspace-view-query-helper-review.md"
+            .to_owned(),
+    ];
+
+    let error = package.audit_conformance_evidence(&matrix).unwrap_err();
+    assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
+    assert!(
+        error
+            .to_string()
+            .contains("ps1.workspace.handles_lifecycle")
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("row-specific adversarial sign-off")
+    );
+}
+
+#[test]
 fn conformance_evidence_audit_rejects_happy_path_only_denial_rows() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut matrix = package.conformance_matrix().unwrap();
@@ -922,7 +1098,8 @@ fn conformance_evidence_audit_requires_denial_evidence_for_integrated_surface_ro
     row.implementation_evidence =
         vec!["crates/leaven-public-seam/src/package.rs::PublicSeamPackage::v1_scope".to_owned()];
     row.review_evidence = vec![
-        "docs/specs/public-seam-v1/reviews/2026-05-23-initial-contract-owner-review.md".to_owned(),
+        "docs/specs/public-seam-v1/reviews/2026-05-24-acp-stdio-transport-heisenberg-review.md"
+            .to_owned(),
     ];
     row.positive_test_evidence = vec![
         "crates/leaven-public-seam/tests/public_seam_contract/contract_package.rs::v1_scope_markers_refuse_mcp_watch_runtime_and_legacy_worker_protocol"

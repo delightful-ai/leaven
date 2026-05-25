@@ -15,6 +15,7 @@ matrix_rules:
   - A row touching public exports, default features, or facades must include route maturity classification.
   - A row touching worker behavior must prove ACP profile behavior, not a private Rust-only shortcut.
   - A row touching archived or downloaded drafts must prove hard cutover to this package.
+  - A proven row must cite at least one adversarial review file that names the row and signs off on row promotion; old partial or blocker reviews may remain as provenance but cannot be the only review evidence.
 
 proof_levels:
   shape_only: JSON Schema, examples, or generated types prove only syntactic acceptance.
