@@ -102,7 +102,7 @@ pub struct RunCompatibilityManifest {
     pub schema: String,
     /// Product run kind.
     pub run_kind: String,
-    /// Problem-shape compatibility placeholder for this slice.
+    /// Current public optimize problem shape.
     pub problem: Fingerprint,
     /// Case content and split compatibility.
     pub dataset: DatasetCompatibility,
@@ -127,7 +127,7 @@ impl RunCompatibilityManifest {
         Self {
             schema: MANIFEST_SCHEMA.to_owned(),
             run_kind: "leaven-run.optimize".to_owned(),
-            problem: problem_placeholder(),
+            problem: optimize_problem_shape(),
             dataset: inputs.dataset,
             runner: inputs.runner,
             scorer: inputs.scorer,
@@ -437,8 +437,9 @@ fn write_atomic_inner(
     dir.sync_all()
 }
 
-fn problem_placeholder() -> Fingerprint {
+fn optimize_problem_shape() -> Fingerprint {
     let mut fingerprint = FingerprintBuilder::new();
+    // Stable digest seed for manifest schema v4.
     fingerprint.update(b"leaven-run.problem-placeholder.v1");
     fingerprint.finish()
 }
