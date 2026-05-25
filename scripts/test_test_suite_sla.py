@@ -85,7 +85,7 @@ class SuiteDeadlineTests(unittest.TestCase):
             mock.patch.object(
                 MODULE.argparse.ArgumentParser,
                 "parse_args",
-                return_value=MODULE.argparse.Namespace(sla_seconds=30.0, build_timeout=None),
+                return_value=MODULE.argparse.Namespace(sla_seconds=30.0, build_timeout=120.0),
             ),
         ):
             self.assertEqual(MODULE.main(), 0)

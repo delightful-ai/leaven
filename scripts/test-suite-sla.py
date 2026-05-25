@@ -134,39 +134,18 @@ def test_commands(workspace_root: Path) -> list[tuple[str, list[str]]]:
     return workspace_doctest_commands(workspace_root)
 
 
-def build_workspace_tests(workspace_root: Path, build_timeout: float | None = None) -> int:
-    print(
-        "building workspace nextest suite: " + " ".join(WORKSPACE_TEST_BUILD_COMMAND),
-        flush=True,
-    )
-    try:
-        return subprocess.run(
-            WORKSPACE_TEST_BUILD_COMMAND,
-            cwd=workspace_root,
-            check=False,
-            timeout=build_timeout,
-        ).returncode
-    except subprocess.TimeoutExpired:
-        timeout = f"{build_timeout:.2f}s" if build_timeout is not None else "unbounded"
-        print(f"error: workspace test build exceeded build timeout ({timeout})", flush=True)
-        return 1
-
-
-def run_with_deadline(label: str, command: list[str], cwd: Path, deadline: float) -> int:
-    remaining = deadline - time.perf_counter()
-    if remaining <= 0:
-        print(f"error: no SLA time remains before starting {label}", flush=True)
-        return 1
-
+def run_process_group_with_timeout(
+    label: str,
+    command: list[str],
+    cwd: Path,
+    timeout: float | None,
+) -> int:
     process = subprocess.Popen(command, cwd=cwd, start_new_session=True)
     try:
-        return process.wait(timeout=remaining)
+        return process.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
-        print(
-            f"error: {label} exceeded remaining suite SLA "
-            f"({remaining:.2f}s); terminating command",
-            flush=True,
-        )
+        timeout_label = f"{timeout:.2f}s" if timeout is not None else "unbounded"
+        print(f"error: {label} exceeded timeout ({timeout_label})", flush=True)
         try:
             os.killpg(process.pid, signal.SIGTERM)
         except ProcessLookupError:
@@ -180,6 +159,28 @@ def run_with_deadline(label: str, command: list[str], cwd: Path, deadline: float
                 pass
             process.wait()
         return 1
+
+
+def build_workspace_tests(workspace_root: Path, build_timeout: float | None = None) -> int:
+    print(
+        "building workspace nextest suite: " + " ".join(WORKSPACE_TEST_BUILD_COMMAND),
+        flush=True,
+    )
+    return run_process_group_with_timeout(
+        "workspace test build/discovery",
+        WORKSPACE_TEST_BUILD_COMMAND,
+        workspace_root,
+        build_timeout,
+    )
+
+
+def run_with_deadline(label: str, command: list[str], cwd: Path, deadline: float) -> int:
+    remaining = deadline - time.perf_counter()
+    if remaining <= 0:
+        print(f"error: no SLA time remains before starting {label}", flush=True)
+        return 1
+
+    return run_process_group_with_timeout(label, command, cwd, remaining)
 
 
 def prewarm_commands(commands: list[tuple[str, list[str]]], workspace_root: Path) -> int:
@@ -204,7 +205,7 @@ def main() -> int:
     parser.add_argument(
         "--build-timeout",
         type=float,
-        default=None,
+        default=120.0,
         help="optional timeout for compiling/discovering workspace test binaries",
     )
     args = parser.parse_args()
