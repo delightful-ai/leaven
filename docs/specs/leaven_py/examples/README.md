@@ -29,6 +29,7 @@ just example 03                   # run just one (by number prefix)
 | 06 | `06_reflect_propose_custom.py` | Custom `@lv.reflector` + `@lv.proposer` overriding GEPA defaults — the load-bearing reflection/proposal stage split. |
 | 07 | `07_serve_stage_worker.py` | Standalone Python worker — `lv.serve_stage(my_judge)` script the engine spawns over ACP stdio. Same decorator shape as in-process. |
 | 08 | `08_dspy_dropin.py` | `dspy.configure(lm=lv.x.dspy.LeavenDSPyLM(...))` — existing DSPy modules unmodified through Leaven's LM seam. |
+| 09 | `09_full_repro.py` | **The big repro sketch** — all 6 stage roles in one file (runner + scorer + reflector + proposer + judge + evaluator), multi-LM environment, EvoSkill-shaped composition. Stress-tests the full surface. |
 
 ## Fixtures
 
