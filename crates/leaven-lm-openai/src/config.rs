@@ -1,4 +1,4 @@
-use std::{num::NonZeroUsize, time::Duration};
+use std::{env::VarError, ffi::OsString, num::NonZeroUsize, time::Duration};
 
 use leaven_lm::LmError;
 
@@ -35,10 +35,19 @@ impl OpenAiConfig {
     ///
     /// Returns [`LmError::InvalidRequest`] when the key is missing.
     pub fn from_env() -> Result<Self, LmError> {
-        let api_key = std::env::var("OPENAI_API_KEY")
-            .map_err(|_| LmError::invalid_request("OPENAI_API_KEY is not set"))?;
+        Self::from_env_values(
+            std::env::var("OPENAI_API_KEY"),
+            std::env::var_os(Self::REQUEST_TIMEOUT_ENV),
+        )
+    }
+
+    fn from_env_values(
+        api_key: Result<String, VarError>,
+        request_timeout: Option<OsString>,
+    ) -> Result<Self, LmError> {
+        let api_key = api_key.map_err(|_| LmError::invalid_request("OPENAI_API_KEY is not set"))?;
         let mut config = Self::new(api_key);
-        if let Some(timeout) = request_timeout_from_env()? {
+        if let Some(timeout) = parse_request_timeout(request_timeout)? {
             config = config.with_request_timeout(timeout);
         }
         Ok(config)
@@ -93,8 +102,8 @@ impl OpenAiConfig {
     }
 }
 
-fn request_timeout_from_env() -> Result<Option<Duration>, LmError> {
-    let Some(raw) = std::env::var_os(OpenAiConfig::REQUEST_TIMEOUT_ENV) else {
+fn parse_request_timeout(raw: Option<OsString>) -> Result<Option<Duration>, LmError> {
+    let Some(raw) = raw else {
         return Ok(None);
     };
     let raw = raw.to_string_lossy();
@@ -189,5 +198,39 @@ impl OpenAiRetryPolicy {
 impl Default for OpenAiRetryPolicy {
     fn default() -> Self {
         Self::new(3, Duration::from_millis(250), Duration::from_secs(5))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_env_values_reads_api_key() {
+        let config = OpenAiConfig::from_env_values(Ok("test-key".to_owned()), None).unwrap();
+
+        assert_eq!(config.api_key(), "test-key");
+    }
+
+    #[test]
+    fn from_env_values_reads_request_timeout() {
+        let config =
+            OpenAiConfig::from_env_values(Ok("test-key".to_owned()), Some(OsString::from("600")))
+                .unwrap();
+
+        assert_eq!(config.request_timeout(), Duration::from_secs(600));
+    }
+
+    #[test]
+    fn from_env_values_rejects_invalid_request_timeout() {
+        let Err(error) =
+            OpenAiConfig::from_env_values(Ok("test-key".to_owned()), Some(OsString::from("0")))
+        else {
+            panic!("invalid OpenAI request timeout should be rejected");
+        };
+
+        assert!(error.to_string().contains(
+            "LEAVEN_OPENAI_REQUEST_TIMEOUT_SECONDS must be a positive integer number of seconds"
+        ));
     }
 }
