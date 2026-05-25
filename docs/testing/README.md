@@ -88,9 +88,9 @@ doctest harness fan-out, or assertion altitude until the default suite is back
 under the SLA.
 
 The SLA runner executes libtest binaries concurrently while preserving each
-binary's normal libtest thread pool. The default outer fanout is intentionally
-moderate so large contract binaries can use their internal parallelism without
-serializing hundreds of independent assertions.
+binary's normal libtest thread pool. The default outer fanout is 6 so large
+contract binaries can use their internal parallelism without serializing
+hundreds of independent assertions.
 
 Coverage has hard failure floors plus warning targets. The current hard floors
 are 80% line and 80% branch so coverage does not outrank executable seam
