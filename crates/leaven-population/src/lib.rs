@@ -1,26 +1,13 @@
-//! leaven-population crate skeleton.
+//! Reusable population and frontier implementations for Leaven.
 
-mod beam;
 mod keep_best;
-mod map_elites;
-mod no_population;
-mod novelty;
-mod pareto;
 mod pareto_frontier;
-mod plackett_luce;
 mod skill_utility;
 mod top_k_frontier;
 mod tournament;
-mod tournament_config;
 
-pub use beam::BeamPopulation;
 pub use keep_best::KeepBest;
-pub use map_elites::{MapElites, NicheDescriptor};
-pub use no_population::NoPopulation;
-pub use novelty::NoveltyPopulation;
-pub use pareto::LenientParetoFrontier;
 pub use pareto_frontier::{ParetoFrontier, ParetoFrontierBuilder, PartitionFilter};
-pub use plackett_luce::PlackettLuceFit;
 pub use skill_utility::{
     SkillPairedRolloutUtilityInput, SkillPairedRolloutUtilityInputError,
     SkillPairedRolloutUtilityUpdates, SkillPruningCandidate, SkillRetrievalCandidate,
@@ -35,17 +22,14 @@ pub use skill_utility::{
 };
 pub use top_k_frontier::{TopKFrontier, TopKParentSelectionPolicy, TopKParentSelector};
 pub use tournament::{BradleyTerryFit, TournamentPopulation};
-pub use tournament_config::TournamentConfig;
 
 pub mod prelude {
     pub use crate::{
-        BeamPopulation, BradleyTerryFit, KeepBest, LenientParetoFrontier, MapElites,
-        NicheDescriptor, NoPopulation, NoveltyPopulation, ParetoFrontier, ParetoFrontierBuilder,
-        PartitionFilter, PlackettLuceFit, SkillPairedRolloutUtilityInput,
-        SkillPairedRolloutUtilityInputError, SkillPairedRolloutUtilityUpdates,
-        SkillPruningCandidate, SkillRetrievalCandidate, SkillSimilarityCandidate,
-        SkillSimilarityCandidateError, SkillSimilarityRank, SkillStepTrajectoryOutcome,
-        SkillStepTrajectoryOutcomeError, SkillTwoStageRetrievalConfig,
+        BradleyTerryFit, KeepBest, ParetoFrontier, ParetoFrontierBuilder, PartitionFilter,
+        SkillPairedRolloutUtilityInput, SkillPairedRolloutUtilityInputError,
+        SkillPairedRolloutUtilityUpdates, SkillPruningCandidate, SkillRetrievalCandidate,
+        SkillSimilarityCandidate, SkillSimilarityCandidateError, SkillSimilarityRank,
+        SkillStepTrajectoryOutcome, SkillStepTrajectoryOutcomeError, SkillTwoStageRetrievalConfig,
         SkillTwoStageRetrievalConfigError, SkillTwoStageRetrievalError, SkillTwoStageRetrievalPlan,
         SkillTwoStageRetriever, SkillUseStats, SkillUtilityCredit, SkillUtilityPrunePlan,
         SkillUtilityPruner, SkillUtilityPruningConfig, SkillUtilityPruningError,
