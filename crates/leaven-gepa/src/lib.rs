@@ -21,7 +21,6 @@ pub mod selector;
 pub mod state;
 pub mod validation;
 
-pub use agent_stage::{GepaReflectionBootstrap, GepaStageProposer, gepa_stage_proposer};
 pub use builder::{
     GepaBuilder, GepaBuilderWithPopulation, GepaBuilderWithSurface, GepaReferenceBuilder,
     GepaReferenceBuilderWithSurface, GepaReflectWithLmBuilder, GepaReflectWithLmBuilderWithSurface,
@@ -70,14 +69,13 @@ pub mod prelude {
         GepaCandidateHistoryEntry, GepaCandidateIndex, GepaCandidateRecord, GepaCaseEvidence,
         GepaEventSummary, GepaPopulation, GepaProfile, GepaReferenceBuilder,
         GepaReferenceBuilderWithSurface, GepaReferenceState, GepaReflectWithLmBuilder,
-        GepaReflectWithLmBuilderWithSurface, GepaReflectionBootstrap, GepaReflectiveDataset,
-        GepaReflector, GepaReport, GepaReportCandidate, GepaReportFrontierCase,
-        GepaReportHistoryEntry, GepaReportProfile, GepaReportQualitySummary,
-        GepaReportValidationSubscore, GepaSkipReason, GepaStageProposer, ImprovementOrEqual,
+        GepaReflectWithLmBuilderWithSurface, GepaReflectiveDataset, GepaReflector, GepaReport,
+        GepaReportCandidate, GepaReportFrontierCase, GepaReportHistoryEntry, GepaReportProfile,
+        GepaReportQualitySummary, GepaReportValidationSubscore, GepaSkipReason, ImprovementOrEqual,
         LmBackedReflector, LmBackedReflectorConfig, PartSelector, PlainTextEditParser,
         ReflectRequest, ReflectionError, ReflectionOutputParser, ReflectionRenderInput,
         ReflectionRenderer, ReflectiveCase, ReflectiveCaseInput, ReflectiveDatasetBuilder,
         ReflectiveRun, ReflectiveSideInfoValue, ReflectiveValue, RoundRobinPart, StrictImprovement,
-        SurfaceProposer, ValidationPolicy, gepa_stage_proposer,
+        SurfaceProposer, ValidationPolicy,
     };
 }
