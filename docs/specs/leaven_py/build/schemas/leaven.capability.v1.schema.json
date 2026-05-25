@@ -1,0 +1,799 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.leaven.dev/v1/v0.3/leaven.capability.v1.schema.json",
+  "title": "Leaven Capability v1 v0.3",
+  "description": "Opaque bearer token resolves to this fingerprinted grant document. Cedar-shaped grants. Macaroon-shaped attenuation. Aggregate budgets. Token binding. Revocation and renewal semantics.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "jti",
+    "capability_fingerprint",
+    "policy_fingerprint",
+    "subject_fingerprint",
+    "issuer",
+    "subject",
+    "audience",
+    "issued_at",
+    "expires_at",
+    "token_binding",
+    "budgets",
+    "execution_policy",
+    "grants",
+    "delegation"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "leaven.capability.v1"
+    },
+    "jti": {
+      "type": "string",
+      "pattern": "^jti_[A-Za-z0-9_.:-]+$"
+    },
+    "capability_fingerprint": {
+      "$ref": "common.schema.json#/$defs/CapabilityFingerprint"
+    },
+    "grant_fingerprint": {
+      "$ref": "common.schema.json#/$defs/GrantFingerprint"
+    },
+    "policy_fingerprint": {
+      "$ref": "common.schema.json#/$defs/PolicyFingerprint"
+    },
+    "subject_fingerprint": {
+      "$ref": "common.schema.json#/$defs/SubjectFingerprint"
+    },
+    "parent_capability_fingerprint": {
+      "$ref": "common.schema.json#/$defs/CapabilityFingerprint"
+    },
+    "issuer": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "run_engine",
+            "operator",
+            "remote_control_plane"
+          ]
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "subject": {
+      "$ref": "#/$defs/Subject"
+    },
+    "audience": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^leaven(\\.[a-z0-9_.:-]+)*$"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "issued_at": {
+      "$ref": "common.schema.json#/$defs/Timestamp"
+    },
+    "not_before": {
+      "$ref": "common.schema.json#/$defs/Timestamp"
+    },
+    "expires_at": {
+      "$ref": "common.schema.json#/$defs/Timestamp"
+    },
+    "expiry_behavior": {
+      "enum": [
+        "drain_inflight_no_new_ops",
+        "cancel_inflight",
+        "renew_required_before_long_call"
+      ]
+    },
+    "token_binding": {
+      "$ref": "#/$defs/TokenBinding"
+    },
+    "revocation": {
+      "$ref": "#/$defs/RevocationPolicy"
+    },
+    "renewal": {
+      "$ref": "#/$defs/RenewalPolicy"
+    },
+    "budgets": {
+      "$ref": "#/$defs/AggregateBudgets"
+    },
+    "execution_policy": {
+      "$ref": "#/$defs/ExecutionPolicy"
+    },
+    "grants": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Grant"
+      },
+      "minItems": 1
+    },
+    "delegation": {
+      "$ref": "#/$defs/DelegationPolicy"
+    },
+    "mint_time_validation": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "metadata": {
+      "$ref": "common.schema.json#/$defs/MetadataBag"
+    }
+  },
+  "$defs": {
+    "Subject": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "stage_call"
+            },
+            "run": {
+              "$ref": "common.schema.json#/$defs/RunId"
+            },
+            "stage_call_id": {
+              "$ref": "common.schema.json#/$defs/StageCallId"
+            },
+            "role": {
+              "enum": [
+                "runner",
+                "scorer",
+                "reflector",
+                "proposer",
+                "judge",
+                "callback",
+                "artifact_adapter",
+                "dataset_adapter"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "run",
+            "stage_call_id",
+            "role"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "evaluation_stage_call"
+            },
+            "run": {
+              "$ref": "common.schema.json#/$defs/RunId"
+            },
+            "stage_call_id": {
+              "$ref": "common.schema.json#/$defs/StageCallId"
+            },
+            "evaluation_request_id": {
+              "$ref": "common.schema.json#/$defs/EvaluationRequestId"
+            },
+            "evaluator": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "run",
+            "stage_call_id",
+            "evaluation_request_id"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "operator"
+            },
+            "principal": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "principal"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "TokenBinding": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "opaque_lookup"
+            },
+            "token_id": {
+              "type": "string",
+              "pattern": "^ltok_[A-Za-z0-9_.:-]+$"
+            },
+            "lookup_audience": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "token_id"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "signed_jwt"
+            },
+            "alg": {
+              "enum": [
+                "EdDSA",
+                "ES256"
+              ]
+            },
+            "kid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "alg",
+            "kid"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "mtls_bound"
+            },
+            "certificate_fingerprint": {
+              "$ref": "common.schema.json#/$defs/Fingerprint"
+            }
+          },
+          "required": [
+            "kind",
+            "certificate_fingerprint"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "RevocationPolicy": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": [
+            "none",
+            "issuer_epoch",
+            "online_lookup",
+            "crl"
+          ]
+        },
+        "revocation_epoch": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "revocation_list_uri": {
+          "type": "string"
+        },
+        "check": {
+          "enum": [
+            "on_authenticate",
+            "on_every_request",
+            "on_long_call_boundary"
+          ]
+        }
+      },
+      "required": [
+        "mode",
+        "check"
+      ],
+      "additionalProperties": false
+    },
+    "RenewalPolicy": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": [
+            "none",
+            "renew_before_expiry",
+            "refresh_token"
+          ]
+        },
+        "max_extensions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_total_lifetime_s": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "renewal_audience": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "additionalProperties": false
+    },
+    "AggregateBudgets": {
+      "type": "object",
+      "properties": {
+        "max_total_usd_micro": {
+          "$ref": "common.schema.json#/$defs/UsdMicro"
+        },
+        "max_lm_usd_micro": {
+          "$ref": "common.schema.json#/$defs/UsdMicro"
+        },
+        "max_agent_usd_micro": {
+          "$ref": "common.schema.json#/$defs/UsdMicro"
+        },
+        "max_human_usd_micro": {
+          "$ref": "common.schema.json#/$defs/UsdMicro"
+        },
+        "max_wall_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_concurrent_calls": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_plan_nodes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_materialized_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "ExecutionPolicy": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "enum": [
+            "trusted_local_operator",
+            "managed_sandbox",
+            "package_scorer",
+            "remote_untrusted",
+            "custom"
+          ]
+        },
+        "network": {
+          "enum": [
+            "deny",
+            "leaven_endpoint_only",
+            "allowlist",
+            "unrestricted"
+          ]
+        },
+        "subprocess": {
+          "enum": [
+            "deny",
+            "deny_except_sandbox_exec",
+            "allow"
+          ]
+        },
+        "filesystem": {
+          "enum": [
+            "workspace_handles_only",
+            "project_readonly",
+            "unrestricted"
+          ]
+        },
+        "byo_effects": {
+          "enum": [
+            "forbidden",
+            "declared_only",
+            "allowed_untracked"
+          ]
+        },
+        "allowlist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "profile",
+        "network",
+        "subprocess",
+        "filesystem",
+        "byo_effects"
+      ],
+      "additionalProperties": false
+    },
+    "DelegationPolicy": {
+      "type": "object",
+      "properties": {
+        "may_delegate": {
+          "type": "boolean"
+        },
+        "max_depth": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "must_attenuate": {
+          "type": "boolean"
+        },
+        "allowed_actions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_.:-]*$"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "may_delegate",
+        "max_depth",
+        "must_attenuate"
+      ],
+      "additionalProperties": false
+    },
+    "Grant": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.:-]*$"
+        },
+        "resource": {
+          "type": "object",
+          "properties": {
+            "run": {
+              "$ref": "common.schema.json#/$defs/RunId"
+            },
+            "runs": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/RunId"
+              },
+              "uniqueItems": true
+            },
+            "run_set": {
+              "type": "string"
+            },
+            "evaluation_request_id": {
+              "$ref": "common.schema.json#/$defs/EvaluationRequestId"
+            },
+            "resolved_set": {
+              "type": "string",
+              "pattern": "^rset_[A-Za-z0-9_.:-]+$"
+            },
+            "candidate_ids": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/CandidateRef"
+              }
+            },
+            "case_ids": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/CaseRef"
+              }
+            },
+            "workspace_ids": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/WorkspaceRef"
+              }
+            },
+            "lm_pool": {
+              "type": "string"
+            },
+            "runtime_pool": {
+              "type": "string"
+            },
+            "sandbox_pool": {
+              "type": "string"
+            },
+            "namespace": {
+              "type": "string"
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "constraints": {
+          "type": "object",
+          "properties": {
+            "queries": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "fields": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "case_fields": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "input",
+                  "target",
+                  "metadata"
+                ]
+              },
+              "uniqueItems": true
+            },
+            "forbidden_case_fields": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "input",
+                  "target",
+                  "metadata"
+                ]
+              },
+              "uniqueItems": true
+            },
+            "partitions": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "train",
+                  "validation",
+                  "test",
+                  "diagnostic",
+                  "custom"
+                ]
+              },
+              "uniqueItems": true
+            },
+            "visibility_classes": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "public",
+                  "hidden"
+                ]
+              },
+              "uniqueItems": true
+            },
+            "target_egress": {
+              "enum": [
+                "none",
+                "trusted_model_only",
+                "operator_approved",
+                "unrestricted"
+              ]
+            },
+            "allowed_input_classes": {
+              "$ref": "common.schema.json#/$defs/DataClassSet"
+            },
+            "forbidden_input_classes": {
+              "$ref": "common.schema.json#/$defs/DataClassSet"
+            },
+            "evidence_visibility": {
+              "$ref": "common.schema.json#/$defs/EvidenceVisibility"
+            },
+            "count_policy": {
+              "enum": [
+                "exact",
+                "bucketed",
+                "redacted",
+                "denied"
+              ]
+            },
+            "revision_window": {
+              "type": "object",
+              "properties": {
+                "min": {
+                  "$ref": "common.schema.json#/$defs/GraphRevision"
+                },
+                "max": {
+                  "$ref": "common.schema.json#/$defs/GraphRevision"
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            },
+            "model_roles": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
+            },
+            "models": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
+            },
+            "purposes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
+            },
+            "raw_prompt_logging": {
+              "enum": [
+                "none",
+                "redacted",
+                "full"
+              ]
+            },
+            "raw_completion_logging": {
+              "enum": [
+                "none",
+                "redacted",
+                "full"
+              ]
+            },
+            "raw_transcript_visibility": {
+              "$ref": "common.schema.json#/$defs/EvidenceVisibility"
+            },
+            "workspace_ops": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
+            },
+            "deny_paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "allow_paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "allowed_commands": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "effects": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "create",
+                  "change",
+                  "change_from_workspace_diff",
+                  "change_from_agent_session"
+                ]
+              },
+              "uniqueItems": true
+            },
+            "allowed_surfaces": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/SurfaceFingerprint"
+              }
+            },
+            "change_schemas": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+              }
+            },
+            "may_apply": {
+              "type": "boolean"
+            },
+            "assessment_shapes": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "independent",
+                  "pairwise",
+                  "listwise"
+                ]
+              },
+              "uniqueItems": true
+            },
+            "granularity": {
+              "enum": [
+                "aggregate",
+                "per_case"
+              ]
+            },
+            "allowed_candidates": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/CandidateRef"
+              }
+            },
+            "allowed_cases": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/CaseRef"
+              }
+            },
+            "namespaces": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
+            },
+            "ops": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
+            },
+            "schemas": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+              }
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "max_usd_micro": {
+              "$ref": "common.schema.json#/$defs/UsdMicro"
+            },
+            "max_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max_concurrent": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "timeout_s": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_rows": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max_materialized_bytes": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "action",
+        "resource",
+        "constraints"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

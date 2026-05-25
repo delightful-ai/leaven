@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.leaven.dev/v1/v0.3/leaven.evidence_envelope.v1.schema.json",
+  "title": "Leaven Evidence Envelope v1 v0.3",
+  "description": "Visibility-labeled evidence. Score.output is canonical reportable output; evidence explains and projects it.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "target_derived",
+    "public",
+    "redaction_policy",
+    "producer",
+    "source_receipts"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "leaven.evidence_envelope.v1"
+    },
+    "target_derived": {
+      "type": "boolean"
+    },
+    "data_classes": {
+      "$ref": "common.schema.json#/$defs/DataClassSet"
+    },
+    "producer": {
+      "type": "object",
+      "properties": {
+        "evaluator_id": {
+          "type": "string"
+        },
+        "evaluator_fingerprint": {
+          "$ref": "common.schema.json#/$defs/Fingerprint"
+        },
+        "stage_call_id": {
+          "$ref": "common.schema.json#/$defs/StageCallId"
+        }
+      },
+      "required": [
+        "stage_call_id"
+      ],
+      "additionalProperties": false
+    },
+    "public": {
+      "type": "object",
+      "properties": {
+        "feedback": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "trace_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/TraceRef"
+          }
+        },
+        "data_classes": {
+          "$ref": "common.schema.json#/$defs/DataClassSet"
+        }
+      },
+      "required": [
+        "data_classes"
+      ],
+      "additionalProperties": false
+    },
+    "private": {
+      "type": "object",
+      "properties": {
+        "visibility": {
+          "enum": [
+            "evaluator_only",
+            "operator_only",
+            "scorer_private"
+          ]
+        },
+        "payload": {},
+        "payload_ref": {
+          "$ref": "common.schema.json#/$defs/BlobRef"
+        },
+        "payload_schema_fingerprint": {
+          "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+        },
+        "data_classes": {
+          "$ref": "common.schema.json#/$defs/DataClassSet"
+        }
+      },
+      "required": [
+        "visibility",
+        "data_classes"
+      ],
+      "additionalProperties": false
+    },
+    "redaction_policy": {
+      "type": "object",
+      "properties": {
+        "optimizer": {
+          "$ref": "common.schema.json#/$defs/EvidenceVisibility"
+        },
+        "reflector": {
+          "$ref": "common.schema.json#/$defs/EvidenceVisibility"
+        },
+        "operator": {
+          "$ref": "common.schema.json#/$defs/EvidenceVisibility"
+        }
+      },
+      "required": [
+        "optimizer",
+        "reflector",
+        "operator"
+      ],
+      "additionalProperties": false
+    },
+    "source_receipts": {
+      "type": "object",
+      "properties": {
+        "read": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/ReceiptRef"
+          }
+        },
+        "effect": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/ReceiptRef"
+          }
+        },
+        "write": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/ReceiptRef"
+          }
+        }
+      },
+      "required": [
+        "read",
+        "effect"
+      ],
+      "additionalProperties": false
+    },
+    "trace_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/TraceRef"
+      }
+    },
+    "replayability": {
+      "$ref": "common.schema.json#/$defs/Replayability"
+    },
+    "metadata": {
+      "$ref": "common.schema.json#/$defs/MetadataBag"
+    }
+  },
+  "if": {
+    "properties": {
+      "target_derived": {
+        "const": true
+      }
+    }
+  },
+  "then": {
+    "required": [
+      "data_classes"
+    ]
+  }
+}
