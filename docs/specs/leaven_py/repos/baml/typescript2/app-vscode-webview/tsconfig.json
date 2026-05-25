@@ -1,0 +1,20 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "allowJs": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@b/bridge_wasm": ["../pkg-playground/wasm"],
+      "@b/pkg-playground": ["../pkg-playground/src"],
+      "@b/pkg-playground/*": ["../pkg-playground/src/*"],
+      "@b/pkg-proto": ["../pkg-proto/src"],
+      "@b/pkg-proto/*": ["../pkg-proto/src/*"]
+    }
+  },
+  "include": ["src", "src/**/*", "vite-env.d.ts"],
+  "exclude": ["dist", "build", "node_modules"]
+}

@@ -1,0 +1,157 @@
+# Stow Configuration
+# ==================
+#
+# Stow validates crate naming conventions and dependency rules in the workspace.
+# Install: cargo install --path crates/tools_stow
+# Usage:   cargo stow --check    (validate)
+#          cargo stow --fix      (auto-fix sorting issues)
+#
+# Namespaces ([[namespaces]]):
+#   name                 - Crate prefix (e.g., "baml" for baml_* crates)
+#   approved_prefixes    - Valid sub-prefixes (e.g., "compiler" allows baml_compiler_*)
+#   test_crate_exceptions - Test crates exempt from "must have prefix crate" rule
+#   dependency_rules     - Rules that only apply to crates in this namespace
+#   link_crates          - Cross-namespace deps shown as proxy nodes in this cluster
+#   embed_crates         - Crates from other namespaces placed inside this cluster
+#                          (shown with dashed border; reduces cross-cluster noise)
+#
+# Dependency Rules ([[dependency_rules]] or [[namespaces.dependency_rules]]):
+#   pattern              - Simple glob: "foo*", "*bar", or exact match
+#   pattern.select       - Glob pattern to match
+#   pattern.exclude      - List of patterns to exclude from the match
+#   allowed_prefixes     - Crate prefixes allowed to use this dependency
+#   allowed_crates       - Specific crates/patterns allowed (e.g., "*_cli")
+#   regular_deps_only    - If true, rule only applies to [dependencies], not dev/build
+#   reason               - Error message shown when rule is violated
+#
+# Graph visualization ([graph]):
+#   external_deps        - External deps to show as nodes in the graph
+#   [graph.implied_deps] - When a crate depends on both the key and a value,
+#                          the edge to the value is hidden (implied by the key)
+#                          Example: baml_builtins = ["baml_builtins_macros"]
+#
+# Auto-allowed naming suffixes: _types, _test, _tests (no prefix needed)
+# Auto-allowed dependency access: _test/_tests crates
+# Ignore crates by name pattern (glob)
+# ignore_crates = ["sdk_test_*"]
+#
+# ===========================================================================
+
+# Ignore crates that don't follow the namespace convention
+# - sdk_test_*: SDK test crates
+ignore_crates = ["sdk_test_*"]
+
+# Graph visualization settings
+# Run: cargo stow --graph /tmp/deps.svg
+[graph]
+external_deps = ["serde_json", "tokio", "clap", "anyhow", "salsa", "rowan", "reqwest"]
+
+# Implied dependencies: if a crate depends on both the key and a value,
+# the edge to the value is hidden (it's visually implied by the key).
+[graph.implied_deps]
+baml_builtins = ["baml_builtins_macros"]
+baml_project = ["baml_db"]
+baml_type = ["baml_base", "baml_builtins"]
+bex_heap = ["bex_external_types"]
+bex_external_types = ["bex_vm_types"]
+bex_vm_types = ["bex_resource_types"]
+
+# Global dependency rules (apply to ALL crate namespaces)
+[[dependency_rules]]
+pattern = "anyhow"
+allowed_crates = [
+    "*_cli",
+    "tools_*",
+    "cargo-*",
+    "baml_lsp_*",
+    # `baml_exec` and `baml_pack_host` are surface-area crates per
+    # BEP-027: the shared `baml run` / `baml pack` executor and the
+    # runtime host binary embedded in packed executables. They sit at
+    # the application boundary (same as `baml_cli`) and use anyhow for
+    # the same reason — top-level error surfacing.
+    "baml_exec",
+    "baml_pack_host",
+]
+regular_deps_only = true
+reason = "Use thiserror for proper error types in library crates."
+
+# baml namespace configuration
+[[namespaces]]
+name = "baml"
+approved_prefixes = ["compiler", "builtins", "builtins2", "codegen", "compiler2", "lsp2"]
+test_crate_exceptions = ["baml_tests"]
+embed_crates = ["tools_onionskin", "bex_project"]
+
+# baml-specific dependency rules
+[[namespaces.dependency_rules]]
+pattern = "baml_compiler*"
+allowed_prefixes = ["compiler", "compiler2"]
+allowed_crates = ["baml_db", "baml_project", "bridge_cffi", "baml_type", "baml_lsp2_actions", "baml_builtins_codegen", "baml_builtins2_codegen"]
+reason = "Use baml_db or baml_project to access compiler interfaces."
+
+[[namespaces.dependency_rules]]
+pattern.select = "bex_*"
+pattern.exclude = ["bex_vm_types"]
+# `baml_exec` and `baml_pack_host` are BEP-027 surface-area crates
+# (shared executor + packed-binary runtime host) and sit at the same
+# application boundary as `baml_cli` — they need direct access to the
+# engine, events, and VM types.
+allowed_crates = ["bridge_cffi", "baml_cli", "baml_exec", "baml_pack_host"]
+reason = "baml_* crates should not depend on bex_* crates."
+
+[[namespaces.dependency_rules]]
+pattern.select = "bex_vm_types"
+allowed_crates = ["baml_compiler_emit", "baml_compiler2_emit", "baml_project", "baml_cli", "baml_exec", "baml_pack_host"]
+reason = "Only compiler_emit and baml_project crates should depend on bex_vm_types (pure data layer)."
+
+
+# tools namespace configuration
+[[namespaces]]
+name = "tools"
+approved_prefixes = ["sap"]
+# Allow tools_stow folder to have package name "cargo-stow" for cargo subcommand convention
+name_exceptions = { "tools_stow" = "cargo-stow", "tools_size_gate" = "cargo-size-gate" }
+
+# bex namespace configuration
+[[namespaces]]
+name = "bex"
+approved_prefixes = ["events"]
+link_crates = ["baml_builtins", "baml_type", "sys_types"]
+
+# lsp namespace configuration
+[[namespaces]]
+name = "baml_lsp"
+link_crates = ["baml_db", "baml_project"]
+
+# bridge namespace configuration
+[[namespaces]]
+name = "bridge"
+link_crates = ["bex_project", "sys_native", "sys_types"]
+
+# Bridge crates should go through bex_project for runtime access, not depend on bex internals directly.
+# bridge_wasm needs bex_heap and bex_resource_types for low-level sys ops.
+# bridge_python and bridge_cffi need bex_events for event handling.
+[[namespaces.dependency_rules]]
+pattern.select = "bex_*"
+pattern.exclude = ["bex_project", "bex_events", "bex_events_native", "bex_heap", "bex_resource_types"]
+allowed_crates = []
+reason = "Bridge crates must use bex_project re-exports, not bex internals directly."
+
+# sys namespace configuration
+[[namespaces]]
+name = "sys"
+link_crates = ["baml_type",  "bex_heap", "bex_vm_types"]
+
+[[namespaces]]
+name = "codegen"
+
+[[namespaces]]
+name = "surface"
+# Surface-area crates that don't fit the prefix-based namespaces — they
+# sit at the application boundary and depend on bex_* internals
+# directly (where `baml_*` crates normally cannot). `baml_exec` is the
+# BEP-027 shared executor used by `baml run` and the packed host;
+# `baml_pack_host` is the runtime binary embedded in packed
+# executables. Listed here so they're exempt from the baml-namespace
+# rules forbidding bex_* deps.
+name_exceptions = {"baml_cli" = "baml_cli", "baml_playground_wasm" = "baml_playground_wasm", "baml_exec" = "baml_exec", "baml_pack_host" = "baml_pack_host" }

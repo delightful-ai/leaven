@@ -1,0 +1,43 @@
+[package]
+name = "bex_vm_types"
+version = { workspace = true }
+publish = false
+authors = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+description = "BAML Virtual Machine"
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[build-dependencies]
+baml_builtins2 = { workspace = true }
+baml_builtins2_codegen = { workspace = true }
+
+[dependencies]
+baml_base = { workspace = true }
+baml_builtins2 = { workspace = true }
+baml_type = { workspace = true }
+bex_resource_types = { workspace = true }
+indexmap = { workspace = true }
+serde = { workspace = true }
+tokio = { workspace = true, features = [ "rt", "macros", "sync" ] }
+tokio-util = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+divan = { workspace = true }
+indexmap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[features]
+default = [  ]
+heap_debug = [  ]

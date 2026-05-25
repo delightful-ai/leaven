@@ -1,0 +1,32 @@
+[package]
+name = "baml_db"
+version = { workspace = true }
+publish = false
+authors = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+baml_base = { workspace = true }
+baml_compiler2_emit = { workspace = true }
+baml_compiler2_hir = { workspace = true }
+baml_compiler2_mir = { workspace = true }
+baml_compiler2_ppir = { workspace = true }
+baml_compiler2_tir = { workspace = true }
+baml_compiler_diagnostics = { workspace = true }
+baml_compiler_lexer = { workspace = true }
+baml_compiler_parser = { workspace = true }
+baml_compiler_syntax = { workspace = true }
+baml_workspace = { workspace = true }
+salsa = { workspace = true }
+

@@ -1,0 +1,88 @@
+[package]
+name = "baml_cli"
+version = { workspace = true }
+publish = false
+authors = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+baml_builtins2 = { workspace = true }
+baml_db = { workspace = true }
+baml_exec = { workspace = true }
+baml_fmt = { workspace = true }
+baml_lsp2_actions = { workspace = true }
+baml_lsp_server = { workspace = true }
+baml_project = { workspace = true }
+baml_type = { workspace = true }
+baml_workspace = { workspace = true }
+bex_engine = { workspace = true }
+bex_events = { workspace = true }
+bex_events_native = { workspace = true }
+bex_vm_types = { workspace = true }
+codegen_python = { workspace = true }
+sys_native = { workspace = true }
+anyhow = { workspace = true }
+bitcode = { workspace = true }
+clap = { workspace = true, features = [ "color", "env" ] }
+clap-cargo = { workspace = true }
+console = { workspace = true }
+ctrlc = { workspace = true }
+flate2 = { workspace = true }
+indexmap = { workspace = true }
+indicatif = { workspace = true }
+libsui = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true, features = [ "blocking" ] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+sha2 = { workspace = true }
+strsim = { workspace = true }
+tar = { workspace = true }
+text-size = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }
+zip = { workspace = true }
+
+[features]
+default = [ "aws-crypto" ]
+aws-crypto = [ "baml_lsp_server/aws-crypto", "bex_engine/aws-crypto", "sys_native/aws-crypto" ]
+ring-crypto = [ "baml_lsp_server/ring-crypto", "bex_engine/ring-crypto", "sys_native/ring-crypto" ]
+native-tls = [ "baml_lsp_server/native-tls" ]
+rustls = [ "baml_lsp_server/rustls" ]
+defaults = [  ]
+internal = [  ]
+skip-integ-tests = [  ]
+
+[dev-dependencies]
+baml_tests = { workspace = true }
+insta = { workspace = true }
+tempfile = { workspace = true }
+
+# assert_cmd = "2"
+# console_log = "1"
+# dissimilar = "1.0.4"
+# expect-test = "1.1.0"
+# indoc.workspace = true
+# either = "1.8.1"
+# rstest = "0.22.0"
+# walkdir = "2.5.0"
+# wasm-logger = "0.2.0"
+
+[[bin]]
+name = "baml-cli"
+path = "src/main.rs"
+
+[package.metadata.ci]
+wasm_support = false

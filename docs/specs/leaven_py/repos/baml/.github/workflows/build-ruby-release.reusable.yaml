@@ -1,0 +1,128 @@
+name: BAML Release - Build Ruby
+
+on:
+  workflow_call: {}
+  push:
+    branches: [gemini-fix]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  # suffix is important to prevent a concurrency deadlock with the calling workflow
+  group: ${{ github.workflow }}-${{ github.ref }}-build-ruby
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        _:
+          # Note needs glibc 2.29 https://github.com/rake-compiler/rake-compiler-dock/issues/122
+          - platform: x86_64-linux
+          - platform: x86_64-linux-musl
+          - platform: aarch64-linux
+          - platform: aarch64-linux-musl
+          - platform: arm-linux
+          - platform: arm64-darwin
+          # - platform: x64-mingw32
+          # - platform: x86-mingw-ucrt
+
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    name: ${{ matrix._.platform }}
+    defaults:
+      run:
+        working-directory: engine/language_client_ruby
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oxidize-rb/actions/setup-ruby-and-rust@main
+        with:
+          rubygems: latest
+          ruby-version: "3.4"
+          bundler-cache: false
+          cargo-cache: false
+          cargo-vendor: false
+          rustup-toolchain: stable
+
+      #################################################################################################################
+      #
+      #  BEGIN: these steps are copied from https://github.com/oxidize-rb/actions/blob/main/cross-gem/action.yml
+      #
+      #  We can't use oxidize-rb/actions/cross-gem@main directly, unfortunately, because our Ruby FFI lib is a member
+      #  of the top-level workspace, and we need to do stuff to make rb-sys-dock play nice with it
+      #
+      #################################################################################################################
+
+      - name: Configure environment
+        shell: bash
+        id: configure
+        run: |
+          : Configure environment
+          echo "RB_SYS_DOCK_UID=$(id -u)" >> $GITHUB_ENV
+          echo "RB_SYS_DOCK_GID=$(id -g)" >> $GITHUB_ENV
+          rb_sys_version="$((grep rb_sys Gemfile.lock | head -n 1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+') || (gem info rb_sys --remote | grep -oE '[0-9]+\.[0-9]+\.[0-9]+') || echo "latest")"
+          rb_sys_dock_cache_dir="$HOME/.cache/rb-sys-$rb_sys_version"
+          mkdir -p "$rb_sys_dock_cache_dir"
+          echo "RB_SYS_DOCK_CACHE_DIR=$rb_sys_dock_cache_dir" >> $GITHUB_ENV
+          echo "rb_sys_version=$rb_sys_version" >> $GITHUB_OUTPUT
+          cat >>$GITHUB_ENV <<EOF
+          RUSTFLAGS=--cfg tracing_unstable
+          EOF
+
+      - name: Setup rb-sys
+        shell: bash
+        run: |
+          version="${{ steps.configure.outputs.rb_sys_version }}"
+          echo "Installing rb_sys@$version"
+
+          if [ "$version" = "latest" ]; then
+            gem install rb_sys
+          else
+            gem install rb_sys -v $version
+          fi
+
+      - name: Build gem
+        shell: bash
+        working-directory: engine
+        run: |
+          : Compile gem
+          echo "Docker Working Directory: $(pwd)"
+          set -x
+
+          # Unfortunately we can't actually parallelize the Ruby versions
+          # because they get bundled into the same gem
+          rb-sys-dock \
+            --platform ${{ matrix._.platform }} \
+            --mount-toolchains \
+            --directory language_client_ruby \
+            --ruby-versions 3.4,3.3,3.2,3.1 \
+            --build \
+            -- ${{ matrix._.rb-sys-dock-setup }}
+
+      - name: Show built gem
+        shell: bash
+        run: find pkg -name '*.gem'
+
+      #################################################################################################################
+      #
+      #  END: these steps are copied from https://github.com/oxidize-rb/actions/blob/main/cross-gem/action.yml
+      #
+      #  We can't use oxidize-rb/actions/cross-gem@main directly, unfortunately, because our Ruby FFI lib is a member
+      #  of the top-level workspace, and we need to do stuff to make rb-sys-dock play nice with it
+      #
+      #################################################################################################################
+
+      - name: Upload Ruby artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: gem-${{ matrix._.platform }}
+          path: engine/language_client_ruby/pkg/*.gem
+          if-no-files-found: error
+
+      # - run: |
+      #     for i in $(ls pkg/*.gem); do
+      #       gem push $i
+      #     done

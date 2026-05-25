@@ -1,0 +1,259 @@
+/**
+ * Theme Design System
+ * Single source of truth for colors. All semantic tokens live here.
+ * See docs/THEMING.md for usage and extension guidelines.
+ */
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  color-scheme: light;
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+  --primary: 222.2 47.4% 11.2%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 222.2 84% 4.9%;
+  --radius: 0.5rem;
+  /* Code blocks: inline and block */
+  --code-bg: 210 40% 96.1%;
+  --code-fg: 222.2 84% 4.9%;
+  --code-border: 214.3 31.8% 91.4%;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: 222.2 14% 4%;
+  --foreground: 210 40% 98%;
+  --card: 222.2 14% 6%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222.2 14% 6%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 210 40% 98%;
+  --primary-foreground: 222.2 47% 11.2%;
+  --secondary: 217.2 32.6% 17.5%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217.2 32.6% 17.5%;
+  --muted-foreground: 215 20% 75%;
+  --accent: 217.2 32.6% 17.5%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 217.2 32.6% 17.5%;
+  --input: 217.2 32.6% 17.5%;
+  --ring: 215 20% 75%;
+  /* Code blocks: higher contrast for readability in dark mode */
+  --code-bg: 222.2 14% 9%;
+  --code-fg: 210 40% 95%;
+  --code-border: 217.2 32.6% 22%;
+}
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-code-bg: hsl(var(--code-bg));
+  --color-code-fg: hsl(var(--code-fg));
+  --color-code-border: hsl(var(--code-border));
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+/* Shiki: dual-theme output. Dark variant uses github-dark-high-contrast (see lib/shiki-themes.ts). */
+.dark .shiki,
+.dark .shiki span {
+  color: var(--shiki-dark) !important;
+  background-color: var(--shiki-dark-bg) !important;
+  font-style: var(--shiki-dark-font-style) !important;
+  font-weight: var(--shiki-dark-font-weight) !important;
+  text-decoration: var(--shiki-dark-text-decoration) !important;
+}
+
+/* Code blocks: improve Unicode diagram alignment with robust mono fallbacks */
+.bep-shiki-code pre,
+.bep-shiki-code code {
+  font-family:
+    var(--font-geist-mono),
+    "DejaVu Sans Mono",
+    "Noto Sans Mono",
+    "Liberation Mono",
+    Menlo,
+    Consolas,
+    Monaco,
+    monospace;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+}
+
+.bep-shiki-code .line {
+  white-space: pre;
+}
+
+/* MDX Editor: ensure content area uses semantic colors in dark mode */
+.dark .mdxeditor-root-contenteditable,
+.dark .mdxeditor-root-contenteditable [contenteditable="true"] {
+  color: hsl(var(--foreground));
+}
+
+/* MDX Editor CodeMirror: use semantic code colors in dark mode (preview uses Shiki) */
+.dark .mdxeditor .cm-editor {
+  background-color: hsl(var(--code-bg)) !important;
+  color: hsl(var(--code-fg)) !important;
+}
+
+.dark .mdxeditor .cm-editor .cm-scroller {
+  background-color: hsl(var(--code-bg));
+}
+
+.dark .mdxeditor .cm-editor .cm-content {
+  color: hsl(var(--code-fg));
+}
+
+.dark .mdxeditor .cm-editor .cm-gutters {
+  background-color: hsl(var(--code-bg));
+  color: hsl(var(--muted-foreground));
+  border-color: hsl(var(--code-border));
+}
+
+.dark .mdxeditor .cm-editor .cm-activeLineGutter {
+  background-color: hsl(var(--code-border) / 0.5);
+}
+
+.dark .mdxeditor .cm-editor .cm-activeLine {
+  background-color: hsl(var(--code-border) / 0.3);
+}
+
+.dark .mdxeditor .cm-editor .cm-cursor,
+.dark .mdxeditor .cm-editor .cm-dropCursor {
+  border-left-color: hsl(var(--code-fg));
+}
+
+.dark .mdxeditor .cm-editor .cm-content {
+  caret-color: hsl(var(--code-fg));
+}
+
+.dark .mdxeditor .cm-editor.cm-focused .cm-selectionBackground,
+.dark .mdxeditor .cm-editor .cm-selectionBackground,
+.dark .mdxeditor .cm-editor .cm-content ::selection {
+  background-color: hsl(var(--code-border));
+}
+
+/* Override basicLight syntax colors (dark-on-light) for dark mode readability */
+.dark .mdxeditor .cm-editor .cm-content,
+.dark .mdxeditor .cm-editor .cm-content * {
+  color: hsl(var(--code-fg)) !important;
+}
+
+/* Code block language picker: MDX editor uses --basePageBg (white) for toolbar/select */
+.dark .mdxeditor [class*="codeMirrorToolbar"],
+.dark .mdxeditor [class*="codeMirrorWrapper"] {
+  --basePageBg: hsl(var(--code-bg));
+  --baseBase: hsl(var(--code-bg));
+  --baseText: hsl(var(--code-fg));
+  --baseTextContrast: hsl(var(--code-fg));
+}
+
+.dark .mdxeditor-popup-container {
+  --basePageBg: hsl(var(--background));
+  --baseBase: hsl(var(--muted));
+}
+
+/* Tiptap Editor Styles */
+.ProseMirror {
+  min-height: 200px;
+}
+
+.ProseMirror:focus {
+  outline: none;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  color: hsl(var(--muted-foreground));
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.ProseMirror pre {
+  background: hsl(var(--code-bg));
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  font-family: var(--font-geist-mono);
+}
+
+.ProseMirror code {
+  background: hsl(var(--code-bg));
+  border-radius: 0.25rem;
+  padding: 0.2rem 0.4rem;
+  font-family: var(--font-geist-mono);
+}
+
+.ProseMirror pre code {
+  background: none;
+  padding: 0;
+}
+
+/* Edit mode indicator */
+.edit-mode-active {
+  box-shadow: inset 0 0 0 2px hsl(var(--primary) / 0.2);
+}
+
+/* Compact comment editor */
+.comment-editor [contenteditable] {
+  min-height: 80px !important;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.comment-editor .mdxeditor-toolbar {
+  padding: 4px 8px;
+  gap: 2px;
+}
+
+.comment-editor .mdxeditor-toolbar button {
+  padding: 4px;
+}

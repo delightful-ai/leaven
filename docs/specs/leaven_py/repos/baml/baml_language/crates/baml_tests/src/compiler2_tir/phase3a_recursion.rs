@@ -1,0 +1,635 @@
+//! Phase 3B-18/19 cycle validation tests.
+//!
+//! Tests that invalid (unguarded) type alias cycles produce diagnostics,
+//! while valid recursive types (guarded by containers) are accepted.
+
+use super::support::{make_db, render_tir};
+
+// ── 3B-18/19. Cycle validation ───────────────────────────────────────────
+
+#[test]
+fn type_alias_direct_self_reference() {
+    // type A = A — direct self-reference with no base case.
+    let mut db = make_db();
+    let file = db.add_file("test.baml", "type A = A");
+    insta::assert_snapshot!(render_tir(&db, file), @"
+    type user.A = user.A
+      !! 0..10: recursive type alias cycle: A
+    type user.A$stream = user.A$stream
+      !! 0..0: recursive type alias cycle: A$stream
+    ");
+}
+
+#[test]
+fn type_alias_mutual_recursion() {
+    // type A = B, type B = A — mutual cycle with no base case.
+    let mut db = make_db();
+    let file = db.add_file("test.baml", "type A = B\ntype B = A");
+    insta::assert_snapshot!(render_tir(&db, file), @"
+    type user.A = user.B
+      !! 0..10: recursive type alias cycle: A
+    type user.B = user.A
+      !! 10..21: recursive type alias cycle: B
+    type user.A$stream = user.B$stream
+      !! 0..0: recursive type alias cycle: A$stream
+    type user.B$stream = user.A$stream
+      !! 0..0: recursive type alias cycle: B$stream
+    ");
+}
+
+#[test]
+fn type_alias_indirect_cycle_three() {
+    // type A = B, type B = C, type C = A — three-way cycle with no base case.
+    let mut db = make_db();
+    let file = db.add_file("test.baml", "type A = B\ntype B = C\ntype C = A");
+    insta::assert_snapshot!(render_tir(&db, file), @"
+    type user.A = user.B
+      !! 0..10: recursive type alias cycle: A
+    type user.B = user.C
+      !! 10..21: recursive type alias cycle: B
+    type user.C = user.A
+      !! 21..32: recursive type alias cycle: C
+    type user.A$stream = user.B$stream
+      !! 0..0: recursive type alias cycle: A$stream
+    type user.B$stream = user.C$stream
+      !! 0..0: recursive type alias cycle: B$stream
+    type user.C$stream = user.A$stream
+      !! 0..0: recursive type alias cycle: C$stream
+    ");
+}
+
+#[test]
+fn type_alias_valid_recursive_via_container() {
+    // type JSON = string | int | JSON[] — valid recursive type (guarded by container).
+    // No cycle diagnostic should be emitted.
+    let mut db = make_db();
+    let file = db.add_file(
+        "test.baml",
+        "type JSON = string | int | bool | null | JSON[] | map<string, JSON>",
+    );
+    insta::assert_snapshot!(render_tir(&db, file), @"
+    type user.JSON = string | int | bool | null | user.JSON[] | map<string, user.JSON>
+    type user.JSON$stream = string | int | bool | null | user.JSON$stream[] | map<string, user.JSON$stream>
+    ");
+}
+
+#[test]
+fn type_alias_cycle_used_in_function() {
+    // Cycle in alias used as function param/return — cycle diagnostic on the alias.
+    let mut db = make_db();
+    let file = db.add_file(
+        "test.baml",
+        "type Loop = Loop\nfunction f(x: Loop) -> Loop { return x; }",
+    );
+    insta::assert_snapshot!(render_tir(&db, file), @"
+    type user.Loop = user.Loop
+      !! 0..16: recursive type alias cycle: Loop
+    function user.f(x: user.Loop) -> user.Loop throws never {
+      { : never
+        return x : user.Loop
+      }
+    }
+    type user.Loop$stream = user.Loop$stream
+      !! 0..0: recursive type alias cycle: Loop$stream
+    ");
+}
+
+#[test]
+fn class_field_self_reference() {
+    // class Node { next Node } — required self-reference.
+    // Unconstructable: you can't build a Node without already having a Node.
+    let mut db = make_db();
+    let file = db.add_file("test.baml", "class Node { next Node }");
+    insta::assert_snapshot!(render_tir(&db, file), @r#"
+    class user.Node {
+      next: user.Node
+    }
+      !! 0..24: class cycle: user.Node
+    function user.Node.to_json(self: user.Node) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "next": self.next.to_json() } : map<string, baml.json.json>
+    }
+    function user.Node.from_json(j: baml.json.json) -> user.Node throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      Node { next: baml.json.from_json<Node>(baml.json.field(j, "next")) } : user.Node
+    }
+    class user.Node$stream {
+      next: null | user.Node$stream
+    }
+    "#);
+}
+
+#[test]
+fn class_field_mutual_reference() {
+    // class Husband { wife Wife }, class Wife { husband Husband }
+    // Both fields required — unconstructable mutual cycle.
+    let mut db = make_db();
+    let file = db.add_file(
+        "test.baml",
+        "class Husband { wife Wife }\nclass Wife { husband Husband }",
+    );
+    insta::assert_snapshot!(render_tir(&db, file), @r#"
+    class user.Husband {
+      wife: user.Wife
+    }
+      !! 0..27: class cycle: user.Husband -> user.Wife -> user.Husband
+    function user.Husband.to_json(self: user.Husband) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "wife": self.wife.to_json() } : map<string, baml.json.json>
+    }
+    function user.Husband.from_json(j: baml.json.json) -> user.Husband throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      Husband { wife: baml.json.from_json<Wife>(baml.json.field(j, "wife")) } : user.Husband
+    }
+    class user.Wife {
+      husband: user.Husband
+    }
+      !! 27..58: class cycle: user.Husband -> user.Wife -> user.Husband
+    function user.Wife.to_json(self: user.Wife) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "husband": self.husband.to_json() } : map<string, baml.json.json>
+    }
+    function user.Wife.from_json(j: baml.json.json) -> user.Wife throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      Wife { husband: baml.json.from_json<Husband>(baml.json.field(j, "husband")) } : user.Wife
+    }
+    class user.Husband$stream {
+      wife: null | user.Wife$stream
+    }
+    class user.Wife$stream {
+      husband: null | user.Husband$stream
+    }
+    "#);
+}
+
+// ── Edge cases: Optional / Union guardedness ──────────────────────────────
+//
+// Key question: does Optional or Union provide a structural base case?
+// V1 says NO — only List and Map are structural.
+// These tests document the expected behavior.
+
+#[test]
+fn type_alias_optional_self_reference() {
+    // type A = A? — is Optional a structural guard?
+    // Optional does NOT provide structural termination — this is invalid.
+    let mut db = make_db();
+    let file = db.add_file("test.baml", "type A = A?");
+    insta::assert_snapshot!(render_tir(&db, file), @"
+    type user.A = user.A?
+      !! 0..11: recursive type alias cycle: A
+    type user.A$stream = null | user.A$stream
+      !! 0..0: recursive type alias cycle: A$stream
+    ");
+}
+
+#[test]
+fn type_alias_union_with_base_case() {
+    // type A = A | string — Union with a non-recursive base case.
+    // Union does NOT provide structural termination — this is invalid.
+    let mut db = make_db();
+    let file = db.add_file("test.baml", "type A = A | string");
+    insta::assert_snapshot!(render_tir(&db, file), @"
+    type user.A = user.A | string
+      !! 0..19: recursive type alias cycle: A
+    type user.A$stream = user.A$stream | string
+      !! 0..0: recursive type alias cycle: A$stream
+    ");
+}
+
+#[test]
+fn type_alias_list_in_union() {
+    // type A = A[] | string — List-guarded recursive in union.
+    // List provides structural guard — this is valid.
+    let mut db = make_db();
+    let file = db.add_file("test.baml", "type A = A[] | string");
+    insta::assert_snapshot!(render_tir(&db, file), @"
+    type user.A = user.A[] | string
+    type user.A$stream = user.A$stream[] | string
+    ");
+}
+
+#[test]
+fn type_alias_optional_list_self_reference() {
+    // type A = A[]? — List then Optional.
+    // List provides structural guard — this is valid.
+    let mut db = make_db();
+    let file = db.add_file("test.baml", "type A = A[]?");
+    insta::assert_snapshot!(render_tir(&db, file), @"
+    type user.A = user.A[]?
+    type user.A$stream = null | user.A$stream[]
+    ");
+}
+
+#[test]
+fn type_alias_map_in_union() {
+    // type A = map<string, A> | string — Map-guarded recursive in union.
+    // Map provides structural guard — this is valid.
+    let mut db = make_db();
+    let file = db.add_file("test.baml", "type A = map<string, A> | string");
+    insta::assert_snapshot!(render_tir(&db, file), @"
+    type user.A = map<string, user.A> | string
+    type user.A$stream = map<string, user.A$stream> | string
+    ");
+}
+
+#[test]
+fn type_alias_mutual_cycle_through_optional() {
+    // type A = B?, type B = A — mutual cycle through Optional.
+    // Optional does NOT provide structural termination — both are invalid.
+    let mut db = make_db();
+    let file = db.add_file("test.baml", "type A = B?\ntype B = A");
+    insta::assert_snapshot!(render_tir(&db, file), @"
+    type user.A = user.B?
+      !! 0..11: recursive type alias cycle: A
+    type user.B = user.A
+      !! 11..22: recursive type alias cycle: B
+    type user.A$stream = null | user.B$stream
+      !! 0..0: recursive type alias cycle: A$stream
+    type user.B$stream = user.A$stream
+      !! 0..0: recursive type alias cycle: B$stream
+    ");
+}
+
+#[test]
+fn type_alias_mutual_cycle_through_list() {
+    // type A = B[], type B = A — mutual cycle through List.
+    // List provides structural guard — both are valid.
+    let mut db = make_db();
+    let file = db.add_file("test.baml", "type A = B[]\ntype B = A");
+    insta::assert_snapshot!(render_tir(&db, file), @"
+    type user.A = user.B[]
+    type user.B = user.A
+    type user.A$stream = user.B$stream[]
+    type user.B$stream = user.A$stream
+    ");
+}
+
+// ── Class required-field cycle validation ─────────────────────────────────
+//
+// Classes with required (non-optional, non-list, non-map) fields that form
+// a cycle are impossible to construct. These should produce diagnostics.
+// Optional, list, and map fields break the cycle since they can be
+// null/empty.
+
+#[test]
+fn class_required_field_mutual_cycle() {
+    // class A { b B }, class B { a A } — both fields required.
+    // Impossible to construct either.
+    let mut db = make_db();
+    let file = db.add_file("test.baml", "class A { b B }\nclass B { a A }");
+    insta::assert_snapshot!(render_tir(&db, file), @r#"
+    class user.A {
+      b: user.B
+    }
+      !! 0..15: class cycle: user.A -> user.B -> user.A
+    function user.A.to_json(self: user.A) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "b": self.b.to_json() } : map<string, baml.json.json>
+    }
+    function user.A.from_json(j: baml.json.json) -> user.A throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      A { b: baml.json.from_json<B>(baml.json.field(j, "b")) } : user.A
+    }
+    class user.B {
+      a: user.A
+    }
+      !! 15..31: class cycle: user.A -> user.B -> user.A
+    function user.B.to_json(self: user.B) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "a": self.a.to_json() } : map<string, baml.json.json>
+    }
+    function user.B.from_json(j: baml.json.json) -> user.B throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      B { a: baml.json.from_json<A>(baml.json.field(j, "a")) } : user.B
+    }
+    class user.A$stream {
+      b: null | user.B$stream
+    }
+    class user.B$stream {
+      a: null | user.A$stream
+    }
+    "#);
+}
+
+#[test]
+fn class_required_field_self_cycle() {
+    // class A { self_ref A } — required self-reference.
+    // Impossible to construct.
+    let mut db = make_db();
+    let file = db.add_file("test.baml", "class A { self_ref A }");
+    insta::assert_snapshot!(render_tir(&db, file), @r#"
+    class user.A {
+      self_ref: user.A
+    }
+      !! 0..22: class cycle: user.A
+    function user.A.to_json(self: user.A) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "self_ref": self.self_ref.to_json() } : map<string, baml.json.json>
+    }
+    function user.A.from_json(j: baml.json.json) -> user.A throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      A { self_ref: baml.json.from_json<A>(baml.json.field(j, "self_ref")) } : user.A
+    }
+    class user.A$stream {
+      self_ref: null | user.A$stream
+    }
+    "#);
+}
+
+#[test]
+fn class_required_field_three_way_cycle() {
+    // class A { b B }, class B { c C }, class C { a A } — three-way required cycle.
+    let mut db = make_db();
+    let file = db.add_file(
+        "test.baml",
+        "class A { b B }\nclass B { c C }\nclass C { a A }",
+    );
+    insta::assert_snapshot!(render_tir(&db, file), @r#"
+    class user.A {
+      b: user.B
+    }
+      !! 0..15: class cycle: user.A -> user.B -> user.C -> user.A
+    function user.A.to_json(self: user.A) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "b": self.b.to_json() } : map<string, baml.json.json>
+    }
+    function user.A.from_json(j: baml.json.json) -> user.A throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      A { b: baml.json.from_json<B>(baml.json.field(j, "b")) } : user.A
+    }
+    class user.B {
+      c: user.C
+    }
+      !! 15..31: class cycle: user.A -> user.B -> user.C -> user.A
+    function user.B.to_json(self: user.B) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "c": self.c.to_json() } : map<string, baml.json.json>
+    }
+    function user.B.from_json(j: baml.json.json) -> user.B throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      B { c: baml.json.from_json<C>(baml.json.field(j, "c")) } : user.B
+    }
+    class user.C {
+      a: user.A
+    }
+      !! 31..47: class cycle: user.A -> user.B -> user.C -> user.A
+    function user.C.to_json(self: user.C) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "a": self.a.to_json() } : map<string, baml.json.json>
+    }
+    function user.C.from_json(j: baml.json.json) -> user.C throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      C { a: baml.json.from_json<A>(baml.json.field(j, "a")) } : user.C
+    }
+    class user.A$stream {
+      b: null | user.B$stream
+    }
+    class user.B$stream {
+      c: null | user.C$stream
+    }
+    class user.C$stream {
+      a: null | user.A$stream
+    }
+    "#);
+}
+
+#[test]
+fn class_optional_field_breaks_cycle() {
+    // class A { b B? }, class B { a A } — optional field breaks the cycle.
+    // A can be constructed with b = null, then B can use that A.
+    // Should NOT be an error.
+    let mut db = make_db();
+    let file = db.add_file("test.baml", "class A { b B? }\nclass B { a A }");
+    insta::assert_snapshot!(render_tir(&db, file), @r#"
+    class user.A {
+      b: user.B?
+    }
+    function user.A.to_json(self: user.A) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "b": self.b?.to_json() } : map<string, baml.json.json?>
+    }
+    function user.A.from_json(j: baml.json.json) -> user.A throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      A { b: baml.json.from_json<B?>(baml.json.field(j, "b")) } : user.A
+    }
+    class user.B {
+      a: user.A
+    }
+    function user.B.to_json(self: user.B) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "a": self.a.to_json() } : map<string, baml.json.json>
+    }
+    function user.B.from_json(j: baml.json.json) -> user.B throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      B { a: baml.json.from_json<A>(baml.json.field(j, "a")) } : user.B
+    }
+    class user.A$stream {
+      b: null | user.B$stream
+    }
+    class user.B$stream {
+      a: null | user.A$stream
+    }
+    "#);
+}
+
+#[test]
+fn class_list_field_breaks_cycle() {
+    // class A { bs B[] }, class B { a A } — list field breaks the cycle.
+    // A can be constructed with bs = [], then B can use that A.
+    // Should NOT be an error.
+    let mut db = make_db();
+    let file = db.add_file("test.baml", "class A { bs B[] }\nclass B { a A }");
+    insta::assert_snapshot!(render_tir(&db, file), @r#"
+    class user.A {
+      bs: user.B[]
+    }
+    function user.A.to_json(self: user.A) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "bs": self.bs.to_json() } : map<string, baml.json.json>
+    }
+    function user.A.from_json(j: baml.json.json) -> user.A throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      A { bs: baml.json.from_json<B[]>(baml.json.field(j, "bs")) } : user.A
+    }
+    class user.B {
+      a: user.A
+    }
+    function user.B.to_json(self: user.B) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "a": self.a.to_json() } : map<string, baml.json.json>
+    }
+    function user.B.from_json(j: baml.json.json) -> user.B throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      B { a: baml.json.from_json<A>(baml.json.field(j, "a")) } : user.B
+    }
+    class user.A$stream {
+      bs: user.B$stream[]
+    }
+    class user.B$stream {
+      a: null | user.A$stream
+    }
+    "#);
+}
+
+#[test]
+fn class_map_field_breaks_cycle() {
+    // class A { bm map<string, B> }, class B { a A } — map field breaks the cycle.
+    // A can be constructed with bm = {}, then B can use that A.
+    // Should NOT be an error.
+    let mut db = make_db();
+    let file = db.add_file(
+        "test.baml",
+        "class A { bm map<string, B> }\nclass B { a A }",
+    );
+    insta::assert_snapshot!(render_tir(&db, file), @r#"
+    class user.A {
+      bm: map<string, user.B>
+    }
+    function user.A.to_json(self: user.A) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "bm": self.bm.to_json() } : map<string, baml.json.json>
+    }
+    function user.A.from_json(j: baml.json.json) -> user.A throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      A { bm: baml.json.from_json<map<string, B>>(baml.json.field(j, "bm")) } : user.A
+    }
+    class user.B {
+      a: user.A
+    }
+    function user.B.to_json(self: user.B) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "a": self.a.to_json() } : map<string, baml.json.json>
+    }
+    function user.B.from_json(j: baml.json.json) -> user.B throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      B { a: baml.json.from_json<A>(baml.json.field(j, "a")) } : user.B
+    }
+    class user.A$stream {
+      bm: map<string, user.B$stream>
+    }
+    class user.B$stream {
+      a: null | user.A$stream
+    }
+    "#);
+}
+
+#[test]
+fn class_cycle_through_type_alias() {
+    // class A { b AliasB }, type AliasB = B, class B { a A }
+    // The alias is transparent — this is still a required cycle.
+    let mut db = make_db();
+    let file = db.add_file(
+        "test.baml",
+        "class A { b AliasB }\ntype AliasB = B\nclass B { a A }",
+    );
+    insta::assert_snapshot!(render_tir(&db, file), @r#"
+    class user.A {
+      b: user.AliasB
+    }
+      !! 0..20: class cycle: user.A -> user.B -> user.A
+    function user.A.to_json(self: user.A) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "b": self.b.to_json() } : map<string, baml.json.json>
+    }
+    function user.A.from_json(j: baml.json.json) -> user.A throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      A { b: baml.json.from_json<AliasB>(baml.json.field(j, "b")) } : user.A
+    }
+    type user.AliasB = user.B
+    class user.B {
+      a: user.A
+    }
+      !! 36..52: class cycle: user.A -> user.B -> user.A
+    function user.B.to_json(self: user.B) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "a": self.a.to_json() } : map<string, baml.json.json>
+    }
+    function user.B.from_json(j: baml.json.json) -> user.B throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      B { a: baml.json.from_json<A>(baml.json.field(j, "a")) } : user.B
+    }
+    class user.A$stream {
+      b: null | user.B$stream
+    }
+    type user.AliasB$stream = user.B$stream
+    class user.B$stream {
+      a: null | user.A$stream
+    }
+    "#);
+}
+
+#[test]
+fn class_cycle_broken_by_alias_to_optional() {
+    // class A { b AliasB }, type AliasB = B?, class B { a A }
+    // The alias resolves to B? which is optional — breaks the cycle.
+    let mut db = make_db();
+    let file = db.add_file(
+        "test.baml",
+        "class A { b AliasB }\ntype AliasB = B?\nclass B { a A }",
+    );
+    insta::assert_snapshot!(render_tir(&db, file), @r#"
+    class user.A {
+      b: user.AliasB
+    }
+    function user.A.to_json(self: user.A) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "b": self.b.to_json() } : map<string, unknown>
+    }
+    function user.A.from_json(j: baml.json.json) -> user.A throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      A { b: baml.json.from_json<AliasB>(baml.json.field(j, "b")) } : user.A
+    }
+    type user.AliasB = user.B?
+    class user.B {
+      a: user.A
+    }
+    function user.B.to_json(self: user.B) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "a": self.a.to_json() } : map<string, baml.json.json>
+    }
+    function user.B.from_json(j: baml.json.json) -> user.B throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      B { a: baml.json.from_json<A>(baml.json.field(j, "a")) } : user.B
+    }
+    class user.A$stream {
+      b: null | user.B$stream
+    }
+    type user.AliasB$stream = null | user.B$stream
+    class user.B$stream {
+      a: null | user.A$stream
+    }
+    "#);
+}
+
+#[test]
+fn class_union_field_all_variants_same_class() {
+    // class A { b B | B }, class B { a A }
+    // Union where ALL variants resolve to the same class — still a hard dependency.
+    let mut db = make_db();
+    let file = db.add_file("test.baml", "class A { b B | B }\nclass B { a A }");
+    insta::assert_snapshot!(render_tir(&db, file), @r#"
+    class user.A {
+      b: user.B | user.B
+    }
+      !! 0..19: class cycle: user.A -> user.B -> user.A
+    function user.A.to_json(self: user.A) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "b": self.b.to_json() } : map<string, baml.json.json>
+    }
+    function user.A.from_json(j: baml.json.json) -> user.A throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      A { b: baml.json.from_json<B | B>(baml.json.field(j, "b")) } : user.A
+    }
+    class user.B {
+      a: user.A
+    }
+      !! 19..35: class cycle: user.A -> user.B -> user.A
+    function user.B.to_json(self: user.B) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "a": self.a.to_json() } : map<string, baml.json.json>
+    }
+    function user.B.from_json(j: baml.json.json) -> user.B throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      B { a: baml.json.from_json<A>(baml.json.field(j, "a")) } : user.B
+    }
+    class user.A$stream {
+      b: null | user.B$stream | user.B$stream
+    }
+    class user.B$stream {
+      a: null | user.A$stream
+    }
+    "#);
+}
+
+#[test]
+fn class_union_field_different_variants_breaks_cycle() {
+    // class A { b B | string }, class B { a A }
+    // Union has a non-class variant (string) — can choose that to break cycle.
+    // Should NOT be an error.
+    let mut db = make_db();
+    let file = db.add_file("test.baml", "class A { b B | string }\nclass B { a A }");
+    insta::assert_snapshot!(render_tir(&db, file), @r#"
+    class user.A {
+      b: user.B | string
+    }
+    function user.A.to_json(self: user.A) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "b": self.b.to_json() } : map<string, baml.json.json>
+    }
+    function user.A.from_json(j: baml.json.json) -> user.A throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      A { b: baml.json.from_json<B | string>(baml.json.field(j, "b")) } : user.A
+    }
+    class user.B {
+      a: user.A
+    }
+    function user.B.to_json(self: user.B) -> baml.json.json throws baml.json.JsonSerializationError | baml.json.JsonParseError {
+      map { "a": self.a.to_json() } : map<string, baml.json.json>
+    }
+    function user.B.from_json(j: baml.json.json) -> user.B throws baml.json.JsonParseError | baml.json.JsonDecodeError {
+      B { a: baml.json.from_json<A>(baml.json.field(j, "a")) } : user.B
+    }
+    class user.A$stream {
+      b: null | user.B$stream | string
+    }
+    class user.B$stream {
+      a: null | user.A$stream
+    }
+    "#);
+}
