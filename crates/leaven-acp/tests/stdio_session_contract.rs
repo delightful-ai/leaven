@@ -44,6 +44,90 @@ printf '%s\n' "$LEAVEN_TEST_RESPONSE" | sed "s/__CAPABILITY_FINGERPRINT__/$LEAVE
 }
 
 #[test]
+fn stdio_session_runs_python_external_worker_program_end_to_end() {
+    let package = package();
+    let profile = profile(&package, 32, "pause_worker");
+    let temp = TempDir::new().unwrap();
+    let observed_request = temp.path().join("observed-request.json");
+    let response = response_for(
+        "leaven/lm.complete",
+        "leaven-acp-0",
+        extension_result(
+            "leaven/lm.complete",
+            lm_response_primary(),
+            call_receipt("lm_complete", "lmrec_acp"),
+            &["completion.raw"],
+        ),
+    );
+    let script = python_worker_script(
+        r#"
+import json
+import os
+import sys
+
+request = json.loads(sys.stdin.readline())
+assert request["jsonrpc"] == "2.0"
+assert request["id"] == "leaven-acp-0"
+assert request["method"] == "leaven/lm.complete"
+assert request["params"]["schema_version"] == "leaven.plan.v1"
+assert request["params"]["ops"][0]["kind"] == "let"
+assert os.environ["LEAVEN_CAPABILITY_TOKEN"] == "secret-token"
+assert os.environ["LEAVEN_CAPABILITY_FINGERPRINT"] == "fp_cap_sha256_acp"
+assert os.environ["LEAVEN_ENDPOINT"] == "stdio://worker/session"
+
+with open(os.environ["LEAVEN_TEST_OBSERVED_REQUEST"], "w", encoding="utf-8") as handle:
+    json.dump(request, handle, sort_keys=True)
+
+print(json.dumps({
+    "jsonrpc": "2.0",
+    "method": "session/update",
+    "params": {"message": "python worker accepted plan", "priority": "critical"},
+}), flush=True)
+
+response = json.loads(os.environ["LEAVEN_TEST_RESPONSE"])
+response["result"]["capability_fingerprint"] = os.environ["LEAVEN_CAPABILITY_FINGERPRINT"]
+print(json.dumps(response, sort_keys=True), flush=True)
+"#,
+    );
+    let script_path = script.path().join("worker.py");
+    let mut session = AcpStdioProcessSession::spawn(
+        package,
+        profile,
+        AcpProcessCommand::new("python3")
+            .arg(script_path.to_str().unwrap())
+            .env("LEAVEN_TEST_RESPONSE", response)
+            .env(
+                "LEAVEN_TEST_OBSERVED_REQUEST",
+                observed_request.to_str().unwrap(),
+            ),
+        "secret-token",
+        "stdio://worker/session",
+        "fp_cap_sha256_acp",
+    )
+    .unwrap();
+
+    let result = session
+        .call_extension("leaven/lm.complete", &acp_plan_params())
+        .unwrap();
+    assert_eq!(result.method(), "leaven/lm.complete");
+    assert_eq!(result.primary_kind(), "lm_response");
+    assert_eq!(
+        session
+            .worker_session_snapshot()
+            .lifecycle()
+            .inflight_updates(),
+        1
+    );
+
+    let observed: Value = serde_json::from_str(&fs::read_to_string(observed_request).unwrap())
+        .expect("python worker wrote observed request");
+    assert_eq!(observed["method"], json!("leaven/lm.complete"));
+    assert_eq!(observed["params"]["return"], json!(["input"]));
+    std::mem::forget(script);
+    std::mem::forget(temp);
+}
+
+#[test]
 fn stdio_session_launch_respects_worker_current_dir() {
     let package = package();
     let profile = profile(&package, 32, "pause_worker");
@@ -639,6 +723,13 @@ fn worker_script(body: &str) -> TempDir {
     let path = temp.path().join("worker.sh");
     fs::write(&path, format!("#!/bin/sh\nset -eu\n{body}\n")).unwrap();
     fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+    temp
+}
+
+fn python_worker_script(body: &str) -> TempDir {
+    let temp = TempDir::new().unwrap();
+    let path = temp.path().join("worker.py");
+    fs::write(&path, body).unwrap();
     temp
 }
 
