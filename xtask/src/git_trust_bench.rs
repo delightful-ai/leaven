@@ -364,7 +364,7 @@ fn run_trust_tests(repo_root: &Path, jobs: usize, verbose: bool) -> Result<Vec<C
             "-p",
             "leaven-workspace-firkin",
             "--test",
-            "firkin_git_e2e",
+            "firkin_contract",
         ],
     ];
     let mut reports = Vec::new();

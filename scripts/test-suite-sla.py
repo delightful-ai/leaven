@@ -276,7 +276,7 @@ def run_workspace_test_binaries(
         return 0
 
     env = test_binary_env(workspace_root, binaries)
-    jobs = max(1, int(os.environ.get("LEAVEN_TEST_BINARY_JOBS", "4")))
+    jobs = max(1, int(os.environ.get("LEAVEN_TEST_BINARY_JOBS", "6")))
     print(
         f"running workspace libtest binaries: {len(binaries)} binaries, {jobs} jobs",
         flush=True,
