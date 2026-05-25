@@ -217,9 +217,15 @@ fn run_builder_run_dir_writes_discoverable_durable_artifacts() {
         .compatibility
         .as_ref()
         .expect("durable run reports compatibility summary");
-    assert_eq!(compatibility.schema, "leaven-run.compatibility.v3");
+    assert_eq!(compatibility.schema, "leaven-run.compatibility.v4");
     assert_eq!(compatibility.run_kind, "leaven-run.optimize");
     assert_eq!(compatibility.lm_role_count, 0);
+    assert!(
+        compatibility
+            .cache
+            .starts_with("cache:evaluation-policy-json:")
+    );
+    assert!(compatibility.budget.starts_with("budget:limit-json:"));
     assert_eq!(
         result.summary().cache.evaluation.backend,
         EvaluationCacheBackend::SqliteRunStore
