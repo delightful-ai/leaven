@@ -1,4 +1,20 @@
-fn inspect_reflect_request(
+use std::collections::BTreeSet;
+
+use serde_json::Value;
+
+use crate::PublicSeamError;
+
+use super::inspect_helpers::{
+    array_len, contains_case_target_marker, invalid_stage_payload,
+    literal_expr_array_contains_string, receipt_ref_id, receipt_ref_ids, reject_target_leakage,
+    require_field, require_non_empty_array, require_read_receipt_refs, required_array,
+    required_string, source_ref_key, source_ref_set, string_array,
+};
+use super::{
+    ReflectProposeSubmissionDocument, StagePayloadDocument, StagePayloadRole, StageProposalEffect,
+};
+
+pub(super) fn inspect_reflect_request(
     object: &serde_json::Map<String, Value>,
 ) -> Result<usize, PublicSeamError> {
     require_field(object, "capability_fingerprint")?;
@@ -70,7 +86,7 @@ fn inspect_reflect_request(
     Ok(examples.len())
 }
 
-fn inspect_reflection_result(
+pub(super) fn inspect_reflection_result(
     object: &serde_json::Map<String, Value>,
     source_ref_count: usize,
     read_receipt_count: usize,
@@ -104,7 +120,7 @@ fn inspect_reflection_result(
     Ok(())
 }
 
-fn inspect_propose_request(
+pub(super) fn inspect_propose_request(
     object: &serde_json::Map<String, Value>,
 ) -> Result<(Vec<StageProposalEffect>, usize), PublicSeamError> {
     require_field(object, "capability_fingerprint")?;
@@ -151,7 +167,7 @@ fn inspect_propose_request(
     Ok((effects, change_schema_count))
 }
 
-fn validate_submit_proposal_batch_for_handoff(
+pub(super) fn validate_submit_proposal_batch_for_handoff(
     write: &serde_json::Map<String, Value>,
     allowed_effects: &BTreeSet<StageProposalEffect>,
     allowed_change_schemas: &BTreeSet<String>,
@@ -496,7 +512,9 @@ fn collect_output_record_data_classes(
     Ok(data_classes)
 }
 
-fn inspect_runner_request(object: &serde_json::Map<String, Value>) -> Result<(), PublicSeamError> {
+pub(super) fn inspect_runner_request(
+    object: &serde_json::Map<String, Value>,
+) -> Result<(), PublicSeamError> {
     if object.get("target_forbidden") != Some(&Value::Bool(true)) {
         return Err(invalid_stage_payload(
             "runner request must declare target_forbidden=true",
@@ -506,7 +524,9 @@ fn inspect_runner_request(object: &serde_json::Map<String, Value>) -> Result<(),
     Ok(())
 }
 
-fn inspect_score_context(object: &serde_json::Map<String, Value>) -> Result<(), PublicSeamError> {
+pub(super) fn inspect_score_context(
+    object: &serde_json::Map<String, Value>,
+) -> Result<(), PublicSeamError> {
     require_field(object, "capability_fingerprint")?;
     require_field(object, "output")?;
     require_assessed_output_data_class(object.get("output"), "score context output")?;
@@ -534,7 +554,9 @@ fn inspect_score_context(object: &serde_json::Map<String, Value>) -> Result<(), 
     Ok(())
 }
 
-fn inspect_judge_context(object: &serde_json::Map<String, Value>) -> Result<(), PublicSeamError> {
+pub(super) fn inspect_judge_context(
+    object: &serde_json::Map<String, Value>,
+) -> Result<(), PublicSeamError> {
     require_field(object, "capability_fingerprint")?;
     if array_len(object.get("outputs"), "outputs")? == 0 {
         return Err(invalid_stage_payload(
@@ -554,7 +576,7 @@ fn inspect_judge_context(object: &serde_json::Map<String, Value>) -> Result<(), 
     Ok(())
 }
 
-fn inspect_schema_bound_payload(
+pub(super) fn inspect_schema_bound_payload(
     object: &serde_json::Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
     require_field(object, "capability_fingerprint")?;

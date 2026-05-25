@@ -4,15 +4,18 @@ use serde_json::Value;
 
 use crate::PublicSeamError;
 
+mod inspect;
 mod inspect_helpers;
 
+use inspect::{
+    inspect_judge_context, inspect_propose_request, inspect_reflect_request,
+    inspect_reflection_result, inspect_runner_request, inspect_schema_bound_payload,
+    inspect_score_context, validate_submit_proposal_batch_for_handoff,
+};
 use inspect_helpers::{
-    array_len, contains_case_target_marker, invalid_stage_payload,
-    literal_expr_array_contains_string, matching_source_ref, matching_string, optional_string,
-    prefixed_stage_payload_hash, receipt_ref_id, receipt_ref_ids, reject_target_leakage,
-    require_field, require_non_empty_array, require_read_receipt_refs, required_array,
-    required_object, required_string, source_ref_key, source_ref_set, string_array, string_set,
-    validate_handoff_stage_receipts,
+    array_len, invalid_stage_payload, matching_source_ref, matching_string, optional_string,
+    prefixed_stage_payload_hash, receipt_ref_ids, required_array, required_object, required_string,
+    source_ref_set, string_array, string_set, validate_handoff_stage_receipts,
 };
 
 /// Schema-valid public-seam stage payload with role-specific semantic checks.
@@ -547,5 +550,3 @@ impl PartialOrd for StageProposalEffect {
         Some(self.cmp(other))
     }
 }
-
-include!("stage_payload/inspect.rs");
