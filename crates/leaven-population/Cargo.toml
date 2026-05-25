@@ -16,7 +16,6 @@ leaven-kernel = { workspace = true }
 leaven-core = { workspace = true }
 leaven-engine = { workspace = true }
 leaven-evidence = { workspace = true }
-leaven-preference = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]

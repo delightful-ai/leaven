@@ -15,7 +15,6 @@ leaven-agent = { workspace = true }
 leaven-agent-command = { workspace = true }
 leaven-kernel = { workspace = true }
 leaven-workspace = { workspace = true }
-thiserror = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }
