@@ -9,16 +9,16 @@ It is not an implementation bucket. New behavior belongs in the owning crate fir
 - Optional `git`, `jj`, and `skill` artifact crates are exposed through the
   prelude behind matching features; the placeholder `leaven-artifacts` crate was
   removed instead of kept as a standard facade.
-- `evidence`, `preferences`, `populations`, and `surfaces` re-export their
-  owning crates.
+- `evidence`, `preferences`, `populations`, and `surfaces` expose explicit
+  ledgers of owning-crate public names. New owning-crate exports do not become
+  standard-library exports until this file and `src/lib.rs` are updated.
 - `prelude` should stay a practical import set, not a dumping ground for every public item.
 - Product-builder defaults belong in `leaven-run`; umbrella feature composition belongs in `leaven`.
 
 ## Current Audit Pressure
-- `leaven-std` currently wholesale re-exports mixed crates in named modules.
-  The standard prelude is narrower than those modules, but any placeholder
-  exported from an owning crate's prelude still becomes standard-library
-  looking here.
+- `leaven-std` is a public facade ledger. Avoid whole-crate wildcard exports:
+  they make every future owning-crate export look standard without public
+  maturity review.
 - Treat this crate as an export ledger hotspot: every public name exposed here
   should be behavior-bearing, explicit scaffold/test support, or removed from
   the curated facade.
@@ -28,8 +28,9 @@ It is not an implementation bucket. New behavior belongs in the owning crate fir
 
 ## Local Helper Stack
 - Prefer narrow `pub use` lists once a module mixes mature and scaffold names.
-  Whole-crate glob re-exports are acceptable only while every exported name in
-  that route has the same maturity category.
+  Whole-crate and transitive-prelude glob re-exports are not allowed in this
+  facade; new names must be deliberately added to a route with the right
+  maturity category.
 - Keep `prelude` smaller than module exports. The prelude is for common standard
   pieces, not for every reusable experiment.
 - When a standard piece graduates, first add/prove behavior in the owning crate,
