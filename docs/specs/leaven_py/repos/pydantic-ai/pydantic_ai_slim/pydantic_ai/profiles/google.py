@@ -1,0 +1,146 @@
+from __future__ import annotations as _annotations
+
+import warnings
+from dataclasses import dataclass
+
+from .._json_schema import JsonSchema, JsonSchemaTransformer
+from .._warnings import PydanticAIDeprecationWarning
+from . import ModelProfile
+
+# MIME types supported in native FunctionResponseDict.parts for Gemini 3+.
+# See https://ai.google.dev/gemini-api/docs/function-calling?example=meeting#multimodal
+_GOOGLE_NATIVE_TOOL_RETURN_MIME_TYPES: tuple[str, ...] = (
+    'image/png',
+    'image/jpeg',
+    'image/webp',
+    'application/pdf',
+    'text/plain',
+)
+
+
+@dataclass(kw_only=True)
+class GoogleModelProfile(ModelProfile):
+    """Profile for models used with `GoogleModel`.
+
+    ALL FIELDS MUST BE `google_` PREFIXED SO YOU CAN MERGE THEM WITH OTHER MODELS.
+    """
+
+    google_supports_tool_combination: bool = False
+    """Whether the model supports combining function declarations with native tools and response_schema.
+
+    Gemini 3+ supports all tool combinations:
+    - function_declarations + native_tools
+    - output_tools (function declarations) + native_tools
+    - response_schema (NativeOutput) + function_declarations
+    See https://ai.google.dev/gemini-api/docs/tool-combination
+    """
+
+    google_supports_server_side_tool_invocations: bool = False
+    """Whether the model accepts the `include_server_side_tool_invocations` tool-config field.
+
+    When enabled, Gemini emits explicit `tool_call`/`tool_response` parts for server-side
+    native tools (Google Search, URL Context, File Search) that we round-trip through
+    [`NativeToolCallPart`][pydantic_ai.messages.NativeToolCallPart] /
+    [`NativeToolReturnPart`][pydantic_ai.messages.NativeToolReturnPart]. Pre-Gemini-3 models
+    reject the field with `'Tool call context circulation is not enabled'`.
+
+    Distinct from [`google_supports_tool_combination`][pydantic_ai.profiles.google.GoogleModelProfile.google_supports_tool_combination]
+    even though both currently flip on for Gemini 3+ — the former gates the SDK request
+    field, the latter gates which combinations of native / function / output tools are
+    allowed in the same request.
+    """
+
+    # TODO(v2): remove google_supports_native_output_with_builtin_tools
+    google_supports_native_output_with_builtin_tools: bool | None = None
+    """Deprecated: use `google_supports_tool_combination` instead."""
+
+    google_supported_mime_types_in_tool_returns: tuple[str, ...] = ()
+    """MIME types supported in native FunctionResponseDict.parts.
+    See https://ai.google.dev/gemini-api/docs/function-calling#multimodal-function-responses"""
+
+    google_supports_thinking_level: bool = False
+    """Whether the model uses `thinking_level` (enum: LOW/MEDIUM/HIGH) instead of `thinking_budget` (int).
+
+    Gemini 3+ models use `thinking_level`; Gemini 2.5 uses `thinking_budget`.
+    """
+
+    def __post_init__(self):
+        if self.google_supports_native_output_with_builtin_tools is not None:
+            warnings.warn(
+                '`google_supports_native_output_with_builtin_tools` is deprecated, '
+                'use `google_supports_tool_combination` instead.',
+                PydanticAIDeprecationWarning,
+                stacklevel=2,
+            )
+            # New flag wins on conflict — silently overwriting an explicitly-set new value with
+            # the deprecated alias would surprise users mid-migration.
+            if not self.google_supports_tool_combination:
+                self.google_supports_tool_combination = self.google_supports_native_output_with_builtin_tools
+
+
+def google_model_profile(model_name: str) -> ModelProfile | None:
+    """Get the model profile for a Google model."""
+    is_image_model = 'image' in model_name
+    is_3_or_newer = 'gemini-3' in model_name
+    is_thinking_model = 'gemini-2.5' in model_name or is_3_or_newer
+    # Pro models have always-on thinking: Gemini 2.5 Pro rejects budget=0, Gemini 3+ Pro rejects MINIMAL
+    is_pro = 'pro' in model_name and 'flash' not in model_name
+    thinking_always_enabled = is_thinking_model and is_pro
+    return GoogleModelProfile(
+        json_schema_transformer=GoogleJsonSchemaTransformer,
+        supports_image_output=is_image_model,
+        supports_json_schema_output=is_3_or_newer or not is_image_model,
+        supports_json_object_output=is_3_or_newer or not is_image_model,
+        supports_tools=not is_image_model,
+        supports_tool_return_schema=not is_image_model,
+        supports_thinking=is_thinking_model,
+        thinking_always_enabled=thinking_always_enabled,
+        google_supports_tool_combination=is_3_or_newer,
+        google_supports_server_side_tool_invocations=is_3_or_newer,
+        google_supported_mime_types_in_tool_returns=_GOOGLE_NATIVE_TOOL_RETURN_MIME_TYPES if is_3_or_newer else (),
+        google_supports_thinking_level=is_3_or_newer,
+    )
+
+
+class GoogleJsonSchemaTransformer(JsonSchemaTransformer):
+    """Transforms the JSON Schema from Pydantic to be suitable for Gemini.
+
+    Gemini supports [a subset of OpenAPI v3.0.3](https://ai.google.dev/gemini-api/docs/function-calling#function_declarations).
+    """
+
+    def transform(self, schema: JsonSchema) -> JsonSchema:
+        # Remove properties not supported by Gemini
+        schema.pop('$schema', None)
+        if (const := schema.pop('const', None)) is not None:
+            # Gemini doesn't support const, but it does support enum with a single value
+            schema['enum'] = [const]
+            # If type is not present, infer it from the const value for Gemini API compatibility
+            if 'type' not in schema:
+                if isinstance(const, str):
+                    schema['type'] = 'string'
+                elif isinstance(const, bool):
+                    # bool must be checked before int since bool is a subclass of int in Python
+                    schema['type'] = 'boolean'
+                elif isinstance(const, int):
+                    schema['type'] = 'integer'
+                elif isinstance(const, float):
+                    schema['type'] = 'number'
+        schema.pop('discriminator', None)
+        schema.pop('examples', None)
+
+        # Remove 'title' due to https://github.com/googleapis/python-genai/issues/1732
+        schema.pop('title', None)
+
+        type_ = schema.get('type')
+        if type_ == 'string' and (fmt := schema.pop('format', None)):
+            description = schema.get('description')
+            if description:
+                schema['description'] = f'{description} (format: {fmt})'
+            else:
+                schema['description'] = f'Format: {fmt}'
+
+        # Note: exclusiveMinimum/exclusiveMaximum are NOT yet supported
+        schema.pop('exclusiveMinimum', None)
+        schema.pop('exclusiveMaximum', None)
+
+        return schema

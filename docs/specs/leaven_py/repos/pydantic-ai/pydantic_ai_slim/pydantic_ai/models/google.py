@@ -1,0 +1,2028 @@
+from __future__ import annotations as _annotations
+
+import base64
+import re
+import warnings
+from collections.abc import AsyncIterator, Awaitable
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Literal, cast, overload
+from uuid import uuid4
+
+from typing_extensions import assert_never
+
+from .. import UnexpectedModelBehavior, _utils, usage
+from .._output import OutputObjectDefinition
+from .._run_context import RunContext
+from .._warnings import PydanticAIDeprecationWarning
+from ..exceptions import ModelAPIError, ModelHTTPError, UserError
+from ..messages import (
+    BinaryContent,
+    CachePoint,
+    CompactionPart,
+    FilePart,
+    FileUrl,
+    FinishReason,
+    ModelMessage,
+    ModelRequest,
+    ModelResponse,
+    ModelResponsePart,
+    ModelResponseStreamEvent,
+    NativeToolCallPart,
+    NativeToolReturnPart,
+    RetryPromptPart,
+    SystemPromptPart,
+    TextContent,
+    TextPart,
+    ThinkingPart,
+    ToolCallPart,
+    ToolReturnPart,
+    UploadedFile,
+    UserPromptPart,
+    VideoUrl,
+)
+from ..native_tools import (
+    AbstractNativeTool,
+    CodeExecutionTool,
+    FileSearchTool,
+    ImageGenerationTool,
+    WebFetchTool,
+    WebSearchTool,
+)
+from ..profiles import ModelProfileSpec
+from ..profiles.google import GoogleModelProfile
+from ..providers import Provider, infer_provider
+from ..settings import ModelSettings, ServiceTier, ThinkingEffort, ToolChoiceScalar
+from ..tools import ToolDefinition
+from . import (
+    Model,
+    ModelRequestParameters,
+    StreamedResponse,
+    check_allow_model_requests,
+    download_item,
+    get_user_agent,
+)
+from ._tool_choice import resolve_tool_choice
+
+try:
+    from google.genai import Client, errors
+    from google.genai.types import (
+        BlobDict,
+        CodeExecutionResult,
+        CodeExecutionResultDict,
+        ContentDict,
+        ContentUnionDict,
+        CountTokensConfigDict,
+        ExecutableCode,
+        ExecutableCodeDict,
+        FileDataDict,
+        FileSearchDict,
+        FinishReason as GoogleFinishReason,
+        FunctionCallDict,
+        FunctionCallingConfigDict,
+        FunctionCallingConfigMode,
+        FunctionDeclarationDict,
+        FunctionResponseBlobDict,
+        FunctionResponseDict,
+        FunctionResponseFileDataDict,
+        FunctionResponsePartDict,
+        GenerateContentConfigDict,
+        GenerateContentResponse,
+        GenerationConfigDict,
+        GoogleSearchDict,
+        GroundingMetadata,
+        HttpOptionsDict,
+        ImageConfigDict,
+        MediaResolution,
+        Modality,
+        Part,
+        PartDict,
+        SafetySettingDict,
+        ServiceTier as _GoogleSDKServiceTier,
+        ThinkingConfigDict,
+        ToolCall,
+        ToolCodeExecutionDict,
+        ToolConfigDict,
+        ToolDict,
+        ToolListUnionDict,
+        ToolResponse,
+        ToolType,
+        UrlContextDict,
+        UrlContextMetadata,
+        VideoMetadataDict,
+    )
+except ImportError as _import_error:
+    raise ImportError(
+        'Please install `google-genai` to use the Google model, '
+        'you can use the `google` optional group — `pip install "pydantic-ai-slim[google]"`'
+    ) from _import_error
+
+
+_FILE_SEARCH_QUERY_PATTERN = re.compile(r'file_search\.query\(query=(["\'])((?:\\.|(?!\1)[^\\])*)\1\)')
+
+_TOOL_TYPE_TO_NATIVE_TOOL_NAME: dict[ToolType, str] = {
+    ToolType.GOOGLE_SEARCH_WEB: WebSearchTool.kind,
+    ToolType.URL_CONTEXT: WebFetchTool.kind,
+    ToolType.FILE_SEARCH: FileSearchTool.kind,
+}
+
+_NATIVE_TOOL_NAME_TO_TOOL_TYPE: dict[str, ToolType] = {v: k for k, v in _TOOL_TYPE_TO_NATIVE_TOOL_NAME.items()}
+
+LatestGoogleModelNames = Literal[
+    'gemini-flash-latest',
+    'gemini-flash-lite-latest',
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-lite',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-preview-09-2025',
+    'gemini-2.5-flash-image',
+    'gemini-2.5-flash-lite',
+    'gemini-2.5-flash-lite-preview-09-2025',
+    'gemini-2.5-pro',
+    'gemini-3-flash-preview',
+    'gemini-3-pro-image-preview',
+    'gemini-3-pro-preview',
+    'gemini-3.1-flash-image-preview',
+    'gemini-3.1-flash-lite-preview',
+    'gemini-3.1-pro-preview',
+    'gemini-3.5-flash',
+]
+"""Latest Gemini models."""
+
+GoogleModelName = str | LatestGoogleModelNames
+"""Possible Gemini model names.
+
+Since Gemini supports a variety of date-stamped models, we explicitly list the latest models but
+allow any name in the type hints.
+See [the Gemini API docs](https://ai.google.dev/gemini-api/docs/models/gemini#model-variations) for a full list.
+"""
+
+_FINISH_REASON_MAP: dict[GoogleFinishReason, FinishReason | None] = {
+    GoogleFinishReason.FINISH_REASON_UNSPECIFIED: None,
+    GoogleFinishReason.STOP: 'stop',
+    GoogleFinishReason.MAX_TOKENS: 'length',
+    GoogleFinishReason.SAFETY: 'content_filter',
+    GoogleFinishReason.RECITATION: 'content_filter',
+    GoogleFinishReason.LANGUAGE: 'error',
+    GoogleFinishReason.OTHER: None,
+    GoogleFinishReason.BLOCKLIST: 'content_filter',
+    GoogleFinishReason.PROHIBITED_CONTENT: 'content_filter',
+    GoogleFinishReason.SPII: 'content_filter',
+    GoogleFinishReason.MALFORMED_FUNCTION_CALL: 'error',
+    GoogleFinishReason.IMAGE_SAFETY: 'content_filter',
+    GoogleFinishReason.UNEXPECTED_TOOL_CALL: 'error',
+    GoogleFinishReason.IMAGE_PROHIBITED_CONTENT: 'content_filter',
+    GoogleFinishReason.NO_IMAGE: 'error',
+}
+
+_GOOGLE_IMAGE_SIZE = Literal['512', '1K', '2K', '4K']
+_GOOGLE_IMAGE_SIZES: tuple[_GOOGLE_IMAGE_SIZE, ...] = _utils.get_args(_GOOGLE_IMAGE_SIZE)
+
+_GOOGLE_IMAGE_OUTPUT_FORMAT = Literal['png', 'jpeg', 'webp']
+_GOOGLE_IMAGE_OUTPUT_FORMATS: tuple[_GOOGLE_IMAGE_OUTPUT_FORMAT, ...] = _utils.get_args(_GOOGLE_IMAGE_OUTPUT_FORMAT)
+
+
+# Accept both the current name (`google-cloud` / `google`) and the pre-v2 names
+# (`google-vertex` / `google-gla`) so history captured against the old provider name
+# still routes correctly through the new model class.
+_GOOGLE_CLOUD_PROVIDER_NAMES: frozenset[str] = frozenset({'google-cloud', 'google-vertex'})
+_GEMINI_API_PROVIDER_NAMES: frozenset[str] = frozenset({'google', 'google-gla'})
+
+
+GoogleCloudServiceTier = Literal[
+    'pt_then_on_demand',
+    'pt_only',
+    'pt_then_flex',
+    'pt_then_priority',
+    'on_demand',
+    'flex_only',
+    'priority_only',
+]
+"""Values for the `google_cloud_service_tier` field on [`GoogleModelSettings`][pydantic_ai.models.google.GoogleModelSettings].
+
+Controls Google Cloud HTTP headers for [Provisioned Throughput](https://cloud.google.com/vertex-ai/generative-ai/docs/provisioned-throughput/use-provisioned-throughput)
+(PT), [Flex PayGo](https://cloud.google.com/vertex-ai/generative-ai/docs/flex-paygo), and [Priority PayGo](https://cloud.google.com/vertex-ai/generative-ai/docs/priority-paygo).
+
+- `'pt_then_on_demand'` (**default**): PT when quota allows, then standard on-demand spillover. No headers sent.
+- `'pt_only'`: PT only (`X-Vertex-AI-LLM-Request-Type: dedicated`). No on-demand spillover; returns 429 when over quota.
+- `'pt_then_flex'`: PT when quota allows, then [Flex PayGo](https://cloud.google.com/vertex-ai/generative-ai/docs/flex-paygo) spillover (`X-Vertex-AI-LLM-Shared-Request-Type: flex`).
+- `'pt_then_priority'`: PT when quota allows, then [Priority PayGo](https://cloud.google.com/vertex-ai/generative-ai/docs/priority-paygo) spillover (`X-Vertex-AI-LLM-Shared-Request-Type: priority`).
+- `'on_demand'`: Standard on-demand only (`X-Vertex-AI-LLM-Request-Type: shared`). Bypasses PT for this request.
+- `'flex_only'`: [Flex PayGo](https://cloud.google.com/vertex-ai/generative-ai/docs/flex-paygo) only (`X-Vertex-AI-LLM-Request-Type: shared` and `X-Vertex-AI-LLM-Shared-Request-Type: flex`). Bypasses PT.
+- `'priority_only'`: [Priority PayGo](https://cloud.google.com/vertex-ai/generative-ai/docs/priority-paygo) only (`X-Vertex-AI-LLM-Request-Type: shared` and `X-Vertex-AI-LLM-Shared-Request-Type: priority`). Bypasses PT.
+
+Not every model or region supports every value; see the linked Google docs.
+"""
+
+GoogleVertexServiceTier = GoogleCloudServiceTier
+"""Deprecated alias for [`GoogleCloudServiceTier`][pydantic_ai.models.google.GoogleCloudServiceTier].
+
+Use `GoogleCloudServiceTier` instead — Google Cloud is the new name for the platform formerly
+known as Vertex AI.
+"""
+
+GoogleServiceTier = Literal[
+    'pt_then_on_demand',
+    'pt_only',
+    'pt_then_flex',
+    'pt_then_priority',
+    'on_demand',
+    'flex_only',
+    'priority_only',
+]
+"""Deprecated alias for service tier values.
+
+Use [`service_tier`][pydantic_ai.settings.ModelSettings.service_tier] for Gemini API (GLA)
+or [`google_cloud_service_tier`][pydantic_ai.models.google.GoogleModelSettings.google_cloud_service_tier] for Google Cloud.
+"""
+
+
+class GoogleModelSettings(ModelSettings, total=False):
+    """Settings used for a Gemini model request."""
+
+    # ALL FIELDS MUST BE `google_` PREFIXED SO YOU CAN MERGE THEM WITH OTHER MODELS.
+
+    google_safety_settings: list[SafetySettingDict]
+    """The safety settings to use for the model.
+
+    See <https://ai.google.dev/gemini-api/docs/safety-settings> for more information.
+    """
+
+    google_thinking_config: ThinkingConfigDict
+    """The thinking configuration to use for the model.
+
+    See <https://ai.google.dev/gemini-api/docs/thinking> for more information.
+    """
+
+    google_labels: dict[str, str]
+    """User-defined metadata to break down billed charges. Only supported by the Vertex AI API.
+
+    See the [Gemini API docs](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/add-labels-to-api-calls) for use cases and limitations.
+    """
+
+    google_video_resolution: MediaResolution
+    """The video resolution to use for the model.
+
+    See <https://ai.google.dev/api/generate-content#MediaResolution> for more information.
+    """
+
+    google_cached_content: str
+    """The name of the cached content to use for the model.
+
+    See <https://ai.google.dev/gemini-api/docs/caching> for more information.
+    """
+
+    google_logprobs: bool
+    """Include log probabilities in the response.
+
+    See <https://docs.cloud.google.com/vertex-ai/generative-ai/docs/multimodal/content-generation-parameters#log-probabilities-output-tokens> for more information.
+
+    Note: Only supported for Vertex AI and non-streaming requests.
+
+    These will be included in `ModelResponse.provider_details['logprobs']`.
+    """
+
+    google_top_logprobs: int
+    """Include log probabilities of the top n tokens in the response.
+
+    See <https://docs.cloud.google.com/vertex-ai/generative-ai/docs/multimodal/content-generation-parameters#log-probabilities-output-tokens> for more information.
+
+    Note: Only supported for Vertex AI and non-streaming requests.
+
+    These will be included in `ModelResponse.provider_details['logprobs']`.
+    """
+
+    google_cloud_service_tier: GoogleCloudServiceTier
+    """The service tier to use for the model request when using Google Cloud.
+
+    Controls routing for Provisioned Throughput, Flex PayGo, and Priority PayGo
+    (e.g., `'pt_only'`, `'flex_only'`, `'priority_only'`).
+
+    See [`GoogleCloudServiceTier`][pydantic_ai.models.google.GoogleCloudServiceTier] for all values,
+    headers sent, and links to Google docs.
+    """
+
+    google_vertex_service_tier: GoogleCloudServiceTier
+    """Deprecated: use `google_cloud_service_tier`. Will be removed in v2."""
+
+    google_service_tier: GoogleServiceTier
+    """Deprecated: use `service_tier` for Gemini API (GLA) or `google_cloud_service_tier` for Google Cloud."""
+
+
+def _get_deprecated_google_service_tier(model_settings: GoogleModelSettings) -> GoogleServiceTier | None:
+    """Return `google_service_tier`, emitting a `DeprecationWarning` when it is set."""
+    if (deprecated := model_settings.get('google_service_tier')) is not None:
+        # stacklevel=2 points at the resolver (caller of this helper); the warning text already
+        # names the field so users can identify the source from the message itself.
+        warnings.warn(
+            '`google_service_tier` is deprecated; use `google_cloud_service_tier` for Google Cloud '
+            'or the top-level `service_tier` for the Gemini API (GLA).',
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return deprecated
+    return None
+
+
+def _get_deprecated_google_vertex_service_tier(model_settings: GoogleModelSettings) -> GoogleCloudServiceTier | None:
+    """Return `google_vertex_service_tier`, emitting a `PydanticAIDeprecationWarning` when it is set.
+
+    Google retired the "Vertex AI" brand for "Google Cloud"; the field is renamed accordingly. The old
+    key keeps working in 1.x but warns; v2 will drop it.
+    """
+    if (deprecated := model_settings.get('google_vertex_service_tier')) is not None:
+        warnings.warn(
+            '`google_vertex_service_tier` is deprecated; use `google_cloud_service_tier` instead. '
+            'Google Cloud is the new name for the platform formerly known as Vertex AI.',
+            PydanticAIDeprecationWarning,
+            stacklevel=2,
+        )
+        return deprecated
+    return None
+
+
+_GlaServiceTier = Literal['standard', 'flex', 'priority']
+_TOP_LEVEL_TO_GLA_SERVICE_TIER: dict[ServiceTier, _GlaServiceTier] = {
+    'default': 'standard',
+    'flex': 'flex',
+    'priority': 'priority',
+}
+
+
+def _resolve_gla_service_tier(model_settings: GoogleModelSettings) -> _GlaServiceTier | None:
+    """Resolve the value to send as `service_tier` on a Gemini API (GLA) request.
+
+    The deprecated `google_service_tier` only covers Vertex-shaped values, so on GLA we
+    ignore it (after triggering the warning) and map the top-level `service_tier`
+    (`'default'` → `'standard'`, `'flex'`/`'priority'` pass through, `'auto'` is dropped
+    so the server picks the default).
+    """
+    _get_deprecated_google_service_tier(model_settings)
+    if unified := model_settings.get('service_tier'):
+        return _TOP_LEVEL_TO_GLA_SERVICE_TIER.get(unified)
+    return None
+
+
+# Mapping from cross-provider `ServiceTier` to the safe Google Cloud equivalent, used when the top-level
+# `service_tier` is the only signal available. `'flex'` / `'priority'` always pick the PT-with-spillover
+# variant (never `*_only`) so PT customers keep using their reserved capacity first; users who want to
+# bypass PT must set `google_cloud_service_tier` explicitly.
+_TOP_LEVEL_TO_GOOGLE_CLOUD_SERVICE_TIER: dict[ServiceTier, GoogleCloudServiceTier] = {
+    'auto': 'pt_then_on_demand',
+    'default': 'pt_then_on_demand',
+    'flex': 'pt_then_flex',
+    'priority': 'pt_then_priority',
+}
+
+
+def _resolve_google_cloud_service_tier(model_settings: GoogleModelSettings) -> GoogleCloudServiceTier:
+    """Resolve the Google Cloud tier to use for this request.
+
+    Per-provider `google_cloud_service_tier` wins, then the deprecated `google_vertex_service_tier`
+    (with warning), then the deprecated `google_service_tier` (with warning), then the top-level
+    `service_tier` mapped via [`_TOP_LEVEL_TO_GOOGLE_CLOUD_SERVICE_TIER`][]. Defaults to
+    `'pt_then_on_demand'` so Google Cloud's built-in PT-with-spillover behavior is the baseline.
+    """
+    if tier := model_settings.get('google_cloud_service_tier'):
+        return tier
+    if vertex_tier := _get_deprecated_google_vertex_service_tier(model_settings):
+        return vertex_tier
+    if deprecated := _get_deprecated_google_service_tier(model_settings):
+        return deprecated
+    if top_level := model_settings.get('service_tier'):
+        return _TOP_LEVEL_TO_GOOGLE_CLOUD_SERVICE_TIER[top_level]
+    return 'pt_then_on_demand'
+
+
+def _google_cloud_service_tier_headers(service_tier: GoogleCloudServiceTier) -> dict[str, str]:
+    """HTTP headers for Google Cloud Provisioned Throughput, Flex PayGo, and Priority PayGo routing."""
+    if service_tier == 'pt_then_on_demand':
+        return {}
+    if service_tier == 'pt_only':
+        return {'X-Vertex-AI-LLM-Request-Type': 'dedicated'}
+    if service_tier == 'on_demand':
+        return {'X-Vertex-AI-LLM-Request-Type': 'shared'}
+    if service_tier == 'pt_then_flex':
+        return {'X-Vertex-AI-LLM-Shared-Request-Type': 'flex'}
+    if service_tier == 'pt_then_priority':
+        return {'X-Vertex-AI-LLM-Shared-Request-Type': 'priority'}
+    if service_tier == 'flex_only':
+        return {
+            'X-Vertex-AI-LLM-Request-Type': 'shared',
+            'X-Vertex-AI-LLM-Shared-Request-Type': 'flex',
+        }
+    if service_tier == 'priority_only':
+        return {
+            'X-Vertex-AI-LLM-Request-Type': 'shared',
+            'X-Vertex-AI-LLM-Shared-Request-Type': 'priority',
+        }
+    assert_never(service_tier)  # pragma: no cover
+
+
+@dataclass(init=False)
+class GoogleModel(Model[Client]):
+    """A model that uses Gemini via `generativelanguage.googleapis.com` API.
+
+    This is implemented from scratch rather than using a dedicated SDK, good API documentation is
+    available [here](https://ai.google.dev/api).
+
+    Apart from `__init__`, all methods are private or match those of the base class.
+    """
+
+    _model_name: GoogleModelName = field(repr=False)
+    _provider: Provider[Client] = field(repr=False)
+
+    def __init__(
+        self,
+        model_name: GoogleModelName,
+        *,
+        provider: Literal['google', 'google-cloud', 'gateway'] | Provider[Client] = 'google',
+        profile: ModelProfileSpec | None = None,
+        settings: ModelSettings | None = None,
+    ):
+        """Initialize a Gemini model.
+
+        Args:
+            model_name: The name of the model to use.
+            provider: The provider to use for authentication and API access. Can be either the string
+                'google' (Gemini API) or 'google-cloud' (Google Cloud, formerly known as Vertex AI),
+                or an instance of `Provider[google.genai.AsyncClient]`. Defaults to 'google'.
+            profile: The model profile to use. Defaults to a profile picked by the provider based on the model name.
+            settings: The model settings to use. Defaults to None.
+        """
+        self._model_name = model_name
+
+        if isinstance(provider, str):
+            provider = infer_provider('gateway/google-cloud' if provider == 'gateway' else provider)
+        self._provider = provider
+
+        super().__init__(settings=settings, profile=profile or provider.model_profile)
+
+    @property
+    def client(self) -> Client:
+        return self._provider.client
+
+    @property
+    def base_url(self) -> str:
+        return self._provider.base_url
+
+    @property
+    def model_name(self) -> GoogleModelName:
+        """The model name."""
+        return self._model_name
+
+    @property
+    def system(self) -> str:
+        """The model provider."""
+        return self._provider.name
+
+    @property
+    def _matching_provider_names(self) -> frozenset[str]:
+        if self.system in _GOOGLE_CLOUD_PROVIDER_NAMES:
+            return _GOOGLE_CLOUD_PROVIDER_NAMES
+        if self.system in _GEMINI_API_PROVIDER_NAMES:
+            return _GEMINI_API_PROVIDER_NAMES
+        return frozenset({self.system})  # pragma: no cover
+
+    @property
+    def _resolved_profile(self) -> GoogleModelProfile:
+        return GoogleModelProfile.from_profile(self.profile)
+
+    @classmethod
+    def supported_native_tools(cls) -> frozenset[type[AbstractNativeTool]]:
+        """Return the set of native tool types this model can handle."""
+        return frozenset({WebSearchTool, CodeExecutionTool, FileSearchTool, WebFetchTool, ImageGenerationTool})
+
+    def prepare_request(
+        self, model_settings: ModelSettings | None, model_request_parameters: ModelRequestParameters
+    ) -> tuple[ModelSettings | None, ModelRequestParameters]:
+        # Ignore optional infrastructure native tools (e.g. auto-injected `ToolSearchTool`) —
+        # they're dropped by `Model.prepare_request` when inert and shouldn't trigger the
+        # "native tool + output tools" path.
+        user_native_tools = [t for t in model_request_parameters.native_tools if not t.optional]
+        if (
+            user_native_tools
+            and model_request_parameters.output_tools
+            and not self._resolved_profile.google_supports_tool_combination
+        ):
+            # Pre-Gemini-3 models reject `output_tools + native_tools` together. Force prompted
+            # output (the only mode that doesn't add a tool to the request); raise if the caller
+            # explicitly asked for tool/native output.
+            model_request_parameters = model_request_parameters.with_default_output_mode('prompted')
+            if model_request_parameters.output_mode != 'prompted':
+                raise UserError(
+                    'This model does not support output tools and built-in tools at the same time. '
+                    'Use `output_type=PromptedOutput(...)` instead.'
+                )
+        return super().prepare_request(model_settings, model_request_parameters)
+
+    async def request(
+        self,
+        messages: list[ModelMessage],
+        model_settings: ModelSettings | None,
+        model_request_parameters: ModelRequestParameters,
+    ) -> ModelResponse:
+        check_allow_model_requests()
+        model_settings, model_request_parameters = self.prepare_request(
+            model_settings,
+            model_request_parameters,
+        )
+        model_settings = cast(GoogleModelSettings, model_settings or {})
+        response = await self._generate_content(messages, False, model_settings, model_request_parameters)
+        return self._process_response(response)
+
+    async def count_tokens(
+        self,
+        messages: list[ModelMessage],
+        model_settings: ModelSettings | None,
+        model_request_parameters: ModelRequestParameters,
+    ) -> usage.RequestUsage:
+        check_allow_model_requests()
+        model_settings, model_request_parameters = self.prepare_request(
+            model_settings,
+            model_request_parameters,
+        )
+        model_settings = cast(GoogleModelSettings, model_settings or {})
+        contents, generation_config = await self._build_content_and_config(
+            messages, model_settings, model_request_parameters
+        )
+
+        # Annoyingly, the type of `GenerateContentConfigDict.get` is "partially `Unknown`" because `response_schema` includes `typing._UnionGenericAlias`,
+        # so without this we'd need `pyright: ignore[reportUnknownMemberType]` on every line and wouldn't get type checking anyway.
+        generation_config = cast(dict[str, Any], generation_config)
+
+        config = CountTokensConfigDict(
+            http_options=generation_config.get('http_options'),
+        )
+        if self._provider.name not in _GEMINI_API_PROVIDER_NAMES:
+            # The fields are not supported by the Gemini API per https://github.com/googleapis/python-genai/blob/7e4ec284dc6e521949626f3ed54028163ef9121d/google/genai/models.py#L1195-L1214
+            config.update(  # pragma: lax no cover
+                system_instruction=generation_config.get('system_instruction'),
+                tools=cast(list[ToolDict], generation_config.get('tools')),
+                # Annoyingly, GenerationConfigDict has fewer fields than GenerateContentConfigDict, and no extra fields are allowed.
+                generation_config=GenerationConfigDict(
+                    temperature=generation_config.get('temperature'),
+                    top_p=generation_config.get('top_p'),
+                    top_k=generation_config.get('top_k'),
+                    max_output_tokens=generation_config.get('max_output_tokens'),
+                    stop_sequences=generation_config.get('stop_sequences'),
+                    presence_penalty=generation_config.get('presence_penalty'),
+                    frequency_penalty=generation_config.get('frequency_penalty'),
+                    seed=generation_config.get('seed'),
+                    thinking_config=generation_config.get('thinking_config'),
+                    media_resolution=generation_config.get('media_resolution'),
+                    response_mime_type=generation_config.get('response_mime_type'),
+                    response_json_schema=generation_config.get('response_json_schema'),
+                ),
+            )
+
+        response = await self.client.aio.models.count_tokens(
+            model=self._model_name,
+            contents=contents,
+            config=config,
+        )
+        if response.total_tokens is None:
+            raise UnexpectedModelBehavior(  # pragma: no cover
+                'Total tokens missing from Gemini response', str(response)
+            )
+        return usage.RequestUsage(
+            input_tokens=response.total_tokens,
+        )
+
+    @asynccontextmanager
+    async def request_stream(
+        self,
+        messages: list[ModelMessage],
+        model_settings: ModelSettings | None,
+        model_request_parameters: ModelRequestParameters,
+        run_context: RunContext[Any] | None = None,
+    ) -> AsyncIterator[StreamedResponse]:
+        check_allow_model_requests()
+        model_settings, model_request_parameters = self.prepare_request(
+            model_settings,
+            model_request_parameters,
+        )
+        model_settings = cast(GoogleModelSettings, model_settings or {})
+        response = await self._generate_content(messages, True, model_settings, model_request_parameters)
+        try:
+            yield await self._process_streamed_response(response, model_request_parameters)  # type: ignore
+        finally:
+            aclose = getattr(response, 'aclose', None)
+            if aclose is not None:  # pragma: no branch
+                await aclose()
+
+    def _build_image_config(self, tool: ImageGenerationTool) -> ImageConfigDict:
+        """Build ImageConfigDict from ImageGenerationTool with validation."""
+        image_config = ImageConfigDict()
+
+        if tool.aspect_ratio is not None:
+            image_config['aspect_ratio'] = tool.aspect_ratio
+
+        if tool.size is not None:
+            if tool.size not in _GOOGLE_IMAGE_SIZES:
+                raise UserError(
+                    f'Google image generation only supports `size` values: {_GOOGLE_IMAGE_SIZES}. '
+                    f'Got: {tool.size!r}. Omit `size` to use the default (1K).'
+                )
+            image_config['image_size'] = tool.size
+
+        if self.system in _GOOGLE_CLOUD_PROVIDER_NAMES:
+            if tool.output_format is not None:
+                if tool.output_format not in _GOOGLE_IMAGE_OUTPUT_FORMATS:
+                    raise UserError(
+                        f'Google image generation only supports `output_format` values: {_GOOGLE_IMAGE_OUTPUT_FORMATS}. '
+                        f'Got: {tool.output_format!r}.'
+                    )
+                image_config['output_mime_type'] = f'image/{tool.output_format}'
+
+            output_compression = tool.output_compression
+            if output_compression is not None:
+                if not (0 <= output_compression <= 100):
+                    raise UserError(
+                        f'Google image generation `output_compression` must be between 0 and 100. '
+                        f'Got: {output_compression}.'
+                    )
+                if tool.output_format not in (None, 'jpeg'):
+                    raise UserError(
+                        f'Google image generation `output_compression` is only supported for JPEG format. '
+                        f'Got format: {tool.output_format!r}. Either set `output_format="jpeg"` or remove `output_compression`.'
+                    )
+                image_config['output_compression_quality'] = output_compression
+                if tool.output_format is None:
+                    image_config['output_mime_type'] = 'image/jpeg'
+
+        return image_config
+
+    def _get_native_tools(
+        self, model_request_parameters: ModelRequestParameters
+    ) -> tuple[list[ToolDict], ImageConfigDict | None]:
+        """Get Google-specific native tools (web search, code execution, etc.).
+
+        Returns:
+            A tuple of (native_tools, image_config).
+        """
+        tools: list[ToolDict] = []
+        image_config: ImageConfigDict | None = None
+        if model_request_parameters.native_tools:
+            if model_request_parameters.function_tools and not self._resolved_profile.google_supports_tool_combination:
+                raise UserError('This model does not support function tools and built-in tools at the same time.')
+
+            for tool in model_request_parameters.native_tools:
+                if isinstance(tool, WebSearchTool):
+                    tools.append(ToolDict(google_search=GoogleSearchDict()))
+                elif isinstance(tool, WebFetchTool):
+                    tools.append(ToolDict(url_context=UrlContextDict()))
+                elif isinstance(tool, CodeExecutionTool):
+                    tools.append(ToolDict(code_execution=ToolCodeExecutionDict()))
+                elif isinstance(tool, FileSearchTool):
+                    file_search_config = FileSearchDict(file_search_store_names=list(tool.file_store_ids))
+                    tools.append(ToolDict(file_search=file_search_config))
+                elif isinstance(tool, ImageGenerationTool):  # pragma: no branch
+                    if not self.profile.supports_image_output:
+                        raise UserError(
+                            "`ImageGenerationTool` is not supported by this model. Use a model with 'image' in the name instead."
+                        )
+                    image_config = self._build_image_config(tool)
+                else:  # pragma: no cover
+                    raise UserError(
+                        f'`{tool.__class__.__name__}` is not supported by `GoogleModel`. If it should be, please file an issue.'
+                    )
+
+        return tools, image_config
+
+    def _get_tool_config(
+        self,
+        model_request_parameters: ModelRequestParameters,
+        model_settings: GoogleModelSettings,
+    ) -> tuple[list[ToolDict] | None, ToolConfigDict | None, ImageConfigDict | None]:
+        """Determine which tools to send and the API tool config.
+
+        Returns:
+            A tuple of (filtered_tools, tool_config, image_config).
+        """
+        native_tools, image_config = self._get_native_tools(model_request_parameters)
+
+        tool_defs = model_request_parameters.tool_defs
+
+        resolved_tool_choice = resolve_tool_choice(model_settings, model_request_parameters)
+
+        function_calling_config_modes: dict[ToolChoiceScalar, FunctionCallingConfigMode] = {
+            'auto': FunctionCallingConfigMode.AUTO,
+            'none': FunctionCallingConfigMode.NONE,
+            'required': FunctionCallingConfigMode.ANY,
+        }
+
+        allowed_function_names: list[str] = []
+        if isinstance(resolved_tool_choice, tuple):
+            tool_choice_mode, tool_names = resolved_tool_choice
+            if tool_choice_mode == 'auto':
+                # Breaks caching, but Google doesn't support AUTO mode with allowed_function_names
+                tool_defs = {k: v for k, v in tool_defs.items() if k in tool_names}
+            else:
+                # Use ANY mode with allowed_function_names to force one of the specified tools
+                allowed_function_names = list(tool_names)
+        else:
+            tool_choice_mode = resolved_tool_choice
+
+        function_calling_config: FunctionCallingConfigDict = {'mode': function_calling_config_modes[tool_choice_mode]}
+        if allowed_function_names:
+            function_calling_config['allowed_function_names'] = allowed_function_names
+        tool_config = ToolConfigDict(function_calling_config=function_calling_config)
+
+        # `include_server_side_tool_invocations` makes Gemini emit explicit `tool_call`/`tool_response`
+        # parts for WebSearchTool, WebFetchTool, FileSearchTool. Pre-Gemini-3 models reject the field
+        # ('Tool call context circulation is not enabled'); CodeExecutionTool uses its own
+        # `executable_code`/`code_execution_result` parts; ImageGenerationTool runs through `image_config`.
+        emits_tool_call_invocations = any(
+            isinstance(t, (WebSearchTool, WebFetchTool, FileSearchTool)) for t in model_request_parameters.native_tools
+        )
+        if emits_tool_call_invocations and self._resolved_profile.google_supports_server_side_tool_invocations:
+            tool_config['include_server_side_tool_invocations'] = True
+
+        tools: list[ToolDict] = [
+            ToolDict(function_declarations=[_function_declaration_from_tool(t)]) for t in tool_defs.values()
+        ]
+
+        tools.extend(native_tools)
+
+        if not tools:
+            return None, None, image_config
+
+        return tools, tool_config, image_config
+
+    @overload
+    async def _generate_content(
+        self,
+        messages: list[ModelMessage],
+        stream: Literal[False],
+        model_settings: GoogleModelSettings,
+        model_request_parameters: ModelRequestParameters,
+    ) -> GenerateContentResponse: ...
+
+    @overload
+    async def _generate_content(
+        self,
+        messages: list[ModelMessage],
+        stream: Literal[True],
+        model_settings: GoogleModelSettings,
+        model_request_parameters: ModelRequestParameters,
+    ) -> Awaitable[AsyncIterator[GenerateContentResponse]]: ...
+
+    async def _generate_content(
+        self,
+        messages: list[ModelMessage],
+        stream: bool,
+        model_settings: GoogleModelSettings,
+        model_request_parameters: ModelRequestParameters,
+    ) -> GenerateContentResponse | Awaitable[AsyncIterator[GenerateContentResponse]]:
+        contents, config = await self._build_content_and_config(
+            messages,
+            model_settings,
+            model_request_parameters,
+        )
+        func = self.client.aio.models.generate_content_stream if stream else self.client.aio.models.generate_content
+        try:
+            return await func(model=self._model_name, contents=contents, config=config)  # type: ignore
+        except errors.APIError as e:
+            if (status_code := e.code) >= 400:
+                raise ModelHTTPError(
+                    status_code=status_code,
+                    model_name=self._model_name,
+                    body=cast(Any, e.details),  # pyright: ignore[reportUnknownMemberType]
+                ) from e
+            raise ModelAPIError(model_name=self._model_name, message=str(e)) from e
+
+    def _translate_thinking(
+        self,
+        model_settings: GoogleModelSettings,
+        model_request_parameters: ModelRequestParameters,
+    ) -> ThinkingConfigDict | None:
+        """Get thinking config, falling back to unified thinking when provider-specific setting is not set."""
+        if config := model_settings.get('google_thinking_config'):
+            return config
+        thinking = model_request_parameters.thinking
+        if thinking is None:
+            return None
+        # Don't use `self._resolved_profile`: `tests/test_thinking.py` invokes this as an
+        # unbound method with a `FunctionModel` carrying a `GoogleModelProfile`.
+        profile = GoogleModelProfile.from_profile(self.profile)
+        if thinking is False:
+            if profile.google_supports_thinking_level:
+                return ThinkingConfigDict(thinking_level=cast(Any, 'MINIMAL'))
+            return ThinkingConfigDict(thinking_budget=0)
+        if profile.google_supports_thinking_level:
+            if thinking is True:
+                return ThinkingConfigDict(include_thoughts=True)
+            level_map: dict[ThinkingEffort, str] = {
+                'minimal': 'MINIMAL',
+                'low': 'LOW',
+                'medium': 'MEDIUM',
+                'high': 'HIGH',
+                'xhigh': 'HIGH',  # no higher level available
+            }
+            return ThinkingConfigDict(include_thoughts=True, thinking_level=cast(Any, level_map[thinking]))
+        else:
+            if thinking is True:
+                return ThinkingConfigDict(include_thoughts=True)
+            budget_map: dict[ThinkingEffort, int] = {
+                'minimal': 128,  # minimum for Gemini 2.5 Pro
+                'low': 2048,
+                'medium': 8192,
+                'high': 24576,
+                'xhigh': 24576,  # max for Flash; Pro goes to 32768 but we use a safe common max
+            }
+            return ThinkingConfigDict(include_thoughts=True, thinking_budget=budget_map[thinking])
+
+    async def _build_content_and_config(
+        self,
+        messages: list[ModelMessage],
+        model_settings: GoogleModelSettings,
+        model_request_parameters: ModelRequestParameters,
+    ) -> tuple[list[ContentUnionDict], GenerateContentConfigDict]:
+        tools, tool_config, image_config = self._get_tool_config(model_request_parameters, model_settings)
+        if model_request_parameters.function_tools and not self.profile.supports_tools:
+            raise UserError('Tools are not supported by this model.')
+
+        response_mime_type = None
+        response_schema = None
+        if model_request_parameters.output_mode == 'native':
+            if model_request_parameters.function_tools and not self._resolved_profile.google_supports_tool_combination:
+                raise UserError(
+                    'This model does not support `NativeOutput` and function tools at the same time. Use `output_type=ToolOutput(...)` instead.'
+                )
+            response_mime_type = 'application/json'
+            output_object = model_request_parameters.output_object
+            assert output_object is not None
+            response_schema = self._map_response_schema(output_object)
+        elif model_request_parameters.output_mode == 'prompted' and not tools:
+            if not self.profile.supports_json_object_output:
+                raise UserError('JSON output is not supported by this model.')
+            response_mime_type = 'application/json'
+        system_instruction, contents = await self._map_messages(messages, model_request_parameters)
+
+        modalities: list[str] = [Modality.TEXT.value]
+        if self.profile.supports_image_output:
+            modalities.append(Modality.IMAGE.value)
+            if not model_request_parameters.allow_text_output:
+                modalities.remove(Modality.TEXT.value)
+
+        headers: dict[str, str] = {'Content-Type': 'application/json', 'User-Agent': get_user_agent()}
+        if extra_headers := model_settings.get('extra_headers'):
+            headers.update(extra_headers)
+
+        gla_service_tier: _GlaServiceTier | None = None
+        if self.system in _GOOGLE_CLOUD_PROVIDER_NAMES:
+            headers.update(_google_cloud_service_tier_headers(_resolve_google_cloud_service_tier(model_settings)))
+        else:
+            gla_service_tier = _resolve_gla_service_tier(model_settings)
+
+        http_options: HttpOptionsDict = {'headers': headers}
+        if timeout := model_settings.get('timeout'):
+            if isinstance(timeout, int | float):
+                http_options['timeout'] = int(1000 * timeout)
+            else:
+                raise UserError('Google does not support setting ModelSettings.timeout to a httpx.Timeout')
+
+        config = GenerateContentConfigDict(
+            http_options=http_options,
+            system_instruction=system_instruction,
+            temperature=model_settings.get('temperature'),
+            top_p=model_settings.get('top_p'),
+            top_k=model_settings.get('top_k'),
+            max_output_tokens=model_settings.get('max_tokens'),
+            stop_sequences=model_settings.get('stop_sequences'),
+            presence_penalty=model_settings.get('presence_penalty'),
+            frequency_penalty=model_settings.get('frequency_penalty'),
+            seed=model_settings.get('seed'),
+            safety_settings=model_settings.get('google_safety_settings'),
+            thinking_config=self._translate_thinking(model_settings, model_request_parameters),
+            labels=model_settings.get('google_labels'),
+            media_resolution=model_settings.get('google_video_resolution'),
+            cached_content=model_settings.get('google_cached_content'),
+            tools=cast(ToolListUnionDict, tools),
+            tool_config=tool_config,
+            response_mime_type=response_mime_type,
+            response_json_schema=response_schema,
+            response_modalities=modalities,
+            image_config=image_config,
+        )
+
+        if gla_service_tier is not None:
+            config['service_tier'] = cast(_GoogleSDKServiceTier, gla_service_tier)
+
+        # Validate logprobs settings
+        logprobs_requested = model_settings.get('google_logprobs')
+        if logprobs_requested:
+            config['response_logprobs'] = True
+
+            if 'google_top_logprobs' in model_settings:
+                config['logprobs'] = model_settings.get('google_top_logprobs')
+
+        return contents, config
+
+    def _process_response(self, response: GenerateContentResponse) -> ModelResponse:
+        candidate = response.candidates[0] if response.candidates else None
+
+        vendor_id = response.response_id
+        finish_reason: FinishReason | None = None
+        vendor_details: dict[str, Any] = {}
+
+        raw_finish_reason = candidate.finish_reason if candidate else None
+        if raw_finish_reason and candidate:  # pragma: no branch
+            vendor_details = {'finish_reason': raw_finish_reason.value}
+            # Add safety ratings to provider details
+            if candidate.safety_ratings:
+                vendor_details['safety_ratings'] = [r.model_dump(by_alias=True) for r in candidate.safety_ratings]
+            finish_reason = _FINISH_REASON_MAP.get(raw_finish_reason)
+        elif candidate is None and response.prompt_feedback and response.prompt_feedback.block_reason:
+            block_reason = response.prompt_feedback.block_reason
+            vendor_details['block_reason'] = block_reason.value
+            if response.prompt_feedback.block_reason_message:
+                vendor_details['block_reason_message'] = response.prompt_feedback.block_reason_message
+            if response.prompt_feedback.safety_ratings:
+                vendor_details['safety_ratings'] = [
+                    r.model_dump(by_alias=True) for r in response.prompt_feedback.safety_ratings
+                ]
+            finish_reason = 'content_filter'
+
+        if response.create_time is not None:  # pragma: no branch
+            vendor_details['timestamp'] = response.create_time
+
+        if (
+            response.sdk_http_response
+            and response.sdk_http_response.headers
+            and (service_tier := response.sdk_http_response.headers.get('x-gemini-service-tier'))
+        ):
+            vendor_details['service_tier'] = service_tier.lower()
+
+        # Add traffic_type to provider_details for Flex PayGo verification
+        if response.usage_metadata and response.usage_metadata.traffic_type:
+            vendor_details['traffic_type'] = response.usage_metadata.traffic_type.value
+
+        if candidate is None or candidate.content is None or candidate.content.parts is None:
+            parts = []
+        else:
+            parts = candidate.content.parts or []
+
+        if candidate and (logprob_results := candidate.logprobs_result):
+            vendor_details['logprobs'] = logprob_results.model_dump(mode='json')
+            vendor_details['avg_logprobs'] = candidate.avg_logprobs
+
+        usage = _metadata_as_usage(response, provider=self._provider.name, provider_url=self._provider.base_url)
+        grounding_metadata = candidate.grounding_metadata if candidate else None
+        url_context_metadata = candidate.url_context_metadata if candidate else None
+
+        return _process_response_from_parts(
+            parts,
+            grounding_metadata,
+            response.model_version or self._model_name,
+            self._provider.name,
+            self._provider.base_url,
+            usage,
+            vendor_id=vendor_id,
+            vendor_details=vendor_details or None,
+            finish_reason=finish_reason,
+            url_context_metadata=url_context_metadata,
+        )
+
+    async def _process_streamed_response(
+        self, response: AsyncIterator[GenerateContentResponse], model_request_parameters: ModelRequestParameters
+    ) -> StreamedResponse:
+        """Process a streamed response, and prepare a streaming response to return."""
+        peekable_response: _utils.PeekableAsyncStream[
+            GenerateContentResponse, AsyncIterator[GenerateContentResponse]
+        ] = _utils.PeekableAsyncStream(response)
+        first_chunk = await peekable_response.peek()
+        if isinstance(first_chunk, _utils.Unset):
+            raise UnexpectedModelBehavior('Streamed response ended without content or tool calls')  # pragma: no cover
+
+        return GeminiStreamedResponse(
+            model_request_parameters=model_request_parameters,
+            _model_name=first_chunk.model_version or self._model_name,
+            _response=peekable_response,
+            _provider_name=self._provider.name,
+            _provider_url=self._provider.base_url,
+            _provider_timestamp=first_chunk.create_time,
+        )
+
+    async def _map_messages(  # noqa: C901
+        self,
+        messages: list[ModelMessage],
+        model_request_parameters: ModelRequestParameters,
+    ) -> tuple[ContentDict | None, list[ContentUnionDict]]:
+        supports_tool_combination = self._resolved_profile.google_supports_tool_combination
+        contents: list[ContentUnionDict] = []
+        system_parts: list[PartDict] = []
+
+        for m in messages:
+            if isinstance(m, ModelRequest):
+                message_parts: list[PartDict] = []
+
+                for part in m.parts:
+                    if isinstance(part, SystemPromptPart):
+                        system_parts.append({'text': part.content})
+                    elif isinstance(part, UserPromptPart):
+                        message_parts.extend(await self._map_user_prompt(part))
+                    elif isinstance(part, ToolReturnPart):
+                        message_parts.extend(await self._map_tool_return(part))
+                    elif isinstance(part, RetryPromptPart):
+                        if part.tool_name is None:
+                            message_parts.append({'text': part.model_response()})
+                        else:
+                            message_parts.append(
+                                {
+                                    'function_response': {
+                                        'name': part.tool_name,
+                                        'response': {'error': part.model_response()},
+                                        'id': part.tool_call_id,
+                                    }
+                                }
+                            )
+                    else:
+                        assert_never(part)
+
+                # Work around a Gemini bug where content objects containing functionResponse parts are treated as
+                # role=model even when role=user is explicitly specified.
+                #
+                # We build `message_parts` first, then split into multiple content objects whenever we transition
+                # between function_response and non-function_response parts.
+                #
+                # TODO: Remove workaround when https://github.com/pydantic/pydantic-ai/issues/4210 is resolved
+                if message_parts:
+                    content_parts: list[PartDict] = []
+
+                    for part in message_parts:
+                        if (
+                            content_parts
+                            and 'function_response' in content_parts[-1]
+                            and 'function_response' not in part
+                        ):
+                            contents.append({'role': 'user', 'parts': content_parts})
+                            content_parts = []
+
+                        content_parts.append(part)
+
+                    contents.append({'role': 'user', 'parts': content_parts})
+            elif isinstance(m, ModelResponse):
+                maybe_content = _content_model_response(
+                    m, self._matching_provider_names, supports_tool_combination=supports_tool_combination
+                )
+                if maybe_content:
+                    contents.append(maybe_content)
+            else:
+                assert_never(m)
+
+        # Google GenAI requires at least one user part in the message, and that function call turns
+        # come immediately after a user turn or after a function response turn.
+        if not contents or contents[0].get('role') == 'model':  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
+            contents.insert(0, {'role': 'user', 'parts': [{'text': ''}]})
+
+        if instruction_parts := self._get_instruction_parts(messages, model_request_parameters):
+            for part in instruction_parts:
+                system_parts.append({'text': part.content})
+        system_instruction = ContentDict(role='user', parts=system_parts) if system_parts else None
+
+        return system_instruction, contents
+
+    async def _map_tool_return(self, part: ToolReturnPart) -> list[PartDict]:
+        """Map a `ToolReturnPart` to Google API format, handling multimodal content.
+
+        For Gemini 3+ models with supported MIME types, files are sent inside
+        `function_response.parts` for efficiency. Unsupported types become separate
+        parts after the function_response (fallback strategy).
+        See: https://ai.google.dev/gemini-api/docs/function-calling?example=meeting#multimodal
+        """
+        supported_mime_types = self._resolved_profile.google_supported_mime_types_in_tool_returns
+
+        function_response_parts: list[FunctionResponsePartDict] = []
+        fallback_parts: list[PartDict] = []
+        fallback_refs: list[str] = []
+
+        for file in part.files:
+            if file.media_type in supported_mime_types:
+                fr_part = await self._map_file_to_function_response_part(file)
+                function_response_parts.append(fr_part)
+            else:
+                fallback_refs.append(f'See file {file.identifier}.')
+                fallback_parts.append({'text': f'This is file {file.identifier}:'})
+                file_part = await self._map_file_to_part(file)
+                fallback_parts.append(file_part)
+
+        response = part.model_response_object()
+        if fallback_refs:
+            response = {'output': [response, *fallback_refs]}
+
+        function_response_dict: FunctionResponseDict = {
+            'name': part.tool_name,
+            'response': response,
+            'id': part.tool_call_id,
+        }
+        if function_response_parts:
+            function_response_dict['parts'] = function_response_parts
+
+        result: list[PartDict] = [{'function_response': function_response_dict}]
+        result.extend(fallback_parts)
+
+        return result
+
+    def _validate_uploaded_file(self, file: UploadedFile) -> tuple[str, str]:
+        """Validate an `UploadedFile` and return (`file_uri`, `mime_type`).
+
+        The Gemini API uses the Files API (https:// URIs). Google Cloud uses GCS
+        (gs:// URIs). The Files API is not available on Google Cloud.
+        """
+        if file.provider_name not in self._matching_provider_names:
+            raise UserError(
+                f'UploadedFile with `provider_name={file.provider_name!r}` cannot be used with GoogleModel. '
+                f'Expected `provider_name` to be one of {sorted(self._matching_provider_names)!r}.'
+            )
+        if self.system in _GOOGLE_CLOUD_PROVIDER_NAMES:
+            if not file.file_id.startswith('gs://'):
+                raise UserError(
+                    f'UploadedFile for GoogleModel (Google Cloud) must use a GCS URI (gs://bucket/path), got: {file.file_id}'
+                )
+        elif not file.file_id.startswith('https://'):
+            raise UserError(
+                f'UploadedFile for GoogleModel (Gemini API) must use a file URI from the Google Files API '
+                f'(https://generativelanguage.googleapis.com/...), got: {file.file_id}'
+            )
+        return file.file_id, file.media_type
+
+    async def _resolve_file(
+        self, file: FileUrl | BinaryContent | UploadedFile
+    ) -> tuple[Literal['inline'], bytes, str] | tuple[Literal['file'], str, str]:
+        """Resolve a file to either inline data `('inline', data, mime_type)` or a file reference `('file', uri, mime_type)`.
+
+        Shared resolution logic for both `_map_file_to_part` and `_map_file_to_function_response_part`.
+        """
+        if isinstance(file, BinaryContent):
+            return ('inline', file.data, file.media_type)
+        elif isinstance(file, UploadedFile):
+            file_uri, mime_type = self._validate_uploaded_file(file)
+            return ('file', file_uri, mime_type)
+        elif isinstance(file, VideoUrl) and (
+            file.is_youtube or (file.url.startswith('gs://') and self.system in _GOOGLE_CLOUD_PROVIDER_NAMES)
+        ):
+            return ('file', file.url, file.media_type)
+        elif isinstance(file, FileUrl):
+            if file.force_download or (
+                self.system in _GEMINI_API_PROVIDER_NAMES
+                and not file.url.startswith(r'https://generativelanguage.googleapis.com/v1beta/files')
+            ):
+                downloaded_item = await download_item(file, data_format='bytes')
+                return ('inline', downloaded_item['data'], downloaded_item['data_type'])
+            else:
+                return ('file', file.url, file.media_type)  # pragma: lax no cover
+        else:
+            assert_never(file)
+
+    async def _map_file_to_part(self, file: FileUrl | BinaryContent | UploadedFile) -> PartDict:
+        """Map a multimodal file directly to a Google API `PartDict`."""
+        resolved = await self._resolve_file(file)
+        part_dict: PartDict
+        if resolved[0] == 'inline':
+            part_dict = {'inline_data': BlobDict(data=resolved[1], mime_type=resolved[2])}
+        else:
+            part_dict = {'file_data': FileDataDict(file_uri=resolved[1], mime_type=resolved[2])}
+        if isinstance(file, (BinaryContent, VideoUrl, UploadedFile)) and file.vendor_metadata:
+            part_dict['video_metadata'] = cast(VideoMetadataDict, file.vendor_metadata)
+        return part_dict
+
+    async def _map_file_to_function_response_part(
+        self, file: FileUrl | BinaryContent | UploadedFile
+    ) -> FunctionResponsePartDict:
+        """Map a multimodal file to `FunctionResponsePartDict` for Gemini 3+ native tool returns.
+
+        Note: `FunctionResponseBlobDict`/`FunctionResponseFileDataDict` declare `display_name` but
+        the google-genai SDK's `_live_converters.py` rejects it at runtime. We omit it until the
+        SDK supports it, at which point we could also add `$ref` identifiers in the response dict.
+        """
+        resolved = await self._resolve_file(file)
+        if resolved[0] == 'inline':
+            blob_dict: FunctionResponseBlobDict = {'data': resolved[1], 'mime_type': resolved[2]}
+            return FunctionResponsePartDict(inline_data=blob_dict)
+        else:
+            file_data_dict: FunctionResponseFileDataDict = {'file_uri': resolved[1], 'mime_type': resolved[2]}
+            return FunctionResponsePartDict(file_data=file_data_dict)
+
+    async def _map_user_prompt(self, part: UserPromptPart) -> list[PartDict]:
+        if isinstance(part.content, str):
+            return [{'text': part.content}]
+        else:
+            content: list[PartDict] = []
+            for item in part.content:
+                if isinstance(item, str | TextContent):
+                    text = item if isinstance(item, str) else item.content
+                    content.append({'text': text})
+                elif isinstance(item, (BinaryContent, FileUrl, UploadedFile)):
+                    file_part = await self._map_file_to_part(item)
+                    content.append(file_part)
+                elif isinstance(item, CachePoint):
+                    # Google doesn't support inline CachePoint markers. Google's caching requires
+                    # pre-creating cache objects via the API, then referencing them by name using
+                    # `GoogleModelSettings.google_cached_content`. See https://ai.google.dev/gemini-api/docs/caching
+                    pass
+                else:
+                    assert_never(item)
+        return content
+
+    def _map_response_schema(self, o: OutputObjectDefinition) -> dict[str, Any]:
+        response_schema = o.json_schema.copy()
+        if o.name:
+            response_schema['title'] = o.name
+        if o.description:
+            response_schema['description'] = o.description
+
+        return response_schema
+
+
+@dataclass
+class GeminiStreamedResponse(StreamedResponse):
+    """Implementation of `StreamedResponse` for the Gemini model."""
+
+    _model_name: GoogleModelName
+    _response: _utils.PeekableAsyncStream[GenerateContentResponse, AsyncIterator[GenerateContentResponse]]
+    _provider_name: str
+    _provider_url: str
+    _provider_timestamp: datetime | None = None
+    _timestamp: datetime = field(default_factory=_utils.now_utc)
+    _file_search_tool_call_id: str | None = field(default=None, init=False)
+    _code_execution_tool_call_id: str | None = field(default=None, init=False)
+    _has_content_filter: bool = field(default=False, init=False)
+    _has_tool_invocations: bool = field(default=False, init=False)
+
+    async def close_stream(self) -> None:
+        try:
+            # google.genai types this as AsyncIterator, but at runtime it's an
+            # async generator that exposes aclose().
+            await self._response.source.aclose()  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
+        except RuntimeError as exc:
+            if not _utils.is_async_generator_already_running(exc):
+                raise
+
+    async def _get_event_iterator(self) -> AsyncIterator[ModelResponseStreamEvent]:  # noqa: C901
+        if self._provider_timestamp is not None:
+            self.provider_details = {'timestamp': self._provider_timestamp}
+        try:
+            async for chunk in self._response:
+                self._usage = _metadata_as_usage(chunk, self._provider_name, self._provider_url)
+
+                if (
+                    chunk.sdk_http_response
+                    and chunk.sdk_http_response.headers
+                    and (service_tier := chunk.sdk_http_response.headers.get('x-gemini-service-tier'))
+                ):
+                    self.provider_details = {**(self.provider_details or {}), 'service_tier': service_tier.lower()}
+
+                # Capture traffic_type before the candidates guard, since usage_metadata
+                # may be present on chunks without candidates.
+                if chunk.usage_metadata and chunk.usage_metadata.traffic_type:
+                    self.provider_details = {
+                        **(self.provider_details or {}),
+                        'traffic_type': chunk.usage_metadata.traffic_type.value,
+                    }
+
+                if not chunk.candidates:
+                    if chunk.prompt_feedback and chunk.prompt_feedback.block_reason:
+                        self._has_content_filter = True
+                        block_reason = chunk.prompt_feedback.block_reason
+                        self.provider_details = {
+                            **(self.provider_details or {}),
+                            'block_reason': block_reason.value,
+                        }
+                        if chunk.prompt_feedback.block_reason_message:
+                            self.provider_details['block_reason_message'] = chunk.prompt_feedback.block_reason_message
+                        if chunk.prompt_feedback.safety_ratings:
+                            self.provider_details['safety_ratings'] = [
+                                r.model_dump(by_alias=True) for r in chunk.prompt_feedback.safety_ratings
+                            ]
+                        self.finish_reason = 'content_filter'
+                        if chunk.response_id:  # pragma: no branch
+                            self.provider_response_id = chunk.response_id
+                    continue
+
+                candidate = chunk.candidates[0]
+
+                if chunk.response_id:  # pragma: no branch
+                    self.provider_response_id = chunk.response_id
+
+                raw_finish_reason = candidate.finish_reason
+                if raw_finish_reason and not self._has_content_filter:
+                    self.provider_details = {
+                        **(self.provider_details or {}),
+                        'finish_reason': raw_finish_reason.value,
+                    }
+
+                    if candidate.safety_ratings:
+                        self.provider_details['safety_ratings'] = [
+                            r.model_dump(by_alias=True) for r in candidate.safety_ratings
+                        ]
+
+                    self.finish_reason = _FINISH_REASON_MAP.get(raw_finish_reason)
+
+                # Google streams the grounding metadata (including the web search queries and results)
+                # _after_ the text that was generated using it, so it would show up out of order in the stream,
+                # and cause issues with the logic that doesn't consider text ahead of built-in tool calls as output.
+                # If that gets fixed (or we have a workaround), we can uncomment this:
+                # web_search_call, web_search_return = _map_grounding_metadata(
+                #     candidate.grounding_metadata, self.provider_name
+                # )
+                # if web_search_call and web_search_return:
+                #     yield self._parts_manager.handle_part(vendor_part_id=uuid4(), part=web_search_call)
+                #     yield self._parts_manager.handle_part(
+                #         vendor_part_id=uuid4(), part=web_search_return
+                #     )
+
+                # URL context metadata (for WebFetchTool) is streamed in the first chunk, before the text,
+                # so we can safely yield it here.
+                #
+                # `_has_tool_invocations` reflects parts seen in *prior* chunks because we can't peek
+                # ahead in a stream. The non-streaming path (`_has_native_tool_invocations(parts)` in
+                # `_process_response_from_parts`) inspects all parts upfront and is safer. The
+                # streaming assumption — confirmed by Gemini 3 cassettes — is that
+                # `url_context_metadata` and native `tool_call`/`tool_response` parts are mutually
+                # exclusive: when `include_server_side_tool_invocations=True` the API returns
+                # tool_call/tool_response parts *instead of* the metadata, never both.
+                if not self._has_tool_invocations:
+                    web_fetch_call, web_fetch_return = _map_url_context_metadata(
+                        candidate.url_context_metadata, self.provider_name
+                    )
+                    if web_fetch_call and web_fetch_return:
+                        yield self._parts_manager.handle_part(vendor_part_id=uuid4(), part=web_fetch_call)
+                        yield self._parts_manager.handle_part(vendor_part_id=uuid4(), part=web_fetch_return)
+
+                if candidate.content is None or candidate.content.parts is None:
+                    continue
+
+                parts = candidate.content.parts
+                if not parts:
+                    continue  # pragma: no cover
+
+                if not self._has_tool_invocations:
+                    self._has_tool_invocations = _has_native_tool_invocations(parts)
+
+                for part in parts:
+                    provider_details: dict[str, Any] | None = None
+                    if part.thought_signature:
+                        # Per https://ai.google.dev/gemini-api/docs/function-calling?example=meeting#thought-signatures:
+                        # - Always send the thought_signature back to the model inside its original Part.
+                        # - Don't merge a Part containing a signature with one that does not. This breaks the positional context of the thought.
+                        # - Don't combine two Parts that both contain signatures, as the signature strings cannot be merged.
+                        thought_signature = base64.b64encode(part.thought_signature).decode('utf-8')
+                        provider_details = {'thought_signature': thought_signature}
+
+                    if part.text is not None:
+                        if len(part.text) == 0 and not provider_details:
+                            continue
+                        if part.thought:
+                            for event in self._parts_manager.handle_thinking_delta(
+                                vendor_part_id=None,
+                                content=part.text,
+                                provider_name=self.provider_name if provider_details else None,
+                                provider_details=provider_details,
+                            ):
+                                yield event
+                        else:
+                            for event in self._parts_manager.handle_text_delta(
+                                vendor_part_id=None,
+                                content=part.text,
+                                provider_name=self.provider_name if provider_details else None,
+                                provider_details=provider_details,
+                            ):
+                                yield event
+                    elif part.function_call:
+                        maybe_event = self._parts_manager.handle_tool_call_delta(
+                            vendor_part_id=uuid4(),
+                            tool_name=part.function_call.name,
+                            args=part.function_call.args,
+                            tool_call_id=part.function_call.id,
+                            provider_name=self.provider_name if provider_details else None,
+                            provider_details=provider_details,
+                        )
+                        if maybe_event is not None:  # pragma: no branch
+                            yield maybe_event
+                    elif part.inline_data is not None:
+                        if part.thought:  # pragma: no cover
+                            # Per https://ai.google.dev/gemini-api/docs/image-generation#thinking-process:
+                            # > The model generates up to two interim images to test composition and logic. The last image within Thinking is also the final rendered image.
+                            # We currently don't expose these image thoughts as they can't be represented with `ThinkingPart`
+                            continue
+                        data = part.inline_data.data
+                        mime_type = part.inline_data.mime_type
+                        assert data and mime_type, 'Inline data must have data and mime type'
+                        content = BinaryContent(data=data, media_type=mime_type)
+                        yield self._parts_manager.handle_part(
+                            vendor_part_id=uuid4(),
+                            part=FilePart(
+                                content=BinaryContent.narrow_type(content),
+                                provider_name=self.provider_name if provider_details else None,
+                                provider_details=provider_details,
+                            ),
+                        )
+                    elif part.tool_call:
+                        tool_call_part = _map_tool_call(part.tool_call, self.provider_name)
+                        tool_call_part.provider_details = provider_details
+                        yield self._parts_manager.handle_part(vendor_part_id=uuid4(), part=tool_call_part)
+                    elif part.tool_response:
+                        tool_response_part = _map_tool_response(part.tool_response, self.provider_name)
+                        tool_response_part.provider_details = provider_details
+                        yield self._parts_manager.handle_part(vendor_part_id=uuid4(), part=tool_response_part)
+                    elif part.executable_code is not None:
+                        part_obj = self._handle_executable_code_streaming(part.executable_code)
+                        part_obj.provider_details = provider_details
+                        yield self._parts_manager.handle_part(vendor_part_id=uuid4(), part=part_obj)
+                    elif part.code_execution_result is not None:
+                        part = self._map_code_execution_result(part.code_execution_result)
+                        part.provider_details = provider_details
+                        yield self._parts_manager.handle_part(vendor_part_id=uuid4(), part=part)
+                    else:
+                        assert part.function_response is not None, f'Unexpected part: {part}'  # pragma: no cover
+
+                # Grounding metadata is attached to the final text chunk, so
+                # we emit the `NativeToolReturnPart` after the text delta so
+                # that the delta is properly added to the same `TextPart` as earlier chunks
+                if not self._has_tool_invocations:
+                    file_search_part = self._handle_file_search_grounding_metadata_streaming(
+                        candidate.grounding_metadata
+                    )
+                    if file_search_part is not None:
+                        yield self._parts_manager.handle_part(vendor_part_id=uuid4(), part=file_search_part)
+        except errors.APIError as e:
+            if (status_code := e.code) >= 400:
+                raise ModelHTTPError(
+                    status_code=status_code,
+                    model_name=self._model_name,
+                    body=cast(Any, e.details),  # pyright: ignore[reportUnknownMemberType]
+                ) from e
+            raise ModelAPIError(model_name=self._model_name, message=str(e)) from e
+
+    def _handle_file_search_grounding_metadata_streaming(
+        self, grounding_metadata: GroundingMetadata | None
+    ) -> NativeToolReturnPart | None:
+        """Handle file search grounding metadata for streaming responses.
+
+        Returns a NativeToolReturnPart if file search results are available in the grounding metadata.
+        """
+        if not self._file_search_tool_call_id or not grounding_metadata:
+            return None
+
+        grounding_chunks = grounding_metadata.grounding_chunks
+        retrieved_contexts = _extract_file_search_retrieved_contexts(grounding_chunks)
+        if retrieved_contexts:  # pragma: no branch
+            part = NativeToolReturnPart(
+                provider_name=self.provider_name,
+                tool_name=FileSearchTool.kind,
+                tool_call_id=self._file_search_tool_call_id,
+                content=retrieved_contexts,
+            )
+            self._file_search_tool_call_id = None
+            return part
+        return None  # pragma: no cover
+
+    def _map_code_execution_result(self, code_execution_result: CodeExecutionResult) -> NativeToolReturnPart:
+        """Map code execution result to a NativeToolReturnPart using instance state."""
+        assert self._code_execution_tool_call_id is not None
+        return _map_code_execution_result(code_execution_result, self.provider_name, self._code_execution_tool_call_id)
+
+    def _handle_executable_code_streaming(self, executable_code: ExecutableCode) -> ModelResponsePart:
+        """Handle executable code for streaming responses.
+
+        Returns a NativeToolCallPart for file search or code execution.
+        Sets self._code_execution_tool_call_id or self._file_search_tool_call_id as appropriate.
+        """
+        code = executable_code.code
+        has_file_search_tool = any(
+            isinstance(tool, FileSearchTool) for tool in self.model_request_parameters.native_tools
+        )
+
+        if code and has_file_search_tool and (file_search_query := self._extract_file_search_query(code)):
+            self._file_search_tool_call_id = _utils.generate_tool_call_id()
+            return NativeToolCallPart(
+                provider_name=self.provider_name,
+                tool_name=FileSearchTool.kind,
+                tool_call_id=self._file_search_tool_call_id,
+                args={'query': file_search_query},
+            )
+
+        self._code_execution_tool_call_id = _utils.generate_tool_call_id()
+        return _map_executable_code(executable_code, self.provider_name, self._code_execution_tool_call_id)
+
+    def _extract_file_search_query(self, code: str) -> str | None:
+        """Extract the query from file_search.query() executable code.
+
+        Handles escaped quotes in the query string.
+
+        Example: 'print(file_search.query(query="what is the capital of France?"))'
+        Returns: 'what is the capital of France?'
+        """
+        match = _FILE_SEARCH_QUERY_PATTERN.search(code)
+        if match:
+            query = match.group(2)
+            query = query.replace('\\\\', '\\').replace('\\"', '"').replace("\\'", "'")
+            return query
+        return None  # pragma: no cover
+
+    @property
+    def model_name(self) -> GoogleModelName:
+        """Get the model name of the response."""
+        return self._model_name
+
+    @property
+    def provider_name(self) -> str:
+        """Get the provider name."""
+        return self._provider_name
+
+    @property
+    def provider_url(self) -> str:
+        """Get the provider base URL."""
+        return self._provider_url
+
+    @property
+    def timestamp(self) -> datetime:
+        """Get the timestamp of the response."""
+        return self._timestamp
+
+
+def _content_model_response(
+    m: ModelResponse, accepted_provider_names: frozenset[str], *, supports_tool_combination: bool = False
+) -> ContentDict | None:
+    # `accepted_provider_names` includes both the current provider's `name` and any pre-v2 aliases
+    # (e.g. `google-cloud` + `google-vertex`) so history replayed from before the v2 rename still
+    # routes its thinking signatures and native tool parts back to this provider.
+    parts: list[PartDict] = []
+    # Thought signature emitted by a `ThinkingPart`, to be carried over to the *next* part.
+    pending_thinking_signature: str | None = None
+    # Gemini requires the first `function_call` in a turn to carry a thought_signature; subsequent
+    # ones don't. Per https://ai.google.dev/gemini-api/docs/thought-signatures#signatures-in-function-calling-parts.
+    # Tracked here so each `ToolCallPart` arm can decide whether to fall back to the documented dummy signature.
+    needs_function_call_signature = True
+
+    for item in m.parts:
+        item_signature = _decode_inline_thought_signature(item, m, accepted_provider_names)
+        if item_signature is None and pending_thinking_signature is not None:
+            item_signature = base64.b64decode(pending_thinking_signature)
+        pending_thinking_signature = None
+
+        part: PartDict | None
+        if isinstance(item, ToolCallPart):
+            part = _function_call_part_dict(item, item_signature, needs_signature=needs_function_call_signature)
+            needs_function_call_signature = False
+        elif isinstance(item, TextPart):
+            part = _attach_signature({'text': item.content}, item_signature)
+        elif isinstance(item, ThinkingPart):
+            if item.provider_name in accepted_provider_names and item.signature:
+                # The signature attaches to the _next_ part, not the thinking part itself.
+                pending_thinking_signature = item.signature
+            if item.content:
+                part = _attach_signature({'text': item.content, 'thought': True}, item_signature)
+            else:
+                part = None
+        elif isinstance(item, NativeToolCallPart):
+            part = _native_tool_call_part_dict(
+                item, accepted_provider_names, item_signature, supports_tool_combination=supports_tool_combination
+            )
+        elif isinstance(item, NativeToolReturnPart):
+            part = _native_tool_return_part_dict(
+                item, accepted_provider_names, item_signature, supports_tool_combination=supports_tool_combination
+            )
+        elif isinstance(item, FilePart):
+            inline_data_dict: BlobDict = {'data': item.content.data, 'mime_type': item.content.media_type}
+            part = _attach_signature({'inline_data': inline_data_dict}, item_signature)
+        elif isinstance(item, CompactionPart):  # pragma: no cover
+            # Compaction parts are not sent back to models that don't support compaction.
+            part = None
+        else:
+            assert_never(item)
+
+        if part:
+            parts.append(part)
+
+    if not parts:
+        return None
+    return ContentDict(role='model', parts=parts)
+
+
+def _decode_inline_thought_signature(
+    item: ModelResponsePart, m: ModelResponse, accepted_provider_names: frozenset[str]
+) -> bytes | None:
+    """Decode the thought signature stored on `item.provider_details`, if any.
+
+    Returns the raw signature bytes ready to embed in a `PartDict`, or `None` if no signature
+    applies (either missing, or the response originated from a different provider).
+    """
+    if not item.provider_details:
+        return None
+    if m.provider_name not in accepted_provider_names and item.provider_name not in accepted_provider_names:
+        return None  # pragma: no cover
+    raw = item.provider_details.get('thought_signature')
+    if not raw:
+        return None  # pragma: no cover
+    return base64.b64decode(raw)
+
+
+def _attach_signature(part: PartDict, signature: bytes | None) -> PartDict:
+    if signature is not None:
+        part['thought_signature'] = signature
+    return part
+
+
+def _function_call_part_dict(item: ToolCallPart, signature: bytes | None, *, needs_signature: bool) -> PartDict:
+    part: PartDict = {
+        'function_call': FunctionCallDict(name=item.tool_name, args=item.args_as_dict(), id=item.tool_call_id),
+    }
+    part = _attach_signature(part, signature)
+    if signature is None and needs_signature:
+        # Per https://ai.google.dev/gemini-api/docs/thought-signatures#faqs and
+        # https://cloud.google.com/vertex-ai/generative-ai/docs/thought-signatures#using-rest-or-manual-handling
+        # the documented dummy `skip_thought_signature_validator` works for both Gemini API and Google Cloud.
+        part['thought_signature'] = b'skip_thought_signature_validator'
+    return part
+
+
+def _native_tool_call_part_dict(
+    item: NativeToolCallPart,
+    accepted_provider_names: frozenset[str],
+    signature: bytes | None,
+    *,
+    supports_tool_combination: bool,
+) -> PartDict | None:
+    if item.provider_name not in accepted_provider_names:
+        return None
+    if item.tool_name == CodeExecutionTool.kind:
+        return _attach_signature({'executable_code': cast(ExecutableCodeDict, item.args_as_dict())}, signature)
+    tool_type = _NATIVE_TOOL_NAME_TO_TOOL_TYPE.get(item.tool_name)
+    if tool_type is None:  # pragma: no cover
+        raise UnexpectedModelBehavior(f'Unknown native tool name: {item.tool_name!r}')
+    if not _can_echo_server_side_tool_part(item.tool_call_id, supports_tool_combination=supports_tool_combination):
+        return None
+    part: PartDict = {
+        'tool_call': {'id': item.tool_call_id, 'tool_type': tool_type, 'args': item.args_as_dict()},
+    }
+    return _attach_signature(part, signature)
+
+
+def _native_tool_return_part_dict(
+    item: NativeToolReturnPart,
+    accepted_provider_names: frozenset[str],
+    signature: bytes | None,
+    *,
+    supports_tool_combination: bool,
+) -> PartDict | None:
+    if item.provider_name not in accepted_provider_names:
+        return None
+    if item.tool_name == CodeExecutionTool.kind and isinstance(item.content, dict):
+        return _attach_signature(
+            {'code_execution_result': cast(CodeExecutionResultDict, item.content)},  # pyright: ignore[reportUnknownMemberType]
+            signature,
+        )
+    tool_type = _NATIVE_TOOL_NAME_TO_TOOL_TYPE.get(item.tool_name)
+    if tool_type is None:  # pragma: no cover
+        raise UnexpectedModelBehavior(f'Unknown native tool name: {item.tool_name!r}')
+    if not _can_echo_server_side_tool_part(item.tool_call_id, supports_tool_combination=supports_tool_combination):
+        return None
+    response: dict[str, Any] = item.content if _utils.is_str_dict(item.content) else {'result': item.content}
+    part: PartDict = {
+        'tool_response': {'id': item.tool_call_id, 'tool_type': tool_type, 'response': response},
+    }
+    return _attach_signature(part, signature)
+
+
+def _can_echo_server_side_tool_part(tool_call_id: str, *, supports_tool_combination: bool) -> bool:
+    """Whether a server-side native-tool part can be echoed back to Gemini as `tool_call` / `tool_response`.
+
+    Two reasons to skip:
+
+    1. The model doesn't support tool combination (pre-Gemini-3) — those models never emit
+       `tool_call`/`tool_response` parts and reject them in request bodies.
+    2. The `tool_call_id` was synthesized by pydantic-ai (the `pyd_ai_` prefix from
+       [`generate_tool_call_id`][pydantic_ai._utils.generate_tool_call_id]) — i.e. the part was
+       reconstructed from `grounding_metadata` / `url_context_metadata` and never had a real
+       Google id. Gemini rejects unknown ids, so message histories built before this round-trip
+       support landed must drop those parts even on Gemini 3+.
+    """
+    if not supports_tool_combination:
+        return False
+    return not tool_call_id.startswith('pyd_ai_')
+
+
+def _process_part(
+    part: Part, code_execution_tool_call_id: str | None, provider_name: str
+) -> tuple[ModelResponsePart | None, str | None]:
+    """Process a Google Part and return the corresponding ModelResponsePart.
+
+    Returns:
+        A tuple of (item, code_execution_tool_call_id). Returns (None, id) if the part should be skipped.
+    """
+    provider_details: dict[str, Any] | None = None
+    if part.thought_signature:
+        # Per https://ai.google.dev/gemini-api/docs/function-calling?example=meeting#thought-signatures:
+        # - Always send the thought_signature back to the model inside its original Part.
+        # - Don't merge a Part containing a signature with one that does not. This breaks the positional context of the thought.
+        # - Don't combine two Parts that both contain signatures, as the signature strings cannot be merged.
+        thought_signature = base64.b64encode(part.thought_signature).decode('utf-8')
+        provider_details = {'thought_signature': thought_signature}
+
+    if part.executable_code is not None:
+        code_execution_tool_call_id = _utils.generate_tool_call_id()
+        item = _map_executable_code(part.executable_code, provider_name, code_execution_tool_call_id)
+    elif part.code_execution_result is not None:
+        assert code_execution_tool_call_id is not None
+        item = _map_code_execution_result(part.code_execution_result, provider_name, code_execution_tool_call_id)
+    elif part.text is not None:
+        # Google sometimes sends empty text parts, we don't want to add them to the response
+        if len(part.text) == 0 and not provider_details:
+            return None, code_execution_tool_call_id
+        if part.thought:
+            item = ThinkingPart(content=part.text)
+        else:
+            item = TextPart(content=part.text)
+    elif part.function_call:
+        assert part.function_call.name is not None
+        item = ToolCallPart(tool_name=part.function_call.name, args=part.function_call.args)
+        if part.function_call.id is not None:
+            item.tool_call_id = part.function_call.id
+    elif part.tool_call:
+        item = _map_tool_call(part.tool_call, provider_name)
+    elif part.tool_response:
+        item = _map_tool_response(part.tool_response, provider_name)
+    elif inline_data := part.inline_data:
+        data = inline_data.data
+        mime_type = inline_data.mime_type
+        assert data and mime_type, 'Inline data must have data and mime type'
+        content = BinaryContent(data=data, media_type=mime_type)
+        item = FilePart(content=BinaryContent.narrow_type(content))
+    else:  # pragma: no cover
+        raise UnexpectedModelBehavior(f'Unsupported response from Gemini: {part!r}')
+
+    if provider_details:
+        item.provider_details = {**(item.provider_details or {}), **provider_details}
+        item.provider_name = provider_name
+
+    return item, code_execution_tool_call_id
+
+
+def _process_response_from_parts(
+    parts: list[Part],
+    grounding_metadata: GroundingMetadata | None,
+    model_name: GoogleModelName,
+    provider_name: str,
+    provider_url: str,
+    usage: usage.RequestUsage,
+    vendor_id: str | None,
+    vendor_details: dict[str, Any] | None = None,
+    finish_reason: FinishReason | None = None,
+    url_context_metadata: UrlContextMetadata | None = None,
+) -> ModelResponse:
+    items: list[ModelResponsePart] = []
+
+    if not _has_native_tool_invocations(parts):
+        web_search_call, web_search_return = _map_grounding_metadata(grounding_metadata, provider_name)
+        if web_search_call and web_search_return:
+            items.append(web_search_call)
+            items.append(web_search_return)
+
+        file_search_call, file_search_return = _map_file_search_grounding_metadata(grounding_metadata, provider_name)
+        if file_search_call and file_search_return:
+            items.append(file_search_call)
+            items.append(file_search_return)
+        web_fetch_call, web_fetch_return = _map_url_context_metadata(url_context_metadata, provider_name)
+        if web_fetch_call and web_fetch_return:
+            items.append(web_fetch_call)
+            items.append(web_fetch_return)
+
+    item: ModelResponsePart | None = None
+    code_execution_tool_call_id: str | None = None
+    for part in parts:
+        item, code_execution_tool_call_id = _process_part(part, code_execution_tool_call_id, provider_name)
+        if item is not None:
+            items.append(item)
+
+    return ModelResponse(
+        parts=items,
+        model_name=model_name,
+        usage=usage,
+        provider_response_id=vendor_id,
+        provider_details=vendor_details,
+        provider_name=provider_name,
+        provider_url=provider_url,
+        finish_reason=finish_reason,
+    )
+
+
+def _has_native_tool_invocations(parts: list[Part]) -> bool:
+    """Whether the response carries explicit `tool_call`/`tool_response` parts.
+
+    When the API returned these (because `include_server_side_tool_invocations` was set),
+    metadata-based reconstruction (`_map_grounding_metadata`, `_map_url_context_metadata`,
+    `_map_file_search_grounding_metadata`) must be skipped — otherwise we emit duplicate
+    `NativeToolCallPart`/`NativeToolReturnPart` pairs for the same tool invocation.
+    See https://ai.google.dev/api/caching#ToolConfig.
+    """
+    return any(p.tool_call or p.tool_response for p in parts)
+
+
+def _function_declaration_from_tool(tool: ToolDefinition) -> FunctionDeclarationDict:
+    json_schema = tool.parameters_json_schema
+    f = FunctionDeclarationDict(
+        name=tool.name,
+        description=tool.description or '',
+        parameters_json_schema=json_schema,
+    )
+    if tool.return_schema:
+        f['response_json_schema'] = tool.return_schema
+    return f
+
+
+def _metadata_as_usage(response: GenerateContentResponse, provider: str, provider_url: str) -> usage.RequestUsage:
+    metadata = response.usage_metadata
+    if metadata is None:
+        return usage.RequestUsage()
+    details: dict[str, int] = {}
+    if cached_content_token_count := metadata.cached_content_token_count:
+        details['cached_content_tokens'] = cached_content_token_count
+
+    if thoughts_token_count := (metadata.thoughts_token_count or 0):
+        details['thoughts_tokens'] = thoughts_token_count
+
+    if tool_use_prompt_token_count := metadata.tool_use_prompt_token_count:
+        details['tool_use_prompt_tokens'] = tool_use_prompt_token_count
+
+    for prefix, metadata_details in [
+        ('prompt', metadata.prompt_tokens_details),
+        ('cache', metadata.cache_tokens_details),
+        ('candidates', metadata.candidates_tokens_details),
+        ('tool_use_prompt', metadata.tool_use_prompt_tokens_details),
+    ]:
+        assert getattr(metadata, f'{prefix}_tokens_details') is metadata_details
+        if not metadata_details:
+            continue
+        for detail in metadata_details:
+            if not detail.modality or not detail.token_count:
+                continue
+            details[f'{detail.modality.lower()}_{prefix}_tokens'] = detail.token_count
+
+    return usage.RequestUsage.extract(
+        response.model_dump(include={'model_version', 'usage_metadata'}, by_alias=True),
+        provider=provider,
+        provider_url=provider_url,
+        provider_fallback='google',
+        details=details,
+    )
+
+
+def _map_executable_code(executable_code: ExecutableCode, provider_name: str, tool_call_id: str) -> NativeToolCallPart:
+    part = NativeToolCallPart(
+        provider_name=provider_name,
+        tool_name=CodeExecutionTool.kind,
+        args=executable_code.model_dump(mode='json', exclude_none=True),
+        tool_call_id=tool_call_id,
+    )
+    part.otel_metadata = {'code_arg_name': 'code', 'code_arg_language': 'python'}
+    return part
+
+
+def _map_code_execution_result(
+    code_execution_result: CodeExecutionResult, provider_name: str, tool_call_id: str
+) -> NativeToolReturnPart:
+    return NativeToolReturnPart(
+        provider_name=provider_name,
+        tool_name=CodeExecutionTool.kind,
+        content=code_execution_result.model_dump(mode='json', exclude_none=True),
+        tool_call_id=tool_call_id,
+    )
+
+
+def _resolve_native_tool_name(tool_type: ToolType | None) -> str:
+    if tool_type is None:  # pragma: no cover
+        raise UnexpectedModelBehavior('Missing tool_type on native tool part')
+    tool_name = _TOOL_TYPE_TO_NATIVE_TOOL_NAME.get(tool_type)
+    if tool_name is None:  # pragma: no cover
+        raise UnexpectedModelBehavior(f'Unknown tool type on native tool part: {tool_type!r}')
+    return tool_name
+
+
+def _map_tool_call(tool_call: ToolCall, provider_name: str) -> NativeToolCallPart:
+    return NativeToolCallPart(
+        provider_name=provider_name,
+        tool_name=_resolve_native_tool_name(tool_call.tool_type),
+        tool_call_id=tool_call.id or _utils.generate_tool_call_id(),
+        args=tool_call.args,
+    )
+
+
+def _map_tool_response(tool_response: ToolResponse, provider_name: str) -> NativeToolReturnPart:
+    return NativeToolReturnPart(
+        provider_name=provider_name,
+        tool_name=_resolve_native_tool_name(tool_response.tool_type),
+        tool_call_id=tool_response.id or _utils.generate_tool_call_id(),
+        content=tool_response.response,
+    )
+
+
+def _map_grounding_metadata(
+    grounding_metadata: GroundingMetadata | None, provider_name: str
+) -> tuple[NativeToolCallPart, NativeToolReturnPart] | tuple[None, None]:
+    if grounding_metadata and (web_search_queries := grounding_metadata.web_search_queries):
+        tool_call_id = _utils.generate_tool_call_id()
+        return (
+            NativeToolCallPart(
+                provider_name=provider_name,
+                tool_name=WebSearchTool.kind,
+                tool_call_id=tool_call_id,
+                args={'queries': web_search_queries},
+            ),
+            NativeToolReturnPart(
+                provider_name=provider_name,
+                tool_name=WebSearchTool.kind,
+                tool_call_id=tool_call_id,
+                content=[chunk.web.model_dump(mode='json') for chunk in grounding_chunks if chunk.web]
+                if (grounding_chunks := grounding_metadata.grounding_chunks)
+                else None,
+            ),
+        )
+    else:
+        return None, None
+
+
+def _extract_file_search_retrieved_contexts(
+    grounding_chunks: list[Any] | None,
+) -> list[dict[str, Any]]:
+    """Extract retrieved contexts from grounding chunks for file search.
+
+    Returns an empty list if no retrieved contexts are found.
+    """
+    if not grounding_chunks:  # pragma: no cover
+        return []
+    retrieved_contexts: list[dict[str, Any]] = []
+    for chunk in grounding_chunks:
+        if not chunk.retrieved_context:
+            continue
+        context_dict: dict[str, Any] = chunk.retrieved_context.model_dump(
+            mode='json', exclude_none=True, by_alias=False
+        )
+        # The SDK type may not define file_search_store yet, but model_dump includes it.
+        # Check both snake_case and camelCase since the field name varies.
+        file_search_store = context_dict.get('file_search_store')
+        if file_search_store is None:  # pragma: lax no cover
+            context_dict_with_aliases: dict[str, Any] = chunk.retrieved_context.model_dump(
+                mode='json', exclude_none=True, by_alias=True
+            )
+            file_search_store = context_dict_with_aliases.get('fileSearchStore')
+        if file_search_store is not None:  # pragma: lax no cover
+            context_dict['file_search_store'] = file_search_store
+        retrieved_contexts.append(context_dict)
+    return retrieved_contexts
+
+
+def _map_file_search_grounding_metadata(
+    grounding_metadata: GroundingMetadata | None, provider_name: str
+) -> tuple[NativeToolCallPart, NativeToolReturnPart] | tuple[None, None]:
+    if not grounding_metadata or not (grounding_chunks := grounding_metadata.grounding_chunks):
+        return None, None
+
+    retrieved_contexts = _extract_file_search_retrieved_contexts(grounding_chunks)
+
+    if not retrieved_contexts:
+        return None, None
+
+    tool_call_id = _utils.generate_tool_call_id()
+    return (
+        NativeToolCallPart(
+            provider_name=provider_name,
+            tool_name=FileSearchTool.kind,
+            tool_call_id=tool_call_id,
+            args={},
+        ),
+        NativeToolReturnPart(
+            provider_name=provider_name,
+            tool_name=FileSearchTool.kind,
+            tool_call_id=tool_call_id,
+            content=retrieved_contexts,
+        ),
+    )
+
+
+def _map_url_context_metadata(
+    url_context_metadata: UrlContextMetadata | None, provider_name: str
+) -> tuple[NativeToolCallPart, NativeToolReturnPart] | tuple[None, None]:
+    if url_context_metadata and (url_metadata := url_context_metadata.url_metadata):
+        tool_call_id = _utils.generate_tool_call_id()
+        # Extract URLs from the metadata
+        urls = [meta.retrieved_url for meta in url_metadata if meta.retrieved_url]
+        return (
+            NativeToolCallPart(
+                provider_name=provider_name,
+                tool_name=WebFetchTool.kind,
+                tool_call_id=tool_call_id,
+                args={'urls': urls} if urls else None,
+            ),
+            NativeToolReturnPart(
+                provider_name=provider_name,
+                tool_name=WebFetchTool.kind,
+                tool_call_id=tool_call_id,
+                content=[meta.model_dump(mode='json') for meta in url_metadata],
+            ),
+        )
+    else:
+        return None, None
