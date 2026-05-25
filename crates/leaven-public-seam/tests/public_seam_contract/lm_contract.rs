@@ -1,4 +1,4 @@
-use crate::support::workspace_root;
+use crate::support::package;
 use std::sync::{Arc, Mutex};
 
 use futures::executor::block_on;
@@ -9,14 +9,13 @@ use leaven_lm::{
 };
 use leaven_public_seam::{
     PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
-    PlanLmCompleteOutcome, PlanLmCompleteRequest, PublicSeamError, PublicSeamPackage,
-    SchemaFingerprint,
+    PlanLmCompleteOutcome, PlanLmCompleteRequest, PublicSeamError, SchemaFingerprint,
 };
 use serde_json::{Value, json};
 
 #[test]
 fn lm_complete_can_execute_through_provider_neutral_lm_trait_and_preserve_cost() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let lm = Arc::new(ScriptedLm::new(scripted_response(Message::assistant(
         "trait ok",
     ))));
@@ -85,7 +84,7 @@ fn lm_complete_can_execute_through_provider_neutral_lm_trait_and_preserve_cost()
 
 #[test]
 fn lm_complete_trait_mapping_preserves_forbidden_result_tool_metadata_for_validation() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let message = Message::assistant("trait ok").with_tool_call_id("call_lookup_1");
     let lm = Arc::new(ScriptedLm::new(scripted_response(message)));
     let mut host = LmTraitHost::new(lm);
@@ -104,7 +103,7 @@ fn lm_complete_trait_mapping_preserves_forbidden_result_tool_metadata_for_valida
 
 #[test]
 fn lm_complete_json_schema_executes_through_provider_neutral_lm_trait() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let lm = Arc::new(ScriptedLm::new(scripted_response(Message::assistant(
         "{\"answer\":\"ok\"}",
     ))));
@@ -126,7 +125,7 @@ fn lm_complete_json_schema_executes_through_provider_neutral_lm_trait() {
 
 #[test]
 fn lm_complete_json_schema_rejects_invalid_parsed_provider_payload() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let lm = Arc::new(ScriptedLm::new(scripted_response(Message::assistant(
         "{\"answer\":42}",
     ))));
@@ -147,7 +146,7 @@ fn lm_complete_json_schema_rejects_invalid_parsed_provider_payload() {
 
 #[test]
 fn lm_complete_json_schema_rejects_non_json_provider_text_in_public_seam_adapter() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let lm = Arc::new(ScriptedLm::new(scripted_response(Message::assistant(
         "not json",
     ))));
@@ -168,7 +167,7 @@ fn lm_complete_json_schema_rejects_non_json_provider_text_in_public_seam_adapter
 
 #[test]
 fn lm_complete_provider_trait_error_is_not_success_receipted_by_host_json() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let lm = Arc::new(FailingLm::new(LmError::provider(
         "scripted",
         Some(503),
@@ -191,7 +190,7 @@ fn lm_complete_provider_trait_error_is_not_success_receipted_by_host_json() {
 
 #[test]
 fn lm_complete_rejects_tool_result_message_id_drift_before_provider_call() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let lm = Arc::new(ScriptedLm::new(scripted_response(Message::assistant(
         "trait ok",
     ))));
@@ -214,7 +213,7 @@ fn lm_complete_rejects_tool_result_message_id_drift_before_provider_call() {
 
 #[test]
 fn lm_complete_rejects_typed_provider_hint_shape_drift_before_provider_call() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     for (field, replacement, expected) in [
         (
             "prompt_cache_key",

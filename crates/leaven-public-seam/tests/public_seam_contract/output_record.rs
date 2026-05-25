@@ -1,14 +1,14 @@
-use crate::support::workspace_root;
+use crate::support::package;
 use leaven_evidence::{
     DataClass, DataClassSet, OutputBlobAudit, OutputMetadata, OutputRecord, OutputVisibility,
 };
 use leaven_kernel::BlobRef;
-use leaven_public_seam::{PublicBlobRef, PublicSeamError, PublicSeamPackage};
+use leaven_public_seam::{PublicBlobRef, PublicSeamError};
 use serde_json::json;
 
 #[test]
 fn output_record_lowers_inline_visibility_and_data_classes_to_active_schema() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let output = OutputRecord::inline("answer 42").with_metadata(OutputMetadata::new(
         OutputVisibility::ReflectorVisible,
         DataClassSet::new([DataClass::candidate_output(), DataClass::public()]),
@@ -32,7 +32,7 @@ fn output_record_lowers_inline_visibility_and_data_classes_to_active_schema() {
 
 #[test]
 fn output_record_rejects_placeholder_or_under_described_blob_outputs() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let placeholder = OutputRecord::inline(" \n\t");
     assert!(matches!(
@@ -76,7 +76,7 @@ fn output_record_rejects_placeholder_or_under_described_blob_outputs() {
 
 #[test]
 fn output_record_projects_audited_blob_without_external_metadata() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let blob = OutputRecord::audited_blob(
         BlobRef {
             store: "file".to_owned(),
@@ -120,7 +120,7 @@ fn output_record_projects_audited_blob_without_external_metadata() {
 
 #[test]
 fn output_record_value_validation_rejects_schema_only_shortcuts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     assert!(matches!(
         package

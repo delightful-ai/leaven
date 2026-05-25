@@ -1,11 +1,11 @@
-use crate::support::workspace_root;
+use crate::support::package;
 use std::{collections::BTreeMap, path::Path};
 
 use futures::future::BoxFuture;
 use leaven_public_seam::{
     CapabilityDocument, PlanExecutionHost, PlanLmCompleteOutcome, PlanLmCompleteRequest,
     PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome,
-    PlanWorkspaceQueryRequest, PublicSeamError, PublicSeamPackage,
+    PlanWorkspaceQueryRequest, PublicSeamError,
 };
 use leaven_workspace::{
     Command, CommandOutput, Workspace, WorkspaceBackend, WorkspaceError, WorkspacePath,
@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 
 #[test]
 fn workspace_query_executes_finite_reads_through_workspace_view() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut host = WorkspaceQueryHost::new();
 
     let report = package
@@ -71,7 +71,7 @@ fn workspace_query_executes_finite_reads_through_workspace_view() {
 
 #[test]
 fn workspace_query_view_helper_rejects_unbounded_controls() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     for (name, op, expected) in [
         (
@@ -119,7 +119,7 @@ fn workspace_query_view_helper_rejects_unbounded_controls() {
 
 #[test]
 fn workspace_query_view_helper_rejects_git_queries_as_host_owned() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     for (name, op, expected) in [
         (
             "log",

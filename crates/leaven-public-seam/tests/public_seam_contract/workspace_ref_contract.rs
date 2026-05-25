@@ -1,10 +1,10 @@
-use crate::support::workspace_root;
+use crate::support::package;
 use leaven_public_seam::{
     CapabilityDocument, PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext,
     PlanExecutionHost, PlanLmCompleteOutcome, PlanLmCompleteRequest,
     PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome,
     PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
-    PublicSeamError, PublicSeamPackage,
+    PublicSeamError,
 };
 use serde_json::{Value, json};
 
@@ -16,7 +16,7 @@ const SNAPSHOT_2: &str = "fp_snapshot_sha256_objectrefcontractsecond";
 
 #[test]
 fn workspace_lifecycle_preserves_and_enforces_object_refs() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut host = WorkspaceRefHost::default();
 
     let report = package
@@ -44,7 +44,7 @@ fn workspace_lifecycle_preserves_and_enforces_object_refs() {
 
 #[test]
 fn workspace_lifecycle_rejects_object_ref_run_substitution_before_release_host_work() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut host = WorkspaceRefHost::default();
 
     let error = package
@@ -66,7 +66,7 @@ fn workspace_lifecycle_rejects_object_ref_run_substitution_before_release_host_w
 
 #[test]
 fn workspace_lifecycle_does_not_collapse_same_id_distinct_object_refs() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut host = WorkspaceRefHost::default();
 
     let report = package
@@ -98,7 +98,7 @@ fn workspace_lifecycle_does_not_collapse_same_id_distinct_object_refs() {
 
 #[test]
 fn workspace_lifecycle_rejects_bare_id_release_of_object_ref_handle() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut host = WorkspaceRefHost::default();
 
     let error = package
@@ -120,7 +120,7 @@ fn workspace_lifecycle_rejects_bare_id_release_of_object_ref_handle() {
 
 #[test]
 fn workspace_query_preserves_object_ref_receipt_preimage() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut host = WorkspaceRefHost::default();
 
     let report = package

@@ -1,11 +1,11 @@
+use crate::support::package;
 use crate::support::prefixed_jcs_hash;
-use crate::support::workspace_root;
-use leaven_public_seam::{PublicSeamError, PublicSeamPackage, Replayability};
+use leaven_public_seam::{PublicSeamError, Replayability};
 use serde_json::{Value, json};
 
 #[test]
 fn per_assessment_replayability_rolls_up_from_each_assessment() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let result = package
         .validate_plan_result_document(&mixed_replayability_result(
             "has_declared_external_effects",
@@ -34,7 +34,7 @@ fn per_assessment_replayability_rolls_up_from_each_assessment() {
 
 #[test]
 fn replayability_summary_cannot_hide_non_replayable_assessment() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     assert!(matches!(
         package
@@ -65,7 +65,7 @@ fn replayability_summary_cannot_hide_non_replayable_assessment() {
 
 #[test]
 fn assessment_write_receipts_reject_missing_per_assessment_result_facts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut result = mixed_replayability_result(
         "pure_read",
         [
@@ -83,7 +83,7 @@ fn assessment_write_receipts_reject_missing_per_assessment_result_facts() {
 
 #[test]
 fn assessment_write_receipts_reject_mismatched_assessment_batch_request_scope() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut result = mixed_replayability_result("pure_read", [("assess_replay_1", "pure_read")]);
     result["receipts"][0]["evaluation_request_id"] = json!("evalreq_other");
 
@@ -95,7 +95,7 @@ fn assessment_write_receipts_reject_mismatched_assessment_batch_request_scope() 
 
 #[test]
 fn replayability_summary_cannot_ignore_other_result_values() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut result = mixed_replayability_result("pure_read", [("assess_replay_1", "pure_read")]);
     result["values"]["external_value"] = json!({
         "kind": "graph_set",

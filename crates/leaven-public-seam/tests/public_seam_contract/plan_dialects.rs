@@ -1,10 +1,10 @@
-use crate::support::workspace_root;
-use leaven_public_seam::{PublicSeamError, PublicSeamPackage};
+use crate::support::package;
+use leaven_public_seam::PublicSeamError;
 use serde_json::{Value, json};
 
 #[test]
 fn pinned_dialects_replay_pointer_jsonpath_and_template_deterministically() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let document = package
         .validate_plan_document(&pinned_dialect_plan())
         .unwrap();
@@ -51,7 +51,7 @@ fn pinned_dialects_replay_pointer_jsonpath_and_template_deterministically() {
 
 #[test]
 fn pinned_dialects_reject_unpinned_or_executable_syntax() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let dialects = package.pinned_dialects();
     let document = json!({
         "case": {
@@ -143,7 +143,7 @@ fn pinned_dialects_reject_unpinned_or_executable_syntax() {
 
 #[test]
 fn pinned_dialects_do_not_inspect_arbitrary_json_data_slots() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     package
         .validate_plan_document(&extension_payload_with_prose_field_plan())
         .unwrap();

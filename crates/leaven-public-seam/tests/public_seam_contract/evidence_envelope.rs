@@ -1,10 +1,10 @@
-use crate::support::workspace_root;
-use leaven_public_seam::{PublicSeamError, PublicSeamPackage};
+use crate::support::package;
+use leaven_public_seam::PublicSeamError;
 use serde_json::{Value, json};
 
 #[test]
 fn evidence_envelope_preserves_visibility_data_classes_and_receipts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let envelope = package
         .validate_evidence_envelope_document(&target_derived_envelope())
         .unwrap();
@@ -36,7 +36,7 @@ fn evidence_envelope_preserves_visibility_data_classes_and_receipts() {
 
 #[test]
 fn evidence_envelope_accepts_object_receipt_refs_and_binds_trace_receipts_to_sources() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut envelope = target_derived_envelope();
     envelope["source_receipts"]["read"] = json!([receipt_ref("qrec_target")]);
     envelope["source_receipts"]["effect"] = json!([receipt_ref("lmrec_score")]);
@@ -56,7 +56,7 @@ fn evidence_envelope_accepts_object_receipt_refs_and_binds_trace_receipts_to_sou
 
 #[test]
 fn evidence_envelope_accepts_schema_valid_trace_refs_without_receipts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut envelope = target_derived_envelope();
     envelope["public"]["trace_refs"][0]
         .as_object_mut()
@@ -80,7 +80,7 @@ fn evidence_envelope_accepts_schema_valid_trace_refs_without_receipts() {
 
 #[test]
 fn evidence_envelope_covers_non_target_projection_classes_when_declared() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let envelope = package
         .validate_evidence_envelope_document(&non_target_envelope())
         .unwrap();
@@ -119,7 +119,7 @@ fn evidence_envelope_covers_non_target_projection_classes_when_declared() {
 
 #[test]
 fn evidence_envelope_rejects_declared_non_target_data_class_gaps() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut missing_public = non_target_envelope();
     missing_public["data_classes"] = json!(["scorer.private", "transcript.raw"]);
@@ -160,7 +160,7 @@ fn evidence_envelope_rejects_declared_non_target_data_class_gaps() {
 
 #[test]
 fn evidence_envelope_rejects_source_receipt_family_mismatches() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     for (field, value, expected) in [
         (
@@ -205,7 +205,7 @@ fn evidence_envelope_rejects_source_receipt_family_mismatches() {
 
 #[test]
 fn evidence_envelope_rejects_target_derived_data_class_gaps() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut missing_top_level = target_derived_envelope();
     missing_top_level
@@ -292,7 +292,7 @@ fn evidence_envelope_rejects_target_derived_data_class_gaps() {
 
 #[test]
 fn evidence_envelope_rejects_unreceipted_target_derived_evidence() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut missing_target_read = target_derived_envelope();
     missing_target_read["source_receipts"]["read"] = json!([]);
@@ -326,7 +326,7 @@ fn evidence_envelope_rejects_unreceipted_target_derived_evidence() {
 
 #[test]
 fn evidence_envelope_rejects_hidden_target_derivation_flag() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut top_level_target_class = target_derived_envelope();
     top_level_target_class["target_derived"] = json!(false);

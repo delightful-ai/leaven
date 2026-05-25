@@ -1,11 +1,11 @@
+use crate::support::package;
 use crate::support::prefixed_jcs_hash;
-use crate::support::workspace_root;
-use leaven_public_seam::{PublicSeamError, PublicSeamPackage};
+use leaven_public_seam::PublicSeamError;
 use serde_json::{Value, json};
 
 #[test]
 fn plan_result_preserves_nested_evidence_visibility_data_classes_and_receipts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let result = package
         .validate_plan_result_document(&evidence_backed_result())
@@ -29,7 +29,7 @@ fn plan_result_preserves_nested_evidence_visibility_data_classes_and_receipts() 
 
 #[test]
 fn plan_result_accepts_object_form_evidence_receipt_refs() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut result = evidence_backed_result();
     let read_ref = receipt_ref_for_result(&result, "qrec_target");
     let effect_ref = receipt_ref_for_result(&result, "lmrec_score");
@@ -49,7 +49,7 @@ fn plan_result_accepts_object_form_evidence_receipt_refs() {
 
 #[test]
 fn plan_result_accepts_unreceipted_evidence_trace_refs() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut result = evidence_backed_result();
     let evidence = &mut result["values"]["assessment_rows"]["items"][0]["evidence"];
     evidence["public"]["trace_refs"][0]
@@ -69,7 +69,7 @@ fn plan_result_accepts_unreceipted_evidence_trace_refs() {
 
 #[test]
 fn plan_result_preserves_evidence_source_receipt_trace_visibility() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut result = evidence_backed_result();
     result["receipts"][0]["trace_refs"] =
         json!([receipt_trace_ref("trace_read_target", "case.target")]);
@@ -86,7 +86,7 @@ fn plan_result_preserves_evidence_source_receipt_trace_visibility() {
 
 #[test]
 fn plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut missing_read_receipt = evidence_backed_result();
     missing_read_receipt["values"]["assessment_rows"]["items"][0]["evidence"]["source_receipts"]
@@ -169,7 +169,7 @@ fn plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind()
 
 #[test]
 fn plan_result_rejects_evidence_receipt_trace_visibility_conflicts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut hidden_receipt_class = evidence_backed_result();
     hidden_receipt_class["receipts"][1]["trace_refs"] = json!([receipt_trace_ref(
@@ -221,7 +221,7 @@ fn plan_result_rejects_evidence_receipt_trace_visibility_conflicts() {
 
 #[test]
 fn plan_result_rejects_nested_score_output_data_class_gaps() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut missing_candidate_output = evidence_backed_result();
     missing_candidate_output["values"]["assessment_rows"]["data_classes"] = json!([
@@ -243,7 +243,7 @@ fn plan_result_rejects_nested_score_output_data_class_gaps() {
 
 #[test]
 fn plan_result_rejects_nested_score_blob_ref_data_class_gaps() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut missing_blob_class = evidence_backed_result();
     missing_blob_class["values"]["assessment_rows"]["data_classes"] = json!([
@@ -265,7 +265,7 @@ fn plan_result_rejects_nested_score_blob_ref_data_class_gaps() {
 
 #[test]
 fn plan_result_rejects_nested_trace_ref_data_class_gaps() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut missing_score_trace_class = evidence_backed_result();
     missing_score_trace_class["values"]["assessment_rows"]["data_classes"] = json!([
@@ -321,7 +321,7 @@ fn plan_result_rejects_nested_trace_ref_data_class_gaps() {
 
 #[test]
 fn plan_result_rejects_nested_evidence_hidden_target_derivation_flag() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut hidden_target = evidence_backed_result();
     hidden_target["values"]["assessment_rows"]["items"][0]["evidence"]["target_derived"] =
@@ -337,7 +337,7 @@ fn plan_result_rejects_nested_evidence_hidden_target_derivation_flag() {
 
 #[test]
 fn plan_result_rejects_submit_assessment_result_hashes_that_do_not_bind_values() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut wrong_submit_assessments_request_hash = evidence_backed_result();
     wrong_submit_assessments_request_hash["receipts"][2]["request_hash"] =

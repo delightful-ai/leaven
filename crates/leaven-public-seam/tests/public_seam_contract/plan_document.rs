@@ -1,4 +1,4 @@
-use crate::support::workspace_root;
+use crate::support::package;
 use std::collections::{BTreeMap, BTreeSet};
 
 use leaven_lm::{MessageContentPart, OutputMode, Role};
@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 
 #[test]
 fn plan_ir_family_accepts_typed_let_call_write_documents() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let plan = typed_let_call_write_plan();
     let document = package.validate_plan_document(&plan).unwrap();
 
@@ -35,7 +35,7 @@ fn plan_ir_family_accepts_typed_let_call_write_documents() {
 
 #[test]
 fn plan_ir_family_rejects_unknown_core_call_write_and_escape_hatch_ops() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut unknown_core = typed_let_call_write_plan();
     unknown_core["ops"][0]["kind"] = json!("compute");
@@ -74,7 +74,7 @@ fn plan_ir_family_rejects_unknown_core_call_write_and_escape_hatch_ops() {
 
 #[test]
 fn plan_ir_family_lowers_and_executes_let_call_write_through_public_seam_owner() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut plan = typed_let_call_write_plan();
     plan["mode"] = json!({"kind": "execute"});
     plan["commit"] = json!({
@@ -126,7 +126,7 @@ fn plan_ir_family_lowers_and_executes_let_call_write_through_public_seam_owner()
 
 #[test]
 fn plan_execution_with_capability_checks_call_authority_before_host_effects() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut plan = typed_let_call_write_plan();
     plan["mode"] = json!({"kind": "execute"});
     plan["commit"] = json!({
@@ -183,7 +183,7 @@ fn plan_execution_with_capability_checks_call_authority_before_host_effects() {
 
 #[test]
 fn plan_execution_with_capability_allows_workspace_lifecycle_calls() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let plan = workspace_materialize_release_plan();
 
     let mut host = RecordingPlanHost::default();
@@ -218,7 +218,7 @@ fn plan_execution_with_capability_allows_workspace_lifecycle_calls() {
 
 #[test]
 fn plan_execution_with_capability_denies_ungranted_workspace_queries_before_host_effects() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let plan = workspace_materialize_query_plan();
 
     let mut host = RecordingPlanHost::default();
@@ -309,7 +309,7 @@ fn plan_execution_with_capability_denies_ungranted_workspace_queries_before_host
 
 #[test]
 fn workspace_query_denies_no_capability_execution_route() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut host = RecordingPlanHost::default();
 
     let error = package
@@ -331,7 +331,7 @@ fn workspace_query_denies_no_capability_execution_route() {
 
 #[test]
 fn plan_execution_with_capability_denies_sandbox_policy_before_host_effects() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut capability = sandbox_exec_capability_value();
     capability["execution_policy"]["subprocess"] = json!("deny");
     let capability = CapabilityDocument::from_value(capability).unwrap();
@@ -383,7 +383,7 @@ fn plan_execution_with_capability_denies_sandbox_policy_before_host_effects() {
 
 #[test]
 fn plan_execution_with_capability_gates_evaluator_writes_before_host_effects() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut assessment_host = RecordingPlanHost::default();
     let assessment_report = package
@@ -477,7 +477,7 @@ fn plan_execution_with_capability_gates_evaluator_writes_before_host_effects() {
 
 #[test]
 fn plan_execution_result_rejects_receipt_hashes_unbound_from_plan_preimages() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let context = plan_execution_context();
 
     let mut query_host = RecordingPlanHost::default();
@@ -542,7 +542,7 @@ fn plan_execution_result_rejects_receipt_hashes_unbound_from_plan_preimages() {
 
 #[test]
 fn plan_execution_result_rejects_workspace_query_value_forgery_with_valid_hashes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let context = plan_execution_context();
     let plan = workspace_materialize_query_plan();
     let mut result = package
@@ -668,7 +668,7 @@ fn workspace_query_result_fixture(
 
 #[test]
 fn plan_execution_result_rejects_literal_workspace_handle_provenance_forgery() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let context = plan_execution_context();
     let plan = forged_workspace_handle_query_plan();
     let value = json!({
@@ -742,7 +742,7 @@ fn plan_execution_result_rejects_literal_workspace_handle_provenance_forgery() {
 
 #[test]
 fn plan_execution_result_rejects_workspace_lifecycle_state_forgery_with_valid_hashes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let context = plan_execution_context();
     let plan = workspace_materialize_release_plan();
     let result = package
@@ -785,7 +785,7 @@ fn plan_execution_result_rejects_workspace_lifecycle_state_forgery_with_valid_ha
 
 #[test]
 fn plan_execution_result_rejects_missing_operation_receipts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let context = plan_execution_context();
 
     let mut plan = typed_let_call_write_plan();
@@ -843,7 +843,7 @@ fn plan_execution_result_rejects_missing_operation_receipts() {
 
 #[test]
 fn evaluator_target_reads_execute_case_query_load_with_query_receipts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let plan = evaluator_target_case_query_plan();
     let context = evaluator_plan_execution_context();
     let mut host = RecordingPlanHost::default();
@@ -887,7 +887,7 @@ fn evaluator_target_reads_execute_case_query_load_with_query_receipts() {
 
 #[test]
 fn capability_execution_denies_calls_that_drop_dependency_data_classes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut plan = evaluator_target_case_query_plan();
     plan["ops"].as_array_mut().unwrap().push(json!({
         "kind": "call",
@@ -962,7 +962,7 @@ fn capability_execution_denies_calls_that_drop_dependency_data_classes() {
 
 #[test]
 fn capability_execution_denies_calls_that_drop_nested_agent_command_data_classes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut plan = typed_let_call_write_plan();
     plan["mode"] = json!({"kind": "execute"});
     plan["ops"][0]["expr"]["value"] = literal_agent_session_with_command_output_classes();
@@ -1002,7 +1002,7 @@ fn capability_execution_denies_calls_that_drop_nested_agent_command_data_classes
 
 #[test]
 fn capability_execution_denies_calls_that_drop_nested_graph_row_data_classes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut plan = typed_let_call_write_plan();
     plan["mode"] = json!({"kind": "execute"});
     plan["ops"][0]["expr"]["value"] = literal_assessment_graph_set();
@@ -1030,7 +1030,7 @@ fn capability_execution_denies_calls_that_drop_nested_graph_row_data_classes() {
 
 #[test]
 fn capability_execution_denies_calls_that_drop_literal_expr_data_classes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut plan = typed_let_call_write_plan();
     plan["mode"] = json!({"kind": "execute"});
     plan["ops"][0]["expr"]["data_classes"] = json!(["external.secret"]);
@@ -1072,7 +1072,7 @@ fn capability_execution_denies_calls_that_drop_literal_expr_data_classes() {
 
 #[test]
 fn capability_execution_denies_calls_that_drop_workspace_listing_entry_data_classes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut plan = typed_let_call_write_plan();
     plan["mode"] = json!({"kind": "execute"});
     plan["ops"][0]["expr"]["value"] = literal_workspace_listing_with_entry_classes();
@@ -1100,7 +1100,7 @@ fn capability_execution_denies_calls_that_drop_workspace_listing_entry_data_clas
 
 #[test]
 fn write_receipts_bind_literal_dependency_data_classes_without_rewriting_values() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut plan = emit_event_from_literal_dependency_plan();
     plan["ops"][0]["expr"]["data_classes"] = json!(["external.secret"]);
     let context = plan_execution_context();
@@ -1137,7 +1137,7 @@ fn write_receipts_bind_literal_dependency_data_classes_without_rewriting_values(
 
 #[test]
 fn capability_execution_ignores_domain_json_data_classes_inside_dependencies() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut plan = typed_let_call_write_plan();
     plan["mode"] = json!({"kind": "execute"});
     plan["ops"][0]["expr"]["value"] = json!({
@@ -1188,7 +1188,7 @@ fn capability_execution_ignores_domain_json_data_classes_inside_dependencies() {
 
 #[test]
 fn evaluator_target_reads_reject_missing_or_unbound_case_query_receipts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let plan = evaluator_target_case_query_plan();
     let context = evaluator_plan_execution_context();
     let result = package
@@ -1219,7 +1219,7 @@ fn evaluator_target_reads_reject_missing_or_unbound_case_query_receipts() {
 
 #[test]
 fn evaluator_target_reads_reject_unrequested_target_material() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut plan = evaluator_target_case_query_plan();
     plan["ops"][0]["expr"]["query"]["include"] = json!(["input"]);
 
@@ -1238,7 +1238,7 @@ fn evaluator_target_reads_reject_unrequested_target_material() {
 
 #[test]
 fn evaluator_target_reads_reject_missing_evaluator_capability_before_host_read() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let plan = evaluator_target_case_query_plan();
 
     let mut bare_host = RecordingPlanHost::default();
@@ -1402,7 +1402,7 @@ fn rebind_failed_call_result_hash(result: &mut Value, receipt_index: usize, name
 
 #[test]
 fn plan_ir_family_execution_rejects_dry_run_or_no_graph_write_fake_execution() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut host = RecordingPlanHost::default();
 
     let dry_run = typed_let_call_write_plan();
@@ -1436,7 +1436,7 @@ fn plan_ir_family_execution_rejects_dry_run_or_no_graph_write_fake_execution() {
 
 #[test]
 fn plan_execution_modes_require_cached_uses_cache_and_refuses_live_misses() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut miss = RecordingPlanHost::default();
     let plan = require_cached_call_plan();
 
@@ -1468,7 +1468,7 @@ fn plan_execution_modes_require_cached_uses_cache_and_refuses_live_misses() {
 
 #[test]
 fn plan_execution_modes_require_cached_rejects_agent_and_sandbox_live_work() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     for call in [agent_run_call(), sandbox_exec_call()] {
         let plan = require_cached_external_call_plan(call);
@@ -1487,7 +1487,7 @@ fn plan_execution_modes_require_cached_rejects_agent_and_sandbox_live_work() {
 
 #[test]
 fn agent_run_and_sandbox_exec_lower_to_owned_runtime_primitives_and_emit_receipts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut agent_host = RecordingPlanHost::default();
     let agent_plan = agent_run_workspace_plan(&agent_run_call());
@@ -1538,7 +1538,7 @@ fn agent_run_and_sandbox_exec_lower_to_owned_runtime_primitives_and_emit_receipt
 
 #[test]
 fn agent_run_lowering_defaults_missing_tool_policy_to_no_shell() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut call = agent_run_call();
     call.as_object_mut().unwrap().remove("tool_policy");
     let mut host = RecordingPlanHost::default();
@@ -1557,7 +1557,7 @@ fn agent_run_lowering_defaults_missing_tool_policy_to_no_shell() {
 
 #[test]
 fn agent_run_result_rejects_commands_outside_declared_allowed_commands() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut call = agent_run_call();
     call["tool_policy"]["allowed_commands"] = json!(["python"]);
     let mut host = RecordingPlanHost::default();
@@ -1582,7 +1582,7 @@ fn agent_run_result_rejects_commands_outside_declared_allowed_commands() {
 
 #[test]
 fn call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let context = plan_execution_context();
     let plan = execute_call_only_plan();
     let mut result = package
@@ -1617,7 +1617,7 @@ fn call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes()
 
 #[test]
 fn agent_run_rejects_unmaterialized_released_and_host_path_workspaces() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut unmaterialized = agent_run_workspace_plan(&agent_run_call());
     unmaterialized["ops"][1]["call"]["workspace"] = json!("ws_unmaterialized");
@@ -1679,7 +1679,7 @@ fn agent_run_rejects_unmaterialized_released_and_host_path_workspaces() {
 
 #[test]
 fn sandbox_exec_rejects_unmaterialized_released_and_host_path_workspaces() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut unmaterialized = sandbox_exec_workspace_plan();
     unmaterialized["ops"][1]["call"]["workspace"] = json!("ws_unmaterialized");
@@ -1741,7 +1741,7 @@ fn sandbox_exec_rejects_unmaterialized_released_and_host_path_workspaces() {
 
 #[test]
 fn sandbox_exec_blob_refs_only_requires_stream_blob_refs() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut plan = sandbox_exec_workspace_plan();
     plan["ops"][1]["call"]["stream_policy"] = json!("blob_refs_only");
 
@@ -1804,7 +1804,7 @@ fn assert_sandbox_stream_result_rejects_forgery(
 
 #[test]
 fn sandbox_exec_outcome_propagates_stream_and_file_blob_data_classes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut host = RecordingPlanHost {
         sandbox_stream: SandboxStreamFixture::NonPublicBlobDataClasses,
         ..RecordingPlanHost::default()
@@ -1839,7 +1839,7 @@ fn sandbox_exec_outcome_propagates_stream_and_file_blob_data_classes() {
 
 #[test]
 fn workspace_materialize_and_release_emit_typed_handles_and_receipts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let plan = workspace_materialize_release_plan();
     let mut host = RecordingPlanHost::default();
 
@@ -1881,7 +1881,7 @@ fn workspace_materialize_and_release_emit_typed_handles_and_receipts() {
 
 #[test]
 fn workspace_materialize_rejects_host_path_and_lifetime_substitution() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut host_path = workspace_materialize_only_plan();
     host_path["ops"][0]["name"] = json!("workspace_path");
@@ -1917,7 +1917,7 @@ fn workspace_materialize_rejects_host_path_and_lifetime_substitution() {
 
 #[test]
 fn workspace_handle_provenance_rejects_literal_forgery_and_released_reuse() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     for (name, plan, expected_error) in [
         (
@@ -2016,7 +2016,7 @@ fn workspace_handle_provenance_rejects_literal_forgery_and_released_reuse() {
 
 #[test]
 fn workspace_release_rejects_unmaterialized_handles_and_host_path_substitutes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut unmaterialized = workspace_materialize_release_plan();
     unmaterialized["ops"][1]["call"]["workspace"] = json!("ws_unmaterialized");
     let mut host = RecordingPlanHost::default();
@@ -2108,7 +2108,7 @@ fn workspace_release_rejects_unmaterialized_handles_and_host_path_substitutes() 
 
 #[test]
 fn workspace_query_reads_require_live_handles_and_emit_query_receipts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut host = RecordingPlanHost::default();
 
     let report =
@@ -2185,7 +2185,7 @@ fn workspace_query_reads_require_live_handles_and_emit_query_receipts() {
 
 #[test]
 fn workspace_query_rejects_unmaterialized_released_and_mismatched_results() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut unmaterialized = workspace_materialize_query_plan();
     unmaterialized["ops"][1]["expr"]["workspace"] = json!("ws_unmaterialized");
@@ -2292,7 +2292,7 @@ fn workspace_query_rejects_unmaterialized_released_and_mismatched_results() {
 
 #[test]
 fn workspace_query_rejects_file_listing_stat_and_digest_result_mismatches() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     assert_file_listing_stat_workspace_query_mismatches(&package);
     assert_digest_workspace_query_mismatches(&package);
 }
@@ -2424,7 +2424,7 @@ fn assert_digest_workspace_query_mismatches(package: &PublicSeamPackage) {
 
 #[test]
 fn workspace_query_rejects_snapshot_git_and_artifact_result_mismatches() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     for (name, op, expected) in [
         (
             "snapshot_wrong_workspace",
@@ -2570,7 +2570,7 @@ fn assert_workspace_query_mismatch(
 
 #[test]
 fn agent_run_lowering_preserves_json_schema_output_contract() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut call = agent_run_call();
     call["output"] = agent_status_output_contract();
     let plan = agent_run_workspace_plan(&call);
@@ -2704,7 +2704,7 @@ fn assert_agent_json_schema_result_rejects_forgery(
 
 #[test]
 fn agent_run_lowering_preserves_workspace_diff_surface_fingerprint() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut call = agent_run_call();
     call["output"] = json!({
         "kind": "workspace_diff",
@@ -2728,7 +2728,7 @@ fn agent_run_lowering_preserves_workspace_diff_surface_fingerprint() {
 
 #[test]
 fn agent_run_preserves_runtime_selector_and_rejects_fingerprint_mismatch() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut plan = agent_run_workspace_plan(&agent_run_call());
     plan["ops"][1]["call"]["runtime"] = json!("codex/app-server");
     let mut host = RecordingPlanHost::default();
@@ -2764,7 +2764,7 @@ fn agent_run_preserves_runtime_selector_and_rejects_fingerprint_mismatch() {
 
 #[test]
 fn agent_run_rejects_schema_valid_sessions_without_audit_facts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let plan = agent_run_workspace_plan(&agent_run_call());
     for (agent_audit, expected) in [
         (
@@ -2843,7 +2843,7 @@ fn agent_run_rejects_schema_valid_sessions_without_audit_facts() {
 
 #[test]
 fn sandbox_exec_rejects_schema_valid_results_without_audit_facts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     {
         let sandbox_stream = SandboxStreamFixture::MissingStreamRefs;
         let expected = "completed sandbox_exec result value must carry stdout_ref and stderr_ref";
@@ -2952,7 +2952,7 @@ fn assert_sandbox_exec_rejects_missing_receipt_cost(package: &PublicSeamPackage,
 
 #[test]
 fn plan_execution_modes_replay_uses_receipts_without_live_host_effects() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut plan = typed_let_call_write_plan();
     plan["mode"] = json!({
         "kind": "replay",
@@ -2977,7 +2977,7 @@ fn plan_execution_modes_replay_uses_receipts_without_live_host_effects() {
 
 #[test]
 fn plan_execution_produces_failed_paid_lm_call_and_charge_receipts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let plan = execute_call_only_plan();
     let mut host = RecordingPlanHost {
         fail_lm: true,
@@ -3009,7 +3009,7 @@ fn plan_execution_produces_failed_paid_lm_call_and_charge_receipts() {
 
 #[test]
 fn plan_execution_rejects_failed_call_receipts_without_typed_error_and_charge_audit() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let plan = execute_call_only_plan();
     let context = plan_execution_context();
     let mut host = RecordingPlanHost {
@@ -3060,7 +3060,7 @@ fn plan_execution_rejects_failed_call_receipts_without_typed_error_and_charge_au
 
 #[test]
 fn plan_ir_family_execution_rejects_known_variants_outside_representative_harness() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut plan = typed_let_call_write_plan();
     plan["mode"] = json!({"kind": "execute"});
     plan["commit"] = json!({
@@ -3088,7 +3088,7 @@ fn plan_ir_family_execution_rejects_known_variants_outside_representative_harnes
 
 #[test]
 fn lm_complete_lowering_rejects_deferred_multimodal_or_extension_content() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut plan = typed_let_call_write_plan();
     plan["mode"] = json!({"kind": "execute"});
     plan["commit"] = json!({
@@ -3124,7 +3124,7 @@ fn lm_complete_lowering_rejects_deferred_multimodal_or_extension_content() {
 
 #[test]
 fn lm_complete_rejects_streaming_request_shapes_before_provider_call() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     for (field, value) in [
         ("stream", json!(true)),
         ("output", json!({"kind": "streaming"})),
@@ -3156,7 +3156,7 @@ fn lm_complete_rejects_streaming_request_shapes_before_provider_call() {
 
 #[test]
 fn lm_complete_rejects_schema_valid_non_final_or_oversized_responses() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     assert_lm_forged_response_fakes_rejected(&package);
     assert_lm_cost_binding_fakes_rejected(&package);
 }
@@ -3309,7 +3309,7 @@ fn assert_lm_cost_binding_fakes_rejected(package: &PublicSeamPackage) {
 
 #[test]
 fn lm_complete_lowering_preserves_json_schema_output_and_provider_hints() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut plan = typed_let_call_write_plan();
     plan["mode"] = json!({"kind": "execute"});
     plan["commit"] = json!({
@@ -3416,7 +3416,7 @@ fn lm_complete_lowering_preserves_json_schema_output_and_provider_hints() {
 
 #[test]
 fn plan_ir_revision_modes_preserve_explicit_bases() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut at_revision = typed_let_call_write_plan();
     at_revision["consistency"] = json!({
@@ -3438,7 +3438,7 @@ fn plan_ir_revision_modes_preserve_explicit_bases() {
 
 #[test]
 fn plan_revision_modes_reject_since_revision_fallback_to_latest() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut mismatched_source = since_revision_event_diff_plan();
     mismatched_source["ops"][0]["expr"]["source"]["since_revision"] = json!("rev_other");
@@ -3464,7 +3464,7 @@ fn plan_revision_modes_reject_since_revision_fallback_to_latest() {
 
 #[test]
 fn plan_revision_modes_execute_graph_queries_at_declared_scope() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut latest_host = RecordingPlanHost::default();
     let latest_report = package
@@ -3531,7 +3531,7 @@ fn plan_revision_modes_execute_graph_queries_at_declared_scope() {
 
 #[test]
 fn submit_assessments_score_outputs_cover_all_assessment_shapes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let document = package
         .validate_plan_document(&submit_assessments_plan())
@@ -3546,7 +3546,7 @@ fn submit_assessments_score_outputs_cover_all_assessment_shapes() {
 
 #[test]
 fn submit_assessments_accepts_candidate_artifact_score_output_class() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut document = submit_assessments_plan();
     document["ops"][0]["write"]["assessments"][0]["score"]["output"]["data_classes"] =
         json!(["candidate.artifact", "public"]);
@@ -3562,7 +3562,7 @@ fn submit_assessments_accepts_candidate_artifact_score_output_class() {
 
 #[test]
 fn submit_assessments_accepts_evidence_source_receipts_without_duplicate_assessment_declarations() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut document = submit_assessments_plan();
     document["ops"][0]["write"]["assessments"][0]
         .as_object_mut()
@@ -3578,7 +3578,7 @@ fn submit_assessments_accepts_evidence_source_receipts_without_duplicate_assessm
 
 #[test]
 fn submit_assessments_rejects_missing_or_placeholder_score_output() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut missing_output = submit_assessments_plan();
     missing_output["ops"][0]["write"]["assessments"][0]["score"]
@@ -3659,7 +3659,7 @@ fn submit_assessments_rejects_missing_or_placeholder_score_output() {
 
 #[test]
 fn submit_assessments_rejects_summary_only_score_output_dummies() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     for (assessment_index, data_class, summary) in [
         (
@@ -3701,7 +3701,7 @@ fn submit_assessments_rejects_summary_only_score_output_dummies() {
 
 #[test]
 fn submit_assessments_rejects_missing_assessment_score_or_replayability() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut missing_score = submit_assessments_plan();
     missing_score["ops"][0]["write"]["assessments"][0]
@@ -3728,7 +3728,7 @@ fn submit_assessments_rejects_missing_assessment_score_or_replayability() {
 
 #[test]
 fn submit_assessments_rejects_schema_valid_but_semantically_invalid_evidence() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut no_source_receipts = submit_assessments_plan();
     no_source_receipts["ops"][0]["write"]["assessments"][0]["evidence"]["source_receipts"]["read"] =

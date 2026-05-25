@@ -1,5 +1,5 @@
+use crate::support::package;
 use crate::support::prefixed_jcs_hash;
-use crate::support::workspace_root;
 use leaven_public_seam::{
     AcpAuthenticateRequest, AcpBackpressure, AcpPermissionRequest, AcpProgressDisposition,
     AcpProgressPriority, AcpSessionLifecycle, AcpSessionState, AcpStdioWorkerLaunch,
@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 
 #[test]
 fn acp_profile_validates_pinned_stdio_leaven_methods_and_bounded_updates() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let profile = package
         .validate_acp_profile_document(&acp_profile())
         .unwrap();
@@ -52,7 +52,7 @@ fn acp_profile_validates_pinned_stdio_leaven_methods_and_bounded_updates() {
 
 #[test]
 fn acp_stdio_worker_launch_uses_profile_env_and_redacts_bearer_artifacts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let profile = package
         .validate_acp_profile_document(&acp_profile())
         .unwrap();
@@ -135,7 +135,7 @@ fn acp_stdio_worker_launch_uses_profile_env_and_redacts_bearer_artifacts() {
 
 #[test]
 fn acp_stdio_worker_launch_rejects_missing_required_launch_facts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let profile = package
         .validate_acp_profile_document(&acp_profile())
         .unwrap();
@@ -156,7 +156,7 @@ fn acp_stdio_worker_launch_rejects_missing_required_launch_facts() {
 
 #[test]
 fn acp_worker_session_uses_engine_client_worker_agent_inversion_and_bounded_updates() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let profile = package
         .validate_acp_profile_document(&acp_profile())
         .unwrap();
@@ -229,7 +229,7 @@ fn acp_worker_session_uses_engine_client_worker_agent_inversion_and_bounded_upda
 
 #[test]
 fn acp_lifecycle_cancellation_requires_receipts_and_closed_plan_errors() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let profile = package
         .validate_acp_profile_document(&acp_profile())
         .unwrap();
@@ -308,7 +308,7 @@ fn acp_lifecycle_cancellation_requires_receipts_and_closed_plan_errors() {
 
 #[test]
 fn acp_lifecycle_rejects_unbounded_or_overproducing_progress_queues() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let mut unbounded_profile = acp_profile();
     unbounded_profile["flow_control"]["default_max_inflight_updates"] = json!(0);
     assert!(matches!(
@@ -338,7 +338,7 @@ fn acp_lifecycle_rejects_unbounded_or_overproducing_progress_queues() {
 
 #[test]
 fn acp_lifecycle_applies_profile_backpressure_strategies() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut drop_profile = acp_profile();
     drop_profile["flow_control"]["default_max_inflight_updates"] = json!(1);
@@ -424,7 +424,7 @@ fn acp_lifecycle_applies_profile_backpressure_strategies() {
 
 #[test]
 fn acp_profile_rejects_mcp_latest_nonstdio_human_granting_and_unbounded_updates() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut mcp_method = acp_profile();
     mcp_method["extension_methods"][0]["method"] = json!("mcp/tools.call");
@@ -525,7 +525,7 @@ fn acp_profile_rejects_mcp_latest_nonstdio_human_granting_and_unbounded_updates(
 
 #[test]
 fn acp_jsonrpc_requests_and_responses_bind_plan_ir_and_extension_results() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let profile = package
         .validate_acp_profile_document(&acp_profile())
         .unwrap();
@@ -557,7 +557,7 @@ fn acp_jsonrpc_requests_and_responses_bind_plan_ir_and_extension_results() {
 
 #[test]
 fn acp_jsonrpc_rejects_in_process_or_cross_method_fakes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let profile = package
         .validate_acp_profile_document(&acp_profile())
         .unwrap();
@@ -667,7 +667,7 @@ fn acp_jsonrpc_rejects_in_process_or_cross_method_fakes() {
 
 #[test]
 fn acp_permissions_use_capability_grants_and_return_planerror_redactions() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let profile = package
         .validate_acp_profile_document(&acp_profile())
         .unwrap();
@@ -747,7 +747,7 @@ fn acp_permissions_use_capability_grants_and_return_planerror_redactions() {
 
 #[test]
 fn acp_authenticate_rejects_unknown_expired_or_fingerprint_mismatched_tokens() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let profile = package
         .validate_acp_profile_document(&acp_profile())
         .unwrap();
@@ -803,7 +803,7 @@ fn acp_authenticate_rejects_unknown_expired_or_fingerprint_mismatched_tokens() {
 
 #[test]
 fn acp_permissions_deny_ungranted_models_workspace_ops_and_commands() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let profile = package
         .validate_acp_profile_document(&acp_profile())
         .unwrap();
@@ -908,7 +908,7 @@ fn acp_permissions_deny_ungranted_models_workspace_ops_and_commands() {
 
 #[test]
 fn acp_extension_results_require_receipts_capability_fingerprint_and_data_classes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
     let result = package
         .validate_acp_extension_result_document(&extension_result())
         .unwrap();
@@ -980,7 +980,7 @@ fn acp_extension_results_require_receipts_capability_fingerprint_and_data_classe
 
 #[test]
 fn acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     for (method, primary, receipt) in extension_result_cases() {
         let data_classes = primary
@@ -1004,7 +1004,7 @@ fn acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts() {
 
 #[test]
 fn acp_extension_results_preserve_agent_and_sandbox_blob_ref_data_classes() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut agent = agent_session_primary();
     agent["transcript_ref"] = acp_blob_ref("blob_agent_transcript", &["transcript.raw"]);
@@ -1049,7 +1049,7 @@ fn acp_extension_results_preserve_agent_and_sandbox_blob_ref_data_classes() {
 
 #[test]
 fn acp_extension_results_reject_agent_and_sandbox_blob_ref_data_class_gaps() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut agent_transcript_gap = agent_session_primary();
     agent_transcript_gap["transcript_ref"] =
@@ -1089,7 +1089,7 @@ fn acp_extension_results_reject_agent_and_sandbox_blob_ref_data_class_gaps() {
 
 #[test]
 fn acp_extension_results_reject_lm_cost_audit_gaps() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let mut missing_primary_cost = lm_response_primary();
     missing_primary_cost.as_object_mut().unwrap().remove("cost");
@@ -1143,7 +1143,7 @@ fn acp_extension_results_reject_lm_cost_audit_gaps() {
 
 #[test]
 fn acp_extension_results_reject_agent_audit_gaps() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     for (primary, expected) in [
         (
@@ -1278,7 +1278,7 @@ fn assert_acp_agent_extension_rejects_missing_receipt_cost(package: &PublicSeamP
 
 #[test]
 fn acp_extension_results_reject_sandbox_audit_gaps() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     for (primary, expected) in [
         (
@@ -1368,7 +1368,7 @@ fn acp_extension_results_reject_sandbox_audit_gaps() {
 
 #[test]
 fn acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let wrong_primary = extension_result_for(
         "leaven/lm.complete",
@@ -1500,7 +1500,7 @@ fn assert_workspace_release_extension_result_negatives(package: &PublicSeamPacka
 
 #[test]
 fn acp_extension_results_reject_forged_result_hashes_for_extension_and_receiptless_primaries() {
-    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let package = package();
 
     let wrong_extension_op = extension_result_for(
         "leaven/graph.query",
