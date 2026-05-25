@@ -353,7 +353,7 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
 ];
 
 #[test]
-fn corrected_topology_workspace_members_are_scaffolded() {
+fn corrected_topology_workspace_members_have_entrypoints() {
     let root = workspace_root();
     assert_eq!(
         workspace_members(&root),
@@ -364,7 +364,7 @@ fn corrected_topology_workspace_members_are_scaffolded() {
         assert!(crate_root.join("Cargo.toml").exists());
         assert!(
             crate_root.join("src/lib.rs").exists(),
-            "{krate} must expose a src/lib.rs skeleton"
+            "{krate} must expose a src/lib.rs entrypoint"
         );
     }
     for member in EXPECTED_BINARIES {
@@ -372,7 +372,7 @@ fn corrected_topology_workspace_members_are_scaffolded() {
         assert!(member_root.join("Cargo.toml").exists());
         assert!(
             member_root.join("src/main.rs").exists(),
-            "{member} must expose a src/main.rs skeleton"
+            "{member} must expose a src/main.rs entrypoint"
         );
     }
 }
