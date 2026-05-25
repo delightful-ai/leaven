@@ -7,13 +7,11 @@ members = [
     "crates/leaven",
     "crates/leaven-agent",
     "crates/leaven-agent-command",
-    "crates/leaven-agent-claude-code",
     "crates/leaven-agent-codex",
     "crates/leaven-agent-codex-app-server",
     "crates/leaven-agent-codex-cli",
     "crates/leaven-acp",
     "crates/leaven-cli",
-    "crates/leaven-agent-opencode",
     "crates/leaven-agentic",
     "crates/leaven-agentic-git",
     "crates/leaven-agentic-skill",
@@ -32,9 +30,7 @@ members = [
     "crates/leaven-gepa-agentic-skill",
     "crates/leaven-kernel",
     "crates/leaven-lm",
-    "crates/leaven-lm-anthropic",
     "crates/leaven-lm-cache",
-    "crates/leaven-lm-local",
     "crates/leaven-lm-mock",
     "crates/leaven-lm-openai",
     "crates/leaven-mipro",
@@ -49,18 +45,12 @@ members = [
     "crates/leaven-store",
     "crates/leaven-store-file",
     "crates/leaven-store-inline",
-    "crates/leaven-store-object",
-    "crates/leaven-store-sqlite",
     "crates/leaven-surface",
     "crates/leaven-textgrad",
     "crates/leaven-trace",
     "crates/leaven-workspace",
-    "crates/leaven-workspace-docker",
-    "crates/leaven-workspace-e2b",
-    "crates/leaven-workspace-firecracker",
     "crates/leaven-workspace-firkin",
     "crates/leaven-workspace-git",
-    "crates/leaven-workspace-k8s",
     "crates/leaven-workspace-local",
     "crates/leaven-derive",
     "examples/p0_graph_skeleton",
@@ -149,13 +139,11 @@ leaven-workspace = { path = "crates/leaven-workspace", version = "0.0.0" }
 leaven-derive = { path = "crates/leaven-derive", version = "0.0.0" }
 leaven-agent = { path = "crates/leaven-agent", version = "0.0.0" }
 leaven-agent-command = { path = "crates/leaven-agent-command", version = "0.0.0" }
-leaven-agent-claude-code = { path = "crates/leaven-agent-claude-code", version = "0.0.0" }
 leaven-agent-codex = { path = "crates/leaven-agent-codex", version = "0.0.0" }
 leaven-agent-codex-app-server = { path = "crates/leaven-agent-codex-app-server", version = "0.0.0", default-features = false }
 leaven-agent-codex-cli = { path = "crates/leaven-agent-codex-cli", version = "0.0.0" }
 leaven-acp = { path = "crates/leaven-acp", version = "0.0.0" }
 leaven-cli = { path = "crates/leaven-cli", version = "0.0.0" }
-leaven-agent-opencode = { path = "crates/leaven-agent-opencode", version = "0.0.0" }
 leaven-agentic = { path = "crates/leaven-agentic", version = "0.0.0" }
 leaven-agentic-git = { path = "crates/leaven-agentic-git", version = "0.0.0" }
 leaven-agentic-skill = { path = "crates/leaven-agentic-skill", version = "0.0.0" }
@@ -172,9 +160,7 @@ leaven-gepa-agentic-git = { path = "crates/leaven-gepa-agentic-git", version = "
 leaven-gepa-agentic-skill = { path = "crates/leaven-gepa-agentic-skill", version = "0.0.0" }
 leaven-kernel = { path = "crates/leaven-kernel", version = "0.0.0" }
 leaven-lm = { path = "crates/leaven-lm", version = "0.0.0" }
-leaven-lm-anthropic = { path = "crates/leaven-lm-anthropic", version = "0.0.0" }
 leaven-lm-cache = { path = "crates/leaven-lm-cache", version = "0.0.0" }
-leaven-lm-local = { path = "crates/leaven-lm-local", version = "0.0.0" }
 leaven-lm-mock = { path = "crates/leaven-lm-mock", version = "0.0.0" }
 leaven-lm-openai = { path = "crates/leaven-lm-openai", version = "0.0.0" }
 leaven-mipro = { path = "crates/leaven-mipro", version = "0.0.0" }
@@ -188,17 +174,11 @@ leaven-stage = { path = "crates/leaven-stage", version = "0.0.0" }
 leaven-store = { path = "crates/leaven-store", version = "0.0.0" }
 leaven-store-file = { path = "crates/leaven-store-file", version = "0.0.0" }
 leaven-store-inline = { path = "crates/leaven-store-inline", version = "0.0.0" }
-leaven-store-object = { path = "crates/leaven-store-object", version = "0.0.0" }
-leaven-store-sqlite = { path = "crates/leaven-store-sqlite", version = "0.0.0" }
 leaven-surface = { path = "crates/leaven-surface", version = "0.0.0" }
 leaven-textgrad = { path = "crates/leaven-textgrad", version = "0.0.0" }
 leaven-trace = { path = "crates/leaven-trace", version = "0.0.0" }
-leaven-workspace-docker = { path = "crates/leaven-workspace-docker", version = "0.0.0" }
-leaven-workspace-e2b = { path = "crates/leaven-workspace-e2b", version = "0.0.0" }
-leaven-workspace-firecracker = { path = "crates/leaven-workspace-firecracker", version = "0.0.0" }
 leaven-workspace-firkin = { path = "crates/leaven-workspace-firkin", version = "0.0.0" }
 leaven-workspace-git = { path = "crates/leaven-workspace-git", version = "0.0.0" }
-leaven-workspace-k8s = { path = "crates/leaven-workspace-k8s", version = "0.0.0" }
 leaven-workspace-local = { path = "crates/leaven-workspace-local", version = "0.0.0" }
 
 # error handling

@@ -26,9 +26,8 @@ evaluation cache.
   identity. Role-level resume identity belongs above this crate.
 
 ## Route Away
-- Raw provider clients stay in `leaven-lm-openai`, `leaven-lm-anthropic`,
-  `leaven-lm-local`, or future provider crates. Providers do not depend on this
-  cache to be valid providers.
+- Raw provider clients stay in `leaven-lm-openai` or future provider crates.
+  Providers do not depend on this cache to be valid providers.
 - Engine assessment/evaluation caching stays in `leaven-engine`; it deduplicates
   scored candidate evaluations, not raw LM responses.
 - Provider-side prompt caching stays in the provider leaf. OpenAI prompt cache

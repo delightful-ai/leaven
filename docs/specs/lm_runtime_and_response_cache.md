@@ -44,7 +44,7 @@ Leaven provisions a SQLite-backed LM response cache automatically, and
 | `leaven-lm-openai` | OpenAI Responses API lowering for the neutral `Lm` trait | GEPA, engine graph, cache backends |
 | `leaven-lm-mock` | deterministic scripted/test LM implementation | concrete providers, cache backends |
 | `leaven-gepa` | GEPA reflection components that consume `impl Lm` | concrete providers and cache stores |
-| `leaven` | feature-gated import facade for `lm-cache`, `lm-openai`, `lm-anthropic` | implementation logic |
+| `leaven` | feature-gated import facade for `lm-cache` and `lm-openai` | implementation logic |
 
 Allowed dependency edges:
 

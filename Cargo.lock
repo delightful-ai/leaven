@@ -3177,17 +3177,13 @@ dependencies = [
  "leaven-gepa",
  "leaven-kernel",
  "leaven-lm",
- "leaven-lm-anthropic",
  "leaven-lm-cache",
  "leaven-lm-openai",
  "leaven-run",
  "leaven-std",
  "leaven-store-inline",
- "leaven-store-sqlite",
  "leaven-surface",
  "leaven-workspace",
- "leaven-workspace-docker",
- "leaven-workspace-e2b",
  "leaven-workspace-firkin",
  "leaven-workspace-git",
  "leaven-workspace-local",
@@ -3215,15 +3211,6 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "leaven-agent-claude-code"
-version = "0.0.0"
-dependencies = [
- "leaven-agent",
- "leaven-kernel",
- "leaven-workspace",
 ]
 
 [[package]]
@@ -3275,15 +3262,6 @@ dependencies = [
  "leaven-workspace",
  "leaven-workspace-local",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "leaven-agent-opencode"
-version = "0.0.0"
-dependencies = [
- "leaven-agent",
- "leaven-kernel",
- "leaven-workspace",
 ]
 
 [[package]]
@@ -3604,14 +3582,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "leaven-lm-anthropic"
-version = "0.0.0"
-dependencies = [
- "leaven-kernel",
- "leaven-lm",
-]
-
-[[package]]
 name = "leaven-lm-cache"
 version = "0.0.0"
 dependencies = [
@@ -3624,14 +3594,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
-]
-
-[[package]]
-name = "leaven-lm-local"
-version = "0.0.0"
-dependencies = [
- "leaven-kernel",
- "leaven-lm",
 ]
 
 [[package]]
@@ -3824,22 +3786,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "leaven-store-object"
-version = "0.0.0"
-dependencies = [
- "leaven-kernel",
- "leaven-store",
-]
-
-[[package]]
-name = "leaven-store-sqlite"
-version = "0.0.0"
-dependencies = [
- "leaven-kernel",
- "leaven-store",
-]
-
-[[package]]
 name = "leaven-surface"
 version = "0.0.0"
 dependencies = [
@@ -3886,30 +3832,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "leaven-workspace-docker"
-version = "0.0.0"
-dependencies = [
- "leaven-kernel",
- "leaven-workspace",
-]
-
-[[package]]
-name = "leaven-workspace-e2b"
-version = "0.0.0"
-dependencies = [
- "leaven-kernel",
- "leaven-workspace",
-]
-
-[[package]]
-name = "leaven-workspace-firecracker"
-version = "0.0.0"
-dependencies = [
- "leaven-kernel",
- "leaven-workspace",
-]
-
-[[package]]
 name = "leaven-workspace-firkin"
 version = "0.0.0"
 dependencies = [
@@ -3938,14 +3860,6 @@ dependencies = [
  "leaven-workspace",
  "tempfile",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "leaven-workspace-k8s"
-version = "0.0.0"
-dependencies = [
- "leaven-kernel",
- "leaven-workspace",
 ]
 
 [[package]]
