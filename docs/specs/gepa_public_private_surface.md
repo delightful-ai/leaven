@@ -466,9 +466,9 @@ It must not depend on `leaven-eval`, `leaven-run`, or `leaven-gepa`.
 Domain crates own domain truth:
 
 ```text
-leaven-dsrs       LM-program artifacts, module surfaces, DSRS evaluators
-leaven-agentic    task-suite cases, hidden targets, workspace/session evidence
-artifact crates   artifact-specific surfaces and helpers
+future DSRS interop crates    LM-program artifacts, module surfaces, DSRS evaluators
+leaven-agentic                task-suite cases, hidden targets, workspace/session evidence
+artifact crates               artifact-specific surfaces and helpers
 ```
 
 They may provide convenience conversions into `leaven-run`/`leaven-eval`

@@ -42,7 +42,7 @@ surface or encode the warning at the owning layer.
 - `crates/leaven-gepa-agentic-git`: bridge crate for the GEPA reflection + Git-program agentic proposer path. It may compose GEPA reflection requests, generic agentic proposer flow, `GitProgramArtifact`, and Git-program materialization/readback; it must not own GEPA search policy, provider protocols, Git identity law, Firkin mechanics, or frontier admission rules. It is explicit scaffold until the deterministic bridge proof lands.
 - `crates/leaven-gepa-agentic-skill`: bridge crate for the GEPA reflection + skill-bank agentic proposer path. It may compose GEPA reflection requests, generic agentic proposer flow, and skill-bank materialization/readback; it must not own GEPA search policy, provider protocols, or skill artifact validation rules.
 - Domain/edge adapters such as future CUDA or Rust-side Python crates should be added only when they carry behavior, tests, topology rows, and local ownership docs. Do not add placeholder adapter crates.
-- `crates/leaven-dsrs`: orphan placeholder/bait, not a workspace member. It has no `Cargo.toml` or `src/lib.rs`; do not route new DSRS work there unless the crate is deliberately reintroduced with topology-contract, workspace, spec, and local `AGENTS.md` updates.
+- DSRS interop is not a current workspace crate. Reintroduce a DSRS crate only with topology-contract coverage, workspace membership, behavior-bearing tests, and local ownership docs.
 - `crates/leaven-derive`: derive macros only; no runtime or adapter dependencies without an explicit derive contract.
 - `crates/leaven`: umbrella import experience and re-exports only.
 - `docs/specs`: durable product and architecture specs. Read the relevant spec before implementing spec-derived behavior.
@@ -149,7 +149,7 @@ The skill descriptions own trigger routing. Do not duplicate their full routing 
 
 ## Hazards / Exceptions
 - Nearby code is not automatically precedent. Prefer the contract tests, specs, and decision cards over imitation.
-- The current workspace inventory comes from `Cargo.toml` plus `crates/leaven/tests/topology_contract.rs`, not directory presence. `crates/leaven-dsrs` is the known stale directory trap.
+- The current workspace inventory comes from `Cargo.toml` plus `crates/leaven/tests/topology_contract.rs`, not directory presence or historical spec diagrams.
 - Philosophy docs are decision filters. If a rule must be operational, encode it in code, tests, specs, or the nearest `AGENTS.md`.
 - Audit docs are not ornamental. When they distinguish topology proof from product maturity, preserve that distinction in examples, test docs, public facades, and local routing guidance.
 - If code and doctrine disagree, resolve the mismatch in the same change: update code toward doctrine or update doctrine because reality changed.

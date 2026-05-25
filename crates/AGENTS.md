@@ -31,7 +31,7 @@ Root `AGENTS.md` owns the full routing map. This file adds local crate-family ru
 - Edge/domain adapters should return as behavior-bearing crates with local
   tests. Placeholder CUDA/Python adapter crates were removed instead of kept as
   public reservations.
-- `leaven-dsrs` is a quarantined orphan directory, not a workspace crate. Do not treat it as an edge-adapter precedent until it has a manifest, `src/lib.rs`, topology coverage, and a local boundary file that says what it owns.
+- DSRS interop is not a current workspace crate. Do not treat historical DSRS notes as an edge-adapter precedent until a crate returns with a manifest, topology coverage, tests, and a local boundary file that says what it owns.
 - `leaven-derive` is derive macros only. Do not add runtime or adapter dependencies without an explicit derive contract.
 
 ## Leaf Activation Rules

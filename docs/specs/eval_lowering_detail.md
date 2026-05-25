@@ -87,7 +87,7 @@ leaven-agentic
 leaven-workspace
 leaven-workspace-*
 leaven-lm-*
-leaven-dsrs
+future DSRS interop crates
 future domain adapter crates
 concrete provider/runtime crates
 ```
@@ -446,7 +446,8 @@ Expected implementations:
 - `Vec<LmCase<I, T>>` in `leaven-eval`;
 - `Dataset<C>` in `leaven-eval`;
 - `leaven_agentic::CaseSuite` in `leaven-agentic`, not in `leaven-eval`;
-- future DSRS case/program fixtures in `leaven-dsrs`, not in `leaven-eval`.
+- future DSRS case/program fixtures in a behavior-bearing DSRS interop crate,
+  not in `leaven-eval`.
 
 ### 4.2 Deferred Engine Adapters
 

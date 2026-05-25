@@ -211,7 +211,7 @@ leaven-agent
 leaven-agentic
 leaven-workspace-*
 leaven-artifact-*
-leaven-dsrs
+future DSRS interop crates
 future domain adapter crates
 ```
 
