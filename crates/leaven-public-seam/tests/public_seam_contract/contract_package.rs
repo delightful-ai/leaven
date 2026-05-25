@@ -793,6 +793,28 @@ fn conformance_evidence_audit_rejects_stale_blocked_on_for_non_blocked_rows() {
 }
 
 #[test]
+fn conformance_evidence_audit_requires_positive_tests_for_structural_rows() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut matrix = package.conformance_matrix().unwrap();
+    let row = matrix
+        .rows
+        .iter_mut()
+        .find(|row| row.id == "ps1.authority.manifest_inventory")
+        .unwrap();
+
+    row.positive_test_evidence.clear();
+
+    let error = package.audit_conformance_evidence(&matrix).unwrap_err();
+    assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
+    assert!(
+        error
+            .to_string()
+            .contains("ps1.authority.manifest_inventory")
+    );
+    assert!(error.to_string().contains("positive test evidence"));
+}
+
+#[test]
 fn conformance_evidence_audit_rejects_happy_path_only_denial_rows() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut matrix = package.conformance_matrix().unwrap();
