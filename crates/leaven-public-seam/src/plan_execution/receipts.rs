@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use leaven_workspace::WorkspacePath;
 use serde_json::{Map, Value, json};
 
 use super::{
@@ -11,9 +10,12 @@ use super::{
 };
 use crate::{PublicSeamError, plan_error};
 
+mod effects;
 mod helpers;
 mod queries;
 
+use effects::{update_call_workspace_provenance, validate_write_receipt};
+pub use effects::{validate_agent_session_value, validate_sandbox_exec_value};
 use helpers::{
     ReceiptValidationState, expected_call_result_value_kind, receipts_by_op_var,
     require_receipt_field, validate_call_workspace_provenance,
@@ -518,5 +520,3 @@ fn validate_sandbox_stream_value(
     }
     Ok(())
 }
-
-include!("receipts/effects.rs");

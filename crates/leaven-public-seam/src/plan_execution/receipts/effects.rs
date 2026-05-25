@@ -1,3 +1,16 @@
+use std::collections::{BTreeMap, BTreeSet};
+
+use leaven_workspace::WorkspacePath;
+use serde_json::{Map, Value, json};
+
+use super::{ReceiptValidationState, dependency_data_classes, require_receipt_field};
+use crate::PublicSeamError;
+use crate::plan_execution::{
+    PlanExecutionContext, dependency_values,
+    effects::{LiveWorkspaceHandle, require_live_workspace_ref, workspace_ref_facts},
+    invalid_plan, nested_kind, object, prefixed_jcs_hash, required_string,
+};
+
 pub fn validate_agent_session_value(
     call_kind: &str,
     call: Option<&Value>,
@@ -192,7 +205,7 @@ pub fn validate_sandbox_exec_value(
     Ok(())
 }
 
-fn update_call_workspace_provenance(
+pub(super) fn update_call_workspace_provenance(
     name: &str,
     call_kind: &str,
     call: &Value,
@@ -281,7 +294,7 @@ fn update_call_workspace_provenance(
     Ok(())
 }
 
-fn validate_write_receipt(
+pub(super) fn validate_write_receipt(
     op_object: &Map<String, Value>,
     name: &str,
     context: &PlanExecutionContext,
