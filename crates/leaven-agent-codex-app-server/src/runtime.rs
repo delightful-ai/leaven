@@ -330,6 +330,7 @@ fn output_schema(contract: &OutputContract) -> CodexResult<Option<serde_json::Va
         } => serde_json::from_str(&schema.schema)
             .map(Some)
             .map_err(CodexAppServerError::from),
+        OutputContract::JsonSchema { schema, .. } => Ok(Some(schema.clone())),
         OutputContract::Files { .. }
         | OutputContract::JsonFile { schema: None, .. }
         | OutputContract::FinalMessage
@@ -592,6 +593,35 @@ mod tests {
             turn.effort,
             Some(codex_protocol::openai_models::ReasoningEffort::Low)
         ));
+    }
+
+    #[test]
+    fn turn_params_lower_direct_json_schema_contracts() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "answer": { "type": "string" }
+            },
+            "required": ["answer"]
+        });
+        let request = AgentRunRequest::new(
+            AgentInstructions::task("answer in json"),
+            OutputContract::JsonSchema {
+                schema_fingerprint: "schema-fp".to_owned(),
+                schema: schema.clone(),
+            },
+        );
+
+        let turn = turn_start_params(
+            &CodexAppServerConfig::default(),
+            "thread-1",
+            Path::new("/workspace"),
+            &request,
+        )
+        .expect("turn params");
+
+        assert_eq!(turn.output_schema, Some(schema));
     }
 
     fn json_response(id: &str, result: serde_json::Value) -> String {

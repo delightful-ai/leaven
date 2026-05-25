@@ -8,10 +8,6 @@ a universal `CodexRuntime`.
 - Feature `app-server` re-exports `leaven-agent-codex-app-server`.
 - Feature `stdio` is an app-server connector feature, not the default
   backend-neutral Codex path.
-- Features `app-server` and `stdio` currently inherit the app-server leaf's
-  vendored protocol drift around `InitializeCapabilities::request_attestation`.
-  Treat those feature checks as known-failing drift gates until the leaf is
-  reconciled.
 
 ## Route Away
 - Backend-neutral Codex CLI execution belongs in `leaven-agent-codex-cli`.
@@ -28,9 +24,10 @@ a universal `CodexRuntime`.
   does not pull provider dependencies by default.
 - `cargo check -p leaven-agent-codex --features cli` proves CLI re-export
   wiring.
-- `cargo check -p leaven-agent-codex --features app-server` and
-  `cargo check -p leaven-agent-codex --features stdio` are currently
-  known-failing app-server drift gates, not green facade proof.
+- `cargo check -p leaven-agent-codex --features app-server` proves app-server
+  re-export wiring.
+- `cargo check -p leaven-agent-codex --features stdio` proves the stdio feature
+  selects the app-server connector route without making it default behavior.
 - `cargo test -p leaven --test topology_contract` proves Codex app-server
   protocol crates stay leaf-only and the umbrella crate does not expose Codex by
   default.
@@ -46,7 +43,7 @@ a universal `CodexRuntime`.
   do: keep it opt-in and keep protocol dependencies gated in `leaven-agent-codex-app-server`
   preserve: topology's leaf-only Codex protocol boundary
   avoid: making app-server or stdio part of default Codex behavior just because the facade can name it
-  verify: run `cargo test -p leaven --test topology_contract`; feature checks are still blocked by the app-server leaf's vendored protocol drift until fixed
+  verify: run `cargo check -p leaven-agent-codex --features app-server`, `cargo check -p leaven-agent-codex --features stdio`, and `cargo test -p leaven --test topology_contract`
 
 ## Local Bait
 - Do not add shared Codex protocol structs here because both Codex CLI and
