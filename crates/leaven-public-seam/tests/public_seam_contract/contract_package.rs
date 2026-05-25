@@ -815,7 +815,7 @@ fn conformance_evidence_audit_requires_positive_tests_for_structural_rows() {
 }
 
 #[test]
-fn conformance_evidence_audit_requires_row_specific_review_signoff_for_proven_rows() {
+fn conformance_evidence_audit_rejects_proven_rows_without_row_specific_review_signoff() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut matrix = package.conformance_matrix().unwrap();
     let row = matrix
