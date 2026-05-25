@@ -5,7 +5,8 @@ use leaven_workspace::Command;
 use serde_json::Value;
 
 use super::{
-    LiveWorkspaceHandle, WorkspaceRefFacts, invalid_call, require_live_workspace_ref,
+    LiveWorkspaceHandle, WorkspaceRefFacts, blob_ref, cost_value,
+    extend_data_classes_from_blob_ref, fingerprint_hex, invalid_call, require_live_workspace_ref,
     required_object, workspace_path, workspace_ref_facts,
 };
 use crate::PublicSeamError;
@@ -168,5 +169,152 @@ fn lower_sandbox_output_contract(
             "unsupported sandbox_exec output contract `{other}`"
         ))),
         None => Err(invalid_call("sandbox_exec output contract must carry kind")),
+    }
+}
+
+/// Host outcome for a typed `sandbox_exec` call.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanSandboxExecOutcome {
+    pub(in crate::plan_execution) status: String,
+    pub(in crate::plan_execution) exit_code: Option<i64>,
+    pub(in crate::plan_execution) stdout_ref: Option<Value>,
+    pub(in crate::plan_execution) stderr_ref: Option<Value>,
+    pub(in crate::plan_execution) files: BTreeMap<String, Value>,
+    pub(in crate::plan_execution) data_classes: Vec<String>,
+    pub(in crate::plan_execution) replayability: String,
+    pub(in crate::plan_execution) runtime_fingerprint: String,
+    pub(in crate::plan_execution) cost: Option<Value>,
+}
+
+impl PlanSandboxExecOutcome {
+    /// Creates a completed sandbox execution outcome.
+    #[must_use]
+    pub fn completed(runtime_fingerprint: impl Into<String>) -> Self {
+        Self {
+            status: "completed".to_owned(),
+            exit_code: Some(0),
+            stdout_ref: None,
+            stderr_ref: None,
+            files: BTreeMap::new(),
+            data_classes: vec!["public".to_owned()],
+            replayability: "boundary_managed".to_owned(),
+            runtime_fingerprint: runtime_fingerprint.into(),
+            cost: None,
+        }
+    }
+
+    /// Creates a sandbox outcome from provider-neutral workspace command output.
+    pub fn from_command_output(
+        output: leaven_kernel::Metered<leaven_workspace::CommandOutput>,
+        runtime_fingerprint: leaven_kernel::Fingerprint,
+        stdout_ref: Value,
+        stderr_ref: Value,
+    ) -> Result<Self, PublicSeamError> {
+        Self::from_command_output_with_file_refs(
+            output,
+            runtime_fingerprint,
+            stdout_ref,
+            stderr_ref,
+            std::iter::empty::<(leaven_workspace::WorkspacePath, Value)>(),
+        )
+    }
+
+    /// Creates a sandbox outcome from command output plus blob refs for captured files.
+    ///
+    /// Every file captured by the backend-neutral command output must have a
+    /// matching blob ref, and every supplied file blob ref must correspond to a
+    /// captured workspace file. This keeps file artifacts bound to the command
+    /// result instead of letting hosts attach unrelated blobs after execution.
+    pub fn from_command_output_with_file_refs(
+        output: leaven_kernel::Metered<leaven_workspace::CommandOutput>,
+        runtime_fingerprint: leaven_kernel::Fingerprint,
+        stdout_ref: Value,
+        stderr_ref: Value,
+        file_refs: impl IntoIterator<Item = (leaven_workspace::WorkspacePath, Value)>,
+    ) -> Result<Self, PublicSeamError> {
+        let leaven_kernel::Metered { value, cost } = output;
+        blob_ref::validate_stream_blob_ref(&stdout_ref, &value.stdout.bytes, "sandbox stdout")?;
+        blob_ref::validate_stream_blob_ref(&stderr_ref, &value.stderr.bytes, "sandbox stderr")?;
+        let mut outcome = Self::completed(format!(
+            "fp_runtime_sha256_{}",
+            fingerprint_hex(runtime_fingerprint)
+        ));
+        outcome.exit_code = value.status.code.map(i64::from);
+        outcome = outcome.with_stream_refs(stdout_ref, stderr_ref);
+
+        let mut file_refs_by_path = BTreeMap::new();
+        for (path, blob_ref) in file_refs {
+            if file_refs_by_path.insert(path.clone(), blob_ref).is_some() {
+                return Err(invalid_call(format!(
+                    "sandbox output file `{}` has duplicate blob refs",
+                    path.as_str()
+                )));
+            }
+        }
+        for path in file_refs_by_path.keys() {
+            if !value.output_files.contains_key(path) {
+                return Err(invalid_call(format!(
+                    "sandbox output file `{}` blob ref does not match a captured command output file",
+                    path.as_str()
+                )));
+            }
+        }
+        for (path, captured) in &value.output_files {
+            if captured.truncated {
+                return Err(invalid_call(format!(
+                    "sandbox output file `{}` capture is truncated and cannot be bound to a blob ref",
+                    path.as_str()
+                )));
+            }
+            let blob_ref = file_refs_by_path.get(path).ok_or_else(|| {
+                invalid_call(format!(
+                    "sandbox output file `{}` is missing a blob ref",
+                    path.as_str()
+                ))
+            })?;
+            outcome = outcome.with_file_ref(path.as_str(), blob_ref.clone(), &captured.bytes)?;
+        }
+
+        Ok(outcome.with_cost(cost_value(&cost)))
+    }
+
+    /// Attaches stdout and stderr blob references.
+    #[must_use]
+    fn with_stream_refs(mut self, stdout_ref: Value, stderr_ref: Value) -> Self {
+        extend_data_classes_from_blob_ref(&mut self.data_classes, &stdout_ref);
+        extend_data_classes_from_blob_ref(&mut self.data_classes, &stderr_ref);
+        self.stdout_ref = Some(stdout_ref);
+        self.stderr_ref = Some(stderr_ref);
+        self
+    }
+
+    /// Attaches a captured output file blob reference after binding its byte audit.
+    fn with_file_ref(
+        mut self,
+        path: impl Into<String>,
+        blob_ref: Value,
+        bytes: impl AsRef<[u8]>,
+    ) -> Result<Self, PublicSeamError> {
+        let path = path.into();
+        leaven_workspace::WorkspacePath::new(&path).map_err(|error| {
+            invalid_call(format!(
+                "sandbox output file path must be relative workspace path: {error}"
+            ))
+        })?;
+        blob_ref::validate_stream_blob_ref(
+            &blob_ref,
+            bytes.as_ref(),
+            &format!("sandbox output file `{path}`"),
+        )?;
+        extend_data_classes_from_blob_ref(&mut self.data_classes, &blob_ref);
+        self.files.insert(path, blob_ref);
+        Ok(self)
+    }
+
+    /// Attaches a cost object.
+    #[must_use]
+    pub fn with_cost(mut self, cost: Value) -> Self {
+        self.cost = Some(cost);
+        self
     }
 }

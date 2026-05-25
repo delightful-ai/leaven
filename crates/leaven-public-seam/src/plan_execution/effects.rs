@@ -1,8 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use leaven_workspace::{CommandOutput, WorkspacePath};
+use leaven_workspace::WorkspacePath;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 
 use crate::PublicSeamError;
 
@@ -11,9 +10,9 @@ mod blob_ref;
 mod lm;
 mod sandbox;
 
-pub use agent::PlanAgentRunRequest;
+pub use agent::{AgentCommandOutputRefs, PlanAgentRunOutcome, PlanAgentRunRequest};
 pub use lm::{PlanLmCompleteOutcome, PlanLmCompleteRequest};
-pub use sandbox::PlanSandboxExecRequest;
+pub use sandbox::{PlanSandboxExecOutcome, PlanSandboxExecRequest};
 
 /// Lowered `workspace_materialize` request passed to a plan execution host.
 #[derive(Clone, Copy, Debug)]
