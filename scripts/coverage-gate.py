@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -148,6 +149,7 @@ def main() -> int:
     if args.skip_clean:
         commands.append(["cargo", "llvm-cov", "clean", "--profraw-only"])
     else:
+        clear_generated_coverage_targets()
         commands.append(["cargo", "llvm-cov", "clean", "--workspace"])
     commands.extend(
         [
@@ -171,6 +173,8 @@ def main() -> int:
     if args.skip_report:
         print("coverage report skipped by --skip-report")
         return 0
+
+    clear_generated_trybuild_targets()
 
     lcov_path = output_path.with_suffix(".lcov")
     lcov_command = [
@@ -251,6 +255,22 @@ def main() -> int:
 def run(command: list[str]) -> subprocess.CompletedProcess[bytes]:
     print(f"running coverage gate: {' '.join(command)}", flush=True)
     return subprocess.run(command, check=False)
+
+
+def clear_generated_trybuild_targets() -> None:
+    trybuild_target = Path("target/tests/trybuild")
+    if not trybuild_target.exists():
+        return
+    print(f"removing stale generated trybuild targets: {trybuild_target}", flush=True)
+    shutil.rmtree(trybuild_target)
+
+
+def clear_generated_coverage_targets() -> None:
+    coverage_target = Path("target/llvm-cov-target")
+    if not coverage_target.exists():
+        return
+    print(f"removing stale generated coverage targets: {coverage_target}", flush=True)
+    shutil.rmtree(coverage_target)
 
 
 def exclude_args(packages: list[str]) -> list[str]:
