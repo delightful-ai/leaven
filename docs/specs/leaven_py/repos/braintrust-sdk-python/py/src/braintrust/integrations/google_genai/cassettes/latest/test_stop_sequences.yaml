@@ -1,0 +1,67 @@
+interactions:
+- request:
+    body: '{"contents": [{"parts": [{"text": "Write a short story about a robot."}],
+      "role": "user"}], "generationConfig": {"maxOutputTokens": 500, "stopSequences":
+      ["END", "\n\n"]}}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '171'
+      Content-Type:
+      - application/json
+      Host:
+      - generativelanguage.googleapis.com
+      user-agent:
+      - google-genai-sdk/2.4.0 gl-python/3.12.12
+      x-goog-api-client:
+      - google-genai-sdk/2.4.0 gl-python/3.12.12
+    method: POST
+    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent
+  response:
+    body:
+      string: "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\":
+        [\n          {\n            \"text\": \"Unit 734, known to the household as
+        \\\"Arthur,\\\" did not dream, but he did archive.\",\n            \"thoughtSignature\":
+        \"EjQKMgEMOdbHs170/Brk2XxmH1xM6uTxSl07STS2N9crnSStnXhdqbGrHYNeG2sX1eonnayn\"\n
+        \         }\n        ],\n        \"role\": \"model\"\n      },\n      \"finishReason\":
+        \"MAX_TOKENS\",\n      \"index\": 0\n    }\n  ],\n  \"usageMetadata\": {\n
+        \   \"promptTokenCount\": 9,\n    \"candidatesTokenCount\": 23,\n    \"totalTokenCount\":
+        32,\n    \"promptTokensDetails\": [\n      {\n        \"modality\": \"TEXT\",\n
+        \       \"tokenCount\": 9\n      }\n    ],\n    \"serviceTier\": \"standard\"\n
+        \ },\n  \"modelVersion\": \"gemini-3.1-flash-lite\",\n  \"responseId\": \"8IQMat-4JOGN_PUP3YeZgA8\"\n}\n"
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Type:
+      - application/json; charset=UTF-8
+      Date:
+      - Tue, 19 May 2026 15:42:43 GMT
+      Server:
+      - scaffolding on HTTPServer2
+      Server-Timing:
+      - gfet4t7; dur=3463
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Origin
+      - X-Origin
+      - Referer
+      X-Content-Type-Options:
+      - nosniff
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Gemini-Service-Tier:
+      - standard
+      X-XSS-Protection:
+      - '0'
+      content-length:
+      - '742'
+    status:
+      code: 200
+      message: OK
+version: 1

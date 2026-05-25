@@ -1,0 +1,44 @@
+name: adk-py
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        required: false
+        type: string
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          cache: true
+          experimental: true
+          install_args: uv
+
+      - name: Install deprecated package compatibility dependencies
+        working-directory: integrations/adk-py
+        run: |
+          mise exec -- uv sync
+
+      - name: Lint deprecated compatibility package
+        working-directory: integrations/adk-py
+        run: |
+          mise exec -- uv run ruff check $(git ls-files '*.py' | grep -v 'examples/')
+
+      - name: Run deprecated compatibility tests
+        working-directory: integrations/adk-py
+        run: |
+          mise exec -- uv run pytest src/tests/test_reexports.py
+
+      - name: Test deprecated package import
+        working-directory: integrations/adk-py
+        run: |
+          mise exec -- uv run python -c "import braintrust_adk; print('braintrust_adk imported successfully')"
+          mise exec -- uv run python -c "from braintrust_adk import setup_braintrust; print('setup_braintrust imported successfully')"

@@ -1,0 +1,88 @@
+interactions:
+- request:
+    body: '{"max_tokens":999,"messages":[{"role":"user","content":"who are you?"}],"model":"there-is-no-such-model"}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '105'
+      Content-Type:
+      - application/json
+      Host:
+      - api.anthropic.com
+      User-Agent:
+      - Anthropic/Python 0.100.0
+      X-Stainless-Arch:
+      - arm64
+      X-Stainless-Async:
+      - 'false'
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - MacOS
+      X-Stainless-Package-Version:
+      - 0.100.0
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.12
+      anthropic-version:
+      - '2023-06-01'
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '0'
+      x-stainless-timeout:
+      - '600'
+    method: POST
+    uri: https://api.anthropic.com/v1/messages
+  response:
+    body:
+      string: '{"type":"error","error":{"type":"not_found_error","message":"model:
+        there-is-no-such-model"},"request_id":"req_011Cavxovvs9WgyRecHvzPc2"}'
+    headers:
+      CF-RAY:
+      - 9fa1f92b4bb6aa98-YYZ
+      Connection:
+      - keep-alive
+      Content-Security-Policy:
+      - default-src 'none'; frame-ancestors 'none'
+      Content-Type:
+      - application/json
+      Date:
+      - Mon, 11 May 2026 14:46:28 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Robots-Tag:
+      - none
+      anthropic-organization-id:
+      - 27796668-7351-40ac-acc4-024aee8995a5
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '137'
+      request-id:
+      - req_011Cavxovvs9WgyRecHvzPc2
+      set-cookie:
+      - _cfuvid=eg1x9mbjtigxlZ9a1HvVpXbOO6fG_uFnyHEHOdVlRr4-1778510788.3705938-1.0.1.1-Zk2fzrVI9Qr_ddtL_ILYxVhu4KpvobdxBsfMjuUbTwU;
+        HttpOnly; SameSite=None; Secure; Path=/; Domain=api.anthropic.com
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      traceresponse:
+      - 00-250cac04a86130f8b4e4943f98f2d490-e219ac27e9bf5fa5-01
+      vary:
+      - Accept-Encoding
+      x-envoy-upstream-service-time:
+      - '33'
+      x-should-retry:
+      - 'false'
+    status:
+      code: 404
+      message: Not Found
+version: 1
