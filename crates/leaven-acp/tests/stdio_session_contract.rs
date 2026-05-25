@@ -133,40 +133,373 @@ fn stdio_session_runs_python_external_worker_program_across_v1_method_families()
     let profile = profile(&package, 32, "pause_worker");
     let temp = TempDir::new().unwrap();
     let observed_requests = temp.path().join("observed-requests.json");
-    let program_cases = external_worker_program_cases();
+    let program_cases = extension_result_cases();
     let expected: Vec<(&str, &str)> = program_cases
         .iter()
         .map(|case| (case.method, case.primary_kind))
         .collect();
-    let program_spec = serde_json::to_string(
-        &program_cases
-            .iter()
-            .map(|case| {
-                json!({
-                    "method": case.method,
-                    "primary_kind": case.primary_kind,
-                    "result": case.result
-                })
-            })
-            .collect::<Vec<_>>(),
-    )
-    .unwrap();
     let script = python_worker_script(
         r#"
+import hashlib
 import json
 import os
 import sys
 
-cases = json.loads(os.environ["LEAVEN_TEST_PROGRAM"])
+EXPECTED_METHODS = [
+    "leaven/graph.query",
+    "leaven/case.load",
+    "leaven/case.input",
+    "leaven/case.target",
+    "leaven/case.metadata",
+    "leaven/human.review",
+    "leaven/event.emit",
+    "leaven/workspace.materialize",
+    "leaven/workspace.release",
+    "leaven/workspace.snapshot",
+    "leaven/workspace.list",
+    "leaven/workspace.read_file",
+    "leaven/workspace.stat",
+    "leaven/workspace.digest",
+    "leaven/workspace.git_log",
+    "leaven/workspace.git_diff",
+    "leaven/workspace.git_status",
+    "leaven/workspace.capture_artifacts",
+    "leaven/lm.complete",
+    "leaven/agent.run",
+    "leaven/sandbox.exec",
+    "leaven/proposal.submit_batch",
+    "leaven/proposal.apply",
+    "leaven/assessment.submit",
+    "leaven/evaluation.request",
+]
+
+GENERIC_EXTENSION_OPS = {
+    "leaven/graph.query": ("graph.query", "qrec_graph", "query", ["public"]),
+    "leaven/case.load": ("case.load", "qrec_case_load", "query", ["public"]),
+    "leaven/case.input": ("case.input", "qrec_case_input", "query", ["public"]),
+    "leaven/case.target": ("case.target", "qrec_case_target", "query", ["public"]),
+    "leaven/case.metadata": ("case.metadata", "qrec_case_metadata", "query", ["public"]),
+    "leaven/human.review": ("human.review", "humanrec_acp", "call", ["public"]),
+    "leaven/event.emit": ("event.emit", "wrec_event_emit", "write", ["public"]),
+}
+
+WORKSPACE_METHODS = {
+    "leaven/workspace.materialize": ("workspace_handle", "wrec_materialize", "call", ["workspace.file"]),
+    "leaven/workspace.release": ("workspace_handle", "wrec_release", "call", ["workspace.file"]),
+    "leaven/workspace.snapshot": ("workspace_snapshot", "qrec_workspace_snapshot", "query", ["workspace.file"]),
+    "leaven/workspace.list": ("workspace_listing", "qrec_workspace_list", "query", ["workspace.file"]),
+    "leaven/workspace.read_file": ("workspace_file", "qrec_workspace_file", "query", ["workspace.file"]),
+    "leaven/workspace.stat": ("workspace_listing", "qrec_workspace_stat", "query", ["workspace.file"]),
+    "leaven/workspace.digest": ("workspace_snapshot", "qrec_workspace_digest", "query", ["workspace.file"]),
+    "leaven/workspace.git_log": ("workspace_diff", "qrec_workspace_git_log", "query", ["workspace.file"]),
+    "leaven/workspace.git_diff": ("workspace_diff", "qrec_workspace_git_diff", "query", ["workspace.file"]),
+    "leaven/workspace.git_status": ("workspace_diff", "qrec_workspace_git_status", "query", ["workspace.file"]),
+    "leaven/workspace.capture_artifacts": ("workspace_listing", "qrec_workspace_capture", "query", ["workspace.file"]),
+}
+
+EFFECT_AND_WRITE_METHODS = {
+    "leaven/lm.complete": ("lm_response", "lmrec_acp", "call", ["completion.raw"]),
+    "leaven/agent.run": ("agent_session", "agentrec_acp", "call", ["public", "transcript.raw"]),
+    "leaven/sandbox.exec": ("sandbox_exec", "execrec_acp", "call", ["public"]),
+    "leaven/proposal.submit_batch": ("proposal_batch_receipt", "wrec_proposal_submit", "write", ["public"]),
+    "leaven/proposal.apply": ("apply_receipt", "wrec_proposal_apply", "write", ["public"]),
+    "leaven/assessment.submit": ("assessment_batch_receipt", "wrec_assessment_submit", "write", ["public"]),
+    "leaven/evaluation.request": ("evaluation_request_receipt", "wrec_evaluation_request", "write", ["public"]),
+}
+
 observed = []
 
-for index, case in enumerate(cases):
+def canonical_hash(prefix, value):
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return prefix + hashlib.sha256(encoded).hexdigest()
+
+def blob_ref(blob_id, data_classes):
+    return {
+        "kind": "blob_ref",
+        "id": blob_id,
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "bytes": 32,
+        "data_classes": data_classes,
+    }
+
+def query_receipt(receipt):
+    return {
+        "kind": "query",
+        "receipt": receipt,
+        "op_var": "workspace_read",
+        "started_at": "2026-05-23T00:00:00Z",
+        "completed_at": "2026-05-23T00:00:01Z",
+        "op_hash": "fp_query_sha256_acp",
+        "result_hash": "fp_result_sha256_acp",
+        "graph_revision": "rev_acp",
+        "status": "succeeded",
+        "read_scope_fingerprint": "fp_scope_sha256_acp",
+        "projection_fingerprint": "fp_projection_sha256_acp",
+    }
+
+def call_receipt(call_kind, receipt):
+    value = {
+        "kind": "call",
+        "receipt": receipt,
+        "op_var": "worker_call",
+        "started_at": "2026-05-23T00:00:00Z",
+        "completed_at": "2026-05-23T00:00:01Z",
+        "call_kind": call_kind,
+        "request_hash": "fp_request_sha256_acp",
+        "result_hash": "fp_result_sha256_acp",
+        "runtime_fingerprint": "fp_runtime_sha256_acp",
+        "status": "succeeded",
+    }
+    if call_kind == "lm_complete":
+        value["cost"] = {"usd_micro": 42, "lm_calls": 1}
+    if call_kind == "agent_run":
+        value["cost"] = {"usd_micro": 1000, "agent_calls": 1}
+    if call_kind == "sandbox_exec":
+        value["cost"] = {"usd_micro": 10, "sandbox_calls": 1}
+    return value
+
+def write_receipt(write_kind, receipt):
+    value = {
+        "kind": "write",
+        "receipt": receipt,
+        "op_var": "primary",
+        "started_at": "2026-05-23T00:00:00Z",
+        "completed_at": "2026-05-23T00:00:01Z",
+        "write_kind": write_kind,
+        "request_hash": "fp_request_sha256_acp",
+        "result_hash": "fp_result_sha256_acp",
+        "base_revision": "rev_acp",
+        "committed_revision": "rev_acp",
+        "status": "succeeded",
+    }
+    if write_kind == "submit_proposal_batch":
+        value["proposal_batch_id"] = "pb_acp"
+        value["proposal_ids"] = ["prop_acp"]
+    if write_kind == "apply_proposal_batch":
+        value["created_candidates"] = ["cand_acp_created"]
+    if write_kind == "submit_assessments":
+        value["evaluation_request_id"] = "evalreq_acp"
+        value["assessment_ids"] = ["assess_acp"]
+        value["request_hash"] = canonical_hash("fp_request_sha256_", {
+            "schema_version": "leaven.submit_assessments_request.v1",
+            "evaluation_request_id": "evalreq_acp",
+            "assessment_ids": ["assess_acp"],
+        })
+    if write_kind == "request_evaluation":
+        value["evaluation_request_id"] = "evalreq_acp"
+    if write_kind == "emit_run_event":
+        value["event_id"] = "event_acp"
+    return value
+
+def extension_primary(op):
+    return {
+        "kind": "extension",
+        "namespace": "leaven",
+        "op": op,
+        "schema_fingerprint": "fp_schema_sha256_acpextension",
+        "payload": {"status": "ok"},
+    }
+
+def workspace_primary(kind, receipt):
+    if kind == "workspace_handle":
+        return {
+            "kind": "workspace_handle",
+            "workspace": "ws_acp",
+            "lifetime": "stage_call",
+            "released": receipt == "wrec_release",
+            "graph_revision": "rev_acp",
+            "data_classes": ["workspace.file"],
+            "replayability": "fully_managed",
+            "receipt": receipt,
+        }
+    if kind == "workspace_snapshot":
+        return {
+            "kind": "workspace_snapshot",
+            "workspace": "ws_acp",
+            "digest": "sha256:workspace",
+            "graph_revision": "rev_acp",
+            "data_classes": ["workspace.file"],
+            "replayability": "pure_read",
+        }
+    if kind == "workspace_listing":
+        return {
+            "kind": "workspace_listing",
+            "entries": [{"path": "src/lib.rs", "kind": "file", "data_classes": ["workspace.file"]}],
+            "graph_revision": "rev_acp",
+            "data_classes": ["workspace.file"],
+            "replayability": "pure_read",
+        }
+    if kind == "workspace_file":
+        return {
+            "kind": "workspace_file",
+            "path": "src/lib.rs",
+            "content": "pub fn demo() {}",
+            "graph_revision": "rev_acp",
+            "data_classes": ["workspace.file"],
+            "replayability": "pure_read",
+            "receipt": "qrec_workspace_file",
+        }
+    if kind == "workspace_diff":
+        return {
+            "kind": "workspace_diff",
+            "text": " M src/lib.rs",
+            "graph_revision": "rev_acp",
+            "data_classes": ["workspace.file"],
+            "replayability": "pure_read",
+        }
+    raise AssertionError(f"unknown workspace primary {kind}")
+
+def effect_or_write_primary(kind):
+    if kind == "lm_response":
+        return {
+            "kind": "lm_response",
+            "message": {"role": "assistant", "content": [{"kind": "text", "text": "ok"}]},
+            "graph_revision": "rev_acp",
+            "cost": {"usd_micro": 42, "lm_calls": 1},
+            "data_classes": ["completion.raw"],
+            "replayability": "fully_managed",
+            "receipt": "lmrec_acp",
+        }
+    if kind == "agent_session":
+        return {
+            "kind": "agent_session",
+            "status": "completed",
+            "transcript_ref": blob_ref("blob_agent_transcript", ["transcript.raw"]),
+            "commands": [{
+                "argv": ["codex"],
+                "status": "completed",
+                "receipt": "agentrec_acp",
+                "stdout_ref": blob_ref("blob_agent_stdout", ["transcript.raw"]),
+                "stderr_ref": blob_ref("blob_agent_stderr", ["transcript.raw"]),
+            }],
+            "cost": {"usd_micro": 1000, "agent_calls": 1},
+            "graph_revision": "rev_acp",
+            "data_classes": ["public", "transcript.raw"],
+            "replayability": "fully_managed",
+            "receipt": "agentrec_acp",
+        }
+    if kind == "sandbox_exec":
+        return {
+            "kind": "sandbox_exec",
+            "status": "completed",
+            "exit_code": 0,
+            "cost": {"usd_micro": 10, "sandbox_calls": 1},
+            "stdout_ref": blob_ref("blob_sandbox_stdout", ["public"]),
+            "stderr_ref": blob_ref("blob_sandbox_stderr", ["public"]),
+            "graph_revision": "rev_acp",
+            "data_classes": ["public"],
+            "replayability": "fully_managed",
+            "receipt": "execrec_acp",
+        }
+    if kind == "proposal_batch_receipt":
+        return {
+            "kind": "proposal_batch_receipt",
+            "batch_id": "pb_acp",
+            "proposal_ids": ["prop_acp"],
+            "status": "committed",
+            "graph_revision": "rev_acp",
+            "data_classes": ["public"],
+            "replayability": "fully_managed",
+            "receipt": "wrec_proposal_submit",
+        }
+    if kind == "apply_receipt":
+        return {
+            "kind": "apply_receipt",
+            "created_candidates": ["cand_acp_created"],
+            "status": "committed",
+            "graph_revision": "rev_acp",
+            "data_classes": ["public"],
+            "replayability": "fully_managed",
+            "receipt": "wrec_proposal_apply",
+        }
+    if kind == "assessment_batch_receipt":
+        return {
+            "kind": "assessment_batch_receipt",
+            "evaluation_request_id": "evalreq_acp",
+            "assessment_ids": ["assess_acp"],
+            "per_assessment": [{"assessment": "assess_acp", "replayability": "fully_managed"}],
+            "status": "committed",
+            "graph_revision": "rev_acp",
+            "data_classes": ["public"],
+            "replayability": "fully_managed",
+            "receipt": "wrec_assessment_submit",
+        }
+    if kind == "evaluation_request_receipt":
+        return {
+            "kind": "evaluation_request_receipt",
+            "evaluation_request_id": "evalreq_acp",
+            "status": "recorded",
+            "graph_revision": "rev_acp",
+            "data_classes": ["public"],
+            "replayability": "fully_managed",
+            "receipt": "wrec_evaluation_request",
+        }
+    raise AssertionError(f"unknown effect/write primary {kind}")
+
+def make_result(method):
+    if method in GENERIC_EXTENSION_OPS:
+        op, receipt_id, receipt_kind, data_classes = GENERIC_EXTENSION_OPS[method]
+        primary = extension_primary(op)
+        if receipt_kind == "query":
+            receipt = query_receipt(receipt_id)
+        elif receipt_kind == "call":
+            receipt = call_receipt("human_review", receipt_id)
+        else:
+            receipt = write_receipt("emit_run_event", receipt_id)
+    elif method in WORKSPACE_METHODS:
+        primary_kind, receipt_id, receipt_kind, data_classes = WORKSPACE_METHODS[method]
+        primary = workspace_primary(primary_kind, receipt_id)
+        if receipt_kind == "query":
+            receipt = query_receipt(receipt_id)
+        else:
+            call_kind = "workspace_materialize" if method.endswith("materialize") else "workspace_release"
+            receipt = call_receipt(call_kind, receipt_id)
+    else:
+        primary_kind, receipt_id, receipt_kind, data_classes = EFFECT_AND_WRITE_METHODS[method]
+        primary = effect_or_write_primary(primary_kind)
+        if receipt_kind == "call":
+            call_kind = {
+                "leaven/lm.complete": "lm_complete",
+                "leaven/agent.run": "agent_run",
+                "leaven/sandbox.exec": "sandbox_exec",
+            }[method]
+            receipt = call_receipt(call_kind, receipt_id)
+        else:
+            write_kind = {
+                "leaven/proposal.submit_batch": "submit_proposal_batch",
+                "leaven/proposal.apply": "apply_proposal_batch",
+                "leaven/assessment.submit": "submit_assessments",
+                "leaven/evaluation.request": "request_evaluation",
+            }[method]
+            receipt = write_receipt(write_kind, receipt_id)
+    schema_version = {
+        "query": "leaven.plan_query_result.v1",
+        "call": "leaven.plan_call_result.v1",
+        "write": "leaven.plan_write_result.v1",
+    }[receipt["kind"]]
+    op_name = receipt.get("op_var", "primary")
+    receipt["result_hash"] = canonical_hash("fp_result_sha256_", {
+        "schema_version": schema_version,
+        "name": op_name,
+        "value": primary,
+    })
+    return {
+        "method": method,
+        "redactions": [],
+        "capability_fingerprint": os.environ["LEAVEN_CAPABILITY_FINGERPRINT"],
+        "data_classes": data_classes,
+        "primary": primary,
+        "receipts": [receipt],
+    }
+
+for index, expected_method in enumerate(EXPECTED_METHODS):
     request = json.loads(sys.stdin.readline())
     assert request["jsonrpc"] == "2.0"
     assert request["id"] == f"leaven-acp-{index}"
-    assert request["method"] == case["method"]
+    assert request["method"] == expected_method
     assert request["params"]["schema_version"] == "leaven.plan.v1"
     assert request["params"]["commit"]["kind"] == "no_graph_writes"
+    assert request["params"]["ops"][0]["expr"]["value"] == expected_method
     assert "mcp" not in request["method"]
     assert os.environ["LEAVEN_CAPABILITY_TOKEN"] == "secret-token"
     assert os.environ["LEAVEN_CAPABILITY_FINGERPRINT"] == "fp_cap_sha256_acp"
@@ -183,10 +516,8 @@ for index, case in enumerate(cases):
             "priority": "critical",
         },
     }), flush=True)
-    result = case["result"]
-    result["capability_fingerprint"] = os.environ["LEAVEN_CAPABILITY_FINGERPRINT"]
+    result = make_result(expected_method)
     assert result["method"] == request["method"]
-    assert result["primary"]["kind"] == case["primary_kind"]
     print(json.dumps({
         "jsonrpc": "2.0",
         "id": request["id"],
@@ -203,7 +534,6 @@ with open(os.environ["LEAVEN_TEST_OBSERVED_REQUESTS"], "w", encoding="utf-8") as
         profile,
         AcpProcessCommand::new("python3")
             .arg(script_path.to_str().unwrap())
-            .env("LEAVEN_TEST_PROGRAM", program_spec)
             .env(
                 "LEAVEN_TEST_OBSERVED_REQUESTS",
                 observed_requests.to_str().unwrap(),
@@ -216,7 +546,7 @@ with open(os.environ["LEAVEN_TEST_OBSERVED_REQUESTS"], "w", encoding="utf-8") as
 
     for (index, (method, primary_kind)) in expected.iter().enumerate() {
         let response = session
-            .call_extension(method, &acp_plan_params())
+            .call_extension(method, &acp_plan_params_for_method(method))
             .unwrap_or_else(|error| panic!("program call {index} {method} failed: {error:?}"));
         assert_eq!(response.id(), format!("leaven-acp-{index}"));
         assert_eq!(response.method(), *method);
@@ -1353,6 +1683,12 @@ fn acp_plan_params() -> Value {
         "return": ["input"],
         "commit": {"kind": "no_graph_writes"}
     })
+}
+
+fn acp_plan_params_for_method(method: &str) -> Value {
+    let mut params = acp_plan_params();
+    params["ops"][0]["expr"]["value"] = json!(method);
+    params
 }
 
 fn extension_primary(op: &str) -> Value {
