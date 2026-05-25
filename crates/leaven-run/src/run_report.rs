@@ -1,7 +1,5 @@
 //! Product-run report and summary construction.
 
-use std::{fs, fs::OpenOptions, io::Write, path::Path};
-
 use leaven_core::{
     Artifact, AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest,
     EvaluationSet, PartitionId,
@@ -15,15 +13,17 @@ use leaven_kernel::{AssessmentId, BudgetSnapshot, CandidateId, Cost, ErrorKind, 
 use leaven_store::EvidenceStore;
 
 use crate::{
-    OptimizeError, RunProblem,
+    RunProblem,
     result::{
         BestCandidate, EvaluationCacheBackend, EvaluationCacheBypassReason,
         EvaluationCacheBypassSummary, EvaluationCacheSummary, RunCacheSummary, RunEventSummary,
-        RunNotResumableReason, RunReportPaths, RunResumability, RunStorage, StandardRunSummary,
-        average,
+        RunReportPaths, RunResumability, RunStorage, StandardRunSummary, average,
     },
-    run_store::PreparedStore,
 };
+
+mod storage;
+
+pub use storage::{report_paths_for, run_storage, write_summary_report};
 
 pub struct FinalEvaluations {
     pub baseline_train: Option<CandidateEvaluationSummary>,
@@ -419,115 +419,6 @@ fn output_record_text(output: &OutputRecord) -> String {
     }
 }
 
-pub fn run_storage<P>(
-    run_id: leaven_kernel::RunId,
-    store: &PreparedStore<P>,
-    latest_checkpoint: Option<leaven_kernel::CheckpointId>,
-    has_compatibility_manifest: bool,
-) -> RunStorage
-where
-    P: leaven_core::OptimizationProblem,
-{
-    if store.store.persistence().is_some() {
-        RunStorage::Stored {
-            run_id,
-            run_dir: store.run_dir.clone(),
-            latest_checkpoint,
-            resumability: if store.run_dir.is_none() {
-                RunResumability::NotResumable {
-                    reason: RunNotResumableReason::ExplicitStoreWithoutLocalRunDir,
-                }
-            } else if latest_checkpoint.is_none() {
-                RunResumability::NotResumable {
-                    reason: RunNotResumableReason::MissingLatestCheckpoint,
-                }
-            } else if !has_compatibility_manifest {
-                RunResumability::NotResumable {
-                    reason: RunNotResumableReason::MissingCompatibilityManifest,
-                }
-            } else {
-                RunResumability::Resumable
-            },
-        }
-    } else {
-        RunStorage::Ephemeral { run_id }
-    }
-}
-
-pub fn report_paths_for(storage: &RunStorage) -> RunReportPaths {
-    match storage {
-        RunStorage::Stored {
-            run_dir: Some(run_dir),
-            ..
-        } => RunReportPaths {
-            summary_json: Some(run_dir.join("reports").join("summary.json")),
-        },
-        RunStorage::Stored { .. } | RunStorage::Ephemeral { .. } => RunReportPaths::default(),
-    }
-}
-
-pub fn write_summary_report(summary: &StandardRunSummary) -> Result<(), OptimizeError> {
-    let Some(path) = &summary.reports.summary_json else {
-        return Ok(());
-    };
-    let parent = path
-        .parent()
-        .expect("summary report path has parent directory");
-    fs::create_dir_all(parent).map_err(|source| OptimizeError::ReportStore {
-        operation: "create report directory",
-        source,
-    })?;
-    let bytes =
-        serde_json::to_vec_pretty(summary).expect("standard run summary is JSON-serializable");
-    write_report_atomic(path, &bytes, "write summary json")
-}
-
-fn write_report_atomic(
-    path: &Path,
-    bytes: &[u8],
-    operation: &'static str,
-) -> Result<(), OptimizeError> {
-    let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    let file_name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or_else(|| OptimizeError::ReportStore {
-            operation,
-            source: std::io::Error::new(std::io::ErrorKind::InvalidInput, "path has no file name"),
-        })?;
-    let temp = path.with_file_name(format!(".{file_name}.{}.tmp", uuid::Uuid::new_v4()));
-    let result = write_report_atomic_inner(path, &temp, parent, bytes, operation);
-    if result.is_err() {
-        let _ = fs::remove_file(&temp);
-    }
-    result
-}
-
-fn write_report_atomic_inner(
-    path: &Path,
-    temp: &Path,
-    parent: &Path,
-    bytes: &[u8],
-    operation: &'static str,
-) -> Result<(), OptimizeError> {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(temp)
-        .map_err(|source| OptimizeError::ReportStore { operation, source })?;
-    file.write_all(bytes)
-        .and_then(|()| file.sync_all())
-        .map_err(|source| OptimizeError::ReportStore { operation, source })?;
-    drop(file);
-    fs::rename(temp, path).map_err(|source| OptimizeError::ReportStore { operation, source })?;
-    let dir = OpenOptions::new()
-        .read(true)
-        .open(parent)
-        .map_err(|source| OptimizeError::ReportStore { operation, source })?;
-    dir.sync_all()
-        .map_err(|source| OptimizeError::ReportStore { operation, source })
-}
-
 fn event_summary(event: &leaven_engine::RunEvent) -> RunEventSummary {
     match event {
         leaven_engine::RunEvent::OptimizationStarted { .. } => RunEventSummary::OptimizationStarted,
@@ -645,7 +536,10 @@ fn increment_bypass(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::{
+        collections::{BTreeMap, BTreeSet},
+        path::Path,
+    };
 
     use leaven_core::{
         Artifact, ArtifactIdentity, Assessment, CaseSetVersion, CausalInputs, ProposalEffectKind,
@@ -661,6 +555,8 @@ mod tests {
         StageRole,
     };
     use leaven_store_inline::InlineEvidenceStore;
+
+    use crate::{OptimizeError, RunNotResumableReason};
 
     use super::*;
 
@@ -952,7 +848,7 @@ mod tests {
 
     #[test]
     fn summary_report_atomic_write_rejects_paths_without_file_names() {
-        let error = write_report_atomic(Path::new(""), b"{}", "write summary json")
+        let error = storage::write_report_atomic(Path::new(""), b"{}", "write summary json")
             .expect_err("report atomic writes require a file path");
 
         assert!(matches!(error, OptimizeError::ReportStore { .. }));
@@ -1008,7 +904,7 @@ mod tests {
         assert!(error.to_string().contains("assessment missing"));
 
         let run_id = RunId::new();
-        let prepared = PreparedStore::<RunProblem<TestArtifact, (), ()>> {
+        let prepared = crate::run_store::PreparedStore::<RunProblem<TestArtifact, (), ()>> {
             store: crate::OptimizeStore::durable(
                 InlineEvidenceStore::<CaseAssessmentEvidence>::new("durable-report-test"),
                 NoopPersistence,
