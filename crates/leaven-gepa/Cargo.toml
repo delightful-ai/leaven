@@ -1,6 +1,6 @@
 [package]
 name = "leaven-gepa"
-description = "Leaven crate skeleton for leaven-gepa."
+description = "Behavior-bearing GEPA optimizer primitives for Leaven."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

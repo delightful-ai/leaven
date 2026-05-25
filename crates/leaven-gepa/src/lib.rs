@@ -1,4 +1,9 @@
-//! GEPA optimizer primitives.
+//! Behavior-bearing GEPA optimizer primitives.
+//!
+//! This crate owns GEPA loop state, surface-edit lowering, selection,
+//! validation, reflection request construction, report projection, and
+//! checkpoint state. Some product-facing slots remain scaffold or advanced
+//! extension points; see the crate-local `AGENTS.md` before widening exports.
 
 pub mod agent_stage;
 pub mod builder;

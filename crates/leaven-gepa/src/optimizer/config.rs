@@ -272,8 +272,9 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
     /// Swap the reflective-dataset builder used before each reflection step.
     ///
     /// The builder is the "what data does reflection see" seam. The default is
-    /// [`GepaReflectiveDataset`], a GEPA-parity per-case projection. A plain
-    /// closure can be passed here via the closure blanket impl.
+    /// [`GepaReflectiveDataset`](crate::reflection::GepaReflectiveDataset), a
+    /// GEPA-parity per-case projection. A plain closure can be passed here via
+    /// the closure blanket impl.
     #[must_use]
     pub fn reflective_dataset<NextDataset>(
         self,
