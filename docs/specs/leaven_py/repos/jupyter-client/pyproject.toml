@@ -1,0 +1,299 @@
+[build-system]
+requires = ["hatchling>=1.5"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jupyter_client"
+dynamic = ["version"]
+description = "Jupyter protocol implementation and client libraries"
+keywords = [ "Interactive", "Interpreter", "Shell", "Web",]
+classifiers = [
+    "Framework :: Jupyter",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3"
+]
+requires-python = ">=3.10"
+dependencies = [
+    "jupyter_core>=5.1",
+    "python-dateutil>=2.8.2",
+    "pyzmq>=25.0",
+    "tornado>=6.4.1",
+    "traitlets>=5.3",
+]
+
+[[project.authors]]
+name = "Jupyter Development Team"
+email = "jupyter@googlegroups.com"
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[project.license]
+file = "LICENSE"
+
+[project.urls]
+Homepage = "https://jupyter.org"
+Documentation = "https://jupyter-client.readthedocs.io/"
+Source = "https://github.com/jupyter/jupyter_client"
+
+# this is required by sp-repo-review, it suggest to rely on test, and
+# move test within dependency groups but moving it to dependency-group
+# would mean it does not work when pip install jupyter_client[test] from
+# a released sdist/wheel AFAICT.
+[dependency-groups]
+dev = [ ]
+
+[project.optional-dependencies]
+test = [
+    "anyio",
+    "coverage",
+    "ipykernel>=6.14",
+    "mypy; platform_python_implementation != 'PyPy'",
+    "paramiko; sys_platform == 'win32'",
+    "pre-commit",
+    "pytest",
+    "pytest-jupyter[client]>=0.6.2",
+    "pytest-cov",
+    "pytest-timeout",
+    "msgpack"
+]
+docs = [
+    "ipykernel",
+    "myst-parser",
+    "sphinx>=4",
+    "pydata_sphinx_theme",
+    "sphinxcontrib_github_alt",
+    "sphinxcontrib-spelling",
+    "sphinx-autodoc-typehints",
+]
+orjson = ["orjson"] # When orjson is installed it will be used for faster pack and unpack
+
+[project.scripts]
+jupyter-kernelspec = "jupyter_client.kernelspecapp:KernelSpecApp.launch_instance"
+jupyter-run = "jupyter_client.runapp:RunApp.launch_instance"
+jupyter-kernel = "jupyter_client.kernelapp:main"
+
+[project.entry-points."jupyter_client.kernel_provisioners"]
+local-provisioner = "jupyter_client.provisioning:LocalProvisioner"
+
+[tool.hatch.version]
+path = "jupyter_client/_version.py"
+validate-bump = false
+
+[tool.hatch.envs.docs]
+features = ["docs"]
+[tool.hatch.envs.docs.scripts]
+build = "make -C docs html SPHINXOPTS='-W'"
+api = "sphinx-apidoc -o docs/api -f -E jupyter_client"
+
+[tool.hatch.envs.test]
+features = ["test"]
+[tool.hatch.envs.test.scripts]
+test = "python -m pytest -vv {args}"
+nowarn = "test -W default {args}"
+
+[tool.hatch.envs.cov]
+features = ["test"]
+dependencies = ["coverage[toml]", "pytest-cov"]
+[tool.hatch.envs.cov.scripts]
+test = "python -m pytest -vv --cov jupyter_client --cov-branch --cov-report term-missing:skip-covered {args}"
+nowarn = "test -W default {args}"
+
+[tool.hatch.envs.typing]
+dependencies = ["pre-commit"]
+detached = true
+[tool.hatch.envs.typing.scripts]
+test = "pre-commit run --all-files --hook-stage manual mypy"
+
+[tool.hatch.envs.lint]
+dependencies = ["pre-commit"]
+detached = true
+[tool.hatch.envs.lint.scripts]
+build = [
+  "pre-commit run --all-files ruff-check",
+  "pre-commit run --all-files ruff-format"
+]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+xfail_strict = true
+log_cli_level = "info"
+addopts = [
+  "-raXs", "--durations=10", "--color=yes", "--doctest-modules",
+   "--showlocals", "--strict-markers", "--strict-config"
+]
+testpaths = [
+    "jupyter_client",
+    "tests/"
+]
+timeout = 100
+# Restore this setting to debug failures
+timeout_method = "thread"
+filterwarnings= [
+  # Fail on warnings
+  "error",
+  # from python-dateutil
+  "ignore:datetime.datetime.utcfromtimestamp:DeprecationWarning",
+  "ignore:datetime.datetime.utcnow:DeprecationWarning",
+  # from ipykernel 6 (fixed in 7)
+  "ignore:Parsing dates:DeprecationWarning:ipykernel.jsonutil",
+]
+log_level = "INFO"
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "def __repr__",
+  "if self.debug:",
+  "if settings.DEBUG",
+  "raise AssertionError",
+  "raise NotImplementedError",
+  "if 0:",
+  "if __name__ == .__main__.:",
+  "class .*\bProtocol\\):",
+"@(abc\\.)?abstractmethod",
+]
+omit = [
+    "jupyter_client/ssh/forward.py"
+]
+
+[tool.coverage.run]
+relative_files = true
+source = ["jupyter_client"]
+
+[tool.mypy]
+files = "jupyter_client"
+python_version = "3.10"
+strict = true
+disallow_any_generics = false
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+no_implicit_reexport = false
+pretty = true
+show_error_context = true
+warn_return_any = false
+warn_unreachable = true
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+  "A",
+  "B",
+  "C",
+  "DTZ",
+  "E",
+  "EM",
+  "F",
+  "FBT",
+  "I",
+  "ICN",
+  "N",
+  "PLC",
+  "PLE",
+  "PLW",
+  "Q",
+  "RUF",
+  "S",
+  "SIM",
+  "T",
+  "TID",
+  "UP",
+  "W",
+  "YTT",
+]
+ignore = [
+  # Allow non-abstract empty methods in abstract base classes
+  "B027",
+  # Ignore McCabe complexity
+  "C901",
+  # Allow boolean positional values in function calls, like `dict.get(... True)`
+  "FBT003",
+  # Use of `assert` detected
+  "S101",
+  # Line too long
+  "E501",
+  # Relative imports are banned
+  "TID252",
+  # Boolean ... in function definition
+  "FBT001",
+  "FBT002",
+  # Module level import not at top of file
+  "E402",
+  # A001/A002/A003 .. is shadowing a python builtin
+  "A001",
+  "A002",
+  "A003",
+  # Possible hardcoded password
+  "S105",
+  "S106",
+  # Q000 Single quotes found but double quotes preferred
+  "Q000",
+  # N806 Variable `B` in function should be lowercase
+  "N806",
+  # SIM105 Use `contextlib.suppress(ValueError)` instead of try-except-pass
+  "SIM105",
+  # SIM108 [*] Use ternary operator
+  "SIM108",
+  # S110 `try`-`except`-`pass` detected, consider logging the exception
+  "S110",
+  # PLW0603 Using the global statement to update
+  "PLW0603",
+  # Mutable class attributes should be annotated with `typing.ClassVar`
+  "RUF012",
+  # non-pep585-annotation
+  "UP006",
+  # non-pep604-annotation
+  "UP007",
+  #UP031 Use format specifiers instead of percent format,
+  "UP031",
+  # `import` should be at the top-level of a file
+  "PLC0415"
+
+
+]
+unfixable = [
+  # Don't touch print statements
+  "T201",
+  # Don't touch noqa lines
+  "RUF100",
+  # Imported but unused
+  "F401",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# B011 Do not call assert False since python -O removes these calls
+# F841 local variable 'foo' is assigned to but never used
+# C408 Unnecessary `dict` call
+# E402 Module level import not at top of file
+# T201 `print` found
+# B007 Loop control variable `i` not used within the loop body.
+# N802 Function name `assertIn` should be lowercase
+# EM101 Exception must not use a string literal, assign to variable first
+# PLR2004 Magic value used in comparison
+# S603 `subprocess` call: check for execution of untrusted input
+"tests/*" = ["B011", "F841", "C408", "E402", "T201", "B007", "N802", "EM101", "EM102", "PLR2004", "S603"]
+# T201 `print` found
+"*app.py" = ["T201"]
+# F401 `._version.__version__` imported but unused
+"jupyter_client/__init__.py" = ["F401"]
+
+[tool.interrogate]
+ignore-init-module=true
+ignore-private=true
+ignore-semiprivate=true
+ignore-property-decorators=true
+ignore-nested-functions=true
+ignore-nested-classes=true
+fail-under=90
+exclude = ["docs", "test"]
+
+[tool.repo-review]
+ignore = ["GH102"]
