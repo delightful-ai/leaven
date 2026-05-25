@@ -43,7 +43,9 @@ surface or encode the warning at the owning layer.
 - `crates/leaven-gepa-agentic-skill`: bridge crate for the GEPA reflection + skill-bank agentic proposer path. It may compose GEPA reflection requests, generic agentic proposer flow, and skill-bank materialization/readback; it must not own GEPA search policy, provider protocols, or skill artifact validation rules.
 - Domain/edge adapters such as future CUDA or Rust-side Python crates should be added only when they carry behavior, tests, topology rows, and local ownership docs. Do not add placeholder adapter crates.
 - DSRS interop is not a current workspace crate. Reintroduce a DSRS crate only with topology-contract coverage, workspace membership, behavior-bearing tests, and local ownership docs.
-- `crates/leaven-derive`: derive macros only; no runtime or adapter dependencies without an explicit derive contract.
+- Derive macros are not a current workspace crate. Reintroduce `leaven-derive`
+  only with real codegen, UI pass/fail fixtures, trait-contract tests, topology
+  coverage, and public route maturity updates.
 - `crates/leaven`: umbrella import experience and re-exports only.
 - `docs/specs`: durable product and architecture specs. Read the relevant spec before implementing spec-derived behavior.
 - `docs/specs/public-seam-v1`: locked public seam specification for external-language workers: plan IR, capability tokens, result receipts, stage payloads, evaluator/evidence envelopes, the Leaven ACP profile, and JSON Schemas. Watch is deferred from v1.

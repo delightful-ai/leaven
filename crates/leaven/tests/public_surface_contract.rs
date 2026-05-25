@@ -67,9 +67,6 @@ const SURFACE: &[(&str, Route, &str)] = &[
     ("ScoreError", Route::Prelude, ""),
     ("StandardRunSummary", Route::Prelude, ""),
     ("optimize", Route::Prelude, ""),
-    ("DeriveArtifact", Route::Prelude, ""),
-    ("DeriveContentAddressed", Route::Prelude, ""),
-    ("DeriveEditSurface", Route::Prelude, ""),
     // --- extend: engine stage traits implemented by component authors. ---
     (
         "Optimizer",
@@ -359,7 +356,7 @@ const SURFACE: &[(&str, Route, &str)] = &[
     (
         "ContentAddressed",
         Route::Plumbing,
-        "derive-macro output and content-store internals",
+        "content-store internals",
     ),
     (
         "CacheIdentity",

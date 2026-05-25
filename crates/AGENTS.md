@@ -32,7 +32,9 @@ Root `AGENTS.md` owns the full routing map. This file adds local crate-family ru
   tests. Placeholder CUDA/Python adapter crates were removed instead of kept as
   public reservations.
 - DSRS interop is not a current workspace crate. Do not treat historical DSRS notes as an edge-adapter precedent until a crate returns with a manifest, topology coverage, tests, and a local boundary file that says what it owns.
-- `leaven-derive` is derive macros only. Do not add runtime or adapter dependencies without an explicit derive contract.
+- Derive macros are not a current workspace crate. Do not add placeholder macro
+  crates; reintroduce `leaven-derive` only with real codegen, UI pass/fail
+  fixtures, trait-contract tests, topology coverage, and local ownership docs.
 
 ## Leaf Activation Rules
 Every workspace crate now has a local `AGENTS.md`; read the stacked root, this

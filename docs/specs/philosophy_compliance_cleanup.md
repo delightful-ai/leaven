@@ -89,9 +89,9 @@ contract tests once the trait is public and behavior-bearing.
   Amount-like values are finite and non-negative by construction, serde
   deserialization preserves the same invariant, and budget tests cover the
   former `NaN` bypass shape.
-- `leaven-derive` no longer exposes derive macros that silently expand to
-  nothing. Reserved derives now fail explicitly, with `trybuild` coverage, until
-  the real derive contracts are implemented.
+- The placeholder `leaven-derive` crate was removed instead of shipping
+  compile-error macros through the default public route. Derives should return
+  only with real codegen and trait-contract coverage.
 - UUID-backed ID macro generation now accepts doc attributes, so public
   identifier docstrings do not break the typed-ID implementation.
 - `EvaluationCacheKey` now carries `CaseSetVersion` instead of downgrading the
@@ -142,8 +142,9 @@ Required cleanup:
 
 ### Derive Macro Implementation
 
-`leaven-derive` now fails explicitly instead of silently expanding to nothing,
-but the spec-defined derive implementation is still open.
+The placeholder `leaven-derive` crate was removed after first being hardened to
+fail explicitly instead of silently expanding to nothing. The spec-defined
+derive implementation is still open.
 
 Required cleanup:
 

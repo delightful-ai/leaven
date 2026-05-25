@@ -242,7 +242,8 @@ uuid_id!(
 /// silently produces incorrect cache results. Two safety mechanisms are
 /// provided in higher crates:
 ///
-/// - `#[derive(Artifact)]` / `#[derive(ContentAddressed)]` in `leaven-derive`
+/// - future `#[derive(Artifact)]` / `#[derive(ContentAddressed)]` macros once
+///   a behavior-bearing derive crate exists
 ///   generate hash implementations that include every field by default,
 ///   skipping only those marked `#[content_skip]`.
 /// - A dev-mode `verify_cache_consistency` flag re-evaluates on cache hits
