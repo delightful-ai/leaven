@@ -1,6 +1,6 @@
 [package]
 name = "leaven-preference"
-description = "Leaven crate skeleton for leaven-preference."
+description = "Stateless preference relations over Leaven evidence values."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,7 +11,5 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-leaven-kernel = { workspace = true }
 leaven-core = { workspace = true }
-leaven-engine = { workspace = true }
 leaven-evidence = { workspace = true }

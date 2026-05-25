@@ -385,15 +385,7 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-preference",
         ],
     ),
-    (
-        "leaven-preference",
-        &[
-            "leaven-core",
-            "leaven-engine",
-            "leaven-evidence",
-            "leaven-kernel",
-        ],
-    ),
+    ("leaven-preference", &["leaven-core", "leaven-evidence"]),
     (
         "leaven-public-seam",
         &[

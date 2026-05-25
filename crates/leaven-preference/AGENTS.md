@@ -5,17 +5,19 @@ It may interpret evidence into `leaven-core::Preference`, but it must not own po
 
 ## Routing
 - Put scalar ordering helpers in `src/scalar.rs`; the finite-score invariant is owned by `leaven-evidence::ScalarEvidence`.
-- Put list/ranking and Pareto preference relation vocabulary in their named modules when behavior lands.
+- Put list/ranking and Pareto preference relation vocabulary in named modules
+  only when behavior lands.
 - Put Bradley-Terry, Plackett-Luce, tournament, frontier, archive, and niche state in `leaven-population`.
 - Put dynamic stage traits and `DynPreferenceRelation` object behavior in `leaven-engine`; add adapters here only when they remain stateless preference implementations.
 
 ## Current Public-Maturity Split
 - Behavior-bearing today: `HigherScoreIsBetter` and `LowerScoreIsBetter` over
   `ScalarEvidence` have tests and rely on evidence-level finite construction.
-- Public placeholders today: `BordaPreference`, `CopelandPreference`,
-  `LexicographicPreference`, and `ParetoPreference` are production-looking unit
-  structs without algorithms or laws. Do not re-export them as standard behavior
-  through `leaven-std` or product examples until implemented.
+- `BordaPreference`, `CopelandPreference`, `LexicographicPreference`, and
+  `ParetoPreference` were removed instead of kept as production-looking unit
+  structs without algorithms or laws. Reintroduce any of those names only with
+  an evidence input shape, tie policy, constructors if needed, and contract
+  tests in the same change.
 
 ## Local Helper Stack
 - Scalar preferences should accept `ScalarEvidence`, not raw `f64`, so the
@@ -27,10 +29,11 @@ It may interpret evidence into `leaven-core::Preference`, but it must not own po
 
 ## Local Bait
 - The crate depends near engine/population vocabulary, so it is tempting to put selection state here. Do not. Preference answers "which result is better"; population answers "what state survives observations."
-- Ranking module names are not proof that ranking algorithms are implemented. Add tests with the behavior before expanding exports.
+- Ranking module names are not proof that ranking algorithms are implemented.
+  Add tests with the behavior before expanding exports.
 - A zero-sized type is acceptable only when it has real marker laws or behavior
-  tests. Current ranking/Pareto names are audit-visible placeholders, not
-  canonical examples.
+  tests. Deleted ranking/Pareto placeholders must not return as canonical
+  examples without those laws.
 
 ## Proof Anchors
 - `cargo nextest run -p leaven-preference` proves the scalar stateless

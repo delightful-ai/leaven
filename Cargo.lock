@@ -3687,9 +3687,7 @@ name = "leaven-preference"
 version = "0.0.0"
 dependencies = [
  "leaven-core",
- "leaven-engine",
  "leaven-evidence",
- "leaven-kernel",
 ]
 
 [[package]]
