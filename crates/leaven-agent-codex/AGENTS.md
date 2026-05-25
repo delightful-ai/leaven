@@ -4,8 +4,10 @@ ergonomics for concrete Codex runtime crates and intentionally does not define
 a universal `CodexRuntime`.
 
 ## Map
-- Feature `cli` re-exports `leaven-agent-codex-cli`.
-- Feature `app-server` re-exports `leaven-agent-codex-app-server`.
+- Feature `cli` explicitly re-exports the current `leaven-agent-codex-cli`
+  runtime/config/parser names.
+- Feature `app-server` explicitly re-exports the current
+  `leaven-agent-codex-app-server` config/error/runtime/transport names.
 - Feature `stdio` is an app-server connector feature, not the default
   backend-neutral Codex path.
 
@@ -19,7 +21,8 @@ a universal `CodexRuntime`.
 
 ## Proof Anchors
 - `crates/leaven-agent-codex/src/lib.rs` should remain a feature-gated map of
-  re-exports only.
+  explicit re-exports only. Do not use wildcard facade re-exports; new leaf
+  exports need deliberate maturity review before flowing through this facade.
 - `cargo check -p leaven-agent-codex --no-default-features` proves the facade
   does not pull provider dependencies by default.
 - `cargo check -p leaven-agent-codex --features cli` proves CLI re-export
