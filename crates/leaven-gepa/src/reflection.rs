@@ -8,7 +8,7 @@ use leaven_core::{
 };
 use leaven_engine::{ProposalError, RunContext, RunContextError};
 pub use leaven_evidence::{Attachment, AttachmentKind};
-use leaven_evidence::{CaseAssessmentEvidence, OutputRecord, ScalarEvidence};
+use leaven_evidence::{CaseAssessmentEvidence, ScalarEvidence};
 use leaven_kernel::{AgentId, AssessmentId, CandidateId, CaseId, CaseRunId, MetadataBag, TraceRef};
 use leaven_lm::{LmRequest, Messages};
 use leaven_surface::EditSurface;
@@ -511,22 +511,13 @@ impl ReflectionProjection for CaseAssessmentEvidence {
         let mut reflective_case = ReflectiveCase::from_example(
             ReflectiveValue::default(),
             None,
-            Some(ReflectiveValue::Text(output_record_text(self.output()))),
+            Some(ReflectiveValue::Text(self.output().report_text())),
             Some(self.score().score()),
             self.feedback().to_owned(),
         );
         reflective_case.case_id = Some(case);
         reflective_case.runs[0].attempt_index = None;
         reflective_case
-    }
-}
-
-fn output_record_text(output: &OutputRecord) -> String {
-    match output {
-        OutputRecord::Inline { text, .. } => text.clone(),
-        OutputRecord::BlobRef { reference, .. } => {
-            format!("blob:{}:{}", reference.store, reference.key)
-        }
     }
 }
 
@@ -708,8 +699,7 @@ mod tests {
     use super::render::strip_optional_language;
     use super::{
         ReflectiveCase, ReflectiveCaseInput, ReflectiveRun, ReflectiveSideInfoValue,
-        ReflectiveValue, extract_replacement_text, output_record_text, render_prompt_template,
-        render_reflective_cases,
+        ReflectiveValue, extract_replacement_text, render_prompt_template, render_reflective_cases,
     };
 
     fn example_case(
@@ -833,9 +823,9 @@ mod tests {
             store: "file".to_owned(),
             key: "outputs/1".to_owned(),
         });
-        assert_eq!(output_record_text(&blob), "blob:file:outputs/1");
+        assert_eq!(blob.report_text(), "blob:file:outputs/1");
         assert_eq!(
-            output_record_text(&OutputRecord::inline("inline answer")),
+            OutputRecord::inline("inline answer").report_text(),
             "inline answer"
         );
 

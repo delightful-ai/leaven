@@ -8,7 +8,7 @@ use leaven_eval::{
     CandidateEvaluationSummary, Case, Dataset, DatasetSplits, EvaluationReport, ReportScore,
     SplitReport, SplitRole,
 };
-use leaven_evidence::{CaseAssessmentEvidence, OutputRecord};
+use leaven_evidence::CaseAssessmentEvidence;
 use leaven_kernel::{AssessmentId, BudgetSnapshot, CandidateId, Cost, EvaluatorId};
 use leaven_store::EvidenceStore;
 
@@ -324,16 +324,7 @@ fn report_score(
             vec![evidence_ref]
         },
         feedback: evidence.feedback().to_owned(),
-        output: output_record_text(evidence.output()),
-    }
-}
-
-fn output_record_text(output: &OutputRecord) -> String {
-    match output {
-        OutputRecord::Inline { text, .. } => text.clone(),
-        OutputRecord::BlobRef { reference, .. } => {
-            format!("blob:{}:{}", reference.store, reference.key)
-        }
+        output: evidence.output().report_text(),
     }
 }
 
@@ -349,7 +340,7 @@ mod tests {
         ResolvedEvaluationRequest, ResolvedRequestKind,
     };
     use leaven_eval::SplitPolicy;
-    use leaven_evidence::ScalarEvidence;
+    use leaven_evidence::{OutputRecord, ScalarEvidence};
     use leaven_kernel::{
         AssessmentId, BudgetSnapshot, CandidateId, CaseId, ContentId, Cost, ErrorKind, ErrorRecord,
         EvaluationRequestId, EvaluationSetId, EvaluatorId, Fingerprint, IterationId, MetadataBag,
