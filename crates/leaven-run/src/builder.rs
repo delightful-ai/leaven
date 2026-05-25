@@ -5,14 +5,6 @@ use std::{
     sync::Arc,
 };
 
-use futures::{FutureExt, future::BoxFuture};
-use leaven_core::{Artifact, OptimizationProblem, PartitionId};
-use leaven_engine::{CachePolicy, Callback, Optimizer};
-use leaven_eval::{Case, Dataset, DatasetSplits, NoTarget};
-use leaven_evidence::CaseAssessmentEvidence;
-use leaven_kernel::{Budget, BudgetSnapshot, CandidateId, CheckpointId, Fingerprint, RunId};
-use serde::{Serialize, de::DeserializeOwned};
-
 use self::{
     cases::{build_case_plan, case_set_cases, cases_from_inputs},
     engine::{
@@ -42,6 +34,12 @@ use crate::{
         mark_latest_checkpoint, prepare_store,
     },
 };
+use futures::{FutureExt, future::BoxFuture};
+use leaven_core::{Artifact, OptimizationProblem, PartitionId};
+use leaven_engine::{CachePolicy, Callback, Optimizer};
+use leaven_eval::{Case, Dataset, DatasetSplits, NoTarget};
+use leaven_evidence::CaseAssessmentEvidence;
+use leaven_kernel::{Budget, BudgetSnapshot, CandidateId, CheckpointId, Fingerprint, RunId};
 
 type Runner<A, I, Out> = Arc<
     dyn Fn(A, RunCase<I>) -> BoxFuture<'static, Result<RunOutput<Out>, RunError>> + Send + Sync,
@@ -57,6 +55,7 @@ mod engine;
 mod final_eval;
 mod order;
 mod resume;
+mod run;
 
 /// Problem type used by the public run builder.
 pub struct RunProblem<A, I, T = NoTarget> {
@@ -374,117 +373,5 @@ where
     pub fn test_inputs(mut self, test: Vec<I>) -> Self {
         self.test = cases_from_inputs(self.train.len() + self.validation.len(), test);
         self
-    }
-}
-
-impl<A, I, T, O, Out> OptimizeBuilder<A, I, T, O, Out>
-where
-    A: Artifact + Serialize + DeserializeOwned,
-    <A as Artifact>::Change: Serialize + DeserializeOwned,
-    I: Clone + Serialize + Send + Sync + 'static,
-    T: Clone + Serialize + Send + Sync + 'static,
-    O: Optimizer<RunProblem<A, I, T>>,
-    Out: Clone + Send + Sync + 'static,
-{
-    /// Runs the optimization.
-    pub async fn run(mut self) -> Result<Optimized<A>, OptimizeError> {
-        self.order.check()?;
-        let scorer = self.scorer.take().ok_or(OptimizeError::MissingScore)?;
-        let budget = self.budget.take().ok_or(OptimizeError::MissingBudget)?;
-        let metric_call_limit = budget.metric_calls;
-        let engine_budget = search_ledger_budget(budget.clone());
-        if self.train.is_empty() && (!self.validation.is_empty() || !self.test.is_empty()) {
-            return Err(OptimizeError::HeldOutWithoutTrain);
-        }
-        let case_content = case_content_fingerprint(&self.train, &self.validation, &self.test)
-            .map_err(|source| OptimizeError::CaseFingerprint { source })?;
-        let case_plan = build_case_plan(&self.train, &self.validation, &self.test, case_content)?;
-        let mut prepared_store = prepare_run_store(&mut self.store, self.run_id)?;
-        let (runner_fingerprint, scorer_fingerprint) = durable_runtime_fingerprints(
-            prepared_store.run_dir.as_deref(),
-            self.runner_fingerprint,
-            self.scorer_fingerprint,
-        )?;
-        let evaluation_cache_policy = self
-            .evaluation_cache_policy
-            .clone()
-            .unwrap_or_else(|| default_evaluation_cache_policy(&prepared_store));
-        let evaluator_identity = scoring_evaluator_identity(
-            runner_fingerprint,
-            scorer_fingerprint,
-            case_content,
-            case_plan.splits.fingerprint(),
-            evaluation_cache_policy.clone(),
-        );
-        let evaluator_fingerprint = RuntimeFingerprint::new(evaluator_identity.fingerprint());
-        let compatibility = RunCompatibilityManifest::new(RunCompatibilityInputs {
-            dataset: DatasetCompatibility::new(case_content, &case_plan.splits),
-            runner: runner_fingerprint,
-            scorer: scorer_fingerprint,
-            evaluator: evaluator_fingerprint,
-            optimizer: self.optimizer.optimizer_compatibility(),
-            lm_roles: self.lm_role_fingerprints.clone(),
-            cache_policy: &evaluation_cache_policy,
-            budget: &budget,
-        });
-        let compatibility_summary = prepared_store
-            .run_dir
-            .as_ref()
-            .map(|_| compatibility.summary());
-        let evaluator = ScoringEvaluator::new(
-            Arc::new(case_set_cases(&self.train, &self.validation, &self.test)),
-            self.runner.clone(),
-            scorer,
-            &evaluator_identity,
-        )
-        .with_parallelism(self.evaluation_parallelism)
-        .with_cache_policy(evaluation_cache_policy);
-        let callbacks = std::mem::take(&mut self.callbacks);
-        let EngineStart {
-            engine,
-            resumed,
-            checkpoint,
-        } = start_engine(EngineStartInputs {
-            budget: engine_budget,
-            metric_call_limit,
-            evaluator,
-            prepared_store: &mut prepared_store,
-            compatibility: &compatibility,
-            callbacks,
-        })?;
-        if let Some(checkpoint) = checkpoint {
-            restore_optimizer_checkpoint(
-                &mut self.optimizer,
-                &checkpoint,
-                &prepared_store,
-                engine.view(),
-            )?;
-            return run_with_engine(
-                self,
-                engine,
-                EngineRunInputs {
-                    case_set: &case_plan.case_set,
-                    dataset: &case_plan.dataset,
-                    splits: &case_plan.splits,
-                    prepared_store,
-                    resumed: true,
-                    compatibility_summary,
-                },
-            )
-            .await;
-        }
-        run_with_engine(
-            self,
-            engine,
-            EngineRunInputs {
-                case_set: &case_plan.case_set,
-                dataset: &case_plan.dataset,
-                splits: &case_plan.splits,
-                prepared_store,
-                resumed,
-                compatibility_summary,
-            },
-        )
-        .await
     }
 }
