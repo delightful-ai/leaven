@@ -22,8 +22,6 @@ pub use leaven_core::OptimizationProblem;
 // --- Reading results: assessments, evidence, preferences. ---
 
 pub use leaven_core::Assessment;
-pub use leaven_core::AssessmentGranularity;
-pub use leaven_core::AssessmentTarget;
 pub use leaven_core::Evidence;
 pub use leaven_core::PairOrder;
 pub use leaven_core::Preference;
@@ -40,7 +38,6 @@ pub use leaven_surface::SurfaceFingerprint;
 // --- Budget and identity an ordinary user touches. ---
 
 pub use leaven_kernel::Budget;
-pub use leaven_kernel::CandidateId;
 pub use leaven_kernel::Cost;
 pub use leaven_kernel::CostUnit;
 
@@ -52,9 +49,7 @@ pub use leaven_run::OptimizeError;
 pub use leaven_run::Optimized;
 pub use leaven_run::RunError;
 pub use leaven_run::RunEventSummary;
-pub use leaven_run::RunOutput;
 pub use leaven_run::Score;
-pub use leaven_run::ScoreContext;
 pub use leaven_run::ScoreError;
 pub use leaven_run::StandardRunSummary;
 pub use leaven_run::optimize;

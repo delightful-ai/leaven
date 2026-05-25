@@ -72,6 +72,10 @@ pub use leaven_engine::TrustPolicy;
 
 // --- Cold algebra: the proposal/evaluation vocabulary a stage author emits. ---
 
+/// Evaluator authors choose whether assessments are aggregate or per-case.
+pub use leaven_core::AssessmentGranularity;
+/// Evaluator authors choose which candidate shape an assessment targets.
+pub use leaven_core::AssessmentTarget;
 /// Proposer authors build `CausalInputs` to record what a proposal derived from.
 pub use leaven_core::CausalInputs;
 /// Evaluator authors read `EvaluationRequest` to know which candidates to score.
@@ -99,6 +103,10 @@ pub use leaven_core::ProposalProvenance;
 pub use leaven_run::IntoOptimizeStore;
 /// Custom store authors implement `OptimizeStore` for evidence persistence.
 pub use leaven_run::OptimizeStore;
+/// Evaluator authors return `RunOutput` from product runner adapters.
+pub use leaven_run::RunOutput;
+/// Scorer authors receive `ScoreContext` in the product runner/scorer path.
+pub use leaven_run::ScoreContext;
 
 // --- LM provider vocabulary: implemented and consumed by LM/agent providers. ---
 
