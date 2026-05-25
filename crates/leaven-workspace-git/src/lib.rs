@@ -1,4 +1,4 @@
-//! leaven-workspace-git crate skeleton.
+//! Host-local Git workspace backend and Git projection/import helpers.
 
 mod checkout;
 pub(crate) mod cli;
