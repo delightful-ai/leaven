@@ -1,5 +1,5 @@
 ## Boundary
-This crate owns reusable population and fitted-state implementations: keep-best, Pareto/frontier variants, tournament/Bradley-Terry, Plackett-Luce, skill utility state, novelty, map-elites, beam, and no-population strategies.
+This crate owns reusable population and fitted-state implementations: keep-best, Pareto/frontier variants, tournament/Bradley-Terry, and skill utility state.
 
 Population code may consume evidence and emit `PopulationEvent`s. It must not mutate `RunGraph`; optimizers decide which assessments each population observes, and `RunContext` records the resulting graph events.
 
@@ -21,17 +21,21 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
   runner/parser has already emitted it. Embeddings, route-key extraction,
   trajectory parsing, artifact mutation, and router training stay outside it.
 - Put reusable population configuration in this crate when it can serve more than one optimizer. Put optimizer-specific strategy state in the optimizer crate.
+- Reintroduce beam, no-population, novelty, map-elites, lenient Pareto,
+  Plackett-Luce, or tournament-config names only with behavior-bearing laws and
+  tests. The old placeholder unit structs were removed instead of exported
+  through `leaven-std`.
 
 ## Current Public-Maturity Split
 - Behavior-bearing today: `KeepBest`, `TopKFrontier`, `TopKParentSelector`,
   `TournamentPopulation` / `BradleyTerryFit`, `ParetoFrontier` /
   `ParetoFrontierBuilder`, and `SkillUtilityState` have focused tests and emit
   `PopulationEvent`s without writing the graph where applicable.
-- Public placeholders today: `BeamPopulation`, `MapElites`,
+- The old public placeholders `BeamPopulation`, `MapElites`,
   `NicheDescriptor`, `NoveltyPopulation`, `NoPopulation`,
-  `LenientParetoFrontier`, `PlackettLuceFit`, and `TournamentConfig` are
-  production-looking names with little or no behavior. Treat them as scaffold
-  until laws/tests land.
+  `LenientParetoFrontier`, `PlackettLuceFit`, and `TournamentConfig` were
+  deleted. They must not return as ordinary public exports until laws/tests
+  land.
 
 ## Local Helper Stack
 - Use `KeepBest` for single-objective scalar P1-style flows; tie policy is "do
@@ -90,7 +94,7 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
 - `SkillUtilityPruner` plans removals but does not remove files, mutate a
   `SkillBank`, or decide which task/step pool is active. The caller supplies one
   pool at a time and applies the returned plan at the artifact/optimizer layer.
-- Public unit structs in this crate are under audit pressure. Implement or
+- New public population names are under audit pressure. Implement or
   scaffold-gate them before letting `leaven-std` or examples present them as
   standard population implementations.
 
@@ -100,6 +104,7 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
   credit application, step-trajectory and skill-use-evidence credit extraction,
   two-stage routed skill retrieval, utility-guided skill pruning plans, and
   Pareto/frontier population laws, including finite fitted updates and partition
-  filtering.
+  filtering. It does not prove future beam, novelty, no-population, map-elites,
+  lenient Pareto, Plackett-Luce, or tournament-config names.
 - `cargo nextest run -p leaven-gepa --test gepa_smoke` proves GEPA consumes population state without moving GEPA selectors or gates into this crate.
 - `cargo nextest run -p leaven --test scalar_keep_best --test pairwise_tournament --test gepa_parity` proves mature population implementations participate in public end-to-end workflows through the umbrella surface. It is not proof for placeholder population names.

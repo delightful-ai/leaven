@@ -179,7 +179,7 @@ The GEPA-facing API name is `candidate_selector`.
 | `leaven-run` | public optimize builder, train/validation/test lowering, scorer/evaluator helpers, default evidence store wiring, result facade | optimizer strategy state, domain semantics, concrete providers/workspaces |
 | `leaven-eval` | lowered dataset/split/plan/report data and fingerprints | graph mutation, evaluator execution, GEPA rhythm, environments |
 | `leaven-evidence` | scalar/casewise/attribution/pairwise evidence shapes | graph mutation, GEPA rhythm |
-| `leaven-population` | `KeepBest`, `ParetoFrontier`, `TournamentPopulation`, population events | GEPA selectors, graph mutation internals |
+| `leaven-population` | `KeepBest`, `TopKFrontier`, `ParetoFrontier`, `TournamentPopulation`, population events | GEPA selectors, graph mutation internals |
 | `leaven-engine`/optimizer-owned helpers | renderers/materializers over typed values until a behavior-bearing render crate exists | optimizer rhythm, GEPA policy |
 | `leaven-lm` | provider-neutral LM request/response vocabulary | GEPA, engine graph, response-cache stores |
 | `leaven-lm-cache` | reusable Leaven response-cache policy, keys, stores, and `CachedLm` wrapper | GEPA rhythm, engine evaluation cache, concrete providers |
