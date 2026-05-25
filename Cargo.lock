@@ -7277,12 +7277,14 @@ name = "trace2skill_spreadsheetbench"
 version = "0.0.0"
 dependencies = [
  "calamine",
+ "leaven-acp",
  "leaven-agentic-skill",
  "leaven-artifact-skill",
  "leaven-core",
  "leaven-eval",
  "leaven-evidence",
  "leaven-kernel",
+ "leaven-public-seam",
  "serde",
  "serde_json",
  "tempfile",
