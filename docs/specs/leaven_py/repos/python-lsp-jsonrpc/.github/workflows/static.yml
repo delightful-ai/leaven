@@ -1,0 +1,37 @@
+name: Static code analysis
+
+on:
+  push:
+    branches:
+      - develop
+
+  pull_request:
+    branches:
+      - '*'
+
+jobs:
+  build:
+    name: Static code analysis
+    runs-on: ubuntu-latest
+    env:
+      CI: 'true'
+      OS: 'linux'
+    timeout-minutes: 2
+    steps:
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: static-pip-${{ hashFiles('setup.py') }}
+          restore-keys: static-pip-
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.8'
+          architecture: 'x64'
+      - run: pip install -e .[test]
+      - name: Pylint checks
+        run: pylint pylsp_jsonrpc test
+      - name: Code style checks
+        run: pycodestyle pylsp_jsonrpc test
+      - name: Pyflakes checks
+        run: pyflakes pylsp_jsonrpc test
