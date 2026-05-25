@@ -1,6 +1,6 @@
 [package]
 name = "leaven-artifact-jj"
-description = "Leaven crate skeleton for leaven-artifact-jj."
+description = "JJ-backed artifact vocabulary for materialized file snapshots."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,8 +13,6 @@ workspace = true
 [dependencies]
 leaven-kernel = { workspace = true }
 leaven-core = { workspace = true }
-leaven-surface = { workspace = true }
-leaven-artifacts = { workspace = true }
 leaven-stage = { workspace = true }
 leaven-workspace = { workspace = true }
 serde = { workspace = true }

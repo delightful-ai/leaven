@@ -7,6 +7,18 @@ use leaven_stage::MaterializableArtifact;
 use leaven_workspace::{WorkspaceConfig, WorkspaceFactory, WorkspacePath};
 use leaven_workspace_local::LocalWorkspaceFactory;
 
+const REMOVED_PLACEHOLDER_JJ_NAMES: &[&str] = &[
+    "JjArtifactIdentityMode",
+    "JjOp",
+    "ConflictRegion",
+    "ConflictRegionId",
+    "OperationId",
+    "OperationSummary",
+    "JjChangesetSurface",
+    "JjConflictSurface",
+    "JjPathSurface",
+];
+
 #[test]
 fn jj_artifact_materializes_files_and_reads_patch_change() {
     block_on(async {
@@ -77,4 +89,16 @@ fn jj_artifact_reports_absent_or_invalid_patch_changes() {
         }
         workspace.cleanup().await.unwrap();
     });
+}
+
+#[test]
+fn crate_root_does_not_export_empty_jj_reservation_names() {
+    let lib = std::fs::read_to_string("src/lib.rs").expect("read jj artifact crate root");
+
+    for symbol in REMOVED_PLACEHOLDER_JJ_NAMES {
+        assert!(
+            !lib.contains(symbol),
+            "`{symbol}` must not be reintroduced without JJ behavior and contract tests"
+        );
+    }
 }
