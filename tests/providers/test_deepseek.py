@@ -1,0 +1,106 @@
+import re
+
+import httpx
+import pytest
+
+from pydantic_ai.exceptions import UserError
+from pydantic_ai.profiles.openai import OpenAIJsonSchemaTransformer, OpenAIModelProfile
+
+from ..conftest import TestEnv, try_import
+
+with try_import() as imports_successful:
+    import openai
+
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.deepseek import DeepSeekProvider
+
+pytestmark = pytest.mark.skipif(not imports_successful(), reason='openai not installed')
+
+
+def test_deep_seek_provider():
+    provider = DeepSeekProvider(api_key='api-key')
+    assert provider.name == 'deepseek'
+    assert provider.base_url == 'https://api.deepseek.com'
+    assert isinstance(provider.client, openai.AsyncOpenAI)
+    assert provider.client.api_key == 'api-key'
+
+
+def test_deep_seek_provider_need_api_key(env: TestEnv) -> None:
+    env.remove('DEEPSEEK_API_KEY')
+    with pytest.raises(
+        UserError,
+        match=re.escape(
+            'Set the `DEEPSEEK_API_KEY` environment variable or pass it via `DeepSeekProvider(api_key=...)`'
+            ' to use the DeepSeek provider.'
+        ),
+    ):
+        DeepSeekProvider()
+
+
+def test_deep_seek_provider_pass_http_client() -> None:
+    http_client = httpx.AsyncClient()
+    provider = DeepSeekProvider(http_client=http_client, api_key='api-key')
+    assert provider.client._client == http_client  # type: ignore[reportPrivateUsage]
+
+
+def test_deep_seek_pass_openai_client() -> None:
+    openai_client = openai.AsyncOpenAI(api_key='api-key')
+    provider = DeepSeekProvider(openai_client=openai_client)
+    assert provider.client == openai_client
+
+
+def test_deep_seek_model_profile():
+    provider = DeepSeekProvider(api_key='api-key')
+    model = OpenAIChatModel('deepseek-r1', provider=provider)
+    assert model.profile.json_schema_transformer == OpenAIJsonSchemaTransformer
+    assert model.profile.supports_thinking is True
+    assert model.profile.thinking_always_enabled is True
+
+
+@pytest.mark.parametrize('model_name', ['deepseek-v4-flash', 'deepseek-v4-pro'])
+def test_deep_seek_v4_model_profile(model_name: str):
+    provider = DeepSeekProvider(api_key='api-key')
+    profile = provider.model_profile(model_name)
+    assert profile is not None
+    assert isinstance(profile, OpenAIModelProfile)
+    assert profile.supports_thinking is True
+    assert profile.thinking_always_enabled is False
+    assert profile.openai_supports_tool_choice_required is False
+
+
+def test_deep_seek_chat_model_profile():
+    provider = DeepSeekProvider(api_key='api-key')
+    profile = provider.model_profile('deepseek-chat')
+    assert profile is not None
+    assert isinstance(profile, OpenAIModelProfile)
+    assert profile.supports_thinking is False
+    assert profile.openai_supports_tool_choice_required is True
+
+
+def test_deep_seek_r1_model_profile():
+    """Regression anchor: deepseek-r1 must always have thinking enabled."""
+    provider = DeepSeekProvider(api_key='api-key')
+    profile = provider.model_profile('deepseek-r1')
+    assert profile is not None
+    assert isinstance(profile, OpenAIModelProfile)
+    assert profile.supports_thinking is True
+    assert profile.thinking_always_enabled is True
+
+
+def test_deep_seek_reasoner_model_profile():
+    provider = DeepSeekProvider(api_key='api-key')
+    profile = provider.model_profile('deepseek-reasoner')
+    assert profile is not None
+    assert isinstance(profile, OpenAIModelProfile)
+    assert profile.supports_thinking is True
+    assert profile.thinking_always_enabled is True
+    assert profile.openai_supports_tool_choice_required is False
+
+
+def test_deep_seek_v4_future_sku_inherits_tool_choice_restriction():
+    """Future deepseek-v4-* SKUs must inherit tool_choice=required restriction via startswith predicate."""
+    provider = DeepSeekProvider(api_key='api-key')
+    profile = provider.model_profile('deepseek-v4-turbo')
+    assert profile is not None
+    assert isinstance(profile, OpenAIModelProfile)
+    assert profile.openai_supports_tool_choice_required is False

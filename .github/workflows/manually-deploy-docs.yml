@@ -1,0 +1,30 @@
+name: Manual Docs Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Note: this should match the `deploy-docs` job in ci.yml
+  deploy-docs-manual:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate app token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app-token
+        with:
+          app-id: ${{ vars.DOCS_APP_ID }}
+          private-key: ${{ secrets.DOCS_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: unified-docs
+
+      - name: Trigger unified-docs deployment
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          gh api repos/pydantic/unified-docs/dispatches \
+            --method POST \
+            -f event_type=docs-update \
+            -f "client_payload[source]=pydantic/pydantic-ai (manual)"
