@@ -1,0 +1,5 @@
+---
+reference: inspect view
+description: Inspect log viewer.
+---
+

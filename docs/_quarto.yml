@@ -1,0 +1,106 @@
+project:
+  type: meridianlabs-ai/inspect-docs
+  resources:
+    - CNAME
+    - listing/
+
+website:
+  navbar:
+    left:
+      - text: "User Guide"
+        href: index.qmd
+      - text: "Reference"
+        href: reference/index.qmd
+      - text: "Extensions"
+        href: extensions/index.qmd
+      - text: "Evals"
+        href: evals/index.qmd
+
+inspect-docs:
+  title: Inspect
+  description: Open-source framework for large language model evaluations
+  image: /images/inspect.png
+  logo: images/aisi-logo.svg
+  favicon: favicon.svg
+  url: https://inspect.aisi.org.uk
+  module: inspect_ai
+  repo: UKGovernmentBEIS/inspect_ai
+  org: UK AI Security Institute
+  org_url: https://aisi.gov.uk
+  twitter: AISecurityInst
+  navigation:
+    - text: Basics
+      contents:
+        - text: Welcome
+          href: index.qmd
+        - href: tutorial.qmd
+        - href: options.qmd
+        - href: log-viewer.qmd
+        - text: VS Code
+          href: vscode.qmd
+    - text: Components
+      contents:
+        - href: tasks.qmd
+        - text: Task Config
+          href: task-configuration.qmd
+        - href: datasets.qmd
+        - href: solvers.qmd
+        - href: scorers.qmd
+        - href: scanners.qmd
+    - text: Models 
+      contents:
+        - href: models.qmd
+        - text: Providers
+          href: providers.qmd
+        - href: caching.qmd
+        - text: Concurrency
+          href: models-concurrency.qmd
+        - href: compaction.qmd
+        - href: multimodal.qmd
+        - href: reasoning.qmd
+        - href: structured.qmd
+        - href: models-batch.qmd
+    - text: Agents
+      contents:
+        - href: agents.qmd
+        - href: react-agent.qmd
+        - href: deepagent.qmd
+        - text: Intervention
+          href: intervention.qmd
+        - href: multi-agent.qmd
+        - href: agent-custom.qmd
+        - href: agent-bridge.qmd
+        - href: human-agent.qmd
+    - text: Tools
+      contents:
+        - href: tools.qmd
+        - href: tools-standard.qmd
+        - text: MCP Tools
+          href: tools-mcp.qmd
+        - href: tools-custom.qmd
+        - href: sandboxing.qmd
+        - href: approval.qmd
+    - text: Analysis
+      contents:
+        - href: eval-logs.qmd
+        - href: dataframe.qmd
+    - text: Advanced
+      contents:
+        - href: eval-sets.qmd
+        - text: Handling Errors
+          href: handling-errors.qmd
+        - text: Setting Limits
+          href: setting-limits.qmd
+        - href: typing.qmd
+        - href: tracing.qmd
+        - href: parallelism.qmd
+        - href: interactivity.qmd
+        - href: early-stopping.qmd
+        - href: extensions.qmd
+
+format:
+  inspect-docs-html:
+    code-annotations: select
+
+execute:
+  enabled: false

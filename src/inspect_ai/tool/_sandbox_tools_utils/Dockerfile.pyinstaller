@@ -1,0 +1,47 @@
+# Base image will automatically use target platform
+FROM python:3.10-slim-bullseye AS base
+
+# Architecture-specific package installation
+FROM base AS packages-amd64
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    gcc \
+    g++ \
+    build-essential \
+    patchelf \
+    scons \
+    file \
+    git
+
+FROM base AS packages-arm64  
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    gcc \
+    g++ \
+    build-essential \
+    patchelf \
+    scons \
+    file \
+    git
+
+# Final stage - automatically selects correct packages stage
+FROM packages-${TARGETARCH} AS final
+
+# Create an isolated Python environment to avoid PEP 668 (externally managed)
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
+
+RUN python -m pip install --no-cache-dir --upgrade pip 'setuptools<82' wheel
+# staticx's setup.py imports pkg_resources which was removed in setuptools 82.
+# pip's build isolation installs latest setuptools, breaking the build.
+# --no-build-isolation uses the venv's pinned setuptools instead.
+RUN python -m pip install --no-cache-dir --no-build-isolation staticx
+RUN python -m pip install --no-cache-dir \
+        pyinstaller \
+        psutil \
+        jsonrpcserver \
+        pydantic \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+CMD ["tail", "-f", "/dev/null"]

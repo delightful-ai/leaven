@@ -1,0 +1,189 @@
+---
+title: Reasoning
+llms-description: Additional options and data available for reasoning models.
+---
+
+## Overview
+
+Reasoning models like OpenAI GPT-5, Claude 4, and Gemini 3 have some additional options that can be used to tailor their behaviour. They also in some cases make available full or summarized reasoning traces for the chains of thought that led to their response.
+
+## Reasoning Effort {#reasoning-effort}
+
+The `reasoning_effort` option controls how much reasoning is performed. Inspect supports a supserset of what the various provider APIs accept and does mapping as required (as documented below). Available options include: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`.
+
+For example:
+
+``` bash
+inspect eval math.py --model openai/gpt-5 --reasoning-effort high
+```
+
+Or from Python:
+
+```python
+eval("math.py", model="openai/gpt-5", reasoning_effort="high")
+```
+
+### Provider Mapping
+
+#### OpenAI
+
+| Inspect input                                   | API value         |
+|-------------------------------------------------|-------------------|
+| `none`                                          | reasoning omitted |
+| `minimal` / `low` / `medium` / `high` / `xhigh` | identical         |
+| `max`                                           | `xhigh`           |
+
+#### Anthropic Claude 4.6+
+
+Opus 4.6, Opus 4.7, Sonnet 4.6 all use [adaptive thinking](https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking) with the `effort` parameter.
+
+| Inspect input     | API value                                |
+|-------------------|------------------------------------------|
+| `none`            | reasoning omitted                        |
+| `minimal` / `low` | `low`                                    |
+| `medium`          | `medium`                                 |
+| `high`            | `high`                                   |
+| `xhigh`           | `xhigh` on Claude 4.7+; otherwise `high` |
+| `max`             | `max`                                    |
+
+
+
+#### Anthropic Claude 3.7 / 4.0 / 4.1 / 4.5
+
+These models do not accept `effort` natively, so Inspect automatically bridges `reasoning_effort` to an [extended thinking](https://platform.claude.com/docs/en/build-with-claude/extended-thinking) token budget as follows:
+
+| Effort          | Token budget |
+|-----------------|--------------|
+| `minimal`       | 2,048        |
+| `low`           | 4,096        |
+| `medium`        | 10,000       |
+| `high`          | 16,000       |
+| `xhigh` / `max` | 32,000       |
+
+Note that you can also pass `reasoning_tokens` explicitly for these models.
+
+#### Google Gemini 3
+
+Gemini 3 Flash exposes four thinking levels (`MINIMAL`, `LOW`, `MEDIUM`, `HIGH`); Gemini 3 Pro / Pro 3.1 omit `MINIMAL` and otherwise share the same scale.
+
+| Inspect input            | API value (Flash)  | API value (Pro)   |
+|--------------------------|--------------------|-------------------|
+| `none`                   | thinking disabled  | thinking disabled |
+| `minimal`                | `MINIMAL`          | `LOW`             |
+| `low`                    | `LOW`              | `LOW`             |
+| `medium`                 | `MEDIUM`           | `MEDIUM`          |
+| `high` / `xhigh` / `max` | `HIGH`             | `HIGH`            |
+
+#### Google Gemini 2.5
+
+Does not accept effort levels, rather they support a `thinking_budget`. Inspect bridges `reasoning_effort` to the following  budgets:
+
+| Effort          | Token budget |
+|-----------------|--------------|
+| `minimal`       | 2,048        |
+| `low`           | 4,096        |
+| `medium`        | 10,000       |
+| `high`          | 16,000       |
+| `xhigh` / `max` | 32,000       |
+
+Note that you can also pass `reasoning_tokens` explicitly for these models.
+
+#### Grok
+
+Grok 3 Mini and Grok 4.X variants (`grok-4-fast-reasoning`, `grok-4.1-fast-reasoning`, `grok-4.20`, `grok-4.3`) accept `reasoning_effort`. The original `grok-4` reasons but [does not accept the parameter](https://docs.x.ai/developers/model-capabilities/text/reasoning) — Inspect omits effort for that model. Inspect maps `reasoning_effort` as follows:
+
+| Inspect input            | API value         |
+|--------------------------|-------------------|
+| `none`                   | reasoning omitted |
+| `minimal` / `low`        | `low`             |
+| `medium`                 | `medium`          |
+| `high` / `xhigh` / `max` | `high`            |
+
+#### OpenRouter
+
+Passes through to the underlying model; OpenRouter itself maps `effort` to `budget_tokens` for models that need it, using the formula `budget = clamp(max_tokens × ratio, 1024, 128000)`.
+
+| Input | API value | Ratio |
+|---------------|-----------|--------------|
+| `none`        | reasoning omitted | —     |
+| `minimal`     | `minimal` | 0.1          |
+| `low`         | `low`     | 0.2          |
+| `medium`      | `medium`  | 0.5          |
+| `high`        | `high`    | 0.8          |
+| `max` / `xhigh`       | `xhigh`   | 0.95         |
+
+
+
+
+#### Groq / Ollama / SageMaker
+
+Upstream APIs accept only `low` / `medium` / `high`. Inspect clamps the extended values:
+
+| Inspect input            | API value         |
+|--------------------------|-------------------|
+| `none`                   | reasoning omitted |
+| `minimal` / `low`        | `low`             |
+| `medium`                 | `medium`          |
+| `high` / `xhigh` / `max` | `high`            |
+
+#### Bedrock
+
+Varies by hosted model family. Claude on Bedrock accepts only `reasoning_tokens` (no effort); Nova uses its own `reasoningConfig.maxReasoningEffort` scale; GPT-OSS passes effort through.
+
+### Model Defaults
+
+When Inspect does not pass `reasoning_effort`, each provider applies its own default. The table below records the documented provider default per model. Models with no entry have either no documented default or no effort scale at all.
+
+{{< include _reasoning-defaults.md >}}
+
+
+
+## Reasoning Content {#reasoning-content}
+
+Many reasoning models surface their underlying chain of thought in a special "thinking" or reasoning block. Inspect normalises these into `ContentReasoning` blocks alongside `ContentText`, `ContentImage`, etc., and displays them in their own region in Inspect View and the terminal conversation view.
+
+Reasoning content is captured using several heuristics: a `reasoning` or `reasoning_content` field on the assistant message, content wrapped in `<think></think>` tags, or explicit APIs for models that support them (e.g. Anthropic extended thinking blocks).
+
+Some models also return `reasoning_tokens` usage, which is included in the standard `ModelUsage` object.
+
+## Reasoning Options {#reasoning-options}
+
+The following reasoning options are available from the CLI and within `GenerateConfig`:
+
+| Option | Description |
+|--------|-------------|
+| `reasoning_effort` | Constrains effort on reasoning. Accepts `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. See [Reasoning Effort](#reasoning-effort) for per-provider mapping. Supported by all reasoning models — Inspect automatically bridges effort to a token budget for legacy Claude (3.7–4.5) and Gemini 2.5. Default is provider-defined. |
+| `reasoning_tokens` | **Deprecated.** Prefer `reasoning_effort`. Explicit token budget for reasoning. Both Anthropic (`budget_tokens`) and Google (`thinking_budget`) have deprecated this control in favour of effort-based reasoning.|
+| `reasoning_summary` | **OpenAI only.** Provide a summary of reasoning steps. Accepts `none`, `concise`, `detailed`, `auto`. Use `auto` to access the most detailed summarizer available. Some OpenAI accounts require [organization verification](https://help.openai.com/en/articles/10910291-api-organization-verification). |
+| `reasoning_history` | How much prior reasoning to replay in conversation history. Accepts `none`, `all`, `last`, `auto`. Use `last` to keep reasoning from dominating the context window. Defaults to `auto`. |
+
+
+## vLLM / SGLang {#vllm-sglang}
+
+vLLM and SGLang both support reasoning outputs, but the configuration is model-specific. See the [vLLM](https://docs.vllm.ai/en/stable/features/reasoning_outputs.html) and [SGLang](https://docs.sglang.ai/backend/separate_reasoning.html) docs for details.
+
+For vLLM, configure the model's reasoning parser using `-M` model arguments. For example, Qwen3:
+
+``` bash
+inspect eval math.py --model vllm/Qwen/Qwen3-8B -M reasoning_parser=qwen3
+```
+
+Thinking mode is model-specific and controlled separately from `--reasoning-effort`. For models where vLLM exposes template switches such as `enable_thinking` or `thinking`, pass them as chat-template kwargs:
+
+``` bash
+inspect eval math.py --model vllm/Qwen/Qwen3-8B \
+  -M reasoning_parser=qwen3 \
+  -M default_chat_template_kwargs='{"enable_thinking": true}'
+```
+
+To override per-request:
+
+``` bash
+inspect eval math.py --model vllm/Qwen/Qwen3-8B \
+  -M reasoning_parser=qwen3 \
+  -M extra_body='{"chat_template_kwargs": {"enable_thinking": true}}'
+```
+
+Open-weights reasoning models do not all support adjustable effort levels — in those cases `--reasoning-effort` is a no-op even though a reasoning parser is required for vLLM to separate reasoning from the final answer.
+
+If the model already emits reasoning between `<think></think>` tags (as with R1 or via prompt engineering), Inspect captures it automatically without any vLLM or SGLang configuration.

@@ -1,0 +1,102 @@
+---
+reference: inspect_ai.util
+description: Miscellaneous utility functions.
+---
+
+## Store
+
+### Store
+### store
+### store_as
+### StoreModel
+### store_from_events
+### store_from_events_as
+
+## Limits
+
+### message_limit
+### token_limit
+### cost_limit
+### time_limit
+### working_limit
+### apply_limits
+### sample_limits
+### SampleLimits
+### Limit
+### LimitExceededError
+### suspend_token_limit
+
+## Concurrency
+
+### concurrency
+### subprocess
+### ExecResult
+### AdaptiveConcurrency
+
+## Display
+
+### display_counter
+### display_type
+### DisplayType
+### input_screen
+
+## Utilities
+
+### span
+### current_span_id
+### span_id_provider
+### collect
+### throttle
+### background
+### trace_action
+### trace_message
+### media_resolver
+### resource
+### download
+### gdrive_download
+
+## Sandbox
+
+### sandbox
+### sandbox_with
+### sandbox_default
+### SandboxEnvironment
+### SandboxConnection
+### sandboxenv
+### sandbox_service
+### ExecRemoteProcess
+### ExecRemoteStreamingOptions
+### ExecRemoteAwaitableOptions
+### ExecOutput
+### ExecStdout
+### ExecStderr
+### ExecCompleted
+
+## Registry
+
+### registry_info
+### registry_create
+### RegistryInfo
+### RegistryType
+
+## JSON
+
+### JSONType
+### JSONSchema
+### json_schema
+
+## Early Stopping
+
+### EarlyStopping
+### EarlyStoppingSummary
+### EarlyStop
+
+## Compose
+
+### parse_compose_yaml
+### is_compose_yaml
+### is_dockerfile
+### ComposeConfig
+### ComposeService
+### ComposeBuild
+### ComposeHealthcheck

@@ -1,0 +1,23 @@
+---
+reference: inspect_ai.approval
+description: Approvers and approval policies.
+---
+
+## Approvers
+
+### auto_approver
+### human_approver
+### read_approval_policies
+### approval
+
+## Types
+
+### Approver
+### Approval
+### ApprovalDecision
+### ApprovalPolicy
+
+## Decorator
+
+### approver
+

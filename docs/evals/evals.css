@@ -1,0 +1,24 @@
+/* Evals-specific overrides (shared styles in ../listing/listing.css) */
+
+/* Detail page — tighten default spacing. */
+.listing-app div.sourceCode pre {
+  margin-bottom: 0;
+}
+.listing-app section {
+  margin-bottom: 1rem;
+}
+.listing-app h2 {
+  margin-top: 0;
+}
+
+/* Badges: inspect_evals (outlined blue), inspect_harbor (outlined green) */
+.listing-app .evals-pill-evals {
+  color: var(--bs-primary);
+  border: 1px solid currentColor;
+  background: transparent;
+}
+.listing-app .evals-pill-harbor {
+  color: var(--bs-success);
+  border: 1px solid currentColor;
+  background: transparent;
+}

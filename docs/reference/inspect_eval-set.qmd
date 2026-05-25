@@ -1,0 +1,7 @@
+---
+reference: inspect eval-set
+description: Evaluate a set of tasks with retries.
+---
+
+
+
