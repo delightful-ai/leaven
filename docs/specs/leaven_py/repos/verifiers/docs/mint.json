@@ -1,0 +1,18 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "navigation": [
+    {
+      "group": "Verifiers",
+      "pages": [
+        "overview",
+        "environments",
+        "byo-harness",
+        "evaluation",
+        "training",
+        "development",
+        "reference",
+        "faqs"
+      ]
+    }
+  ]
+}

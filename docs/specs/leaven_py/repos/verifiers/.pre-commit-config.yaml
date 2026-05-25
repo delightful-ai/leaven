@@ -1,0 +1,34 @@
+default_install_hook_types: [pre-commit, pre-push]
+# Exclude Harbor task assets from linting
+exclude: ^environments/.*/tasks/
+
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --fix
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
+        language: system
+        types_or: [python, pyi]
+      - id: semgrep-v1-policy
+        name: Semgrep v1 policy
+        entry: uv run --group policy semgrep --metrics=off --disable-version-check --config .semgrep/verifiers.yml --error --quiet
+        language: system
+        pass_filenames: false
+      - id: sync-agents-md
+        name: Check generated AGENTS.md / CLAUDE.md
+        entry: uv run python scripts/sync.py --check
+        language: system
+        files: ^(AGENTS\.md|CLAUDE\.md|assets/lab/(AGENTS|CLAUDE)\.md|environments/AGENTS\.md|assets/lab/environments/AGENTS\.md|docs/environments\.md|assets/agents/.*\.md|scripts/sync\.py)$
+        pass_filenames: false
+      - id: ty
+        name: ty (ci parity)
+        entry: uv run --python 3.13 ty check verifiers
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

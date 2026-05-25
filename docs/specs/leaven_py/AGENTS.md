@@ -104,7 +104,7 @@ Per-dependency pattern notes (what we'd steal, what we'd avoid, what's
 surprising) live at
 [`docs/agent-context/patterns/`](docs/agent-context/patterns/).
 
-Phase 1 vendored (2026-05-24):
+Phase 1 vendored (2026-05-24) — direct spec citations:
 
 - `repos/dspy/` — `dspy.BaseLM` + decorator patterns. Read when working
   on `leaven.lm` or `lv.x.dspy.LeavenDSPyLM`.
@@ -113,6 +113,36 @@ Phase 1 vendored (2026-05-24):
 - `repos/mcp-python-sdk/` — stdio JSON-RPC + FastMCP idioms + known
   failure modes. Read when working on `lv.serve_stage` shape or
   considering wire-level decisions in the `leaven-acp` Rust crate.
+
+Phase 2 vendored (2026-05-24) — eval framework compatibility targets:
+
+- `repos/verifiers/` — Prime Intellect environments: `load_environment()`,
+  Taskset/Harness v1, `@vf.reward` rubrics, HF dataset rows. Read when
+  designing `lv.x.verifiers.*` adapters or mapping case/scorer semantics
+  for RL-style eval environments.
+- `repos/harbor/` — container agent eval harness: task directories,
+  `BaseAgent`/`BaseVerifier`, dataset registry, `harbor run` jobs. Read
+  when designing `lv.x.harbor.*` adapters or importing Harbor task layouts
+  into `lv.cases.*`. **Not** `inspect_harbor` (Inspect AI registry glue).
+
+Round 4 vendored (2026-05-24) — high-taste references:
+
+- `repos/baml/` — closest architectural peer (Rust core + per-language
+  typed SDKs + schema-codegen). Read `engine/language_client_python/`,
+  `baml_language/sdks/python/`.
+- `repos/pydantic-ai/` — literal `RunContext` name match, multi-provider
+  lowering. Read `pydantic_ai_slim/`, `pydantic_graph/`. `tests/`
+  locally pruned (~221 MB VCR cassettes).
+- `repos/temporal-python-sdk/` — Python decorators backed by Rust core
+  with replay determinism. Read `temporalio/worker/`, `workflow.py`,
+  `activity.py`.
+- `repos/marvin/` — high-ergonomic surface on top of pydantic-ai.
+- `repos/weave/weave/` — `@weave.op()` decorator (UX target). **Informal
+  sparse-clone copy**, not subtree-tracked; see
+  `repos/weave/README-leaven.md`.
+- `repos/anthropic-sdk-python/` — major LLM provider Python SDK shape.
+- `repos/jupyter-client/` — battle-tested stdio/ZMQ RPC patterns.
+- `repos/python-lsp-jsonrpc/` — 120 KB minimal Python JSON-RPC reference.
 
 ## Verification
 

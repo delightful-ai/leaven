@@ -1,0 +1,245 @@
+import os
+import importlib.util
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+import tomllib
+
+# Timeout in seconds for each subprocess step
+INSTALL_TIMEOUT = 600  # 10 minutes for venv creation + package install
+IMPORT_TIMEOUT = 120  # 2 minutes for importing a package
+LOAD_TIMEOUT = 300  # 5 minutes for loading an environment (may download datasets)
+EVAL_TIMEOUT = 600  # 10 minutes for running vf-eval with -n 1 -r 1
+
+SKIPPED_ENVS = [
+    # Requires fix for completion dataset setup
+    # uv run pytest tests/test_envs.py -vv -k continuation_quality
+    #
+    #     example_id = input_item["example_id"]
+    #                 ~~~~~~~~~~^^^^^^^^^^^^^^
+    # KeyError: 'example_id'
+    "continuation_quality",
+    # Different project structure (uses src/ layout, no pyproject.toml at root)
+    "mcp_env",
+    # Requires BROWSERBASE_API_KEY, BROWSERBASE_PROJECT_ID, MODEL_API_KEY
+    "browser_dom_example",
+    # Requires BROWSERBASE_API_KEY, BROWSERBASE_PROJECT_ID, and running CUA server
+    "browser_cua_example",
+    # Uses prime-tunnel which is still experimental and has low usage limits
+    "terminus_harbor",
+    "opencode_harbor",
+]
+
+SKIPPED_ENV_LOADING_ENVS = [
+    # OpenEnv datasets are built by resetting seeds in sandbox-backed env servers.
+    # Skip generic load checks here and cover via dedicated OpenEnv tests.
+    "openenv_echo",
+    "openenv_textarena",
+    # R2E-Gym pulls a full image-backed SWE taskset; cover it with dedicated v1 tests.
+    "rlm_swe_v1",
+]
+
+
+def get_environments() -> list[Path]:
+    """Get all subdirectories of `environments/`, or only changed environments if CHANGED_ENVS is set."""
+    all_envs = list(x for x in Path("environments").iterdir() if x.is_dir())
+
+    # Filter out skipped environments
+    all_envs = [env for env in all_envs if env.name not in SKIPPED_ENVS]
+
+    # Filter environments if CHANGED_ENVS is set (for PRs)
+    changed_envs = os.getenv("CHANGED_ENVS")
+    if changed_envs == "none":
+        return []
+    if changed_envs:
+        changed_list = [e.strip() for e in changed_envs.split(",") if e.strip()]
+        if changed_list:
+            all_envs = [env for env in all_envs if env.name in changed_list]
+
+    return all_envs
+
+
+@pytest.mark.parametrize("env_dir", get_environments(), ids=lambda x: x.name)
+def test_pyproject_exists(env_dir: Path):
+    """Test that the pyproject.toml file exists for the given environment directory."""
+    assert (env_dir / "pyproject.toml").exists(), "pyproject.toml does not exist"
+
+
+@pytest.mark.parametrize("env_dir", get_environments(), ids=lambda x: x.name)
+def test_pyproject_has_metadata(env_dir: Path):
+    """Test that the pyproject.toml file has the required metadata."""
+    with open(env_dir / "pyproject.toml", "rb") as f:
+        pyproject = tomllib.load(f)
+    assert "name" in pyproject["project"], "pyproject.toml does not have a name"
+    assert "version" in pyproject["project"], "pyproject.toml does not have a version"
+    assert "description" in pyproject["project"], (
+        "pyproject.toml does not have a description"
+    )
+    assert pyproject["project"]["description"] != "Your environment description here", (
+        "Still uses placeholder description"
+    )
+    assert "tags" in pyproject["project"], "pyproject.toml does not have tags"
+    assert pyproject["project"]["tags"] != ["placeholder-tag", "train", "eval"], (
+        "Still uses placeholder tags"
+    )
+
+
+@pytest.mark.parametrize("env_dir", get_environments(), ids=lambda x: x.name)
+def test_readme_exists(env_dir: Path):
+    """Test that the README.md file exists for the given environment directory."""
+    assert (env_dir / "README.md").exists(), "README.md does not exist"
+
+
+def test_alphabet_sort_v1_validates_parameters():
+    module_path = Path("environments/alphabet_sort/alphabet_sort_v1.py").resolve()
+    spec = importlib.util.spec_from_file_location("alphabet_sort_v1_test", module_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    with pytest.raises(ValueError, match="min_turns must be at least 1"):
+        module.AlphabetSortTaskset(config=module.AlphabetSortTasksetConfig(min_turns=0))
+    with pytest.raises(
+        ValueError, match="min_turns must be less than or equal to max_turns"
+    ):
+        module.AlphabetSortTaskset(
+            config=module.AlphabetSortTasksetConfig(min_turns=3, max_turns=2)
+        )
+    with pytest.raises(ValueError, match="min_names_per_turn must be at least 1"):
+        module.AlphabetSortTaskset(
+            config=module.AlphabetSortTasksetConfig(min_names_per_turn=0)
+        )
+    with pytest.raises(
+        ValueError,
+        match="min_names_per_turn must be less than or equal to max_names_per_turn",
+    ):
+        module.AlphabetSortTaskset(
+            config=module.AlphabetSortTasksetConfig(
+                min_names_per_turn=3,
+                max_names_per_turn=2,
+            )
+        )
+
+
+@pytest.mark.parametrize("env_name", ["alphabet_sort", "math_python"])
+def test_v1_wrapper_rejects_unknown_kwargs(env_name: str):
+    module_path = Path("environments") / env_name / f"{env_name}.py"
+    spec = importlib.util.spec_from_file_location(
+        f"{env_name}_wrapper_test", module_path
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    with pytest.raises(
+        TypeError, match="Unsupported v1 load_environment kwargs: extra"
+    ):
+        module.load_environment(v1=True, extra=True)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("env_dir", get_environments(), ids=lambda x: x.name)
+def test_env(env_dir: Path, tmp_path_factory: pytest.TempPathFactory):
+    """Test environment in a fresh venv with local verifiers installed first."""
+    if env_dir.name in SKIPPED_ENVS:
+        pytest.skip(f"Skipping {env_dir.name}")
+    if env_dir.name in SKIPPED_ENV_LOADING_ENVS:
+        pytest.skip(f"Skipping dedicated-runtime smoke test for {env_dir.name}")
+    tmp_venv_dir = tmp_path_factory.mktemp(f"venv_{env_dir.name}")
+    repo_root = Path(__file__).parent.parent
+    cmd = (
+        f"cd {tmp_venv_dir} && uv venv --clear && source .venv/bin/activate && "
+        "uv pip install "
+        "--exclude-newer-package prime-pydantic-config=2026-05-20T00:00:00Z "
+        f"{repo_root.as_posix()} && "
+        "uv pip install "
+        "--exclude-newer-package prime-pydantic-config=2026-05-20T00:00:00Z "
+        f"{env_dir.absolute().as_posix()}"
+    )
+    try:
+        process = subprocess.run(
+            cmd,
+            shell=True,
+            executable="/bin/bash",
+            capture_output=True,
+            text=True,
+            timeout=INSTALL_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired:
+        pytest.fail(f"Timed out after {INSTALL_TIMEOUT}s installing {env_dir.name}")
+    assert process.returncode == 0, (
+        f"Failed to create virtual environment: {process.stderr}"
+    )
+
+    help_test_can_import_env(tmp_venv_dir, env_dir)
+    help_test_can_load_env(tmp_venv_dir, env_dir)
+    help_test_can_eval_env(tmp_venv_dir, env_dir)
+
+
+def help_test_can_import_env(tmp_venv_dir: Path, env_dir: Path):
+    """Test that the environment can be imported as a package."""
+    import_cmd = f"cd {tmp_venv_dir} && source .venv/bin/activate && uv run python -c 'import {env_dir.name}'"
+    try:
+        process = subprocess.run(
+            import_cmd,
+            shell=True,
+            executable="/bin/bash",
+            capture_output=True,
+            text=True,
+            timeout=IMPORT_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired:
+        pytest.fail(f"Timed out after {IMPORT_TIMEOUT}s importing {env_dir.name}")
+    assert process.returncode == 0, "Failed to import environment"
+
+
+def help_test_can_load_env(tmp_venv_dir: Path, env_dir: Path):
+    """Test that the environment can be loaded."""
+    load_cmd = f"""cd {tmp_venv_dir} && source .venv/bin/activate && uv run python -c 'import verifiers as vf; vf.load_environment("{env_dir.name}")'"""
+    try:
+        process = subprocess.run(
+            load_cmd,
+            shell=True,
+            executable="/bin/bash",
+            capture_output=True,
+            text=True,
+            timeout=LOAD_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired:
+        pytest.fail(f"Timed out after {LOAD_TIMEOUT}s loading {env_dir.name}")
+    assert process.returncode == 0, "Failed to load environment"
+
+
+def help_test_can_eval_env(tmp_venv_dir: Path, env_dir: Path):
+    """Test that the environment can be run via vf-eval."""
+    if env_dir.name == "tau2_bench_v1" and not os.getenv("PRIME_API_KEY"):
+        pytest.skip(
+            "Skipping tau2 default eval because PRIME_API_KEY is not configured"
+        )
+    if os.getenv("PRIME_API_KEY"):
+        model_flags = "-m openai/gpt-4.1-mini -b https://api.pinference.ai/api/v1 -k PRIME_API_KEY"
+    elif os.getenv("OPENAI_API_KEY"):
+        model_flags = "-m gpt-4.1-mini -b https://api.openai.com/v1 -k OPENAI_API_KEY"
+    else:
+        pytest.skip("Skipping vf-eval smoke test because no API key is configured")
+
+    eval_cmd = (
+        f"cd {tmp_venv_dir} && source .venv/bin/activate && "
+        f"uv run vf-eval {env_dir.name} {model_flags} -n 1 -r 1 -t 512"
+    )
+    try:
+        process = subprocess.run(
+            eval_cmd,
+            shell=True,
+            executable="/bin/bash",
+            capture_output=True,
+            text=True,
+            timeout=EVAL_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired:
+        pytest.fail(f"Timed out after {EVAL_TIMEOUT}s evaluating {env_dir.name}")
+    assert process.returncode == 0, "Failed to evaluate environment"
