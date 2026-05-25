@@ -2085,6 +2085,13 @@ rows:
       - crates/leaven-public-seam/tests/public_seam_contract/contract_package.rs::conformance_evidence_audit_rejects_happy_path_only_denial_rows
       - crates/leaven-public-seam/tests/public_seam_contract/contract_package.rs::conformance_evidence_audit_rejects_matrix_only_closeout_even_with_test_links
       - crates/leaven-public-seam/tests/public_seam_contract/contract_package.rs::conformance_evidence_audit_rejects_weak_test_function_as_negative_evidence
+      - crates/leaven-public-seam/tests/public_seam_contract/contract_package.rs::conformance_evidence_audit_rejects_proven_rows_without_row_specific_review_signoff
+      - crates/leaven-public-seam/tests/public_seam_contract/contract_package.rs::conformance_evidence_audit_rejects_same_row_blocker_review_as_signoff
+      - crates/leaven-public-seam/tests/public_seam_contract/contract_package.rs::conformance_evidence_audit_rejects_partial_review_preamble_signoff_language
+      - crates/leaven-public-seam/tests/public_seam_contract/contract_package.rs::conformance_evidence_audit_rejects_negated_row_signoff_language
+      - crates/leaven-public-seam/tests/public_seam_contract/contract_package.rs::conformance_evidence_audit_rejects_provenance_substring_as_signoff
+      - crates/leaven-public-seam/tests/public_seam_contract/contract_package.rs::conformance_evidence_audit_rejects_signoff_section_pending_rows
+      - crates/leaven-public-seam/tests/public_seam_contract/contract_package.rs::conformance_evidence_audit_rejects_signoff_section_remains_pending_rows
       - crates/leaven-public-seam/tests/public_seam_contract/contract_package.rs::conformance_evidence_audit_requires_denial_evidence_for_integrated_surface_rows
       - crates/leaven-public-seam/tests/public_seam_contract/contract_package.rs::conformance_evidence_audit_rejects_pending_rows_with_closeout_evidence_fields
       - crates/leaven-public-seam/tests/public_seam_contract/contract_package.rs::conformance_evidence_audit_rejects_blocked_rows_without_named_prerequisites
@@ -2096,4 +2103,5 @@ rows:
       - docs/specs/public-seam-v1/conformance-matrix.yaml
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-negative-denominator-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-row-specific-closeout-signoff-harness-review.md
     status: proven
