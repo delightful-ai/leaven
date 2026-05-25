@@ -283,6 +283,7 @@ def run_workspace_test_binaries(
     )
     queued = list(binaries)
     running: list[tuple[subprocess.Popen[str], str, float, tempfile._TemporaryFileWrapper[bytes]]] = []
+    durations: list[tuple[float, str]] = []
     completed = 0
     while queued or running:
         while queued and len(running) < jobs:
@@ -335,8 +336,9 @@ def run_workspace_test_binaries(
             stderr_file.close()
             running.remove(item)
             completed += 1
+            elapsed = time.perf_counter() - started
+            durations.append((elapsed, target_name))
             if returncode != 0:
-                elapsed = time.perf_counter() - started
                 sys.stderr.write(stderr)
                 print(
                     f"error: test binary {target_name} failed with exit code "
@@ -348,6 +350,11 @@ def run_workspace_test_binaries(
                     other_stderr_file.close()
                 return returncode
         time.sleep(0.01)
+    if durations:
+        slowest = ", ".join(
+            f"{name} {elapsed:.2f}s" for elapsed, name in sorted(durations, reverse=True)[:8]
+        )
+        print(f"slowest completed libtest binaries: {slowest}", flush=True)
     return 0
 
 
