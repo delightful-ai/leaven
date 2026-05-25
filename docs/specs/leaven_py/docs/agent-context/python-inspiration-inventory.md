@@ -299,6 +299,60 @@ Pydantic is already vendored by virtue of being a direct transitive dependency. 
 
 ---
 
+## 12. Verifiers (Prime Intellect)
+
+**Upstream**: https://github.com/PrimeIntellect-ai/verifiers  
+**Default branch**: main  
+**Approximate size**: ~20–35 MB clone; Python 97%  
+**Type**: RL/eval environment library + Prime CLI integration  
+
+### What shaped our design
+- `load_environment(config)` module entrypoint — self-contained eval packages users can bring unchanged
+- Taskset rows + `@vf.reward` rubrics — dataset loading and scorer semantics
+- v1 Taskset/Harness split — parallels Leaven runner/scorer/case separation
+- `HarborTaskset` bridge — shows how Harbor tasks lower into row dicts
+
+### Worth reading for our scaffold
+- `docs/overview.md` — environment module contract
+- `verifiers/v1/taskset.py`, `verifiers/v1/env.py` — row → rollout pipeline
+- `verifiers/rubrics/rubric.py`, `verifiers/decorators.py` — reward/score functions
+- `verifiers/v1/packages/tasksets/harbor.py` — Harbor interop
+
+### Vendor recommendation
+**`full`** — Vendored 2026-05-24 as Phase 2. See `docs/agent-context/patterns/verifiers-patterns.md`.
+
+---
+
+## 13. Harbor (agent eval harness)
+
+**Upstream**: https://github.com/harbor-framework/harbor  
+**Default branch**: main  
+**Approximate size**: ~43–49 MB clone; Python 92%  
+**Type**: Agent evaluation CLI + task/dataset registry (Terminal-Bench official harness)  
+
+**Not this repo:** `meridianlabs-ai/inspect_harbor` (Inspect AI registry adapter only).
+
+### What shaped our design
+- Task directory layout (`instruction.md`, `task.toml`, `tests/`, `environment/`) — informs how Leaven could import containerized benchmark cases into `lv.cases.*`
+- Trial/job orchestration (`harbor run`) — parallels `lv.optimize(...).run()` with concurrency and durable job dirs
+- `BaseAgent` / verifier scripts — runner vs scorer separation with sandbox boundary
+- Dataset manifest digest pinning — aligns with Leaven case identity / cache/resume obligations
+
+### Worth reading for our scaffold
+- `src/harbor/models/task/task.py` — task filesystem contract
+- `src/harbor/models/dataset/manifest.py` — dataset.toml pinned refs
+- `src/harbor/agents/base.py` — agent lifecycle
+- `src/harbor/verifier/verifier.py` — reward extraction from test scripts
+- `examples/tasks/hello-world/` — minimal task skeleton
+
+### Vendor recommendation
+**`full`** — Harbor is medium-sized (~43 MB), cohesive, and the task + verifier layout is load-bearing for agentic eval compatibility. Vendored 2026-05-24 as Phase 2.
+
+### Justification
+Harbor is the de facto harness for Terminal-Bench and many registry benchmarks. Vendoring clarifies task semantics vs Prime Verifiers vs Inspect AI (`inspect_harbor`). Leaven adapters should read real task layout here, not infer from Inspect registry strings alone.
+
+---
+
 ## Recommended Vendor Order
 
 ### **Phase 1 — Load-bearing patterns (add first)**
@@ -306,25 +360,27 @@ Pydantic is already vendored by virtue of being a direct transitive dependency. 
 2. **Inspect AI** — Stage decorator + context injection model (direct design ancestor)
 3. **MCP Python SDK** — Wire protocol + JSON-RPC patterns (foundation for ACP routing)
 
-### **Phase 2 — Composition & execution (add after Phase 1)**
-4. **LangGraph** — StateGraph + RunnableConfig + durability patterns
-5. **OpenAI Evals** — Registry + template patterns for stage lookup and case handling
-6. **OSS Vizier** — Policy/Designer + gRPC client patterns (optimization abstraction)
+### **Phase 2 — Composition & execution (add after Phase 1)** ✅ partial (2026-05-24)
+4. **Verifiers** — `load_environment` + Taskset/Rubric + `@vf.reward` (vendored)
+5. **Harbor** — task directories + verifier scripts + dataset registry (vendored)
+6. **LangGraph** — StateGraph + RunnableConfig + durability patterns (skipped earlier round; revisit if needed)
+7. **OpenAI Evals** — Registry + template patterns (skipped earlier round)
+8. **OSS Vizier** — Policy/Designer + gRPC client patterns (skipped earlier round)
 
 ### **Phase 3 — Agentic reflection (add for Stage 2+ work)**
-7. **CrewAI** — Role-based composition and multi-stage orchestration
-8. **Modal** (subset: `py/modal/`) — Decorator + remote dispatch patterns
+9. **CrewAI** — Role-based composition and multi-stage orchestration
+10. **Modal** (subset: `py/modal/`) — Decorator + remote dispatch patterns
 
 ### **Skip entirely**
-9. **Ray Tune** — Too large (2+ GB monorepo); web-only reference sufficient
-10. **Pydantic** — Already a live dependency; use installed version + web docs
-11. **Optuna** (alternative: if Phase 2 budget allows, `subset:optuna/{study,trial,samplers,storages/rpc_storage.py}` instead of Ray) — Distributed optimization patterns less critical than OSS Vizier; decide based on schedule.
+11. **Ray Tune** — Too large (2+ GB monorepo); web-only reference sufficient
+12. **Pydantic** — Already a live dependency; use installed version + web docs
+13. **Optuna** — Distributed optimization patterns less critical than OSS Vizier; decide based on schedule.
 
 ### **Total estimated vendored size**
-- Phase 1: ~25 MB (DSPy 5 MB + Inspect 20 MB + MCP 10 MB) = 35 MB
-- Phase 2: ~100 MB (LangGraph 75 MB + OpenAI Evals 15 MB + OSS Vizier 30 MB) = 120 MB
-- Phase 3: ~80 MB (CrewAI 25 MB + Modal py/ 50 MB) = 75 MB
-- **Total**: ~230 MB (manageable; leaves room for tests/docs)
+- Phase 1: ~35 MB (DSPy + Inspect + MCP)
+- Phase 2 (eval frameworks): ~63 MB (Verifiers 20 MB + Harbor 43 MB) — **vendored 2026-05-24**
+- Round 4 references: ~150 MB (BAML, pydantic-ai, Temporal, Marvin, Anthropic SDK, etc.)
+- **Current total**: ~289 MB (12 subtree vendors + informal Weave copy)
 
 ---
 

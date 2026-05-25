@@ -76,6 +76,11 @@ members = [
     "examples/trace2skill_spreadsheetbench",
     "xtask",
 ]
+# Vendored Python-scaffold reference repos under docs/specs/leaven_py/repos/
+# contain their own Cargo.toml files (BAML's engine, temporal-python-sdk's
+# bridge, etc.). Excluding them prevents cargo from auto-detecting and
+# attempting to build them as part of this workspace.
+exclude = ["docs/specs/leaven_py/repos"]
 
 [workspace.package]
 version = "0.0.0"
