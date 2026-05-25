@@ -56,8 +56,8 @@ Evidence here is data a stage or evaluator can produce and another component can
   merge scheduler, prevalence policy, patch parser, or skill-directory applier.
 - Public placeholders today: `diff`, `json`, `listwise`, `mixed`,
   `score_vector`, and `string` are root-re-exported names without behavior laws.
-  Do not cite them as standard evidence until they carry fields, constructors,
-  and tests.
+  They are not exported from `leaven_evidence::prelude::*` and must not be cited
+  as standard evidence until they carry fields, constructors, and tests.
 - `CaseAssessmentEvidence` is the reusable scored case-output shape for the
   runner/scorer path: generated output, scalar score, natural-language
   feedback, and candidate-bound assessed outputs when a group judgment needs

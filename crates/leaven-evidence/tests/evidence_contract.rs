@@ -10,6 +10,8 @@ mod command;
 mod feedback;
 #[path = "evidence_contract/pairwise.rs"]
 mod pairwise;
+#[path = "evidence_contract/public_routes.rs"]
+mod public_routes;
 #[path = "evidence_contract/rollout.rs"]
 mod rollout;
 #[path = "evidence_contract/scalar.rs"]
