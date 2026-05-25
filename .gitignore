@@ -1,11 +1,10 @@
 /target
 /vendor
 .env
+.DS_Store
 __pycache__/
 *.py[cod]
 tmp/
 .orientation/
 .beads/issues.jsonl
 .leaven/
-__pycache__/
-*.pyc
