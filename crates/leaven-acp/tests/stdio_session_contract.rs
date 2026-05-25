@@ -128,6 +128,186 @@ print(json.dumps(response, sort_keys=True), flush=True)
 }
 
 #[test]
+fn stdio_session_runs_python_external_worker_program_across_v1_method_families() {
+    let package = package();
+    let profile = profile(&package, 32, "pause_worker");
+    let temp = TempDir::new().unwrap();
+    let observed_requests = temp.path().join("observed-requests.json");
+    let program_cases = external_worker_program_cases();
+    let expected: Vec<(&str, &str)> = program_cases
+        .iter()
+        .map(|case| (case.method, case.primary_kind))
+        .collect();
+    let program_spec = serde_json::to_string(
+        &program_cases
+            .iter()
+            .map(|case| {
+                json!({
+                    "method": case.method,
+                    "primary_kind": case.primary_kind,
+                    "result": case.result
+                })
+            })
+            .collect::<Vec<_>>(),
+    )
+    .unwrap();
+    let script = python_worker_script(
+        r#"
+import json
+import os
+import sys
+
+cases = json.loads(os.environ["LEAVEN_TEST_PROGRAM"])
+observed = []
+
+for index, case in enumerate(cases):
+    request = json.loads(sys.stdin.readline())
+    assert request["jsonrpc"] == "2.0"
+    assert request["id"] == f"leaven-acp-{index}"
+    assert request["method"] == case["method"]
+    assert request["params"]["schema_version"] == "leaven.plan.v1"
+    assert request["params"]["commit"]["kind"] == "no_graph_writes"
+    assert "mcp" not in request["method"]
+    assert os.environ["LEAVEN_CAPABILITY_TOKEN"] == "secret-token"
+    assert os.environ["LEAVEN_CAPABILITY_FINGERPRINT"] == "fp_cap_sha256_acp"
+    observed.append({
+        "id": request["id"],
+        "method": request["method"],
+        "return": request["params"]["return"],
+    })
+    print(json.dumps({
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+            "message": f"python worker completed {request['method']}",
+            "priority": "critical",
+        },
+    }), flush=True)
+    result = case["result"]
+    result["capability_fingerprint"] = os.environ["LEAVEN_CAPABILITY_FINGERPRINT"]
+    assert result["method"] == request["method"]
+    assert result["primary"]["kind"] == case["primary_kind"]
+    print(json.dumps({
+        "jsonrpc": "2.0",
+        "id": request["id"],
+        "result": result,
+    }, sort_keys=True), flush=True)
+
+with open(os.environ["LEAVEN_TEST_OBSERVED_REQUESTS"], "w", encoding="utf-8") as handle:
+    json.dump(observed, handle, sort_keys=True)
+"#,
+    );
+    let script_path = script.path().join("worker.py");
+    let mut session = AcpStdioProcessSession::spawn(
+        package,
+        profile,
+        AcpProcessCommand::new("python3")
+            .arg(script_path.to_str().unwrap())
+            .env("LEAVEN_TEST_PROGRAM", program_spec)
+            .env(
+                "LEAVEN_TEST_OBSERVED_REQUESTS",
+                observed_requests.to_str().unwrap(),
+            ),
+        "secret-token",
+        "stdio://worker/session",
+        "fp_cap_sha256_acp",
+    )
+    .unwrap();
+
+    for (index, (method, primary_kind)) in expected.iter().enumerate() {
+        let response = session
+            .call_extension(method, &acp_plan_params())
+            .unwrap_or_else(|error| panic!("program call {index} {method} failed: {error:?}"));
+        assert_eq!(response.id(), format!("leaven-acp-{index}"));
+        assert_eq!(response.method(), *method);
+        assert_eq!(response.primary_kind(), *primary_kind);
+    }
+    assert_eq!(
+        session
+            .worker_session_snapshot()
+            .lifecycle()
+            .inflight_updates(),
+        expected.len()
+    );
+
+    let observed: Vec<Value> =
+        serde_json::from_str(&fs::read_to_string(observed_requests).unwrap())
+            .expect("python worker wrote observed request sequence");
+    assert_eq!(observed.len(), expected.len());
+    for (index, (method, _)) in expected.iter().enumerate() {
+        assert_eq!(observed[index]["id"], json!(format!("leaven-acp-{index}")));
+        assert_eq!(observed[index]["method"], json!(*method));
+        assert_eq!(observed[index]["return"], json!(["input"]));
+    }
+    std::mem::forget(script);
+    std::mem::forget(temp);
+}
+
+#[test]
+fn stdio_session_rejects_external_worker_program_bare_payload_mid_sequence() {
+    let package = package();
+    let profile = profile(&package, 32, "pause_worker");
+    let first_response = response_for(
+        "leaven/workspace.materialize",
+        "leaven-acp-0",
+        extension_result(
+            "leaven/workspace.materialize",
+            workspace_handle_primary(false, "wrec_materialize"),
+            call_receipt("workspace_materialize", "wrec_materialize"),
+            &["workspace.file"],
+        ),
+    );
+    let script = python_worker_script(
+        r#"
+import json
+import os
+import sys
+
+first = json.loads(sys.stdin.readline())
+assert first["method"] == "leaven/workspace.materialize"
+response = json.loads(os.environ["LEAVEN_TEST_FIRST_RESPONSE"])
+response["result"]["capability_fingerprint"] = os.environ["LEAVEN_CAPABILITY_FINGERPRINT"]
+print(json.dumps(response, sort_keys=True), flush=True)
+
+second = json.loads(sys.stdin.readline())
+assert second["method"] == "leaven/lm.complete"
+print(json.dumps({
+    "jsonrpc": "2.0",
+    "id": second["id"],
+    "result": {
+        "message": {
+            "role": "assistant",
+            "content": [{"kind": "text", "text": "bare payload without ACP receipts"}],
+        },
+    },
+}, sort_keys=True), flush=True)
+"#,
+    );
+    let script_path = script.path().join("worker.py");
+    let mut session = AcpStdioProcessSession::spawn(
+        package,
+        profile,
+        AcpProcessCommand::new("python3")
+            .arg(script_path.to_str().unwrap())
+            .env("LEAVEN_TEST_FIRST_RESPONSE", first_response),
+        "secret-token",
+        "stdio://worker/session",
+        "fp_cap_sha256_acp",
+    )
+    .unwrap();
+
+    let response = session
+        .call_extension("leaven/workspace.materialize", &acp_plan_params())
+        .unwrap();
+    assert_eq!(response.primary_kind(), "workspace_handle");
+    assert!(matches!(
+        session.call_extension("leaven/lm.complete", &acp_plan_params()),
+        Err(AcpTransportError::PublicSeam(_))
+    ));
+    std::mem::forget(script);
+}
+
+#[test]
 fn stdio_session_launch_respects_worker_current_dir() {
     let package = package();
     let profile = profile(&package, 32, "pause_worker");
@@ -759,6 +939,101 @@ fn extension_result_cases() -> Vec<ExtensionCase> {
     cases.extend(extension_result_workspace_cases());
     cases.extend(extension_result_effect_and_write_cases());
     cases
+}
+
+fn external_worker_program_cases() -> Vec<ExtensionCase> {
+    vec![
+        case(
+            "leaven/graph.query",
+            "extension",
+            extension_result(
+                "leaven/graph.query",
+                extension_primary("graph.query"),
+                query_receipt("qrec_graph"),
+                &["public"],
+            ),
+        ),
+        case(
+            "leaven/workspace.materialize",
+            "workspace_handle",
+            extension_result(
+                "leaven/workspace.materialize",
+                workspace_handle_primary(false, "wrec_materialize"),
+                call_receipt("workspace_materialize", "wrec_materialize"),
+                &["workspace.file"],
+            ),
+        ),
+        case(
+            "leaven/workspace.read_file",
+            "workspace_file",
+            extension_result(
+                "leaven/workspace.read_file",
+                workspace_file_primary(),
+                query_receipt("qrec_workspace_file"),
+                &["workspace.file"],
+            ),
+        ),
+        case(
+            "leaven/lm.complete",
+            "lm_response",
+            extension_result(
+                "leaven/lm.complete",
+                lm_response_primary(),
+                call_receipt("lm_complete", "lmrec_acp"),
+                &["completion.raw"],
+            ),
+        ),
+        case(
+            "leaven/agent.run",
+            "agent_session",
+            extension_result(
+                "leaven/agent.run",
+                agent_session_primary(),
+                call_receipt("agent_run", "agentrec_acp"),
+                &["public", "transcript.raw"],
+            ),
+        ),
+        case(
+            "leaven/sandbox.exec",
+            "sandbox_exec",
+            extension_result(
+                "leaven/sandbox.exec",
+                sandbox_exec_primary(),
+                call_receipt("sandbox_exec", "execrec_acp"),
+                &["public"],
+            ),
+        ),
+        case(
+            "leaven/proposal.submit_batch",
+            "proposal_batch_receipt",
+            extension_result(
+                "leaven/proposal.submit_batch",
+                proposal_batch_primary(),
+                write_receipt("submit_proposal_batch", "wrec_proposal_submit"),
+                &["public"],
+            ),
+        ),
+        case(
+            "leaven/assessment.submit",
+            "assessment_batch_receipt",
+            extension_result(
+                "leaven/assessment.submit",
+                assessment_batch_primary(),
+                write_receipt("submit_assessments", "wrec_assessment_submit"),
+                &["public"],
+            ),
+        ),
+        case(
+            "leaven/workspace.release",
+            "workspace_handle",
+            extension_result(
+                "leaven/workspace.release",
+                workspace_handle_primary(true, "wrec_release"),
+                call_receipt("workspace_release", "wrec_release"),
+                &["workspace.file"],
+            ),
+        ),
+    ]
 }
 
 fn extension_result_query_cases() -> Vec<ExtensionCase> {
