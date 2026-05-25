@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# If in a jj repo, point GIT_DIR at jj's backing git store so gh works
+if [ -d .jj ]; then
+  jj_repo="$(cat .jj/repo)"
+  export GIT_DIR
+  GIT_DIR="$(realpath "$jj_repo/store/$(cat "$jj_repo/store/git_target")")"
+fi
+
+owner="$(gh repo view --json owner -q .owner.login)"
+repo="$(gh repo view --json name -q .name)"
+
+if [ -d .jj ]; then
+  bookmark="$(jj log -r @ --no-graph -T 'bookmarks' | sed 's/\*$//')"
+  pr="$(gh pr view "$bookmark" --json number -q .number)"
+else
+  pr="$(gh pr view --json number -q .number)"
+fi
+
+gh api graphql -F owner="$owner" -F repo="$repo" -F pr="$pr" -f query='
+query($owner:String!, $repo:String!, $pr:Int!) {
+  repository(owner:$owner, name:$repo) {
+    pullRequest(number:$pr) {
+      reviewThreads(first: 100) {
+        nodes {
+          isResolved
+          isOutdated
+          path
+          line
+          originalLine
+          comments(first: 100) {
+            nodes { author { login } body url createdAt }
+          }
+        }
+      }
+    }
+  }
+}
+' | jq -r '
+  def indent(s):
+    (s
+      | gsub("\r"; "")
+      | split("\n")
+      | map(if . == "" then "" else "    " + . end)
+      | join("\n")
+    );
+
+  def divider:
+    ("-" * 80);
+
+  .data.repository.pullRequest.reviewThreads.nodes
+  | map(select(.isResolved == false))
+  | sort_by(.path, (.line // .originalLine // 0))
+  | .[]
+  | (
+      "FILE: " + (.path // "?") + ":" + (((.line // .originalLine) // 0) | tostring)
+      + (if .isOutdated then "  [outdated]" else "" end)
+      + "  [unresolved]"
+      + "\n"
+      + (
+          .comments.nodes
+          | map(
+              "  COMMENT:"
+              + "\n  AUTHOR: " + (.author.login // "?")
+              + "\n  TIME: " + (.createdAt // "")
+              + "\n  URL: " + (.url // "")
+              + "\n\n"
+              + indent(.body // "")
+              + "\n"
+            )
+          | join("\n")
+        )
+      + "\n" + divider + "\n"
+    )
+'

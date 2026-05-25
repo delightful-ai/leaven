@@ -1,0 +1,41 @@
+---
+source: crates/baml_tests/src/generated_tests.rs
+---
+=== COMPILER2 DIAGNOSTICS ===
+  [type] error: type mismatch: expected int, got string
+    ╭─[ test.baml:10:7 ]
+    │
+ 10 │ class HasDuplicateField {
+    │       ────────┬────────  
+    │               ╰────────── type mismatch: expected int, got string
+    │ 
+    │ Note: Error code: E0001
+────╯
+
+  [hir] error: Duplicate field `HasDuplicateField.name`
+    ╭─[ test.baml:13:3 ]
+    │
+ 11 │   name string
+    │   ──┬─  
+    │     ╰─── first defined as field here
+    │ 
+ 13 │   name int
+    │   ──┬─  
+    │     ╰─── duplicate field definition
+    │ 
+    │ Note: Error code: E0012
+────╯
+
+  [hir] error: Duplicate variant `HasDuplicateVariant.RED`
+    ╭─[ test.baml:23:3 ]
+    │
+ 21 │   RED
+    │   ─┬─  
+    │    ╰─── first defined as variant here
+    │ 
+ 23 │   RED
+    │   ─┬─  
+    │    ╰─── duplicate variant definition
+    │ 
+    │ Note: Error code: E0012
+────╯

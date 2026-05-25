@@ -1,0 +1,25 @@
+/* Tailwind v4 layers (no preflight — the shared file has a scoped reset) */
+@layer base, theme, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/* Shared playground tokens + scoped reset */
+@import "../../pkg-playground/src/styles/playground.css";
+
+/* ── Webview shell ─────────────────────────────────────────────────── */
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--background);
+  color: var(--foreground);
+}

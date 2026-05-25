@@ -1,0 +1,63 @@
+# Mise tasks for baml_language
+# Ordering between tasks is enforced by .pre-commit-config.yaml priorities, not here
+
+[tasks.validate-markdown]
+description = "Validate markdown files"
+run = "scripts/validate_markdown.py"
+sources = ["**/*.md", ".markdown-whitelist"]
+
+[tasks.fmt]
+description = "Run cargo fmt"
+run = "cargo fmt --all -- --config imports_granularity=Crate --config group_imports=StdExternalCrate"
+sources = ["**/*.rs"]
+
+# Note that clippy-fix and clippy are separate tasks because clippy-fix is substantially slower.
+[tasks.clippy-fix]
+description = "Auto-fix clippy warnings"
+run = "cargo clippy --workspace --all-targets --all-features --fix --allow-dirty --allow-staged --allow-no-vcs -- -D warnings"
+sources = ["**/*.rs", "**/Cargo.toml"]
+
+[tasks.clippy]
+description = "Run cargo clippy"
+run = "cargo clippy --workspace --all-targets --all-features -- -D warnings"
+sources = ["**/*.rs", "**/Cargo.toml"]
+
+[tasks.wasm-excluded]
+description = "List crates excluded from WASM builds (metadata.ci.wasm_support = false)"
+run = "cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.source==null) | select(if .metadata.ci.wasm_support == null then false else (.metadata.ci.wasm_support | not) end) | .name' | sort"
+
+[tasks.clippy-wasm]
+description = "Run cargo clippy for wasm target (bans std::time::{SystemTime,Instant})"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Use checked-in clippy-wasm/clippy.toml via CLIPPY_CONF_DIR so we never overwrite workspace config.
+WASM_PKGS=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.source==null) | select(if .metadata.ci.wasm_support == null then true else .metadata.ci.wasm_support end) | "-p \\(.name)"' | xargs)
+if [ -z "$WASM_PKGS" ]; then
+  echo "No WASM-enabled packages found; nothing to check." >&2
+  exit 0
+fi
+CLIPPY_CONF_DIR="$MISE_CONFIG_ROOT/clippy-wasm" cargo clippy $WASM_PKGS --target wasm32-unknown-unknown --all-features --locked -- -D warnings -W clippy::disallowed-types
+
+"""
+sources = ["**/*.rs", "**/Cargo.toml", "clippy-wasm/clippy.toml"]
+
+[tasks.stow]
+description = "Run cargo stow"
+run = "cargo run -p cargo-stow -- stow --fix"
+sources = ["**/*.rs", "**/Cargo.toml"]
+
+[tasks.size-gate]
+description = "Check artifact sizes against baseline"
+run = "cargo run -p cargo-size-gate -- size-gate check"
+
+[tasks.size-gate-record]
+description = "Record new size baseline"
+run = "cargo run -p cargo-size-gate -- size-gate record"
+
+[tasks.insta-update]
+description = "Run all snapshot tests with INSTA_UPDATE=always"
+env = { INSTA_UPDATE = "always" }
+run = "cargo test --workspace"
+sources = ["**/*.rs", "**/Cargo.toml"]

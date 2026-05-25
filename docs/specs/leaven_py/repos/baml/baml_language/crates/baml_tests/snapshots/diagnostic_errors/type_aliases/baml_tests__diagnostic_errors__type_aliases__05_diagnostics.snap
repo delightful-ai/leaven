@@ -1,0 +1,23 @@
+---
+source: crates/baml_tests/src/generated_tests.rs
+---
+=== COMPILER2 DIAGNOSTICS ===
+  [type] error: type mismatch: expected user.foo, got true
+    ╭─[ type_aliases.baml:11:3 ]
+    │
+ 11 │   true
+    │   ──┬─  
+    │     ╰─── type mismatch: expected user.foo, got true
+    │ 
+    │ Note: Error code: E0001
+────╯
+
+  [type] error: unresolved type: name
+   ╭─[ type_aliases_json.baml:4:8 ]
+   │
+ 4 │   inner name
+   │        ──┬──  
+   │          ╰──── unresolved type: name
+   │ 
+   │ Note: Error code: E0002
+───╯
