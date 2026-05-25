@@ -17,15 +17,16 @@ use leaven_kernel::{
     StageAttemptOutcome, StageAttemptReceiptId, StageAttemptReceiptRef, StageCallId, StageId,
     StageRole,
 };
-use leaven_store::EvidenceStore;
 use leaven_store_inline::InlineEvidenceStore;
 
 use crate::{OptimizeError, RunNotResumableReason, RunResumability};
 
-use super::assessment::{assessment_summary, report_score};
+use super::assessment::assessment_summary;
 use super::*;
 
+mod assessment;
 mod events;
+mod splits;
 
 fn report_summary(candidate: CandidateId, score: f64) -> CandidateEvaluationSummary {
     CandidateEvaluationSummary {
@@ -35,50 +36,6 @@ fn report_summary(candidate: CandidateId, score: f64) -> CandidateEvaluationSumm
         average_score: Some(score),
         cases: Vec::new(),
     }
-}
-
-#[test]
-fn report_scores_preserve_inline_and_blob_outputs() {
-    let inline = report_score(
-        leaven_kernel::CaseId::new(1),
-        leaven_kernel::EvidenceRef {
-            store: "test".to_owned(),
-            key: "inline".to_owned(),
-        },
-        &CaseAssessmentEvidence::new(
-            ScalarEvidence::new(1.0).unwrap(),
-            OutputRecord::inline("inline answer"),
-            "inline feedback",
-        ),
-    );
-    let blob = report_score(
-        leaven_kernel::CaseId::new(2),
-        leaven_kernel::EvidenceRef {
-            store: "test".to_owned(),
-            key: "blob".to_owned(),
-        },
-        &CaseAssessmentEvidence::new(
-            ScalarEvidence::new(0.25).unwrap(),
-            OutputRecord::blob(leaven_kernel::BlobRef {
-                store: "blob-store".to_owned(),
-                key: "answer.txt".to_owned(),
-            }),
-            "blob feedback",
-        )
-        .with_trace(["provider transcript"]),
-    );
-
-    assert_eq!(inline.output, "inline answer");
-    assert_eq!(inline.feedback, "inline feedback");
-    assert_eq!(inline.output_ref.as_ref().unwrap().key, "inline");
-    assert_eq!(blob.feedback_ref.as_ref().unwrap().key, "blob");
-    assert!(inline.trace_refs.is_empty());
-    assert_eq!(
-        blob.trace_refs,
-        blob.feedback_ref.iter().cloned().collect::<Vec<_>>()
-    );
-    assert_eq!(blob.output, "blob:blob-store:answer.txt");
-    assert!((blob.score - 0.25).abs() < f64::EPSILON);
 }
 
 #[test]
@@ -179,24 +136,6 @@ fn final_report_edges_refuse_empty_assessments_and_missing_checkpoints() {
 }
 
 #[test]
-fn split_reports_group_custom_partitions() {
-    futures::executor::block_on(async {
-        let mut harness = report_harness();
-        seed_split_reports(&mut harness).await;
-        let reports =
-            split_reports_for(&harness.engine.view(), &harness.store, &harness.splits).unwrap();
-
-        assert_eq!(reports.len(), 2);
-        assert!(reports.iter().any(|report| report.role == SplitRole::Train));
-        assert!(
-            reports
-                .iter()
-                .any(|report| report.role == SplitRole::Custom("audit".into()))
-        );
-    });
-}
-
-#[test]
 fn final_evaluation_split_reports_preserve_baseline_and_optimized_roles() {
     let candidate = CandidateId::new();
     let train = report_summary(candidate, 1.0);
@@ -284,218 +223,6 @@ fn build_summary_projects_final_scores_storage_cache_and_events() {
     assert!(events.is_empty());
 }
 
-#[test]
-fn assessment_summary_refuses_bad_assessment_groups() {
-    futures::executor::block_on(async {
-        let mut harness = report_harness();
-        let mixed_candidates = harness
-            .engine
-            .evaluate(
-                EvaluatorId::PRIMARY,
-                EvaluationRequest::Independent {
-                    candidates: vec![harness.first, harness.second],
-                    set: EvaluationSet::All,
-                    granularity: AssessmentGranularity::PerCase,
-                    purpose: EvaluationPurpose::Probe,
-                },
-                &harness.case_set,
-                &harness.store,
-            )
-            .await
-            .unwrap();
-        let error = assessment_summary(
-            &harness.engine.view(),
-            &harness.store,
-            &mixed_candidates.assessment_ids,
-        )
-        .expect_err("mixed candidate assessment group must be rejected");
-        assert!(error.to_string().contains("mixed candidates"));
-
-        let first_request = harness
-            .engine
-            .evaluate(
-                EvaluatorId::PRIMARY,
-                all_cases_request(harness.first, AssessmentGranularity::PerCase),
-                &harness.case_set,
-                &harness.store,
-            )
-            .await
-            .unwrap();
-        let second_request = harness
-            .engine
-            .evaluate(
-                EvaluatorId::PRIMARY,
-                all_cases_request(harness.first, AssessmentGranularity::PerCase),
-                &harness.case_set,
-                &harness.store,
-            )
-            .await
-            .unwrap();
-        let error = assessment_summary(
-            &harness.engine.view(),
-            &harness.store,
-            &[
-                first_request.assessment_ids[0],
-                second_request.assessment_ids[0],
-            ],
-        )
-        .expect_err("mixed request assessment group must be rejected");
-        assert!(error.to_string().contains("mixed requests"));
-
-        let aggregate = harness
-            .engine
-            .evaluate(
-                EvaluatorId::PRIMARY,
-                all_cases_request(harness.first, AssessmentGranularity::Aggregate),
-                &harness.case_set,
-                &harness.store,
-            )
-            .await
-            .unwrap();
-        let error = assessment_summary(
-            &harness.engine.view(),
-            &harness.store,
-            &aggregate.assessment_ids,
-        )
-        .expect_err("aggregate assessment group must be rejected");
-        assert!(error.to_string().contains("case-targeted"));
-
-        let pairwise = harness
-            .engine
-            .evaluate(
-                EvaluatorId::PRIMARY,
-                EvaluationRequest::Pairwise {
-                    left: harness.first,
-                    right: harness.second,
-                    set: EvaluationSet::All,
-                    granularity: AssessmentGranularity::PerCase,
-                    purpose: EvaluationPurpose::Probe,
-                    order: leaven_core::PairOrder::Ordered,
-                },
-                &harness.case_set,
-                &harness.store,
-            )
-            .await
-            .unwrap();
-        let error = assessment_summary(
-            &harness.engine.view(),
-            &harness.store,
-            &pairwise.assessment_ids,
-        )
-        .expect_err("non-independent assessment group must be rejected");
-        assert!(error.to_string().contains("independent assessment"));
-    });
-}
-
-#[test]
-fn split_reports_refuse_non_independent_partition_rows() {
-    futures::executor::block_on(async {
-        let harness = report_harness();
-        let mut bad_engine =
-            leaven_engine::Engine::<RunProblem<TestArtifact, &'static str>>::builder()
-                .budget(leaven_kernel::Budget::unlimited())
-                .evaluator(BadPartitionEvaluator)
-                .build();
-        let bad_first = bad_engine.insert_seed(TestArtifact, 0).unwrap();
-        let bad_second = bad_engine.insert_seed(TestArtifact, 1).unwrap();
-        let bad_store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("bad-report-group");
-        let malformed = bad_engine
-            .evaluate(
-                EvaluatorId::PRIMARY,
-                EvaluationRequest::Independent {
-                    candidates: vec![bad_first, bad_second],
-                    set: EvaluationSet::Partition(PartitionId::from("TRAIN")),
-                    granularity: AssessmentGranularity::PerCase,
-                    purpose: EvaluationPurpose::Probe,
-                },
-                &harness.case_set,
-                &bad_store,
-            )
-            .await
-            .unwrap();
-        assert!(!malformed.assessment_ids.is_empty());
-        let error = split_reports_for(&bad_engine.view(), &bad_store, &harness.splits)
-            .expect_err("split reports must reject non-independent partition rows");
-        assert!(error.to_string().contains("independent assessment"));
-    });
-}
-
-fn split_reports_for<A, I, T>(
-    view: &leaven_engine::RunGraphView<'_, RunProblem<A, I, T>>,
-    store: &dyn EvidenceStore<CaseAssessmentEvidence>,
-    splits: &DatasetSplits,
-) -> Result<Vec<SplitReport>, leaven_engine::OptimizerError>
-where
-    A: Artifact,
-    I: Clone + Send + Sync + 'static,
-    T: Clone + Send + Sync + 'static,
-{
-    let mut groups = BTreeMap::<
-        (PartitionId, SplitRole, EvaluationRequestId, CandidateId),
-        Vec<AssessmentId>,
-    >::new();
-    for assessment in view.all_assessments() {
-        let Some((partition, role)) = assessment_split(view, assessment.id()) else {
-            continue;
-        };
-        if splits.role(&partition).is_none() {
-            continue;
-        }
-        let candidate = assessment.independent_candidate().ok_or_else(|| {
-            leaven_engine::OptimizerError::Message(
-                "report expected independent assessment".to_owned(),
-            )
-        })?;
-        groups
-            .entry((partition, role, assessment.request_id(), candidate))
-            .or_default()
-            .push(assessment.id());
-    }
-
-    let mut reports = BTreeMap::<PartitionId, SplitReport>::new();
-    for ((partition, role, _, _), assessments) in groups {
-        let summary = assessment_summary(view, store, &assessments)?;
-        reports
-            .entry(partition.clone())
-            .or_insert_with(|| SplitReport {
-                role,
-                partition,
-                candidates: Vec::new(),
-            })
-            .candidates
-            .push(summary);
-    }
-    Ok(reports.into_values().collect())
-}
-
-fn assessment_split<A, I, T>(
-    view: &leaven_engine::RunGraphView<'_, RunProblem<A, I, T>>,
-    assessment: AssessmentId,
-) -> Option<(PartitionId, SplitRole)>
-where
-    A: Artifact,
-    I: Clone + Send + Sync + 'static,
-    T: Clone + Send + Sync + 'static,
-{
-    let request_id = view.assessment(assessment)?.request_id();
-    let evaluation_request = view.evaluation_request(request_id)?;
-    let request = evaluation_request.request();
-    let partition = match request {
-        EvaluationRequest::Independent {
-            set: EvaluationSet::Partition(partition),
-            ..
-        } => partition.clone(),
-        _ => return None,
-    };
-    let role = match partition.0.as_str() {
-        "TRAIN" => SplitRole::Train,
-        "VALIDATION" => SplitRole::Validation,
-        "TEST" => SplitRole::Test,
-        other => SplitRole::Custom(other.to_owned().into()),
-    };
-    Some((partition, role))
-}
-
 struct ReportHarness {
     case_set: leaven_engine::CaseSet<leaven_eval::Case<&'static str>>,
     engine: leaven_engine::Engine<RunProblem<TestArtifact, &'static str>>,
@@ -542,46 +269,6 @@ fn report_harness() -> ReportHarness {
         second,
         store: InlineEvidenceStore::<CaseAssessmentEvidence>::new("report-groups"),
         splits,
-    }
-}
-
-async fn seed_split_reports(harness: &mut ReportHarness) {
-    for partition in [
-        PartitionId::from("TRAIN"),
-        PartitionId::from("audit"),
-        PartitionId::from("ignored"),
-    ] {
-        harness
-            .engine
-            .evaluate(
-                EvaluatorId::PRIMARY,
-                partition_request(harness.first, partition),
-                &harness.case_set,
-                &harness.store,
-            )
-            .await
-            .unwrap();
-    }
-}
-
-fn partition_request(candidate: CandidateId, partition: PartitionId) -> EvaluationRequest {
-    EvaluationRequest::Independent {
-        candidates: vec![candidate],
-        set: EvaluationSet::Partition(partition),
-        granularity: AssessmentGranularity::PerCase,
-        purpose: EvaluationPurpose::Probe,
-    }
-}
-
-fn all_cases_request(
-    candidate: CandidateId,
-    granularity: AssessmentGranularity,
-) -> EvaluationRequest {
-    EvaluationRequest::Independent {
-        candidates: vec![candidate],
-        set: EvaluationSet::All,
-        granularity,
-        purpose: EvaluationPurpose::Probe,
     }
 }
 
