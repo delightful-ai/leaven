@@ -1,0 +1,26 @@
+---
+reference: inspect_ai.hooks
+description: Hook into Inspect lifecycle events.
+---
+
+## Registration
+
+### Hooks
+### hooks
+
+## Hook Data
+
+### ApiKeyOverride
+### ModelUsageData
+### EvalSetStart
+### EvalSetEnd
+### RunEnd
+### RunStart
+### SampleEnd
+### SampleInit
+### SampleStart
+### SampleAttemptStart
+### SampleAttemptEnd
+### SampleEvent
+### TaskEnd
+### TaskStart

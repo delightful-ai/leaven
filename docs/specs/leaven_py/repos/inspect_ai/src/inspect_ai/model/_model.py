@@ -1,0 +1,2338 @@
+import abc
+import contextlib
+import dataclasses
+import functools
+import json
+import logging
+import os
+import time
+from contextvars import ContextVar
+from copy import copy, deepcopy
+from datetime import datetime, timezone
+from types import TracebackType
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Literal,
+    NamedTuple,
+    Sequence,
+    Type,
+    TypeAlias,
+    cast,
+)
+
+if TYPE_CHECKING:
+    from inspect_ai.tool import ToolInfo
+
+import anyio
+from pydantic import BaseModel
+from pydantic_core import to_jsonable_python
+from shortuuid import uuid
+from tenacity import (
+    RetryCallState,
+    retry,
+)
+from tenacity.wait import WaitBaseT
+
+from inspect_ai._util.constants import (
+    DEFAULT_MAX_CONNECTIONS,
+    DEFAULT_MAX_CONNECTIONS_BATCH,
+    HTTP,
+)
+from inspect_ai._util.content import (
+    Content,
+    ContentAudio,
+    ContentDocument,
+    ContentImage,
+    ContentReasoning,
+    ContentText,
+    ContentVideo,
+)
+from inspect_ai._util.error import PrerequisiteError, exception_message
+from inspect_ai._util.logger import warn_once
+from inspect_ai._util.notgiven import NOT_GIVEN, NotGiven
+from inspect_ai._util.platform import platform_init
+from inspect_ai._util.registry import (
+    RegistryInfo,
+    registry_find,
+    registry_info,
+    registry_unqualified_name,
+)
+from inspect_ai._util.retry import report_http_retry
+from inspect_ai._util.rich import format_traceback
+from inspect_ai._util.trace import trace_action
+from inspect_ai._util.working import report_sample_waiting_time, sample_working_time
+from inspect_ai.model._retry import model_retry_config
+from inspect_ai.tool import Tool, ToolChoice, ToolFunction, ToolInfo
+from inspect_ai.tool._mcp._remote import is_mcp_server_tool
+from inspect_ai.tool._tool import ToolSource
+from inspect_ai.tool._tool_call import ToolCallModelInputHints
+from inspect_ai.tool._tool_def import ToolDef
+from inspect_ai.util import concurrency
+from inspect_ai.util._limit import (
+    check_cost_limit,
+    check_message_limit,
+    check_token_limit,
+    record_model_cost,
+    record_model_usage,
+)
+
+from ._cache import CacheEntry, CachePolicy, cache_fetch, cache_store, epoch
+from ._call_tools import (
+    copy_tools_info,
+    execute_tools,
+    prepare_tools,
+    snapshot_tools_for_event,
+    tool_call_view,
+    tools_info_equal,
+)
+from ._chat_message import (
+    ChatMessage,
+    ChatMessageAssistant,
+    ChatMessageSystem,
+    ChatMessageTool,
+    ChatMessageUser,
+)
+from ._display import (
+    display_conversation_assistant,
+    display_conversation_assistant_error,
+)
+from ._generate_config import (
+    GenerateConfig,
+    active_generate_config,
+    set_active_generate_config,
+)
+from ._model_call import ModelCall, as_error_response
+from ._model_data.model_data import ModelCost
+from ._model_output import ModelOutput, ModelUsage
+from ._tokens import count_media_tokens, count_text_tokens, count_tokens
+
+logger = logging.getLogger(__name__)
+
+
+class GenerateInput(NamedTuple):
+    """Input parameters for generate function."""
+
+    input: list[ChatMessage]
+    """Chat message input."""
+
+    tools: list[ToolInfo]
+    """Tools available for the model to call."""
+
+    tool_choice: ToolChoice | None
+    """Directives to the model as to which tools to prefer."""
+
+    config: GenerateConfig
+    """Model configuration."""
+
+
+@dataclasses.dataclass(frozen=True)
+class RetryDecision:
+    """Classification of a retryable exception for `ModelAPI.should_retry`.
+
+    `should_retry()` may return either a plain `bool` (legacy: any True
+    is treated as a generic transient retry) or a `RetryDecision` to
+    additionally classify the retry kind and pass server-suggested wait
+    times to the adaptive concurrency controller.
+
+    `RetryDecision` is truthy iff `retry` is True, so existing callers
+    written against the `bool` return (`if api.should_retry(ex): ...`)
+    keep working unchanged.
+
+    Use the `no()`, `transient()`, and `rate_limit()` factory methods
+    rather than constructing directly.
+    """
+
+    retry: bool
+    """Whether to retry the request."""
+
+    kind: Literal["rate_limit", "transient"] = "transient"
+    """How to account for the retry against the adaptive controller.
+
+    `rate_limit` triggers a scale-down. `transient` (5xx, timeouts,
+    network errors) only marks the request as retried so the eventual
+    success won't count toward scale-up — it does not shrink the limit.
+    """
+
+    retry_after: float | None = None
+    """Recommended seconds to wait before retrying, if the server provided one (e.g. via `Retry-After`)."""
+
+    def __bool__(self) -> bool:
+        return self.retry
+
+    @classmethod
+    def no(cls) -> "RetryDecision":
+        """Don't retry."""
+        return cls(retry=False)
+
+    @classmethod
+    def transient(cls, retry_after: float | None = None) -> "RetryDecision":
+        """Retry as a transient error (pauses scale-up but doesn't scale down)."""
+        return cls(retry=True, kind="transient", retry_after=retry_after)
+
+    @classmethod
+    def rate_limit(cls, retry_after: float | None = None) -> "RetryDecision":
+        """Retry as a rate-limit error (scales the adaptive controller down)."""
+        return cls(retry=True, kind="rate_limit", retry_after=retry_after)
+
+
+class ModelAPI(abc.ABC):
+    """Model API provider.
+
+    If you are implementing a custom ModelAPI provider your `__init__()`
+    method will also receive a `**model_args` parameter that will carry
+    any custom `model_args` (or `-M` arguments from the CLI) specified
+    by the user. You can then pass these on to the approriate place in
+    your model initialisation code (for example, here is what many
+    of the built-in providers do with the `model_args` passed to them:
+    https://inspect.aisi.org.uk/models.html#model-args)
+    """
+
+    def __init__(
+        self,
+        model_name: str,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        api_key_vars: list[str] = [],
+        config: GenerateConfig = GenerateConfig(),
+    ) -> None:
+        """Create a model API provider.
+
+        Args:
+           model_name (str): Model name.
+           base_url (str | None): Alternate base URL for model.
+           api_key (str | None): API key for model.
+           api_key_vars (list[str]): Environment variables that
+              may contain keys for this provider (used for override)
+           config (GenerateConfig): Model configuration.
+        """
+        self.model_name = model_name
+        self.base_url = base_url
+        self.api_key = api_key
+        self.api_key_vars = api_key_vars
+        self._apply_api_key_overrides()
+
+    def _apply_api_key_overrides(self) -> None:
+        from inspect_ai.hooks._hooks import has_api_key_override, override_api_key
+
+        # apply api key override
+        api_key = self.api_key
+        for key in self.api_key_vars:
+            # if there is an explicit api_key passed then it
+            # overrides anything in the environment so use it
+            if api_key is not None:
+                override = override_api_key(key, api_key)
+                if override is not None:
+                    api_key = override
+            # otherwise look it up in the environment and
+            # override it if it has a value
+            else:
+                value = os.environ.get(key, None)
+                if value is not None:
+                    override = override_api_key(key, value)
+                    if override is not None:
+                        os.environ[key] = override
+                # When a hook is registered but no API key exists anywhere,
+                # still call the hook so it can provide credentials from its
+                # own source (e.g. OAuth tokens, vault, etc.)
+                elif has_api_key_override():
+                    override = override_api_key(key, "")
+                    if override is not None:
+                        api_key = override
+
+        # set any explicitly specified api key
+        self.api_key = api_key
+
+    def initialize(self) -> None:
+        """Reinitialize the model API client.
+
+        This can be used to reinitialize the API keys.
+        """
+        self._apply_api_key_overrides()
+
+    async def aclose(self) -> None:
+        """Async close method for closing any client allocated for the model."""
+        self.close()
+
+    def close(self) -> None:
+        """Sync close method for closing any client allocated for the model."""
+        # if this is is called and aclose is implemented by a subclass then
+        # raise a runtime error (as this model reuqires async close)
+        aclose_method = getattr(self.__class__, "aclose")
+        base_aclose_method = getattr(ModelAPI, "aclose")
+        if aclose_method != base_aclose_method:
+            raise RuntimeError(
+                f"{self.__class__.__name__} models require an async close / context manager."
+            )
+
+    def canonical_name(self) -> str:
+        """Canonical model name for querying results."""
+        return self.model_name
+
+    def input_tokens_name(self) -> str:
+        """Model name used for looking up model input tokens."""
+        return self.canonical_name()
+
+    @abc.abstractmethod
+    async def generate(
+        self,
+        input: list[ChatMessage],
+        tools: list[ToolInfo],
+        tool_choice: ToolChoice,
+        config: GenerateConfig,
+    ) -> ModelOutput | tuple[ModelOutput | Exception, ModelCall]:
+        """Generate output from the model.
+
+        Args:
+          input: Chat message input (if a `str` is passed it is converted to a `ChatUserMessage`).
+          tools: Tools available for the model to call.
+          tool_choice: Directives to the model as to which tools to prefer.
+          config: Model configuration.
+
+        Returns:
+           ModelOutput or tuple[ModelOutput,ModelCall], the latter being
+           useful if you want the underlying model API call logged as
+           part of the ModelEvent.
+        """
+        ...
+
+    async def count_tokens(
+        self,
+        input: str | list[ChatMessage],
+        config: GenerateConfig | None = None,
+    ) -> int:
+        """Estimate token count for input.
+
+        This default implementation uses character-based heuristics for text
+        and size-based estimates for media. Model providers can override
+        `count_text_tokens()` and `count_media_tokens()` for more accurate results,
+        or override this method entirely to use their native token counting APIs.
+
+        Args:
+            input: Input to count tokens for.
+            config: Optional generation config for provider-specific counting
+                (e.g., reasoning parameters that affect token allocation).
+        """
+        if isinstance(input, str):
+            return await self.count_text_tokens(input)
+        else:
+            return await count_tokens(
+                input, self.count_text_tokens, self.count_media_tokens
+            )
+
+    async def count_text_tokens(self, text: str) -> int:
+        """Estimate tokens from text using tiktoken (o200k_base with 10% buffer).
+
+        Override this method to use model-specific tokenizers.
+
+        Args:
+            text: Text to count.
+        """
+        return count_text_tokens(text)
+
+    async def count_media_tokens(
+        self, media: ContentImage | ContentAudio | ContentVideo | ContentDocument
+    ) -> int:
+        """Estimate tokens for media content (images, audio, video, documents).
+
+        For data URIs, estimates are based on decoded size. For URLs/file paths,
+        uses conservative fixed fallbacks. Override this method for provider-specific
+        media token calculations.
+
+        Args:
+            media: Media content to count tokens for.
+        """
+        return count_media_tokens(media)
+
+    async def tokenize(self, text: str) -> list[int]:
+        """Tokenize text into token IDs using the model's tokenizer.
+
+        Override in providers that support server-side tokenization
+        (e.g. vLLM's ``/tokenize`` endpoint).
+
+        Args:
+            text: Text to tokenize.
+
+        Returns:
+            List of token IDs.
+
+        Raises:
+            NotImplementedError: If the provider does not support
+                tokenization.
+        """
+        raise NotImplementedError(f"{type(self).__name__} does not support tokenize().")
+
+    def max_tokens(self) -> int | None:
+        """Default max_tokens."""
+        return None
+
+    def max_tokens_for_config(self, config: GenerateConfig) -> int | None:
+        """Default max_tokens for a given config.
+
+        Args:
+           config: Generation config.
+
+        Returns:
+           Default maximum tokens for specified configuration.
+        """
+        return None
+
+    def max_connections(self) -> int:
+        """Default max_connections."""
+        return DEFAULT_MAX_CONNECTIONS
+
+    def connection_key(self) -> str:
+        """Scope for enforcement of max_connections."""
+        return "default"
+
+    def apply_redacted_reasoning_tokens_to_input(self) -> bool:
+        """Whether compaction should add `redacted_reasoning_tokens` to its input estimate.
+
+        Override and return True for providers whose `usage.input_tokens`
+        omits redacted reasoning content on re-injection (e.g., OpenAI
+        Responses with `store=false` + `include=["reasoning.encrypted_content"]`).
+
+        Note: bridge-mediated workloads (`agent_bridge`) reconstruct messages
+        from provider-native input and lose this metadata, so the predictive
+        correction does not apply there. Bridge users rely on the reactive
+        `model_length` recovery.
+        """
+        return False
+
+    def should_retry(self, ex: Exception) -> bool | RetryDecision:
+        """Should this exception be retried?
+
+        Returns either a plain `bool` (any True is treated as a transient
+        retry by the adaptive controller) or a `RetryDecision` to
+        additionally classify the retry as `rate_limit` vs `transient`
+        and to pass through any server-suggested `retry_after`. Built-in
+        providers return `RetryDecision` so the adaptive controller scales
+        only on real rate-limit signals.
+
+        Args:
+           ex: Exception to check for retry
+        """
+        return False
+
+    def retry_wait(self) -> WaitBaseT | None:
+        return None
+
+    def is_auth_failure(self, ex: Exception) -> bool:
+        """Check if this exception indicates an authentication failure.
+
+        Args:
+           ex: Exception to check for authentication failure
+
+        Returns:
+           True if this is an authentication error (e.g., 401 Unauthorized)
+        """
+        return False
+
+    def collapse_user_messages(self) -> bool:
+        """Collapse consecutive user messages into a single message."""
+        return False
+
+    def collapse_assistant_messages(self) -> bool:
+        """Collapse consecutive assistant messages into a single message."""
+        return False
+
+    def collapse_system_messages(self) -> bool:
+        """Collapse consecutive system messages into a single message."""
+        return False
+
+    def tools_required(self) -> bool:
+        """Any tool use in a message stream means that tools must be passed."""
+        return False
+
+    def supports_remote_mcp(self) -> bool:
+        """Does this provider support remote execution of MCP tools?."""
+        return False
+
+    def tool_result_images(self) -> bool:
+        """Tool results can contain images"""
+        return False
+
+    def tool_result_documents(self) -> bool:
+        """Tool results can be replayed to the model with documents."""
+        return False
+
+    def disable_computer_screenshot_truncation(self) -> bool:
+        """Some models do not support truncation of computer screenshots."""
+        return False
+
+    def force_reasoning_history(self) -> Literal["none", "all", "last"] | None:
+        """Force a specific reasoning history behavior for this provider."""
+        return None
+
+    def auto_reasoning_history(self) -> Literal["none", "all", "last"]:
+        """Behavior to use for reasoning_history='auto'"""
+        return "all"
+
+    def compact_reasoning_history(self) -> bool:
+        """Is reasoning history eligible for compation for this provider?"""
+        return True
+
+    async def compact(
+        self,
+        input: list[ChatMessage],
+        tools: list[ToolInfo],
+        config: GenerateConfig,
+        instructions: str | None = None,
+    ) -> tuple[list[ChatMessage], ModelUsage | None]:
+        """Compact messages using provider-native compaction.
+
+        Some model providers (e.g., OpenAI Codex models) support native context
+        compaction, which reduces the token count of a conversation while preserving
+        semantic meaning. This is useful for long conversations that approach the
+        context window limit.
+
+        Args:
+            input: Chat message input (if a `str` is passed it is converted to a `ChatUserMessage`).
+            tools: Tools available for the model to call.
+            config: Model configuration.
+            instructions: Additional instructions to give the model about compaction
+                (e.g. "Focus on preserving code snippets, variable names, and technical decisions.")
+
+        Returns:
+            A tuple of (compacted_messages, usage) where compacted_messages is a
+            list containing a single message with compaction metadata, and usage
+            contains token counts for the compaction operation.
+
+        Raises:
+            NotImplementedError: For providers without native compaction support.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support native compaction."
+        )
+
+
+REDACTED_REASONING_TOKENS_METADATA_KEY = "redacted_reasoning_tokens"
+"""Metadata key for the per-message reasoning token count that an
+all-redacted-reasoning response contributes to context on re-injection but
+is omitted from `usage.input_tokens` by some providers (e.g., OpenAI
+Responses with encrypted reasoning preservation). Compaction reads this
+to correct its threshold estimate."""
+
+
+def _stamp_redacted_reasoning_tokens(output: ModelOutput) -> None:
+    """Stamp `redacted_reasoning_tokens` onto an assistant message's metadata.
+
+    Only stamps when ALL reasoning blocks in the response are redacted; mixed
+    responses (some visible, some redacted) can't be split from a single
+    `usage.reasoning_tokens` figure, and responses with only visible reasoning
+    don't have the input-counting blind spot the metadata is meant to correct.
+    """
+    if not (
+        output.usage
+        and output.usage.reasoning_tokens
+        and isinstance(output.message.content, list)
+    ):
+        return
+
+    reasoning_blocks = [
+        c for c in output.message.content if isinstance(c, ContentReasoning)
+    ]
+    if not reasoning_blocks or not all(c.redacted for c in reasoning_blocks):
+        return
+
+    output.message.metadata = {
+        **(output.message.metadata or {}),
+        REDACTED_REASONING_TOKENS_METADATA_KEY: output.usage.reasoning_tokens,
+    }
+
+
+class Model:
+    """Model interface.
+
+    Use `get_model()` to get an instance of a model. Model provides an
+    async context manager for closing the connection to it after use.
+    For example:
+
+    ```python
+    async with get_model("openai/gpt-4o") as model:
+        response = await model.generate("Say hello")
+    ```
+    """
+
+    api: ModelAPI
+    """Model API."""
+
+    config: GenerateConfig
+    """Generation config."""
+
+    def __init__(
+        self,
+        api: ModelAPI,
+        config: GenerateConfig,
+        model_args: dict[str, Any] | None = None,
+    ) -> None:
+        """Create a model.
+
+        Args:
+           api: Model API provider.
+           config: Model configuration.
+           model_args: Optional model args
+        """
+        self.api = api
+        self.config = config
+        self.model_args = model_args if model_args is not None else {}
+        self._role: str | None = None
+        self._explicit_base_url: str | None = None
+
+        # state indicating whether our lifetime is bound by a context manager
+        self._context_bound = False
+        self._closed = False
+
+        # if using the Model API standalone in a notebook this will
+        # get hit before score() or eval() so we activate nest_asyncio
+        platform_init()
+
+    def __enter__(self: "Model") -> "Model":
+        self._context_bound = True
+        return self
+
+    async def __aenter__(self: "Model") -> "Model":
+        return self.__enter__()
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        if not self._closed:
+            self.api.close()
+            self._closed = True
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        if not self._closed:
+            await self.api.aclose()
+            self._closed = True
+
+    @property
+    def name(self) -> str:
+        """Model name."""
+        return self.api.model_name
+
+    def canonical_name(self) -> str:
+        """Canonical model name for model info database lookup."""
+        return self.api.canonical_name()
+
+    def input_tokens_name(self) -> str:
+        """Model name used for looking up model input tokens."""
+        return self.api.input_tokens_name()
+
+    @property
+    def explicit_base_url(self) -> str | None:
+        """Base URL explicitly provided by the user (not resolved from env/defaults)."""
+        return self._explicit_base_url
+
+    @property
+    def role(self) -> str | None:
+        """Model role."""
+        return self._role
+
+    def _set_role(self, role: str) -> None:
+        self._role = role
+
+    def __str__(self) -> str:
+        return f"{ModelName(self)}"
+
+    async def generate(
+        self,
+        input: str | list[ChatMessage],
+        tools: Sequence[Tool | ToolDef | ToolInfo | ToolSource] | ToolSource = [],
+        tool_choice: ToolChoice | None = None,
+        config: GenerateConfig = GenerateConfig(),
+        cache: bool | CachePolicy | NotGiven = NOT_GIVEN,
+    ) -> ModelOutput:
+        """Generate output from the model.
+
+        Args:
+          input: Chat message input (if a `str` is passed it is converted
+            to a `ChatMessageUser`).
+          tools: Tools available for the model to call.
+          tool_choice: Directives to the model as to which tools to prefer.
+          config: Model configuration.
+          cache: Caching behavior for generate responses (defaults to no caching).
+
+        Returns:
+           ModelOutput
+        """
+        # if we have a TaskState then update the epoch. without this, it's possible
+        # we'd cache the same response for every single epoch
+        from inspect_ai.solver._task_state import sample_state
+
+        state = sample_state()
+        if state is not None:
+            epoch.set(state.epoch)
+
+        # if we are the default model then update the displayed message count
+        is_active_model = self == active_model()
+        if is_active_model:
+            set_total_messages(input)
+
+        # check message limit, raise exception if we're already at the limit to prevent
+        # a wasteful generate()
+        conversation_length = len(input) if isinstance(input, list) else 1
+        check_message_limit(conversation_length, raise_for_equal=True)
+
+        # resolve config
+        config = self._resolve_config(config)
+
+        # resolve cache (prefer arg, fall back to config)
+        if isinstance(cache, NotGiven):
+            if config.cache is not None:
+                cache = config.cache
+            else:
+                cache = False
+
+        # provide max_tokens from the model api if required
+        if config.max_tokens is None:
+            config.max_tokens = self.api.max_tokens_for_config(config)
+            if config.max_tokens is None:
+                config.max_tokens = self.api.max_tokens()
+
+        # normalize input to chat
+        if isinstance(input, str):
+            input = [ChatMessageUser(content=input)]
+
+        # insert any system message provided in config
+        if config.system_message:
+            input = [ChatMessageSystem(content=config.system_message)] + input
+
+        # enforce concurrency limits
+        start_time = datetime.now(timezone.utc)
+        working_start = sample_working_time()
+        async with self._connection_concurrency(config):
+            # generate
+            output, event = await self._generate(
+                input=input,
+                tools=tools,
+                tool_choice=tool_choice,
+                config=config,
+                cache=cache,
+            )
+
+            # update the most recent ModelEvent with the actual start/completed
+            # times as well as a computation of working time (events are
+            # created _after_ the call to _generate, potentially in response
+            # to retries, so they need their timestamp updated so it accurately
+            # reflects the full start/end time which we know here)
+            from inspect_ai.event._model import ModelEvent
+
+            assert isinstance(event, ModelEvent)
+            event.timestamp = start_time
+            event.working_start = working_start
+            completed = datetime.now(timezone.utc)
+            event.completed = completed
+            event.working_time = (
+                output.time
+                if output.time is not None
+                else (completed - start_time).total_seconds()
+            )
+
+            _stamp_redacted_reasoning_tokens(output)
+
+            # return output
+            return output
+
+    async def generate_loop(
+        self,
+        input: str | list[ChatMessage],
+        tools: Sequence[Tool | ToolDef | ToolSource] | ToolSource = [],
+        config: GenerateConfig = GenerateConfig(),
+        cache: bool | CachePolicy | NotGiven = NOT_GIVEN,
+    ) -> tuple[list[ChatMessage], ModelOutput]:
+        """Generate output from the model, looping as long as the model calls tools.
+
+        Similar to `generate()`, but runs in a loop resolving model tool calls.
+        The loop terminates when the model stops calling tools. The final `ModelOutput`
+        as well the message list for the conversation are returned as a tuple.
+
+        Args:
+          input: Chat message input (if a `str` is passed it is converted
+            to a `ChatMessageUser`).
+          tools: Tools available for the model to call.
+          config: Model configuration.
+          cache: Caching behavior for generate responses (defaults to no caching).
+
+        Returns:
+           Tuple of list[ChatMessage], ModelOutput
+        """
+        # initialise messages
+        input = [ChatMessageUser(content=input)] if isinstance(input, str) else input
+        messages = copy(input)
+        while True:
+            # call model
+            output = await self.generate(
+                input=messages,
+                tools=tools,  # type:ignore[arg-type]
+                config=config,
+                cache=cache,
+            )
+
+            # append to new messages
+            messages.append(output.message)
+
+            # make tool calls or terminate if there are none
+            if output.message.tool_calls:
+                tools_messages, tools_output = await execute_tools(
+                    messages, tools, config.max_tool_output
+                )
+                messages.extend(tools_messages)
+                if tools_output is not None:
+                    output = tools_output
+            else:
+                return messages[len(input) :], output
+
+    async def count_tokens(
+        self,
+        input: str | list[ChatMessage],
+        config: GenerateConfig | None = None,
+    ) -> int:
+        """Estimate token count for input.
+
+        Args:
+           input: Input to count tokens for.
+           config: Optional generation config for provider-specific counting
+               (e.g., reasoning parameters that affect token allocation).
+        """
+        config = self._resolve_config(config)
+
+        # retry handler for token counting (429/timeouts retried with the
+        # same backoff and adaptive-controller signaling as `generate`).
+        # No per-model concurrency cap: count_tokens is O(delta) under the
+        # compaction baseline mechanism, max_samples already provides the
+        # structural ceiling, retries handle rate limits, and provider
+        # count_tokens envelopes are wider than generate envelopes.
+        @retry(
+            **model_retry_config(
+                self.api.model_name,
+                self.config.max_retries,
+                self.config.timeout,
+                self.should_retry,
+                self.before_retry,
+                log_model_retry,
+                report_sample_waiting_time,
+                self.api.retry_wait(),
+            )
+        )
+        async def _count_tokens(
+            input: str | list[ChatMessage], config: GenerateConfig | None
+        ) -> int:
+            return await self.api.count_tokens(input, config)
+
+        return await _count_tokens(input, config)
+
+    async def count_tool_tokens(self, tools: Sequence[ToolInfo]) -> int:
+        """Count tokens for tool definitions.
+
+        Args:
+            tools: List of tool definitions.
+
+        Returns:
+            Total token count for all tool definitions.
+        """
+        # create a message with the tool tokens embedded and count that
+        tool_json = ""
+        for tool in tools:
+            tool_json += json.dumps(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": tool.parameters.model_dump(exclude_none=True),
+                    },
+                }
+            )
+        return await self.count_tokens([ChatMessageUser(content=tool_json)])
+
+    async def compact(
+        self,
+        input: list[ChatMessage],
+        tools: list[ToolInfo],
+        instructions: str | None = None,
+    ) -> tuple[list[ChatMessage], ModelUsage | None]:
+        """Compact messages using provider-native compaction.
+
+        Delegates to the model provider's native compaction API when available.
+        Automatically tracks token usage and enforces token limits.
+
+        Args:
+          input: Chat message input (if a `str` is passed it is converted to a `ChatUserMessage`).
+          tools: Tools available for the model to call.
+          instructions: Additional instructions to give the model about compaction
+               (e.g. "Focus on preserving code snippets, variable names, and technical decisions.")
+
+        Returns:
+          A tuple of (compacted_messages, usage) where compacted_messages is
+          a list of compacted messages and usage contains token counts.
+
+        Raises:
+            NotImplementedError: For providers without native compaction support.
+        """
+        config = self._resolve_config(None)
+
+        # provide max_tokens from the model api if required (same as generate)
+        if config.max_tokens is None:
+            config.max_tokens = self.api.max_tokens_for_config(config)
+            if config.max_tokens is None:
+                config.max_tokens = self.api.max_tokens()
+
+        model_name = ModelName(self)
+        key = f"ModelCompact({self.api.connection_key()})"
+
+        async with concurrency(f"{model_name}_compact", 10, key, visible=False):
+
+            @retry(
+                **model_retry_config(
+                    self.api.model_name,
+                    self.config.max_retries,
+                    self.config.timeout,
+                    self.should_retry,
+                    self.before_retry,
+                    log_model_retry,
+                    report_sample_waiting_time,
+                    self.api.retry_wait(),
+                )
+            )
+            async def _compact(
+                messages: list[ChatMessage],
+            ) -> tuple[list[ChatMessage], ModelUsage | None]:
+                return await self.api.compact(messages, tools, config, instructions)
+
+            # Call compact with retry handling
+            compacted_messages, usage = await _compact(input)
+
+            # Record and check usage
+            if usage:
+                record_and_check_model_usage(f"{self}", usage, role=self.role)
+
+            return compacted_messages, usage
+
+    async def _generate(
+        self,
+        input: list[ChatMessage],
+        tools: Sequence[Tool | ToolDef | ToolInfo | ToolSource] | ToolSource,
+        tool_choice: ToolChoice | None,
+        config: GenerateConfig,
+        cache: bool | CachePolicy | NotGiven = NOT_GIVEN,
+    ) -> tuple[ModelOutput, BaseModel]:
+        from inspect_ai.event._model import ModelEvent
+        from inspect_ai.hooks._hooks import (
+            emit_before_model_generate,
+            emit_model_cache_usage,
+            emit_model_usage,
+            get_all_hooks,
+        )
+        from inspect_ai.hooks._legacy import send_telemetry_legacy
+        from inspect_ai.log._refusal import report_refusal
+        from inspect_ai.log._samples import track_active_model_event
+
+        # default to 'auto' for tool_choice (same as underlying model apis)
+        tool_choice = tool_choice if tool_choice is not None else "auto"
+
+        prepared_tools = await prepare_tools(tools)
+        tdefs = prepared_tools.tdefs
+        base_tools = prepared_tools.base_tools
+
+        # raise error if we don't support remote_mcp and we have an mcp server
+        if not self.api.supports_remote_mcp():
+            for tool in base_tools:
+                if is_mcp_server_tool(tool):
+                    raise RuntimeError(
+                        f"Remote MCP execution is not supported for {self}. "
+                        + 'Please use "local" execution instead.'
+                    )
+
+        # if we have a specific tool selected then filter out the others
+        if isinstance(tool_choice, ToolFunction):
+            base_tools = [tool for tool in base_tools if tool.name == tool_choice.name]
+
+        # if tool_choice is "none" or if there are no tools then fully purge
+        # the tools (as some models (e.g. openai and mistral) get confused
+        # if you pass them tool definitions along with tool_choice == "none"
+        # (they both 'semi' use the tool by placing the arguments in JSON
+        # in their output!). on the other hand, anthropic actually errors if
+        # there are tools anywhere in the message stream and no tools defined.
+        if tool_choice == "none" or len(base_tools) == 0:
+            # allow model providers to implement a tools_required() method to
+            # force tools to be passed (we need this for anthropic)
+            if not self.api.tools_required():
+                base_tools = []
+            tool_choice = "none"
+
+        # handle reasoning history
+        input = resolve_reasoning_history(input, config, self.api)
+
+        # apply any tool model_input handlers
+        input = resolve_tool_model_input(
+            tdefs,
+            input,
+            ToolCallModelInputHints(
+                disable_computer_screenshot_truncation=self.api.disable_computer_screenshot_truncation()
+            ),
+        )
+
+        extract_types: list[type] = []
+        if not self.api.tool_result_images():
+            extract_types.append(ContentImage)
+        if not self.api.tool_result_documents():
+            extract_types.append(ContentDocument)
+        if extract_types:
+            input = tool_result_media_as_user_message(input, tuple(extract_types))
+
+        input = collapse_consecutive_messages_for_api(input, self.api)
+
+        # resolve cache policy
+        if isinstance(cache, NotGiven):
+            cache_policy: bool | CachePolicy | None = config.cache
+        else:
+            cache_policy = cache
+        hooks_enabled = any(hook.enabled() for hook in get_all_hooks())
+        cache_mode: Literal["write"] | None = "write" if cache_policy else None
+        # track reported waiting time during this generate call
+        reported_waiting_time = 0.0
+
+        def report_waiting_time(waiting_time: float) -> None:
+            nonlocal reported_waiting_time
+            report_sample_waiting_time(waiting_time)
+            reported_waiting_time += waiting_time
+
+        @retry(
+            **model_retry_config(
+                self.api.model_name,
+                config.max_retries,
+                config.timeout,
+                self.should_retry,
+                self.before_retry,
+                log_model_retry,
+                report_waiting_time,
+                self.api.retry_wait(),
+            )
+        )
+        async def generate() -> tuple[ModelOutput, BaseModel]:
+            # type-checker can't see that we made sure tool_choice is not none in the outer frame
+            assert tool_choice is not None
+
+            call_tools = copy_tools_info(base_tools)
+
+            await emit_before_model_generate(
+                model_name=str(self),
+                input=input,
+                tools=call_tools,
+                tool_choice=tool_choice,
+                config=config,
+                cache=cache_mode,
+            )
+
+            event_tools = (
+                snapshot_tools_for_event(call_tools, base_tools)
+                if hooks_enabled and not tools_info_equal(call_tools, base_tools)
+                else base_tools
+            )
+
+            cache_entry: CacheEntry | None
+            if cache_policy:
+                if isinstance(cache_policy, CachePolicy):
+                    policy = cache_policy
+                else:
+                    policy = CachePolicy()
+
+                cache_entry = CacheEntry(
+                    base_url=self.api.base_url,
+                    config=deepcopy(config),
+                    input=input,
+                    model=str(self),
+                    policy=policy,
+                    tool_choice=tool_choice,
+                    tools=event_tools,
+                )
+                existing = cache_fetch(cache_entry)
+                if isinstance(existing, ModelOutput):
+                    _, event = self._record_model_interaction(
+                        input=input,
+                        tools=event_tools,
+                        tool_choice=tool_choice,
+                        config=config,
+                        cache="read",
+                        output=existing,
+                        call=None,
+                    )
+                    # mark this request as a cache hit so the post-call
+                    # adaptive-controller success notification is suppressed —
+                    # cache hits don't exercise the rate limit
+                    from inspect_ai.util._concurrency import _request_was_cache_hit
+
+                    _request_was_cache_hit.set(True)
+                    if existing.usage:
+                        await emit_model_cache_usage(
+                            model_name=str(self), usage=existing.usage
+                        )
+                    return existing, event
+            else:
+                cache_entry = None
+
+            # verify that model apis are allowed
+            self.verify_model_apis()
+
+            # record the interaction before the call to generate
+            # (we'll update it with the results once we have them)
+            complete, event = self._record_model_interaction(
+                input=input,
+                tools=event_tools,
+                tool_choice=tool_choice,
+                config=config,
+                cache=cache_mode,
+            )
+
+            # create timeout context manager if we have an attempt timeout
+            timeout_cm = (
+                anyio.move_on_after(config.attempt_timeout)
+                if config.attempt_timeout is not None
+                else contextlib.nullcontext()
+            )
+
+            with trace_action(logger, "Model", f"generate ({str(self)})"):
+                time_start = time.monotonic()
+                try:
+                    assert isinstance(event, ModelEvent)
+                    # Local import to avoid an import cycle (agent → model → agent).
+                    from inspect_ai.agent._channel import null_execution_observer
+                    from inspect_ai.log._samples import sample_active
+
+                    _sample = sample_active()
+                    _observer = (
+                        _sample.execution_observer
+                        if _sample is not None
+                        else null_execution_observer()
+                    )
+
+                    with (
+                        track_active_model_event(event),
+                        _observer.track_model_event(event),
+                    ):
+                        with timeout_cm:
+                            result = await self.api.generate(
+                                input=input,
+                                tools=call_tools,
+                                tool_choice=tool_choice,
+                                config=config,
+                            )
+                        if (
+                            isinstance(timeout_cm, anyio.CancelScope)
+                            and timeout_cm.cancel_called
+                        ):
+                            raise AttemptTimeoutError(config.attempt_timeout)
+                except Exception as ex:
+                    # Mark event as failed for uncaught provider exceptions
+                    complete(ex, None)
+                    raise
+                finally:
+                    time_elapsed = time.monotonic() - time_start
+
+            if isinstance(result, tuple):
+                output, call = result
+            else:
+                output = result
+                call = None
+
+            # raise error
+            if isinstance(output, Exception):
+                complete(output, call)
+
+                # Wrap the error in a runtime error which will show the
+                # request which caused the error (truncated to last
+                # 200 lines if larger to avoid overflowing terminal)
+                error = repr(output)
+                request = json.dumps(call.request, indent=2) if call is not None else ""
+                max_lines = 200
+                request_lines = request.splitlines()
+                if len(request_lines) > max_lines:
+                    request = "\n".join(
+                        [f"... ({len(request_lines) - max_lines} lines truncated) ..."]
+                        + request_lines[-max_lines:]
+                    )
+                error_message = f"\nRequest:\n{request}\n\n{error}"
+                raise RuntimeError(error_message)
+
+            # update output with time (call.time captures time spent
+            # on the actual request that succeeds w/ status 200)
+            if call and call.time is not None:
+                output.time = call.time
+            else:
+                output.time = time_elapsed
+
+            # add views to tool calls
+            for choice in output.choices:
+                for tool_call in choice.message.tool_calls or []:
+                    tool_call.view = tool_call_view(tool_call, tdefs)
+
+            # complete the transcript event
+            complete(output, call)
+
+            # record usage
+            if output.usage:
+                record_and_check_model_usage(f"{self}", output.usage, role=self.role)
+
+                # send telemetry to hooks
+                await emit_model_usage(
+                    model_name=str(self), usage=output.usage, call_duration=output.time
+                )
+                await send_telemetry_legacy(
+                    "model_usage",
+                    json.dumps(dict(model=str(self), usage=output.usage.model_dump())),
+                )
+
+            if cache_policy and cache_entry:
+                cache_store(entry=cache_entry, output=output)
+
+            return output, event
+
+        # call the model (this will do retries, etc., so report waiting time
+        # as elapsed time - actual time for successful model call)
+        time_start = time.monotonic()
+        model_output, event = await generate()
+        total_time = time.monotonic() - time_start
+
+        # notify the adaptive controller of a clean success (no retries during
+        # this logical request, AND not a cache hit since cache hits don't
+        # exercise the rate limit). Successful-after-retry and cache hits are
+        # both treated as neutral.
+        from inspect_ai.util._concurrency import (
+            _active_controller,
+            _request_had_retry,
+            _request_was_cache_hit,
+        )
+
+        controller = _active_controller.get()
+        if (
+            controller is not None
+            and not _request_had_retry.get()
+            and not _request_was_cache_hit.get()
+        ):
+            controller.notify_success()
+        if model_output.time:
+            # we've already reported some of the waiting time in tenacity callbacks
+            # any remaining waiting time will have been due to internal retry within
+            # model providers, which we can get from:
+            #    total_time - reported_waiting_time - model_call_time
+            report_sample_waiting_time(
+                total_time - reported_waiting_time - model_output.time
+            )
+
+        # report refusal
+        if not model_output.empty and model_output.stop_reason == "content_filter":
+            report_refusal(model_output.completion)
+
+        # return results
+        return model_output, event
+
+    def should_retry(self, ex: BaseException) -> bool:
+        if isinstance(ex, Exception):
+            # attempt timeout is always retried (we rely on `timeout`
+            # and/or `max_retries` for termination). Classified as transient:
+            # _request_had_retry still flips so the eventual success won't
+            # count toward adaptive scale-up, but the controller doesn't
+            # scale down for what's essentially infra noise.
+            if isinstance(ex, AttemptTimeoutError):
+                report_http_retry()
+                return True
+
+            # check standard should_retry() method — may return bool or RetryDecision
+            decision = self.api.should_retry(ex)
+            if isinstance(decision, RetryDecision):
+                if decision.retry:
+                    report_http_retry(
+                        kind=decision.kind, retry_after=decision.retry_after
+                    )
+                    return True
+            elif decision:
+                # legacy bool-True path: provider didn't classify, treat as transient
+                report_http_retry()
+                return True
+
+            from inspect_ai.hooks._hooks import has_api_key_override
+
+            if has_api_key_override():
+                if self.api.is_auth_failure(ex):
+                    report_http_retry()
+                    return True
+
+            # see if the API implements legacy is_rate_limit() method
+            is_rate_limit = getattr(self.api, "is_rate_limit", None)
+            if is_rate_limit:
+                warn_once(
+                    logger,
+                    f"provider '{self.name}' implements deprecated is_rate_limit() method, "
+                    + "please change to should_retry()",
+                )
+                if cast(bool, is_rate_limit(ex)):
+                    # legacy method's name says it all — treat as rate-limit
+                    report_http_retry(kind="rate_limit")
+                    return True
+
+        # no retry
+        return False
+
+    async def before_retry(self, ex: BaseException) -> None:
+        if isinstance(ex, Exception) and self.api.is_auth_failure(ex):
+            # close existing model instance
+            await self.api.aclose()
+            # re-initialize
+            self.api.initialize()
+
+    # function to verify that its okay to call model apis
+    def verify_model_apis(self) -> None:
+        if (
+            os.getenv("INSPECT_DISABLE_MODEL_API", None) is not None
+            and ModelName(self).api != "mockllm"
+        ):
+            raise RuntimeError("Model APIs disabled by INSPECT_DISABLE_MODEL_API")
+
+    # semaphore for model generate requests. these can be shared across
+    # instances of Model.  This is so that each distinct model endpoint/account
+    # combination shares the semaphore -- i.e. if you had 3 instances
+    # of a model class (e.g. attacker model, evaluated model, and grader
+    # model) in an eval, they won't each get the full max_connections allocated
+    # (which would likely cause the rate limit to be exceeded). conversely if
+    # you are using distinct models/endpoints/accounts within an eval you should
+    # be able get the full max_connections for each of them. subclasses can
+    # override the _connection_key() argument to provide a scope within which
+    # to enforce max_connections (e.g. by account/api_key, by endpoint, etc.)
+
+    @contextlib.asynccontextmanager
+    async def _connection_concurrency(
+        self, config: GenerateConfig
+    ) -> AsyncIterator[None]:
+        """Get the appropriate connection semaphore for this model instance."""
+        from inspect_ai.util._concurrency import (
+            AdaptiveConcurrencyController,
+            _active_controller,
+            _request_had_retry,
+            _request_was_cache_hit,
+            adaptive_active,
+            resolve_adaptive,
+        )
+
+        model_name = ModelName(self)
+        key = f"Model{self.api.connection_key()}"
+
+        # adaptive path: controller-managed CapacityLimiter. Two precedence
+        # rules — both silent — keep deliberate overrides working under
+        # default-on adaptive:
+        #   * Explicit max_connections wins (existing behavior).
+        #   * Batch mode wins. Batch APIs run on a separate quota, the per-
+        #     request concurrency model doesn't bind (DEFAULT_MAX_CONNECTIONS_BATCH
+        #     is a sentinel ceiling), and the worker's background-task
+        #     ContextVars don't propagate retry/success signals back to
+        #     awaiting generates — so adaptive's success/retry accounting
+        #     would be incorrect anyway. See docs/parallelism.qmd.
+        if adaptive_active(
+            config.adaptive_connections, config.max_connections, config.batch
+        ):
+            adaptive = resolve_adaptive(config.adaptive_connections)
+            async with concurrency(
+                name=str(model_name),
+                concurrency=adaptive.start,
+                key=key,
+                adaptive=adaptive,
+            ) as sem:
+                assert isinstance(sem, AdaptiveConcurrencyController)
+                token_c = _active_controller.set(sem)
+                token_r = _request_had_retry.set(False)
+                token_h = _request_was_cache_hit.set(False)
+                try:
+                    yield
+                finally:
+                    _active_controller.reset(token_c)
+                    _request_had_retry.reset(token_r)
+                    _request_was_cache_hit.reset(token_h)
+        else:
+            # static path (existing behavior, unchanged)
+            max_connections = (
+                config.max_connections
+                if config.max_connections
+                else DEFAULT_MAX_CONNECTIONS_BATCH
+                if config.batch
+                else self.api.max_connections()
+            )
+            async with concurrency(
+                name=str(model_name),
+                concurrency=max_connections,
+                key=key,
+            ):
+                yield
+
+    def _resolve_config(self, config: GenerateConfig | None) -> GenerateConfig:
+        # base config for this model
+        base_config = self.config
+
+        # if we are the active_model then merge active generate config
+        active_config = active_generate_config()
+        if self == active_model():
+            base_config = base_config.merge(active_config)
+
+        # otherwise merge connection-oriented config so its inherited everywhere
+        else:
+            base_config = base_config.merge(
+                GenerateConfig(
+                    max_connections=active_config.max_connections,
+                    adaptive_connections=active_config.adaptive_connections,
+                    max_retries=active_config.max_retries,
+                    timeout=active_config.timeout,
+                )
+            )
+
+        # merge passed config
+        return base_config.merge(config or GenerateConfig())
+
+    def _record_model_interaction(
+        self,
+        input: list[ChatMessage],
+        tools: list[ToolInfo],
+        tool_choice: ToolChoice,
+        config: GenerateConfig,
+        cache: Literal["read", "write"] | None,
+        output: ModelOutput | None = None,
+        call: ModelCall | None = None,
+    ) -> tuple[
+        Callable[[ModelOutput | Exception, ModelCall | None], None],
+        BaseModel,
+    ]:
+        from inspect_ai.event._model import ModelEvent
+        from inspect_ai.log._transcript import transcript
+
+        # create event and add it to the transcript
+        model = str(self)
+        event = ModelEvent(
+            model=model,
+            role=self.role,
+            input=input,
+            tools=tools,
+            tool_choice=tool_choice,
+            config=config,
+            output=output if output else ModelOutput.from_content(model, ""),
+            cache=cache,
+            call=call,
+            pending=output is None,
+        )
+        transcript()._event(event)
+
+        # callable that can be used to update the interaction w/ output
+        def complete(
+            result: ModelOutput | Exception, updated_call: ModelCall | None
+        ) -> None:
+            # Note on operator-cancel: ``AcpTransport.cancel_current_turn``
+            # stamps ``event.error = OPERATOR_CANCEL_ERROR`` on the
+            # in-flight event. The model API can still return inside the
+            # cancellation propagation window; we deliberately let the
+            # natural completion run so ``event.output`` / ``event.call``
+            # capture the real response for forensic logging. The
+            # success branch below does not overwrite ``event.error``,
+            # so the cancel marker stays sticky and downstream
+            # renderers (TUI + inspect view) discriminate on it to
+            # suppress display.
+
+            # trace
+            if isinstance(result, ModelOutput):
+                if result.choices:
+                    display_conversation_assistant(input, result.choices[0].message)
+                event.output = result
+            else:
+                display_conversation_assistant_error(result)
+                event.error = exception_message(result)
+                traceback_text, traceback_ansi = format_traceback(
+                    type(result), result, result.__traceback__
+                )
+                event.traceback = traceback_text
+                event.traceback_ansi = traceback_ansi
+
+            if updated_call is not None:
+                event.call = updated_call
+
+            if (
+                isinstance(result, Exception)
+                and event.call is not None
+                and event.call.response is None
+            ):
+                # We try to set these in the individual providers' error handling, but we make a last
+                # ditch effort here to set them if we don't have a response.
+                event.call.error = True
+                if hasattr(result, "body"):
+                    event.call.response = as_error_response(result.body)
+                elif hasattr(result, "response"):
+                    event.call.response = as_error_response(result.response)
+                else:
+                    event.call.response = as_error_response(str(result))
+
+            event.pending = None
+            transcript()._event_updated(event)
+
+        # if we have output then complete it now
+        if output:
+            complete(output, call)
+
+        return complete, event
+
+
+ModelGenerateFilter: TypeAlias = Callable[
+    [Model, list[ChatMessage], list[ToolInfo], ToolChoice | None, GenerateConfig],
+    Awaitable[ModelOutput | GenerateInput | None],
+]
+"""Filter that receives the resolved ``Model`` instance as its first argument."""
+
+StrGenerateFilter: TypeAlias = Callable[
+    [str, list[ChatMessage], list[ToolInfo], ToolChoice | None, GenerateConfig],
+    Awaitable[ModelOutput | GenerateInput | None],
+]
+"""Deprecated filter that receives a model name ``str`` as its first argument."""
+
+GenerateFilter: TypeAlias = ModelGenerateFilter | StrGenerateFilter
+"""Filter a model generation.
+
+The first argument is the resolved ``Model`` instance.  Filters that
+accept a ``str`` as the first argument are still supported but
+deprecated and will receive ``model.name`` instead.
+
+A filter may substitute for the default model generation by returning a
+``ModelOutput``, modify the input parameters by returning a ``GenerateInput``,
+or return ``None`` to allow default processing to continue.
+"""
+
+
+class AttemptTimeoutError(RuntimeError):
+    def __init__(self, timeout: int | None) -> None:
+        super().__init__(f"attempt_timeout '{timeout or 0}' exceeded.")
+
+
+class ModelName:
+    r"""Model name (api and specific model served by the api).
+
+    Can be used for structural pattern matching of models against
+    various string specifications of models. Used primarily by
+    tasks to allow them to condition their behavior on models or
+    model families.
+
+    String specifications can be fully specified (e.g. openai/gpt-4),
+    partially specified by model name only (e.g. gpt-4) or even
+    partially specified by a substring of model name (e.g. gpt).
+    """
+
+    def __init__(self, model: str | Model) -> None:
+        """Create a ModelName.
+
+        Args:
+           model: Model to create name for.
+        """
+        if isinstance(model, str):
+            (api, name) = self._parse_model(model)
+            if api is None:
+                raise ValueError("API not specified for model name")
+            self.api = api
+            self.name = name
+        else:
+            # registry names have a package prefix, strip it off
+            name = registry_info(model.api).name
+            parts = name.split("/")
+            self.api = "/".join(parts[1:]) if len(parts) > 1 else name
+            self.name = model.name
+
+    def __eq__(self, pattern: object) -> bool:
+        if isinstance(pattern, str):
+            (api, name) = self._parse_model(pattern)
+            if (api and api in self.api) and name in self.name:
+                return True
+            else:
+                return name in self.name
+        else:
+            return False
+
+    def __str__(self) -> str:
+        return f"{self.api}/{self.name}"
+
+    def _parse_model(self, model: str) -> tuple[str | None, str]:
+        parts = model.split("/")
+        if len(parts) > 1:
+            return (parts[0], "/".join(parts[1:]))
+        else:
+            return (None, model)
+
+
+def get_model(
+    model: str | Model | None = None,
+    *,
+    role: str | None = None,
+    required: bool = False,
+    default: str | Model | None = None,
+    config: GenerateConfig | None = None,
+    base_url: str | None = None,
+    api_key: str | None = None,
+    memoize: bool = True,
+    **model_args: Any,
+) -> Model:
+    """Get an instance of a model.
+
+    Calls to get_model() are memoized (i.e. a call with the same arguments
+    will return an existing instance of the model rather than creating a
+    new one). You can disable this with `memoize=False`.
+
+    If you prefer to immediately close models after use (as well as
+    prevent caching) you can employ the async context manager built in
+    to the `Model` class. For example:
+
+    ```python
+    async with get_model("openai/gpt-4o") as model:
+        response = await model.generate("Say hello")
+    ```
+
+    In this case, the model client will be closed at the end of the
+    context manager and will not be available in the get_model() cache.
+
+    Args:
+       model: Model specification.
+          If `Model` is passed it is returned unmodified,
+          if `None` is passed then the model currently being
+          evaluated is returned (or if there is no evaluation
+          then the model referred to by `INSPECT_EVAL_MODEL`).
+       role: Optional named role for model (e.g. for roles specified
+          at the task or eval level). Provide a `default` as a fallback
+          in the case where the `role` hasn't been externally specified.
+          Pass `required` to raise an error if the role has not been specified.
+       required: If a model role is specified, is it required? If required
+          and not present, an error is raised. Otherwise, the current
+          default model is returned.
+       default: Optional. Fallback model in case the specified
+          `model` or `role` is not found.
+       config: Configuration for model.
+       base_url: Optional. Alternate base URL for model.
+       api_key: Optional. API key for model.
+       memoize: Use/store a cached version of the model based on
+          the parameters to `get_model()`
+       **model_args: Additional args to
+          pass to model constructor.
+
+    Returns:
+        Model instance.
+
+    """
+    from inspect_ai.hooks._startup import init_hooks
+
+    config = config or GenerateConfig()
+
+    # start with seeing if a model was passed
+    if isinstance(model, Model):
+        return model
+
+    # next see if this is the special "none" model
+    if model == "none":
+        model = "none/none"
+
+    # resolve model role
+    if role is not None:
+        model_for_role = model_roles().get(role, None)
+        if model_for_role is not None:
+            if config.model_dump(exclude_none=True):
+                model_for_role = copy(model_for_role)
+                model_for_role.config = config.merge(model_for_role.config)
+                model_for_role._set_role(role)
+            return model_for_role
+
+        # raise if required and not found
+        elif required is True and default is None:
+            raise PrerequisiteError(
+                f"Model role '{role}' is required and was not specified."
+            )
+
+    # if a default was specified then use it as the model if
+    # no model was passed
+    if model is None:
+        if isinstance(default, Model):
+            if role is not None:
+                # shallow-copy so we don't mutate the caller's Model
+                # (e.g. a shared instance held in model_roles())
+                default = copy(default)
+                default._set_role(role)
+            return default
+        else:
+            model = default
+
+    # now try finding an 'ambient' model (active or env var)
+    if model is None:
+        # return active_model if there is one
+        active = active_model()
+        if active:
+            return active
+
+        # return based on env var if there is one
+        # (handle lists by taking the first model)
+        model = os.getenv("INSPECT_EVAL_MODEL", None)
+        if model is not None:
+            model = model.split(",")[0]
+        else:
+            raise ValueError(
+                "No model specified (and no model environment variable defined)"
+            )
+
+    # see if we can return a memoized model instance
+    # (exclude mockllm since custom_outputs is an infinite generator)
+    model_cache_key: str = ""  # for mypy below
+    if model.startswith("mockllm/"):
+        memoize = False
+    if memoize:
+        model_cache_key = (
+            model
+            + str(role)
+            + config.model_dump_json(exclude_none=True)
+            + str(base_url)
+            + str(api_key)
+            + str(to_jsonable_python(model_args, fallback=lambda _: None))
+        )
+        cached = cached_model(model_cache_key)
+        if cached is not None:
+            return cached
+
+    # split model into api name and model name if necessary
+    api_name = None
+    original_model = model
+    parts = model.split("/")
+    if len(parts) > 1:
+        api_name = parts[0]
+        model = "/".join(parts[1:])
+
+    # check for api_name matching unqualified name (package prefix not
+    # required as modelapi providers are registred globally for ease of
+    # use from the command line and .env files)
+    def match_modelapi_type(info: RegistryInfo) -> bool:
+        if info.type == "modelapi" and registry_unqualified_name(info) == api_name:
+            return True
+        else:
+            return False
+
+    # find a matching model type
+    modelapi_types = registry_find(match_modelapi_type)
+    if len(modelapi_types) > 0:
+        # create the model (init_hooks here in case the model api
+        # is being used as a stadalone model interface outside of evals)
+        init_hooks()
+        modelapi_type = cast(type[ModelAPI], modelapi_types[0])
+        modelapi_instance = modelapi_type(
+            model_name=model,
+            base_url=base_url,
+            api_key=api_key,
+            config=config,
+            **model_args,
+        )
+        m = Model(modelapi_instance, config, model_args)
+        m._explicit_base_url = base_url
+        if role is not None:
+            m._set_role(role)
+        if memoize:
+            _models[model_cache_key] = m
+        return m
+    else:
+        if api_name is None:
+            raise ValueError(
+                f"Model name {original_model!r} should be in the format of <api_name>/<model_name>."
+            )
+        else:
+            raise ValueError(
+                f"Model API {api_name} of model {original_model!r} not recognized."
+            )
+
+
+# cache for memoization of get_model
+_models: dict[str, Model] = {}
+
+
+def cached_model(key: str) -> Model | None:
+    # clean out context bound models before accessing the cache
+    for k in list(_models.keys()):
+        if _models[k]._context_bound:
+            del _models[k]
+
+    # read from the cache
+    return _models.get(key, None)
+
+
+def resolve_models(
+    model: str | Model | list[str] | list[Model] | None | NotGiven = NOT_GIVEN,
+    model_base_url: str | None = None,
+    model_args: dict[str, Any] | None = None,
+    config: GenerateConfig | None = None,
+) -> list[Model]:
+    model_args = model_args or {}
+    config = config or GenerateConfig()
+
+    # resolve NotGiven to current INSPECT_EVAL_MODEL
+    if isinstance(model, NotGiven):
+        model = os.getenv("INSPECT_EVAL_MODEL", None)
+
+    # resolve None to NoModel
+    if model is None:
+        return [get_model("none")]
+
+    # reflect back a plain model
+    if isinstance(model, Model):
+        return [model]
+
+    # helper to resolve model of various types
+    def resolve_model(m: str | Model) -> Model:
+        return get_model(
+            model=m,
+            base_url=model_base_url,
+            config=config,
+            **model_args,
+        )
+
+    # str to list
+    if isinstance(model, str):
+        model = [m.strip() for m in model.split(",")]
+
+    # resolve models
+    return [resolve_model(m) for m in model]
+
+
+def resolve_reasoning_history(
+    messages: list[ChatMessage],
+    config: GenerateConfig,
+    model_api: ModelAPI,
+) -> list[ChatMessage]:
+    # determine up front if we have any reasoning content
+    have_reasoning = any(
+        [
+            isinstance(m, ChatMessageAssistant)
+            and isinstance(m.content, list)
+            and any([c for c in m.content if isinstance(c, ContentReasoning)])
+            for m in messages
+        ]
+    )
+    if not have_reasoning:
+        return messages
+
+    # determine reasoning history configuration
+    reasoning_history = (
+        config.reasoning_history if config.reasoning_history is not None else "auto"
+    )
+
+    # see if the provider is forcing a reasoning history
+    force = model_api.force_reasoning_history()
+    if force is not None:
+        reasoning_history = force
+    # if it's 'auto' then defer to the provider
+    elif reasoning_history == "auto":
+        reasoning_history = model_api.auto_reasoning_history()
+
+    # generate a version of message history with the correct history
+    if reasoning_history == "all":
+        resolved_messages: list[ChatMessage] = messages
+    else:
+        found_last = False
+        resolved_messages = []
+        for message in reversed(messages):
+            if isinstance(message, ChatMessageAssistant) and isinstance(
+                message.content, list
+            ):
+                # is there reasoning in this message?
+                has_reasoning = any(
+                    isinstance(c, ContentReasoning) for c in message.content
+                )
+                # remove it unless we are in "last" mode and haven't yet found last
+                if has_reasoning:
+                    if reasoning_history == "none" or found_last:
+                        filtered = [
+                            content
+                            for content in message.content
+                            if not isinstance(content, ContentReasoning)
+                        ]
+                        if len(filtered) != len(message.content):
+                            message = message.model_copy(
+                                update={"id": uuid(), "content": filtered}
+                            )
+                    found_last = True
+
+            resolved_messages.append(message)
+
+        # reverse them back
+        resolved_messages.reverse()
+
+    # return messages
+    return resolved_messages
+
+
+def resolve_tool_model_input(
+    tdefs: list[ToolDef], messages: list[ChatMessage], hints: ToolCallModelInputHints
+) -> list[ChatMessage]:
+    # filter on tooldefs that have a model input handler
+    tdefs = [tdef for tdef in tdefs if tdef.model_input is not None]
+
+    # bail if there are no handlers
+    if len(tdefs) == 0:
+        return messages
+
+    # don't mutate the original messages
+    messages = [m.model_copy() for m in messages]
+
+    # extract tool messages
+    tool_messages = [
+        message for message in messages if isinstance(message, ChatMessageTool)
+    ]
+    # run model_input handlers over all tool_messages with the same function name
+    for tdef in tdefs:
+        assert tdef.model_input
+        # filter messages down to just this tool
+        tdef_tool_messages = [
+            message for message in tool_messages if message.function == tdef.name
+        ]
+        # call the function for each tool, passing the index, total, and content
+        for index, message in enumerate(tdef_tool_messages):
+            model_input_content = tdef.model_input(
+                index, len(tool_messages), message.content, hints
+            )
+            if model_input_content is not message.content:
+                message.content = model_input_content
+                message.id = uuid()
+
+    # return modified messages
+    return messages
+
+
+MEDIA_PLACEHOLDERS: dict[type, str] = {
+    ContentImage: "Image content is included below.",
+    ContentDocument: "Document content is included below.",
+}
+
+MediaAccumulator: TypeAlias = tuple[list[ChatMessage], list[Content], list[str]]
+MediaContentAccumulator: TypeAlias = tuple[list[Content], list[Content]]
+
+
+def tool_result_media_as_user_message(
+    messages: list[ChatMessage],
+    extract_types: tuple[type, ...],
+) -> list[ChatMessage]:
+    """Move media content out of tool results into fabricated user messages.
+
+    Tool responses will have matching media replaced with placeholder text,
+    and the extracted content will appear in a new user message.
+    """
+    message_reducer = _make_message_reducer(extract_types)
+    chat_messages, user_message_content, tool_call_ids = functools.reduce(
+        message_reducer,
+        messages,
+        (list[ChatMessage](), list[Content](), list[str]()),
+    )
+    return maybe_adding_user_message(chat_messages, user_message_content, tool_call_ids)
+
+
+def _make_content_reducer(
+    extract_types: tuple[type, ...],
+) -> Callable[[MediaContentAccumulator, Content], MediaContentAccumulator]:
+    """Return a content-level reducer that extracts the given media types."""
+
+    def reducer(
+        acc: MediaContentAccumulator, content: Content
+    ) -> MediaContentAccumulator:
+        new_user_message_content, edited_tool_message_content = acc
+        for media_type, placeholder in MEDIA_PLACEHOLDERS.items():
+            if isinstance(content, media_type) and media_type in extract_types:
+                return new_user_message_content + [
+                    content
+                ], edited_tool_message_content + [ContentText(text=placeholder)]
+        return new_user_message_content, edited_tool_message_content + [content]
+
+    return reducer
+
+
+def _make_message_reducer(
+    extract_types: tuple[type, ...],
+) -> Callable[[MediaAccumulator, ChatMessage], MediaAccumulator]:
+    """Return a message-level reducer that extracts the given media types."""
+    content_reducer = _make_content_reducer(extract_types)
+
+    def reducer(accum: MediaAccumulator, message: ChatMessage) -> MediaAccumulator:
+        messages, pending_content, tool_call_ids = accum
+        if (
+            isinstance(message, ChatMessageTool)
+            and isinstance(message.content, list)
+            and any(isinstance(c, extract_types) for c in message.content)
+        ):
+            new_user_message_content, edited_tool_message_content = functools.reduce(
+                content_reducer,
+                message.content,
+                (list[Content](), list[Content]()),
+            )
+
+            return (
+                messages
+                + [
+                    ChatMessageTool(
+                        content=edited_tool_message_content,
+                        tool_call_id=message.tool_call_id,
+                        function=message.function,
+                    )
+                ],
+                pending_content + new_user_message_content,
+                tool_call_ids
+                + ([message.tool_call_id] if message.tool_call_id else []),
+            )
+
+        else:
+            return (
+                maybe_adding_user_message(messages, pending_content, tool_call_ids)
+                + [message],
+                [],
+                [],
+            )
+
+    return reducer
+
+
+def maybe_adding_user_message(
+    messages: list[ChatMessage], content: list[Content], tool_call_ids: list[str]
+) -> list[ChatMessage]:
+    """If content is empty, return messages, otherwise, create a new ChatMessageUser with it and return a new messages list with that message added."""
+    return (
+        messages + [ChatMessageUser(content=content, tool_call_id=tool_call_ids)]
+        if content
+        else messages
+    )
+
+
+# Functions to reduce consecutive user messages to a single user message -> required for some models
+def collapse_consecutive_messages_for_api(
+    messages: list[ChatMessage], api: ModelAPI
+) -> list[ChatMessage]:
+    # optionally collapse *consecutive* messages into one -
+    # (some apis e.g. anthropic require this)
+    if api.collapse_user_messages():
+        messages = collapse_consecutive_user_messages(messages)
+
+    if api.collapse_assistant_messages():
+        messages = collapse_consecutive_assistant_messages(messages)
+
+    if api.collapse_system_messages():
+        messages = collapse_consecutive_system_messages(messages)
+
+    return messages
+
+
+def collapse_consecutive_user_messages(
+    messages: list[ChatMessage],
+) -> list[ChatMessage]:
+    return functools.reduce(user_message_reducer, messages, [])
+
+
+# Functions to reduce consecutive assistant messages to a single user message -> required for some models
+def collapse_consecutive_assistant_messages(
+    messages: list[ChatMessage],
+) -> list[ChatMessage]:
+    return functools.reduce(assistant_message_reducer, messages, [])
+
+
+# Functions to reduce consecutive system messages to a single system message ->
+# required for OpenRouter inference providers (e.g. AkashML, Parasail) that
+# reject requests containing more than one system message.
+def collapse_consecutive_system_messages(
+    messages: list[ChatMessage],
+) -> list[ChatMessage]:
+    return functools.reduce(system_message_reducer, messages, [])
+
+
+def user_message_reducer(
+    messages: list[ChatMessage],
+    message: ChatMessage,
+) -> list[ChatMessage]:
+    return consecutive_message_reducer(messages, message, ChatMessageUser)
+
+
+def assistant_message_reducer(
+    messages: list[ChatMessage],
+    message: ChatMessage,
+) -> list[ChatMessage]:
+    return consecutive_message_reducer(messages, message, ChatMessageAssistant)
+
+
+def system_message_reducer(
+    messages: list[ChatMessage],
+    message: ChatMessage,
+) -> list[ChatMessage]:
+    return consecutive_message_reducer(messages, message, ChatMessageSystem)
+
+
+def consecutive_message_reducer(
+    messages: list[ChatMessage],
+    message: ChatMessage,
+    message_type: Type[ChatMessage],
+) -> list[ChatMessage]:
+    if (
+        isinstance(message, message_type)
+        and len(messages) > 0
+        and isinstance(messages[-1], message_type)
+    ):
+        messages[-1] = combine_messages(messages[-1], message, message_type)
+    else:
+        messages.append(message)
+    return messages
+
+
+def combine_messages(
+    a: ChatMessage, b: ChatMessage, message_type: Type[ChatMessage]
+) -> ChatMessage:
+    # merge content
+    if isinstance(a.content, str) and isinstance(b.content, str):
+        content: str | list[Content] = f"{a.content}\n{b.content}"
+    elif isinstance(a.content, list) and isinstance(b.content, list):
+        content = a.content + b.content
+    elif isinstance(a.content, str) and isinstance(b.content, list):
+        content = [ContentText(text=a.content), *b.content]
+    elif isinstance(a.content, list) and isinstance(b.content, str):
+        content = a.content + [ContentText(text=b.content)]
+    else:
+        raise TypeError(
+            f"Cannot combine messages with invalid content types: {a.content!r}, {b.content!r}"
+        )
+
+    # merge metadata (later message wins on conflicts)
+    merged_metadata: dict[str, Any] = {}
+    if a.metadata:
+        merged_metadata.update(a.metadata)
+    if b.metadata:
+        merged_metadata.update(b.metadata)
+
+    # track which messages were combined
+    merged_metadata["combined_from"] = [a.id, b.id]
+
+    # type-specific field merging
+    if isinstance(a, ChatMessageAssistant) and isinstance(b, ChatMessageAssistant):
+        merged_tool_calls = (a.tool_calls or []) + (b.tool_calls or [])
+        return ChatMessageAssistant(
+            content=content,
+            tool_calls=merged_tool_calls or None,
+            model=b.model or a.model,
+            source=b.source or a.source,
+            metadata=merged_metadata or None,
+        )
+    elif isinstance(a, ChatMessageUser) and isinstance(b, ChatMessageUser):
+        merged_tool_call_id = (a.tool_call_id or []) + (b.tool_call_id or [])
+        return ChatMessageUser(
+            content=content,
+            tool_call_id=merged_tool_call_id or None,
+            source=b.source or a.source,
+            metadata=merged_metadata or None,
+        )
+    else:
+        return message_type(
+            content=content,
+            source=b.source or a.source,
+            metadata=merged_metadata or None,
+        )
+
+
+def log_model_retry(model_name: str, retry_state: RetryCallState) -> None:
+    from inspect_ai._util.retry import retry_error_summary, sample_context_prefix
+
+    prefix = sample_context_prefix()
+    error = retry_error_summary(retry_state)
+    level = logging.WARNING if retry_state.upcoming_sleep >= (60 * 20) else HTTP
+    logger.log(
+        level,
+        f"{prefix}-> {model_name} retry {retry_state.attempt_number} "
+        f"(retrying in {retry_state.upcoming_sleep:,.0f} seconds){error}",
+    )
+
+
+def init_active_model(model: Model, config: GenerateConfig) -> None:
+    active_model_context_var.set(model)
+    set_active_generate_config(config)
+
+
+def active_model() -> Model | None:
+    """The model currently being evaluated.
+
+    Returns:
+       The model currently being evaluated.
+    """
+    return active_model_context_var.get(None)
+
+
+def init_model_roles(roles: dict[str, Model]) -> None:
+    _model_roles.set(roles)
+
+
+def model_roles() -> dict[str, Model]:
+    """Model roles.
+
+    Get the model roles defined for the current task. Call this method only within a running solver or agent execution (it's not available during task construction).
+    """
+    return _model_roles.get()
+
+
+active_model_context_var: ContextVar[Model | None] = ContextVar("active_model")
+
+_model_roles: ContextVar[dict[str, Model]] = ContextVar("model_roles", default={})
+
+
+# shared contexts for asyncio tasks
+def set_total_messages(input: str | list[ChatMessage]) -> None:
+    from inspect_ai.log._samples import set_active_sample_total_messages
+
+    total_messages = 1 if isinstance(input, str) else len(input)
+
+    # set total messages
+    set_active_sample_total_messages(total_messages)
+
+
+def init_model_usage(initial_usage: dict[str, ModelUsage] | None = None) -> None:
+    # explicit intialization
+    if initial_usage is not None:
+        model_usage_context_var.set(initial_usage)
+
+    # default initialization (ignore if we've already been explicitly intialized)
+    elif len(model_usage_context_var.get()) == 0:
+        model_usage_context_var.set({})
+
+
+def init_sample_model_usage() -> None:
+    sample_model_usage_context_var.set({})
+
+
+def init_role_usage(initial_usage: dict[str, ModelUsage] | None = None) -> None:
+    if initial_usage is not None:
+        role_usage_context_var.set(initial_usage)
+    elif len(role_usage_context_var.get()) == 0:
+        role_usage_context_var.set({})
+
+
+def init_sample_role_usage() -> None:
+    sample_role_usage_context_var.set({})
+
+
+def record_and_check_model_usage(
+    model: str, usage: ModelUsage, role: str | None = None
+) -> None:
+    from inspect_ai.log._samples import (
+        set_active_sample_total_cost,
+        set_active_sample_total_tokens,
+    )
+    from inspect_ai.model._model_info import get_model_info
+
+    # compute cost and set on usage before recording (so ModelUsage.__add__
+    # accumulates it in the per-model usage dicts)
+    info = get_model_info(model)
+    total_cost: float | None = None
+    # Note that we handle info=None here because None is currently a valid output of get_model_info (e.g. for mock models)
+    if info is not None and info.cost is not None:
+        total_cost = compute_model_cost(info.cost, usage)
+        usage.total_cost = total_cost
+
+    # record usage
+    set_model_usage(model, usage, sample_model_usage_context_var.get(None))
+    set_model_usage(model, usage, model_usage_context_var.get(None))
+
+    # record usage by role name (if role is set)
+    if role is not None:
+        set_model_usage(role, usage, sample_role_usage_context_var.get(None))
+        set_model_usage(role, usage, role_usage_context_var.get(None))
+
+    record_model_usage(usage)
+
+    # compute total tokens and update active sample
+    total_tokens = sample_total_tokens()
+    set_active_sample_total_tokens(total_tokens)
+    check_token_limit()
+
+    # record cost to limit tree and check
+    if total_cost is not None:
+        record_model_cost(total_cost)
+        set_active_sample_total_cost(sample_total_cost())
+        check_cost_limit()
+
+
+def set_model_usage(
+    model: str, usage: ModelUsage, model_usage: dict[str, ModelUsage] | None
+) -> None:
+    if model_usage is not None:
+        total_usage = model_usage.get(model, ModelUsage())
+        total_usage += usage
+        model_usage[model] = total_usage
+
+
+def model_usage() -> dict[str, ModelUsage]:
+    return model_usage_context_var.get()
+
+
+model_usage_context_var: ContextVar[dict[str, ModelUsage]] = ContextVar(
+    "model_usage", default={}
+)
+
+
+def sample_model_usage() -> dict[str, ModelUsage]:
+    return sample_model_usage_context_var.get()
+
+
+def role_usage() -> dict[str, ModelUsage]:
+    return role_usage_context_var.get()
+
+
+def sample_role_usage() -> dict[str, ModelUsage]:
+    return sample_role_usage_context_var.get()
+
+
+def sample_total_tokens() -> int:
+    total_tokens = [usage.total_tokens for usage in iter(sample_model_usage().values())]
+    return sum(total_tokens)
+
+
+sample_model_usage_context_var: ContextVar[dict[str, ModelUsage]] = ContextVar(
+    "sample_model_usage", default={}
+)
+
+
+role_usage_context_var: ContextVar[dict[str, ModelUsage]] = ContextVar(
+    "role_usage", default={}
+)
+
+
+sample_role_usage_context_var: ContextVar[dict[str, ModelUsage]] = ContextVar(
+    "sample_role_usage", default={}
+)
+
+
+def compute_model_cost(cost_data: ModelCost, usage: ModelUsage) -> float:
+    """Compute cost for a model call based on usage and cost data.
+
+    Args:
+        cost_data: Per-token pricing for the model.
+        usage: Token counts for the call.
+
+    Returns:
+        Cost in dollars.
+    """
+    cost = usage.input_tokens * cost_data.input / 1_000_000
+    cost += usage.output_tokens * cost_data.output / 1_000_000
+
+    if usage.input_tokens_cache_write is not None:
+        cost += usage.input_tokens_cache_write * cost_data.input_cache_write / 1_000_000
+    if usage.input_tokens_cache_read is not None:
+        cost += usage.input_tokens_cache_read * cost_data.input_cache_read / 1_000_000
+
+    return cost
+
+
+def sample_total_cost() -> float:
+    """Get total cost across all models for the current sample."""
+    return sum(
+        usage.total_cost
+        for usage in sample_model_usage().values()
+        if usage.total_cost is not None
+    )

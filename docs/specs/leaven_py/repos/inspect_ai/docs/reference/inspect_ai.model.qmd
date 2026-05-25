@@ -1,0 +1,117 @@
+---
+reference: inspect_ai.model
+description: Model interface and providers.
+---
+
+## Generation
+
+### get_model
+### Model
+### GenerateConfig
+### GenerateConfigArgs
+### GenerateFilter
+### BatchConfig
+### ResponseSchema
+### ModelOutput
+### ModelConfig
+### ModelCall
+### ModelConversation
+### ModelUsage
+### StopReason
+### ChatCompletionChoice
+### OutputModality
+### ImageOutput
+### RetryDecision
+
+## Messages
+
+### ChatMessage
+### ChatMessageBase
+### ChatMessageSystem
+### ChatMessageUser
+### ChatMessageAssistant
+### ChatMessageTool
+### trim_messages
+### user_prompt
+### stable_message_ids
+
+## Content
+
+### Content
+### ContentText
+### ContentReasoning
+### ContentImage
+### ContentAudio
+### ContentVideo
+### ContentDocument
+### ContentData
+### ContentToolUse
+
+## Citation
+
+### Citation
+### CitationBase
+### UrlCitation
+### DocumentCitation
+### ContentCitation
+
+## Tools
+
+### execute_tools
+### ExecuteToolsResult
+
+## Compaction
+
+### compaction
+### Compact
+### CompactionStrategy
+### CompactionAuto
+### CompactionNative
+### CompactionEdit
+### CompactionSummary
+### CompactionTrim
+
+
+## Model Info
+
+### get_model_info
+### set_model_info
+### set_model_cost
+### ModelInfo
+### ModelCost
+### model_roles
+
+## Logprobs
+
+### Logprob
+### Logprobs
+### TopLogprob
+
+## Caching
+
+### CachePolicy
+### cache_size
+### cache_clear
+### cache_list_expired
+### cache_prune
+### cache_path
+
+## Conversion
+
+### messages_from_openai
+### messages_from_openai_responses
+### messages_from_anthropic
+### messages_from_google
+### model_output_from_openai
+### model_output_from_openai_responses
+### model_output_from_anthropic
+### model_output_from_google
+### messages_to_openai
+
+## Provider
+
+### modelapi
+### ModelAPI
+
+
+

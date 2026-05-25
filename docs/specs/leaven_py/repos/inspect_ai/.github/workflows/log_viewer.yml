@@ -1,0 +1,125 @@
+name: Build Log Viewer
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - "*"
+
+env:
+  UV_VERSION: 0.9.4
+
+jobs:
+  check-schema-and-types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          version: "${{ env.UV_VERSION }}"
+
+      - name: Install Python dependencies
+        run: uv pip install --system .[dev]
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: src/inspect_ai/_view/ts-mono/package.json
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: pnpm
+          cache-dependency-path: src/inspect_ai/_view/ts-mono/pnpm-lock.yaml
+      - name: Install Node.js dependencies
+        working-directory: src/inspect_ai/_view/ts-mono
+        run: pnpm install --frozen-lockfile
+
+      - name: Update schema and types
+        run: python src/inspect_ai/_view/schema.py
+
+      - name: Ensure schema and types changes are checked in
+        run: |
+          if [[ $(git status --porcelain) != "" ]]
+          then
+            echo "Schemas or generated types are out of date. Please run:"
+            echo "  python src/inspect_ai/_view/schema.py"
+            git status
+            git diff
+            exit 1
+          fi
+
+  submodule-on-main:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify submodule commit is on ts-mono main
+        run: |
+          SUBMODULE_SHA=$(git ls-tree HEAD src/inspect_ai/_view/ts-mono | awk '{print $3}')
+          echo "Submodule points to: $SUBMODULE_SHA"
+
+          git fetch https://github.com/meridianlabs-ai/ts-mono.git main
+          MAIN_SHA=$(git rev-parse FETCH_HEAD)
+          echo "ts-mono main is at: $MAIN_SHA"
+
+          if git merge-base --is-ancestor "$SUBMODULE_SHA" "$MAIN_SHA"; then
+            echo "✓ Submodule commit is on ts-mono main"
+          else
+            echo "✗ Submodule commit $SUBMODULE_SHA is not on ts-mono main."
+            echo "  Merge the submodule PR first, then update the pointer."
+            exit 1
+          fi
+
+  dist-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: src/inspect_ai/_view/ts-mono/package.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: pnpm
+          cache-dependency-path: src/inspect_ai/_view/ts-mono/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: src/inspect_ai/_view/ts-mono
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        working-directory: src/inspect_ai/_view/ts-mono
+        run: pnpm --filter inspect build
+
+      - name: Check dist is up-to-date
+        run: |
+          if ! git diff --exit-code src/inspect_ai/_view/dist
+          then
+            echo "❌ dist/ is out of sync with the frontend source!"
+            echo ""
+            echo "The build output has changed. Run:"
+            echo "  cd src/inspect_ai/_view/ts-mono"
+            echo "  pnpm --filter inspect build"
+            echo ""
+            echo "Then commit the updated dist/ directory."
+            exit 1
+          fi

@@ -1,0 +1,995 @@
+import base64
+import re
+from logging import getLogger
+from typing import Any, Literal, Tuple, Union, cast
+
+from pydantic import BaseModel, Field
+from typing_extensions import override
+
+from inspect_ai._util._async import current_async_backend
+from inspect_ai._util.constants import DEFAULT_MAX_TOKENS, NO_CONTENT
+from inspect_ai._util.content import (
+    Content,
+    ContentImage,
+    ContentReasoning,
+    ContentText,
+)
+from inspect_ai._util.error import PrerequisiteError, pip_dependency_error
+from inspect_ai._util.images import file_as_data
+from inspect_ai._util.logger import warn_once
+from inspect_ai._util.version import verify_required_version
+from inspect_ai.log._samples import set_active_model_event_call
+from inspect_ai.model._reasoning import reasoning_to_think_tag
+from inspect_ai.tool import ToolChoice, ToolInfo
+from inspect_ai.tool._tool_call import ToolCall
+from inspect_ai.tool._tool_choice import ToolFunction
+from inspect_ai.util._json import json_schema_dump
+
+from .._chat_message import (
+    ChatMessage,
+    ChatMessageAssistant,
+    ChatMessageSystem,
+    ChatMessageTool,
+    ChatMessageUser,
+)
+from .._generate_config import GenerateConfig
+from .._model import ModelAPI, RetryDecision
+from .._model_call import ModelCall, as_error_response
+from .._model_output import ChatCompletionChoice, ModelOutput, ModelUsage
+from .util import (
+    model_base_url,
+)
+from .util.hooks import ConverseHooks
+
+logger = getLogger(__name__)
+
+# Model for Bedrock Converse API (Response)
+# generated from: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/bedrock-runtime/client/converse.html#converse
+
+ConverseRole = Literal["user", "assistant"]
+ConverseImageFormat = Literal["png", "jpeg", "gif", "webp"]
+ConverseDocumentFormat = Literal[
+    "pdf", "csv", "doc", "docx", "xls", "xlsx", "html", "txt", "md"
+]
+ConverseToolResultStatus = Literal["success", "error"]
+ConverseStopReason = Literal[
+    "end_turn",
+    "tool_use",
+    "max_tokens",
+    "stop_sequence",
+    "guardrail_intervened",
+    "content_filtered",
+    "malformed_model_output",
+    "malformed_tool_use",
+    "invalid_query",
+    "max_tool_invocations",
+    "model_context_window_exceeded",
+]
+ConverseGuardContentQualifier = Literal["grounding_source", "query", "guard_content"]
+ConverseFilterType = Literal[
+    "INSULTS", "HATE", "SEXUAL", "VIOLENCE", "MISCONDUCT", "PROMPT_ATTACK"
+]
+ConverseFilterConfidence = Literal["NONE", "LOW", "MEDIUM", "HIGH"]
+ConverseFilterStrength = Literal["NONE", "LOW", "MEDIUM", "HIGH"]
+
+
+class ConverseImageSource(BaseModel):
+    bytes: bytes
+
+
+class ConverseDocumentSource(BaseModel):
+    bytes: bytes
+
+
+class ConverseImage(BaseModel):
+    format: ConverseImageFormat
+    source: ConverseImageSource
+
+
+class ConverseDocument(BaseModel):
+    format: ConverseDocumentFormat
+    name: str
+    source: ConverseDocumentSource
+
+
+class ConverseToolUse(BaseModel):
+    toolUseId: str
+    name: str
+    input: Union[dict[str, Any], list[Any], int, float, str, bool, None]
+
+
+class ConverseToolResultContent(BaseModel):
+    json_content: Union[dict[str, Any], list[Any], int, float, str, bool, None] = Field(
+        default=None, alias="json"
+    )
+    text: str | None = None
+    image: ConverseImage | None = None
+    document: ConverseDocument | None = None
+
+
+class ConverseToolResult(BaseModel):
+    toolUseId: str
+    content: list[ConverseToolResultContent]
+    status: ConverseToolResultStatus
+
+
+class ConverseGuardContentText(BaseModel):
+    text: str
+    qualifiers: list[ConverseGuardContentQualifier]
+
+
+class ConverseGuardContent(BaseModel):
+    text: ConverseGuardContentText
+
+
+class ConverseReasoningText(BaseModel):
+    text: str
+
+
+class ConverseReasoningContent(BaseModel):
+    reasoningText: ConverseReasoningText
+
+
+class ConverseMessageContent(BaseModel):
+    text: str | None = None
+    image: ConverseImage | None = None
+    document: ConverseDocument | None = None
+    toolUse: ConverseToolUse | None = None
+    toolResult: ConverseToolResult | None = None
+    guardContent: ConverseGuardContent | None = None
+    reasoningContent: ConverseReasoningContent | None = None
+
+
+class ConverseMessage(BaseModel):
+    role: ConverseRole
+    content: list[ConverseMessageContent]
+
+
+class ConverseOutput(BaseModel):
+    message: ConverseMessage
+
+
+class ConverseUsage(BaseModel):
+    inputTokens: int
+    outputTokens: int
+    totalTokens: int
+
+
+class ConverseMetrics(BaseModel):
+    latencyMs: int
+
+
+class ConverseTraceGuardrailFilter(BaseModel):
+    type: ConverseFilterType
+    confidence: ConverseFilterConfidence
+    filterStrength: ConverseFilterStrength
+    action: str
+
+
+class ConverseAdditionalModelResponseFields(BaseModel):
+    value: Union[dict[str, Any], list[Any], int, float, str, bool, None]
+
+
+class ConverseResponse(BaseModel):
+    output: ConverseOutput
+    stopReason: ConverseStopReason
+    usage: ConverseUsage
+    metrics: ConverseMetrics
+    additionalModelResponseFields: ConverseAdditionalModelResponseFields | None = None
+    trace: dict[str, Any] | None = None
+
+
+# Model for Bedrock Converse API (Request)
+# generated from: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/bedrock-runtime/client/converse.html#converse
+class ConverseSource(BaseModel):
+    bytes: bytes
+
+
+class ConverseContent(BaseModel):
+    text: str | None = None
+    image: ConverseImage | None = None
+    document: ConverseDocument | None = None
+    toolUse: ConverseToolUse | None = None
+    toolResult: ConverseToolResult | None = None
+    guardContent: ConverseGuardContent | None = None
+
+
+class ConverseSystemContent(BaseModel):
+    text: str | None = None
+    guardContent: ConverseGuardContent | None = None
+
+
+class ConverseInferenceConfig(BaseModel):
+    maxTokens: int | None = None
+    temperature: float | None = None
+    topP: float | None = None
+    stopSequences: list[str] | None = None
+
+
+class ConverseToolSpec(BaseModel):
+    name: str
+    description: str | None = None
+    inputSchema: (
+        Union[dict[str, Any], list[Any], int, float, str, bool, None] | None
+    ) = None
+
+
+class ConverseTool(BaseModel):
+    toolSpec: ConverseToolSpec
+
+
+class ConverseToolChoice(BaseModel):
+    auto: dict[str, Any] | None = None
+    any: dict[str, Any] | None = None
+    tool: dict[str, str] | None = None
+
+
+class ConverseToolConfig(BaseModel):
+    tools: list[ConverseTool] | None = None
+    toolChoice: ConverseToolChoice | None = None
+
+
+class ConverseGuardrailConfig(BaseModel):
+    guardrailIdentifier: str | None = None
+    guardrailVersion: str | None = None
+    trace: str | None = None
+
+
+class ConversePromptVariable(BaseModel):
+    text: str
+
+
+class ConverseClientConverseRequest(BaseModel):
+    modelId: str
+    messages: list[ConverseMessage]
+    system: list[ConverseSystemContent] | None = None
+    inferenceConfig: ConverseInferenceConfig | None = None
+    toolConfig: ConverseToolConfig | None = None
+    guardrailConfig: ConverseGuardrailConfig | None = None
+    additionalModelRequestFields: (
+        Union[dict[str, Any], list[Any], int, float, str, bool, None] | None
+    ) = None
+    additionalModelResponseFieldPaths: list[str] = []
+
+
+class BedrockAPI(ModelAPI):
+    def __init__(
+        self,
+        model_name: str,
+        base_url: str | None,
+        api_key: str | None = None,
+        config: GenerateConfig = GenerateConfig(),
+        **model_args: Any,
+    ):
+        super().__init__(
+            model_name=model_name,
+            base_url=model_base_url(base_url, "BEDROCK_BASE_URL"),
+            api_key=api_key,
+            api_key_vars=[],
+            config=config,
+        )
+
+        # raise if we are using trio
+        if current_async_backend() == "trio":
+            raise PrerequisiteError(
+                "ERROR: The bedrock provider does not work with the trio async backend."
+            )
+
+        # extract timeout settings from model_args (coerce CLI strings to int)
+        self.read_timeout: int = int(str(model_args.pop("read_timeout", 60)))
+        self.connect_timeout: int = int(str(model_args.pop("connect_timeout", 60)))
+
+        # save model_args (filter out inference params that shouldn't go to session.client)
+        _CLIENT_EXCLUDED_KEYS = {
+            "max_tokens",
+            "temperature",
+            "top_p",
+            "top_k",
+            "stop_seqs",
+            "reasoning_tokens",
+            "reasoning_effort",
+        }
+        self.model_args = {
+            k: v for k, v in model_args.items() if k not in _CLIENT_EXCLUDED_KEYS
+        }
+
+        # import aioboto3 on demand
+        try:
+            import aioboto3
+
+            verify_required_version("Bedrock API", "aioboto3", "13.0.0")
+
+            # Create a shared session to be used when generating
+            self.session = aioboto3.Session()
+
+            # create time tracker
+            self._http_hooks = ConverseHooks(self.session)
+
+        except ImportError:
+            raise pip_dependency_error("Bedrock API", ["aioboto3"])
+
+    @override
+    def connection_key(self) -> str:
+        return self.model_name
+
+    @override
+    def max_tokens(self) -> int | None:
+        if "llama3-70" in self.model_name or "llama3-8" in self.model_name:
+            return 2048
+
+        if "llama3" in self.model_name or "claude3" in self.model_name:
+            return 4096
+
+        elif "mistral-large" in self.model_name:
+            return 8192
+
+        # Other models will just the default
+        else:
+            return DEFAULT_MAX_TOKENS
+
+    # Bedrock returns AWS-specific error codes; the throttling-family codes
+    # are documented as the 429 equivalent and indicate true capacity
+    # throttling. The infra-family codes (RequestTimeout, ServiceUnavailable)
+    # are retryable but represent AWS-side issues, not client over-saturation —
+    # so they're classified as transient (pause scale-up, don't scale down).
+    _BEDROCK_THROTTLE_CODES = frozenset(
+        [
+            "ThrottlingException",
+            "RequestLimitExceeded",
+            "Throttling",
+            "RequestThrottled",
+            "TooManyRequestsException",
+            "ProvisionedThroughputExceededException",
+        ]
+    )
+    _BEDROCK_TRANSIENT_CODES = frozenset(
+        [
+            "TransactionInProgressException",
+            "RequestTimeout",
+            "ServiceUnavailable",
+            "ServiceUnavailableException",
+        ]
+    )
+
+    @override
+    def should_retry(self, ex: Exception) -> bool | RetryDecision:
+        from botocore.exceptions import ClientError
+
+        if isinstance(ex, ClientError):
+            error_code = ex.response.get("Error", {}).get("Code", "")
+            if error_code in self._BEDROCK_THROTTLE_CODES:
+                # AWS doesn't include Retry-After on ThrottlingException — fall
+                # back to the controller's configured cooldown floor.
+                return RetryDecision.rate_limit()
+            if error_code in self._BEDROCK_TRANSIENT_CODES:
+                return RetryDecision.transient()
+        return RetryDecision.no()
+
+    @override
+    def collapse_user_messages(self) -> bool:
+        return True
+
+    @override
+    def collapse_assistant_messages(self) -> bool:
+        return True
+
+    @override
+    def canonical_name(self) -> str:
+        """Canonical model name for model info database lookup.
+
+        Bedrock model names use the format: provider.model-name-version:variant
+        e.g., anthropic.claude-3-5-sonnet-20241022-v2:0
+
+        Returns the canonical format: provider/model-name
+        e.g., anthropic/claude-3-5-sonnet-20241022
+        """
+        name = self.model_name
+        provider: str | None = None
+
+        # Extract provider prefix (e.g., "anthropic." or "meta.")
+        if "." in name:
+            provider, name = name.split(".", 1)
+
+        # Strip variant suffix (e.g., ":0")
+        if ":" in name:
+            name = name.split(":")[0]
+
+        # Strip version suffix like -v1, -v2
+        if name.endswith(("-v1", "-v2", "-v3")):
+            name = name[:-3]
+
+        # Return with provider prefix for database lookup
+        return f"{provider}/{name}" if provider else name
+
+    @override
+    def is_auth_failure(self, ex: Exception) -> bool:
+        from botocore.exceptions import ClientError
+
+        if isinstance(ex, ClientError):
+            error_code = ex.response.get("Error", {}).get("Code", "")
+            return error_code in [
+                "UnrecognizedClientException",
+                "ExpiredTokenException",
+                "InvalidSignatureException",
+            ]
+        return False
+
+    def is_gpt_oss(self) -> bool:
+        return "gpt-oss" in self.model_name
+
+    def is_claude(self) -> bool:
+        return "claude" in self.model_name
+
+    def is_nova(self) -> bool:
+        return "nova" in self.model_name
+
+    def _is_claude_4_x(self, x: int) -> bool:
+        # bedrock model ids look like
+        # `anthropic.claude-opus-4-7-20260101-v1:0` or
+        # `eu.anthropic.claude-opus-4-7-...` for cross-region inference profiles.
+        return (
+            self.is_claude()
+            and re.search(r"claude-[a-zA-Z]+-4-" + str(x), self.model_name) is not None
+        )
+
+    def is_claude_4_7_or_later(self) -> bool:
+        # mirrors the gating used in the native anthropic provider:
+        # claude 4.7+ runs adaptive-thinking-only and rejects temperature /
+        # top_p / top_k. assume future minor versions of claude 4 keep the
+        # 4.7 capability set unless a specific older minor is matched.
+        if not self.is_claude():
+            return False
+        if self._is_claude_4_x(7):
+            return True
+        # future claude 4 minor not yet recognised
+        if re.search(r"claude-[a-zA-Z]+-4-", self.model_name):
+            recognised = any(self._is_claude_4_x(x) for x in (0, 1, 5, 6))
+            if not recognised:
+                return True
+        return False
+
+    async def generate(
+        self,
+        input: list[ChatMessage],
+        tools: list[ToolInfo],
+        tool_choice: ToolChoice,
+        config: GenerateConfig,
+    ) -> ModelOutput | tuple[ModelOutput | Exception, ModelCall]:
+        from botocore.config import Config
+        from botocore.exceptions import ClientError
+
+        # The bedrock client
+        request_id = self._http_hooks.start_request()
+        async with self.session.client(  # type: ignore[call-overload]
+            service_name="bedrock-runtime",
+            endpoint_url=self.base_url,
+            config=Config(
+                read_timeout=self.read_timeout,
+                connect_timeout=self.connect_timeout,
+                retries=dict(mode="adaptive"),
+                user_agent_extra=self._http_hooks.user_agent_extra(request_id),
+            ),
+            **self.model_args,
+        ) as client:
+            # Process the tools
+            resolved_tools = converse_tools(tools)
+            tool_config = None
+            if resolved_tools is not None:
+                choice = converse_tool_choice(tool_choice)
+                tool_config = ConverseToolConfig(
+                    tools=resolved_tools, toolChoice=choice
+                )
+
+            # Resolve the input messages into converse messages
+            system, messages = await converse_messages(
+                input, emulate_reasoning=self.is_claude()
+            )
+
+            # Claude 4.7+ runs adaptive-thinking-only and rejects sampling
+            # parameters; only maxTokens is accepted. Mirror the gating used
+            # in the native anthropic provider. See issue #3766.
+            forbid_sampling_params = self.is_claude_4_7_or_later()
+
+            # additional model request fields
+            additionalModelRequestFields = self._additional_model_request_fields(
+                config, forbid_sampling_params
+            )
+            reasoning_cfg = self.reasoning_config(config)
+            additionalModelRequestFields = additionalModelRequestFields | reasoning_cfg
+
+            # Nova with reasoning at "high" effort requires maxTokens to be unset.
+            # Lower effort levels ("low", "medium") still accept maxTokens, so we
+            # must only omit it for the "high" case. See issue #3767.
+            nova_high_effort_reasoning = (
+                self.is_nova()
+                and reasoning_cfg.get("reasoningConfig", {}).get("maxReasoningEffort")
+                == "high"
+            )
+
+            # Gate temperature / top_p for adaptive-thinking-only models.
+            if forbid_sampling_params and config.temperature is not None:
+                warn_once(logger, self._sampling_param_warning("temperature"))
+                inference_temperature: float | None = None
+            else:
+                inference_temperature = config.temperature
+
+            if forbid_sampling_params and config.top_p is not None:
+                warn_once(logger, self._sampling_param_warning("top_p"))
+                inference_top_p: float | None = None
+            else:
+                inference_top_p = config.top_p
+
+            # Make the request
+            request = ConverseClientConverseRequest(
+                modelId=self.model_name,
+                messages=messages,
+                system=system,
+                inferenceConfig=ConverseInferenceConfig(
+                    maxTokens=None if nova_high_effort_reasoning else config.max_tokens,
+                    temperature=inference_temperature,
+                    topP=inference_top_p,
+                    stopSequences=config.stop_seqs,
+                ),
+                additionalModelRequestFields=additionalModelRequestFields,
+                toolConfig=tool_config,
+            )
+
+            model_call = set_active_model_event_call(
+                request=replace_bytes_with_placeholder(
+                    request.model_dump(exclude_none=True)
+                ),
+            )
+
+            try:
+                # Process the reponse
+                response = await client.converse(
+                    **request.model_dump(exclude_none=True)
+                )
+                converse_response = ConverseResponse(**response)
+
+                model_call.set_response(
+                    response, self._http_hooks.end_request(request_id)
+                )
+
+            except ClientError as ex:
+                model_call.set_error(
+                    as_error_response(ex.response),
+                    self._http_hooks.end_request(request_id),
+                )
+                # Look for an explicit validation exception
+                if ex.response["Error"]["Code"] == "ValidationException":
+                    response = ex.response["Error"]["Message"].lower()
+                    if "too many input tokens" in response or "is too long" in response:
+                        return (
+                            ModelOutput.from_content(
+                                model=self.model_name,
+                                content=response,
+                                stop_reason="model_length",
+                            ),
+                            model_call,
+                        )
+                    else:
+                        return ex, model_call
+                else:
+                    raise ex
+
+        # create a model output from the response
+        output = model_output_from_response(self.model_name, converse_response, tools)
+
+        # return
+        return output, model_call
+
+    def _sampling_param_warning(self, parameter: str) -> str:
+        return (
+            f"bedrock model '{self.model_name}' does not support the "
+            f"'{parameter}' parameter (adaptive thinking only)."
+        )
+
+    def _additional_model_request_fields(
+        self, config: GenerateConfig, forbid_sampling_params: bool
+    ) -> dict[str, Any]:
+        fields: dict[str, Any] = {}
+
+        if config.top_k:
+            if forbid_sampling_params:
+                warn_once(logger, self._sampling_param_warning("top_k"))
+            elif self.is_nova():
+                fields["inferenceConfig"] = {"topK": config.top_k}
+            else:
+                fields["top_k"] = config.top_k
+
+        return fields
+
+    def reasoning_config(self, config: GenerateConfig) -> dict[str, Any]:
+        if self.is_gpt_oss():
+            if config.reasoning_effort is not None:
+                return {"reasoning_effort": config.reasoning_effort}
+        elif self.is_claude():
+            if config.reasoning_tokens is not None:
+                return {
+                    "reasoning_config": {
+                        "type": "enabled",
+                        "budget_tokens": config.reasoning_tokens,
+                    }
+                }
+        elif self.is_nova():
+            if config.reasoning_effort is not None:
+                return {
+                    "reasoningConfig": {
+                        "type": "enabled",
+                        "maxReasoningEffort": config.reasoning_effort,
+                    }
+                }
+
+        return {}
+
+
+async def converse_messages(
+    messages: list[ChatMessage], emulate_reasoning: bool = False
+) -> Tuple[list[ConverseSystemContent] | None, list[ConverseMessage]]:
+    # Split up system messages and input messages
+    system_messages: list[ChatMessage] = []
+    non_system_messages: list[ChatMessage] = []
+    for message in messages:
+        if message.role == "system":
+            system_messages.append(message)
+        else:
+            non_system_messages.append(message)
+
+    # input messages
+    non_system: list[ConverseMessage] = await as_converse_chat_messages(
+        non_system_messages, emulate_reasoning
+    )
+
+    # system messages
+    system: list[ConverseSystemContent] = as_converse_system_messages(system_messages)
+
+    return system if len(system) > 0 else None, non_system
+
+
+def model_output_from_response(
+    model: str, response: ConverseResponse, tools: list[ToolInfo]
+) -> ModelOutput:
+    # extract content and tool calls
+    content: list[Content] = []
+    tool_calls: list[ToolCall] = []
+
+    # process the content in the response message
+    for c in response.output.message.content:
+        if c.text is not None:
+            content.append(ContentText(type="text", text=c.text))
+        elif c.image is not None:
+            base64_image = base64.b64encode(c.image.source.bytes).decode("utf-8")
+            content.append(
+                ContentImage(image=f"data:image/{c.image.format};base64,{base64_image}")
+            )
+        elif c.toolUse is not None:
+            tool_calls.append(
+                ToolCall(
+                    id=c.toolUse.toolUseId,
+                    function=c.toolUse.name,
+                    arguments=cast(dict[str, Any], c.toolUse.input or {}),
+                )
+            )
+        elif c.reasoningContent is not None:
+            # Handle reasoning content
+            reasoning_text = c.reasoningContent.reasoningText.text
+            content.append(ContentReasoning(reasoning=reasoning_text))
+        else:
+            raise ValueError("Unexpected message response in Bedrock provider")
+
+    # resolve choice
+    choice = ChatCompletionChoice(
+        message=ChatMessageAssistant(
+            content=content, tool_calls=tool_calls, model=model, source="generate"
+        ),
+        stop_reason=message_stop_reason(response.stopReason),
+    )
+
+    # Compute usage
+    input_tokens = response.usage.inputTokens
+    output_tokens = response.usage.outputTokens
+    total_tokens = input_tokens + output_tokens
+
+    # return ModelOutput
+    return ModelOutput(
+        model=model,
+        choices=[choice],
+        usage=ModelUsage(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
+        ),
+    )
+
+
+def message_stop_reason(
+    reason: ConverseStopReason,
+) -> Literal[
+    "stop", "max_tokens", "model_length", "tool_calls", "content_filter", "unknown"
+]:
+    match reason:
+        case "end_turn" | "stop_sequence":
+            return "stop"
+        case "tool_use":
+            return "tool_calls"
+        case "max_tokens":
+            return reason
+        case "content_filtered":
+            return "content_filter"
+        case "guardrail_intervened":
+            return "content_filter"
+        case "model_context_window_exceeded":
+            return "model_length"
+        # these are basically server errors which we don't have a way to encode right now
+        case (
+            "malformed_model_output"
+            | "malformed_tool_use"
+            | "invalid_query"
+            | "max_tool_invocations"
+        ):
+            return "unknown"
+        case _:
+            return "unknown"
+
+
+def as_converse_system_messages(
+    messages: list[ChatMessage],
+) -> list[ConverseSystemContent]:
+    return [
+        ConverseSystemContent(text=message.text) for message in messages if message.text
+    ]
+
+
+async def as_converse_chat_messages(
+    messages: list[ChatMessage], emulate_reasoning: bool = False
+) -> list[ConverseMessage]:
+    result: list[ConverseMessage] = []
+    for message in messages:
+        converse_message = await converse_chat_message(message, emulate_reasoning)
+        if converse_message is not None:
+            result.extend(converse_message)
+    return collapse_consecutive_messages(result)
+
+
+async def converse_chat_message(
+    message: ChatMessage, emulate_reasoning: bool = False
+) -> list[ConverseMessage] | None:
+    if isinstance(message, ChatMessageSystem):
+        raise ValueError("System messages should be processed separately for Converse")
+    if isinstance(message, ChatMessageUser):
+        # Simple user message
+        return [
+            ConverseMessage(
+                role="user", content=await converse_contents(message.content)
+            )
+        ]
+    elif isinstance(message, ChatMessageAssistant):
+        if message.tool_calls:
+            # The assistant is calling tools, process those
+            results: list[ConverseMessage] = []
+            for tool_call in message.tool_calls:
+                tool_use = ConverseToolUse(
+                    toolUseId=tool_call.id,
+                    name=tool_call.function,
+                    input=tool_call.arguments,
+                )
+                m = ConverseMessage(
+                    role="assistant", content=[ConverseMessageContent(toolUse=tool_use)]
+                )
+                results.append(m)
+            return results
+        else:
+            # Simple assistant message
+            return [
+                ConverseMessage(
+                    role="assistant",
+                    content=await converse_contents(message.content, emulate_reasoning),
+                )
+            ]
+    elif isinstance(message, ChatMessageTool):
+        # Process tool message
+        if message.tool_call_id is None:
+            raise ValueError(
+                "Tool call is missing a tool call id, which is required for Converse API"
+            )
+        if message.function is None:
+            print(message)
+            raise ValueError(
+                "Tool call is missing a function, which is required for Converse API"
+            )
+
+        status: Literal["success", "error"] = (
+            "success" if message.error is None else "error"
+        )
+
+        # process the tool response content
+        tool_result_content: list[ConverseToolResultContent] = []
+        if isinstance(message.content, str):
+            tool_result_content.append(ConverseToolResultContent(text=message.content))
+        else:
+            for c in message.content:
+                if c.type == "text":
+                    tool_result_content.append(ConverseToolResultContent(text=c.text))
+                elif c.type == "image":
+                    image_data, image_type = await file_as_data(c.image)
+                    tool_result_content.append(
+                        ConverseToolResultContent(
+                            image=ConverseImage(
+                                format=converse_image_type(image_type),
+                                source=ConverseImageSource(bytes=image_data),
+                            )
+                        )
+                    )
+                else:
+                    raise ValueError(
+                        "Unsupported tool content type in Bedrock provider."
+                    )
+
+        # return the tool result
+        tool_result = ConverseToolResult(
+            toolUseId=message.tool_call_id,
+            status=status,
+            content=tool_result_content,
+        )
+        return [
+            ConverseMessage(
+                role="user",
+                content=[ConverseMessageContent(toolResult=tool_result)],
+            )
+        ]
+    else:
+        raise ValueError(f"Unexpected message role {message.role}")
+
+
+async def converse_contents(
+    content: list[Content] | str, emulate_reasoning: bool = False
+) -> list[ConverseMessageContent]:
+    if isinstance(content, str):
+        return [ConverseMessageContent(text=content)]
+    else:
+        result: list[ConverseMessageContent] = []
+        for c in content:
+            if c.type == "image":
+                image_data, image_type = await file_as_data(c.image)
+                result.append(
+                    ConverseMessageContent(
+                        image=ConverseImage(
+                            format=converse_image_type(image_type),
+                            source=ConverseImageSource(bytes=image_data),
+                        )
+                    )
+                )
+            elif c.type == "text":
+                result.append(ConverseMessageContent(text=c.text))
+            elif c.type == "reasoning":
+                # claude needs emulation because signatures aren't propagated
+                if emulate_reasoning:
+                    result.append(
+                        ConverseMessageContent(text=reasoning_to_think_tag(c))
+                    )
+                else:
+                    result.append(
+                        ConverseMessageContent(
+                            reasoningContent=ConverseReasoningContent(
+                                reasoningText=ConverseReasoningText(text=c.reasoning)
+                            )
+                        )
+                    )
+            else:
+                raise RuntimeError(f"Unsupported content type {c.type}")
+
+        # if result is empty converse will reject the api call so insert
+        # a dummy 'no content' as required
+        if len(result) == 0:
+            result = [ConverseMessageContent(text=NO_CONTENT)]
+
+        return result
+
+
+def collapse_consecutive_messages(
+    messages: list[ConverseMessage],
+) -> list[ConverseMessage]:
+    if not messages:
+        return []
+
+    collapsed_messages = [messages[0]]
+
+    for message in messages[1:]:
+        last_message = collapsed_messages[-1]
+        if message.role == last_message.role:
+            last_content = last_message.content[-1]
+            if last_content.toolResult is not None:
+                # Special case tool results since conversation blocks and tool result
+                # blocks cannot be provided in the same turn. If the last block was a
+                # tool result, we'll need to merge the subsequent blocks into the content
+                # itself
+                for c in message.content:
+                    if (
+                        c.text is not None
+                        or c.image is not None
+                        or c.document is not None
+                    ):
+                        last_content.toolResult.content.append(
+                            ConverseToolResultContent(
+                                text=c.text, image=c.image, document=c.document
+                            )
+                        )
+                    else:
+                        last_message.content.extend(message.content)
+            else:
+                last_message.content.extend(message.content)
+        else:
+            collapsed_messages.append(message)
+
+    return collapsed_messages
+
+
+def converse_image_type(type: str) -> ConverseImageFormat:
+    match type:
+        case "image/png":
+            return "png"
+        case "image/gif":
+            return "gif"
+        case "image/png":
+            return "png"
+        case "image/webp":
+            return "webp"
+        case "image/jpeg":
+            return "jpeg"
+        case _:
+            raise ValueError(
+                f"Image mime type {type} is not supported for Bedrock Converse models."
+            )
+
+
+def converse_tools(tools: list[ToolInfo]) -> list[ConverseTool] | None:
+    if len(tools) == 0:
+        return None
+
+    result = []
+    for tool in tools:
+        tool_spec = ConverseToolSpec(
+            name=tool.name,
+            description=tool.description,
+            inputSchema={
+                "json": json_schema_dump(
+                    tool.parameters,
+                    exclude={"additionalProperties"},
+                )
+            },
+        )
+        result.append(ConverseTool(toolSpec=tool_spec))
+    return result
+
+
+def converse_tool_choice(
+    tool_choice: ToolChoice,
+) -> ConverseToolChoice | None:
+    match tool_choice:
+        case "auto":
+            return ConverseToolChoice(auto={})
+        case "any":
+            return ConverseToolChoice(any={})
+        case "none":
+            return ConverseToolChoice(auto={})
+        case ToolFunction(name=name):
+            return ConverseToolChoice(tool={"name": name})
+        case _:
+            raise ValueError(
+                f"Tool choice {tool_choice} is not supported for Bedrock Converse models."
+            )
+
+
+def replace_bytes_with_placeholder(data: Any, placeholder: Any = "<bytes>") -> Any:
+    if isinstance(data, bytes):
+        return placeholder
+    elif isinstance(data, dict):
+        return {
+            k: replace_bytes_with_placeholder(v, placeholder) for k, v in data.items()
+        }
+    elif isinstance(data, list):
+        return [replace_bytes_with_placeholder(item, placeholder) for item in data]
+    elif isinstance(data, tuple):
+        return tuple(replace_bytes_with_placeholder(item, placeholder) for item in data)
+    return data
