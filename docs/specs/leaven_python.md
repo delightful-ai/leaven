@@ -189,8 +189,8 @@ The user does not write the optimizer loop. They configure existing
 optimizers from a registry — `lv.optimizers.gepa(...)`,
 `lv.optimizers.mipro(...)`, future entries — by passing typed configs to
 `lv.optimize(...)`. The optimizer loop runs in Rust. New optimizers
-require a new Rust crate (`leaven-textgrad`, `leaven-trace`, future
-entries), not Python authoring.
+require behavior-bearing Rust crates with local tests and topology rows,
+not Python authoring.
 
 This is not a temporary limitation. Optimizer strategy state binds
 tightly to engine state — parent selectors mutate frontiers, samplers

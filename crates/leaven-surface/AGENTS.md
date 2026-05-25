@@ -30,11 +30,11 @@ identity.
 - Artifact traits, change application, content/cache identity, proposals, and
   evaluation vocabulary belong in `leaven-core`.
 - Concrete artifact family parsing or semantic views belong in
-  `leaven-artifact-*` or `leaven-artifacts`; this crate supplies the surface
+  behavior-bearing `leaven-artifact-*` crates; this crate supplies the surface
   trait and generic path surface, not every domain surface.
 - Rendering an artifact into a workspace, materializing files, truncation
-  policy, and renderer/materializer traits belong in `leaven-engine` or
-  `leaven-render`.
+  policy, and materializer traits belong in `leaven-engine` or a future
+  behavior-bearing renderer crate.
 - Optimizer surface-choice policy, reflection gates, and GEPA-specific lowering
   belong in optimizer crates such as `leaven-gepa`.
 

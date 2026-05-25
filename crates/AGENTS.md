@@ -10,7 +10,10 @@ Root `AGENTS.md` owns the full routing map. This file adds local crate-family ru
 - Execution: `leaven-engine` owns `RunGraph`, graph views, `RunContext`, budget ledger, trust/read scopes, stage traits, events, cache, persistence, reports, and engine loop.
 - Product surface: `leaven-run` and `leaven` own builder ergonomics and re-exports. They compose lower crates; they are not implementation buckets.
 - Evaluation adapters: `leaven-eval-parquet` may depend on format libraries to lower physical files into `leaven-eval` source-row contracts. It stays out of engine execution, product defaults, split policy, and paper-specific semantics.
-- Standard vocabulary: `leaven-artifacts`, `leaven-artifact-*`, `leaven-evidence`, `leaven-preference`, `leaven-population`, `leaven-render`, and `leaven-std` own reusable vocabulary, implementations, and reserved public names at their boundaries. Leaf files own current maturity status.
+- Standard vocabulary: `leaven-artifact-*`, `leaven-evidence`,
+  `leaven-preference`, `leaven-population`, and `leaven-std` own reusable
+  vocabulary and implementations at their boundaries. Placeholder catch-all
+  artifact/render crates were removed instead of kept as public reservations.
 - Runtime adapters: `leaven-lm*`, `leaven-agent*`, `leaven-agentic*`, and `leaven-workspace-*` keep provider/backend details out of cold and engine crates. Provider crates lower to neutral traits; they do not own optimizer rhythm.
 - Public seam: `leaven-public-seam` owns the locked V1 external-language worker
   wire contract, active contract package loading, schema/profile inventory,
@@ -22,8 +25,12 @@ Root `AGENTS.md` owns the full routing map. This file adds local crate-family ru
   stdin/stdout, while delegating Leaven method/result truth back to
   `leaven-public-seam`. It must not become an MCP bridge, provider runtime, or
   graph mutation layer.
-- Optimizers: `leaven-gepa`, `leaven-mipro`, `leaven-textgrad`, and `leaven-trace` own strategy state and search rhythm when behavior is real. Several are scaffold/reserved today; read leaf maturity warnings before using public names as proof. Do not move optimizer-specific policy into `leaven-engine`.
-- Edge/domain adapters: current workspace adapters are `leaven-cuda` and `leaven-python`; they bridge domains without changing the core topology.
+- Optimizers: `leaven-gepa` owns strategy state and search rhythm today. Future
+  MIPRO, TextGrad, and trace optimizers should return as behavior-bearing crates
+  with local tests, not public reservation crates.
+- Edge/domain adapters should return as behavior-bearing crates with local
+  tests. Placeholder CUDA/Python adapter crates were removed instead of kept as
+  public reservations.
 - `leaven-dsrs` is a quarantined orphan directory, not a workspace crate. Do not treat it as an edge-adapter precedent until it has a manifest, `src/lib.rs`, topology coverage, and a local boundary file that says what it owns.
 - `leaven-derive` is derive macros only. Do not add runtime or adapter dependencies without an explicit derive contract.
 
@@ -56,10 +63,9 @@ cross-family rules that apply before you know a leaf's details.
   and process/session mechanics after external dependency approval, but Leaven
   method/result authority stays in `leaven-public-seam`, graph mutation stays
   in `leaven-engine` through `RunContext`, and MCP-over-ACP remains out of V1.
-- Placeholder artifact/optimizer/render/domain leaves may keep public
-  reservation names only when the crate-local file says they are scaffolding.
-  Before exposing one through defaults, replace the placeholder with
-  behavior-bearing tests or mark the facade as scaffold/experimental.
+- Do not add placeholder artifact/optimizer/render/domain leaves as workspace
+  members. Add the crate only when its first public names have behavior-bearing
+  tests and local ownership guidance.
 
 ## Local Rules
 - `src/lib.rs` and `src/prelude.rs` are maps only: module declarations, curated re-exports, and optional crate docs. Put behavior in a named owning module.

@@ -112,9 +112,10 @@ surfaces.
 Git identity law and already exposes Git paths, refs, object IDs, lineage,
 changes, and diffs.
 
-Do not put the Git program artifact in `leaven-artifacts`. That crate currently
-exposes broad standard placeholder names such as `DirArtifact`, `TextArtifact`,
-and `PartMapArtifact`; it does not own Git repository identity law.
+Do not put the Git program artifact in a catch-all artifact crate. The old
+`leaven-artifacts` placeholder was removed because broad names such as
+`DirArtifact`, `TextArtifact`, and `PartMapArtifact` did not own Git repository
+identity law.
 
 Target public surface:
 
@@ -564,8 +565,9 @@ leaven_workspace_firkin
 leaven::workspace_firkin
   optional crate alias behind a workspace-firkin feature
 
-leaven::stdlib::artifacts
-  may re-export GitProgramArtifact behind the git feature once behavior is real
+leaven::stdlib::prelude
+  may re-export GitProgramArtifact behind the git feature once behavior is real;
+  the placeholder stdlib::artifacts module was removed
 
 leaven::prelude
   should not export GitProgramArtifact, GitOps, FirkinWorkspaceFactory, or

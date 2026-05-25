@@ -178,7 +178,6 @@ fn workspace_renderer_names_are_not_public_source_exports() {
     let root = workspace_root();
     for path in [
         root.join("crates/leaven-engine/src"),
-        root.join("crates/leaven-render/src"),
         root.join("crates/leaven/src"),
     ] {
         assert_no_old_workspace_renderer_names(&path);
