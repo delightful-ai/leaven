@@ -1,0 +1,5 @@
+---
+reference: inspect eval
+description: Evaluate one or more tasks.
+---
+

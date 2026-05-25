@@ -1,0 +1,19 @@
+---
+reference: inspect_ai.dataset
+description: Reading samples from datasets.
+---
+
+## Readers
+
+### csv_dataset
+### json_dataset
+### hf_dataset
+
+## Types
+
+### Sample
+### FieldSpec
+### RecordToSample
+### Dataset
+### MemoryDataset
+

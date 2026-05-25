@@ -1,0 +1,35 @@
+---
+reference: inspect_ai.solver
+description: Prompting and elicitation.
+---
+
+## Generation
+
+### generate
+### use_tools
+
+## Prompting
+
+### prompt_template
+### system_message
+### user_message
+### assistant_message
+### chain_of_thought
+### self_critique
+### multiple_choice
+
+## Composition
+
+### chain
+### fork
+
+## Types
+
+### Solver
+### SolverSpec
+### TaskState
+### Generate
+
+## Decorators
+
+### solver

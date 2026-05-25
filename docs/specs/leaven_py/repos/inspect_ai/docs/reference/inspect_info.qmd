@@ -1,0 +1,13 @@
+---
+reference: inspect info
+description: Read version and configuration.
+---
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,87 @@
+---
+reference: inspect_ai.log
+description: List, read, write, and analyse logs.
+---
+
+## Eval Logs
+
+### list_eval_logs
+### write_eval_log
+### write_eval_log_async
+### read_eval_log
+### read_eval_log_async
+### read_eval_log_sample
+### read_eval_log_samples
+### read_eval_log_sample_summaries
+### recompute_metrics
+### convert_eval_logs
+### bundle_log_dir
+### write_log_dir_manifest
+### retryable_eval_logs
+### EvalLogInfo
+
+## Log Editing
+
+### edit_eval_log
+### edit_score
+### invalidate_samples
+### uninvalidate_samples
+### LogUpdate
+### LogEdit
+### MetadataEdit
+### TagsEdit
+### ProvenanceData
+
+## Crash Recovery
+
+### recover_eval_log
+### recoverable_eval_logs
+### RecoverableEvalLog
+### RecoveryNotAvailable
+
+## Eval Log API
+
+### EvalStatus
+### EvalLog
+### EvalSpec
+### EvalDataset
+### EvalConfig
+### EvalRevision
+### EvalPlan
+### EvalPlanStep
+### EvalResults
+### EvalScore
+### EvalMetric
+### EvalSampleReductions
+### EvalStats
+### EvalError
+### EvalSample
+### EvalSampleSummary
+### EvalSampleLimit
+### EvalSampleReductions
+### EvalSampleScore
+### EvalRetryError
+### WriteConflictError
+
+## Condense API
+
+### condense_sample
+### condense_events
+### expand_events
+### EventsData
+
+## Transcript API
+
+### transcript
+### Transcript
+
+
+
+
+
+
+
+
+
+
+

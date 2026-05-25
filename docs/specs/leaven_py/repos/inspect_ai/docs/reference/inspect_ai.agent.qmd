@@ -1,0 +1,65 @@
+---
+reference: inspect_ai.agent
+description: Agent scaffolds and protocol.
+---
+
+## Agents
+
+### react
+### human_cli
+
+## Deep Agent
+
+### deepagent
+### subagent
+### Subagent
+### research
+### plan
+### general
+
+## Execution
+
+### handoff
+### run
+### as_tool
+### as_solver
+
+## Bridging
+
+### agent_bridge
+### AgentBridge
+### sandbox_agent_bridge
+### SandboxAgentBridge
+### BridgedToolsSpec
+
+## Filters
+
+### content_only
+### last_message
+### remove_tools
+### MessageFilter
+
+## Channel
+
+### agent_channel
+### AgentChannel
+### AgentInterrupted
+
+## Protocol
+
+### Agent
+### AgentState
+### agent
+### agent_with
+### is_agent
+
+## Types
+
+### AgentPrompt
+### AgentAttempts
+### AgentContinue
+### AgentSubmit
+
+## Deprecated
+
+### bridge

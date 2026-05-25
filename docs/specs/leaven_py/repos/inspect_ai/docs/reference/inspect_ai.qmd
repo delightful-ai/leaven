@@ -1,0 +1,32 @@
+---
+reference: inspect_ai
+description: Tasks, evaluation, and scoring.
+---
+
+## Evaluation
+
+### eval
+### eval_retry
+### eval_set
+### score
+
+## Tasks
+
+### Task
+### task_with
+### Epochs
+### TaskInfo
+### Tasks
+
+## Scanning
+
+### Scanners
+### ScannerConfig
+
+## View
+
+### view
+
+## Decorators
+
+### task

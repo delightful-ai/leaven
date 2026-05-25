@@ -1,0 +1,596 @@
+import datetime
+import io
+import logging
+import os
+import re
+import string
+import unicodedata
+from contextlib import contextmanager
+from copy import deepcopy
+from pathlib import Path
+from typing import Any, BinaryIO, Iterator, Literal, cast, overload
+from urllib.parse import quote_from_bytes, urlparse
+
+import fsspec  # type: ignore  # type: ignore
+from fsspec.core import split_protocol  # type: ignore  # type: ignore
+from fsspec.implementations.local import make_path_posix  # type: ignore
+from pydantic import BaseModel, Field
+from shortuuid import uuid
+
+from inspect_ai._util._async import configured_async_backend, current_async_backend
+from inspect_ai._util.azure import (
+    AZURE_SCHEMES,
+    apply_azure_fs_options,
+    is_azure_delete_permission_error,
+    is_azure_path,
+)
+from inspect_ai._util.error import PrerequisiteError
+from inspect_ai._util.trace import trace_message
+
+# https://filesystem-spec.readthedocs.io/en/latest/_modules/fsspec/spec.html#AbstractFileSystem
+# https://filesystem-spec.readthedocs.io/en/latest/api.html#fsspec.generic.GenericFileSystem
+
+
+OpenTextMode = Literal["r", "a", "w"]
+OpenBinaryMode = Literal["rb", "ab", "wb"]
+
+
+@overload
+@contextmanager
+def file(
+    file: str,
+    mode: OpenTextMode,
+    encoding: str = "utf-8",
+    fs_options: dict[str, Any] = {},
+) -> Iterator[io.TextIOWrapper]: ...
+
+
+@overload
+@contextmanager
+def file(
+    file: str,
+    mode: OpenBinaryMode,
+    encoding: str = "utf-8",
+    fs_options: dict[str, Any] = {},
+) -> Iterator[BinaryIO]: ...
+
+
+@contextmanager
+def file(
+    file: str,
+    mode: OpenTextMode | OpenBinaryMode,
+    encoding: str = "utf-8",
+    fs_options: dict[str, Any] = {},
+) -> Iterator[io.TextIOWrapper] | Iterator[BinaryIO]:
+    """Open local or remote file stream.
+
+    Open a file stream for reading or writing. Refer to a local file or
+    use a URI with a remove filesystem prefix (e.g. 's3://'). The
+    `fsspec` package is used to resolve filesystem URLs.
+
+    Args:
+        file (str):
+          Local file path or remove filesystem URL (e.g. 's3://')
+        mode (str): Mode for accessing file ("r", "rb", "w", "wb", etc.).
+        encoding: (str): Encoding for text files (defaults to "utf-8")
+        fs_options (dict[str, Any]): Optional. Addional arguments to pass through
+          to the filesystem provider (e.g. `S3FileSystem`). Use `{"anon": True }`
+          if you are accessing a public S3 bucket with no credentials.
+
+    """
+    # get the default storage options for the scheme then apply passed options
+    options = default_fs_options(file)
+    options.update(fs_options)
+
+    # open the file
+    open_file = fsspec.open(file, mode=mode, encoding=encoding, **options)
+
+    # yield the file and ensure it is closed when we exit the context
+    with open_file as f:
+        try:
+            yield f
+        finally:
+            f.close()
+
+
+def open_file(
+    file: str,
+    mode: OpenTextMode | OpenBinaryMode,
+    encoding: str = "utf-8",
+    fs_options: dict[str, Any] = {},
+) -> fsspec.core.OpenFile:
+    # get the default storage options for the scheme then apply passed options
+    options = default_fs_options(file)
+    options.update(fs_options)
+
+    # open the file and return the stream
+    return fsspec.open(file, mode=mode, encoding=encoding, **options)
+
+
+# utility to copy a file
+def copy_file(
+    input_file: str,
+    output_file: str,
+    buffer_size: int = 1024 * 1024,
+) -> None:
+    """Copy a file across filesystems."""
+    with file(input_file, "rb") as fin, file(output_file, "wb") as fout:
+        while True:
+            chunk = fin.read(buffer_size)
+            if not chunk:
+                break
+            fout.write(chunk)
+
+
+def basename(file: str) -> str:
+    """Get the base name of the file.
+
+    Works for all variations of fsspec providers, posix/windows/etc.
+
+    Args:
+       file (str): File name
+
+    Returns:
+       Base name for file
+    """
+    # windows paths aren't natively handled on posix so flip backslashes
+    if os.sep == "/":
+        file = file.replace("\\", "/")
+    normalized_path = make_path_posix(file)
+    _, path_without_protocol = split_protocol(normalized_path)
+    name: str = path_without_protocol.rstrip("/").split("/")[-1]
+    return name
+
+
+def dirname(file: str) -> str:
+    base = basename(file)
+    return file[: -(len(base) + 1)]
+
+
+def exists(file: str) -> bool:
+    fs = filesystem(file)
+    return fs.exists(file)
+
+
+class FileInfo(BaseModel):
+    name: str
+    """Name of file."""
+
+    type: str
+    """Type of file (file or directory)"""
+
+    size: int
+    """File size in bytes."""
+
+    mtime: float | None
+    """File modification time (None if the file is a directory on S3)."""
+
+    etag: str | None = Field(default=None)
+    """Etag (provided by some remote filesystems)"""
+
+
+class FileSystem:
+    def __init__(self, fs: Any) -> None:
+        self.fs = fs
+
+    @property
+    def sep(self) -> str:
+        return cast(str, self.fs.sep)
+
+    def exists(self, path: str) -> bool:
+        return self.fs.exists(path) is True
+
+    def touch(self, path: str) -> None:
+        self.fs.touch(path)
+
+    def rm(
+        self, path: str, recursive: bool = False, maxdepth: int | None = None
+    ) -> None:
+        self.fs.rm(path, recursive=recursive, maxdepth=maxdepth)
+
+    def mv(self, lpath: str, rpath: str) -> None:
+        self.fs.mv(lpath, rpath)
+
+    def mkdir(self, path: str, exist_ok: bool = False) -> None:
+        if self.is_s3():
+            # try to avoid calling create_bucket on s3 filesystems (as that requires distinct
+            # privileges from being able to write to an existing bucket). we do this by
+            # first calling mkdir w/ create_parents=False and then only if that fails
+            # with FileNotFound do we attempt to create the bucket by calling mkdirs
+            try:
+                self.fs.makedir(path, create_parents=False)
+            except FileExistsError:
+                if exist_ok:
+                    pass
+                else:
+                    raise
+            except FileNotFoundError:
+                self.fs.makedirs(path, exist_ok=exist_ok)
+        else:
+            self.fs.makedirs(path, exist_ok=exist_ok)
+
+    def info(self, path: str, **kwargs: dict[str, Any]) -> FileInfo:
+        return self._file_info(self.fs.info(path, **kwargs))
+
+    def path_as_uri(self, path: str) -> str:
+        return str(self.fs.unstrip_protocol(path))
+
+    def ls(
+        self, path: str, recursive: bool = False, **kwargs: dict[str, Any]
+    ) -> list[FileInfo]:
+        # prevent caching of listings
+        self.fs.invalidate_cache(path)
+
+        # enumerate the files
+        if recursive:
+            files: list[dict[str, Any]] = []
+            for _, _, filenames in self.fs.walk(path=path, detail=True, **kwargs):
+                files.extend(filenames.values())
+        else:
+            files = cast(
+                list[dict[str, Any]],
+                self.fs.ls(path, detail=True, **kwargs),
+            )
+
+        # return FileInfo
+        return [self._file_info(file) for file in files]
+
+    def is_local(self) -> bool:
+        return isinstance(self.fs, fsspec.implementations.local.LocalFileSystem)
+
+    def is_writeable(self, path: str) -> bool:
+        # first, attempt to create a zero-byte blob/file. If this fails outright we are not
+        # writeable. Azure gets a constant touch file name b/c some azure credentials can create
+        # but not delete (e.g. SAS without 'd' delete permission or managed identity with only
+        # Data Writer). The marker file can just be gc'd later.
+        _WRITE_TEST_FILENAME = ".inspect_write_test"
+        touch_filename = _WRITE_TEST_FILENAME if is_azure_path(path) else uuid()
+        path.rstrip("/\\")
+        touch_file = f"{path}{self.fs.sep}{touch_filename}"
+        try:
+            self.touch(touch_file)
+        except PermissionError:
+            return False
+        except Exception:
+            # azure may throw other error types, treat those as non-writeable
+            return False
+
+        # attempt to remove the test file.
+        try:
+            self.rm(touch_file)
+        except Exception as ex:
+            # tolerate azure write permission w/o delete permission
+            if is_azure_delete_permission_error(ex):
+                return True
+
+            # if delete failed for some other reason, report non-writeable
+            return False
+
+        # writeable!
+        return True
+
+    def is_async(self) -> bool:
+        return isinstance(self.fs, fsspec.asyn.AsyncFileSystem)
+
+    def is_s3(self) -> bool:
+        # match on the fsspec protocol instead of isinstance(S3FileSystem)
+        # so we don't pull in s3fs/aiobotocore at import time
+        protocol = self.fs.protocol
+        protocols = protocol if isinstance(protocol, tuple) else (protocol,)
+        return "s3" in protocols
+
+    def put_file(self, lpath: str, rpath: str) -> None:
+        self.fs.put_file(lpath, rpath)
+
+    def get_file(self, rpath: str, lpath: str) -> None:
+        self.fs.get_file(rpath, lpath)
+
+    def read_bytes(
+        self, path: str, start: int | None = None, end: int | None = None
+    ) -> bytes:
+        return cast(bytes, self.fs.read_bytes(path, start, end))
+
+    def _file_info(self, info: dict[str, Any]) -> FileInfo:
+        # name needs the protocol prepended
+        file = info.copy()
+        file["name"] = self.fs.unstrip_protocol(file["name"])
+
+        file["mtime"] = self._determine_mtime(file)
+
+        # S3 filesystems provided an ETag
+        if "ETag" in file.keys():
+            etag: str | None = file["ETag"].strip('"')
+        else:
+            etag = None
+
+        return FileInfo(
+            name=file["name"],
+            type=file["type"],
+            size=file.get("size") or 0,
+            mtime=file["mtime"],
+            etag=etag,
+        )
+
+    def _determine_mtime(self, file: dict[str, Any]) -> float | None:
+        # Prefer provider supplied mtime if present.
+        if "mtime" in file:
+            normalized = self._normalize_timestamp(file["mtime"])
+            if normalized is not None:
+                return normalized
+
+        # S3 style dictionaries expose LastModified.
+        if "LastModified" in file:
+            normalized = self._normalize_timestamp(file["LastModified"])
+            if normalized is not None:
+                return normalized
+
+        if file.get("type") != "file":
+            return None
+
+        # When listings omit an mtime, fall back to filesystem APIs.
+        if hasattr(self.fs, "created"):
+            try:
+                created = self.fs.created(file["name"])
+                normalized = self._normalize_timestamp(created)
+                if normalized is not None:
+                    return normalized
+            except Exception:
+                pass
+
+        if hasattr(self.fs, "modified"):
+            try:
+                modified = self.fs.modified(file["name"])
+                normalized = self._normalize_timestamp(modified)
+                if normalized is not None:
+                    return normalized
+            except Exception:
+                pass
+
+        return None
+
+    def _normalize_timestamp(self, mtime: Any) -> float | None:
+        if isinstance(mtime, datetime.datetime):
+            return mtime.timestamp() * 1000
+        if isinstance(mtime, (int, float)):
+            return float(mtime) * 1000
+        return None
+
+
+def filesystem(path: str, fs_options: dict[str, Any] = {}) -> FileSystem:
+    """Return the filesystem used to host the specified path.
+
+    Args:
+      path (str): Local path or remote URL e.g. s3://).  The
+        `fsspec` package is used to resolve filesystem URLs.
+      fs_options (dict[str, Any]): Optional. Additional arguments to pass through
+        to the filesystem provider (e.g. `S3FileSystem`). Use `{"anon": True }`
+        if you are accessing a public S3 bucket with no credentials.
+
+    Returns:
+       An tuple with an `fsspec` compatible filesystem and the
+       file-systems-specific URL for file.
+    """
+    # determine options
+    options = default_fs_options(path)
+    options.update(fs_options)
+
+    # create filesystem
+    fs, path = fsspec.core.url_to_fs(path, **options)
+    return FileSystem(fs)
+
+
+def absolute_file_path(file: str) -> str:
+    # check for a relative dir, if we find one then resolve to absolute
+    fs_scheme = urlparse(file).scheme
+    if not fs_scheme and not os.path.isabs(file):
+        file = Path(file).resolve().as_posix()
+    return strip_trailing_sep(file)
+
+
+def to_uri(path_or_uri: str) -> str:
+    # Check if it's already a URI
+    parsed = urlparse(path_or_uri)
+
+    if parsed.scheme:
+        # Already has a scheme, return as is
+        return path_or_uri
+
+    # It's a file path, convert to URI.
+    # Note: Path.as_uri() encodes @ as %40, but @ is valid in URI path
+    # components (RFC 3986) and the encoded form breaks round-tripping
+    # through filesystem()/local_path().
+    path_obj = Path(path_or_uri).absolute()
+    return "file://" + quote_from_bytes(bytes(path_obj), safe="/:@")
+
+
+def local_path(filename: str) -> str:
+    """Convert a file:// URL to a local path, or return as-is."""
+    if filename.startswith("file://"):
+        return urlparse(filename).path
+    return filename
+
+
+def default_fs_options(file: str) -> dict[str, Any]:
+    scheme = urlparse(file).scheme
+    if (
+        scheme == "s3"
+        and configured_async_backend() == "trio"
+        and current_async_backend() == "trio"
+    ):
+        raise PrerequisiteError(
+            "ERROR: The s3 interface is not supported when running under the trio async backend."
+        )
+
+    options = deepcopy(DEFAULT_FS_OPTIONS.get(scheme, {}))
+    # Inject Azure Blob/DataLake credentials only when the path actually uses an
+    # Azure scheme—this lets the optional `adlfs` dependency be imported/configured
+    # on demand rather than for every filesystem.
+    if scheme in AZURE_SCHEMES:
+        apply_azure_fs_options(options)
+    # disable caching for all filesystems
+    options.update(
+        dict(
+            skip_instance_cache=False,
+            use_listings_cache=False,
+        )
+    )
+    return options
+
+
+def size_in_mb(file: str) -> float:
+    # Open the file using fsspec and retrieve the file's information
+    fs, path = fsspec.core.url_to_fs(file)
+
+    # Use the filesystem's info method to get the size
+    file_info = fs.info(path)
+
+    # Extract the size from the file information
+    file_size_in_bytes = cast(float, file_info["size"])
+
+    # Get the size in megabytes
+    file_size_in_mb = file_size_in_bytes / (1024 * 1024)
+    return file_size_in_mb
+
+
+def safe_filename(s: str, max_length: int = 255) -> str:
+    """
+    Convert a string into a safe filename by removing or replacing unsafe characters.
+
+    Args:
+        s (str): The input string to convert
+        max_length (int): Maximum length of the resulting filename (default 255)
+
+    Returns:
+        str: A safe filename string
+
+    Examples:
+        >>> safe_filename("Hello/World?.txt")
+        'Hello_World.txt'
+    """
+    # normalize unicode characters
+    s = unicodedata.normalize("NFKD", s)
+    s = s.encode("ASCII", "ignore").decode("ASCII")
+
+    # remove or replace unsafe characters
+    # Keep only alphanumeric characters, dots, dashes, and underscores
+    safe_chars = string.ascii_letters + string.digits + ".-_"
+    s = "".join(c if c in safe_chars else "_" for c in s)
+
+    # remove consecutive underscores
+    s = re.sub(r"_+", "_", s)
+
+    # remove leading/trailing periods and underscores
+    s = s.strip("._")
+
+    # handle empty string case
+    if not s:
+        s = "untitled"
+
+    # handle starting with a period (hidden files)
+    if s.startswith("."):
+        s = "_" + s
+
+    # enforce length limit
+    if len(s) > max_length:
+        # If we need to truncate, preserve the file extension if present
+        name, ext = os.path.splitext(s)
+        ext_len = len(ext)
+        if ext_len > 0:
+            max_name_length = max_length - ext_len
+            s = name[:max_name_length] + ext
+        else:
+            s = s[:max_length]
+
+    return s
+
+
+# clean underscores, slashes, colons, and + from the file name component so we can
+# reliably parse components out later without worrying about underscores
+def clean_filename_component(component: str) -> str:
+    return (
+        component.replace("_", "-")
+        .replace("/", "-")
+        .replace(":", "-")
+        .replace("+", "-")
+    )
+
+
+def strip_trailing_sep(path: str) -> str:
+    """Remove trailing separators from a path, preserving the root.
+
+    Matches pathlib behavior: exactly ``//`` is preserved per POSIX,
+    any other all-separator path collapses to a single separator.
+    """
+    fs = filesystem(path)
+    stripped = path.rstrip(fs.sep)
+    if stripped:
+        return stripped
+    # All separators — preserve exactly "//" per POSIX, otherwise collapse
+    if path == fs.sep * 2:
+        return path
+    return fs.sep
+
+
+logger = logging.getLogger(__name__)
+
+
+async def cleanup_s3_sessions() -> None:
+    """Close cached S3FileSystem sessions to prevent 'Unclosed connector' errors.
+
+    s3fs caches S3FileSystem instances via fsspec's instance cache. Each holds an
+    aiobotocore client with an open aiohttp.ClientSession. At process exit, s3fs's
+    weakref finalizer fails to close these properly due to a bug in its close_session
+    method (it accesses _connector instead of _sessions on AIOHTTPSession), causing
+    aiohttp.ClientSession.__del__ to emit 'Unclosed client session' / 'Unclosed
+    connector' warnings. See https://github.com/fsspec/s3fs/issues/943
+
+    This function explicitly closes the sessions via the proper async cleanup path
+    and clears the instance cache so the weakref finalizer has nothing to do.
+    """
+    import sys
+
+    if "s3fs" not in sys.modules:
+        # s3fs was never imported so there can be no cached instances
+        return
+
+    from s3fs import S3FileSystem  # type: ignore
+
+    instances = list(S3FileSystem._cache.values())
+    if not instances:
+        return
+
+    try:
+        for instance in instances:
+            s3creator = getattr(instance, "_s3creator", None)
+            if s3creator is not None:
+                try:
+                    await s3creator.__aexit__(None, None, None)
+                except Exception:
+                    pass
+    finally:
+        try:
+            S3FileSystem.clear_instance_cache()
+        except Exception:
+            logger.warning("Failed to clear S3FileSystem instance cache", exc_info=True)
+        else:
+            trace_message(
+                logger,
+                "s3",
+                "Cleaned up %d cached S3FileSystem instance(s)",
+                len(instances),
+            )
+
+
+DEFAULT_FS_OPTIONS: dict[str, dict[str, Any]] = dict(
+    # disable all S3 native caching
+    s3=dict(
+        default_fill_cache=False,
+        default_cache_type="none",
+        cache_regions=False,
+        config_kwargs={"signature_version": "s3v4"},
+    ),
+    # Azure schemes (credentials resolved dynamically in default_fs_options)
+    az=dict(),
+    abfs=dict(),
+    abfss=dict(),
+)
