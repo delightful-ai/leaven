@@ -323,10 +323,10 @@ per-workspace scratch cleanup
 run-pod lifecycle cleanup
 ```
 
-It must not export generic container abstractions unless a second backend
-requires the same law. `leaven-workspace-docker` and `leaven-workspace-k8s`
-already own their concrete backend names; a generic container layer would be a
-new public dependency decision, not a convenience helper.
+It must not export generic container abstractions unless a second
+behavior-bearing backend requires the same law. Docker and Kubernetes workspace
+crates were removed while they were placeholder-only; a generic container layer
+would be a new public dependency decision, not a convenience helper.
 
 ## 8. Git Ops API
 

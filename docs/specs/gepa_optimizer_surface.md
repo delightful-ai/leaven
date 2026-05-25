@@ -207,8 +207,6 @@ leaven-lm
 
 ```text
 leaven-lm-openai
-leaven-lm-anthropic
-leaven-lm-local
 leaven-lm-cache
 leaven-agent
 leaven-agentic
@@ -609,8 +607,7 @@ let reflector = LmBackedReflector::new(lm, "gpt-4.1-mini", renderer, parser);
 ```
 
 `leaven-gepa` still depends only on `leaven-lm`; it does not depend on
-`leaven-lm-openai`, `leaven-lm-anthropic`, `leaven-lm-local`, or
-`leaven-lm-cache`.
+`leaven-lm-openai` or `leaven-lm-cache`.
 
 The call is exactly:
 
