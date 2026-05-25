@@ -3160,8 +3160,6 @@ dependencies = [
  "leaven-agentic",
  "leaven-agentic-git",
  "leaven-agentic-skill",
- "leaven-artifact-git",
- "leaven-artifact-jj",
  "leaven-artifact-skill",
  "leaven-core",
  "leaven-engine",
@@ -3179,7 +3177,6 @@ dependencies = [
  "leaven-workspace",
  "leaven-workspace-firkin",
  "leaven-workspace-git",
- "leaven-workspace-local",
  "serde",
 ]
 

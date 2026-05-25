@@ -12,7 +12,7 @@ workspace = true
 
 [dependencies]
 futures = { workspace = true }
-leaven = { workspace = true, features = ["workspace-local"] }
+leaven = { workspace = true }
 leaven-core = { workspace = true }
 leaven-engine = { workspace = true }
 leaven-evidence = { workspace = true }

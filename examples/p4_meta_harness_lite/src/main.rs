@@ -6,16 +6,13 @@ use std::time::Duration;
 
 use futures::executor::block_on;
 use leaven::extend::{
-    Arity, CachePolicy, CausalInputs, EvaluationRequest, EvaluationSet, Evaluator, InfoRef,
-    MaterializationReport, MaterializeContext, MaterializeError, Materializer, Optimizer, Proposal,
-    ProposalBatch, ProposalBatchSemantics, ProposalContext, ProposalEffect, Proposer, RunEvent,
-    RunGraphView, StepStatus, TrustPolicy,
+    Arity, AssessmentGranularity, AssessmentTarget, CachePolicy, CausalInputs, EvaluationRequest,
+    EvaluationSet, Evaluator, InfoRef, MaterializationReport, MaterializeContext, MaterializeError,
+    Materializer, Optimizer, Proposal, ProposalBatch, ProposalBatchSemantics, ProposalContext,
+    ProposalEffect, Proposer, RunEvent, RunGraphView, StepStatus, TrustPolicy,
 };
 use leaven::plumbing::{ContentId, MetadataBag};
-use leaven::prelude::{
-    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget, Cost,
-    OptimizationProblem,
-};
+use leaven::prelude::{Artifact, ArtifactIdentity, Assessment, Budget, Cost, OptimizationProblem};
 use leaven_core::{
     EvaluationPurpose, ExternalRef, PartitionId, ResolvedEvaluationRequest, ResolvedRequestKind,
 };
