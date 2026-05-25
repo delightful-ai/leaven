@@ -208,21 +208,13 @@ where
     T: Clone + Send + Sync + 'static,
     Out: Clone + Send + Sync + 'static,
 {
-    let parallelism = parallelism.get().min(jobs.len().max(1));
     let runner = Arc::clone(runner);
     let scorer = Arc::clone(scorer);
-    async move {
-        stream::iter(jobs)
-            .map(move |job| {
-                let runner = Arc::clone(&runner);
-                let scorer = Arc::clone(&scorer);
-                async move { evaluate_job(job, &runner, &scorer).await }
-            })
-            .buffer_unordered(parallelism)
-            .try_collect::<Vec<_>>()
-            .await
-    }
-    .boxed()
+    evaluate_unordered_jobs(jobs, parallelism, move |job| {
+        let runner = Arc::clone(&runner);
+        let scorer = Arc::clone(&scorer);
+        async move { evaluate_job(job, &runner, &scorer).await }
+    })
 }
 
 async fn evaluate_job<A, I, T, Out>(
@@ -306,6 +298,28 @@ where
      GEPA reflection see a durable rendering of the runner's typed output"
 )]
 struct MissingReportableOutput;
+
+fn evaluate_unordered_jobs<Job, Outcome, Fut, Evaluate>(
+    jobs: Vec<Job>,
+    parallelism: NonZeroUsize,
+    evaluate: Evaluate,
+) -> impl Future<Output = Result<Vec<Outcome>, EvaluationError>> + Send + 'static
+where
+    Job: Send + 'static,
+    Outcome: Send + 'static,
+    Fut: Future<Output = Result<Outcome, EvaluationError>> + Send + 'static,
+    Evaluate: Fn(Job) -> Fut + Send + Sync + 'static,
+{
+    let parallelism = parallelism.get().min(jobs.len().max(1));
+    async move {
+        stream::iter(jobs)
+            .map(evaluate)
+            .buffer_unordered(parallelism)
+            .try_collect::<Vec<_>>()
+            .await
+    }
+    .boxed()
+}
 
 pub fn default_parallelism() -> NonZeroUsize {
     std::thread::available_parallelism()
