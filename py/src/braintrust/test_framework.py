@@ -1,0 +1,1063 @@
+import importlib.util
+import re
+import sys
+from unittest.mock import MagicMock
+
+import pytest
+from braintrust.logger import BraintrustState
+
+from .framework import (
+    Eval,
+    EvalCase,
+    EvalHooks,
+    EvalResultWithSummary,
+    Evaluator,
+    Filter,
+    _call_user_fn_args,
+    evaluate_filter,
+    parse_filters,
+    run_evaluator,
+)
+from .score import Classification, Score, Scorer
+from .test_helpers import init_test_exp, with_memory_logger, with_simulate_login  # noqa: F401
+
+
+HAS_PYDANTIC = importlib.util.find_spec("pydantic") is not None
+
+
+@pytest.mark.asyncio
+async def test_run_evaluator_basic():
+    """Test that run_evaluator correctly processes a simple evaluation."""
+    # Define test data
+    data = [
+        EvalCase(input=1, expected=2),
+        EvalCase(input=2, expected=4),
+        EvalCase(input=3, expected=6),
+    ]
+
+    # Define a simple task function
+    def multiply_by_two(input_value):
+        return input_value * 2
+
+    # Define a simple scoring function
+    def exact_match(input_value, output, expected):
+        return 1.0 if output == expected else 0.0
+
+    # Create evaluator
+    evaluator = Evaluator(
+        project_name="test-project",
+        eval_name="test-evaluator",
+        data=data,
+        task=multiply_by_two,
+        scores=[exact_match],
+        experiment_name=None,
+        metadata=None,
+    )
+
+    # Run evaluator
+    result = await run_evaluator(experiment=None, evaluator=evaluator, position=None, filters=[])
+
+    # Verify results
+    assert isinstance(result, EvalResultWithSummary)
+    assert len(result.results) == 3
+
+    # Check individual results
+    for i, eval_result in enumerate(result.results):
+        input_value = i + 1
+        expected_value = input_value * 2
+
+        assert eval_result.input == input_value
+        assert eval_result.expected == expected_value
+        assert eval_result.output == expected_value
+        assert eval_result.scores.get("exact_match") == 1.0
+        assert eval_result.error is None
+
+    # Verify summary
+    assert result.summary.project_name == "test-project"
+    assert "exact_match" in result.summary.scores
+    assert result.summary.scores["exact_match"].score == 1.0
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not HAS_PYDANTIC, reason="pydantic not installed")
+async def test_run_evaluator_exposes_validated_parameter_values_to_hooks():
+    from pydantic import BaseModel
+
+    class PrefixParam(BaseModel):
+        value: str = "hello"
+
+    data = [EvalCase(input="world", expected="hello world")]
+
+    def task(input_value, hooks):
+        return f"{hooks.parameters['prefix']} {input_value}"
+
+    def exact_match(input_value, output, expected):
+        return 1.0 if output == expected else 0.0
+
+    evaluator = Evaluator(
+        project_name="test-project",
+        eval_name="test-parameters",
+        data=data,
+        task=task,
+        scores=[exact_match],
+        experiment_name=None,
+        metadata=None,
+        parameters={
+            "prefix": PrefixParam,
+            "model": {
+                "type": "model",
+                "default": "gpt-5-mini",
+            },
+        },
+    )
+
+    result = await run_evaluator(experiment=None, evaluator=evaluator, position=None, filters=[])
+
+    assert result.results[0].output == "hello world"
+
+
+@pytest.mark.asyncio
+async def test_run_evaluator_with_many_scorers():
+    # This test validates that we can process scores from any sources. It is nox's job
+    # to ensure this test runs with and without autoevals and braintrust_core installed.
+    try:
+        from braintrust_core.score import Score as BraintrustCoreScore
+    except ImportError:
+        from .score import Score as BraintrustCoreScore
+
+    # Define test data
+    data = [
+        EvalCase(input="abc", expected="abc"),
+        EvalCase(input="def", expected="def"),
+    ]
+
+    def simple_task(input_value):
+        return input_value
+
+    def dict_scorer(input_value, output, expected):
+        return {"name": "dict_scorer", "score": 1.0}
+
+    def core_scorer(input_value, output, expected):
+        return BraintrustCoreScore(name="core_scorer", score=1.0)
+
+    def scorer(input_value, output, expected):
+        return Score(name="scorer", score=1.0)
+
+    class CustomScorer(Scorer):
+        def _run_eval_sync(self, *args, **kwargs):
+            return Score(name="custom_scorer", score=1.0)
+
+    class CustomScorerAsync(Scorer):
+        async def eval_async(self, *args, **kwargs):
+            return Score(name="custom_async_scorer", score=1.0)
+
+        def _run_eval_sync(self, *args, **kwargs):
+            return Score(name="custom_async_scorer", score=1.0)
+
+    scorers = [
+        dict_scorer,
+        core_scorer,
+        scorer,
+        CustomScorer(),
+        CustomScorerAsync(),
+    ]
+    scorer_names = [
+        "core_scorer",
+        "scorer",
+        "dict_scorer",
+        "custom_scorer",
+        "custom_async_scorer",
+    ]
+
+    # if autoevals is installed, use it. This verifies our scoring duck typing works
+    try:
+        from autoevals import Levenshtein
+
+        scorers.append(Levenshtein())
+        scorer_names.append("Levenshtein")
+        scorers.append(Levenshtein)
+        scorer_names.append("Levenshtein")
+    except ImportError:
+        pass
+
+    # Create evaluator with all scorers
+    evaluator = Evaluator(
+        project_name="test-project",
+        eval_name="test-multiple-score-classes",
+        data=data,
+        task=simple_task,
+        scores=scorers,
+        experiment_name=None,
+        metadata=None,
+    )
+
+    # Run evaluator
+    result = await run_evaluator(None, evaluator, None, [])
+
+    assert isinstance(result, EvalResultWithSummary)
+    assert len(result.results) == 2
+
+    # All scorers should produce the same scores
+    for eval_result in result.results:
+        for scorer_name in scorer_names:
+            print(eval_result.scores)
+            assert scorer_name in eval_result.scores
+            assert eval_result.scores[scorer_name] == 1.0
+
+    assert result.summary.project_name == "test-project"
+    for scorer_name in scorer_names:
+        assert scorer_name in result.summary.scores
+        assert result.summary.scores[scorer_name].score == 1.0
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    sys.version_info < (3, 14),
+    reason="PEP 649 lazy annotation evaluation is 3.14+",
+)
+async def test_hooks_with_type_checking_only_annotation():
+    """Regression test for #263.
+
+    On Python 3.14 (PEP 649), `inspect.signature(fn)` defaults to VALUE
+    format, which eagerly evaluates annotations and raises `NameError` for
+    TYPE_CHECKING-only imports. The bare except in `_call_user_fn_args`
+    used to fall back to passing every kwarg through, and the separate
+    signature call that decides whether to inject `hooks` would also raise,
+    leaving the task to crash on a missing `hooks` argument.
+    """
+    # The unresolved name in the annotation must be unquoted to trigger the
+    # PEP 649 lazy-eval path; defining this at module top-level would fail
+    # on Python <3.14, so build it via exec inside the 3.14-only branch.
+    saw_hooks: list[bool] = []
+    ns: dict = {"saw_hooks": saw_hooks, "EvalHooks": EvalHooks}
+    exec(
+        "def task_with_unresolvable_hooks_annotation(\n"
+        "    input_value: int,\n"
+        "    hooks: EvalHooks[frozenset[SomeType]],\n"
+        ") -> int:\n"
+        "    saw_hooks.append(hooks is not None)\n"
+        "    return input_value * 2\n",
+        ns,
+    )
+    task = ns["task_with_unresolvable_hooks_annotation"]
+
+    evaluator = Evaluator(
+        project_name="test-project",
+        eval_name="test-pep649-typecheck-only",
+        data=[EvalCase(input=1, expected=2)],
+        task=task,
+        scores=[],
+        experiment_name=None,
+        metadata=None,
+        trial_count=1,
+    )
+
+    result = await run_evaluator(experiment=None, evaluator=evaluator, position=None, filters=[])
+
+    assert len(result.results) == 1
+    assert saw_hooks == [True]
+    assert result.results[0].error is None
+    assert result.results[0].output == 2
+
+
+@pytest.mark.asyncio
+async def test_hooks_trial_index():
+    """Test that trial_index is correctly passed to task via hooks."""
+    trial_indices: list[int] = []
+
+    # Task that captures trial indices
+    def task_with_hooks(input_value: int, hooks: EvalHooks) -> int:
+        trial_indices.append(hooks.trial_index)
+        return input_value * 2
+
+    # Create evaluator with trial_count > 1
+    evaluator = Evaluator(
+        project_name="test-project",
+        eval_name="test-trial-index",
+        data=[EvalCase(input=1, expected=2)],
+        task=task_with_hooks,
+        scores=[],  # No scoring needed for this test
+        experiment_name=None,
+        metadata=None,
+        trial_count=3,  # Run 3 trials
+    )
+
+    # Run evaluator
+    result = await run_evaluator(experiment=None, evaluator=evaluator, position=None, filters=[])
+
+    # Verify we got 3 results (one for each trial)
+    assert len(result.results) == 3
+
+    # Verify trial indices were captured correctly
+    assert len(trial_indices) == 3
+    assert sorted(trial_indices) == [0, 1, 2]
+
+    # Verify all results are correct
+    for eval_result in result.results:
+        assert eval_result.input == 1
+        assert eval_result.expected == 2
+        assert eval_result.output == 2  # 1 * 2
+        assert eval_result.error is None
+
+
+@pytest.mark.asyncio
+async def test_hooks_trial_index_multiple_inputs():
+    """Test trial_index with multiple inputs to ensure proper indexing."""
+    trial_data: list[tuple] = []  # (input, trial_index)
+
+    def task_with_hooks(input_value: int, hooks: EvalHooks) -> int:
+        trial_data.append((input_value, hooks.trial_index))
+        return input_value * 2
+
+    # Create evaluator with multiple inputs and trials
+    evaluator = Evaluator(
+        project_name="test-project",
+        eval_name="test-trial-index-multiple",
+        data=[
+            EvalCase(input=1, expected=2),
+            EvalCase(input=2, expected=4),
+        ],
+        task=task_with_hooks,
+        scores=[],
+        experiment_name=None,
+        metadata=None,
+        trial_count=2,  # 2 trials per input
+    )
+
+    # Run evaluator
+    result = await run_evaluator(experiment=None, evaluator=evaluator, position=None, filters=[])
+
+    # Should have 4 results total (2 inputs × 2 trials)
+    assert len(result.results) == 4
+    assert len(trial_data) == 4
+
+    # Group by input to verify trial indices
+    input_1_trials = [trial_idx for inp, trial_idx in trial_data if inp == 1]
+    input_2_trials = [trial_idx for inp, trial_idx in trial_data if inp == 2]
+
+    # Each input should have been run with trial indices 0 and 1
+    assert sorted(input_1_trials) == [0, 1]
+    assert sorted(input_2_trials) == [0, 1]
+
+
+@pytest.mark.asyncio
+async def test_per_input_trial_count_overrides_global():
+    """Test that per-input trial_count overrides the global trial_count."""
+    trial_data: list[tuple] = []  # (input, trial_index)
+
+    def task_with_hooks(input_value: int, hooks: EvalHooks) -> int:
+        trial_data.append((input_value, hooks.trial_index))
+        return input_value * 2
+
+    evaluator = Evaluator(
+        project_name="test-project",
+        eval_name="test-per-input-trial-count",
+        data=[
+            EvalCase(input=1, expected=2),  # inherits global trial_count=2
+            EvalCase(input=2, expected=4, trial_count=5),  # overrides to 5
+            EvalCase(input=3, expected=6, trial_count=1),  # overrides to 1
+        ],
+        task=task_with_hooks,
+        scores=[],
+        experiment_name=None,
+        metadata=None,
+        trial_count=2,
+    )
+
+    result = await run_evaluator(experiment=None, evaluator=evaluator, position=None, filters=[])
+
+    # 2 + 5 + 1 = 8 total results
+    assert len(result.results) == 8
+    assert len(trial_data) == 8
+
+    input_1_trials = sorted([trial_idx for inp, trial_idx in trial_data if inp == 1])
+    input_2_trials = sorted([trial_idx for inp, trial_idx in trial_data if inp == 2])
+    input_3_trials = sorted([trial_idx for inp, trial_idx in trial_data if inp == 3])
+
+    assert input_1_trials == [0, 1]
+    assert input_2_trials == [0, 1, 2, 3, 4]
+    assert input_3_trials == [0]
+
+
+@pytest.mark.asyncio
+async def test_per_input_trial_count_without_global():
+    """Test that per-input trial_count works when no global trial_count is set."""
+    trial_data: list[tuple] = []  # (input, trial_index)
+
+    def task_with_hooks(input_value: int, hooks: EvalHooks) -> int:
+        trial_data.append((input_value, hooks.trial_index))
+        return input_value * 2
+
+    evaluator = Evaluator(
+        project_name="test-project",
+        eval_name="test-per-input-trial-count-no-global",
+        data=[
+            EvalCase(input=1, expected=2),  # uses default trial_count=1
+            EvalCase(input=2, expected=4, trial_count=3),  # overrides to 3
+        ],
+        task=task_with_hooks,
+        scores=[],
+        experiment_name=None,
+        metadata=None,
+    )
+
+    result = await run_evaluator(experiment=None, evaluator=evaluator, position=None, filters=[])
+
+    # 1 + 3 = 4 total results
+    assert len(result.results) == 4
+    assert len(trial_data) == 4
+
+    input_1_trials = sorted([trial_idx for inp, trial_idx in trial_data if inp == 1])
+    input_2_trials = sorted([trial_idx for inp, trial_idx in trial_data if inp == 2])
+
+    assert input_1_trials == [0]
+    assert input_2_trials == [0, 1, 2]
+
+
+@pytest.mark.asyncio
+async def test_per_input_trial_count_with_dict_data():
+    """Test that per-input trial_count works when data items are plain dicts."""
+    trial_data: list[tuple] = []  # (input, trial_index)
+
+    def task_with_hooks(input_value: int, hooks: EvalHooks) -> int:
+        trial_data.append((input_value, hooks.trial_index))
+        return input_value * 2
+
+    evaluator = Evaluator(
+        project_name="test-project",
+        eval_name="test-per-input-trial-count-dict",
+        data=[
+            {"input": 1, "expected": 2},  # inherits global trial_count=2
+            {"input": 2, "expected": 4, "trial_count": 4},  # overrides to 4
+            {"input": 3, "expected": 6, "trial_count": 1},  # overrides to 1
+        ],
+        task=task_with_hooks,
+        scores=[],
+        experiment_name=None,
+        metadata=None,
+        trial_count=2,
+    )
+
+    result = await run_evaluator(experiment=None, evaluator=evaluator, position=None, filters=[])
+
+    # 2 + 4 + 1 = 7 total results
+    assert len(result.results) == 7
+    assert len(trial_data) == 7
+
+    input_1_trials = sorted([trial_idx for inp, trial_idx in trial_data if inp == 1])
+    input_2_trials = sorted([trial_idx for inp, trial_idx in trial_data if inp == 2])
+    input_3_trials = sorted([trial_idx for inp, trial_idx in trial_data if inp == 3])
+
+    assert input_1_trials == [0, 1]
+    assert input_2_trials == [0, 1, 2, 3]
+    assert input_3_trials == [0]
+
+
+@pytest.mark.vcr
+@pytest.mark.asyncio
+async def test_scorer_spans_have_purpose_attribute(with_memory_logger, with_simulate_login):
+    """Test that scorer spans have span_attributes.purpose='scorer' and propagate to subspans."""
+    # Define test data
+    data = [
+        EvalCase(input="hello", expected="hello"),
+    ]
+
+    def simple_task(input_value):
+        return input_value
+
+    def purpose_scorer(input_value, output, expected):
+        return 1.0 if output == expected else 0.0
+
+    evaluator = Evaluator(
+        project_name="test-project",
+        eval_name="test-scorer-purpose",
+        data=data,
+        task=simple_task,
+        scores=[purpose_scorer],
+        experiment_name="test-scorer-purpose",
+        metadata=None,
+    )
+
+    # Create experiment so spans get logged
+    exp = init_test_exp("test-scorer-purpose", "test-project")
+
+    # Run evaluator
+    result = await run_evaluator(experiment=exp, evaluator=evaluator, position=None, filters=[])
+
+    assert len(result.results) == 1
+    assert result.results[0].scores.get("purpose_scorer") == 1.0
+
+    # Check the logged spans
+    logs = with_memory_logger.pop()
+
+    # Find the scorer span (has type="score")
+    scorer_spans = [log for log in logs if log.get("span_attributes", {}).get("type") == "score"]
+    assert len(scorer_spans) == 1, f"Expected 1 scorer span, found {len(scorer_spans)}"
+
+    scorer_span = scorer_spans[0]
+
+    # Verify the scorer span has purpose='scorer'
+    assert scorer_span["span_attributes"].get("purpose") == "scorer", (
+        f"Scorer span should have purpose='scorer', got: {scorer_span['span_attributes']}"
+    )
+
+    # Verify that non-scorer spans (task, eval) do NOT have purpose='scorer'
+    non_scorer_spans = [log for log in logs if log.get("span_attributes", {}).get("type") != "score"]
+    assert len(non_scorer_spans) > 0, "Expected at least one non-scorer span"
+    for span in non_scorer_spans:
+        assert span.get("span_attributes", {}).get("purpose") != "scorer", (
+            f"Non-scorer span should NOT have purpose='scorer', got: {span['span_attributes']}"
+        )
+
+
+@pytest.fixture
+def simple_scorer():
+    def simple_scorer_function(input, output, expected):
+        return {"name": "simple_scorer", "score": 0.8}
+
+    return simple_scorer_function
+
+
+@pytest.mark.asyncio
+async def test_eval_classifier_only_populates_classifications():
+    result = await Eval(
+        "test-classifier-only",
+        data=[{"input": "hello", "expected": "greeting"}],
+        task=lambda input_value: input_value,
+        classifiers=[
+            lambda input_value, output, expected: Classification(
+                id="greeting",
+                name="category",
+                label="Greeting",
+                metadata={"source": "unit-test"},
+            )
+        ],
+        no_send_logs=True,
+    )
+
+    assert len(result.results) == 1
+    assert result.results[0].scores == {}
+    assert result.results[0].classifications == {
+        "category": [
+            {
+                "id": "greeting",
+                "label": "Greeting",
+                "metadata": {"source": "unit-test"},
+            }
+        ]
+    }
+
+
+@pytest.mark.asyncio
+async def test_eval_classifier_without_label_omits_label():
+    def category(input_value, output, expected):
+        return {"id": "greeting"}
+
+    result = await Eval(
+        "test-classifier-without-label",
+        data=[{"input": "hello"}],
+        task=lambda input_value: input_value,
+        classifiers=[category],
+        no_send_logs=True,
+    )
+
+    assert len(result.results) == 1
+    assert result.results[0].classifications == {"category": [{"id": "greeting"}]}
+
+
+@pytest.mark.asyncio
+async def test_eval_multiple_classifications_append_same_name():
+    def category(input_value, output, expected):
+        return [
+            {"id": "greeting", "name": "category", "label": "Greeting"},
+            {"id": "informal", "name": "category", "label": "Informal"},
+        ]
+
+    result = await Eval(
+        "test-classifier-append",
+        data=[{"input": "hello"}],
+        task=lambda input_value: input_value,
+        classifiers=[category],
+        no_send_logs=True,
+    )
+
+    assert len(result.results) == 1
+    assert result.results[0].classifications == {
+        "category": [
+            {"id": "greeting", "label": "Greeting"},
+            {"id": "informal", "label": "Informal"},
+        ]
+    }
+
+
+@pytest.mark.asyncio
+async def test_eval_populates_scores_and_classifications(simple_scorer):
+    def category(input_value, output, expected):
+        return {"id": "greeting", "label": "Greeting"}
+
+    result = await Eval(
+        "test-score-and-classify",
+        data=[{"input": "hello", "expected": "hello"}],
+        task=lambda input_value: input_value,
+        scores=[simple_scorer],
+        classifiers=[category],
+        no_send_logs=True,
+    )
+
+    assert len(result.results) == 1
+    assert result.results[0].scores == {"simple_scorer": 0.8}
+    assert result.results[0].classifications == {"category": [{"id": "greeting", "label": "Greeting"}]}
+
+
+@pytest.mark.vcr
+@pytest.mark.asyncio
+async def test_classifier_spans_are_logged(with_memory_logger, with_simulate_login):
+    evaluator = Evaluator(
+        project_name="test-project",
+        eval_name="test-classifier-span",
+        data=[EvalCase(input="hello", expected="greeting")],
+        task=lambda input_value: input_value,
+        scores=[],
+        classifiers=[
+            lambda input_value, output, expected: [
+                {
+                    "id": "greeting",
+                    "name": "category",
+                    "label": "Greeting",
+                    "metadata": {"source": "greeting"},
+                },
+                {
+                    "id": "informal",
+                    "name": "category",
+                    "label": "Informal",
+                    "metadata": {"source": "style"},
+                },
+            ]
+        ],
+        experiment_name="test-classifier-span",
+        metadata=None,
+    )
+
+    exp = init_test_exp("test-classifier-span", "test-project")
+    result = await run_evaluator(experiment=exp, evaluator=evaluator, position=None, filters=[])
+
+    assert len(result.results) == 1
+    expected_classifications = {
+        "category": [
+            {"id": "greeting", "label": "Greeting", "metadata": {"source": "greeting"}},
+            {"id": "informal", "label": "Informal", "metadata": {"source": "style"}},
+        ]
+    }
+    assert result.results[0].classifications == expected_classifications
+
+    logs = with_memory_logger.pop()
+    classifier_spans = [log for log in logs if log.get("span_attributes", {}).get("type") == "classifier"]
+    assert len(classifier_spans) == 1
+    assert classifier_spans[0]["span_attributes"].get("purpose") == "scorer"
+    assert classifier_spans[0].get("output") == expected_classifications
+    assert classifier_spans[0].get("metadata") == {"category": [{"source": "greeting"}, {"source": "style"}]}
+
+    root_spans = [log for log in logs if not log["span_parents"]]
+    assert len(root_spans) == 1
+    assert root_spans[0].get("classifications") == expected_classifications
+
+
+@pytest.mark.asyncio
+async def test_eval_no_send_logs_true(with_memory_logger, simple_scorer):
+    """Test that Eval with no_send_logs=True runs locally without creating experiment."""
+
+    def exact_match(input, output, expected):
+        return {"name": "exact_match", "score": 1.0 if output == expected else 0.0}
+
+    result = await Eval(
+        "test-no-logs",
+        data=[{"input": "hello", "expected": "hello world"}, {"input": "test", "expected": "test world"}],
+        task=lambda input_val: input_val + " world",
+        scores=[exact_match, simple_scorer],
+        no_send_logs=True,
+    )
+
+    # Verify it returns results
+    assert len(result.results) == 2
+    assert result.results[0].input == "hello"
+    assert result.results[0].output == "hello world"
+    assert result.results[0].scores["exact_match"] == 1.0
+    assert result.results[0].scores["simple_scorer"] == 0.8
+
+    assert result.results[1].input == "test"
+    assert result.results[1].output == "test world"
+    assert result.results[1].scores["exact_match"] == 1.0
+    assert result.results[1].scores["simple_scorer"] == 0.8
+
+    # Verify it builds a local summary (no experiment_url means local run)
+    assert result.summary.project_name == "test-no-logs"
+    assert result.summary.experiment_url is None
+    assert result.summary.scores["exact_match"].score == 1.0
+    assert result.summary.scores["simple_scorer"].score == 0.8
+
+    # Most importantly: verify that no logs were sent (should be empty)
+    logs = with_memory_logger.pop()
+    assert len(logs) == 0
+
+
+@pytest.mark.asyncio
+async def test_eval_no_send_logs_with_none_score(with_memory_logger):
+    """Test that scorers returning None don't crash local mode."""
+
+    def sometimes_none_scorer(input, output, expected):
+        # Return None for first input, score for second
+        if input == "hello":
+            return {"name": "conditional", "score": None}
+        return {"name": "conditional", "score": 1.0}
+
+    result = await Eval(
+        "test-none-score",
+        data=[
+            {"input": "hello", "expected": "hello world"},
+            {"input": "test", "expected": "test world"},
+        ],
+        task=lambda input_val: input_val + " world",
+        scores=[sometimes_none_scorer],
+        no_send_logs=True,
+    )
+
+    # Should not crash and should calculate average from non-None scores only
+    assert result.summary.scores["conditional"].score == 1.0  # Only the second score counts
+
+
+@pytest.mark.asyncio
+async def test_hooks_tags_append(with_memory_logger, with_simulate_login, simple_scorer):
+    """Test that hooks.tags can be appended to and logged."""
+
+    initial_tags = ["cookies n cream"]
+    appended_tags = ["chocolate", "vanilla", "strawberry"]
+    expected_tags = ["cookies n cream", "chocolate", "vanilla", "strawberry"]
+
+    def task_with_hooks(input, hooks):
+        for x in appended_tags:
+            hooks.tags.append(x)
+        return input
+
+    evaluator = Evaluator(
+        project_name=__name__,
+        eval_name=__name__,
+        data=[EvalCase(input="hello", expected="hello world", tags=initial_tags)],
+        task=task_with_hooks,
+        scores=[simple_scorer],
+        experiment_name=__name__,
+        metadata=None,
+        summarize_scores=False,
+    )
+    exp = init_test_exp(__name__)
+    result = await run_evaluator(experiment=exp, evaluator=evaluator, position=None, filters=[])
+    assert result.results[0].tags == expected_tags
+
+    logs = with_memory_logger.pop()
+    assert len(logs) == 3
+
+    # assert root span contains tags
+    root_span = [log for log in logs if not log["span_parents"]]
+    assert len(root_span) == 1
+    assert root_span[0].get("tags") == expected_tags
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tags", "expected_tags"),
+    [(None, None), ([], None), (["chocolate", "vanilla", "strawberry"], ["chocolate", "vanilla", "strawberry"])],
+)
+async def test_hooks_tags_list(with_memory_logger, with_simulate_login, simple_scorer, tags, expected_tags):
+    """Test that hooks.tags can be set to a list."""
+
+    def task_with_hooks(input, hooks):
+        hooks.tags = tags
+        return input
+
+    evaluator = Evaluator(
+        project_name=__name__,
+        eval_name=__name__,
+        data=[EvalCase(input="hello", expected="hello world")],
+        task=task_with_hooks,
+        scores=[simple_scorer],
+        experiment_name=__name__,
+        metadata=None,
+        summarize_scores=False,
+    )
+    exp = init_test_exp(__name__)
+    result = await run_evaluator(experiment=exp, evaluator=evaluator, position=None, filters=[])
+    assert result.results[0].tags == expected_tags
+
+    logs = with_memory_logger.pop()
+    assert len(logs) == 3
+
+    # assert root span contains tags
+    root_span = [log for log in logs if not log["span_parents"]]
+    assert len(root_span) == 1
+    assert root_span[0].get("tags") == expected_tags
+
+
+@pytest.mark.asyncio
+async def test_hooks_tags_with_failing_scorer(with_memory_logger, with_simulate_login, simple_scorer):
+    """Test that hooks.tags can be set to a list."""
+
+    expected_tags = ["chocolate", "vanilla", "strawberry"]
+
+    def task_with_hooks(input, hooks):
+        hooks.tags = expected_tags
+        return input
+
+    def failing_scorer(input, output, expected):
+        raise Exception("test error")
+
+    evaluator = Evaluator(
+        project_name=__name__,
+        eval_name=__name__,
+        data=[EvalCase(input="hello", expected="hello world")],
+        task=task_with_hooks,
+        scores=[simple_scorer, failing_scorer],
+        experiment_name=__name__,
+        metadata=None,
+        summarize_scores=False,
+    )
+    exp = init_test_exp(__name__)
+    result = await run_evaluator(experiment=exp, evaluator=evaluator, position=None, filters=[])
+    assert result.results[0].tags == expected_tags
+
+    logs = with_memory_logger.pop()
+    assert len(logs) == 4
+
+    # assert root span contains tags
+    root_span = [log for log in logs if not log["span_parents"]]
+    assert len(root_span) == 1
+    assert root_span[0].get("tags") == expected_tags
+
+
+@pytest.mark.asyncio
+async def test_hooks_tags_with_invalid_type(with_memory_logger, with_simulate_login, simple_scorer):
+    """Test that result contains an error for cases where hooks.tags is set to an invalid type."""
+
+    def task_with_hooks(input, hooks):
+        hooks.tags = 123
+        return input
+
+    evaluator = Evaluator(
+        project_name=__name__,
+        eval_name=__name__,
+        data=[EvalCase(input="hello", expected="hello world")],
+        task=task_with_hooks,
+        scores=[simple_scorer],
+        experiment_name=__name__,
+        metadata=None,
+        summarize_scores=False,
+    )
+    exp = init_test_exp(__name__)
+    result = await run_evaluator(experiment=exp, evaluator=evaluator, position=None, filters=[])
+    assert len(result.results) == 1
+    assert isinstance(result.results[0].error, TypeError)
+
+
+@pytest.mark.asyncio
+async def test_hooks_without_setting_tags(with_memory_logger, with_simulate_login, simple_scorer):
+    """Test where hooks.tags is not set"""
+
+    def task_with_hooks(input, hooks):
+        return input
+
+    evaluator = Evaluator(
+        project_name=__name__,
+        eval_name=__name__,
+        data=[EvalCase(input="hello", expected="hello world")],
+        task=task_with_hooks,
+        scores=[simple_scorer],
+        experiment_name=__name__,
+        metadata=None,
+        summarize_scores=False,
+    )
+    exp = init_test_exp(__name__)
+    result = await run_evaluator(experiment=exp, evaluator=evaluator, position=None, filters=[])
+    assert result.results[0].tags == None
+
+    logs = with_memory_logger.pop()
+    assert len(logs) == 3
+
+    # assert root span contains tags
+    root_span = [log for log in logs if not log["span_parents"]]
+    assert len(root_span) == 1
+    assert root_span[0].get("tags") == None
+
+
+@pytest.mark.asyncio
+async def test_eval_enable_cache():
+    state = BraintrustState()
+    state.span_cache = MagicMock()
+
+    # Test enable_cache=False
+    await Eval(
+        "test-enable-cache-false",
+        data=[EvalCase(input=1, expected=1)],
+        task=lambda x: x,
+        scores=[],
+        state=state,
+        no_send_logs=True,
+        enable_cache=False,
+    )
+    state.span_cache.start.assert_not_called()
+    state.span_cache.stop.assert_not_called()
+
+    # Test enable_cache=True (default)
+    state.span_cache.start.reset_mock()
+    state.span_cache.stop.reset_mock()
+
+    await Eval(
+        "test-enable-cache-true",
+        data=[EvalCase(input=1, expected=1)],
+        task=lambda x: x,
+        scores=[],
+        state=state,
+        no_send_logs=True,
+        # enable_cache defaults to True
+    )
+    state.span_cache.start.assert_called()
+    state.span_cache.stop.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_run_evaluator_empty_dataset_warns(capsys):
+    """Warn when run_evaluator receives an empty dataset."""
+    evaluator = Evaluator(
+        project_name="test-project",
+        eval_name="test-evaluator",
+        data=[],
+        task=lambda input: input,
+        scores=[],
+        experiment_name=None,
+        metadata=None,
+    )
+    await run_evaluator(experiment=None, evaluator=evaluator, position=None, filters=[])
+
+    captured = capsys.readouterr()
+    assert "Warning" in captured.err
+    assert "empty" in captured.err.lower()
+
+
+class TestCallUserFnArgs:
+    """Regression tests for https://github.com/braintrustdata/braintrust-sdk-python/issues/240."""
+
+    def test_preserves_default_for_unmatched_keyword_only_param(self):
+        default_config = object()
+
+        def scorer(input, output, expected, *, config=default_config, **kwargs):
+            return config, kwargs
+
+        positional_args, final_kwargs = _call_user_fn_args(
+            scorer,
+            {
+                "input": "question",
+                "output": "answer",
+                "expected": "answer",
+                "metadata": {"case": 1},
+                "trace": object(),
+            },
+        )
+
+        assert positional_args == []
+        assert final_kwargs["input"] == "question"
+        assert final_kwargs["output"] == "answer"
+        assert final_kwargs["expected"] == "answer"
+        assert final_kwargs["config"] is default_config
+        assert final_kwargs["metadata"] == {"case": 1}
+        assert "trace" in final_kwargs
+
+    def test_keeps_required_unmatched_params_backward_compatible(self):
+        def scorer(input_value, output, expected):
+            return input_value, output, expected
+
+        positional_args, final_kwargs = _call_user_fn_args(
+            scorer,
+            {
+                "input": "question",
+                "output": "answer",
+                "expected": "answer",
+            },
+        )
+
+        assert positional_args == []
+        assert final_kwargs == {
+            "input_value": "question",
+            "output": "answer",
+            "expected": "answer",
+        }
+
+
+class TestEvaluateFilter:
+    """Regression tests for https://github.com/braintrustdata/braintrust-sdk-python/issues/207."""
+
+    @pytest.mark.parametrize(
+        "datum",
+        [
+            {"input": "hello", "metadata": {"name": "foo"}},
+            EvalCase(input="hello", metadata={"name": "foo"}),
+        ],
+        ids=["dict", "evalcase"],
+    )
+    def test_evaluate_filter_match(self, datum):
+        f = Filter(path=["metadata", "name"], pattern=re.compile("foo"))
+        assert evaluate_filter(datum, f) is True
+
+    @pytest.mark.parametrize(
+        "datum",
+        [
+            {"input": "hello", "metadata": {"name": "bar"}},
+            EvalCase(input="hello", metadata={"name": "bar"}),
+        ],
+        ids=["dict", "evalcase"],
+    )
+    def test_evaluate_filter_no_match(self, datum):
+        f = Filter(path=["metadata", "name"], pattern=re.compile("foo"))
+        assert evaluate_filter(datum, f) is False
+
+    @pytest.mark.parametrize(
+        "datum",
+        [
+            {"input": "hello"},
+            EvalCase(input="hello"),
+        ],
+        ids=["dict", "evalcase"],
+    )
+    def test_evaluate_filter_missing_key(self, datum):
+        f = Filter(path=["metadata", "name"], pattern=re.compile("foo"))
+        assert evaluate_filter(datum, f) is False
+
+    def test_evaluate_filter_nested_metadata(self):
+        datum = EvalCase(input="hello", metadata={"priority": "P0", "owner": "alice"})
+        f = Filter(path=["metadata", "priority"], pattern=re.compile("^P0$"))
+        assert evaluate_filter(datum, f) is True
+
+    def test_evaluate_filter_input_field(self):
+        datum = EvalCase(input={"text": "hello world"}, metadata={"name": "foo"})
+        f = Filter(path=["input", "text"], pattern=re.compile("hello"))
+        assert evaluate_filter(datum, f) is True
+
+    @pytest.mark.asyncio
+    async def test_run_evaluator_with_filter_and_evalcase(self):
+        data = [
+            EvalCase(input="hello", metadata={"name": "foo"}),
+            EvalCase(input="world", metadata={"name": "bar"}),
+        ]
+
+        evaluator = Evaluator(
+            project_name="test-project",
+            eval_name="test-filter-evalcase",
+            data=data,
+            task=lambda x: x,
+            scores=[],
+            experiment_name=None,
+            metadata=None,
+        )
+
+        filters = parse_filters(["metadata.name=foo"])
+        result = await run_evaluator(experiment=None, evaluator=evaluator, position=None, filters=filters)
+
+        # Only the "foo" case should pass the filter
+        assert len(result.results) == 1
+        assert result.results[0].input == "hello"
