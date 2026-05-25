@@ -16,6 +16,11 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 import leaven as lv
+from leaven.assessment import AssessmentWrite
+from leaven.builders.assessments import AssessmentSubmission
+from leaven.context import EvalContext
+from leaven.evaluation_job import EvaluationJob
+from leaven.evidence import EvidenceEnvelope
 
 
 class JudgeResult(BaseModel):
@@ -29,8 +34,8 @@ class JudgeResult(BaseModel):
     trust_profile=lv.TrustProfile.MANAGED_SANDBOX,
     granularity="per_case",
 )
-async def evaluate(job: lv.EvaluationJob, cx: lv.EvalContext) -> lv.AssessmentSubmission:
-    assessments: list[lv.AssessmentWrite] = []
+async def evaluate(job: EvaluationJob, cx: EvalContext) -> AssessmentSubmission:
+    assessments: list[AssessmentWrite] = []
 
     for item in job.independent_cases():
         assert item.candidate_id is not None
@@ -58,7 +63,7 @@ async def evaluate(job: lv.EvaluationJob, cx: lv.EvalContext) -> lv.AssessmentSu
                     task=f"Judge the candidate's answer against the rubric.\n"
                     f"Question: {case.input['question']}\n"
                     f"Rubric: {(case.target or {}).get('rubric', 'exact match')}",
-                    developer=lv.roles.JUDGE,
+                    system=lv.roles.JUDGE,
                 ),
                 output=lv.output.json_schema(JudgeResult),
                 input_classes=[lv.data_class.CASE_TARGET, lv.data_class.CANDIDATE_OUTPUT],
@@ -69,18 +74,14 @@ async def evaluate(job: lv.EvaluationJob, cx: lv.EvalContext) -> lv.AssessmentSu
         composite = 0.7 * parsed.score + 0.3 * (1.0 if tests.exit_code == 0 else 0.0)
 
         assessments.append(
-            lv.AssessmentWrite.independent_case(
+            AssessmentWrite.independent_case(
                 candidate=item.candidate_id,
                 case=item.case_id,
                 score=lv.Score(
                     value=composite,
-                    output=lv.OutputRecord.text(
-                        summary=parsed.feedback,
-                        visibility="optimizer_visible",
-                    ),
-                    metrics={"judge_score": parsed.score, "tests_passed": float(tests.exit_code == 0)},
+                    feedback=parsed.feedback,
                 ),
-                evidence=lv.EvidenceEnvelope.public_private(
+                evidence=EvidenceEnvelope.public_private(
                     public={
                         "feedback": parsed.feedback,
                         "verdict": parsed.verdict,
@@ -92,7 +93,7 @@ async def evaluate(job: lv.EvaluationJob, cx: lv.EvalContext) -> lv.AssessmentSu
                     },
                     target_derived=True,
                 ),
-                read_receipts=[case.receipt, diff.receipt],
+                read_receipts=[diff.receipt],
                 effect_receipts=[tests.receipt, judgment.receipt],
                 replayability="boundary_managed",
             ),

@@ -1,6 +1,6 @@
 # Examples
 
-Eight runnable example scripts that show the full Leaven Python surface.
+Ten runnable example scripts that show the full Leaven Python surface.
 Every example is composable Python that imports cleanly, typechecks under
 `ty`, and prints something illustrative. Bodies that would normally hit
 the engine raise `NotImplementedError` (caught and printed as `(expected)`)
@@ -30,6 +30,7 @@ just example 03                   # run just one (by number prefix)
 | 07 | `07_serve_stage_worker.py` | Standalone Python worker — `lv.serve_stage(my_judge)` script the engine spawns over ACP stdio. Same decorator shape as in-process. |
 | 08 | `08_dspy_dropin.py` | `dspy.configure(lm=lv.x.dspy.LeavenDSPyLM(...))` — existing DSPy modules unmodified through Leaven's LM seam. |
 | 09 | `09_full_repro.py` | **The big repro sketch** — all 6 stage roles in one file (runner + scorer + reflector + proposer + judge + evaluator), multi-LM environment, EvoSkill-shaped composition. Stress-tests the full surface. |
+| 10 | `10_stage_composition.py` | **The new surface direction** — `Artifact x Task x Stages x Runtime` with explicit, swappable stage objects. |
 
 ## Fixtures
 

@@ -4,8 +4,9 @@ Receipts are audit currency, not log decoration. The Rust engine mints them;
 the Python side carries opaque handles and passes them back into evidence
 envelopes / assessment writes to bind effects to their source operations.
 
-Python users never construct receipts directly. They receive them on the
-result of a `cx.*` builder call and thread them through.
+Python users never construct receipts directly. High-level authoring surfaces
+hide them; advanced evaluator/proposer code may receive opaque handles on
+effect/query results and pass them into low-level evidence envelopes.
 """
 
 from __future__ import annotations

@@ -20,6 +20,19 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 import leaven as lv
+from leaven.assessment import AssessmentWrite
+from leaven.builders.assessments import AssessmentSubmission
+from leaven.context import EvalContext, StageContext
+from leaven.evaluation_job import EvaluationJob
+from leaven.evidence import EvidenceEnvelope
+from leaven.proposal import ProposalBatch
+from leaven.stage_payloads import (
+    JudgeRequest,
+    ProposeRequest,
+    ReflectionResult,
+    ReflectRequest,
+    StageSourceRef,
+)
 
 HERE = Path(__file__).parent
 FIXTURE = HERE / "fixtures" / "arithmetic.jsonl"
@@ -47,7 +60,7 @@ class PairwiseJudgment(BaseModel):
 
 
 @lv.runner
-async def run(bank: lv.SkillBank, case: lv.Case, cx: lv.RunContext) -> str:
+async def run(bank: lv.SkillBank, case: lv.Case, cx) -> str:
     """Materialize the skill bank into a workspace, run an agent, return output."""
     ws = await cx.workspace.materialize_candidate(
         cx.candidate_id, surface="full_repo", lifetime="stage_call",
@@ -56,7 +69,7 @@ async def run(bank: lv.SkillBank, case: lv.Case, cx: lv.RunContext) -> str:
     session = await cx.agent.run(
         workspace=ws,
         instructions=lv.AgentInstructions(
-            task=case.input["question"], developer=lv.roles.EXECUTOR,
+            task=case.input["question"],
         ),
         timeout_s=240,
     )
@@ -67,12 +80,11 @@ async def run(bank: lv.SkillBank, case: lv.Case, cx: lv.RunContext) -> str:
 
 
 @lv.scorer
-async def score(output: str, case: lv.Case, cx: lv.RunContext) -> lv.Score:
+async def score(output: str, case: lv.Case, cx) -> lv.Score:
     target = (case.target or {}).get("answer", "")
     return lv.Score(
         value=lv.scoring.multi_tolerance(output, target),
-        output=lv.OutputRecord.text(summary=output, visibility="optimizer_visible"),
-        metrics={"length_chars": float(len(output))},
+        feedback=f"candidate answered {output!r}; target was {target!r}",
     )
 
 
@@ -80,7 +92,7 @@ async def score(output: str, case: lv.Case, cx: lv.RunContext) -> lv.Score:
 
 
 @lv.reflector(stage_id="examples/09-reflector")
-async def reflect(req: lv.ReflectRequest, cx: lv.StageContext) -> lv.ReflectionResult:
+async def reflect(req: ReflectRequest, cx: StageContext) -> ReflectionResult:
     failing = [ex for ex in req.examples if (ex.score or 0.0) < 0.5]
     summary = ", ".join(f"{ex.case_id}={ex.score:.2f}" for ex in failing[:8])
     diagnostic = await cx.lm.complete(
@@ -91,10 +103,10 @@ async def reflect(req: lv.ReflectRequest, cx: lv.StageContext) -> lv.ReflectionR
         max_tokens=512,
         model_role="reflector",
     )
-    return lv.ReflectionResult(
+    return ReflectionResult(
         diagnosis=diagnostic.text,
         diagnosis_source_refs=[
-            lv.StageSourceRef(kind="reflection_example", id=ex.case_id) for ex in failing
+            StageSourceRef(kind="reflection_example", id=ex.case_id) for ex in failing
         ],
         metadata={"failing_count": len(failing)},
     )
@@ -104,7 +116,7 @@ async def reflect(req: lv.ReflectRequest, cx: lv.StageContext) -> lv.ReflectionR
 
 
 @lv.proposer(stage_id="examples/09-proposer", repair_attempts=2)
-async def propose(req: lv.ProposeRequest, cx: lv.StageContext) -> lv.ProposalBatch:
+async def propose(req: ProposeRequest, cx: StageContext) -> ProposalBatch:
     ws = await cx.workspace.materialize_candidate(
         req.parent_candidate_id, surface="skills_only", lifetime="stage_call",
     )
@@ -113,19 +125,19 @@ async def propose(req: lv.ProposeRequest, cx: lv.StageContext) -> lv.ProposalBat
         workspace=ws,
         instructions=lv.AgentInstructions(
             task="Propose a typed skill-bank change addressing REFLECTION.md.",
-            developer=lv.roles.SKILL_PROPOSER,
+            system=lv.roles.SKILL_PROPOSER,
         ),
         output=lv.output.json_schema(SkillBuilderProposal),
         timeout_s=180,
     )
-    return lv.ProposalBatch.from_skill_proposal(session.parsed)
+    return ProposalBatch.from_skill_proposal(session.parsed)
 
 
 # ----- Stage 5: judge — pairwise preference between two candidates ---------
 
 
 @lv.judge(stage_id="examples/09-pairwise-judge")
-async def judge(req: lv.JudgeRequest, cx: lv.StageContext) -> lv.AssessmentWrite:
+async def judge(req: JudgeRequest, cx: StageContext) -> AssessmentWrite:
     case = await cx.case.load(req.case_id, include=("input", "target"))
     response = await cx.lm.complete(
         messages=[
@@ -142,15 +154,14 @@ async def judge(req: lv.JudgeRequest, cx: lv.StageContext) -> lv.AssessmentWrite
         model_role="judge",
     )
     parsed: PairwiseJudgment = response.parsed
-    return lv.AssessmentWrite.pairwise(
+    return AssessmentWrite.pairwise(
         candidates=req.candidates,
         case=req.case_id,
         preference=parsed.preferred_candidate,
-        evidence=lv.EvidenceEnvelope.public_only(
+        evidence=EvidenceEnvelope.public_only(
             payload={"reasoning": parsed.reasoning, "confidence": parsed.confidence},
             data_classes=[lv.data_class.OPTIMIZER_VISIBLE],
         ),
-        read_receipts=[case.receipt],
         effect_receipts=[response.receipt],
         replayability="boundary_managed",
     )
@@ -164,11 +175,10 @@ async def judge(req: lv.JudgeRequest, cx: lv.StageContext) -> lv.AssessmentWrite
     trust_profile=lv.TrustProfile.MANAGED_SANDBOX,
     granularity="per_case",
 )
-async def evaluate(job: lv.EvaluationJob, cx: lv.EvalContext) -> lv.AssessmentSubmission:
-    assessments: list[lv.AssessmentWrite] = []
+async def evaluate(job: EvaluationJob, cx: EvalContext) -> AssessmentSubmission:
+    assessments: list[AssessmentWrite] = []
     for item in job.independent_cases():
         assert item.candidate_id is not None
-        case = await cx.case.load(item.case_id, include=("input", "target"))
         ws = await cx.workspace.materialize_candidate(
             item.candidate_id, surface="full_repo", lifetime="stage_call",
         )
@@ -182,24 +192,20 @@ async def evaluate(job: lv.EvaluationJob, cx: lv.EvalContext) -> lv.AssessmentSu
             )
         composite = 1.0 if tests.exit_code == 0 else 0.0
         assessments.append(
-            lv.AssessmentWrite.independent_case(
+            AssessmentWrite.independent_case(
                 candidate=item.candidate_id, case=item.case_id,
                 score=lv.Score(
                     value=composite,
-                    output=lv.OutputRecord.text(
-                        summary=f"tests {'pass' if tests.exit_code == 0 else 'fail'}",
-                        visibility="optimizer_visible",
-                    ),
-                    metrics={"tests_exit": float(tests.exit_code)},
+                    feedback=f"pytest {'passed' if tests.exit_code == 0 else 'failed'}",
                 ),
-                evidence=lv.EvidenceEnvelope.public_private(
+                evidence=EvidenceEnvelope.public_private(
                     public={"tests_passed": tests.exit_code == 0,
                             "data_classes": [lv.data_class.OPTIMIZER_VISIBLE]},
                     private={"git_diff": diff.text,
                              "data_classes": [lv.data_class.CASE_TARGET, lv.data_class.EVALUATOR_PRIVATE]},
                     target_derived=True,
                 ),
-                read_receipts=[case.receipt, diff.receipt],
+                read_receipts=[diff.receipt],
                 effect_receipts=[tests.receipt],
                 replayability="boundary_managed",
             ),

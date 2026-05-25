@@ -75,6 +75,10 @@ class WorkspaceBuilder:
         Returned handle auto-releases at the end of the stage_call (or run, or
         manually). Pass the handle into downstream `cx.sandbox.exec` /
         `cx.agent.run` / `cx.workspace.*` calls.
+
+        Normal rollout pipelines should use `cx.rollout_workspace`; this method
+        is for advanced evaluator/proposer/reflector code that deliberately
+        materializes an additional workspace.
         """
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 

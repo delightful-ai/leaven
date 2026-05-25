@@ -68,7 +68,6 @@ def main() -> None:
         input={"question": "2 + 3"},
         target={"answer": "5"},
         metadata={"difficulty": "trivial"},
-        receipt=lv.QueryReceipt(receipt_id="demo-receipt"),
     )
     print()
     print("hand-built case:", case.id, "/", case.input, "→", case.target)

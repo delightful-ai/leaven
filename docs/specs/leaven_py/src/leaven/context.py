@@ -9,12 +9,14 @@ Three flavors:
 - `StageContext` — reflector/proposer/judge stages (per stage call)
 - `EvalContext` — evaluator stages (per evaluation request, may iterate many cases)
 
-All three share the same builder surface; they differ in stage-metadata
-fields and the lifecycle methods available.
+The scaffold keeps the builder namespaces visible on all three contexts for
+typing convenience. The engine still enforces role-specific capabilities; not
+every builder method is valid in every stage role.
 """
 
 from __future__ import annotations
 
+from ._handles import WorkspaceHandle
 from .builders.agent import AgentBuilder
 from .builders.assessments import AssessmentsBuilder
 from .builders.batch import BatchBuilder
@@ -62,6 +64,16 @@ class RunContext(_ContextBase):
     @property
     def case_id(self) -> str:
         """The case being evaluated in this run."""
+        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+
+    @property
+    def rollout_workspace(self) -> WorkspaceHandle:
+        """Workspace prepared for this rollout.
+
+        The engine/runtime materializes the current artifact and case according
+        to the active `Rollout.layout`. Runners and scorers may inspect this
+        handle; they should not re-materialize ordinary rollout workspaces.
+        """
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
 

@@ -16,7 +16,13 @@ from .case import Case
 from .evidence import EvidenceEnvelope
 from .score import Score
 
-Replayability = Literal["fully_replayable", "boundary_managed", "non_replayable"]
+Replayability = Literal[
+    "pure_read",
+    "fully_managed",
+    "boundary_managed",
+    "has_declared_external_effects",
+    "has_untracked_external_effects",
+]
 
 
 class AssessmentWrite(BaseModel):
@@ -24,14 +30,14 @@ class AssessmentWrite(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    kind: Literal["independent_case", "pairwise", "listwise"]
+    kind: Literal["independent", "pairwise", "listwise"]
     candidate: str | None = None
-    """Single candidate id for independent_case shape."""
+    """Single candidate id for independent shape."""
     candidates: list[str] | None = None
     """Multiple candidate ids for pairwise/listwise."""
     case: str
     score: Score | None = None
-    """Single score for independent_case."""
+    """Single score for independent shape."""
     ranking: list[str] | None = None
     """Ranked candidate ids for listwise."""
     preference: str | None = None

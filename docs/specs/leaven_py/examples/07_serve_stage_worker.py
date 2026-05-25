@@ -23,6 +23,10 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 import leaven as lv
+from leaven.assessment import AssessmentWrite
+from leaven.context import StageContext
+from leaven.evidence import EvidenceEnvelope
+from leaven.stage_payloads import JudgeRequest
 
 
 class JudgeOutcome(BaseModel):
@@ -34,7 +38,7 @@ class JudgeOutcome(BaseModel):
     stage_id="examples/llm-pairwise-judge",
     trust_profile=lv.TrustProfile.PACKAGE_SCORER,
 )
-async def judge(req: lv.JudgeRequest, cx: lv.StageContext) -> lv.AssessmentWrite:
+async def judge(req: JudgeRequest, cx: StageContext) -> AssessmentWrite:
     case = await cx.case.load(req.case_id, include=("input", "target"))
 
     response = await cx.lm.complete(
@@ -60,15 +64,14 @@ async def judge(req: lv.JudgeRequest, cx: lv.StageContext) -> lv.AssessmentWrite
     )
     outcome: JudgeOutcome = response.parsed
 
-    return lv.AssessmentWrite.pairwise(
+    return AssessmentWrite.pairwise(
         candidates=req.candidates,
         case=req.case_id,
         preference=req.candidates[0],  # judge picks; demo uses first
-        evidence=lv.EvidenceEnvelope.public_only(
+        evidence=EvidenceEnvelope.public_only(
             payload={"feedback": outcome.feedback, "judge_score": outcome.score},
             data_classes=[lv.data_class.OPTIMIZER_VISIBLE],
         ),
-        read_receipts=[case.receipt],
         effect_receipts=[response.receipt],
         replayability="boundary_managed",
     )

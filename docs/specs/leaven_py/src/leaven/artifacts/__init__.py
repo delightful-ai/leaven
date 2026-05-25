@@ -10,7 +10,8 @@ namespace owned by its semantics.
 
 from __future__ import annotations
 
+from .directory import DirectoryArtifact, directory
 from .prompt import PromptArtifact
 from .skill_bank import SkillBank
 
-__all__ = ["PromptArtifact", "SkillBank"]
+__all__ = ["DirectoryArtifact", "PromptArtifact", "SkillBank", "directory"]

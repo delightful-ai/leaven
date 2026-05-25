@@ -13,7 +13,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-Granularity = Literal["per_case", "pairwise", "listwise"]
+EvaluationKind = Literal["independent", "pairwise", "listwise"]
+Granularity = Literal["aggregate", "per_case"]
+Purpose = Literal["train", "validation", "test", "diagnostic", "custom"]
 
 
 class EvaluationItem(BaseModel):
@@ -36,7 +38,15 @@ class EvaluationJob(BaseModel):
     evaluation_request_id: str
     """Job id; pass back to `cx.assessments.submit(evaluation_request_id, ...)`."""
 
+    kind: EvaluationKind
+    """Assessment shape requested by the engine."""
+
     granularity: Granularity
+    """Whether the engine requested aggregate or per-case assessments."""
+
+    purpose: Purpose = "validation"
+    """Why this evaluation is being run."""
+
     evaluator_id: str
     """The evaluator id registered for this job."""
 
@@ -44,7 +54,7 @@ class EvaluationJob(BaseModel):
     deadline_seconds: float | None = None
 
     def independent_cases(self) -> Iterable[EvaluationItem]:
-        """Yield items for a `per_case` job. Raises if granularity differs."""
+        """Yield items for an independent per-candidate job."""
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
     def pairwise_cases(self) -> Iterable[EvaluationItem]:
@@ -56,4 +66,4 @@ class EvaluationJob(BaseModel):
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
 
-__all__ = ["EvaluationItem", "EvaluationJob", "Granularity"]
+__all__ = ["EvaluationItem", "EvaluationJob", "EvaluationKind", "Granularity", "Purpose"]

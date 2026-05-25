@@ -17,13 +17,16 @@ import asyncio
 from pathlib import Path
 
 import leaven as lv
+from leaven.context import StageContext
+from leaven.proposal import ProposalBatch
+from leaven.stage_payloads import ProposeRequest, ReflectionResult, ReflectRequest, StageSourceRef
 
 HERE = Path(__file__).parent
 FIXTURE = HERE / "fixtures" / "arithmetic.jsonl"
 
 
 @lv.reflector(stage_id="examples/custom-reflector")
-async def reflect(req: lv.ReflectRequest, cx: lv.StageContext) -> lv.ReflectionResult:
+async def reflect(req: ReflectRequest, cx: StageContext) -> ReflectionResult:
     # Build a diagnostic from the reflection examples. The diagnosis must
     # cite which examples it depends on via `diagnosis_source_refs`.
     failing = [ex for ex in req.examples if (ex.score or 0.0) < 0.5]
@@ -44,10 +47,10 @@ async def reflect(req: lv.ReflectRequest, cx: lv.StageContext) -> lv.ReflectionR
         model_role="reflector",
     )
 
-    return lv.ReflectionResult(
+    return ReflectionResult(
         diagnosis=diagnosis_lm.text,
         diagnosis_source_refs=[
-            lv.StageSourceRef(kind="reflection_example", id=ex.case_id)
+            StageSourceRef(kind="reflection_example", id=ex.case_id)
             for ex in failing
         ],
         metadata={"failing_count": len(failing)},
@@ -55,7 +58,7 @@ async def reflect(req: lv.ReflectRequest, cx: lv.StageContext) -> lv.ReflectionR
 
 
 @lv.proposer(stage_id="examples/custom-proposer", repair_attempts=2)
-async def propose(req: lv.ProposeRequest, cx: lv.StageContext) -> lv.ProposalBatch:
+async def propose(req: ProposeRequest, cx: StageContext) -> ProposalBatch:
     # Agentic proposer: materialize a workspace, give an agent the diagnosis,
     # let it write a typed change.
     ws = await cx.workspace.materialize_candidate(
@@ -69,7 +72,7 @@ async def propose(req: lv.ProposeRequest, cx: lv.StageContext) -> lv.ProposalBat
         workspace=ws,
         instructions=lv.AgentInstructions(
             task="Propose a typed change to the candidate that addresses REFLECTION.md.",
-            developer=lv.roles.SKILL_PROPOSER,
+            system=lv.roles.SKILL_PROPOSER,
         ),
         timeout_s=180,
     )
@@ -77,7 +80,7 @@ async def propose(req: lv.ProposeRequest, cx: lv.StageContext) -> lv.ProposalBat
     # The agent's session contains the actual changes; the engine parses
     # workspace deltas into typed `ProposalEffect`s. For the scaffold,
     # `from_skill_proposal` is the convention helper that does the parse.
-    return lv.ProposalBatch.from_skill_proposal(session.parsed)
+    return ProposalBatch.from_skill_proposal(session.parsed)
 
 
 async def amain() -> None:
