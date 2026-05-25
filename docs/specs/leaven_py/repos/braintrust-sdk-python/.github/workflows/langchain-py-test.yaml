@@ -1,0 +1,40 @@
+name: langchain-py
+
+on:
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          cache: true
+          experimental: true
+          install_args: uv
+
+      - name: Install dependencies
+        working-directory: integrations/langchain-py
+        run: |
+          mise exec -- uv sync
+
+      - name: Lint package
+        working-directory: integrations/langchain-py
+        run: |
+          mise exec -- uv run ruff check $(git ls-files '*.py' | grep -v 'examples/')
+
+      - name: Run tests
+        working-directory: integrations/langchain-py
+        run: |
+          mise exec -- uv run pytest src
+
+      - name: Test package import
+        working-directory: integrations/langchain-py
+        run: |
+          mise exec -- uv run python -c "import braintrust_langchain; print('braintrust_langchain imported successfully')"
+          mise exec -- uv run python -c "from braintrust_langchain import BraintrustCallbackHandler; print('BraintrustCallbackHandler imported successfully')"

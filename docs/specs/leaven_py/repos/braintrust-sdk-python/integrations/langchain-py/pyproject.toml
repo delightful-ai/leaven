@@ -1,0 +1,79 @@
+[project]
+name = "braintrust-langchain"
+version = "0.3.0"
+description = "DEPRECATED: LangChain integration is now included in the main braintrust package. Install braintrust instead."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "braintrust>=0.12.0",
+    "langchain>=0.3.27",
+]
+license = "MIT"
+authors = [{ name = "Braintrust", email = "sdk@braintrustdata.com" }]
+keywords = ["braintrust", "langchain", "llm", "tracing", "ai", "agents", "deprecated"]
+classifiers = [
+    "Development Status :: 7 - Inactive",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://www.braintrust.dev"
+Repository = "https://github.com/braintrustdata/braintrust-sdk-python"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+exclude = ["tests*"]
+
+
+[tool.uv.workspace]
+members = [
+    ".",
+]
+
+[tool.uv.sources]
+braintrust = { path = "../../py", editable = true }
+
+[dependency-groups]
+dev = [
+    "build",
+    "httpx",
+    "langchain-anthropic>=1.3.0",
+    "langchain-openai>=1.2.1",
+    "langgraph>=1.2.0",
+    "pre-commit",
+    "pytest",
+    "pytest-asyncio>=1.1.0",
+    "pytest-vcr>=1.0.2",
+    "ruff",
+    "tenacity",
+    "twine",
+]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "I",    # isort
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["braintrust_langchain"]
+known-third-party = ["braintrust", "langchain"]
+
+[tool.pytest.ini_options]
+testpaths = ["src/tests"]
+python_files = ["test_*.py"]
+addopts = "-v"

@@ -1,0 +1,27 @@
+*.pyc
+*.swp
+*.swo
+venv
+.env
+.direnv
+.DS_STORE
+.idea
+node_modules
+.turbo
+build
+dist
+*.egg-info
+.aider*
+!.aiderignore
+.pnpm-store
+
+docker-compose.override.yml
+Dockerfile.local
+
+**/.claude/settings.local.json
+CLAUDE.local.md
+.zed
+tsconfig.tsbuildinfo
+
+# BTX spec cache
+py/src/braintrust/btx/.spec-cache/

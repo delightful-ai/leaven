@@ -1,0 +1,15 @@
+[project]
+name = "braintrust-langchain-example"
+version = "0.1.0"
+description = "LangChain chain traced via BraintrustCallbackHandler"
+requires-python = ">=3.10"
+dependencies = [
+    "braintrust",
+    "langchain-anthropic",
+    "langchain-core",
+    "langchain-openai",
+    "python-dotenv",
+]
+
+[tool.uv.sources]
+braintrust = { path = "../../py", editable = true }
