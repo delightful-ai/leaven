@@ -10,9 +10,10 @@ It is not an implementation bucket. New behavior belongs in the owning crate fir
 - Product-builder defaults belong in `leaven-run`; umbrella feature composition belongs in `leaven`.
 
 ## Current Audit Pressure
-- `leaven-std` currently wholesale re-exports mixed crates. That makes
-  placeholder evidence/preference/population/render names look like standard
-  library behavior.
+- `leaven-std` currently wholesale re-exports mixed crates in named modules.
+  The standard prelude is narrower than those modules, but any placeholder
+  exported from an owning crate's prelude still becomes standard-library
+  looking here.
 - Treat this crate as an export ledger hotspot: every public name exposed here
   should be behavior-bearing, explicit scaffold/test support, or removed from
   the curated facade.
