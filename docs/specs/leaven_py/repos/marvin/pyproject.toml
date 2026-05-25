@@ -1,0 +1,110 @@
+[project]
+name = "marvin"
+description = "a simple and powerful tool to get things done with AI"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dynamic = ["version"]
+dependencies = [
+    "aiosqlite>=0.20.0",
+    "alembic>=1.12.0",
+    "jinja2>=3.1.4",
+    "partial-json-parser>=0.2.1.1.post5",
+    "pydantic-ai>=1.9.0",
+    "pydantic-settings>=2.6.1",
+    "pydantic[email]>=2.10.6",
+    "rich>=13.9.4",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "typer>=0.15.1",
+]
+
+[dependency-groups]
+dev = [
+    "apispec",
+    "atproto",
+    "chromadb>=1.0.15",
+    "commentjson",
+    "copychat>=0.5.2",
+    "dirty-equals>=0.9.0",
+    "ipython>=8.12.3",
+    "pdbpp>=0.10.3",
+    "pre-commit",
+    "pytest-asyncio>=0.23.5",
+    "pytest-env>=1.1.5",
+    "pytest-rerunfailures>=15.0",
+    "pytest-timeout>=2.3.1",
+    "pytest-xdist>=3.6.1",
+    "pytest>=8.3.3",
+    "ruff",
+    "pandas",
+    "prefect",
+    "qdrant-client[fastembed]",
+    "fastmcp@git+https://github.com/jlowin/fastmcp.git",
+]
+
+[project.optional-dependencies]
+audio = ["pyaudio>=0.2.14"]
+
+slackbot = ["slackbot"]
+
+mcp = ["fastmcp"]
+
+prefect = ["prefect>=3.6.11"]
+
+[project.scripts]
+marvin = "marvin.cli.main:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/marvin"]
+include = ["migrations/**/*", "alembic.ini"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pytest.ini_options]
+addopts = "-vv --color=yes"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+timeout = 60
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore:.*search.*method is deprecated.*:DeprecationWarning:qdrant_client\\.async_qdrant_fastembed",
+]
+norecursedirs = [
+    "*.egg-info",
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".vscode",
+    "node_modules",
+]
+
+env = [
+    "MARVIN_TEST_MODE=1",
+    'D:MARVIN_AGENT_MODEL=openai:gpt-4o-mini',
+    'D:MARVIN_AGENT_TEMPERATURE=0.0',
+    'D:MARVIN_AGENT_RETRIES=4',
+    'D:MARVIN_MEMORY_PROVIDER=chroma-ephemeral',
+    'D:MARVIN_LOG_LEVEL=DEBUG',
+    'D:MARVIN_ENABLE_DEFAULT_PRINT_HANDLER=0',
+]
+[tool.hatch.version]
+source = "vcs"
+
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "I001", "RUF013"]
+
+[tool.uv.sources]
+slackbot = { workspace = true }
+fastmcp = { git = "https://github.com/jlowin/fastmcp.git" }
+
+[tool.uv.workspace]
+members = ["examples/slackbot"]
+
+[build-system]
+requires = ["hatchling>=1.21.0", "hatch-vcs>=0.4.0"]
+build-backend = "hatchling.build"
