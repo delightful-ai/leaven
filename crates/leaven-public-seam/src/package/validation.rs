@@ -534,7 +534,7 @@ fn review_text_block_signs_off_row(block: &str, row_id: &str) -> bool {
         return false;
     }
     let normalized = block.to_ascii_lowercase();
-    let row = format!("`{}`", row_id).to_ascii_lowercase();
+    let row = format!("`{row_id}`").to_ascii_lowercase();
     let has_signoff = normalized.contains(&format!("{row}: signed off"))
         || normalized.contains(&format!("{row}: sign off"))
         || normalized.contains(&format!("{row}: sign-off"))
