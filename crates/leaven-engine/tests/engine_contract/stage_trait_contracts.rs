@@ -1,5 +1,3 @@
-mod support;
-
 use futures::executor::block_on;
 use leaven_core::{
     Assessment, AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationSet,
@@ -12,7 +10,7 @@ use leaven_engine::{
 };
 use leaven_kernel::{Cost, EvaluatorId, Fingerprint, MetadataBag, Metered, ProposerId, StageId};
 
-use support::{TestEvidence, TestProblem, TextArtifact, graph_and_budget};
+use super::support::{TestEvidence, TestProblem, TextArtifact, graph_and_budget};
 
 #[test]
 fn dyn_proposer_delegates_to_static_proposer() {

@@ -1,5 +1,3 @@
-mod support;
-
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -25,7 +23,7 @@ use leaven_kernel::{
 use leaven_store::{EvidenceStore, StoreError};
 use leaven_store_inline::{InlineEvidenceStore, InlineStore};
 
-use support::{TestEvidence, TestProblem, TextArtifact, graph_and_budget};
+use super::support::{TestEvidence, TestProblem, TextArtifact, graph_and_budget};
 
 #[test]
 fn case_reads_installed_case_set_and_is_none_without_one() {

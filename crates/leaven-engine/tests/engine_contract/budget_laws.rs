@@ -1,9 +1,7 @@
 use leaven_engine::{BudgetLedger, RunContext};
 use leaven_kernel::{Amount, Budget, BudgetDimension, Cost, RunId, StageId};
 
-mod support;
-
-use support::{TestProblem, graph_and_budget};
+use super::support::{TestProblem, graph_and_budget};
 
 fn usd_micro(amount: f64) -> Cost {
     Cost::custom("usd_micro", amount).unwrap()

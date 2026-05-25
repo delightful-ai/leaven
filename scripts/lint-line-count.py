@@ -18,6 +18,9 @@ SKIP_DIRS = {
     # symlinked `vendor/` directory and are not Leaven production source.
     "vendor",
 }
+SKIP_PATH_PREFIXES = {
+    ("docs", "specs", "leaven_py", "repos"),
+}
 
 
 def main() -> int:
@@ -54,19 +57,29 @@ def main() -> int:
 
 def rust_files(root: Path):
     for dirpath, dirnames, filenames in os.walk(root):
+        current = Path(dirpath)
         dirnames[:] = [
             dirname
             for dirname in dirnames
-            if dirname not in SKIP_DIRS and not is_test_path(Path(dirpath, dirname), root)
+            if dirname not in SKIP_DIRS
+            and not is_skipped_path(current / dirname, root)
+            and not is_test_path(current / dirname, root)
         ]
-        current = Path(dirpath)
         for filename in filenames:
             if not filename.endswith(".rs"):
                 continue
             path = current / filename
-            if is_test_path(path, root):
+            if is_skipped_path(path, root) or is_test_path(path, root):
                 continue
             yield path
+
+
+def is_skipped_path(path: Path, root: Path) -> bool:
+    try:
+        relative = path.resolve().relative_to(root)
+    except ValueError:
+        return True
+    return any(relative.parts[: len(prefix)] == prefix for prefix in SKIP_PATH_PREFIXES)
 
 
 def is_test_path(path: Path, root: Path) -> bool:

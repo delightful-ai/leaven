@@ -1,9 +1,7 @@
-mod support;
-
 use leaven_engine::{Arity, Population, PopulationEvent, PopulationView, RunContext, RunGraphView};
 use leaven_kernel::{AssessmentId, CandidateId, FiniteF64, PopulationId};
 
-use support::{TestProblem, graph_and_budget};
+use super::support::{TestProblem, graph_and_budget};
 
 #[test]
 fn reweighted_population_events_use_finite_weights() {

@@ -18,5 +18,7 @@ mod materializer_contract;
 mod population_event_contract;
 #[path = "engine_contract/stage_trait_contracts.rs"]
 mod stage_trait_contracts;
+#[path = "engine_contract/support/mod.rs"]
+mod support;
 #[path = "engine_contract/trust_policy.rs"]
 mod trust_policy;
