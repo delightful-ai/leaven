@@ -18,6 +18,8 @@
 //! 5. `lib.rs` re-exports no individual type at the crate root: it carries
 //!    only `pub mod` route modules, crate aliases, and feature-gated module
 //!    re-exports. The route module *is* the classification.
+//! 6. Facade modules do not use wildcard re-exports; each public facade keeps
+//!    an explicit symbol ledger.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -529,6 +531,21 @@ fn lib_rs_routes_no_individual_symbol_at_the_crate_root() {
     }
 }
 
+#[test]
+fn facade_modules_do_not_use_wildcard_reexports() {
+    for file in facade_files() {
+        let text = fs::read_to_string(&file).unwrap();
+        for raw in text.lines() {
+            let line = raw.split("//").next().unwrap_or("").trim();
+            assert!(
+                !line.starts_with("pub use ") || !line.ends_with("::*;"),
+                "{} uses wildcard facade export `{line}` -- public facades must list symbols explicitly so maturity and test-support routes stay reviewable",
+                file.display()
+            );
+        }
+    }
+}
+
 /// The route modules paired with the route they own.
 fn route_files() -> Vec<(Route, PathBuf)> {
     let src = umbrella_src();
@@ -537,6 +554,12 @@ fn route_files() -> Vec<(Route, PathBuf)> {
         (Route::Extend, src.join("extend.rs")),
         (Route::Plumbing, src.join("plumbing.rs")),
     ]
+}
+
+/// Namespaced facade modules exposed by `leaven::...`.
+fn facade_files() -> Vec<PathBuf> {
+    let src = umbrella_src();
+    vec![src.join("gepa.rs")]
 }
 
 /// Final exported names from every `pub use` in a route module.
