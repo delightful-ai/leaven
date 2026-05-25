@@ -6,8 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use leaven_artifact_git::{
-    GitArtifactError, GitObjectId, GitPath, GitProgramArtifact, GitProgramChange, GitRepoChange,
-    GitRevision, RepoKey,
+    GitObjectId, GitPath, GitProgramArtifact, GitProgramChange, GitRepoChange, GitRevision, RepoKey,
 };
 use leaven_core::OptimizationProblem;
 use leaven_engine::{MaterializationReport, MaterializeContext, MaterializeError, Materializer};
@@ -15,26 +14,7 @@ use leaven_kernel::{Cost, Metered, RunId};
 use leaven_workspace::{Command, CommandOutput, WorkspacePath, WorkspacePathError, WorkspaceView};
 use leaven_workspace_git::GitWorkspaceGitError;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GitProgramStores {
-    stores: BTreeMap<RepoKey, PathBuf>,
-}
-
-impl GitProgramStores {
-    pub fn new(stores: BTreeMap<RepoKey, PathBuf>) -> Result<Self, GitAgenticGitError> {
-        if stores.is_empty() {
-            return Err(GitAgenticGitError::MissingStores);
-        }
-        Ok(Self { stores })
-    }
-
-    fn store_for(&self, repo: &RepoKey) -> Result<&Path, GitAgenticGitError> {
-        self.stores
-            .get(repo)
-            .map(PathBuf::as_path)
-            .ok_or_else(|| GitAgenticGitError::MissingStore { repo: repo.clone() })
-    }
-}
+use crate::{GitAgenticGitError, GitProgramStores};
 
 #[derive(Clone, Debug)]
 pub struct GitProgramMaterializer {
@@ -354,32 +334,6 @@ impl GitProgramReadback {
         cleanup.remove();
         Ok(imported)
     }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum GitAgenticGitError {
-    #[error("git program store map is empty")]
-    MissingStores,
-    #[error("missing durable git store for repo `{repo}`")]
-    MissingStore { repo: RepoKey },
-    #[error("missing git program layout for repo `{repo}`")]
-    MissingLayout { repo: RepoKey },
-    #[error("tree materialization is not implemented for repo `{repo}`")]
-    UnsupportedTreeMaterialization { repo: RepoKey },
-    #[error("tree readback is not implemented for repo `{repo}`")]
-    UnsupportedTreeReadback { repo: RepoKey },
-    #[error("git bundle `{path}` does not contain a head")]
-    EmptyBundle { path: String },
-    #[error(transparent)]
-    Workspace(#[from] leaven_workspace::WorkspaceError),
-    #[error(transparent)]
-    WorkspacePath(#[from] WorkspacePathError),
-    #[error(transparent)]
-    Git(#[from] GitWorkspaceGitError),
-    #[error(transparent)]
-    GitArtifact(#[from] GitArtifactError),
-    #[error(transparent)]
-    Utf8(#[from] std::string::FromUtf8Error),
 }
 
 fn workspace_path(path: &GitPath) -> Result<WorkspacePath, WorkspacePathError> {
