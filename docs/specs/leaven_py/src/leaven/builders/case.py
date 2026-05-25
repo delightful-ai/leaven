@@ -7,11 +7,15 @@ from typing import Literal
 
 from ..case import Case
 
-CaseField = Literal["input", "target", "metadata", "target_ref"]
+CaseField = Literal["input", "target", "metadata", "files", "setup", "sandbox", "split"]
 
 
 class CaseBuilder:
-    """Case loader bound to a context. Reads are receipted."""
+    """Case loader bound to a context.
+
+    Returned `Case` values are ordinary user-facing records. The engine still
+    records read receipts internally for audit/replay.
+    """
 
     async def load(
         self,

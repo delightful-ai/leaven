@@ -17,43 +17,34 @@ __version__ = "0.1.0-alpha.0"
 # Namespace re-exports (submodules) — these stay as `lv.<name>.*`
 from . import (
     agent,
+    artifacts,
     cases,
     data_class,
     frontier,
+    layouts,
     lm,
     optimizers,
     output,
     runs,
     sandbox,
     scoring,
+    setup,
     trust,
     workspace,
     x,
 )
-
-# ----- Handles (engine-owned resources) ------------------------------------
-from ._handles import CandidateHandle, WorkspaceHandle, WorkspaceLifetime, WorkspaceSurface
-
-# ----- Receipts (opaque handles) -------------------------------------------
-from ._receipts import CallReceipt, QueryReceipt, WriteReceipt
 from .agent_instructions import AgentInstructions, AgentRoles
 
 # ----- Built-in artifacts ---------------------------------------------------
 from .artifacts import PromptArtifact, SkillBank
 from .artifacts.skill_bank import SkillFile
-from .assessment import Assessment, AssessmentWrite, Replayability
 
 # ----- Composition + entry -------------------------------------------------
 from .budget import Budget, budget
 from .case import Case, CaseSet, CaseSplits
 
-# ----- Context objects (the `cx` parameter) --------------------------------
-from .context import EvalContext, RunContext, StageContext
-
 # ----- Stage decorators + registration -------------------------------------
 from .decorators import (
-    RegisteredStage,
-    StageRole,
     evaluator,
     judge,
     proposer,
@@ -64,23 +55,15 @@ from .decorators import (
     serve_stage,
 )
 from .environment import Cache, Environment, environment
-from .evaluation_job import EvaluationItem, EvaluationJob, Granularity
-from .evidence import EvidenceEnvelope, EvidencePrivate, EvidencePublic
+from .evolution import EvolutionBuilder, evolve
 from .optimize import OptimizeBuilder, optimize
-from .output_record import OutputRecord, Visibility
-from .proposal import ProposalBatch, ProposalEffect
 
 # ----- Result + inspection -------------------------------------------------
 from .result import Candidate, Optimized, ReplayResult, RunSummary, Split
+from .runtime import Runtime, runtime
 from .score import Score
-from .stage_payloads import (
-    JudgeRequest,
-    ProposeRequest,
-    ReflectExample,
-    ReflectionResult,
-    ReflectRequest,
-    StageSourceRef,
-)
+from .stages import Evaluate, Propose, Reflect, Rollout, ScoreStage, Stages
+from .task import Task
 
 # ----- Trust profile constants ---------------------------------------------
 from .trust import TrustProfile
@@ -99,17 +82,18 @@ roles = AgentRoles
 # as a side-effect of `from .X import Y`. We delete them so `dir(leaven)`
 # only shows the deliberate surface — the convention in AGENTS.md is that
 # users access these types as `lv.Case`, `lv.Assessment`, not `lv.case.Case`.
-# Submodules INTENDED as namespaces (`agent`, `lm`, `workspace`, `sandbox`,
-# `cases`, `optimizers`, `frontier`, `output`, `scoring`, `trust`, `runs`,
-# `x`, `data_class`) are imported above with `from . import ...` and stay.
+# Submodules INTENDED as namespaces (`agent`, `artifacts`, `lm`, `workspace`,
+# `sandbox`, `cases`, `optimizers`, `frontier`, `output`, `scoring`, `trust`,
+# `runs`, `x`, `data_class`, `layouts`, `setup`) are imported above with
+# `from . import ...` and stay.
 # NOTE: `budget`, `environment`, `optimize` are NOT in this list — they're
 # public top-level callables that share names with their owning submodules.
 # Deleting them would remove the function, not just the module attribute.
 for _leaky in (
-    "agent_instructions", "artifacts", "assessment", "builders",
+    "agent_instructions", "assessment", "builders",
     "case", "context", "decorators", "evaluation_job",
-    "evidence", "output_record", "proposal", "result",
-    "score", "stage_payloads",
+    "evidence", "evolution", "output_record", "proposal", "result",
+    "score", "stage_payloads", "stages", "task",
 ):
     if _leaky in globals():
         del globals()[_leaky]
@@ -119,58 +103,37 @@ __all__ = [
     # records
     "AgentInstructions",
     "AgentRoles",
-    "Assessment",
-    "AssessmentWrite",
     "Budget",
     "Cache",
-    "CallReceipt",
     "Candidate",
-    "CandidateHandle",
     "Case",
     "CaseSet",
     "CaseSplits",
     "Environment",
-    "EvalContext",
-    "EvaluationItem",
-    "EvaluationJob",
-    "EvidenceEnvelope",
-    "EvidencePrivate",
-    "EvidencePublic",
-    "Granularity",
-    "JudgeRequest",
+    "Evaluate",
+    "EvolutionBuilder",
     "OptimizeBuilder",
     "Optimized",
-    "OutputRecord",
     "PromptArtifact",
-    "ProposalBatch",
-    "ProposalEffect",
-    "ProposeRequest",
-    "QueryReceipt",
-    "ReflectExample",
-    "ReflectRequest",
-    "ReflectionResult",
-    "RegisteredStage",
+    "Propose",
+    "Reflect",
     "ReplayResult",
-    "Replayability",
-    "RunContext",
+    "Rollout",
     "RunSummary",
+    "Runtime",
     "Score",
+    "ScoreStage",
     "SkillBank",
     "SkillFile",
     "Split",
-    "StageContext",
-    "StageRole",
-    "StageSourceRef",
+    "Stages",
+    "Task",
     "TrustProfile",
-    "Visibility",
-    "WorkspaceHandle",
-    "WorkspaceLifetime",
-    "WorkspaceSurface",
-    "WriteReceipt",
     # versioning
     "__version__",
     # namespaces
     "agent",
+    "artifacts",
     # entry + composition
     "budget",
     "cases",
@@ -182,8 +145,10 @@ __all__ = [
     "environment",
     # decorators + stage registration
     "evaluator",
+    "evolve",
     "frontier",
     "judge",
+    "layouts",
     "lm",
     "optimize",
     "optimizers",
@@ -194,10 +159,12 @@ __all__ = [
     "roles",
     "runner",
     "runs",
+    "runtime",
     "sandbox",
     "scorer",
     "scoring",
     "serve_stage",
+    "setup",
     "trust",
     "workspace",
     "x",

@@ -1,7 +1,7 @@
 """AgentInstructions — typed instruction bundle for `cx.agent.run(instructions=...)`.
 
-Carries task text plus optional developer/system role content. The seam
-validates structure; the agent runtime renders the prompt.
+Carries per-run task text plus optional stable system context. Mutable behavior
+belongs in the artifact/workspace, not in this instruction bundle.
 """
 
 from __future__ import annotations
@@ -17,17 +17,19 @@ class AgentInstructions(BaseModel):
     task: str
     """The task description shown to the agent."""
 
-    developer: str | None = None
-    """Developer/system-role content. Optional; prepended to task."""
+    system: str | None = None
+    """Stable system/developer context. Do not put mutable artifact behavior here."""
 
     rubric: str | None = None
     """Optional rubric block (rendered separately from task in the prompt)."""
 
 
 class AgentRoles:
-    """Convention strings for the `developer` field across common roles.
+    """Stable prompt-context labels for common stage purposes.
 
-    Use as `lv.AgentInstructions(task=..., developer=lv.roles.EXECUTOR)`.
+    Use as `lv.AgentInstructions(task=..., system=lv.roles.JUDGE)` only when
+    the role text is stable context. Mutable executor/proposer behavior belongs
+    in the artifact being optimized.
     """
 
     EXECUTOR = "executor"

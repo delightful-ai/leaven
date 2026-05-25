@@ -38,8 +38,9 @@ When editing the scaffold:
   should be public (promote it) or use a public alternative.
 - Submodules listed in `leaven/__init__.py`'s `__all__` (e.g.
   `optimizers`, `lm`, `agent`, `workspace`, `sandbox`, `cases`,
-  `frontier`, `output`, `scoring`, `trust`, `runs`, `x`, `data_class`)
-  are intentional namespaces. Submodules that leak into `dir(leaven)`
+  `frontier`, `output`, `scoring`, `trust`, `runs`, `x`, `data_class`,
+  `artifacts`, `layouts`, `setup`) are intentional namespaces. Submodules
+  that leak into `dir(leaven)`
   only because their public types are imported from them (`leaven.case`,
   `leaven.assessment`, etc.) are NOT in `__all__`; users access the type
   as `lv.Case`, `lv.Assessment`.
@@ -141,6 +142,9 @@ Round 4 vendored (2026-05-24) — high-taste references:
   sparse-clone copy**, not subtree-tracked; see
   `repos/weave/README-leaven.md`.
 - `repos/anthropic-sdk-python/` — major LLM provider Python SDK shape.
+- `repos/braintrust-sdk-python/` — Python tracing/evals SDK, `Eval(...)`,
+  span/logging APIs, OpenTelemetry bridge, pytest plugin, and agent/model
+  auto-instrumentation patterns.
 - `repos/jupyter-client/` — battle-tested stdio/ZMQ RPC patterns.
 - `repos/python-lsp-jsonrpc/` — 120 KB minimal Python JSON-RPC reference.
 
@@ -150,7 +154,10 @@ Round 4 vendored (2026-05-24) — high-taste references:
 - `uv run python -c "import leaven; print(dir(leaven))"` lists the top-level
   surface without import errors.
 - `just check` runs lint, types, and compiles `examples/*.py`.
-- `uv run ty src/leaven` passes type checking.
+- `uv run ty check src/leaven --exclude 'src/leaven/_types/**' --force-exclude`
+  passes type checking. `_types/**` is generated schema projection and remains
+  excluded until codegen emits Ty-legal constrained aliases instead of pydantic
+  `constr(...)`/`conint(...)` calls in type positions.
 - `uv run ruff check src/leaven examples` passes linting.
 
 No runtime tests against the engine; examples print composed types and canonical

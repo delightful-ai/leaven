@@ -25,7 +25,7 @@ FIXTURE = HERE / "fixtures" / "arithmetic.jsonl"
 async def run(
     prompt: lv.PromptArtifact,
     case: lv.Case,
-    cx: lv.RunContext,
+    cx,
 ) -> str:
     response = await cx.lm.complete(
         prompt=prompt.template.format(**case.input),
@@ -35,7 +35,7 @@ async def run(
 
 
 @lv.scorer
-async def score(output: str, case: lv.Case, cx: lv.RunContext) -> lv.Score:
+async def score(output: str, case: lv.Case, cx) -> lv.Score:
     return lv.Score.exact_match(output, (case.target or {})["answer"])
 
 

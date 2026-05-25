@@ -25,7 +25,7 @@ class ProposalsBuilder:
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
     async def apply(self, submission: ProposalSubmission) -> WriteReceipt:
-        """Apply a previously-submitted proposal batch. Mutates the run graph."""
+        """Ask the engine to apply a previously-submitted proposal batch."""
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
     async def submit_and_apply(self, batch: ProposalBatch) -> WriteReceipt:

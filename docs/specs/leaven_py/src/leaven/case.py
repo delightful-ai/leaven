@@ -1,43 +1,49 @@
-"""Case record — the unit of evaluation work.
+"""Case records — the public task instance and execution projection.
 
-A Case carries input, target (hidden from runners/reflectors by default),
-and metadata. Loaded via `cx.case.load(case_id, include=[...])`; the
-include set determines which fields are projected (target-safe by default).
+Users author `Case` values in `lv.Task(cases=[...])`; stages also receive a
+case-shaped projection selected by the engine for the current role. The engine
+tracks receipts and redactions internally; ordinary user code should not thread
+case read receipts by hand.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
-from ._receipts import QueryReceipt
+from .sandbox.config import SandboxConfig
+from .setup import SetupScript
 
 
 class Case(BaseModel):
-    """A loaded case. Carries the read receipt for downstream evidence binding."""
+    """One benchmark/task case."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid")
 
     id: str
     """Case identifier (paper-source-derived where applicable)."""
 
     input: dict[str, Any]
-    """Inputs visible to runners. Always projected."""
+    """Inputs visible to runners."""
 
     target: dict[str, Any] | None = None
-    """Hidden answer(s). Visible only to evaluators/scorers/judges, never to
-    runners or reflectors. None when the caller did not include target in the
-    load projection."""
+    """Hidden answer(s) / rubric. Projected only to target-authorized roles."""
 
-    metadata: dict[str, Any] | None = None
-    """Source-side metadata (split, difficulty, etc.). Visible per projection."""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    """Source-side metadata such as split, difficulty, and provenance."""
 
-    target_ref: str | None = None
-    """Opaque target reference for evidence binding without exposing target value."""
+    files: dict[str, str] = Field(default_factory=dict)
+    """Case files/assets materialized by rollout layouts."""
 
-    receipt: QueryReceipt
-    """Read receipt — pass into `EvidenceEnvelope.read_receipts` to bind."""
+    setup: SetupScript | None = None
+    """Optional setup action run after files are materialized."""
+
+    sandbox: SandboxConfig | None = None
+    """Optional per-case sandbox override."""
+
+    split: str | None = None
+    """Optional split tag used when a `Task` is lowered into train/val/test sets."""
 
 
 class CaseSet(BaseModel):

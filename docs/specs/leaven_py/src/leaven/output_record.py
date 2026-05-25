@@ -1,7 +1,8 @@
 """OutputRecord — typed output projection for assessments and stage results.
 
-Carries visibility, data classes, and either inline content or a blob ref.
-Constructors are explicit: `text(...)`, `blob(...)`, `structured(...)`.
+Carries visibility, data classes, and either inline value or a blob ref.
+Constructors are explicit: `text(...)`, `json_value(...)`, `blob(...)`,
+`structured(...)`.
 """
 
 from __future__ import annotations
@@ -10,9 +11,18 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .data_class import OPTIMIZER_VISIBLE
+from .data_class import PUBLIC
 
-Visibility = Literal["optimizer_visible", "evaluator_only", "trace_only", "private"]
+Visibility = Literal[
+    "public",
+    "optimizer_visible",
+    "reflector_visible",
+    "evaluator_only",
+    "operator_only",
+    "private",
+    "redacted",
+]
+OutputKind = Literal["text", "json", "blob_ref", "structured", "agent_session", "workspace_diff"]
 
 
 class OutputRecord(BaseModel):
@@ -20,21 +30,21 @@ class OutputRecord(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    kind: Literal["text", "blob", "structured"]
-    visibility: Visibility = "optimizer_visible"
-    data_classes: list[str] = Field(default_factory=lambda: [OPTIMIZER_VISIBLE])
+    kind: OutputKind
+    visibility: Visibility = "public"
+    data_classes: list[str] = Field(default_factory=lambda: [PUBLIC])
     summary: str | None = None
-    content: Any | None = None
-    """Inline content for `text` and `structured`; `None` for `blob`."""
+    value: Any | None = None
+    """Inline value for text/json/structured outputs; None for blob refs."""
     blob_ref: str | None = None
-    """Opaque blob reference for `blob` outputs; `None` for inline."""
+    """Opaque blob reference for blob-backed outputs; None for inline."""
 
     @classmethod
     def text(
         cls,
         *,
         summary: str,
-        visibility: Visibility = "optimizer_visible",
+        visibility: Visibility = "public",
         data_classes: list[str] | None = None,
     ) -> OutputRecord:
         """Inline text output. Summary IS the content."""
@@ -45,11 +55,23 @@ class OutputRecord(BaseModel):
         cls,
         *,
         summary: str,
-        content: dict[str, Any],
-        visibility: Visibility = "optimizer_visible",
+        value: dict[str, Any],
+        visibility: Visibility = "public",
         data_classes: list[str] | None = None,
     ) -> OutputRecord:
         """Inline structured output (JSON-shaped). Summary is a human-readable label."""
+        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+
+    @classmethod
+    def json_value(
+        cls,
+        *,
+        summary: str,
+        value: Any,
+        visibility: Visibility = "public",
+        data_classes: list[str] | None = None,
+    ) -> OutputRecord:
+        """Inline JSON-shaped output."""
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
     @classmethod
@@ -58,11 +80,11 @@ class OutputRecord(BaseModel):
         *,
         summary: str,
         blob_ref: str,
-        visibility: Visibility = "optimizer_visible",
+        visibility: Visibility = "public",
         data_classes: list[str] | None = None,
     ) -> OutputRecord:
         """Blob-referenced output. The blob_ref is engine-minted."""
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
 
-__all__ = ["OutputRecord", "Visibility"]
+__all__ = ["OutputKind", "OutputRecord", "Visibility"]

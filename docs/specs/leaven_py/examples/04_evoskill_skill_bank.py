@@ -28,7 +28,7 @@ FIXTURE = HERE / "fixtures" / "arithmetic.jsonl"
 async def run(
     bank: lv.SkillBank,
     case: lv.Case,
-    cx: lv.RunContext,
+    cx,
 ) -> str:
     ws = await cx.workspace.materialize_candidate(
         cx.candidate_id,
@@ -41,7 +41,6 @@ async def run(
         workspace=ws,
         instructions=lv.AgentInstructions(
             task=case.input["question"],
-            developer=lv.roles.EXECUTOR,
         ),
         timeout_s=240,
     )
@@ -49,12 +48,11 @@ async def run(
 
 
 @lv.scorer
-async def score(output: str, case: lv.Case, cx: lv.RunContext) -> lv.Score:
+async def score(output: str, case: lv.Case, cx) -> lv.Score:
     target = (case.target or {}).get("answer", "")
     return lv.Score(
         value=lv.scoring.multi_tolerance(output, target),
-        output=lv.OutputRecord.text(summary=output, visibility="optimizer_visible"),
-        metrics={"length_chars": float(len(output))},
+        feedback=f"candidate answered {output!r}; target was {target!r}",
     )
 
 

@@ -49,6 +49,7 @@ class RegisteredStage[A, O](BaseModel):
     role: StageRole
     id: str
     trust_profile: TrustProfile = TrustProfile.MANAGED_SANDBOX
+    granularity: Granularity | None = None
     func: Any
     """The wrapped async user function. Engine-internal."""
 
@@ -71,6 +72,8 @@ def _make_registered(
     func: Callable[..., Awaitable[Any]],
     stage_id: str | None,
     trust_profile: TrustProfile | str,
+    *,
+    granularity: Granularity | None = None,
 ) -> RegisteredStage[Any, Any]:
     """Internal: build a RegisteredStage from a decorated function.
 
@@ -82,6 +85,7 @@ def _make_registered(
         role=role,
         id=stage_id or f"{getattr(func, '__module__', 'leaven')}.{getattr(func, '__name__', 'stage')}",
         trust_profile=_resolve_trust(trust_profile),
+        granularity=granularity,
         func=func,
     )
 
@@ -105,7 +109,7 @@ def evaluator(
     """Decorate an async function as an evaluator stage."""
 
     def wrap(f: EvaluatorFunc) -> RegisteredStage[Any, Any]:
-        return _make_registered("evaluator", f, id, trust_profile)
+        return _make_registered("evaluator", f, id, trust_profile, granularity=granularity)
 
     return wrap(func) if func is not None else wrap
 
@@ -206,7 +210,9 @@ def scorer(
 ) -> Any:
     """Decorate an async function as a scorer stage.
 
-    Scorers receive (output, case, cx) and return a `Score`.
+    Scorers receive (output, case, cx) and return a `Score`. For rollout
+    pipelines, `cx.rollout_workspace` is the engine-prepared workspace that
+    the runner/command/agent just used.
     """
 
     def wrap(f: ScorerFunc) -> RegisteredStage[Any, Score]:

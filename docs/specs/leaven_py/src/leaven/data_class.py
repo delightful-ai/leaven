@@ -16,13 +16,16 @@ from __future__ import annotations
 from typing import Final
 
 # Case-derived classes
+PUBLIC: Final = "public"
 CASE_INPUT: Final = "case.input"
 CASE_TARGET: Final = "case.target"
 CASE_METADATA: Final = "case.metadata"
 
 # Candidate-derived classes
 CANDIDATE_OUTPUT: Final = "candidate.output"
-ARTIFACT_OUTPUT: Final = "artifact.output"
+CANDIDATE_ARTIFACT: Final = "candidate.artifact"
+ARTIFACT_OUTPUT: Final = CANDIDATE_ARTIFACT
+"""Deprecated scaffold alias; use CANDIDATE_ARTIFACT."""
 
 # Workspace-derived classes
 WORKSPACE_FILE: Final = "workspace.file"
@@ -32,7 +35,9 @@ WORKSPACE_SECRET: Final = "workspace.secret"
 # Provenance/visibility classes
 OPTIMIZER_VISIBLE: Final = "optimizer.visible"
 EVALUATOR_PRIVATE: Final = "evaluator.private"
-TRACE_ONLY: Final = "trace.only"
+SCORER_PRIVATE: Final = "scorer.private"
+TRACE_ONLY: Final = "transcript.raw"
+"""Deprecated scaffold alias; use transcript/raw output visibility instead."""
 
 # Extension namespace marker — `x.<adapter>.*` data classes follow the same
 # convention as the `x.*` schema namespace; e.g. `x.dspy.completion`.
@@ -40,6 +45,7 @@ EXTENSION_PREFIX: Final = "x."
 
 __all__ = [
     "ARTIFACT_OUTPUT",
+    "CANDIDATE_ARTIFACT",
     "CANDIDATE_OUTPUT",
     "CASE_INPUT",
     "CASE_METADATA",
@@ -47,6 +53,8 @@ __all__ = [
     "EVALUATOR_PRIVATE",
     "EXTENSION_PREFIX",
     "OPTIMIZER_VISIBLE",
+    "PUBLIC",
+    "SCORER_PRIVATE",
     "TRACE_ONLY",
     "WORKSPACE_DIFF",
     "WORKSPACE_FILE",

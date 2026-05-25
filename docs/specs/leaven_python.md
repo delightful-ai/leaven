@@ -69,8 +69,74 @@ deployment."* That sentence is still operative.
 
 ## What the user writes
 
-The minimal full Leaven program in Python is composition + stages + run.
-The smallest meaningful sketch is ~20 lines:
+The high-level Leaven program in Python is artifact + task + swappable
+stages + optimizer + runtime. This is the public shape that should feel
+closest to FlashEvolve, while the task records stay close to Inspect's
+`Task` / case vocabulary:
+
+```python
+import leaven as lv
+
+task = lv.Task(
+    cases=[
+        lv.Case(
+            id="arith-001",
+            input={"question": "What is 2 + 3?"},
+            target={"answer": "5"},
+            files={"README.md": "Answer the arithmetic question."},
+            setup=lv.setup.bash("mkdir -p output"),
+        )
+    ],
+    sandbox=lv.sandbox.docker(image="python:3.12"),
+)
+
+artifact = lv.artifacts.directory("./agent_harness")
+rollout = lv.Rollout.command(
+    argv=["uv", "run", "python", "target/current/run.py"],
+    layout=lv.layouts.case_workspace(),
+    output=lv.output.files(["output/result.json"]),
+)
+
+@lv.scorer
+async def score(output: object, case: lv.Case, cx: lv.RunContext) -> lv.Score:
+    result_file = await cx.workspace.read_file(
+        cx.rollout_workspace, "output/result.json")
+    return lv.Score.exact_match(result_file.content, case.target["answer"])
+
+score_stage = lv.ScoreStage.fn(score)
+
+result = await lv.evolve(
+    artifact=artifact,
+    task=task,
+    stages=lv.Stages(
+        rollout=rollout,
+        score=score_stage,
+        reflect=lv.Reflect.default_gepa(),
+        propose=lv.Propose.agent_edit(agent=lv.agent.codex(model="gpt-5-codex")),
+        evaluate=lv.Evaluate.pipeline(rollout=rollout, score=score_stage, split="val"),
+    ),
+    optimizer=lv.optimizers.gepa(population_size=8),
+    runtime=lv.runtime.local(budget=lv.budget(usd=20)),
+).run()
+```
+
+The ownership rule is load-bearing:
+
+```text
+Artifact = mutable behavior package
+Task     = benchmark world: cases, files, setup, hidden targets, sandbox needs
+Stages   = swappable algorithm roles and their layout requirements
+Runtime  = workspace/sandbox allocation, effects, receipts, trust, budget
+```
+
+`Rollout` is the interpretation of the current artifact version for one
+sample. Do not put a universal `entrypoint` on the base artifact concept.
+If a harness command or manifest must evolve, it belongs inside the artifact
+projection under the stage's mutable root; the rollout remains the stable
+contract for executing that projection.
+
+For tiny prompt optimizations, the decorator form remains sugar over the
+same roles. The smallest meaningful sketch is still ~20 lines:
 
 ```python
 import leaven as lv
@@ -470,7 +536,8 @@ Three sub-rules carry the weight:
 2. **Submodules that exist as namespaces** (`lv.optimizers`, `lv.lm`,
    `lv.agent`, `lv.workspace`, `lv.sandbox`, `lv.cases`, `lv.frontier`,
    `lv.output`, `lv.scoring`, `lv.trust`, `lv.runs`, `lv.x`,
-   `lv.data_class`) are listed in the top-level `__all__`. Submodules that
+   `lv.data_class`, `lv.artifacts`, `lv.layouts`, `lv.setup`) are listed
+   in the top-level `__all__`. Submodules that
    leak into `dir(leaven)` because of import machinery (`leaven.case`,
    `leaven.assessment`, etc. — files behind public types) are NOT in
    `__all__` and users should access the type via `lv.Case`, `lv.Assessment`
@@ -511,7 +578,8 @@ The implementation must honor:
   modules that users discover and depend on.
 - **Don't proliferate ways to do one thing.** Per the user's stated
   preference: one canonical way. Builders, not free-form construction.
-  Decorators, not config dicts. Typed records, not unstructured maps.
+  Explicit stage objects for composition; decorators only as function-stage
+  authoring sugar. Typed records, not unstructured maps.
 - **Don't ship without typing.** Pydantic models or dataclasses with
   full type hints. `Optimized[A]` is generic; IDE autocomplete works
   on `result.best.summary()` without guessing.

@@ -25,7 +25,7 @@ The vendoring discipline comes from
 
 ## Inventory
 
-12 subtree vendors + 1 informal copy. Total ~289 MB.
+13 subtree vendors + 1 informal copy. Total ~324 MB.
 
 | repo | path | size | upstream | added |
 |------|------|------|----------|-------|
@@ -36,6 +36,7 @@ The vendoring discipline comes from
 | Harbor | `repos/harbor/` | 43 MB | harbor-framework/harbor@main | 2026-05-24 |
 | Temporal Python SDK | `repos/temporal-python-sdk/` | 12 MB | temporalio/sdk-python@main | 2026-05-24 |
 | Anthropic SDK | `repos/anthropic-sdk-python/` | 8 MB | anthropics/anthropic-sdk-python@main | 2026-05-24 |
+| Braintrust Python SDK | `repos/braintrust-sdk-python/` | 35 MB | braintrustdata/braintrust-sdk-python@main | 2026-05-24 |
 | Jupyter Client | `repos/jupyter-client/` | 1.4 MB | jupyter/jupyter_client@main | 2026-05-24 |
 | python-lsp-jsonrpc | `repos/python-lsp-jsonrpc/` | 120 KB | python-lsp/python-lsp-jsonrpc@develop | 2026-05-24 |
 | pydantic-ai | `repos/pydantic-ai/` | 13 MB (tests/ pruned) | pydantic/pydantic-ai@main | 2026-05-24 |
@@ -211,6 +212,27 @@ The vendoring discipline comes from
 - Read first in: `src/anthropic/` (top-level), `src/anthropic/_client.py`,
   `src/anthropic/types/`, `src/anthropic/lib/streaming/`.
 - Update: `git subtree pull --prefix=docs/specs/leaven_py/repos/anthropic-sdk-python https://github.com/anthropics/anthropic-sdk-python.git main --squash`
+
+### Braintrust Python SDK
+
+- Local path: `docs/specs/leaven_py/repos/braintrust-sdk-python/`
+- Upstream: `https://github.com/braintrustdata/braintrust-sdk-python`
+- Ref vendored: `main` (2026-05-24)
+- Added for: Python tracing and eval SDK patterns: `Eval(...)`, scorer
+  wiring, span/tracing APIs, OpenTelemetry bridging, pytest integration,
+  and auto-instrumentation for agent/model frameworks such as DSPy,
+  Pydantic AI, LangChain, OpenAI Agents, Claude Agent SDK, AutoGen,
+  CrewAI, Strands, AgentScope, and Temporal.
+- Runtime import/package name: `braintrust` (plus optional `autoevals` in
+  upstream examples); vendoring does not add it as a Leaven runtime
+  dependency.
+- Read first in: `py/README.md`, `py/src/braintrust/framework.py`,
+  `py/src/braintrust/logger.py`, `py/src/braintrust/trace.py`,
+  `py/src/braintrust/otel/`, `py/src/braintrust/integrations/`,
+  `py/src/braintrust/wrappers/pytest_plugin/`.
+- Pattern notes: `docs/agent-context/patterns/braintrust-sdk-python-patterns.md`
+- Add: `git subtree add --prefix=docs/specs/leaven_py/repos/braintrust-sdk-python https://github.com/braintrustdata/braintrust-sdk-python.git main --squash`
+- Update: `git subtree pull --prefix=docs/specs/leaven_py/repos/braintrust-sdk-python https://github.com/braintrustdata/braintrust-sdk-python.git main --squash`
 
 ### Jupyter Client
 
