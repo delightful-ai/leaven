@@ -178,7 +178,6 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-engine",
             "leaven-kernel",
             "leaven-store",
-            "leaven-surface",
             "leaven-workspace",
         ],
     ),
@@ -205,10 +204,7 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-workspace-git",
         ],
     ),
-    (
-        "leaven-artifact-git",
-        &["leaven-core", "leaven-kernel", "leaven-surface"],
-    ),
+    ("leaven-artifact-git", &["leaven-core", "leaven-kernel"]),
     (
         "leaven-artifact-jj",
         &[
@@ -223,17 +219,13 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
         &["leaven-core", "leaven-kernel", "leaven-surface"],
     ),
     ("leaven-core", &["leaven-kernel"]),
-    (
-        "leaven-derive",
-        &["leaven-core", "leaven-kernel", "leaven-surface"],
-    ),
+    ("leaven-derive", &[]),
     (
         "leaven-engine",
         &[
             "leaven-core",
             "leaven-kernel",
             "leaven-store",
-            "leaven-surface",
             "leaven-workspace",
         ],
     ),
@@ -252,7 +244,6 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-kernel",
             "leaven-lm",
             "leaven-population",
-            "leaven-preference",
             "leaven-stage",
             "leaven-surface",
             "leaven-workspace",
@@ -301,7 +292,6 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-engine",
             "leaven-evidence",
             "leaven-kernel",
-            "leaven-preference",
         ],
     ),
     ("leaven-preference", &["leaven-core", "leaven-evidence"]),
@@ -335,7 +325,6 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-core",
             "leaven-engine",
             "leaven-kernel",
-            "leaven-store",
             "leaven-workspace",
         ],
     ),

@@ -3249,7 +3249,6 @@ dependencies = [
  "leaven-kernel",
  "leaven-workspace",
  "leaven-workspace-local",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -3279,7 +3278,6 @@ dependencies = [
  "leaven-public-seam",
  "leaven-store",
  "leaven-store-inline",
- "leaven-surface",
  "leaven-workspace",
  "leaven-workspace-local",
  "serde",
@@ -3325,7 +3323,6 @@ version = "0.0.0"
 dependencies = [
  "leaven-core",
  "leaven-kernel",
- "leaven-surface",
  "serde",
  "thiserror 2.0.18",
 ]
@@ -3397,9 +3394,6 @@ dependencies = [
 name = "leaven-derive"
 version = "0.0.0"
 dependencies = [
- "leaven-core",
- "leaven-kernel",
- "leaven-surface",
  "trybuild",
 ]
 
@@ -3475,7 +3469,6 @@ dependencies = [
  "leaven-kernel",
  "leaven-lm",
  "leaven-population",
- "leaven-preference",
  "leaven-stage",
  "leaven-store-inline",
  "leaven-surface",
@@ -3511,7 +3504,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -3603,7 +3595,6 @@ dependencies = [
  "leaven-engine",
  "leaven-evidence",
  "leaven-kernel",
- "leaven-preference",
  "proptest",
  "serde",
 ]
@@ -3670,7 +3661,6 @@ dependencies = [
  "leaven-core",
  "leaven-engine",
  "leaven-kernel",
- "leaven-store",
  "leaven-store-inline",
  "leaven-workspace",
  "leaven-workspace-local",

@@ -13,6 +13,5 @@ workspace = true
 [dependencies]
 leaven-kernel = { workspace = true }
 leaven-core = { workspace = true }
-leaven-surface = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
