@@ -16,6 +16,7 @@ use leaven::engine::{
     CacheBypassReason, CacheStatus, Callback, ErrorPolicy, RunContext, RunEvent, RunGraphView,
 };
 use leaven::eval::{Case, SplitRole};
+use leaven::extend::{RunOutput, ScoreContext};
 use leaven::gepa::{
     Gepa, GepaCandidateIndex, GepaEventSummary, GepaOptimizedExt, GepaProfile, GepaProposalAttempt,
     GepaReport, GepaSkipReason, ReflectionError, ReflectiveCase, ReflectiveDatasetBuilder,
@@ -27,8 +28,8 @@ use leaven::kernel::{
 };
 use leaven::plumbing::{ContentId, Fingerprint, FiniteF64, MetadataBag};
 use leaven::prelude::{
-    Artifact, ArtifactIdentity, Budget, EditSurface, Optimized, Part, PartAddress, RunOutput,
-    Score, ScoreContext, ScoreError, SurfaceError, SurfaceFingerprint,
+    Artifact, ArtifactIdentity, Budget, EditSurface, Optimized, Part, PartAddress, Score,
+    ScoreError, SurfaceError, SurfaceFingerprint,
 };
 use leaven::run::{
     CachePolicy, OptimizeError, ResumeCompatibilityError, RunCase, RunError, RunProblem,
@@ -2980,8 +2981,10 @@ impl AimeLmProvider {
 const fn lm_role_label(role: Role) -> &'static str {
     match role {
         Role::System => "system",
+        Role::Developer => "developer",
         Role::User => "user",
         Role::Assistant => "assistant",
+        Role::Tool => "tool",
     }
 }
 
@@ -5787,8 +5790,7 @@ async fn score_answer(
     ctx: ScoreContext<AimePrompt, AimeInput, AimeTarget, AimeRunOutput>,
 ) -> Result<Score, ScoreError> {
     let target = ctx
-        .case
-        .target()
+        .load_target()
         .ok_or_else(|| ScoreError::new("AIME scorer requires a target answer"))?;
     let (score, feedback) = aime_score_feedback(target, &ctx.output.output.answer);
     Ok(Score::new(score, feedback)
@@ -6928,9 +6930,10 @@ Provide the new parameter value within ``` blocks."
                     && line.ends_with("/reports/summary.json"))
         );
         assert!(lines.iter().any(|line| {
-            line.starts_with("compatibility=schema=leaven-run.compatibility.v3")
+            line.starts_with("compatibility=schema=leaven-run.compatibility.v4")
                 && line.contains(" run_kind=leaven-run.optimize ")
-                && line.contains(" cache=cache:auto/")
+                && line.contains(" cache=cache:evaluation-policy-json:")
+                && line.contains(" budget=budget:limit-json:")
                 && line.contains(" lm_roles=2")
         }));
         assert!(
