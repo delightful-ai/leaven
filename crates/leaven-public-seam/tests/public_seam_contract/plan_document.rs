@@ -1,3 +1,4 @@
+use crate::support::workspace_root;
 use std::collections::{BTreeMap, BTreeSet};
 
 use leaven_lm::{MessageContentPart, OutputMode, Role};
@@ -6208,14 +6209,6 @@ fn since_revision_event_diff_plan() -> Value {
             "kind": "no_graph_writes"
         }
     })
-}
-
-fn workspace_root() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(std::path::Path::parent)
-        .unwrap()
-        .to_path_buf()
 }
 
 fn assert_call_authority_denied_redactions(error: &PublicSeamError, expected: &[&str]) {

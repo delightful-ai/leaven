@@ -1,3 +1,4 @@
+use crate::support::workspace_root;
 use leaven_kernel::{Cost, Fingerprint, Metered};
 use leaven_public_seam::{
     CapabilityDocument, PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext,
@@ -639,12 +640,4 @@ fn sandbox_contract_capability() -> CapabilityDocument {
         }
     }))
     .unwrap()
-}
-
-fn workspace_root() -> std::path::PathBuf {
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(2)
-        .unwrap()
-        .to_path_buf()
 }

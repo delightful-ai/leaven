@@ -1,3 +1,4 @@
+use crate::support::workspace_root;
 use leaven_public_seam::{PublicSeamError, PublicSeamPackage};
 use serde_json::{Value, json};
 
@@ -497,12 +498,4 @@ fn receipt_ref(id: &str) -> Value {
         "id": id,
         "fingerprint": "fp_receipt_sha256_evidence"
     })
-}
-
-fn workspace_root() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(std::path::Path::parent)
-        .unwrap()
-        .to_path_buf()
 }

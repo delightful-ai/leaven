@@ -1,6 +1,7 @@
+use crate::support::workspace_root;
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use leaven_public_seam::{
     MatrixRowStatus, PublicSeamError, PublicSeamPackage, SchemaFingerprint, WorkerTransportKind,
@@ -1122,14 +1123,6 @@ fn v1_scope_markers_refuse_mcp_watch_runtime_and_legacy_worker_protocol() {
     assert!(!scope.watch_runtime_enabled);
     assert!(!scope.legacy_worker_protocol_enabled);
     assert_eq!(scope.worker_transport, "acp_profile");
-}
-
-fn workspace_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(Path::parent)
-        .unwrap()
-        .to_path_buf()
 }
 
 fn finite_diff_plan() -> Value {

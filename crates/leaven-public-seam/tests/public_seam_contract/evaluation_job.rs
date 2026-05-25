@@ -1,3 +1,4 @@
+use crate::support::workspace_root;
 use leaven_public_seam::{EvaluationJobKind, PublicSeamError, PublicSeamPackage};
 use serde_json::{Value, json};
 
@@ -467,12 +468,4 @@ fn evaluation_job_kind(kind: leaven_public_seam::EvaluationJobKind) -> &'static 
         leaven_public_seam::EvaluationJobKind::Pairwise => "pairwise",
         leaven_public_seam::EvaluationJobKind::Listwise => "listwise",
     }
-}
-
-fn workspace_root() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(std::path::Path::parent)
-        .unwrap()
-        .to_path_buf()
 }

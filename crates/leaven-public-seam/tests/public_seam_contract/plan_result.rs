@@ -1,3 +1,5 @@
+use crate::support::prefixed_jcs_hash;
+use crate::support::workspace_root;
 use leaven_public_seam::{PublicSeamError, PublicSeamPackage};
 use serde_json::{Value, json};
 
@@ -890,13 +892,6 @@ fn bind_result_hashes_in_place(result: &mut Value) {
     *result = bind_result_hashes(std::mem::take(result));
 }
 
-fn prefixed_jcs_hash(prefix: &str, value: &Value) -> String {
-    format!(
-        "{prefix}{}",
-        jcs_canonicalize::sha256_jcs_hex(value).unwrap()
-    )
-}
-
 fn blob_ref(id: &str, data_classes: impl IntoIterator<Item = &'static str>) -> Value {
     json!({
         "kind": "blob_ref",
@@ -962,12 +957,4 @@ fn typed_failure_result() -> Value {
             }
         ]
     })
-}
-
-fn workspace_root() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(std::path::Path::parent)
-        .unwrap()
-        .to_path_buf()
 }

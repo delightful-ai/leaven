@@ -1,3 +1,4 @@
+use crate::support::workspace_root;
 use std::sync::{Arc, Mutex};
 
 use futures::executor::block_on;
@@ -468,12 +469,4 @@ fn plan_execution_context() -> PlanExecutionContext {
         "2026-05-24T00:00:00Z",
         "2026-05-24T00:00:01Z",
     )
-}
-
-fn workspace_root() -> std::path::PathBuf {
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(2)
-        .unwrap()
-        .to_path_buf()
 }

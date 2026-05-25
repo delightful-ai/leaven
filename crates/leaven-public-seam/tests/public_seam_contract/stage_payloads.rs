@@ -1,3 +1,4 @@
+use crate::support::workspace_root;
 use leaven_public_seam::{
     PublicSeamError, PublicSeamPackage, StagePayloadRole, StageProposalEffect,
 };
@@ -1366,12 +1367,4 @@ fn object_form_receipt_ref(id: &str) -> Value {
         "id": id,
         "fingerprint": "fp_receipt_sha256_stagepayload"
     })
-}
-
-fn workspace_root() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(std::path::Path::parent)
-        .unwrap()
-        .to_path_buf()
 }

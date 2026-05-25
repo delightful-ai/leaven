@@ -1,3 +1,5 @@
+use crate::support::prefixed_jcs_hash;
+use crate::support::workspace_root;
 use leaven_public_seam::{PublicSeamError, PublicSeamPackage, Replayability};
 use serde_json::{Value, json};
 
@@ -181,19 +183,4 @@ fn bind_submit_assessments_request_hash(result: &mut Value) {
             "assessment_ids": receipt["assessment_ids"]
         }),
     ));
-}
-
-fn prefixed_jcs_hash(prefix: &str, value: &Value) -> String {
-    format!(
-        "{prefix}{}",
-        jcs_canonicalize::sha256_jcs_hex(value).unwrap()
-    )
-}
-
-fn workspace_root() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(std::path::Path::parent)
-        .unwrap()
-        .to_path_buf()
 }

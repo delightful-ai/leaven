@@ -1,3 +1,4 @@
+use crate::support::workspace_root;
 use leaven_evidence::{
     DataClass, DataClassSet, OutputBlobAudit, OutputMetadata, OutputRecord, OutputVisibility,
 };
@@ -130,12 +131,4 @@ fn output_record_value_validation_rejects_schema_only_shortcuts() {
             .unwrap_err(),
         PublicSeamError::ExampleValidation { .. }
     ));
-}
-
-fn workspace_root() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(std::path::Path::parent)
-        .unwrap()
-        .to_path_buf()
 }

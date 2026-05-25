@@ -1,3 +1,4 @@
+use crate::support::workspace_root;
 use leaven_public_seam::{
     CallAuthorityDenialKind, CallAuthorityError, CapabilityDocument, PublicSeamPackage,
 };
@@ -383,14 +384,6 @@ fn base_capability() -> Value {
             "allowed_actions": []
         }
     })
-}
-
-fn workspace_root() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(std::path::Path::parent)
-        .unwrap()
-        .to_path_buf()
 }
 
 fn call_authority_denial(error: CallAuthorityError) -> leaven_public_seam::CallAuthorityDenial {

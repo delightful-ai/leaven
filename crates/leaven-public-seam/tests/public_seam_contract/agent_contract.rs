@@ -1,3 +1,4 @@
+use crate::support::workspace_root;
 use leaven_agent::{AgentSession, CommandRecord};
 use leaven_kernel::{AgentSessionId, Cost, Fingerprint, Metered};
 use leaven_public_seam::{
@@ -658,12 +659,4 @@ fn agent_contract_capability_value() -> Value {
             "allowed_actions": []
         }
     })
-}
-
-fn workspace_root() -> std::path::PathBuf {
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(2)
-        .unwrap()
-        .to_path_buf()
 }
