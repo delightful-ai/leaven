@@ -109,22 +109,22 @@ instrumentation, use `just coverage-smoke-fast --package <crate> --test
 <integration-test-name>`. It skips report generation entirely and therefore
 does not produce or enforce line/branch percentages.
 
-The v0.2.1b topology cutover adds many spec-listed crate skeletons whose job is
-to enforce dependency direction before their behavior lands. The default
-coverage gate keeps hard `coverage_line_floor` and `coverage_branch_floor`
-values over production/source behavior after excluding non-default milestone
-packages from workspace execution, and reports higher warning targets when the
-workspace falls below the desired ratchet. It runs the workspace tests plus
-`xtask` under `cargo llvm-cov` before reporting. The enforced denominator
-excludes test harness files and `#[cfg(test)] mod ...` blocks after execution,
-so tests can exercise production code without becoming code that must itself be
-covered. Line and branch coverage are both enforced from the lcov report so
-generic monomorphizations do not create duplicate missed-line denominators.
-Empty map crates and unimplemented skeleton crates naturally add no executable
-denominator; once a crate gains runtime behavior, that behavior is part of the
-canonical coverage surface and needs contract tests in the same change.
-Coverage keeps the exercised surface honest; it does not promote proxy
-examples or placeholder public names into mature product contracts.
+The topology contract verifies the active workspace entrypoints and dependency
+direction. It is not a maturity claim. The default coverage gate keeps hard
+`coverage_line_floor` and `coverage_branch_floor` values over production/source
+behavior after excluding non-default milestone packages from workspace
+execution, and reports higher warning targets when the workspace falls below
+the desired ratchet. It runs the workspace tests plus `xtask` under
+`cargo llvm-cov` before reporting. The enforced denominator excludes test
+harness files and `#[cfg(test)] mod ...` blocks after execution, so tests can
+exercise production code without becoming code that must itself be covered.
+Line and branch coverage are both enforced from the lcov report so generic
+monomorphizations do not create duplicate missed-line denominators. Empty map
+crates naturally add no executable denominator; once a crate gains runtime
+behavior, that behavior is part of the canonical coverage surface and needs
+contract tests in the same change. Coverage keeps the exercised surface honest;
+it does not promote proxy examples or placeholder public names into mature
+product contracts.
 
 ## Test Shapes
 
@@ -206,9 +206,9 @@ Use the narrowest layer that proves the claim.
   scenario for materialized workspace history, proposer-authored fresh
   artifacts, explicit cleanup, evidence refs, hidden test filtering,
   evaluator workspace isolation, and population update.
-- `crates/leaven/tests/topology_contract.rs`: guardrails for the full corrected
-  v0.2.1b workspace member list, `src/lib.rs` skeleton presence,
-  Leaven-to-Leaven dependency DAG, and cold-core leak boundaries.
+- `crates/leaven/tests/topology_contract.rs`: guardrails for the active
+  workspace member list, crate/bin entrypoints, Leaven-to-Leaven dependency
+  DAG, and cold-core leak boundaries.
 - `crates/leaven-agentic-skill/tests/skill_agentic.rs`: skill-bank
   materialization/readback, workspace proposal parsing, patch-plan validation,
   atomic patch application, change reporting, and rollback evidence for failed
