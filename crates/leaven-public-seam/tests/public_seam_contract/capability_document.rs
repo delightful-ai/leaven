@@ -1,5 +1,5 @@
+use crate::support::workspace_root;
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
 
 use leaven_engine::BudgetLedger;
 use leaven_kernel::{Amount, BudgetDimension, StageId};
@@ -1031,12 +1031,4 @@ fn assert_delegation_denied(parent: &CapabilityDocument, child: Value) {
         CapabilityDenialKind::Delegation,
         "{denial:?}"
     );
-}
-
-fn workspace_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(Path::parent)
-        .unwrap()
-        .to_path_buf()
 }

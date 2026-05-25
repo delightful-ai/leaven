@@ -1,3 +1,4 @@
+use crate::support::workspace_root;
 use leaven_public_seam::{CapabilityDocument, PublicSeamError, PublicSeamPackage};
 use serde_json::{Value, json};
 
@@ -296,12 +297,4 @@ fn base_capability() -> Value {
             "allowed_actions": []
         }
     })
-}
-
-fn workspace_root() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(std::path::Path::parent)
-        .unwrap()
-        .to_path_buf()
 }

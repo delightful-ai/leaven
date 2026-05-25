@@ -1,3 +1,4 @@
+use crate::support::workspace_root;
 use std::{collections::BTreeMap, path::Path};
 
 use futures::future::BoxFuture;
@@ -429,12 +430,4 @@ fn workspace_query_capability() -> CapabilityDocument {
         }
     }))
     .unwrap()
-}
-
-fn workspace_root() -> &'static std::path::Path {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
 }

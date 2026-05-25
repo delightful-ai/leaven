@@ -1,3 +1,5 @@
+use crate::support::prefixed_jcs_hash;
+use crate::support::workspace_root;
 use leaven_public_seam::{
     AcpAuthenticateRequest, AcpBackpressure, AcpPermissionRequest, AcpProgressDisposition,
     AcpProgressPriority, AcpSessionLifecycle, AcpSessionState, AcpStdioWorkerLaunch,
@@ -2286,19 +2288,4 @@ fn query_receipt(receipt: &str) -> Value {
         "read_scope_fingerprint": "fp_scope_sha256_acp",
         "projection_fingerprint": "fp_projection_sha256_acp"
     })
-}
-
-fn prefixed_jcs_hash(prefix: &str, value: &Value) -> String {
-    format!(
-        "{prefix}{}",
-        jcs_canonicalize::sha256_jcs_hex(value).unwrap()
-    )
-}
-
-fn workspace_root() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(std::path::Path::parent)
-        .unwrap()
-        .to_path_buf()
 }
