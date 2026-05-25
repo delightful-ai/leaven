@@ -1,6 +1,6 @@
 [package]
 name = "leaven-store-inline"
-description = "Leaven crate skeleton for leaven-store-inline."
+description = "In-memory implementations of Leaven storage capabilities."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -1,6 +1,6 @@
 [package]
 name = "leaven-agent"
-description = "Leaven crate skeleton for leaven-agent."
+description = "Provider-neutral agent runtime contracts."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

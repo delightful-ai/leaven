@@ -1,6 +1,6 @@
 [package]
 name = "leaven-workspace-local"
-description = "Leaven crate skeleton for leaven-workspace-local."
+description = "Trusted local filesystem and process workspace backend."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

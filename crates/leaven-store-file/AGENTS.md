@@ -62,8 +62,9 @@ choose product defaults, or define engine checkpoint schemas.
   verify: add focused tests to `tests/file_stores.rs`
 
 ## Local Bait
-- The package description still says "skeleton", but this crate has real store
-  behavior. Treat the source and `tests/file_stores.rs` as authoritative.
+- This crate has real local store behavior, but it is still only a filesystem
+  backend. Treat the source and `tests/file_stores.rs` as authoritative for
+  layout and durability, not as product checkpoint schema law.
 - Evidence schemas are problem-owned. Do not add one global evidence JSON shape
   here because this backend happens to serialize evidence values.
 - Local root paths are backend details. Public callers should hold refs and use
