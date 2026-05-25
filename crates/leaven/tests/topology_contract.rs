@@ -55,7 +55,6 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "examples/p7_self_optimization_kernel",
     "examples/p8_aime_gepa",
     "examples/trace2skill_spreadsheetbench",
-    "crates/leaven-cli",
     "xtask",
 ];
 
@@ -103,6 +102,7 @@ const EXPECTED_CRATES: &[&str] = &[
 ];
 
 const EXPECTED_BINARIES: &[&str] = &[
+    "crates/leaven-cli",
     "examples/p0_graph_skeleton",
     "examples/p1_keep_best",
     "examples/p2_pairwise_tournament",
@@ -367,6 +367,11 @@ fn corrected_topology_workspace_members_have_entrypoints() {
             "{krate} must expose a src/lib.rs entrypoint"
         );
     }
+    assert_eq!(
+        crate_directories(&root),
+        expected_crate_directories(),
+        "crate-like directories under crates/ must be real expected workspace crates; delete placeholder directories instead of quarantining them"
+    );
     for member in EXPECTED_BINARIES {
         let member_root = root.join(member);
         assert!(member_root.join("Cargo.toml").exists());
@@ -474,6 +479,15 @@ fn str_set(values: &[&str]) -> BTreeSet<String> {
     values.iter().copied().map(str::to_owned).collect()
 }
 
+fn expected_crate_directories() -> BTreeSet<String> {
+    EXPECTED_CRATES
+        .iter()
+        .copied()
+        .chain(["leaven-cli"])
+        .map(str::to_owned)
+        .collect()
+}
+
 fn path_dependencies(cargo_toml: &Path) -> BTreeSet<String> {
     let text = fs::read_to_string(cargo_toml).unwrap();
     section(&text, "dependencies")
@@ -529,5 +543,15 @@ fn cargo_manifests(root: &Path) -> Vec<PathBuf> {
                 .iter()
                 .map(|member| root.join(member).join("Cargo.toml")),
         )
+        .collect()
+}
+
+fn crate_directories(root: &Path) -> BTreeSet<String> {
+    fs::read_dir(root.join("crates"))
+        .unwrap()
+        .map(|entry| entry.unwrap())
+        .filter(|entry| entry.file_type().unwrap().is_dir())
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter(|name| name.starts_with("leaven-") || name == "leaven")
         .collect()
 }
