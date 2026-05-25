@@ -57,10 +57,13 @@ class DoctestDetectionTests(unittest.TestCase):
 
 
 class SuiteDeadlineTests(unittest.TestCase):
-    def test_test_binary_env_preserves_libtest_parallelism_by_default(self) -> None:
-        env = MODULE.test_binary_env(pathlib.Path.cwd(), [])
+    def test_nextest_command_preserves_workspace_excludes(self) -> None:
+        command = MODULE.WORKSPACE_TEST_RUN_COMMAND
 
-        self.assertNotIn("RUST_TEST_THREADS", env)
+        self.assertEqual(command[:3], ["cargo", "nextest", "run"])
+        self.assertIn("--workspace", command)
+        self.assertIn("--exclude", command)
+        self.assertIn("p8_aime_gepa", command)
 
     def test_workspace_build_timeout_is_separate_from_runtime_sla(self) -> None:
         with mock.patch.object(
@@ -69,15 +72,16 @@ class SuiteDeadlineTests(unittest.TestCase):
             [sys.executable, "-c", "import time; time.sleep(10)"],
         ):
             started = time.perf_counter()
-            with self.assertRaises(SystemExit):
-                MODULE.discover_workspace_test_binaries(pathlib.Path.cwd(), build_timeout=0.1)
+            result = MODULE.build_workspace_tests(pathlib.Path.cwd(), build_timeout=0.1)
 
+        self.assertEqual(result, 1)
         self.assertLess(time.perf_counter() - started, 3.0)
 
     def test_runtime_sla_starts_after_workspace_build_discovery(self) -> None:
         with (
-            mock.patch.object(MODULE, "discover_workspace_test_binaries", return_value=[]),
+            mock.patch.object(MODULE, "build_workspace_tests", return_value=0),
             mock.patch.object(MODULE, "test_commands", return_value=[]),
+            mock.patch.object(MODULE, "run_with_deadline", return_value=0),
             mock.patch.object(
                 MODULE.argparse.ArgumentParser,
                 "parse_args",
@@ -85,6 +89,24 @@ class SuiteDeadlineTests(unittest.TestCase):
             ),
         ):
             self.assertEqual(MODULE.main(), 0)
+
+    def test_doctest_prewarm_runs_before_runtime_deadline_starts(self) -> None:
+        with mock.patch.object(MODULE.subprocess, "run") as run:
+            run.return_value.returncode = 0
+            started = time.perf_counter()
+            result = MODULE.prewarm_commands(
+                [
+                    (
+                        "slow doctest compile",
+                        [sys.executable, "-c", "import time; time.sleep(0.2)"],
+                    )
+                ],
+                pathlib.Path.cwd(),
+            )
+
+        self.assertEqual(result, 0)
+        self.assertLess(time.perf_counter() - started, 0.1)
+        run.assert_called_once()
 
     def test_command_deadline_kills_slow_subprocess(self) -> None:
         started = time.perf_counter()
@@ -101,26 +123,6 @@ class SuiteDeadlineTests(unittest.TestCase):
 
         self.assertEqual(result, 1)
         self.assertLess(time.perf_counter() - started, 3.0)
-
-    def test_workspace_binaries_start_known_slow_targets_first(self) -> None:
-        root = pathlib.Path.cwd()
-        binaries = [
-            ("tiny_target", root, root),
-            ("optimize_builder", root, root),
-            ("public_seam_contract", root, root),
-            ("agentic_contract", root, root),
-        ]
-
-        ordered = sorted(
-            binaries,
-            key=lambda binary: MODULE.SLOW_TEST_BINARY_PRIORITY.get(binary[0], 0),
-            reverse=True,
-        )
-
-        self.assertEqual(
-            [name for name, _, _ in ordered],
-            ["public_seam_contract", "agentic_contract", "optimize_builder", "tiny_target"],
-        )
 
 
 if __name__ == "__main__":
