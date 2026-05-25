@@ -345,9 +345,11 @@ pub(super) fn ensure_test_reference(
                 message: format!("row `{row_id}` test evidence `{reference}` has no symbol"),
             })?;
     let path = package.repo_root.join(path_part);
-    let source = fs::read_to_string(&path).map_err(|source| PublicSeamError::Io {
-        path: path.clone(),
-        source,
+    let source = fs::read_to_string(&path).map_err(|source| PublicSeamError::InvalidMatrix {
+        message: format!(
+            "row `{row_id}` test evidence `{reference}` could not be read at `{}`: {source}",
+            path.display()
+        ),
     })?;
     let symbol = symbol.rsplit("::").next().unwrap_or(symbol);
     if source.contains(&format!("fn {symbol}(")) {
