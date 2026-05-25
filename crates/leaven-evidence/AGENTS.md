@@ -118,9 +118,10 @@ Evidence here is data a stage or evaluator can produce and another component can
   policy. The wire bridge is not implemented yet.
 - Human prose fields such as rationales and notes are debug context. Algorithms should route on typed fields such as `ScalarEvidence::score`, `PairwiseJudgment`, and `CaseOutcome`, not require prose to exist.
 - Placeholder modules in `src/lib.rs` are naming reservations, not permission to hide real implementation in `lib.rs`. Move behavior into the named module first.
-- The crate doc still says skeleton, and audit docs flag that as stale/ambiguous.
-  Fix metadata separately from symbol maturity: some exports are real and some
-  are placeholders.
+- The crate docs and package metadata mirror the public-maturity split: some
+  exports are behavior-bearing reusable values, while `diff`, `json`,
+  `listwise`, `mixed`, `score_vector`, and `string` remain named scaffold until
+  they carry fields, constructors, and contract tests.
 
 ## Proof Anchors
 - `cargo nextest run -p leaven-evidence` proves scalar, pairwise, paired

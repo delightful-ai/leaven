@@ -1,4 +1,14 @@
-//! leaven-evidence crate skeleton.
+//! Reusable evidence value shapes for Leaven runs.
+//!
+//! This crate owns data that a stage or evaluator can produce and another
+//! component can interpret: scalar scores, pairwise judgments, paired rollout
+//! rewards, sparse casewise outcomes, command and trajectory records, output
+//! records, skill-use telemetry, attribution, and case assessment records.
+//!
+//! Some root-re-exported names are still explicit reservations. The `diff`,
+//! `json`, `listwise`, `mixed`, `score_vector`, and `string` modules are
+//! public scaffold until their values carry fields, constructors, and contract
+//! tests.
 
 pub mod attribution {
     use leaven_core::Evidence;

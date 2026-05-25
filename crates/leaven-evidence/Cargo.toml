@@ -1,6 +1,6 @@
 [package]
 name = "leaven-evidence"
-description = "Leaven crate skeleton for leaven-evidence."
+description = "Reusable evidence value shapes for Leaven runs."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
