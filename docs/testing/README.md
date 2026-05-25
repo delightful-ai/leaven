@@ -70,19 +70,22 @@ Current milestone classifications:
 The canonical full test suite has a hard wall-clock SLA:
 
 ```text
-just test must finish in <30s
+just test execution must finish in <30s
 ```
 
-`just test` enforces this directly. The SLA covers workspace libtest binaries
-whose source contains test markers, including conventional sibling module
-directories for consolidated integration harnesses, and workspace doctests for
-library/tool packages that contain Rust doctest fences. Milestone examples stay
-out of the default SLA and run through explicit `just milestone-*` recipes.
-Empty library, binary, proc-macro, and doctest harnesses are skipped because
-they prove nothing while adding process-startup cost. If the suite crosses the
-line, do not add a second slow lane; reduce fixture cost, property-test case
-count, setup work, doctest harness fan-out, or assertion altitude until the
-default suite is back under the SLA.
+`just test` enforces this on test execution after compiling and discovering the
+workspace libtest binaries. The build/discovery step is still mandatory and must
+fail on compile errors, but compiler wall time is not evidence that the runtime
+suite crossed the SLA. The SLA covers workspace libtest binaries whose source
+contains test markers, including conventional sibling module directories for
+consolidated integration harnesses, and workspace doctests for library/tool
+packages that contain Rust doctest fences. Milestone examples stay out of the
+default SLA and run through explicit `just milestone-*` recipes. Empty library,
+binary, proc-macro, and doctest harnesses are skipped because they prove nothing
+while adding process-startup cost. If the suite crosses the line, do not add a
+second slow lane; reduce fixture cost, property-test case count, setup work,
+doctest harness fan-out, or assertion altitude until the default suite is back
+under the SLA.
 
 The SLA runner executes many libtest binaries concurrently and sets
 `RUST_TEST_THREADS=1` inside each binary. This keeps parallelism at the suite
