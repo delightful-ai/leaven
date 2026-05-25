@@ -1,4 +1,10 @@
-fn require_field(
+use std::collections::BTreeSet;
+
+use serde_json::Value;
+
+use crate::PublicSeamError;
+
+pub(super) fn require_field(
     object: &serde_json::Map<String, Value>,
     field: &str,
 ) -> Result<(), PublicSeamError> {
@@ -8,7 +14,10 @@ fn require_field(
     Ok(())
 }
 
-fn require_non_empty_array(value: Option<&Value>, field: &str) -> Result<(), PublicSeamError> {
+pub(super) fn require_non_empty_array(
+    value: Option<&Value>,
+    field: &str,
+) -> Result<(), PublicSeamError> {
     if required_array(value, field)?.is_empty() {
         return Err(invalid_stage_payload(format!(
             "stage payload field `{field}` must be non-empty"
@@ -17,14 +26,17 @@ fn require_non_empty_array(value: Option<&Value>, field: &str) -> Result<(), Pub
     Ok(())
 }
 
-fn reject_target_leakage(value: Option<&Value>, context: &str) -> Result<(), PublicSeamError> {
+pub(super) fn reject_target_leakage(
+    value: Option<&Value>,
+    context: &str,
+) -> Result<(), PublicSeamError> {
     let Some(value) = value else {
         return Ok(());
     };
     reject_target_leakage_value(value, context)
 }
 
-fn required_object<'a>(
+pub(super) fn required_object<'a>(
     value: &'a Value,
     field: &str,
 ) -> Result<&'a serde_json::Map<String, Value>, PublicSeamError> {
@@ -33,7 +45,7 @@ fn required_object<'a>(
         .ok_or_else(|| invalid_stage_payload(format!("{field} must be an object")))
 }
 
-fn matching_string(
+pub(super) fn matching_string(
     left: &serde_json::Map<String, Value>,
     right: &serde_json::Map<String, Value>,
     field: &str,
@@ -48,7 +60,7 @@ fn matching_string(
     Ok(left.to_owned())
 }
 
-fn matching_source_ref(
+pub(super) fn matching_source_ref(
     left: &serde_json::Map<String, Value>,
     right: &serde_json::Map<String, Value>,
     field: &str,
@@ -70,7 +82,7 @@ fn matching_source_ref(
     Ok(left)
 }
 
-fn validate_handoff_stage_receipts(
+pub(super) fn validate_handoff_stage_receipts(
     handoff: &Value,
     reflect_stage_call_id: &str,
     propose_stage_call_id: &str,
@@ -221,7 +233,10 @@ fn validate_propose_receipt_binds_reflect_receipt(
     ))
 }
 
-fn reject_target_leakage_value(value: &Value, context: &str) -> Result<(), PublicSeamError> {
+pub(super) fn reject_target_leakage_value(
+    value: &Value,
+    context: &str,
+) -> Result<(), PublicSeamError> {
     match value {
         Value::Object(object) => {
             for (key, nested) in object {
@@ -248,23 +263,29 @@ fn reject_target_leakage_value(value: &Value, context: &str) -> Result<(), Publi
     Ok(())
 }
 
-fn contains_case_target_marker(text: &str) -> bool {
+pub(super) fn contains_case_target_marker(text: &str) -> bool {
     text.to_ascii_lowercase().contains("case.target")
 }
 
-fn prefixed_stage_payload_hash(prefix: &str, value: &Value) -> Result<String, PublicSeamError> {
+pub(super) fn prefixed_stage_payload_hash(
+    prefix: &str,
+    value: &Value,
+) -> Result<String, PublicSeamError> {
     let digest = jcs_canonicalize::sha256_jcs_hex(value)
         .map_err(|error| invalid_stage_payload(format!("stage payload hash failed: {error}")))?;
     Ok(format!("{prefix}{digest}"))
 }
 
-fn required_string<'a>(value: Option<&'a Value>, field: &str) -> Result<&'a str, PublicSeamError> {
+pub(super) fn required_string<'a>(
+    value: Option<&'a Value>,
+    field: &str,
+) -> Result<&'a str, PublicSeamError> {
     value.and_then(Value::as_str).ok_or_else(|| {
         invalid_stage_payload(format!("stage payload field `{field}` must be a string"))
     })
 }
 
-fn optional_string(value: Option<&Value>) -> Result<Option<String>, PublicSeamError> {
+pub(super) fn optional_string(value: Option<&Value>) -> Result<Option<String>, PublicSeamError> {
     value
         .map(|value| {
             value
@@ -275,7 +296,7 @@ fn optional_string(value: Option<&Value>) -> Result<Option<String>, PublicSeamEr
         .transpose()
 }
 
-fn required_array<'a>(
+pub(super) fn required_array<'a>(
     value: Option<&'a Value>,
     field: &str,
 ) -> Result<&'a Vec<Value>, PublicSeamError> {
@@ -284,7 +305,7 @@ fn required_array<'a>(
     })
 }
 
-fn array_len(value: Option<&Value>, field: &str) -> Result<usize, PublicSeamError> {
+pub(super) fn array_len(value: Option<&Value>, field: &str) -> Result<usize, PublicSeamError> {
     value.map_or(Ok(0), |value| {
         value.as_array().map(Vec::len).ok_or_else(|| {
             invalid_stage_payload(format!("stage payload field `{field}` must be an array"))
@@ -292,7 +313,10 @@ fn array_len(value: Option<&Value>, field: &str) -> Result<usize, PublicSeamErro
     })
 }
 
-fn string_array(value: Option<&Value>, field: &str) -> Result<Vec<String>, PublicSeamError> {
+pub(super) fn string_array(
+    value: Option<&Value>,
+    field: &str,
+) -> Result<Vec<String>, PublicSeamError> {
     value.map_or_else(
         || Ok(Vec::new()),
         |value| {
@@ -314,11 +338,14 @@ fn string_array(value: Option<&Value>, field: &str) -> Result<Vec<String>, Publi
     )
 }
 
-fn string_set(value: Option<&Value>, field: &str) -> Result<BTreeSet<String>, PublicSeamError> {
+pub(super) fn string_set(
+    value: Option<&Value>,
+    field: &str,
+) -> Result<BTreeSet<String>, PublicSeamError> {
     string_array(value, field).map(|values| values.into_iter().collect())
 }
 
-fn literal_expr_array_contains_string(value: &Value, needle: &str) -> bool {
+pub(super) fn literal_expr_array_contains_string(value: &Value, needle: &str) -> bool {
     let Some(object) = value.as_object() else {
         return false;
     };
@@ -331,7 +358,10 @@ fn literal_expr_array_contains_string(value: &Value, needle: &str) -> bool {
         .is_some_and(|values| values.iter().any(|value| value.as_str() == Some(needle)))
 }
 
-fn source_ref_set(value: Option<&Value>, field: &str) -> Result<BTreeSet<String>, PublicSeamError> {
+pub(super) fn source_ref_set(
+    value: Option<&Value>,
+    field: &str,
+) -> Result<BTreeSet<String>, PublicSeamError> {
     let Some(value) = value else {
         return Ok(BTreeSet::new());
     };
@@ -344,7 +374,7 @@ fn source_ref_set(value: Option<&Value>, field: &str) -> Result<BTreeSet<String>
         .collect::<Result<BTreeSet<_>, _>>()
 }
 
-fn source_ref_key(value: &Value) -> Result<String, PublicSeamError> {
+pub(super) fn source_ref_key(value: &Value) -> Result<String, PublicSeamError> {
     if let Some(candidate) = candidate_ref_key(value)? {
         return Ok(candidate);
     }
@@ -355,7 +385,7 @@ fn source_ref_key(value: &Value) -> Result<String, PublicSeamError> {
     })
 }
 
-fn candidate_ref_key(value: &Value) -> Result<Option<String>, PublicSeamError> {
+pub(super) fn candidate_ref_key(value: &Value) -> Result<Option<String>, PublicSeamError> {
     if let Some(candidate) = value
         .as_str()
         .filter(|candidate| candidate.starts_with("cand_"))
@@ -377,7 +407,10 @@ fn candidate_ref_key(value: &Value) -> Result<Option<String>, PublicSeamError> {
     Ok(Some(format!("candidate:{run}{id}")))
 }
 
-fn receipt_ref_ids(value: Option<&Value>, field: &str) -> Result<Vec<String>, PublicSeamError> {
+pub(super) fn receipt_ref_ids(
+    value: Option<&Value>,
+    field: &str,
+) -> Result<Vec<String>, PublicSeamError> {
     let Some(value) = value else {
         return Ok(Vec::new());
     };
@@ -390,7 +423,10 @@ fn receipt_ref_ids(value: Option<&Value>, field: &str) -> Result<Vec<String>, Pu
         .collect()
 }
 
-fn require_read_receipt_refs(value: Option<&Value>, field: &str) -> Result<(), PublicSeamError> {
+pub(super) fn require_read_receipt_refs(
+    value: Option<&Value>,
+    field: &str,
+) -> Result<(), PublicSeamError> {
     for receipt in receipt_ref_ids(value, field)? {
         if !is_read_receipt_id(&receipt) {
             return Err(invalid_stage_payload(format!(
@@ -401,7 +437,7 @@ fn require_read_receipt_refs(value: Option<&Value>, field: &str) -> Result<(), P
     Ok(())
 }
 
-fn receipt_ref_id(value: &Value, field: &str) -> Result<String, PublicSeamError> {
+pub(super) fn receipt_ref_id(value: &Value, field: &str) -> Result<String, PublicSeamError> {
     if let Some(id) = value.as_str() {
         return Ok(id.to_owned());
     }
@@ -426,7 +462,7 @@ fn is_read_receipt_id(receipt: &str) -> bool {
         || receipt.starts_with("wsread_")
 }
 
-fn invalid_stage_payload(message: impl Into<String>) -> PublicSeamError {
+pub(super) fn invalid_stage_payload(message: impl Into<String>) -> PublicSeamError {
     PublicSeamError::InvalidStagePayload {
         message: message.into(),
     }

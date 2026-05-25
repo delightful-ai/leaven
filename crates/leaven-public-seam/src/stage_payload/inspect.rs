@@ -561,5 +561,3 @@ fn inspect_schema_bound_payload(
     require_field(object, "payload_schema")?;
     Ok(())
 }
-
-include!("inspect_helpers.rs");
