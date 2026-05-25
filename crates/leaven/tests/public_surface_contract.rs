@@ -195,6 +195,11 @@ const SURFACE: &[(&str, Route, &str)] = &[
         "Evaluator authors declare cacheability",
     ),
     // --- extend: cold algebra a stage author emits. ---
+    (
+        "CandidateId",
+        Route::Extend,
+        "stage authors name graph candidates",
+    ),
     ("InfoRef", Route::Extend, "proposer authors attach lineage"),
     (
         "CausalInputs",

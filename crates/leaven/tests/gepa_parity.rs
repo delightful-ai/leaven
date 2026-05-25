@@ -5,18 +5,16 @@ use std::{
 
 use futures::executor::block_on;
 use leaven::extend::{
-    CachePolicy, EvaluationRequest, Evaluator, InfoRef, Optimizer, Proposal, ProposalBatch,
-    ProposalBatchSemantics, ProposalEffect, RunEvent, TrustPolicy,
+    AssessmentGranularity, AssessmentTarget, CachePolicy, CandidateId, EvaluationRequest,
+    Evaluator, InfoRef, Optimizer, Proposal, ProposalBatch, ProposalBatchSemantics, ProposalEffect,
+    RunEvent, RunOutput, ScoreContext, TrustPolicy,
 };
 use leaven::gepa::{
     Gepa, GepaReflectiveDataset, GepaReflector, ReflectRequest, ReflectiveValue, SurfaceProposer,
     test_support::FixedSurfaceEdit,
 };
 use leaven::plumbing::ContentId;
-use leaven::prelude::{
-    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget,
-    CandidateId, Cost, RunOutput, Score, ScoreContext, optimize,
-};
+use leaven::prelude::{Artifact, ArtifactIdentity, Assessment, Budget, Cost, Score, optimize};
 use leaven::stdlib::{
     evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence},
     populations::ParetoFrontier,
