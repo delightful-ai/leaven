@@ -263,11 +263,11 @@ rows:
     fake_pass_rejected: Public seam code importing graph internals for convenience.
     minimum_closeout_level: semantic_denial
     positive_test_evidence:
-      - crates/leaven-engine/tests/graph_surface.rs::create_proposal_creates_candidate_without_causal_parent
-      - crates/leaven-engine/tests/graph_surface.rs::change_proposal_creates_causal_edge
+      - crates/leaven-engine/tests/engine_contract/graph_surface.rs::create_proposal_creates_candidate_without_causal_parent
+      - crates/leaven-engine/tests/engine_contract/graph_surface.rs::change_proposal_creates_causal_edge
       - crates/leaven-run/tests/public_seam.rs::runcontext_proposal_writes_project_to_public_seam_receipts
     negative_test_evidence:
-      - crates/leaven-engine/tests/graph_surface.rs::graph_snapshot_restore_rejects_proposal_batch_inconsistencies
+      - crates/leaven-engine/tests/engine_contract/graph_surface.rs::graph_snapshot_restore_rejects_proposal_batch_inconsistencies
       - crates/leaven-run/tests/public_seam.rs::proposal_write_projection_rejects_receipts_not_backed_by_runcontext_graph_truth
     implementation_evidence:
       - crates/leaven-engine/src/context/run_context.rs::RunContext::record_proposal_batch
@@ -569,12 +569,12 @@ rows:
     positive_test_evidence:
       - crates/leaven-public-seam/tests/public_seam_contract/capability_document.rs::aggregate_budget_ledger_enforces_cross_grant_totals_and_roles
       - crates/leaven-public-seam/tests/public_seam_contract/capability_document.rs::aggregate_budget_runtime_projection_enforces_engine_cross_role_and_delegated_totals
-      - crates/leaven-engine/tests/budget_laws.rs::budget_ledger_rejects_mixed_runtime_roles_and_delegated_work_beyond_aggregate_axes
+      - crates/leaven-engine/tests/engine_contract/budget_laws.rs::budget_ledger_rejects_mixed_runtime_roles_and_delegated_work_beyond_aggregate_axes
     negative_test_evidence:
       - crates/leaven-public-seam/tests/public_seam_contract/capability_document.rs::aggregate_budget_ledger_rejects_role_and_concurrency_overruns
       - crates/leaven-public-seam/tests/public_seam_contract/capability_document.rs::aggregate_budget_ledger_rejects_role_spend_beyond_total_budget
       - crates/leaven-public-seam/tests/public_seam_contract/capability_document.rs::aggregate_budget_runtime_projection_rejects_role_concurrency_delegation_and_precision_bypasses
-      - crates/leaven-engine/tests/budget_laws.rs::budget_ledger_rejects_mixed_runtime_roles_and_delegated_work_beyond_aggregate_axes
+      - crates/leaven-engine/tests/engine_contract/budget_laws.rs::budget_ledger_rejects_mixed_runtime_roles_and_delegated_work_beyond_aggregate_axes
     implementation_evidence:
       - crates/leaven-engine/src/budget.rs::BudgetLedger
       - crates/leaven-public-seam/src/capability/budget.rs::CapabilityDocument::runtime_budget_limit
@@ -727,7 +727,7 @@ rows:
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::stage_payloads_validate_all_role_specific_payload_shapes_with_provenance
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::active_reflect_then_propose_example_validates_through_semantic_stage_payloads
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::stage_payloads_preserve_object_form_info_and_receipt_refs
-      - crates/leaven-agentic/tests/public_seam_stage.rs::agentic_reflect_propose_handoff_lowers_through_locked_public_seam_owner
+      - crates/leaven-agentic/tests/agentic_contract/public_seam_stage.rs::agentic_reflect_propose_handoff_lowers_through_locked_public_seam_owner
     negative_test_evidence:
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::stage_payloads_reject_object_form_candidate_run_substitution
       - crates/leaven-public-seam/tests/public_seam_contract/call_authority.rs::call_authority_rejects_reflector_lm_call_input_classes_include_case_target
@@ -736,7 +736,7 @@ rows:
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::reflect_request_rejects_missing_source_refs_or_query_policy
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::reflect_request_rejects_parent_source_or_surface_context_gaps
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::reflection_result_rejects_unproven_diagnosis_without_sources
-      - crates/leaven-agentic/tests/public_seam_stage.rs::agentic_reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fakes
+      - crates/leaven-agentic/tests/agentic_contract/public_seam_stage.rs::agentic_reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fakes
     implementation_evidence:
       - crates/leaven-agentic/src/public_seam_stage.rs::ReflectRequestPayload
       - crates/leaven-agentic/src/public_seam_stage.rs::ReflectRequestPayload::new
@@ -871,12 +871,12 @@ rows:
     fake_pass_rejected: One generic agent prompt that both critiques and writes.
     minimum_closeout_level: semantic_denial
     positive_test_evidence:
-      - crates/leaven-agentic/tests/public_seam_stage.rs::agentic_reflect_propose_handoff_lowers_through_locked_public_seam_owner
+      - crates/leaven-agentic/tests/agentic_contract/public_seam_stage.rs::agentic_reflect_propose_handoff_lowers_through_locked_public_seam_owner
       - crates/leaven-gepa-agentic-git/tests/git_reflection.rs::public_seam_reflect_then_propose_stage_projection_uses_separate_agent_sessions
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::reflect_propose_handoff_binds_distinct_stage_calls_and_exact_reflection_result
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::reflect_propose_submission_binds_proposal_effects_to_cited_handoff
     negative_test_evidence:
-      - crates/leaven-agentic/tests/public_seam_stage.rs::agentic_reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fakes
+      - crates/leaven-agentic/tests/agentic_contract/public_seam_stage.rs::agentic_reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fakes
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::propose_request_rejects_missing_reflection_result_and_change_schema_authority
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::propose_request_rejects_reflection_source_ref_drop
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fakes
@@ -955,8 +955,8 @@ rows:
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::active_reflect_then_propose_example_validates_through_semantic_stage_payloads
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::stage_payloads_preserve_object_form_info_and_receipt_refs
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::reflect_propose_submission_binds_proposal_effects_to_cited_handoff
-      - crates/leaven-agentic/tests/public_seam_stage.rs::agentic_reflect_propose_handoff_lowers_through_locked_public_seam_owner
-      - crates/leaven-agentic/tests/public_seam_stage.rs::agentic_role_payloads_lower_remaining_stage_roles_through_locked_public_seam_owner
+      - crates/leaven-agentic/tests/agentic_contract/public_seam_stage.rs::agentic_reflect_propose_handoff_lowers_through_locked_public_seam_owner
+      - crates/leaven-agentic/tests/agentic_contract/public_seam_stage.rs::agentic_role_payloads_lower_remaining_stage_roles_through_locked_public_seam_owner
       - crates/leaven-gepa-agentic-git/tests/git_reflection.rs::public_seam_reflect_then_propose_stage_projection_uses_separate_agent_sessions
     negative_test_evidence:
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::stage_payloads_reject_object_form_candidate_run_substitution
@@ -970,10 +970,10 @@ rows:
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::runner_request_rejects_case_target_material
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::callback_and_adapter_payloads_reject_missing_payload_schema
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::reflect_propose_submission_rejects_mutation_without_cited_handoff
-      - crates/leaven-agentic/tests/public_seam_stage.rs::agentic_reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fakes
-      - crates/leaven-agentic/tests/public_seam_stage.rs::agentic_runner_and_scorer_payload_builders_reject_target_and_output_fakes
-      - crates/leaven-agentic/tests/public_seam_stage.rs::agentic_judge_payload_builder_rejects_empty_and_public_only_outputs
-      - crates/leaven-agentic/tests/public_seam_stage.rs::agentic_callback_and_adapter_payload_builders_reject_schema_and_capability_fakes
+      - crates/leaven-agentic/tests/agentic_contract/public_seam_stage.rs::agentic_reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fakes
+      - crates/leaven-agentic/tests/agentic_contract/public_seam_stage.rs::agentic_runner_and_scorer_payload_builders_reject_target_and_output_fakes
+      - crates/leaven-agentic/tests/agentic_contract/public_seam_stage.rs::agentic_judge_payload_builder_rejects_empty_and_public_only_outputs
+      - crates/leaven-agentic/tests/agentic_contract/public_seam_stage.rs::agentic_callback_and_adapter_payload_builders_reject_schema_and_capability_fakes
     implementation_evidence:
       - crates/leaven-agentic/src/public_seam_stage.rs::PublicStagePayloadIdentity
       - crates/leaven-agentic/src/public_seam_stage.rs::ReflectRequestPayload
@@ -1096,7 +1096,7 @@ rows:
     fake_pass_rejected: A test evaluator closure with no durable job identity.
     minimum_closeout_level: semantic_denial
     positive_test_evidence:
-      - crates/leaven-engine/tests/context_services.rs::evaluation_requests_record_evaluator_fingerprint_as_runtime_job_identity
+      - crates/leaven-engine/tests/engine_contract/context_services.rs::evaluation_requests_record_evaluator_fingerprint_as_runtime_job_identity
       - crates/leaven-run/tests/scoring_evaluator.rs::independent_runtime_evaluation_request_projects_to_public_seam_job
       - crates/leaven-run/tests/scoring_evaluator.rs::pairwise_runtime_evaluation_request_projects_to_public_seam_job
       - crates/leaven-run/tests/scoring_evaluator.rs::listwise_runtime_evaluation_request_projects_to_public_seam_job
@@ -1196,7 +1196,7 @@ rows:
       - crates/leaven-public-seam/tests/public_seam_contract/plan_document.rs::submit_assessments_accepts_candidate_artifact_score_output_class
       - crates/leaven-public-seam/tests/public_seam_contract/plan_result.rs::plan_result_accepts_assessment_summary_with_score_output_and_evidence_envelope
       - crates/leaven-public-seam/tests/public_seam_contract/plan_result.rs::plan_result_accepts_assessment_summary_structured_or_numeric_score_output_values
-      - crates/leaven-evidence/tests/command.rs::audited_blob_output_carries_public_audit_facts
+      - crates/leaven-evidence/tests/evidence_contract/command.rs::audited_blob_output_carries_public_audit_facts
       - crates/leaven-public-seam/tests/public_seam_contract/plan_document.rs::submit_assessments_accepts_evidence_source_receipts_without_duplicate_assessment_declarations
     negative_test_evidence:
       - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_missing_reportable_output_for_typed_runner_outputs
@@ -1286,8 +1286,8 @@ rows:
     fake_pass_rejected: Writing assessment rows into a global bucket by id only.
     minimum_closeout_level: semantic_denial
     positive_test_evidence:
-      - crates/leaven-engine/tests/context_services.rs::evaluate_with_resolves_sets_stores_evidence_and_emits_events
-      - crates/leaven-engine/tests/context_services.rs::pairwise_and_listwise_evaluations_record_non_independent_targets
+      - crates/leaven-engine/tests/engine_contract/context_services.rs::evaluate_with_resolves_sets_stores_evidence_and_emits_events
+      - crates/leaven-engine/tests/engine_contract/context_services.rs::pairwise_and_listwise_evaluations_record_non_independent_targets
       - crates/leaven-public-seam/tests/public_seam_contract/plan_document.rs::plan_execution_with_capability_gates_evaluator_writes_before_host_effects
       - crates/leaven-public-seam/tests/public_seam_contract/plan_result_replayability.rs::per_assessment_replayability_rolls_up_from_each_assessment
       - crates/leaven-run/tests/public_seam.rs::runcontext_assessments_project_to_public_seam_submit_assessment_receipts
