@@ -1,0 +1,21 @@
+# Optional imports for benchmark analyzers.
+matplotlib
+pandas
+
+# For Atari100K Experimenters.
+ale-py
+# dopamine-rl  # pygame installation issues.
+
+# For NAS Benchmarks.
+https://github.com/google-research/nasbench/archive/master.zip  # NASBench-101
+nats_bench  # NASBench-201
+
+# For HPOB, use 1.5.1.
+xgboost
+
+# For Raytune.
+ray[default]
+
+# For (multiobjective) optproblems.
+optproblems==1.3
+diversipy==0.9
