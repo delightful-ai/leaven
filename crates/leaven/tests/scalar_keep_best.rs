@@ -1,13 +1,11 @@
 use futures::executor::block_on;
 use leaven::extend::{
-    CachePolicy, EvaluationRequest, Evaluator, Optimizer, Proposal, ProposalBatch,
-    ProposalBatchSemantics, ProposalContext, Proposer, RunContext, RunEvent,
+    AssessmentGranularity, AssessmentTarget, CachePolicy, CandidateId, EvaluationRequest,
+    Evaluator, Optimizer, Proposal, ProposalBatch, ProposalBatchSemantics, ProposalContext,
+    Proposer, RunContext, RunEvent,
 };
 use leaven::plumbing::ContentId;
-use leaven::prelude::{
-    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget,
-    CandidateId, Cost,
-};
+use leaven::prelude::{Artifact, ArtifactIdentity, Assessment, Budget, Cost};
 use leaven::stdlib::{evidence::ScalarEvidence, populations::KeepBest};
 use leaven_core::{EvaluationPurpose, ResolvedEvaluationRequest, ResolvedRequestKind};
 use leaven_engine::{
@@ -16,6 +14,7 @@ use leaven_engine::{
 };
 use leaven_kernel::{EvaluatorId, Fingerprint, MetadataBag, Metered, ProposerId};
 use leaven_store_inline::InlineEvidenceStore;
+use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
 
 #[test]
@@ -92,25 +91,9 @@ fn engine_runs_scalar_keep_best_end_to_end() {
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct TextArtifact(String);
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-enum TextChange {
-    Append(&'static str),
-}
-
-#[derive(Debug)]
-struct TextError;
-
-impl std::fmt::Display for TextError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("text error")
-    }
-}
-
-impl std::error::Error for TextError {}
-
 impl Artifact for TextArtifact {
-    type Change = TextChange;
-    type ApplyError = TextError;
+    type Change = String;
+    type ApplyError = Infallible;
 
     fn identity(&self) -> ArtifactIdentity {
         let mut bytes = [0; 32];
@@ -121,9 +104,7 @@ impl Artifact for TextArtifact {
     }
 
     fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
-        match change {
-            TextChange::Append(suffix) => Ok(Self(format!("{}{suffix}", self.0))),
-        }
+        Ok(Self(change.clone()))
     }
 }
 
@@ -153,8 +134,8 @@ impl Proposer<ScalarProblem> for TwoMutations {
         Ok(Metered::new(
             ProposalBatch {
                 proposals: vec![
-                    Proposal::mutate(target, TextChange::Append("b")).build(),
-                    Proposal::mutate(target, TextChange::Append("aa")).build(),
+                    Proposal::mutate(target, "ab".to_owned()).build(),
+                    Proposal::mutate(target, "aaa".to_owned()).build(),
                 ],
                 semantics: ProposalBatchSemantics::Alternatives,
                 metadata: MetadataBag::new(),

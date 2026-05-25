@@ -96,6 +96,8 @@ pub use leaven_core::ProposalBatchSemantics;
 pub use leaven_core::ProposalEffect;
 /// Proposer authors set `ProposalProvenance` to record how a proposal was made.
 pub use leaven_core::ProposalProvenance;
+/// Stage authors name graph candidates with `CandidateId`.
+pub use leaven_kernel::CandidateId;
 
 // --- Run extension surface: store and evaluator wiring for custom workflows. ---
 
