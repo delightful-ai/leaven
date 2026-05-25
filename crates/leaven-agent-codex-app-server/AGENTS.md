@@ -36,28 +36,24 @@ and not a skill optimizer.
 - `cargo check -p leaven-agent-codex-app-server --no-default-features` proves
   config/error vocabulary builds without protocol dependencies.
 - When touching gated protocol, client, transport, or runtime code, run
-  `cargo check -p leaven-agent-codex-app-server --features app-server`; it is
-  currently a known-failing drift gate until the initializer supplies the
-  vendored `InitializeCapabilities::request_attestation` field. When it passes,
-  it proves Codex protocol drift has been reconciled in this leaf.
+  `cargo check -p leaven-agent-codex-app-server --features app-server`; it
+  proves the app-server protocol dependency graph and typed request lowering
+  still build at this leaf.
 - When touching the stdio connector, run
   `cargo check -p leaven-agent-codex-app-server --features stdio`; this
-  currently fails for the same vendored protocol drift because stdio enables
-  the app-server path. When it passes, it proves the local-mount connector path
-  builds.
+  proves the local-mount connector route builds through the app-server path.
 - `cargo test -p leaven --test topology_contract` proves app-server protocol
   dependencies remain leaf-only.
 - `LEAVEN_CODEX_LIVE=1 cargo test -p leaven-agent-codex-app-server --features live-codex-tests -- --ignored`
-  is currently blocked by the same vendored protocol drift because
-  `live-codex-tests` enables `stdio`, which enables `app-server`. After the
-  drift is fixed, it proves the opt-in live stdio path against local Codex auth.
+  spends local Codex auth/runtime and proves the opt-in live stdio path against
+  the local Codex installation.
 
 ## Decision Cards
 - when: changing initialize/thread/turn mapping
   do: update typed config, fingerprint inputs, protocol conversion tests, and runtime request mapping together
   preserve: materialized non-ephemeral threads by default, fail-closed approval mode, and provider raw events as opt-in evidence
   avoid: accepting protocol drift by weakening config types or moving protocol fields into neutral crates
-  verify: run `cargo check -p leaven-agent-codex-app-server --features app-server`; until the known vendored drift is fixed, keep the failure tied to this leaf
+  verify: run `cargo check -p leaven-agent-codex-app-server --features app-server`
 
 - when: adding a connector
   do: implement `CodexAppServerConnector` with an honest `WorkspaceAccessMode`
@@ -79,13 +75,9 @@ and not a skill optimizer.
 - If a vendored Codex protocol field changes, update this crate's request
   mapping and history normalization rather than moving protocol types into
   `leaven-agent` or `leaven-agentic`.
-- A missing protocol field such as `InitializeCapabilities::request_attestation`
-  is app-server protocol drift to fix in this crate's request mapping, not a
-  reason to weaken the leaf-only dependency boundary.
 - Do not copy DSRs repo-agent ownership wholesale. Leaven copies app-server
   transport/history ideas while keeping repo materialization and graph readback
   in Leaven stages.
 - The live stdio test spends local Codex auth/runtime and requires
-  `LEAVEN_CODEX_LIVE=1`, but it cannot run until the app-server feature drift
-  is fixed. When unblocked, it proves provider-adapter connectivity, not an
-  agentic paper reproduction or product builder path.
+  `LEAVEN_CODEX_LIVE=1`. It proves provider-adapter connectivity, not an
+  agentic paper reproduction, public-seam ACP proof, or product builder path.
