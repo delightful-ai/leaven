@@ -287,18 +287,55 @@ fn agent_run_plan_params() -> Value {
         "schema_version": "leaven.plan.v1",
         "plan_id": "plan_trace2skill_spreadsheetbench_acp",
         "consistency": {"kind": "latest_at_start"},
-        "mode": {"kind": "dry_run"},
-        "ops": [{
-            "kind": "let",
-            "name": "task",
-            "expr": {
-                "kind": "literal",
-                "value": "trace2skill_spreadsheetbench_verified_13_1",
-                "data_classes": ["public"]
+        "mode": {"kind": "execute"},
+        "ops": [
+            {
+                "kind": "call",
+                "name": "workspace",
+                "idempotency_key": "trace2skill-acp-workspace-0001",
+                "call": {
+                    "kind": "workspace_materialize",
+                    "candidate": "cand_trace2skill_spreadsheetbench_13_1",
+                    "surface": "program",
+                    "mode": "copy_on_write",
+                    "lifetime": "manual_release"
+                }
+            },
+            {
+                "kind": "call",
+                "name": "solve_case",
+                "deps": ["workspace"],
+                "idempotency_key": "trace2skill-acp-agent-run-0001",
+                "call": {
+                    "kind": "agent_run",
+                    "runtime": "python-stdio-trace2skill-worker",
+                    "runtime_fingerprint": "fp_runtime_sha256_trace2skillpythonworker",
+                    "workspace": "ws_trace2skill_spreadsheetbench_13_1",
+                    "instructions": {
+                        "system": "Solve exactly one Trace2Skill SpreadsheetBench-Verified case inside the materialized workspace.",
+                        "task": "Read the initial 13-1 workbook, group RANGES rows by DATE and REF, write the LISTS DATA and OPERATION sections, and return the transcript plus the produced workbook artifact."
+                    },
+                    "tool_policy": {
+                        "allow_shell": false,
+                        "allowed_tools": ["read_file", "write_file"],
+                        "allowed_commands": ["python"]
+                    },
+                    "output": {
+                        "kind": "files",
+                        "paths": ["13-1_output.xlsx"],
+                        "max_bytes": 1048576
+                    },
+                    "limits": {
+                        "timeout_s": 30,
+                        "max_turns": 4,
+                        "max_usd_micro": 0
+                    },
+                    "input_classes": ["public", "workspace.file"]
+                }
             }
-        }],
-        "return": ["task"],
-        "commit": {"kind": "no_graph_writes"}
+        ],
+        "return": ["workspace", "solve_case"],
+        "commit": {"kind": "graph_writes_atomic", "on_stale": "reject"}
     })
 }
 
@@ -513,8 +550,20 @@ for line in sys.stdin:
     request = json.loads(line)
     assert request["jsonrpc"] == "2.0"
     assert request["method"] == "leaven/agent.run"
-    assert request["params"]["schema_version"] == "leaven.plan.v1"
-    assert request["params"]["ops"][0]["expr"]["value"] == "trace2skill_spreadsheetbench_verified_13_1"
+    params = request["params"]
+    assert params["schema_version"] == "leaven.plan.v1"
+    assert params["mode"]["kind"] == "execute"
+    assert params["commit"]["kind"] == "graph_writes_atomic"
+    workspace_call = params["ops"][0]["call"]
+    agent_call = params["ops"][1]["call"]
+    assert workspace_call["kind"] == "workspace_materialize"
+    assert workspace_call["candidate"] == "cand_trace2skill_spreadsheetbench_13_1"
+    assert agent_call["kind"] == "agent_run"
+    assert agent_call["workspace"] == "ws_trace2skill_spreadsheetbench_13_1"
+    assert agent_call["tool_policy"]["allow_shell"] is False
+    assert agent_call["output"]["kind"] == "files"
+    assert agent_call["output"]["paths"] == ["13-1_output.xlsx"]
+    assert "workspace.file" in agent_call["input_classes"]
     assert os.environ["LEAVEN_CAPABILITY_TOKEN"] == "secret-token"
     assert os.environ["LEAVEN_ENDPOINT"] == "stdio://trace2skill-spreadsheetbench/worker"
 
