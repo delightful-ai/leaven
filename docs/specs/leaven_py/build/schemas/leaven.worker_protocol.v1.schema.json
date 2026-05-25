@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.leaven.dev/v1/v0.3/leaven.worker_protocol.v1.schema.json",
+  "title": "Deprecated worker protocol marker",
+  "description": "Deprecated. Use leaven.acp_profile.v1.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "leaven.worker_protocol.v1.deprecated"
+    },
+    "replacement": {
+      "const": "leaven.acp_profile.v1"
+    }
+  },
+  "required": [
+    "schema_version",
+    "replacement"
+  ],
+  "additionalProperties": false
+}

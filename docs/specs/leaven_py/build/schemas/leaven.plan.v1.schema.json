@@ -1,0 +1,3006 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.leaven.dev/v1/v0.3/leaven.plan.v1.schema.json",
+  "title": "Leaven Plan IR v1 v0.3",
+  "description": "One value IR family with Let/Call/Write. v0.3 pins path/template dialects, flattens query exprs, adds typed tool/LM/workspace/evaluation shapes, and separates reflection from proposal at payload level.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "plan_id",
+    "consistency",
+    "mode",
+    "ops",
+    "return",
+    "commit"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "leaven.plan.v1"
+    },
+    "plan_id": {
+      "$ref": "common.schema.json#/$defs/IdempotencyKey"
+    },
+    "consistency": {
+      "$ref": "#/$defs/Consistency"
+    },
+    "mode": {
+      "$ref": "#/$defs/EvalMode"
+    },
+    "ops": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PlanOp"
+      },
+      "minItems": 1
+    },
+    "return": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+      },
+      "uniqueItems": true
+    },
+    "commit": {
+      "$ref": "#/$defs/CommitPolicy"
+    },
+    "metadata": {
+      "$ref": "common.schema.json#/$defs/MetadataBag"
+    }
+  },
+  "$defs": {
+    "Consistency": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "latest_at_start"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "at_revision"
+            },
+            "revision": {
+              "$ref": "common.schema.json#/$defs/GraphRevision"
+            }
+          },
+          "required": [
+            "kind",
+            "revision"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "since_revision"
+            },
+            "since": {
+              "$ref": "common.schema.json#/$defs/GraphRevision"
+            },
+            "until": {
+              "$ref": "common.schema.json#/$defs/GraphRevision"
+            }
+          },
+          "required": [
+            "kind",
+            "since"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "EvalMode": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "execute"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "dry_run"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "require_cached"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "replay"
+            },
+            "receipts": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/ReceiptRef"
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "kind",
+            "receipts"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "CommitPolicy": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "no_graph_writes"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "graph_writes_atomic"
+            },
+            "on_stale": {
+              "enum": [
+                "reject",
+                "allow_if_policy_allows",
+                "rebase_extension"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "on_stale"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "graph_writes_sequential"
+            },
+            "on_failure": {
+              "enum": [
+                "stop",
+                "continue"
+              ]
+            },
+            "on_stale": {
+              "enum": [
+                "reject",
+                "allow_if_policy_allows",
+                "rebase_extension"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "on_failure",
+            "on_stale"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "PlanOp": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "let"
+            },
+            "name": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "expr": {
+              "$ref": "#/$defs/Expr"
+            },
+            "deps": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "expr"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "call"
+            },
+            "name": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "call": {
+              "$ref": "#/$defs/CapabilityCall"
+            },
+            "deps": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              },
+              "uniqueItems": true
+            },
+            "idempotency_key": {
+              "$ref": "common.schema.json#/$defs/IdempotencyKey"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "call",
+            "idempotency_key"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "write"
+            },
+            "name": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "write": {
+              "$ref": "#/$defs/GraphWrite"
+            },
+            "preconditions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Precondition"
+              }
+            },
+            "deps": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              },
+              "uniqueItems": true
+            },
+            "idempotency_key": {
+              "$ref": "common.schema.json#/$defs/IdempotencyKey"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "write",
+            "idempotency_key"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Expr": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "literal"
+            },
+            "value": {},
+            "data_classes": {
+              "$ref": "common.schema.json#/$defs/DataClassSet"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "var"
+            },
+            "name": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "graph_query"
+            },
+            "source": {
+              "$ref": "#/$defs/GraphSource"
+            },
+            "steps": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/GraphStep"
+              }
+            },
+            "projection": {
+              "$ref": "#/$defs/Projection"
+            },
+            "page": {
+              "$ref": "#/$defs/PageRequest"
+            }
+          },
+          "required": [
+            "kind",
+            "source",
+            "projection"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "case_query"
+            },
+            "query": {
+              "$ref": "#/$defs/CaseQuery"
+            }
+          },
+          "required": [
+            "kind",
+            "query"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "workspace_query"
+            },
+            "workspace": {
+              "$ref": "common.schema.json#/$defs/WorkspaceRef"
+            },
+            "op": {
+              "$ref": "#/$defs/WorkspaceQuery"
+            }
+          },
+          "required": [
+            "kind",
+            "workspace",
+            "op"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "project"
+            },
+            "input": {
+              "$ref": "#/$defs/Expr"
+            },
+            "projection": {
+              "$ref": "#/$defs/Projection"
+            }
+          },
+          "required": [
+            "kind",
+            "input",
+            "projection"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "filter"
+            },
+            "input": {
+              "$ref": "#/$defs/Expr"
+            },
+            "predicate": {
+              "$ref": "#/$defs/Predicate"
+            }
+          },
+          "required": [
+            "kind",
+            "input",
+            "predicate"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "sort"
+            },
+            "input": {
+              "$ref": "#/$defs/Expr"
+            },
+            "keys": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SortKey"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "input",
+            "keys"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "limit"
+            },
+            "input": {
+              "$ref": "#/$defs/Expr"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            }
+          },
+          "required": [
+            "kind",
+            "input",
+            "limit"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "template"
+            },
+            "dialect": {
+              "$ref": "common.schema.json#/$defs/TemplateDialect"
+            },
+            "template": {
+              "type": "string"
+            },
+            "vars": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/Expr"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "dialect",
+            "template",
+            "vars"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "extract"
+            },
+            "input": {
+              "$ref": "#/$defs/Expr"
+            },
+            "path": {
+              "$ref": "common.schema.json#/$defs/JsonPath"
+            }
+          },
+          "required": [
+            "kind",
+            "input",
+            "path"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "refs_from_result"
+            },
+            "from": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            }
+          },
+          "required": [
+            "kind",
+            "from"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "$ref": "common.schema.json#/$defs/ExtensionObject"
+        }
+      ]
+    },
+    "PageRequest": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "cursor": {
+          "$ref": "common.schema.json#/$defs/Cursor"
+        },
+        "stable_order": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "GraphSource": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "by_candidate"
+            },
+            "candidate": {
+              "$ref": "common.schema.json#/$defs/CandidateRef"
+            }
+          },
+          "required": [
+            "kind",
+            "candidate"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "candidate_set"
+            },
+            "filter": {
+              "$ref": "#/$defs/CandidateFilter"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "by_proposal"
+            },
+            "proposal": {
+              "$ref": "common.schema.json#/$defs/ProposalRef"
+            }
+          },
+          "required": [
+            "kind",
+            "proposal"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "by_proposal_batch"
+            },
+            "proposal_batch": {
+              "$ref": "common.schema.json#/$defs/ProposalBatchRef"
+            }
+          },
+          "required": [
+            "kind",
+            "proposal_batch"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "assessment_set"
+            },
+            "filter": {
+              "$ref": "#/$defs/AssessmentFilter"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "recent_failures"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          },
+          "required": [
+            "kind",
+            "limit"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "costs"
+            },
+            "scope": {}
+          },
+          "required": [
+            "kind",
+            "scope"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "events"
+            },
+            "since_revision": {
+              "$ref": "common.schema.json#/$defs/GraphRevision"
+            },
+            "until_revision": {
+              "$ref": "common.schema.json#/$defs/GraphRevision"
+            },
+            "filter": {}
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "candidate_tree"
+            },
+            "root": {
+              "$ref": "common.schema.json#/$defs/CandidateRef"
+            },
+            "depth": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "$ref": "common.schema.json#/$defs/ExtensionObject"
+        }
+      ]
+    },
+    "GraphStep": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "traverse"
+            },
+            "edge": {
+              "$ref": "#/$defs/GraphEdge"
+            }
+          },
+          "required": [
+            "kind",
+            "edge"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "filter"
+            },
+            "predicate": {
+              "$ref": "#/$defs/Predicate"
+            }
+          },
+          "required": [
+            "kind",
+            "predicate"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "sort"
+            },
+            "keys": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SortKey"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "keys"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "limit"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            }
+          },
+          "required": [
+            "kind",
+            "limit"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "project"
+            },
+            "projection": {
+              "$ref": "#/$defs/Projection"
+            }
+          },
+          "required": [
+            "kind",
+            "projection"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "GraphEdge": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "parents"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "children"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "siblings"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "informed_by"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "informed"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "proposal_that_created"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "lineage"
+            },
+            "depth": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "descendants"
+            },
+            "depth": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "assessments"
+            },
+            "filter": {
+              "$ref": "#/$defs/AssessmentFilter"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "pairwise_assessments"
+            },
+            "other": {
+              "$ref": "common.schema.json#/$defs/CandidateRef"
+            }
+          },
+          "required": [
+            "kind",
+            "other"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "CandidateFilter": {
+      "type": "object",
+      "properties": {
+        "ids": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/CandidateRef"
+          }
+        },
+        "predicate": {
+          "$ref": "#/$defs/Predicate"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "AssessmentFilter": {
+      "type": "object",
+      "properties": {
+        "candidate": {
+          "$ref": "common.schema.json#/$defs/CandidateRef"
+        },
+        "case": {
+          "$ref": "common.schema.json#/$defs/CaseRef"
+        },
+        "request": {
+          "$ref": "common.schema.json#/$defs/EvaluationRequestRef"
+        },
+        "kind": {
+          "enum": [
+            "independent",
+            "pairwise",
+            "listwise"
+          ]
+        },
+        "predicate": {
+          "$ref": "#/$defs/Predicate"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "Predicate": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "eq"
+            },
+            "field": {
+              "$ref": "common.schema.json#/$defs/JsonPointer"
+            },
+            "value": {}
+          },
+          "required": [
+            "kind",
+            "field",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "ne"
+            },
+            "field": {
+              "$ref": "common.schema.json#/$defs/JsonPointer"
+            },
+            "value": {}
+          },
+          "required": [
+            "kind",
+            "field",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "gt"
+            },
+            "field": {
+              "$ref": "common.schema.json#/$defs/JsonPointer"
+            },
+            "value": {}
+          },
+          "required": [
+            "kind",
+            "field",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "gte"
+            },
+            "field": {
+              "$ref": "common.schema.json#/$defs/JsonPointer"
+            },
+            "value": {}
+          },
+          "required": [
+            "kind",
+            "field",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "lt"
+            },
+            "field": {
+              "$ref": "common.schema.json#/$defs/JsonPointer"
+            },
+            "value": {}
+          },
+          "required": [
+            "kind",
+            "field",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "lte"
+            },
+            "field": {
+              "$ref": "common.schema.json#/$defs/JsonPointer"
+            },
+            "value": {}
+          },
+          "required": [
+            "kind",
+            "field",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "contains"
+            },
+            "field": {
+              "$ref": "common.schema.json#/$defs/JsonPointer"
+            },
+            "value": {}
+          },
+          "required": [
+            "kind",
+            "field",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "matches"
+            },
+            "field": {
+              "$ref": "common.schema.json#/$defs/JsonPointer"
+            },
+            "value": {}
+          },
+          "required": [
+            "kind",
+            "field",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "in"
+            },
+            "field": {
+              "$ref": "common.schema.json#/$defs/JsonPointer"
+            },
+            "values": {
+              "type": "array",
+              "items": {}
+            }
+          },
+          "required": [
+            "kind",
+            "field",
+            "values"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "exists"
+            },
+            "field": {
+              "$ref": "common.schema.json#/$defs/JsonPointer"
+            }
+          },
+          "required": [
+            "kind",
+            "field"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "is_null"
+            },
+            "field": {
+              "$ref": "common.schema.json#/$defs/JsonPointer"
+            }
+          },
+          "required": [
+            "kind",
+            "field"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "and"
+            },
+            "predicates": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Predicate"
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "kind",
+            "predicates"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "or"
+            },
+            "predicates": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Predicate"
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "kind",
+            "predicates"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "not"
+            },
+            "predicate": {
+              "$ref": "#/$defs/Predicate"
+            }
+          },
+          "required": [
+            "kind",
+            "predicate"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "SortKey": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "$ref": "common.schema.json#/$defs/JsonPointer"
+        },
+        "direction": {
+          "enum": [
+            "asc",
+            "desc"
+          ]
+        },
+        "nulls": {
+          "enum": [
+            "first",
+            "last"
+          ]
+        }
+      },
+      "required": [
+        "field",
+        "direction"
+      ],
+      "additionalProperties": false
+    },
+    "Projection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "ids"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "summary"
+            },
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/JsonPointer"
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "candidate_projection"
+            },
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/JsonPointer"
+              },
+              "uniqueItems": true
+            },
+            "artifact": {
+              "$ref": "#/$defs/ArtifactProjection"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "artifact_projection"
+            },
+            "artifact": {
+              "$ref": "#/$defs/ArtifactProjection"
+            }
+          },
+          "required": [
+            "kind",
+            "artifact"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "assessment_projection"
+            },
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/JsonPointer"
+              },
+              "uniqueItems": true
+            },
+            "evidence_visibility": {
+              "$ref": "common.schema.json#/$defs/EvidenceVisibility"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "diff_projection"
+            },
+            "surface_fingerprint": {
+              "$ref": "common.schema.json#/$defs/SurfaceFingerprint"
+            },
+            "diff_schema": {
+              "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+            },
+            "left": {
+              "$ref": "common.schema.json#/$defs/CandidateRef"
+            },
+            "right": {
+              "$ref": "common.schema.json#/$defs/CandidateRef"
+            }
+          },
+          "required": [
+            "kind",
+            "surface_fingerprint",
+            "diff_schema",
+            "left",
+            "right"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "$ref": "common.schema.json#/$defs/ExtensionObject"
+        }
+      ]
+    },
+    "ArtifactProjection": {
+      "type": "object",
+      "properties": {
+        "surface_fingerprint": {
+          "$ref": "common.schema.json#/$defs/SurfaceFingerprint"
+        },
+        "projection_schema": {
+          "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+        },
+        "selector_schema": {
+          "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+        },
+        "selector": {},
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "data_classes": {
+          "$ref": "common.schema.json#/$defs/DataClassSet"
+        }
+      },
+      "required": [
+        "surface_fingerprint",
+        "projection_schema"
+      ],
+      "additionalProperties": false
+    },
+    "CaseQuery": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "resolve_set"
+            },
+            "set": {
+              "$ref": "#/$defs/EvaluationSetExpr"
+            },
+            "purpose": {
+              "enum": [
+                "train",
+                "validation",
+                "test",
+                "diagnostic",
+                "custom"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "set",
+            "purpose"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "load"
+            },
+            "case": {
+              "$ref": "common.schema.json#/$defs/CaseRef"
+            },
+            "include": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "input",
+                  "target",
+                  "metadata"
+                ]
+              },
+              "uniqueItems": true
+            },
+            "projection_schema": {
+              "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+            }
+          },
+          "required": [
+            "kind",
+            "case",
+            "include"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "EvaluationSetExpr": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "named"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "cases"
+            },
+            "cases": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/CaseRef"
+              },
+              "minItems": 1
+            },
+            "requires_partition_resolution": {
+              "const": true
+            }
+          },
+          "required": [
+            "kind",
+            "cases",
+            "requires_partition_resolution"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "tagged"
+            },
+            "tag": {
+              "type": "string"
+            },
+            "requires_partition_resolution": {
+              "const": true
+            }
+          },
+          "required": [
+            "kind",
+            "tag",
+            "requires_partition_resolution"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "recent"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "requires_partition_resolution": {
+              "const": true
+            }
+          },
+          "required": [
+            "kind",
+            "limit",
+            "requires_partition_resolution"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "union"
+            },
+            "sets": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/EvaluationSetExpr"
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "kind",
+            "sets"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "intersect"
+            },
+            "sets": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/EvaluationSetExpr"
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "kind",
+            "sets"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "difference"
+            },
+            "base": {
+              "$ref": "#/$defs/EvaluationSetExpr"
+            },
+            "subtract": {
+              "$ref": "#/$defs/EvaluationSetExpr"
+            }
+          },
+          "required": [
+            "kind",
+            "base",
+            "subtract"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "sample"
+            },
+            "base": {
+              "$ref": "#/$defs/EvaluationSetExpr"
+            },
+            "n": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "seed": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "base",
+            "n",
+            "seed"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "stratified"
+            },
+            "base": {
+              "$ref": "#/$defs/EvaluationSetExpr"
+            },
+            "by": {
+              "$ref": "common.schema.json#/$defs/JsonPointer"
+            },
+            "per_bucket": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "seed": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "base",
+            "by",
+            "per_bucket",
+            "seed"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "WorkspaceQuery": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "snapshot"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "list"
+            },
+            "path": {
+              "type": "string"
+            },
+            "recursive": {
+              "type": "boolean"
+            },
+            "max_entries": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "kind",
+            "path"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "read_file"
+            },
+            "path": {
+              "type": "string"
+            },
+            "max_bytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "expected_data_classes": {
+              "$ref": "common.schema.json#/$defs/DataClassSet"
+            }
+          },
+          "required": [
+            "kind",
+            "path",
+            "expected_data_classes"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "stat"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "path"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "digest"
+            },
+            "path": {
+              "type": "string"
+            },
+            "algorithm": {
+              "enum": [
+                "sha256",
+                "blake3"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "path",
+            "algorithm"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "git_log"
+            },
+            "max_entries": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "git_diff"
+            },
+            "against": {
+              "enum": [
+                "seed",
+                "parent",
+                "baseline",
+                "head"
+              ]
+            },
+            "max_bytes": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "kind",
+            "against"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "git_status"
+            },
+            "porcelain": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "capture_artifacts"
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "max_bytes": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "kind",
+            "paths"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "LmContentPart": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "text"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "tool_result"
+            },
+            "tool_call_id": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "tool_call_id",
+            "content"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "$ref": "common.schema.json#/$defs/ExtensionObject"
+        }
+      ]
+    },
+    "LmMessage": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "enum": [
+            "system",
+            "developer",
+            "user",
+            "assistant",
+            "tool"
+          ]
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LmContentPart"
+          },
+          "minItems": 1
+        },
+        "tool_call_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "content"
+      ],
+      "additionalProperties": false
+    },
+    "LmTool": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+        },
+        "description": {
+          "type": "string"
+        },
+        "input_schema": {},
+        "requires_capability_action": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.:-]*$"
+        }
+      },
+      "required": [
+        "name",
+        "input_schema"
+      ],
+      "additionalProperties": false
+    },
+    "LmSampling": {
+      "type": "object",
+      "properties": {
+        "temperature": {
+          "type": "number",
+          "minimum": 0
+        },
+        "top_p": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "max_output_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "stop": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "LmOutputContract": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "final_message"
+            },
+            "max_bytes": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "json_schema"
+            },
+            "schema_fingerprint": {
+              "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+            },
+            "schema": {}
+          },
+          "required": [
+            "kind",
+            "schema_fingerprint"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "CapabilityCall": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/LmCompleteCall"
+        },
+        {
+          "$ref": "#/$defs/AgentRunCall"
+        },
+        {
+          "$ref": "#/$defs/SandboxExecCall"
+        },
+        {
+          "$ref": "#/$defs/WorkspaceMaterializeCall"
+        },
+        {
+          "$ref": "#/$defs/WorkspaceReleaseCall"
+        },
+        {
+          "$ref": "#/$defs/HumanReviewCall"
+        },
+        {
+          "$ref": "common.schema.json#/$defs/ExtensionObject"
+        }
+      ]
+    },
+    "LmCompleteCall": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "lm_complete"
+        },
+        "purpose": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.:-]*$"
+        },
+        "model": {
+          "type": "string"
+        },
+        "model_role": {
+          "type": "string"
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LmMessage"
+          },
+          "minItems": 1
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LmTool"
+          }
+        },
+        "sampling": {
+          "$ref": "#/$defs/LmSampling"
+        },
+        "output": {
+          "$ref": "#/$defs/LmOutputContract"
+        },
+        "provider_hints": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_.:-]*$"
+          },
+          "additionalProperties": {}
+        },
+        "cache_policy": {
+          "enum": [
+            "default",
+            "require_cached",
+            "bypass",
+            "record_only"
+          ]
+        },
+        "input_classes": {
+          "$ref": "common.schema.json#/$defs/DataClassSet"
+        },
+        "forbidden_input_classes": {
+          "$ref": "common.schema.json#/$defs/DataClassSet"
+        }
+      },
+      "required": [
+        "kind",
+        "purpose",
+        "messages",
+        "output",
+        "input_classes"
+      ],
+      "additionalProperties": false
+    },
+    "AgentToolPolicy": {
+      "type": "object",
+      "properties": {
+        "allow_shell": {
+          "type": "boolean"
+        },
+        "allowed_tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "denied_tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "allowed_commands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "deny_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "network": {
+          "enum": [
+            "deny",
+            "leaven_endpoint_only",
+            "allowlist",
+            "unrestricted"
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "AgentRunCall": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "agent_run"
+        },
+        "runtime": {
+          "type": "string"
+        },
+        "runtime_fingerprint": {
+          "$ref": "common.schema.json#/$defs/RuntimeFingerprint"
+        },
+        "workspace": {
+          "$ref": "common.schema.json#/$defs/WorkspaceRef"
+        },
+        "instructions": {
+          "type": "object",
+          "properties": {
+            "system": {
+              "type": "string"
+            },
+            "task": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "task"
+          ],
+          "additionalProperties": false
+        },
+        "tool_policy": {
+          "$ref": "#/$defs/AgentToolPolicy"
+        },
+        "output": {
+          "$ref": "common.schema.json#/$defs/OutputContract"
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "timeout_s": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_turns": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_usd_micro": {
+              "$ref": "common.schema.json#/$defs/UsdMicro"
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "input_classes": {
+          "$ref": "common.schema.json#/$defs/DataClassSet"
+        },
+        "forbidden_input_classes": {
+          "$ref": "common.schema.json#/$defs/DataClassSet"
+        }
+      },
+      "required": [
+        "kind",
+        "runtime",
+        "instructions",
+        "output",
+        "input_classes"
+      ],
+      "additionalProperties": false
+    },
+    "SandboxExecCall": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "sandbox_exec"
+        },
+        "workspace": {
+          "$ref": "common.schema.json#/$defs/WorkspaceRef"
+        },
+        "argv": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "timeout_s": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "output": {
+          "$ref": "common.schema.json#/$defs/OutputContract"
+        },
+        "stream_policy": {
+          "enum": [
+            "buffer",
+            "stream_updates",
+            "blob_refs_only"
+          ]
+        },
+        "input_classes": {
+          "$ref": "common.schema.json#/$defs/DataClassSet"
+        },
+        "forbidden_input_classes": {
+          "$ref": "common.schema.json#/$defs/DataClassSet"
+        }
+      },
+      "required": [
+        "kind",
+        "workspace",
+        "argv",
+        "timeout_s",
+        "output",
+        "input_classes"
+      ],
+      "additionalProperties": false
+    },
+    "WorkspaceMaterializeCall": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "workspace_materialize"
+        },
+        "candidate": {
+          "$ref": "common.schema.json#/$defs/CandidateRef"
+        },
+        "surface": {
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "read_only",
+            "copy_on_write",
+            "mutable_eval"
+          ]
+        },
+        "lifetime": {
+          "enum": [
+            "plan",
+            "stage_call",
+            "manual_release"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "candidate",
+        "mode",
+        "lifetime"
+      ],
+      "additionalProperties": false
+    },
+    "WorkspaceReleaseCall": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "workspace_release"
+        },
+        "workspace": {
+          "$ref": "common.schema.json#/$defs/WorkspaceRef"
+        },
+        "force": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "workspace"
+      ],
+      "additionalProperties": false
+    },
+    "HumanReviewCall": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "human_review"
+        },
+        "queue": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "rubric": {},
+        "input_classes": {
+          "$ref": "common.schema.json#/$defs/DataClassSet"
+        },
+        "max_usd_micro": {
+          "$ref": "common.schema.json#/$defs/UsdMicro"
+        }
+      },
+      "required": [
+        "kind",
+        "queue",
+        "prompt",
+        "input_classes"
+      ],
+      "additionalProperties": false
+    },
+    "GraphWrite": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/SubmitProposalBatchWrite"
+        },
+        {
+          "$ref": "#/$defs/SubmitAssessmentsWrite"
+        },
+        {
+          "$ref": "#/$defs/RequestEvaluationWrite"
+        },
+        {
+          "$ref": "#/$defs/ApplyProposalBatchWrite"
+        },
+        {
+          "$ref": "#/$defs/EmitRunEventWrite"
+        },
+        {
+          "$ref": "common.schema.json#/$defs/ExtensionObject"
+        }
+      ]
+    },
+    "ValueExpr": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "literal"
+            },
+            "value": {}
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "var"
+            },
+            "name": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "extract"
+            },
+            "input": {
+              "$ref": "#/$defs/Expr"
+            },
+            "path": {
+              "$ref": "common.schema.json#/$defs/JsonPath"
+            }
+          },
+          "required": [
+            "kind",
+            "input",
+            "path"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "$ref": "common.schema.json#/$defs/ExtensionObject"
+        }
+      ]
+    },
+    "ProposalEffectWrite": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "create"
+            },
+            "artifact_type": {
+              "type": "string"
+            },
+            "artifact_schema": {
+              "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+            },
+            "artifact": {
+              "$ref": "#/$defs/ValueExpr"
+            }
+          },
+          "required": [
+            "kind",
+            "artifact_type",
+            "artifact_schema",
+            "artifact"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "change"
+            },
+            "target": {
+              "$ref": "common.schema.json#/$defs/CandidateRef"
+            },
+            "surface_fingerprint": {
+              "$ref": "common.schema.json#/$defs/SurfaceFingerprint"
+            },
+            "change_schema": {
+              "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+            },
+            "change": {
+              "$ref": "#/$defs/ValueExpr"
+            }
+          },
+          "required": [
+            "kind",
+            "target",
+            "surface_fingerprint",
+            "change_schema",
+            "change"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "change_from_workspace_diff"
+            },
+            "target": {
+              "$ref": "common.schema.json#/$defs/CandidateRef"
+            },
+            "workspace": {
+              "$ref": "common.schema.json#/$defs/WorkspaceRef"
+            },
+            "roots": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "parser": {
+              "type": "string"
+            },
+            "surface_fingerprint": {
+              "$ref": "common.schema.json#/$defs/SurfaceFingerprint"
+            },
+            "change_schema": {
+              "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+            }
+          },
+          "required": [
+            "kind",
+            "target",
+            "workspace",
+            "surface_fingerprint",
+            "change_schema"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "change_from_agent_session"
+            },
+            "target": {
+              "$ref": "common.schema.json#/$defs/CandidateRef"
+            },
+            "agent_receipt": {
+              "$ref": "common.schema.json#/$defs/ReceiptRef"
+            },
+            "parser": {
+              "type": "string"
+            },
+            "surface_fingerprint": {
+              "$ref": "common.schema.json#/$defs/SurfaceFingerprint"
+            },
+            "change_schema": {
+              "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+            }
+          },
+          "required": [
+            "kind",
+            "target",
+            "agent_receipt",
+            "parser",
+            "surface_fingerprint",
+            "change_schema"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "SubmitProposalBatchWrite": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "submit_proposal_batch"
+        },
+        "semantics": {
+          "enum": [
+            "alternatives",
+            "sequence"
+          ]
+        },
+        "proposals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "effect": {
+                "$ref": "#/$defs/ProposalEffectWrite"
+              },
+              "causal": {},
+              "informed_by": {
+                "$ref": "#/$defs/Expr"
+              },
+              "annotations": {
+                "$ref": "#/$defs/ValueExpr"
+              },
+              "annotations_schema": {
+                "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+              },
+              "read_receipts": {
+                "type": "array",
+                "items": {
+                  "$ref": "common.schema.json#/$defs/ReceiptRef"
+                }
+              },
+              "metadata": {
+                "$ref": "common.schema.json#/$defs/MetadataBag"
+              }
+            },
+            "required": [
+              "effect",
+              "causal",
+              "informed_by"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "kind",
+        "semantics",
+        "proposals"
+      ],
+      "additionalProperties": false
+    },
+    "SubmitAssessmentsWrite": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "submit_assessments"
+        },
+        "evaluation_request_id": {
+          "$ref": "common.schema.json#/$defs/EvaluationRequestId"
+        },
+        "assessments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "independent",
+                  "pairwise",
+                  "listwise"
+                ]
+              },
+              "candidate": {
+                "$ref": "common.schema.json#/$defs/CandidateRef"
+              },
+              "candidates": {
+                "type": "array",
+                "items": {
+                  "$ref": "common.schema.json#/$defs/CandidateRef"
+                }
+              },
+              "target": {},
+              "score": {
+                "$ref": "common.schema.json#/$defs/Score"
+              },
+              "preference": {},
+              "ranking": {},
+              "evidence": {
+                "$ref": "leaven.evidence_envelope.v1.schema.json"
+              },
+              "read_receipts": {
+                "type": "array",
+                "items": {
+                  "$ref": "common.schema.json#/$defs/ReceiptRef"
+                }
+              },
+              "effect_receipts": {
+                "type": "array",
+                "items": {
+                  "$ref": "common.schema.json#/$defs/ReceiptRef"
+                }
+              },
+              "replayability": {
+                "$ref": "common.schema.json#/$defs/Replayability"
+              },
+              "cost_attribution": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "sum_effect_receipts",
+                      "explicit",
+                      "none"
+                    ]
+                  },
+                  "cost": {
+                    "$ref": "common.schema.json#/$defs/Cost"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "kind",
+              "score",
+              "evidence",
+              "replayability"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "kind",
+        "evaluation_request_id",
+        "assessments"
+      ],
+      "additionalProperties": false
+    },
+    "RequestEvaluationWrite": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "request_evaluation"
+        },
+        "request": {
+          "type": "object",
+          "properties": {
+            "shape": {
+              "enum": [
+                "independent",
+                "pairwise",
+                "listwise"
+              ]
+            },
+            "candidates": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/CandidateRef"
+              },
+              "minItems": 1
+            },
+            "set": {
+              "$ref": "#/$defs/EvaluationSetExpr"
+            },
+            "granularity": {
+              "enum": [
+                "aggregate",
+                "per_case"
+              ]
+            },
+            "purpose": {
+              "enum": [
+                "train",
+                "validation",
+                "test",
+                "diagnostic",
+                "custom"
+              ]
+            },
+            "evaluator": {
+              "type": "string"
+            },
+            "metadata": {
+              "$ref": "common.schema.json#/$defs/MetadataBag"
+            }
+          },
+          "required": [
+            "shape",
+            "candidates",
+            "set",
+            "granularity",
+            "purpose"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "kind",
+        "request"
+      ],
+      "additionalProperties": false
+    },
+    "ApplyProposalBatchWrite": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "apply_proposal_batch"
+        },
+        "proposal_batch": {
+          "$ref": "common.schema.json#/$defs/ProposalBatchRef"
+        },
+        "policy": {
+          "enum": [
+            "apply_all",
+            "apply_first_valid",
+            "apply_by_optimizer_policy"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "proposal_batch",
+        "policy"
+      ],
+      "additionalProperties": false
+    },
+    "EmitRunEventWrite": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "emit_run_event"
+        },
+        "event_kind": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.:-]*$"
+        },
+        "payload_schema": {
+          "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+        },
+        "payload": {},
+        "visibility": {
+          "$ref": "common.schema.json#/$defs/VisibilityClass"
+        }
+      },
+      "required": [
+        "kind",
+        "event_kind",
+        "payload_schema",
+        "payload",
+        "visibility"
+      ],
+      "additionalProperties": false
+    },
+    "Precondition": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "candidate_exists"
+            },
+            "candidate": {
+              "$ref": "common.schema.json#/$defs/CandidateRef"
+            }
+          },
+          "required": [
+            "kind",
+            "candidate"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "candidate_identity"
+            },
+            "candidate": {
+              "$ref": "common.schema.json#/$defs/CandidateRef"
+            },
+            "identity": {
+              "$ref": "common.schema.json#/$defs/ArtifactIdentity"
+            }
+          },
+          "required": [
+            "kind",
+            "candidate",
+            "identity"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "graph_revision_at_least"
+            },
+            "revision": {
+              "$ref": "common.schema.json#/$defs/GraphRevision"
+            }
+          },
+          "required": [
+            "kind",
+            "revision"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "graph_revision_equals"
+            },
+            "revision": {
+              "$ref": "common.schema.json#/$defs/GraphRevision"
+            }
+          },
+          "required": [
+            "kind",
+            "revision"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "assessment_exists"
+            },
+            "assessment": {
+              "$ref": "common.schema.json#/$defs/AssessmentRef"
+            }
+          },
+          "required": [
+            "kind",
+            "assessment"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "receipt_exists"
+            },
+            "receipt": {
+              "$ref": "common.schema.json#/$defs/ReceiptRef"
+            }
+          },
+          "required": [
+            "kind",
+            "receipt"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "schema_valid"
+            },
+            "schema_fingerprint": {
+              "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+            },
+            "value": {
+              "$ref": "#/$defs/ValueExpr"
+            }
+          },
+          "required": [
+            "kind",
+            "schema_fingerprint",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}
