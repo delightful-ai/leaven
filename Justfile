@@ -7,22 +7,13 @@ coverage_line_floor := '80.00'
 coverage_branch_floor := '80.00'
 coverage_line_warn := '92.56'
 coverage_branch_warn := '88.39'
+milestone_excludes := '--exclude p0_graph_skeleton --exclude p1_keep_best --exclude p2_pairwise_tournament --exclude p3_gepa_parity --exclude p4_meta_harness_lite --exclude p5_evoskill_iteration --exclude p5_skill_paper_reproductions --exclude p6_optimizer_policy_self_opt --exclude p7_self_optimization_kernel --exclude p8_aime_gepa --exclude trace2skill_spreadsheetbench'
 
 lint:
     cargo fmt --check
     python3 scripts/lint-line-count.py
     cargo clippy --workspace --all-targets \
-      --exclude p0_graph_skeleton \
-      --exclude p1_keep_best \
-      --exclude p2_pairwise_tournament \
-      --exclude p3_gepa_parity \
-      --exclude p4_meta_harness_lite \
-      --exclude p5_evoskill_iteration \
-      --exclude p5_skill_paper_reproductions \
-      --exclude p6_optimizer_policy_self_opt \
-      --exclude p7_self_optimization_kernel \
-      --exclude p8_aime_gepa \
-      --exclude trace2skill_spreadsheetbench \
+      {{milestone_excludes}} \
       -- -D warnings
 
 clippy: lint
@@ -33,21 +24,11 @@ test:
 
 test-one +args:
     cargo nextest run --workspace \
-      --exclude p0_graph_skeleton \
-      --exclude p1_keep_best \
-      --exclude p2_pairwise_tournament \
-      --exclude p3_gepa_parity \
-      --exclude p4_meta_harness_lite \
-      --exclude p5_evoskill_iteration \
-      --exclude p5_skill_paper_reproductions \
-      --exclude p6_optimizer_policy_self_opt \
-      --exclude p7_self_optimization_kernel \
-      --exclude p8_aime_gepa \
-      --exclude trace2skill_spreadsheetbench \
+      {{milestone_excludes}} \
       {{args}}
 
 test-stress count +args:
-    for i in $(seq 1 {{count}}); do echo "stress run $i/{{count}}"; cargo nextest run --workspace --exclude p0_graph_skeleton --exclude p1_keep_best --exclude p2_pairwise_tournament --exclude p3_gepa_parity --exclude p4_meta_harness_lite --exclude p5_evoskill_iteration --exclude p5_skill_paper_reproductions --exclude p6_optimizer_policy_self_opt --exclude p7_self_optimization_kernel --exclude p8_aime_gepa --exclude trace2skill_spreadsheetbench {{args}}; done
+    for i in $(seq 1 {{count}}); do echo "stress run $i/{{count}}"; cargo nextest run --workspace {{milestone_excludes}} {{args}}; done
 
 bench-git-trust +args:
     cargo run -p xtask -- git-trust-bench {{args}}
