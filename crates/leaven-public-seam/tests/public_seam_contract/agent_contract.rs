@@ -1,4 +1,4 @@
-use crate::support::{package, plan_call_result_hash};
+use crate::support::{package, plan_call_result_hash, sha256_hex};
 use leaven_agent::{AgentSession, CommandRecord};
 use leaven_kernel::{AgentSessionId, Cost, Fingerprint, Metered};
 use leaven_public_seam::{
@@ -9,7 +9,6 @@ use leaven_public_seam::{
 };
 use leaven_workspace::{CapturedOutput, Command, CommandOutput, ExitStatus, WorkspacePath};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 
 #[test]
 fn agent_run_can_project_provider_neutral_agent_session_into_plan_result() {
@@ -408,7 +407,7 @@ fn command_output_refs(fixture: CommandOutputRefsFixture) -> Vec<AgentCommandOut
         CommandOutputRefsFixture::WrongStdoutBytes => json!({
             "kind": "blob_ref",
             "id": "blob_agent_command_stdout",
-            "sha256": format!("{:x}", Sha256::digest(b"agent stdout")),
+            "sha256": sha256_hex(b"agent stdout"),
             "bytes": 99,
             "data_classes": ["transcript.raw"]
         }),
@@ -544,7 +543,7 @@ fn blob_ref_for_bytes(id: &'static str, bytes: &[u8], data_classes: &[&str]) -> 
     json!({
         "kind": "blob_ref",
         "id": id,
-        "sha256": format!("{:x}", Sha256::digest(bytes)),
+        "sha256": sha256_hex(bytes),
         "bytes": bytes.len(),
         "data_classes": data_classes
     })
