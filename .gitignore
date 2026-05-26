@@ -7,6 +7,7 @@ __pycache__/
 docs/specs/leaven_py/.pytest_cache/
 docs/specs/leaven_py/.ruff_cache/
 docs/specs/leaven_py/.venv/
+docs/specs/leaven_py/build/
 docs/specs/leaven_py/**/__pycache__/
 *.profraw
 tmp/
