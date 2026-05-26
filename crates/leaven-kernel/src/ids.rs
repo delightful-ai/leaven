@@ -267,6 +267,12 @@ impl ContentId {
     /// Width in bytes.
     pub const BYTES: usize = 32;
 
+    /// Hashes observable artifact bytes into a `ContentId` with BLAKE3.
+    #[must_use]
+    pub fn hash_bytes(bytes: impl AsRef<[u8]>) -> Self {
+        Self(*blake3::hash(bytes.as_ref()).as_bytes())
+    }
+
     /// Wraps a 32-byte hash into a `ContentId`.
     #[must_use]
     pub const fn from_bytes(bytes: [u8; 32]) -> Self {

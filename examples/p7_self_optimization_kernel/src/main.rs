@@ -2,15 +2,12 @@ use std::collections::BTreeSet;
 
 use futures::executor::block_on;
 use leaven::extend::{
-    Arity, CachePolicy, CausalInputs, EvaluationRequest, Evaluator, InfoRef, Optimizer, Proposal,
-    ProposalBatch, ProposalBatchSemantics, ProposalContext, ProposalEffect, Proposer, RunEvent,
-    RunGraphView, StepStatus, TrustPolicy,
+    Arity, AssessmentGranularity, AssessmentTarget, CachePolicy, CausalInputs, EvaluationRequest,
+    Evaluator, InfoRef, Optimizer, Proposal, ProposalBatch, ProposalBatchSemantics,
+    ProposalContext, ProposalEffect, Proposer, RunEvent, RunGraphView, StepStatus, TrustPolicy,
 };
 use leaven::plumbing::ContentId;
-use leaven::prelude::{
-    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget, Cost,
-    OptimizationProblem,
-};
+use leaven::prelude::{Artifact, ArtifactIdentity, Assessment, Budget, Cost, OptimizationProblem};
 use leaven_core::{
     EvaluationPurpose, EvaluationSet, ExternalRef, PartitionId, ResolvedEvaluationRequest,
     ResolvedRequestKind,
@@ -1431,8 +1428,5 @@ fn case_by_id(cases: &[SelfOptimizationCase], id: CaseId) -> Option<&SelfOptimiz
 }
 
 fn content_id(bytes: &[u8]) -> ContentId {
-    let mut id = [0; ContentId::BYTES];
-    let len = bytes.len().min(ContentId::BYTES);
-    id[..len].copy_from_slice(&bytes[..len]);
-    ContentId::from_bytes(id)
+    ContentId::hash_bytes(bytes)
 }

@@ -133,11 +133,7 @@ impl Artifact for TestArtifact {
     type ApplyError = TestError;
 
     fn identity(&self) -> ArtifactIdentity {
-        let mut bytes = [0; ContentId::BYTES];
-        let raw = self.0.as_bytes();
-        bytes[..raw.len().min(ContentId::BYTES)]
-            .copy_from_slice(&raw[..raw.len().min(ContentId::BYTES)]);
-        ArtifactIdentity::Content(ContentId::from_bytes(bytes))
+        ArtifactIdentity::Content(ContentId::hash_bytes(&self.0))
     }
 
     fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {

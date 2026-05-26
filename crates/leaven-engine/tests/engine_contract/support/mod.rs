@@ -48,11 +48,7 @@ impl Artifact for TextArtifact {
 }
 
 fn text_content_id(text: &str) -> ContentId {
-    let mut bytes = [0; 32];
-    let raw = text.as_bytes();
-    let len = raw.len().min(32);
-    bytes[..len].copy_from_slice(&raw[..len]);
-    ContentId::from_bytes(bytes)
+    ContentId::hash_bytes(text)
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -36,6 +36,18 @@ fn fingerprint_hex_is_full_width_and_lowercase() {
 }
 
 #[test]
+fn content_ids_hash_observable_bytes() {
+    let content = ContentId::hash_bytes("artifact-state");
+    let same = ContentId::hash_bytes("artifact-state");
+    let different = ContentId::hash_bytes("artifact-state!");
+
+    assert_eq!(content, same);
+    assert_ne!(content, different);
+    assert_ne!(content, ContentId::zero());
+    assert_eq!(ContentId::from_bytes(*content.as_bytes()), content);
+}
+
+#[test]
 fn metadata_bag_preserves_typed_values_in_key_order() {
     let dynamic = MetadataKey::new("worker");
     let mut bag = MetadataBag::new();

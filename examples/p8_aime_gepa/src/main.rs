@@ -5857,17 +5857,7 @@ fn aime_score_feedback(target: &AimeTarget, raw_answer: &str) -> (f64, String) {
 }
 
 fn content_id(bytes: &[u8]) -> ContentId {
-    let mut material = BTreeMap::new();
-    material.insert("prompt", bytes);
-    let mut id = [0; ContentId::BYTES];
-    for (index, byte) in material
-        .values()
-        .flat_map(|value| value.iter().copied())
-        .enumerate()
-    {
-        id[index % ContentId::BYTES] ^= byte;
-    }
-    ContentId::from_bytes(id)
+    ContentId::hash_bytes(bytes)
 }
 
 #[cfg(test)]

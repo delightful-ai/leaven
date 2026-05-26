@@ -93,9 +93,7 @@ impl Artifact for TestArtifact {
     type ApplyError = TestArtifactError;
 
     fn identity(&self) -> ArtifactIdentity {
-        let mut bytes = [0; ContentId::BYTES];
-        bytes[..std::mem::size_of::<i32>()].copy_from_slice(&self.0.to_le_bytes());
-        ArtifactIdentity::Content(ContentId::from_bytes(bytes))
+        ArtifactIdentity::Content(ContentId::hash_bytes(self.0.to_le_bytes()))
     }
 
     fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {

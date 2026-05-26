@@ -741,8 +741,5 @@ fn merge_report(report: &mut MaterializationReport, metered: Metered<Materializa
 }
 
 fn content_id(bytes: &[u8]) -> ContentId {
-    let mut id = [0; ContentId::BYTES];
-    let len = bytes.len().min(ContentId::BYTES);
-    id[..len].copy_from_slice(&bytes[..len]);
-    ContentId::from_bytes(id)
+    ContentId::hash_bytes(bytes)
 }

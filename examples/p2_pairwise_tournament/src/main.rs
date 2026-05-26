@@ -1,13 +1,10 @@
 use futures::executor::block_on;
 use leaven::extend::{
-    CachePolicy, EvaluationRequest, Evaluator, Optimizer, Proposal, ProposalBatch,
-    ProposalBatchSemantics, RunEvent,
+    AssessmentGranularity, AssessmentTarget, CachePolicy, CandidateId, EvaluationRequest,
+    Evaluator, Optimizer, Proposal, ProposalBatch, ProposalBatchSemantics, RunEvent,
 };
 use leaven::plumbing::ContentId;
-use leaven::prelude::{
-    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget,
-    CandidateId, Cost, PairOrder,
-};
+use leaven::prelude::{Artifact, ArtifactIdentity, Assessment, Budget, Cost, PairOrder};
 use leaven::stdlib::{
     evidence::{PairwiseJudgment, PairwiseJudgmentEvidence},
     populations::{BradleyTerryFit, TournamentPopulation},
@@ -208,8 +205,5 @@ impl Evaluator<TournamentProblem> for LengthPairwiseJudge {
 }
 
 fn content_id(bytes: &[u8]) -> ContentId {
-    let mut id = [0; ContentId::BYTES];
-    let len = bytes.len().min(ContentId::BYTES);
-    id[..len].copy_from_slice(&bytes[..len]);
-    ContentId::from_bytes(id)
+    ContentId::hash_bytes(bytes)
 }

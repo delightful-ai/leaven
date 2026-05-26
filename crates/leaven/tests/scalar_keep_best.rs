@@ -96,11 +96,7 @@ impl Artifact for TextArtifact {
     type ApplyError = Infallible;
 
     fn identity(&self) -> ArtifactIdentity {
-        let mut bytes = [0; 32];
-        let raw = self.0.as_bytes();
-        let len = raw.len().min(32);
-        bytes[..len].copy_from_slice(&raw[..len]);
-        ArtifactIdentity::Content(ContentId::from_bytes(bytes))
+        ArtifactIdentity::Content(ContentId::hash_bytes(&self.0))
     }
 
     fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {

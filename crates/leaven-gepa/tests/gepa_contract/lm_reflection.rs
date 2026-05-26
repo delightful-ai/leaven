@@ -1131,8 +1131,5 @@ fn candidate_suffix(_candidate: CandidateId) -> bool {
 }
 
 fn content_id(text: &str) -> ContentId {
-    let mut bytes = [0; 32];
-    let raw = text.as_bytes();
-    bytes[..raw.len().min(32)].copy_from_slice(&raw[..raw.len().min(32)]);
-    ContentId::from_bytes(bytes)
+    ContentId::hash_bytes(text)
 }
