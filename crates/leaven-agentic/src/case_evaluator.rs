@@ -1,5 +1,7 @@
 //! Stock evaluator over agentic cases.
 
+mod attempt;
+
 use std::future::Future;
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
@@ -22,9 +24,10 @@ use crate::AgenticAdapterError;
 use crate::case::{AgentCase, CaseSuite};
 use crate::case_record::{
     AgentCaseRetryRecord, AgentCaseRunError, AgentCaseRunPolicy, AgentCaseRunRecord,
-    CASE_RUN_RECORD_METADATA_KEY, FailedAgentCaseRun, ScoredAgentCaseRun,
+    CASE_RUN_RECORD_METADATA_KEY,
 };
 use crate::error::{checked_add_cost, map_workspace_error};
+use attempt::{CaseAttemptFailure, CaseAttemptScope};
 
 /// Presenter input for one candidate/case execution.
 pub struct AgentCasePresentationInput<'a, P>
@@ -524,67 +527,5 @@ where
                 ))
             }
         }
-    }
-}
-
-struct CaseAttemptFailure {
-    record: AgentCaseRunRecord,
-    source: AgenticAdapterError,
-}
-
-#[derive(Clone, Copy)]
-struct CaseAttemptScope {
-    run_id: leaven_kernel::RunId,
-    candidate: CandidateId,
-    case: leaven_kernel::CaseId,
-    partition: EvaluationSetId,
-    attempt: NonZeroUsize,
-}
-
-impl CaseAttemptScope {
-    fn failed(
-        self,
-        session: Option<AgentSessionId>,
-        outputs: Vec<WorkspacePath>,
-        error: AgentCaseRunError,
-        cost: Cost,
-    ) -> AgentCaseRunRecord {
-        AgentCaseRunRecord::failed_attempt(FailedAgentCaseRun {
-            run_id: self.run_id,
-            candidate: self.candidate,
-            case: self.case,
-            partition: self.partition,
-            attempt: self.attempt,
-            session,
-            outputs,
-            error,
-            cost,
-        })
-    }
-
-    fn scored(
-        self,
-        session: AgentSessionId,
-        outputs: Vec<WorkspacePath>,
-        retries: Vec<AgentCaseRetryRecord>,
-        cost: Cost,
-    ) -> AgentCaseRunRecord {
-        AgentCaseRunRecord::scored_attempt(ScoredAgentCaseRun {
-            run_id: self.run_id,
-            candidate: self.candidate,
-            case: self.case,
-            partition: self.partition,
-            attempt: self.attempt,
-            session,
-            outputs,
-            retries,
-            cost,
-        })
-    }
-}
-
-impl CaseAttemptFailure {
-    fn new(record: AgentCaseRunRecord, source: AgenticAdapterError) -> Self {
-        Self { record, source }
     }
 }

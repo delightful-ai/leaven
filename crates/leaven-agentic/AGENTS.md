@@ -51,21 +51,22 @@ provider protocol details or optimizer-specific search rhythm.
   materializers and parsers instead of defining every domain artifact.
 
 ## Proof Anchors
-- `crates/leaven-agentic/tests/agentic_adapters.rs` proves proposer/evaluator
-  workspace lifecycle, runtime cost flow, parser boundaries, graph application,
-  and cleanup failure handling.
-- `crates/leaven-agentic/tests/agentic_workload.rs` proves case-suite
-  fingerprinting, hidden targets, run policy, preflight, case records, cache
-  policy, and workload evaluator behavior.
-- `crates/leaven-agentic/tests/repairing_proposer.rs` proves bounded repair
-  loops, repair metadata, inspection, and exhausted repair behavior.
-- `crates/leaven-agentic/tests/public_seam_stage.rs` proves agentic-owned
-  reflection/proposal stage lowering crosses the locked public-seam owner with
-  separate ReflectRequest, ReflectionResult, ProposeRequest, and binding stage
-  receipts.
-- `crates/leaven-agentic/tests/goal_handoff.rs` proves the pre-goal checklist,
-  typed request/output helpers, next-stage planning, and execution prompt
-  contracts.
+- `crates/leaven-agentic/tests/agentic_contract/agentic_adapters.rs` proves
+  proposer/evaluator workspace lifecycle, runtime cost flow, parser
+  boundaries, graph application, and cleanup failure handling.
+- `crates/leaven-agentic/tests/agentic_contract/agentic_workload.rs` proves
+  case-suite fingerprinting, hidden targets, run policy, preflight, case
+  records, cache policy, and workload evaluator behavior.
+- `crates/leaven-agentic/tests/agentic_contract/repairing_proposer.rs` proves
+  bounded repair loops, repair metadata, inspection, and exhausted repair
+  behavior.
+- `crates/leaven-agentic/tests/agentic_contract/public_seam_stage.rs` proves
+  agentic-owned reflection/proposal stage lowering crosses the locked
+  public-seam owner with separate ReflectRequest, ReflectionResult,
+  ProposeRequest, and binding stage receipts.
+- `crates/leaven-agentic/tests/agentic_contract/goal_handoff.rs` proves the
+  pre-goal checklist, typed request/output helpers, next-stage planning, and
+  execution prompt contracts.
 - `docs/specs/agentic_stage_runtime.md` owns the generic runtime/stage split.
 - Run `cargo nextest run -p leaven-agentic` to prove generic agentic adapter
   behavior.
@@ -87,31 +88,31 @@ provider runtime behavior.
   do: keep runtime execution in `leaven-agent*`, materialize through workspace/render helpers, then parse typed proposals in this crate or a shape-specific adapter
   preserve: `AgentSession` as runtime fact and `RunContext` as the only graph mutation path
   avoid: treating provider transcript text or workspace diffs as graph records before a parser validates them
-  verify: run `cargo nextest run -p leaven-agentic --test agentic_adapters`
+  verify: run `cargo nextest run -p leaven-agentic --test agentic_contract agentic_adapters`
 
 - when: adding cache, retry, or repair behavior around agentic evaluation
   do: make the fingerprint inputs explicit and keep bounded repair as stage policy
   preserve: hidden target boundaries, attempt history, cleanup failure reporting, and cost accounting
   avoid: default caching for nondeterministic agent evaluators without a law over runtime/workload/presenter/scorer/candidate identity
-  verify: run `cargo nextest run -p leaven-agentic --test agentic_workload --test repairing_proposer`
+  verify: run `cargo nextest run -p leaven-agentic --test agentic_contract agentic_workload repairing_proposer`
 
 - when: adding agentic case or workload policy
   do: distinguish live evaluator behavior from policy vocabulary that is only recorded or preflighted today
   preserve: hidden target boundaries, case-suite fingerprinting, per-case assessment records, retry records, and workspace cleanup accounting
   avoid: documenting `max_parallel_cases`, `max_parallel_workspaces`, `score_on_error`, `fail_on_error`, or checkpoint policy as live scheduler behavior until `AgentCaseEvaluator` actually implements it
-  verify: run `cargo nextest run -p leaven-agentic --test agentic_workload` and add an evaluator test, not just a serialization test, when policy becomes operational
+  verify: run `cargo nextest run -p leaven-agentic --test agentic_contract agentic_workload` and add an evaluator test, not just a serialization test, when policy becomes operational
 
 - when: adding presenter/scorer helpers
   do: keep case input/workspace requirements in `leaven-agentic` and artifact-specific projection in a shape-specific adapter crate
   preserve: hidden `CaseTarget` values as scorer-visible only and `AgentCasePresentation.materialized_refs` as the explicit candidate-visible footprint
   avoid: moving agentic task/environment semantics into `leaven-eval` or leaking hidden targets through materializers
-  verify: run the preflight and evaluator paths in `cargo nextest run -p leaven-agentic --test agentic_workload`
+  verify: run the preflight and evaluator paths in `cargo nextest run -p leaven-agentic --test agentic_contract agentic_workload`
 
 - when: changing persistent-goal handoff prompts
   do: keep the pre-goal checklist explicit in `GoalHandoff`, expose typed request/output helpers through `GoalLoop`, and prove the no-hidden-runtime path in tests
   preserve: original intent, designed surface, misleading proxy proof rejection, acceptance path, proof denominator, stage rationale, required changes, stop condition, and honest blocked closeout
   avoid: moving Codex CLI flags or jj command execution into this generic adapter crate, or dropping typed `GoalStagePlan` fields before execution
-  verify: run `cargo test -p leaven-agentic --test goal_handoff`
+  verify: run `cargo test -p leaven-agentic --test agentic_contract goal_handoff`
 
 ## Local Bait
 - `docs/specs/public-seam-v1/` locks the public seam for external-worker
