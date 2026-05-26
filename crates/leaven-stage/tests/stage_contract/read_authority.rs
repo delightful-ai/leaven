@@ -14,7 +14,7 @@ use leaven_stage::{
 use leaven_workspace::{WorkspaceConfig, WorkspaceFactory, WorkspacePath};
 use leaven_workspace_local::LocalWorkspaceFactory;
 
-use crate::support::{TestEvidence, TestProblem, TextArtifact, graph_and_budget};
+use crate::support::{TestEvidence, TestProblem, graph_and_budget, text_artifact};
 
 #[test]
 fn read_authority_writes_candidate_query_entry_and_receipt() {
@@ -22,7 +22,7 @@ fn read_authority_writes_candidate_query_entry_and_receipt() {
         let (mut graph, mut budget) = graph_and_budget();
         let candidate = {
             let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap()
+            ctx.insert_seed(text_artifact("seed"), 0).unwrap()
         };
         let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
         let proposal_ctx = ctx.proposal_context(StageId::custom("stage"));
@@ -152,9 +152,8 @@ fn read_authority_renders_all_visible_candidate_queries_and_records_limits() {
         let (left, right) = {
             let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
             (
-                ctx.insert_seed(TextArtifact("left".to_owned()), 0).unwrap(),
-                ctx.insert_seed(TextArtifact("right".to_owned()), 0)
-                    .unwrap(),
+                ctx.insert_seed(text_artifact("left"), 0).unwrap(),
+                ctx.insert_seed(text_artifact("right"), 0).unwrap(),
             )
         };
         let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
@@ -226,7 +225,7 @@ fn read_authority_enforces_query_and_byte_limits() {
         let (mut graph, mut budget) = graph_and_budget();
         let candidate = {
             let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap()
+            ctx.insert_seed(text_artifact("seed"), 0).unwrap()
         };
         let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
         let proposal_ctx = ctx.proposal_context(StageId::custom("stage"));
@@ -292,7 +291,7 @@ fn read_authority_renders_visible_assessment_queries() {
         let store = leaven_store_inline::InlineEvidenceStore::<TestEvidence>::new("inline");
         let candidate_id = {
             let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap()
+            ctx.insert_seed(text_artifact("seed"), 0).unwrap()
         };
         let assessment_id = {
             let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)

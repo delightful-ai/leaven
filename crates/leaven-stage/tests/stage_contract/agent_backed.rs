@@ -21,7 +21,7 @@ use leaven_workspace::{WorkspaceBackend, WorkspaceError, WorkspacePath, Workspac
 use leaven_workspace_local::LocalWorkspaceFactory;
 use serde::Deserialize;
 
-use crate::support::{TestProblem, TextArtifact, graph_and_budget};
+use crate::support::{TestProblem, graph_and_budget, text_artifact};
 
 #[test]
 fn agent_backed_fake_runtime_records_receipt_and_applies_candidate() {
@@ -29,7 +29,7 @@ fn agent_backed_fake_runtime_records_receipt_and_applies_candidate() {
         let (mut graph, mut budget) = graph_and_budget();
         let parent = {
             let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap()
+            ctx.insert_seed(text_artifact("seed"), 0).unwrap()
         };
         let proposer = AgentBacked::<ProposerSlot<ReflectRequest>, _, _, _>::from_factory(
             LocalWorkspaceFactory::temp(),
@@ -86,7 +86,7 @@ fn agent_backed_exposes_stage_identity_and_surfaces_runtime_errors() {
         let (mut graph, mut budget) = graph_and_budget();
         let parent = {
             let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap()
+            ctx.insert_seed(text_artifact("seed"), 0).unwrap()
         };
         let proposer = AgentBacked::<ProposerSlot<ReflectRequest>, _, _, _>::from_factory(
             LocalWorkspaceFactory::temp(),
@@ -138,7 +138,7 @@ fn agent_backed_rejects_invalid_output_contract_before_workspace_allocation() {
         let (mut graph, mut budget) = graph_and_budget();
         let parent = {
             let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap()
+            ctx.insert_seed(text_artifact("seed"), 0).unwrap()
         };
         let proposer = AgentBacked::<ProposerSlot<ReflectRequest>, _, _, _>::from_factory(
             LocalWorkspaceFactory::temp(),
@@ -168,7 +168,7 @@ fn agent_backed_surfaces_serialization_allocation_and_parse_failures() {
         let (mut graph, mut budget) = graph_and_budget();
         let parent = {
             let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap()
+            ctx.insert_seed(text_artifact("seed"), 0).unwrap()
         };
         let serialization = AgentBacked::<ProposerSlot<BadRequest>, _, _, _>::from_factory(
             LocalWorkspaceFactory::temp(),
@@ -251,7 +251,7 @@ fn agent_backed_records_missing_outputs_before_parse_failure() {
         let (mut graph, mut budget) = graph_and_budget();
         let parent = {
             let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap()
+            ctx.insert_seed(text_artifact("seed"), 0).unwrap()
         };
         let proposer = AgentBacked::<ProposerSlot<ReflectRequest>, _, _, _>::from_factory(
             LocalWorkspaceFactory::temp(),
@@ -296,7 +296,7 @@ fn agent_backed_records_workspace_setup_failure_receipt() {
         let (mut graph, mut budget) = graph_and_budget();
         let parent = {
             let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap()
+            ctx.insert_seed(text_artifact("seed"), 0).unwrap()
         };
         let setup = AgentBacked::<ProposerSlot<ReflectRequest>, _, _, _>::from_factory(
             SetupFailingFactory,
@@ -340,7 +340,7 @@ fn agent_backed_records_prewarm_query_failure_receipt() {
         let (mut graph, mut budget) = graph_and_budget();
         let parent = {
             let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap()
+            ctx.insert_seed(text_artifact("seed"), 0).unwrap()
         };
         let proposer = AgentBacked::<ProposerSlot<ReflectRequest>, _, _, _>::from_factory(
             QueryWriteFailingFactory,
@@ -386,7 +386,7 @@ fn agent_backed_surfaces_cleanup_failure_after_success_and_parse_error() {
         let (mut graph, mut budget) = graph_and_budget();
         let parent = {
             let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap()
+            ctx.insert_seed(text_artifact("seed"), 0).unwrap()
         };
         let success = AgentBacked::<ProposerSlot<ReflectRequest>, _, _, _>::from_factory(
             CleanupFailingFactory,
