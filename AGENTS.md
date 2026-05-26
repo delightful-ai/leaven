@@ -117,7 +117,7 @@ public-seam drafts via `.ignore`. Search those trees by explicit path or with
   do: name the claim and choose exactly one shape: law, example, scenario, or regression
   preserve: the `<30s` full-suite runtime target, hard completion timeout, and coverage ratchet
   avoid: ceremony tests, broad e2e assertions for facts expressible lower down, and hidden slow lanes
-  verify: run `just test`; it enforces the suite SLA
+  verify: run `just test`; it warns on the runtime target and enforces the hard timeout
 
 - when: changing crate boundaries or dependencies
   do: run a topology check before editing, then update the crate-boundary contract and nearest ownership docs in the same change
@@ -150,8 +150,8 @@ The skill descriptions own trigger routing. Do not duplicate their full routing 
 
 ## Verification Policy
 - The workspace pins nightly via `rust-toolchain.toml`. The `dev` profile keeps LLVM as the default backend with line-table debuginfo, disables Cargo incremental compilation, and uses many codegen units for local edit/compile/test loops; the pinned nightly ICEs when incremental compilation and the parallel rustc frontend are combined. `.cargo/config.toml` still enables the parallel rustc frontend (`-Zthreads`) for reliable hot-loop speed without per-command `CARGO_INCREMENTAL=0` wrappers.
-- `just test`: canonical full test suite; builds and discovers workspace test binaries with Cargo, runs the discovered libtest binaries plus doctests, reports the `<30s` runtime target, and enforces the hard completion timeout configured in the root `Justfile`.
-- `just check`: completion gate; runs formatting, production line-count lint, clippy, SLA-enforced tests, and line/branch coverage.
+- `just test`: canonical full test suite; builds and discovers workspace test binaries with Cargo, runs the discovered libtest binaries plus doctests, warns on the `<30s` runtime target, and enforces the hard completion timeout configured in the root `Justfile`.
+- `just check`: completion gate; runs formatting, production line-count lint, clippy, the default workspace test lane, and line/branch coverage.
 - Use narrower commands only while iterating. Before claiming behavior is complete, run `just check` unless the user explicitly requested a narrower proof.
 - Child `AGENTS.md` files should add verification deltas tied to local change types, not repeat root commands.
 

@@ -13,8 +13,8 @@ just check
 ```
 
 `just check` runs formatting, the production line-count lint, clippy with
-workspace library/tool targets, the SLA-enforced workspace libtest suite,
-doctests, and the line/branch coverage summary. The default gate excludes milestone example
+workspace library/tool targets, the default workspace libtest suite, doctests,
+and the line/branch coverage summary. The default gate excludes milestone example
 packages; use the explicit milestone recipes when an example workflow is the
 claim under test. Use narrower recipes only while iterating:
 
@@ -73,10 +73,12 @@ The canonical full test suite has a wall-clock runtime target:
 just test execution should finish in <30s
 ```
 
-`just test` enforces this on test execution after compiling the workspace
-test binaries and prewarming workspace doctests. Those preflight steps are still
-mandatory and must fail on compile errors, but compiler wall time is not
-evidence that the runtime suite crossed the target. The target covers default
+`just test` reports this after compiling the workspace test binaries and
+prewarming workspace doctests. Crossing 30s is a warning, not the hard failure
+condition; failed subprocesses and the 600s timeout still fail the command.
+Those preflight steps are still mandatory and must fail on compile errors, but
+compiler wall time is not evidence that the runtime suite crossed the target.
+The target covers default
 workspace lib/bin/integration/example test targets through
 `cargo test --workspace --all-targets` and workspace doctests for library/tool
 packages that contain executable Rust doctest fences. Milestone examples stay
