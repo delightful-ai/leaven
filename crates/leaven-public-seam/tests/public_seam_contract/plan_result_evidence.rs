@@ -1,5 +1,4 @@
-use crate::support::package;
-use crate::support::prefixed_jcs_hash;
+use crate::support::{bind_plan_result_hashes, package, prefixed_jcs_hash};
 use leaven_public_seam::PublicSeamError;
 use serde_json::{Value, json};
 
@@ -487,7 +486,6 @@ fn score_output_record() -> Value {
 }
 
 fn bind_result_hashes(mut result: Value) -> Value {
-    let values = result["values"].as_object().unwrap().clone();
     for receipt in result["receipts"].as_array_mut().unwrap() {
         if receipt["kind"].as_str() == Some("write")
             && receipt["write_kind"].as_str() == Some("submit_assessments")
@@ -501,33 +499,8 @@ fn bind_result_hashes(mut result: Value) -> Value {
                 }),
             ));
         }
-        let receipt_id = receipt["receipt"].as_str().unwrap();
-        let Some((name, value)) = values.iter().find(|(_, value)| {
-            value
-                .as_object()
-                .and_then(|object| object.get("receipt"))
-                .and_then(Value::as_str)
-                == Some(receipt_id)
-        }) else {
-            continue;
-        };
-        let schema_version = match receipt["kind"].as_str().unwrap() {
-            "query" => "leaven.plan_query_result.v1",
-            "call" => "leaven.plan_call_result.v1",
-            "write" => "leaven.plan_write_result.v1",
-            other => panic!("unexpected receipt kind {other}"),
-        };
-        let op_name = receipt["op_var"].as_str().unwrap_or(name);
-        receipt["result_hash"] = json!(prefixed_jcs_hash(
-            "fp_result_sha256_",
-            &json!({
-                "schema_version": schema_version,
-                "name": op_name,
-                "value": value
-            }),
-        ));
     }
-    result
+    bind_plan_result_hashes(result)
 }
 
 fn target_derived_evidence() -> Value {
