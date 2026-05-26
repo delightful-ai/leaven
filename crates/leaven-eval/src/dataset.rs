@@ -1,8 +1,6 @@
 //! Dataset and case records.
 
-use std::collections::BTreeMap;
-
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use leaven_kernel::{CaseId, Fingerprint, FingerprintBuilder, MetadataBag, MetadataValue};
 
