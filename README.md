@@ -2,23 +2,28 @@
 
 *u walk away. it bakes.*
 
-Leaven is a Rust library for letting coding agents improve things they can
-change and measure: a prompt, a config, code, an agent's own setup, or a whole
-workspace. You set the conditions. The agent runs the loop. You come back to
-find it better.
+Leaven is a Rust library for optimizing agents.
+Leaven can improve things it change and measure: skills, codebases, harnesses, environments. 
 
-Bread bakes because you set up the conditions correctly and walk away. Leaven
-works the same way.
+Doesn't matter what it is or where it lives. If it affects the agent, throw it in leaven.
 
-## Status
+Leaven is built for agents. 
 
-Leaven is early alpha. The Rust workspace is where the current implementation
-lives, and the public API is still moving quickly. The high-level API shown
-below is the direction of travel and is backed by checked examples in this
-repo, but it is not a formal stability promise yet.
+Concretely, this means,
+- written in Rust
+- reusable primitives (yes, you can vibecode your optimizers!)
+- skills (soon to come)
+- agents can inspect/work with all of it. 
 
-Python support is on the roadmap and has design/spec work in progress, but it
-is not shipped as a supported package today.
+You set the conditions. The agent runs the loop. You come back to find it better. (bad)
+
+You need, at minimum, to have some form of reward. 
+
+This means a way to tell if something is good (numbers), valid (binary), or if it's better than something else (pairwise).
+
+You should also be able to provide rich feedback on failures, though for agentic optimization, this is less necessary.
+
+You can use any number of these, combined, as signal for leaven to make your shit bubble n bake. 
 
 ## How It Optimizes Anything
 
@@ -126,6 +131,16 @@ Lineage runs through Stanford NLP: Leaven extends ideas from
 [GEPA](https://github.com/gepa-ai/gepa) and
 [DSPy](https://github.com/stanfordnlp/dspy) into Rust, and reframes them around
 what coding agents can now do autonomously.
+
+## Status
+
+Leaven is early alpha. The Rust workspace is where the current implementation
+lives, and the public API is still moving quickly. The high-level API shown
+below is the direction of travel and is backed by checked examples in this
+repo, but it is not a formal stability promise yet.
+
+Python support is on the roadmap and has design/spec work in progress, but it
+is not shipped as a supported package today.
 
 ## Links
 
