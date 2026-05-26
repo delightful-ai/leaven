@@ -17,6 +17,10 @@ pub enum TextChange {
     Fail,
 }
 
+pub fn text_artifact(text: impl Into<String>) -> TextArtifact {
+    TextArtifact(text.into())
+}
+
 #[derive(Debug, Error)]
 #[error("text error")]
 pub struct TextError;

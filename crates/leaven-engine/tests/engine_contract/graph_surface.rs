@@ -16,6 +16,7 @@ use proptest::prelude::*;
 
 use super::support::{
     TestEvidence, TestProblem, TextArtifact, TextChange, graph_and_budget, record_one,
+    text_artifact,
 };
 
 #[test]
@@ -23,7 +24,7 @@ fn create_proposal_creates_candidate_without_causal_parent() {
     let (mut graph, mut budget) = graph_and_budget();
     let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
 
-    let proposal = Proposal::create(TextArtifact("fresh".to_owned())).build();
+    let proposal = Proposal::create(text_artifact("fresh")).build();
     let batch = record_one(&mut ctx, proposal);
     let report = ctx.apply_batch(batch).unwrap();
     let candidate = report.successful_candidates().next().unwrap();
@@ -52,7 +53,7 @@ fn create_proposal_creates_candidate_without_causal_parent() {
 fn change_proposal_creates_causal_edge() {
     let (mut graph, mut budget) = graph_and_budget();
     let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-    let seed = ctx.insert_seed(TextArtifact("a".to_owned()), 0).unwrap();
+    let seed = ctx.insert_seed(text_artifact("a"), 0).unwrap();
 
     let proposal = Proposal::mutate(seed, TextChange::Append("b".to_owned())).build();
     let batch = record_one(&mut ctx, proposal);
@@ -78,7 +79,7 @@ fn change_proposal_creates_causal_edge() {
 fn graph_snapshot_round_trips_and_rebuilds_lineage_indices() {
     let (mut graph, mut budget) = graph_and_budget();
     let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-    let seed = ctx.insert_seed(TextArtifact("a".to_owned()), 0).unwrap();
+    let seed = ctx.insert_seed(text_artifact("a"), 0).unwrap();
     let proposal = Proposal::mutate(seed, TextChange::Append("b".to_owned())).build();
     let batch = record_one(&mut ctx, proposal);
     let report = ctx.apply_batch(batch).unwrap();
@@ -101,7 +102,7 @@ fn graph_snapshot_round_trips_and_rebuilds_lineage_indices() {
 fn graph_snapshot_restore_rejects_dangling_references() {
     let (mut graph, mut budget) = graph_and_budget();
     let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-    let seed = ctx.insert_seed(TextArtifact("a".to_owned()), 0).unwrap();
+    let seed = ctx.insert_seed(text_artifact("a"), 0).unwrap();
     let proposal = Proposal::mutate(seed, TextChange::Append("b".to_owned())).build();
     let batch = record_one(&mut ctx, proposal);
     let report = ctx.apply_batch(batch).unwrap();
@@ -345,7 +346,7 @@ fn graph_views_expose_record_details_without_storage_maps() {
     batch_metadata.insert("batch", MetadataValue::Bool(true));
     let mut proposal_metadata = MetadataBag::new();
     proposal_metadata.insert("proposal", MetadataValue::String("detail".to_owned()));
-    let proposal = Proposal::create(TextArtifact("detailed".to_owned()))
+    let proposal = Proposal::create(text_artifact("detailed"))
         .metadata(proposal_metadata)
         .build();
     let report = ctx
@@ -407,7 +408,7 @@ fn graph_views_expose_record_details_without_storage_maps() {
 fn invalid_change_provenance_records_failed_apply() {
     let (mut graph, mut budget) = graph_and_budget();
     let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-    let seed = ctx.insert_seed(TextArtifact("a".to_owned()), 0).unwrap();
+    let seed = ctx.insert_seed(text_artifact("a"), 0).unwrap();
     let proposal = Proposal {
         effect: ProposalEffect::Change {
             target: seed,
@@ -458,10 +459,10 @@ fn invalid_change_provenance_records_failed_apply() {
 fn create_proposals_reject_causal_single_parent_provenance() {
     let (mut graph, mut budget) = graph_and_budget();
     let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-    let seed = ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap();
+    let seed = ctx.insert_seed(text_artifact("seed"), 0).unwrap();
     let proposal = Proposal {
         effect: ProposalEffect::Create {
-            artifact: TextArtifact("fresh".to_owned()),
+            artifact: text_artifact("fresh"),
         },
         provenance: ProposalProvenance::new(CausalInputs::Single(seed)),
         annotations: (),
@@ -486,14 +487,12 @@ fn create_proposals_reject_causal_single_parent_provenance() {
 fn aggregate_create_records_nary_lineage_and_rejects_unknown_parents() {
     let (mut graph, mut budget) = graph_and_budget();
     let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-    let left = ctx.insert_seed(TextArtifact("left".to_owned()), 0).unwrap();
-    let right = ctx
-        .insert_seed(TextArtifact("right".to_owned()), 1)
-        .unwrap();
+    let left = ctx.insert_seed(text_artifact("left"), 0).unwrap();
+    let right = ctx.insert_seed(text_artifact("right"), 1).unwrap();
 
     let ok_batch = record_one(
         &mut ctx,
-        Proposal::aggregate(vec![left, right], TextArtifact("joined".to_owned())).build(),
+        Proposal::aggregate(vec![left, right], text_artifact("joined")).build(),
     );
     let ok = ctx.apply_batch(ok_batch).unwrap();
     let child = ok.successful_candidates().next().unwrap();
@@ -505,7 +504,7 @@ fn aggregate_create_records_nary_lineage_and_rejects_unknown_parents() {
         &mut ctx,
         Proposal::aggregate(
             vec![leaven_kernel::CandidateId::new()],
-            TextArtifact("bad".to_owned()),
+            text_artifact("bad"),
         )
         .build(),
     );
@@ -521,12 +520,8 @@ fn aggregate_create_records_nary_lineage_and_rejects_unknown_parents() {
 fn informed_by_does_not_affect_lineage() {
     let (mut graph, mut budget) = graph_and_budget();
     let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-    let source = ctx
-        .insert_seed(TextArtifact("source".to_owned()), 0)
-        .unwrap();
-    let target = ctx
-        .insert_seed(TextArtifact("target".to_owned()), 1)
-        .unwrap();
+    let source = ctx.insert_seed(text_artifact("source"), 0).unwrap();
+    let target = ctx.insert_seed(text_artifact("target"), 1).unwrap();
 
     let proposal = Proposal::mutate(target, TextChange::Append("!".to_owned()))
         .informed_by([InfoRef::Candidate(source)])
@@ -545,10 +540,8 @@ fn informed_by_does_not_affect_lineage() {
 fn merge_proposal_records_pair_lineage_but_applies_to_one_target() {
     let (mut graph, mut budget) = graph_and_budget();
     let mut ctx = leaven_engine::RunContext::<TestProblem>::new(&mut graph, &mut budget);
-    let left = ctx.insert_seed(TextArtifact("left".to_owned()), 0).unwrap();
-    let right = ctx
-        .insert_seed(TextArtifact("right".to_owned()), 1)
-        .unwrap();
+    let left = ctx.insert_seed(text_artifact("left"), 0).unwrap();
+    let right = ctx.insert_seed(text_artifact("right"), 1).unwrap();
 
     let proposal = Proposal::merge(left, right, TextChange::Append("+merged".to_owned())).build();
     let batch = record_one(&mut ctx, proposal);
@@ -567,7 +560,7 @@ fn merge_proposal_records_pair_lineage_but_applies_to_one_target() {
 fn lineage_ancestors_deduplicate_diamonds_without_dropping_parents() {
     let (mut graph, mut budget) = graph_and_budget();
     let mut ctx = leaven_engine::RunContext::<TestProblem>::new(&mut graph, &mut budget);
-    let seed = ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap();
+    let seed = ctx.insert_seed(text_artifact("seed"), 0).unwrap();
 
     let left_batch = record_one(
         &mut ctx,
@@ -609,7 +602,7 @@ fn lineage_ancestors_deduplicate_diamonds_without_dropping_parents() {
 fn siblings_are_candidates_that_share_causal_parents() {
     let (mut graph, mut budget) = graph_and_budget();
     let mut ctx = leaven_engine::RunContext::<TestProblem>::new(&mut graph, &mut budget);
-    let seed = ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap();
+    let seed = ctx.insert_seed(text_artifact("seed"), 0).unwrap();
 
     let first_batch = record_one(
         &mut ctx,
@@ -642,14 +635,8 @@ fn same_content_can_have_multiple_candidates() {
     let (mut graph, mut budget) = graph_and_budget();
     let mut ctx = leaven_engine::RunContext::<TestProblem>::new(&mut graph, &mut budget);
 
-    let first_batch = record_one(
-        &mut ctx,
-        Proposal::create(TextArtifact("same".to_owned())).build(),
-    );
-    let second_batch = record_one(
-        &mut ctx,
-        Proposal::create(TextArtifact("same".to_owned())).build(),
-    );
+    let first_batch = record_one(&mut ctx, Proposal::create(text_artifact("same")).build());
+    let second_batch = record_one(&mut ctx, Proposal::create(text_artifact("same")).build());
     let first = ctx
         .apply_batch(first_batch)
         .unwrap()
@@ -680,10 +667,7 @@ fn applying_same_proposal_twice_is_rejected_without_second_candidate() {
     let (mut graph, mut budget) = graph_and_budget();
     let mut ctx = leaven_engine::RunContext::<TestProblem>::new(&mut graph, &mut budget);
 
-    let batch = record_one(
-        &mut ctx,
-        Proposal::create(TextArtifact("once".to_owned())).build(),
-    );
+    let batch = record_one(&mut ctx, Proposal::create(text_artifact("once")).build());
     let proposal_id = ctx.graph().proposal_batch(batch).unwrap().proposal_ids()[0];
     let first = ctx.apply_proposal(proposal_id).unwrap();
     let second = ctx.apply_proposal(proposal_id).unwrap();
@@ -700,7 +684,7 @@ fn applying_same_proposal_twice_is_rejected_without_second_candidate() {
 fn apply_batch_reports_partial_failure_without_aborting() {
     let (mut graph, mut budget) = graph_and_budget();
     let mut ctx = leaven_engine::RunContext::<TestProblem>::new(&mut graph, &mut budget);
-    let seed = ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap();
+    let seed = ctx.insert_seed(text_artifact("seed"), 0).unwrap();
 
     let batch = ctx
         .record_proposal_batch(
@@ -738,14 +722,14 @@ proptest! {
     fn graph_records_are_append_only(ops in proptest::collection::vec(any::<bool>(), 0..32)) {
         let (mut graph, mut budget) = graph_and_budget();
         let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-        let seed = ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap();
+        let seed = ctx.insert_seed(text_artifact("seed"), 0).unwrap();
         let seed_artifact = ctx.graph().artifact(seed).unwrap().clone();
         let mut known = vec![seed];
         let mut previous = graph_counts(&ctx);
 
         for create in ops {
             let proposal = if create {
-                Proposal::create(TextArtifact("fresh".to_owned())).build()
+                Proposal::create(text_artifact("fresh")).build()
             } else {
                 Proposal::mutate(*known.last().unwrap(), TextChange::Append("x".to_owned()))
                     .build()
@@ -793,7 +777,7 @@ fn snapshot_with_proposal_and_assessment() -> leaven_engine::RunGraphSnapshot<Te
         let case_set = leaven_engine::CaseSet::new(vec!["case"]);
         let child = {
             let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            let seed = ctx.insert_seed(TextArtifact("a".to_owned()), 0).unwrap();
+            let seed = ctx.insert_seed(text_artifact("a"), 0).unwrap();
             let proposal = Proposal::mutate(seed, TextChange::Append("b".to_owned())).build();
             let batch = record_one(&mut ctx, proposal);
             ctx.apply_batch(batch)
@@ -819,7 +803,7 @@ fn snapshot_with_seed_assessment() -> leaven_engine::RunGraphSnapshot<TestProble
         let case_set = leaven_engine::CaseSet::new(vec!["case"]);
         let seed = {
             let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            ctx.insert_seed(TextArtifact("a".to_owned()), 0).unwrap()
+            ctx.insert_seed(text_artifact("a"), 0).unwrap()
         };
         let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
             .with_case_set(&case_set)
