@@ -65,6 +65,16 @@ class SuiteDeadlineTests(unittest.TestCase):
         self.assertIn("--exclude", command)
         self.assertIn("p8_aime_gepa", command)
 
+    def test_workspace_build_command_uses_nextest_list_for_discovery(self) -> None:
+        command = MODULE.WORKSPACE_TEST_BUILD_COMMAND
+
+        self.assertEqual(command[:3], ["cargo", "nextest", "list"])
+        self.assertIn("--message-format", command)
+        self.assertIn("json", command)
+        self.assertIn("--workspace", command)
+        self.assertIn("--exclude", command)
+        self.assertIn("trace2skill_spreadsheetbench", command)
+
     def test_workspace_build_timeout_is_separate_from_runtime_sla(self) -> None:
         with mock.patch.object(
             MODULE,

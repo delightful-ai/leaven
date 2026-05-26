@@ -30,8 +30,10 @@ MILESTONE_PACKAGES = [
 WORKSPACE_TEST_BUILD_COMMAND = [
     "cargo",
     "nextest",
-    "run",
-    "--no-run",
+    "list",
+    "--no-pager",
+    "--message-format",
+    "json",
     "--workspace",
     *[arg for package in MILESTONE_PACKAGES for arg in ("--exclude", package)],
 ]
@@ -139,8 +141,9 @@ def run_process_group_with_timeout(
     command: list[str],
     cwd: Path,
     timeout: float | None,
+    stdout: int | None = None,
 ) -> int:
-    process = subprocess.Popen(command, cwd=cwd, start_new_session=True)
+    process = subprocess.Popen(command, cwd=cwd, start_new_session=True, stdout=stdout)
     try:
         return process.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -171,6 +174,7 @@ def build_workspace_tests(workspace_root: Path, build_timeout: float | None = No
         WORKSPACE_TEST_BUILD_COMMAND,
         workspace_root,
         build_timeout,
+        stdout=subprocess.DEVNULL,
     )
 
 
