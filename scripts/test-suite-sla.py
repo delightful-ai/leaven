@@ -50,6 +50,8 @@ WORKSPACE_TEST_RUN_COMMAND = [
     *[arg for package in MILESTONE_PACKAGES for arg in ("--exclude", package)],
 ]
 
+DEFAULT_BUILD_DISCOVERY_TIMEOUT_SECONDS = 300.0
+
 NON_RUST_FENCE_LANGUAGES = {
     "console",
     "json",
@@ -209,8 +211,11 @@ def main() -> int:
     parser.add_argument(
         "--build-timeout",
         type=float,
-        default=120.0,
-        help="optional timeout for compiling/discovering workspace test binaries",
+        default=DEFAULT_BUILD_DISCOVERY_TIMEOUT_SECONDS,
+        help=(
+            "optional hang guard for compiling/discovering workspace test binaries; "
+            "this is separate from the runtime SLA"
+        ),
     )
     args = parser.parse_args()
 

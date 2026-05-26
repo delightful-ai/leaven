@@ -87,6 +87,9 @@ class SuiteDeadlineTests(unittest.TestCase):
         self.assertEqual(result, 1)
         self.assertLess(time.perf_counter() - started, 3.0)
 
+    def test_default_build_discovery_timeout_is_a_generous_hang_guard(self) -> None:
+        self.assertEqual(MODULE.DEFAULT_BUILD_DISCOVERY_TIMEOUT_SECONDS, 300.0)
+
     def test_runtime_sla_starts_after_workspace_build_discovery(self) -> None:
         with (
             mock.patch.object(MODULE, "build_workspace_tests", return_value=0),
@@ -95,7 +98,10 @@ class SuiteDeadlineTests(unittest.TestCase):
             mock.patch.object(
                 MODULE.argparse.ArgumentParser,
                 "parse_args",
-                return_value=MODULE.argparse.Namespace(sla_seconds=30.0, build_timeout=120.0),
+                return_value=MODULE.argparse.Namespace(
+                    sla_seconds=30.0,
+                    build_timeout=MODULE.DEFAULT_BUILD_DISCOVERY_TIMEOUT_SECONDS,
+                ),
             ),
         ):
             self.assertEqual(MODULE.main(), 0)
