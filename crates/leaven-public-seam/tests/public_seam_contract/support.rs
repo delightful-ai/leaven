@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use leaven_public_seam::PublicSeamPackage;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 pub fn package() -> PublicSeamPackage {
     PublicSeamPackage::active_from_repo(workspace_root()).unwrap()
@@ -19,5 +19,16 @@ pub fn prefixed_jcs_hash(prefix: &str, value: &Value) -> String {
     format!(
         "{prefix}{}",
         jcs_canonicalize::sha256_jcs_hex(value).unwrap()
+    )
+}
+
+pub fn plan_call_result_hash(name: &str, value: Value) -> String {
+    prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_call_result.v1",
+            "name": name,
+            "value": value
+        }),
     )
 }

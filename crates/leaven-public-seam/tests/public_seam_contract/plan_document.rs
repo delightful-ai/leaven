@@ -1,4 +1,4 @@
-use crate::support::{package, prefixed_jcs_hash};
+use crate::support::{package, plan_call_result_hash, prefixed_jcs_hash};
 use std::collections::{BTreeMap, BTreeSet};
 
 use leaven_lm::{MessageContentPart, OutputMode, Role};
@@ -1363,14 +1363,7 @@ fn agent_status_output_contract() -> Value {
 
 fn rebind_call_result_hash(result: &mut Value, receipt_index: usize, name: &str) {
     let value = result["values"][name].clone();
-    result["receipts"][receipt_index]["result_hash"] = json!(prefixed_jcs_hash(
-        "fp_result_sha256_",
-        &json!({
-            "schema_version": "leaven.plan_call_result.v1",
-            "name": name,
-            "value": value
-        }),
-    ));
+    result["receipts"][receipt_index]["result_hash"] = json!(plan_call_result_hash(name, value));
 }
 
 fn rebind_failed_call_result_hash(result: &mut Value, receipt_index: usize, name: &str) {
