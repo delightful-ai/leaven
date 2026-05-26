@@ -1008,7 +1008,7 @@ fn acp_extension_results_preserve_agent_and_sandbox_blob_ref_data_classes() {
     let package = package();
 
     let mut agent = agent_session_primary();
-    agent["transcript_ref"] = acp_blob_ref("blob_agent_transcript", &["transcript.raw"]);
+    agent["transcript_ref"] = fixture_blob_ref("blob_agent_transcript", &["transcript.raw"]);
     agent["data_classes"] = json!(["public", "transcript.raw"]);
     let agent_result = package
         .validate_acp_extension_result_document(&extension_result_for(
@@ -1024,10 +1024,10 @@ fn acp_extension_results_preserve_agent_and_sandbox_blob_ref_data_classes() {
     );
 
     let mut sandbox = sandbox_exec_primary();
-    sandbox["stdout_ref"] = acp_blob_ref("blob_stdout", &["transcript.raw"]);
-    sandbox["stderr_ref"] = acp_blob_ref("blob_stderr", &["transcript.raw"]);
+    sandbox["stdout_ref"] = fixture_blob_ref("blob_stdout", &["transcript.raw"]);
+    sandbox["stderr_ref"] = fixture_blob_ref("blob_stderr", &["transcript.raw"]);
     sandbox["files"] = json!({
-        "out.txt": acp_blob_ref("blob_out", &["workspace.file"])
+        "out.txt": fixture_blob_ref("blob_out", &["workspace.file"])
     });
     sandbox["data_classes"] = json!(["public", "transcript.raw", "workspace.file"]);
     let sandbox_result = package
@@ -1054,7 +1054,7 @@ fn acp_extension_results_reject_agent_and_sandbox_blob_ref_data_class_gaps() {
 
     let mut agent_transcript_gap = agent_session_primary();
     agent_transcript_gap["transcript_ref"] =
-        acp_blob_ref("blob_agent_transcript", &["transcript.raw"]);
+        fixture_blob_ref("blob_agent_transcript", &["transcript.raw"]);
     let agent_transcript_gap = extension_result_for(
         "leaven/agent.run",
         &agent_transcript_gap,
@@ -1069,10 +1069,10 @@ fn acp_extension_results_reject_agent_and_sandbox_blob_ref_data_class_gaps() {
     ));
 
     let mut sandbox_stream_gap = sandbox_exec_primary();
-    sandbox_stream_gap["stdout_ref"] = acp_blob_ref("blob_stdout", &["transcript.raw"]);
-    sandbox_stream_gap["stderr_ref"] = acp_blob_ref("blob_stderr", &["transcript.raw"]);
+    sandbox_stream_gap["stdout_ref"] = fixture_blob_ref("blob_stdout", &["transcript.raw"]);
+    sandbox_stream_gap["stderr_ref"] = fixture_blob_ref("blob_stderr", &["transcript.raw"]);
     sandbox_stream_gap["files"] = json!({
-        "out.txt": acp_blob_ref("blob_out", &["workspace.file"])
+        "out.txt": fixture_blob_ref("blob_out", &["workspace.file"])
     });
     let sandbox_stream_gap = extension_result_for(
         "leaven/sandbox.exec",
@@ -1190,8 +1190,8 @@ fn acp_extension_results_reject_agent_audit_gaps() {
                 "argv": ["codex"],
                 "status": "completed",
                 "receipt": "agentrec_other",
-                "stdout_ref": acp_blob_ref("blob_agent_stdout", &["transcript.raw"]),
-                "stderr_ref": acp_blob_ref("blob_agent_stderr", &["transcript.raw"])
+                "stdout_ref": fixture_blob_ref("blob_agent_stdout", &["transcript.raw"]),
+                "stderr_ref": fixture_blob_ref("blob_agent_stderr", &["transcript.raw"])
             })),
             "agent_run command record receipt",
         ),
@@ -2084,13 +2084,13 @@ fn agent_session_primary() -> Value {
     json!({
         "kind": "agent_session",
         "status": "completed",
-        "transcript_ref": acp_blob_ref("blob_agent_transcript", &["transcript.raw"]),
+        "transcript_ref": fixture_blob_ref("blob_agent_transcript", &["transcript.raw"]),
         "commands": [{
             "argv": ["codex"],
             "status": "completed",
             "receipt": "agentrec_acp",
-            "stdout_ref": acp_blob_ref("blob_agent_stdout", &["transcript.raw"]),
-            "stderr_ref": acp_blob_ref("blob_agent_stderr", &["transcript.raw"])
+            "stdout_ref": fixture_blob_ref("blob_agent_stdout", &["transcript.raw"]),
+            "stderr_ref": fixture_blob_ref("blob_agent_stderr", &["transcript.raw"])
         }],
         "cost": {"usd_micro": 1000, "agent_calls": 1},
         "graph_revision": "rev_acp",
@@ -2118,8 +2118,8 @@ fn sandbox_exec_primary() -> Value {
         "status": "completed",
         "exit_code": 0,
         "cost": {"usd_micro": 10, "sandbox_calls": 1},
-        "stdout_ref": acp_blob_ref("blob_sandbox_stdout", &["public"]),
-        "stderr_ref": acp_blob_ref("blob_sandbox_stderr", &["public"]),
+        "stdout_ref": fixture_blob_ref("blob_sandbox_stdout", &["public"]),
+        "stderr_ref": fixture_blob_ref("blob_sandbox_stderr", &["public"]),
         "graph_revision": "rev_acp",
         "data_classes": ["public"],
         "replayability": "fully_managed",
@@ -2137,13 +2137,9 @@ fn sandbox_exec_primary_with_file(path: &str) -> Value {
     let mut primary = sandbox_exec_primary();
     primary["data_classes"] = json!(["public", "workspace.file"]);
     primary["files"] = json!({
-        path: acp_blob_ref("blob_sandbox_file", &["workspace.file"])
+        path: fixture_blob_ref("blob_sandbox_file", &["workspace.file"])
     });
     primary
-}
-
-fn acp_blob_ref(id: &str, data_classes: &[&str]) -> Value {
-    fixture_blob_ref(id, data_classes)
 }
 
 fn proposal_batch_primary() -> Value {

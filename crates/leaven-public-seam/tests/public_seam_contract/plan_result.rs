@@ -528,7 +528,7 @@ fn plan_result_preserves_value_trace_and_blob_ref_data_classes() {
     blob_backed["values"]["rows"] = json!({
         "kind": "workspace_file",
         "path": "artifacts/output.txt",
-        "blob_ref": blob_ref("blob_workspace_file", ["workspace.file"]),
+        "blob_ref": fixture_blob_ref("blob_workspace_file", &["workspace.file"]),
         "graph_revision": "rev_base",
         "data_classes": ["public", "workspace.file"],
         "replayability": "pure_read",
@@ -575,7 +575,7 @@ fn plan_result_rejects_value_trace_and_blob_ref_data_class_gaps() {
     missing_workspace_blob_class["values"]["rows"] = json!({
         "kind": "workspace_file",
         "path": "artifacts/output.txt",
-        "blob_ref": blob_ref("blob_workspace_file", ["workspace.file"]),
+        "blob_ref": fixture_blob_ref("blob_workspace_file", &["workspace.file"]),
         "graph_revision": "rev_base",
         "data_classes": ["public"],
         "replayability": "pure_read",
@@ -861,10 +861,6 @@ fn bind_result_hashes(result: Value) -> Value {
 
 fn bind_result_hashes_in_place(result: &mut Value) {
     *result = bind_result_hashes(std::mem::take(result));
-}
-
-fn blob_ref(id: &str, data_classes: impl IntoIterator<Item = &'static str>) -> Value {
-    fixture_blob_ref(id, &data_classes.into_iter().collect::<Vec<_>>())
 }
 
 fn typed_failure_result() -> Value {
