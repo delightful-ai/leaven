@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from workspace_packages import MILESTONE_PACKAGES, package_exclude_args
+from workspace_packages import MILESTONE_PACKAGES, cargo_metadata, package_exclude_args
 
 # The dev/test profiles select the Cranelift codegen backend for workspace
 # crates (see root Cargo.toml). Coverage instrumentation (`-Cinstrument-coverage`)
@@ -302,15 +302,7 @@ def test_scope_args(tests: list[str]) -> list[str]:
 
 
 def excluded_package_roots() -> list[Path]:
-    metadata = subprocess.run(
-        ["cargo", "metadata", "--no-deps", "--format-version", "1"],
-        check=False,
-        stdout=subprocess.PIPE,
-        text=True,
-    )
-    if metadata.returncode != 0:
-        raise SystemExit(metadata.returncode)
-    packages = json.loads(metadata.stdout)["packages"]
+    packages = cargo_metadata()["packages"]
     return [
         Path(package["manifest_path"]).parent
         for package in packages

@@ -1,5 +1,11 @@
 """Workspace package groups shared by repository automation scripts."""
 
+from __future__ import annotations
+
+import json
+import subprocess
+from pathlib import Path
+
 MILESTONE_PACKAGES = [
     "p0_graph_skeleton",
     "p1_keep_best",
@@ -20,3 +26,16 @@ def package_exclude_args(packages: list[str]) -> list[str]:
     for package in packages:
         args.extend(["--exclude", package])
     return args
+
+
+def cargo_metadata(workspace_root: Path | None = None) -> dict:
+    metadata = subprocess.run(
+        ["cargo", "metadata", "--no-deps", "--format-version", "1"],
+        cwd=workspace_root,
+        check=False,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    if metadata.returncode != 0:
+        raise SystemExit(metadata.returncode)
+    return json.loads(metadata.stdout)

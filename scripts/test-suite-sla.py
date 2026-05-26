@@ -12,7 +12,7 @@ import signal
 import subprocess
 import time
 
-from workspace_packages import MILESTONE_PACKAGES, package_exclude_args
+from workspace_packages import MILESTONE_PACKAGES, cargo_metadata, package_exclude_args
 
 
 WORKSPACE_TEST_DISCOVERY_COMMAND = [
@@ -78,16 +78,7 @@ def rust_source_has_doctest(path: Path) -> bool:
 
 
 def workspace_doctest_commands(workspace_root: Path) -> list[tuple[str, list[str]]]:
-    metadata = subprocess.run(
-        ["cargo", "metadata", "--no-deps", "--format-version", "1"],
-        cwd=workspace_root,
-        check=False,
-        stdout=subprocess.PIPE,
-        text=True,
-    )
-    if metadata.returncode != 0:
-        raise SystemExit(metadata.returncode)
-    payload = json.loads(metadata.stdout)
+    payload = cargo_metadata(workspace_root)
     members = set(payload["workspace_members"])
     names: list[str] = []
     for package in payload["packages"]:
@@ -181,16 +172,7 @@ def run_capture_with_timeout(
 
 
 def workspace_package_roots(workspace_root: Path) -> dict[str, Path]:
-    metadata = subprocess.run(
-        ["cargo", "metadata", "--no-deps", "--format-version", "1"],
-        cwd=workspace_root,
-        check=False,
-        stdout=subprocess.PIPE,
-        text=True,
-    )
-    if metadata.returncode != 0:
-        raise SystemExit(metadata.returncode)
-    payload = json.loads(metadata.stdout)
+    payload = cargo_metadata(workspace_root)
     return {
         package["id"]: Path(package["manifest_path"]).parent
         for package in payload["packages"]
