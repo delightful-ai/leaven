@@ -107,7 +107,7 @@ Before editing, run the quick blind checks:
   do: add or update the contract test that proves the public promise at the lowest clean layer
   preserve: cold-core dependency boundaries and `RunContext` as graph mutation authority
   avoid: making fields/functions public only for tests or convenience
-  verify: run `cargo nextest run -p leaven-core` during iteration, then `just check`
+  verify: run `cargo test -p leaven-core` during iteration, then `just check`
 
 - when: adding a test
   do: name the claim and choose exactly one shape: law, example, scenario, or regression

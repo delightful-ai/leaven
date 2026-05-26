@@ -135,7 +135,7 @@ Laws:
 Required local checks:
 
 ```text
-cargo nextest run -p leaven-agent-codex-cli
+cargo test -p leaven-agent-codex-cli
 cargo check -p leaven-agent-codex-cli
 cargo test -p leaven --test topology_contract
 ```

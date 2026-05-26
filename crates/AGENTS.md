@@ -97,6 +97,6 @@ cross-family rules that apply before you know a leaf's details.
 
 ## Verification
 - Crate boundary changes: `cargo test -p leaven --test topology_contract`.
-- Public API changes in one crate: run that crate's nextest target, for example `cargo nextest run -p leaven-core`.
+- Public API changes in one crate: run that crate's test target, for example `cargo test -p leaven-core`.
 - Engine/run graph changes: run the focused `leaven-engine` integration test touched by the change, then `just test`.
 - Completion gate for behavior: `just check`.

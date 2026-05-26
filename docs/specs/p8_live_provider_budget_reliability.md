@@ -210,9 +210,9 @@ Focused commands:
 
 - `cargo test -p leaven-engine --test engine_contract context_services`
 - `cargo test -p leaven-engine --test engine_contract engine_loop`
-- `cargo nextest run -p leaven-lm-cache`
-- `cargo nextest run -p leaven-lm-openai`
-- `cargo nextest run -p p8_aime_gepa`
+- `cargo test -p leaven-lm-cache`
+- `cargo test -p leaven-lm-openai`
+- `cargo test -p p8_aime_gepa`
 - `cargo test -p leaven --test topology_contract`
 
 Completion gate remains `just check`.

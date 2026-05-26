@@ -330,9 +330,9 @@ Required tests:
 
 Focused implementation gates:
 
-- `cargo nextest run -p leaven-run --test optimize_builder --test scoring_evaluator`
+- `cargo test -p leaven-run --test optimize_builder --test scoring_evaluator`
 - `cargo test -p leaven-engine --test engine_contract engine_loop`
-- `cargo nextest run -p leaven-gepa --test gepa_smoke`
+- `cargo test -p leaven-gepa --test gepa_contract gepa_smoke`
 - `cargo test -p leaven --test topology_contract`
 
 Completion gate remains `just check`.

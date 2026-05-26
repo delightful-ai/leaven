@@ -841,9 +841,9 @@ Strictly unaffected: `gepa_reference_behavior.md`, `gepa_aime_paper_parity.md`, 
 ### 6.2 Focused commands
 
 ```text
-cargo nextest run -p leaven-gepa
-cargo nextest run -p leaven-agentic
-cargo nextest run -p leaven-gepa-agentic-skill
+cargo test -p leaven-gepa
+cargo test -p leaven-agentic
+cargo test -p leaven-gepa-agentic-skill
 cargo run -p leaven-cli -- doctor proposal-roundtrip --json
 cargo test -p leaven --test topology_contract
 ```

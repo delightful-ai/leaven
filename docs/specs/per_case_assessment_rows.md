@@ -246,11 +246,10 @@ The hard cut is complete only when these claims are tested:
 Focused verification should run the owning crate tests first:
 
 ```text
-cargo nextest run -p leaven-run scoring_evaluator
-cargo nextest run -p leaven-run optimize_builder
-cargo nextest run -p leaven-gepa
+cargo test -p leaven-run --test scoring_evaluator
+cargo test -p leaven-run --test optimize_builder
+cargo test -p leaven-gepa
 ```
 
 Before claiming P8 product readiness, run the P8 milestone command and
 `just check`.
-

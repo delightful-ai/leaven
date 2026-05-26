@@ -336,9 +336,9 @@ Required tests:
 
 Focused commands:
 
-- `cargo nextest run -p leaven-gepa --test gepa_contract lm_reflection`
-- `cargo nextest run -p leaven-gepa --test gepa_smoke`
-- `cargo nextest run -p p8_aime_gepa`
+- `cargo test -p leaven-gepa --test gepa_contract lm_reflection`
+- `cargo test -p leaven-gepa --test gepa_contract gepa_smoke`
+- `cargo test -p p8_aime_gepa`
 - `cargo test -p leaven --test topology_contract`
 
 Completion gate remains `just check` before claiming P8 product readiness.

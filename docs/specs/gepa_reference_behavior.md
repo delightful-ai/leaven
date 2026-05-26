@@ -1553,7 +1553,7 @@ Add tests that fail on today's non-parity behavior:
 - detailed GEPA result exposes candidate table, validation subscores, Pareto
   membership, lineage, discovery counts, and total metric calls.
 
-Focused gate: `cargo nextest run -p leaven-gepa --test gepa_smoke`.
+Focused gate: `cargo test -p leaven-gepa --test gepa_contract gepa_smoke`.
 
 ### P1. Introduce GEPA Reference State
 
@@ -1687,10 +1687,10 @@ Doc/path verification for this spec:
 
 Focused implementation gates as fixes land:
 
-- `cargo nextest run -p leaven-gepa --test gepa_smoke`
-- `cargo nextest run -p leaven-gepa --test lm_reflection`
-- `cargo nextest run -p leaven-population`
-- `cargo nextest run -p p8_aime_gepa`
+- `cargo test -p leaven-gepa --test gepa_contract gepa_smoke`
+- `cargo test -p leaven-gepa --test gepa_contract lm_reflection`
+- `cargo test -p leaven-population`
+- `cargo test -p p8_aime_gepa`
 - `cargo test -p leaven --test topology_contract`
 
 Live AIME parity gate:

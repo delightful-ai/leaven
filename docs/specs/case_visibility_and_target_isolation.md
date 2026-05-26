@@ -349,8 +349,8 @@ Minimum proof set:
 Narrow verification commands for the implementation slice:
 
 ```bash
-cargo nextest run -p leaven-eval
-cargo nextest run -p leaven-run --test scoring_evaluator --test optimize_builder
+cargo test -p leaven-eval
+cargo test -p leaven-run --test scoring_evaluator --test optimize_builder
 cargo test -p leaven --test topology_contract
 ```
 

@@ -984,10 +984,10 @@ Scope:
 During implementation:
 
 ```bash
-cargo nextest run -p leaven-gepa
-cargo nextest run -p leaven-eval
-cargo nextest run -p leaven-run
-cargo nextest run -p leaven --test gepa_parity
+cargo test -p leaven-gepa
+cargo test -p leaven-eval
+cargo test -p leaven-run
+cargo test -p leaven --test gepa_parity
 cargo run -p p3_gepa_parity
 ```
 
