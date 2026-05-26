@@ -1,7 +1,10 @@
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 
 use super::identity::PublicStagePayloadError;
-use super::util::{non_empty, reject_case_target_material, require_assessed_output_class};
+use super::util::{
+    insert_non_empty, non_empty, reject_case_target_material, require_assessed_output_class,
+    stage_object,
+};
 
 /// Public-seam `RunnerRequest` payload for target-free runner execution.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -19,25 +22,11 @@ impl RunnerRequestPayload {
         case_input: Value,
     ) -> Result<Self, PublicStagePayloadError> {
         reject_case_target_material(&case_input, "case_input")?;
-        let mut object = Map::new();
-        object.insert(
-            "schema_version".to_owned(),
-            json!("leaven.stage_payloads.v1"),
-        );
-        object.insert("role".to_owned(), json!("runner"));
-        object.insert("run".to_owned(), json!(non_empty(run.into(), "run")?));
-        object.insert(
-            "stage_call_id".to_owned(),
-            json!(non_empty(stage_call_id.into(), "stage_call_id")?),
-        );
-        object.insert(
-            "candidate".to_owned(),
-            json!(non_empty(candidate.into(), "candidate")?),
-        );
-        object.insert(
-            "case".to_owned(),
-            json!(non_empty(case_ref.into(), "case")?),
-        );
+        let mut object = stage_object("runner");
+        insert_non_empty(&mut object, "run", run)?;
+        insert_non_empty(&mut object, "stage_call_id", stage_call_id)?;
+        insert_non_empty(&mut object, "candidate", candidate)?;
+        insert_non_empty(&mut object, "case", case_ref)?;
         object.insert("case_input".to_owned(), case_input);
         object.insert("target_forbidden".to_owned(), Value::Bool(true));
         Ok(Self {
@@ -89,40 +78,25 @@ impl ScorerContextPayload {
             return Err(PublicStagePayloadError::TargetHandleMismatch);
         }
         require_assessed_output_class(&fields.output, "output")?;
-        let mut object = Map::new();
-        object.insert(
-            "schema_version".to_owned(),
-            json!("leaven.stage_payloads.v1"),
-        );
-        object.insert("role".to_owned(), json!("scorer"));
-        object.insert("run".to_owned(), json!(non_empty(fields.run, "run")?));
-        object.insert(
-            "stage_call_id".to_owned(),
-            json!(non_empty(fields.stage_call_id, "stage_call_id")?),
-        );
-        object.insert(
-            "evaluation_request_id".to_owned(),
-            json!(non_empty(
-                fields.evaluation_request_id,
-                "evaluation_request_id"
-            )?),
-        );
-        object.insert(
-            "candidate".to_owned(),
-            json!(non_empty(fields.candidate, "candidate")?),
-        );
+        let mut object = stage_object("scorer");
+        insert_non_empty(&mut object, "run", fields.run)?;
+        insert_non_empty(&mut object, "stage_call_id", fields.stage_call_id)?;
+        insert_non_empty(
+            &mut object,
+            "evaluation_request_id",
+            fields.evaluation_request_id,
+        )?;
+        insert_non_empty(&mut object, "candidate", fields.candidate)?;
         object.insert("case".to_owned(), json!(case_ref));
         object.insert("output".to_owned(), fields.output);
         if let Some(target_handle) = fields.target_handle {
             object.insert("target_handle".to_owned(), json!(target_handle));
         }
-        object.insert(
-            "capability_fingerprint".to_owned(),
-            json!(non_empty(
-                fields.capability_fingerprint,
-                "capability_fingerprint"
-            )?),
-        );
+        insert_non_empty(
+            &mut object,
+            "capability_fingerprint",
+            fields.capability_fingerprint,
+        )?;
         Ok(Self {
             value: Value::Object(object),
         })
@@ -171,31 +145,21 @@ impl JudgeContextPayload {
         for output in &fields.outputs {
             require_assessed_output_class(output, "outputs")?;
         }
-        let mut object = Map::new();
-        object.insert(
-            "schema_version".to_owned(),
-            json!("leaven.stage_payloads.v1"),
-        );
-        object.insert("role".to_owned(), json!("judge"));
-        object.insert("run".to_owned(), json!(non_empty(fields.run, "run")?));
-        object.insert(
-            "stage_call_id".to_owned(),
-            json!(non_empty(fields.stage_call_id, "stage_call_id")?),
-        );
-        object.insert("left".to_owned(), json!(non_empty(fields.left, "left")?));
-        object.insert("right".to_owned(), json!(non_empty(fields.right, "right")?));
+        let mut object = stage_object("judge");
+        insert_non_empty(&mut object, "run", fields.run)?;
+        insert_non_empty(&mut object, "stage_call_id", fields.stage_call_id)?;
+        insert_non_empty(&mut object, "left", fields.left)?;
+        insert_non_empty(&mut object, "right", fields.right)?;
         if let Some(case_ref) = fields.case_ref {
-            object.insert("case".to_owned(), json!(non_empty(case_ref, "case")?));
+            insert_non_empty(&mut object, "case", case_ref)?;
         }
         object.insert("outputs".to_owned(), json!(fields.outputs));
         object.insert("rubric".to_owned(), fields.rubric);
-        object.insert(
-            "capability_fingerprint".to_owned(),
-            json!(non_empty(
-                fields.capability_fingerprint,
-                "capability_fingerprint"
-            )?),
-        );
+        insert_non_empty(
+            &mut object,
+            "capability_fingerprint",
+            fields.capability_fingerprint,
+        )?;
         Ok(Self {
             value: Value::Object(object),
         })

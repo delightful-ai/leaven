@@ -1,7 +1,9 @@
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 
 use super::identity::{PublicStagePayloadError, PublicStagePayloadIdentity};
-use super::util::{non_empty, reject_case_target_material, stage_payload_fingerprint};
+use super::util::{
+    non_empty, reject_case_target_material, stage_object, stage_payload_fingerprint,
+};
 
 /// Agentic `ReflectRequest` payload ready for public-seam validation.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -25,12 +27,7 @@ impl ReflectRequestPayload {
             reject_case_target_material(example, "examples")?;
         }
         let part_label = non_empty(part_label.into(), "part_label")?;
-        let mut object = Map::new();
-        object.insert(
-            "schema_version".to_owned(),
-            json!("leaven.stage_payloads.v1"),
-        );
-        object.insert("role".to_owned(), json!("reflector"));
+        let mut object = stage_object("reflector");
         identity.push_common(&mut object);
         object.insert("part_label".to_owned(), json!(part_label));
         object.insert("examples".to_owned(), json!(examples));
@@ -140,12 +137,7 @@ impl ProposeRequestPayload {
             });
         }
         let allowed_change_schemas = allowed_change_schemas.into_iter().collect::<Vec<_>>();
-        let mut object = Map::new();
-        object.insert(
-            "schema_version".to_owned(),
-            json!("leaven.stage_payloads.v1"),
-        );
-        object.insert("role".to_owned(), json!("proposer"));
+        let mut object = stage_object("proposer");
         identity.push_common(&mut object);
         object.insert("reflection_result".to_owned(), reflection.value.clone());
         object.insert("allowed_effects".to_owned(), json!(allowed_effects));

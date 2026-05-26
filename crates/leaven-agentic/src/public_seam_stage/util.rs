@@ -17,30 +17,36 @@ pub(super) fn schema_bound_payload(
     payload_schema: impl Into<String>,
     capability_fingerprint: impl Into<String>,
 ) -> Result<Value, PublicStagePayloadError> {
+    let mut object = stage_object(role);
+    insert_non_empty(&mut object, "run", run)?;
+    insert_non_empty(&mut object, "stage_call_id", stage_call_id)?;
+    object.insert(payload_field.to_owned(), payload);
+    insert_non_empty(&mut object, "payload_schema", payload_schema)?;
+    insert_non_empty(
+        &mut object,
+        "capability_fingerprint",
+        capability_fingerprint,
+    )?;
+    Ok(Value::Object(object))
+}
+
+pub(super) fn stage_object(role: &'static str) -> Map<String, Value> {
     let mut object = Map::new();
     object.insert(
         "schema_version".to_owned(),
         json!("leaven.stage_payloads.v1"),
     );
     object.insert("role".to_owned(), json!(role));
-    object.insert("run".to_owned(), json!(non_empty(run.into(), "run")?));
-    object.insert(
-        "stage_call_id".to_owned(),
-        json!(non_empty(stage_call_id.into(), "stage_call_id")?),
-    );
-    object.insert(payload_field.to_owned(), payload);
-    object.insert(
-        "payload_schema".to_owned(),
-        json!(non_empty(payload_schema.into(), "payload_schema")?),
-    );
-    object.insert(
-        "capability_fingerprint".to_owned(),
-        json!(non_empty(
-            capability_fingerprint.into(),
-            "capability_fingerprint"
-        )?),
-    );
-    Ok(Value::Object(object))
+    object
+}
+
+pub(super) fn insert_non_empty(
+    object: &mut Map<String, Value>,
+    field: &'static str,
+    value: impl Into<String>,
+) -> Result<(), PublicStagePayloadError> {
+    object.insert(field.to_owned(), json!(non_empty(value.into(), field)?));
+    Ok(())
 }
 
 pub(super) fn require_assessed_output_class(
