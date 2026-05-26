@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use futures::{FutureExt, channel::oneshot, executor::block_on};
+use futures::{FutureExt, channel::oneshot, executor::block_on, future::BoxFuture};
 use leaven_core::{
     Assessment, AssessmentGranularity, AssessmentTarget, CaseSetVersion, EvaluationPurpose,
     EvaluationSet, PairOrder, ResolvedEvaluationRequest, ResolvedEvaluationSet,
@@ -2499,9 +2499,7 @@ fn scoring_evaluator(
     let scorer = Arc::new(scorer);
     ScoringEvaluator::new(
         Arc::new(vec![input_case(0, 2)]),
-        Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
-            async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
-        }),
+        default_string_runner(),
         Arc::new(move |ctx| {
             let score = scorer(ctx);
             async move { Ok(score) }.boxed()
@@ -2519,15 +2517,23 @@ fn judging_evaluator(
     let scorer = Arc::new(scorer);
     JudgingEvaluator::new(
         Arc::new(vec![input_case(0, 2)]),
-        Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
-            async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
-        }),
+        default_string_runner(),
         Arc::new(move |ctx| {
             let score = scorer(ctx);
             async move { Ok(score) }.boxed()
         }),
         &identity("judging-evaluator-test"),
     )
+}
+
+fn default_string_runner() -> Arc<
+    impl Fn(TextArtifact, RunCase<i32>) -> BoxFuture<'static, Result<RunOutput<String>, RunError>>
+    + Send
+    + Sync,
+> {
+    Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+        async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
+    })
 }
 
 fn input_case(index: usize, input: i32) -> Case<i32> {
@@ -2625,9 +2631,7 @@ fn scoring_evaluator_identity_and_cache_policy_are_stable() {
 fn scoring_evaluator_fingerprint_includes_runtime_and_case_identity() {
     let base = ScoringEvaluator::new(
         Arc::new(vec![input_case(0, 2)]),
-        Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
-            async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
-        }),
+        default_string_runner(),
         Arc::new(
             |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
                 async move { Ok(Score::new(ctx.output.output.parse().unwrap(), "ok")) }.boxed()
@@ -2637,9 +2641,7 @@ fn scoring_evaluator_fingerprint_includes_runtime_and_case_identity() {
     );
     let changed_runner = ScoringEvaluator::new(
         Arc::new(vec![input_case(0, 2)]),
-        Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
-            async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
-        }),
+        default_string_runner(),
         Arc::new(
             |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
                 async move { Ok(Score::new(ctx.output.output.parse().unwrap(), "ok")) }.boxed()
@@ -2652,9 +2654,7 @@ fn scoring_evaluator_fingerprint_includes_runtime_and_case_identity() {
     );
     let changed_cases = ScoringEvaluator::new(
         Arc::new(vec![input_case(0, 2), input_case(1, 3)]),
-        Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
-            async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
-        }),
+        default_string_runner(),
         Arc::new(
             |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
                 async move { Ok(Score::new(ctx.output.output.parse().unwrap(), "ok")) }.boxed()
@@ -2668,9 +2668,7 @@ fn scoring_evaluator_fingerprint_includes_runtime_and_case_identity() {
     );
     let changed_cache_policy = ScoringEvaluator::new(
         Arc::new(vec![input_case(0, 2)]),
-        Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
-            async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
-        }),
+        default_string_runner(),
         Arc::new(
             |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
                 async move { Ok(Score::new(ctx.output.output.parse().unwrap(), "ok")) }.boxed()
