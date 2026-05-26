@@ -77,19 +77,22 @@ just test execution should finish in <30s
 test binaries and prewarming workspace doctests. Those preflight steps are still
 mandatory and must fail on compile errors, but compiler wall time is not
 evidence that the runtime suite crossed the target. The target covers default
-workspace tests through `cargo test` and workspace doctests for
-library/tool packages that contain executable Rust doctest fences. Milestone
-examples stay out of the default SLA and run through explicit
+workspace lib/bin/integration/example test targets through
+`cargo test --workspace --all-targets` and workspace doctests for library/tool
+packages that contain executable Rust doctest fences. Milestone examples stay
+out of the default SLA and run through explicit
 `just milestone-*` recipes. The current hard timeout is 600s so `just check`
 still proves the suite completes while the 30s target remains visible. If the
 suite crosses the target, do not add a second slow lane; reduce fixture cost,
 property-test case count, setup work, doctest harness fan-out, or assertion
 altitude until the default suite is back under the target.
 
-The SLA runner delegates workspace test scheduling to Cargo's native test
-runner. That keeps compile prewarm separate from measured execution without the
-extra external runner discovery fan-out that can dominate this workspace's hot
-loop.
+The SLA runner delegates workspace test discovery to Cargo, then executes the
+discovered libtest binaries directly under the runtime deadline. Doctests are
+run in a separate explicit lane, so the workspace discovery command uses
+`--all-targets` to avoid running the doctest harness twice. That keeps compile
+prewarm separate from measured execution without the external runner discovery
+fan-out that can dominate this workspace's hot loop.
 
 Coverage has hard failure floors plus warning targets. The current hard floors
 are 80% line and 80% branch so coverage does not outrank executable seam

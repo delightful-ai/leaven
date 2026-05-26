@@ -20,16 +20,18 @@ WORKSPACE_TEST_BUILD_COMMAND = [
     "test",
     "--no-run",
     "--workspace",
+    "--all-targets",
     *package_exclude_args(MILESTONE_PACKAGES),
 ]
 
-WORKSPACE_TEST_RUN_COMMAND = [
+WORKSPACE_TEST_DISCOVERY_COMMAND = [
     "cargo",
     "test",
     "--workspace",
+    "--all-targets",
+    "--no-run",
+    "--message-format=json",
     *package_exclude_args(MILESTONE_PACKAGES),
-    "--",
-    "--quiet",
 ]
 
 DEFAULT_BUILD_DISCOVERY_TIMEOUT_SECONDS = 300.0
@@ -167,6 +169,58 @@ def build_workspace_tests(workspace_root: Path, build_timeout: float | None = No
     )
 
 
+def workspace_package_roots(workspace_root: Path) -> dict[str, Path]:
+    metadata = subprocess.run(
+        ["cargo", "metadata", "--no-deps", "--format-version", "1"],
+        cwd=workspace_root,
+        check=False,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    if metadata.returncode != 0:
+        raise SystemExit(metadata.returncode)
+    payload = json.loads(metadata.stdout)
+    return {
+        package["id"]: Path(package["manifest_path"]).parent
+        for package in payload["packages"]
+    }
+
+
+def discover_workspace_test_binaries(workspace_root: Path) -> list[tuple[Path, Path]]:
+    package_roots = workspace_package_roots(workspace_root)
+    metadata = subprocess.run(
+        WORKSPACE_TEST_DISCOVERY_COMMAND,
+        cwd=workspace_root,
+        check=False,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    if metadata.returncode != 0:
+        raise SystemExit(metadata.returncode)
+    binaries: list[tuple[Path, Path]] = []
+    seen: set[Path] = set()
+    for line in metadata.stdout.splitlines():
+        if not line.startswith("{"):
+            continue
+        try:
+            message = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if message.get("reason") != "compiler-artifact":
+            continue
+        executable = message.get("executable")
+        if executable is None:
+            continue
+        package_id = message.get("package_id")
+        package_root = package_roots.get(package_id, workspace_root)
+        path = Path(executable)
+        if path in seen:
+            continue
+        seen.add(path)
+        binaries.append((path, package_root))
+    return binaries
+
+
 def run_with_deadline(label: str, command: list[str], cwd: Path, deadline: float) -> int:
     remaining = deadline - time.perf_counter()
     if remaining <= 0:
@@ -180,6 +234,20 @@ def prewarm_commands(commands: list[tuple[str, list[str]]], workspace_root: Path
     for label, command in commands:
         print(f"prewarming {label}: {' '.join(command)}", flush=True)
         returncode = subprocess.run(command, cwd=workspace_root, check=False).returncode
+        if returncode != 0:
+            return returncode
+    return 0
+
+
+def run_workspace_test_binaries(workspace_root: Path, deadline: float) -> int:
+    binaries = discover_workspace_test_binaries(workspace_root)
+    if not binaries:
+        print("error: no workspace test binaries discovered", flush=True)
+        return 1
+    for binary, cwd in binaries:
+        label = f"workspace test binary {binary.name}"
+        print(f"running {label}: {binary} --quiet", flush=True)
+        returncode = run_with_deadline(label, [str(binary), "--quiet"], cwd, deadline)
         if returncode != 0:
             return returncode
     return 0
@@ -230,9 +298,7 @@ def main() -> int:
         if returncode != 0:
             return returncode
 
-    returncode = run_with_deadline(
-        "workspace cargo test suite", WORKSPACE_TEST_RUN_COMMAND, workspace_root, deadline
-    )
+    returncode = run_workspace_test_binaries(workspace_root, deadline)
     if returncode != 0:
         return returncode
 

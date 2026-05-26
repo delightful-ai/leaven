@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import pathlib
 import sys
 import tempfile
@@ -18,6 +19,10 @@ assert SPEC is not None
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(MODULE)
+
+
+def json_line(payload: object) -> str:
+    return json.dumps(payload)
 
 
 class DoctestDetectionTests(unittest.TestCase):
@@ -58,22 +63,62 @@ class DoctestDetectionTests(unittest.TestCase):
 
 class SuiteDeadlineTests(unittest.TestCase):
     def test_cargo_test_command_preserves_workspace_excludes(self) -> None:
-        command = MODULE.WORKSPACE_TEST_RUN_COMMAND
+        command = MODULE.WORKSPACE_TEST_DISCOVERY_COMMAND
 
-        self.assertEqual(command[:3], ["cargo", "test", "--workspace"])
+        self.assertEqual(command[:4], ["cargo", "test", "--workspace", "--all-targets"])
+        self.assertIn("--no-run", command)
+        self.assertIn("--message-format=json", command)
         self.assertIn("--workspace", command)
+        self.assertIn("--all-targets", command)
         self.assertIn("--exclude", command)
         self.assertIn("p8_aime_gepa", command)
-        self.assertIn("--quiet", command)
 
     def test_workspace_build_command_compiles_test_binaries_for_prewarm(self) -> None:
         command = MODULE.WORKSPACE_TEST_BUILD_COMMAND
 
-        self.assertEqual(command[:3], ["cargo", "test", "--no-run"])
+        self.assertEqual(command[:4], ["cargo", "test", "--no-run", "--workspace"])
         self.assertIn("--no-run", command)
         self.assertIn("--workspace", command)
+        self.assertIn("--all-targets", command)
         self.assertIn("--exclude", command)
         self.assertIn("trace2skill_spreadsheetbench", command)
+
+    def test_workspace_test_binary_discovery_reads_executable_artifacts_once(self) -> None:
+        first = pathlib.Path("/tmp/test-one")
+        second = pathlib.Path("/tmp/test-two")
+        payload = "\n".join(
+            [
+                json_line({"reason": "compiler-message"}),
+                json_line({
+                    "reason": "compiler-artifact",
+                    "package_id": "pkg 1",
+                    "executable": str(first),
+                }),
+                json_line({
+                    "reason": "compiler-artifact",
+                    "package_id": "pkg 1",
+                    "executable": str(first),
+                }),
+                json_line({"reason": "compiler-artifact", "executable": None}),
+                "not json",
+                json_line({
+                    "reason": "compiler-artifact",
+                    "package_id": "pkg 2",
+                    "executable": str(second),
+                }),
+            ]
+        )
+        roots = {"pkg 1": pathlib.Path("/repo/one"), "pkg 2": pathlib.Path("/repo/two")}
+        with (
+            mock.patch.object(MODULE, "workspace_package_roots", return_value=roots),
+            mock.patch.object(MODULE.subprocess, "run") as run,
+        ):
+            run.return_value.returncode = 0
+            run.return_value.stdout = payload
+
+            binaries = MODULE.discover_workspace_test_binaries(pathlib.Path.cwd())
+
+        self.assertEqual(binaries, [(first, roots["pkg 1"]), (second, roots["pkg 2"])])
 
     def test_workspace_build_timeout_is_separate_from_runtime_sla(self) -> None:
         with mock.patch.object(
@@ -94,7 +139,7 @@ class SuiteDeadlineTests(unittest.TestCase):
         with (
             mock.patch.object(MODULE, "build_workspace_tests", return_value=0),
             mock.patch.object(MODULE, "test_commands", return_value=[]),
-            mock.patch.object(MODULE, "run_with_deadline", return_value=0),
+            mock.patch.object(MODULE, "run_workspace_test_binaries", return_value=0),
             mock.patch.object(
                 MODULE.argparse.ArgumentParser,
                 "parse_args",
