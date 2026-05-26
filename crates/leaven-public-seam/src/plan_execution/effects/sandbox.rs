@@ -6,8 +6,8 @@ use serde_json::Value;
 
 use super::{
     LiveWorkspaceHandle, WorkspaceRefFacts, blob_ref, cost_value,
-    extend_data_classes_from_blob_ref, fingerprint_hex, invalid_call, require_live_workspace_ref,
-    required_object, workspace_path, workspace_ref_facts,
+    extend_data_classes_from_blob_ref, invalid_call, require_live_workspace_ref, required_object,
+    workspace_path, workspace_ref_facts,
 };
 use crate::PublicSeamError;
 
@@ -237,7 +237,7 @@ impl PlanSandboxExecOutcome {
         blob_ref::validate_stream_blob_ref(&stderr_ref, &value.stderr.bytes, "sandbox stderr")?;
         let mut outcome = Self::completed(format!(
             "fp_runtime_sha256_{}",
-            fingerprint_hex(runtime_fingerprint)
+            runtime_fingerprint.to_hex()
         ));
         outcome.exit_code = value.status.code.map(i64::from);
         outcome = outcome.with_stream_refs(stdout_ref, stderr_ref);

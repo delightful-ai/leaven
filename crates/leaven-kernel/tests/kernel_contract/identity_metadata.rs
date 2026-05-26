@@ -26,6 +26,16 @@ fn fingerprints_are_stable_for_ordered_inputs() {
 }
 
 #[test]
+fn fingerprint_hex_is_full_width_and_lowercase() {
+    let fingerprint = Fingerprint::from_bytes([0xab; 32]);
+
+    assert_eq!(
+        fingerprint.to_hex(),
+        "abababababababababababababababababababababababababababababababab"
+    );
+}
+
+#[test]
 fn metadata_bag_preserves_typed_values_in_key_order() {
     let dynamic = MetadataKey::new("worker");
     let mut bag = MetadataBag::new();

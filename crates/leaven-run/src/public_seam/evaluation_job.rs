@@ -1,5 +1,3 @@
-use std::fmt::Write as _;
-
 use leaven_core::{
     AssessmentGranularity, EvaluationPurpose, EvaluationRequest, OptimizationProblem,
 };
@@ -467,9 +465,6 @@ fn uuid_ref(prefix: &str, id: uuid::Uuid) -> String {
 }
 
 fn runtime_fingerprint(fingerprint: Fingerprint) -> String {
-    let mut encoded = String::with_capacity(64);
-    for byte in fingerprint.0 {
-        write!(&mut encoded, "{byte:02x}").expect("writing to string cannot fail");
-    }
+    let encoded = fingerprint.to_hex();
     format!("fp_runtime_blake3_{encoded}")
 }

@@ -31,6 +31,12 @@ impl Fingerprint {
     pub const fn from_bytes(bytes: [u8; 32]) -> Self {
         Self(bytes)
     }
+
+    /// Returns the full lowercase hexadecimal encoding of this fingerprint.
+    #[must_use]
+    pub fn to_hex(self) -> String {
+        hex::encode(self.0)
+    }
 }
 
 /// Incremental builder that hashes feed-in bytes into a [`Fingerprint`].

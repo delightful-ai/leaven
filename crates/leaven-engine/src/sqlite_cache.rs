@@ -4,13 +4,12 @@
 //! index. It does not store LM responses, optimizer state, evidence payloads, or
 //! run graph rows.
 
-use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use leaven_kernel::{AssessmentId, Fingerprint, FingerprintBuilder, now};
+use leaven_kernel::{AssessmentId, FingerprintBuilder, now};
 use parking_lot::Mutex;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use thiserror::Error;
@@ -442,7 +441,7 @@ fn insert_entry(
                 key_hash_from_json(&key_json),
                 key_json,
                 assessment_ids_json,
-                hex_fingerprint(key.evaluator),
+                key.evaluator.to_hex(),
                 key.case_set_version.0.as_str(),
                 created_at,
             ],
@@ -479,13 +478,5 @@ fn key_hash_from_json(key_json: &str) -> String {
     let mut builder = FingerprintBuilder::new();
     builder.update(b"leaven-engine/evaluation-cache-key/v1\0");
     builder.update(key_json.as_bytes());
-    hex_fingerprint(builder.finish())
-}
-
-fn hex_fingerprint(fingerprint: Fingerprint) -> String {
-    let mut hash = String::with_capacity(64);
-    for byte in fingerprint.0 {
-        write!(&mut hash, "{byte:02x}").expect("writing to string cannot fail");
-    }
-    hash
+    builder.finish().to_hex()
 }

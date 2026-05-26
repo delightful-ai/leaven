@@ -428,16 +428,6 @@ fn insert_count_cost_axis(
     }
 }
 
-fn fingerprint_hex(fingerprint: leaven_kernel::Fingerprint) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut output = String::with_capacity(64);
-    for byte in fingerprint.0 {
-        output.push(HEX[usize::from(byte >> 4)] as char);
-        output.push(HEX[usize::from(byte & 0x0f)] as char);
-    }
-    output
-}
-
 fn extend_data_classes_from_blob_ref(data_classes: &mut Vec<String>, blob_ref: &Value) {
     let Some(blob_data_classes) = blob_ref
         .as_object()

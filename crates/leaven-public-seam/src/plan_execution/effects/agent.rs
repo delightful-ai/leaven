@@ -10,8 +10,8 @@ use serde_json::{Value, json};
 
 use super::{
     LiveWorkspaceHandle, WorkspaceRefFacts, blob_ref, cost_value,
-    extend_data_classes_from_blob_ref, fingerprint_hex, invalid_call, require_live_workspace_ref,
-    required_object, workspace_path, workspace_ref_facts,
+    extend_data_classes_from_blob_ref, invalid_call, require_live_workspace_ref, required_object,
+    workspace_path, workspace_ref_facts,
 };
 use crate::PublicSeamError;
 
@@ -329,7 +329,7 @@ impl PlanAgentRunOutcome {
         }
         let mut outcome = Self::completed(format!(
             "fp_runtime_sha256_{}",
-            fingerprint_hex(runtime_fingerprint)
+            runtime_fingerprint.to_hex()
         ))
         .with_status(agent_status_value(&value.status))
         .with_transcript_ref(transcript_ref)

@@ -139,12 +139,12 @@ impl RunCompatibilityManifest {
         RunCompatibilitySummary {
             schema: self.schema.clone(),
             run_kind: self.run_kind.clone(),
-            dataset: fingerprint_hex(self.dataset.content),
-            splits: fingerprint_hex(self.dataset.splits),
+            dataset: self.dataset.content.to_hex(),
+            splits: self.dataset.splits.to_hex(),
             case_set_version: self.dataset.case_set_version.clone(),
-            runner: fingerprint_hex(self.runner.fingerprint()),
-            scorer: fingerprint_hex(self.scorer.fingerprint()),
-            evaluator: fingerprint_hex(self.evaluator.fingerprint()),
+            runner: self.runner.fingerprint().to_hex(),
+            scorer: self.scorer.fingerprint().to_hex(),
+            evaluator: self.evaluator.fingerprint().to_hex(),
             optimizer: optimizer_summary(self.optimizer.as_ref()),
             cache: self.cache.clone(),
             budget: self.budget.clone(),
@@ -311,7 +311,7 @@ where
 }
 
 pub fn case_set_version(content: Fingerprint) -> CaseSetVersion {
-    CaseSetVersion(format!("leaven-run-cases-v1:{}", fingerprint_hex(content)))
+    CaseSetVersion(format!("leaven-run-cases-v1:{}", content.to_hex()))
 }
 
 fn compare_manifests(
@@ -392,31 +392,18 @@ fn budget_compatibility(budget: &Budget) -> String {
     format!("budget:limit-json:{limit}")
 }
 
-fn fingerprint_hex(fingerprint: Fingerprint) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut out = String::with_capacity(64);
-    for byte in fingerprint.0 {
-        out.push(HEX[usize::from(byte >> 4)] as char);
-        out.push(HEX[usize::from(byte & 0x0f)] as char);
-    }
-    out
-}
-
 fn optimizer_summary(optimizer: Option<&OptimizerCompatibility>) -> String {
     let Some(optimizer) = optimizer else {
         return "optimizer:undeclared".to_owned();
     };
-    let mut summary = format!(
-        "optimizer:fingerprint={}",
-        fingerprint_hex(optimizer.fingerprint)
-    );
+    let mut summary = format!("optimizer:fingerprint={}", optimizer.fingerprint.to_hex());
     match &optimizer.private_state_policy {
         leaven_engine::PrivateStatePolicy::DerivedFromGraph => {
             summary.push_str(";state=derived-from-graph");
         }
         leaven_engine::PrivateStatePolicy::ExplicitSnapshot { schema, format } => {
             summary.push_str(";state=explicit-snapshot;schema=");
-            summary.push_str(&fingerprint_hex(*schema));
+            summary.push_str(&schema.to_hex());
             summary.push_str(";format=");
             summary.push_str(match format {
                 leaven_engine::StateFormat::Json => "json",

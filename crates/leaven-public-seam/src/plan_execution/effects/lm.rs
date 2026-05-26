@@ -6,7 +6,7 @@ use leaven_lm::{
 };
 use serde_json::{Value, json};
 
-use super::{cost_value, fingerprint_hex};
+use super::cost_value;
 use crate::PublicSeamError;
 
 pub struct PlanLmCompleteRequest<'a> {
@@ -381,7 +381,7 @@ impl PlanLmCompleteOutcome {
         let leaven_kernel::Metered { value, cost } = response;
         Self::new(
             lm_message_value(&value.assistant),
-            format!("fp_runtime_sha256_{}", fingerprint_hex(runtime_fingerprint)),
+            format!("fp_runtime_sha256_{}", runtime_fingerprint.to_hex()),
         )
         .with_cost(cost_value(&cost))
     }
