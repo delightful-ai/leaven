@@ -33,7 +33,9 @@ WORKSPACE_TEST_BUILD_COMMAND = [
     "list",
     "--no-pager",
     "--message-format",
-    "json",
+    "oneline",
+    "--list-type",
+    "binaries-only",
     "--workspace",
     *[arg for package in MILESTONE_PACKAGES for arg in ("--exclude", package)],
 ]
