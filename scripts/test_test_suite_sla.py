@@ -73,16 +73,6 @@ class SuiteDeadlineTests(unittest.TestCase):
         self.assertIn("--exclude", command)
         self.assertIn("p8_aime_gepa", command)
 
-    def test_workspace_build_command_compiles_test_binaries_for_prewarm(self) -> None:
-        command = MODULE.WORKSPACE_TEST_BUILD_COMMAND
-
-        self.assertEqual(command[:4], ["cargo", "test", "--no-run", "--workspace"])
-        self.assertIn("--no-run", command)
-        self.assertIn("--workspace", command)
-        self.assertIn("--all-targets", command)
-        self.assertIn("--exclude", command)
-        self.assertIn("trace2skill_spreadsheetbench", command)
-
     def test_workspace_test_binary_discovery_reads_executable_artifacts_once(self) -> None:
         first = pathlib.Path("/tmp/test-one")
         second = pathlib.Path("/tmp/test-two")
@@ -111,25 +101,25 @@ class SuiteDeadlineTests(unittest.TestCase):
         roots = {"pkg 1": pathlib.Path("/repo/one"), "pkg 2": pathlib.Path("/repo/two")}
         with (
             mock.patch.object(MODULE, "workspace_package_roots", return_value=roots),
-            mock.patch.object(MODULE.subprocess, "run") as run,
+            mock.patch.object(MODULE, "run_capture_with_timeout") as run,
         ):
-            run.return_value.returncode = 0
-            run.return_value.stdout = payload
+            run.return_value = (0, payload)
 
             binaries = MODULE.discover_workspace_test_binaries(pathlib.Path.cwd())
 
         self.assertEqual(binaries, [(first, roots["pkg 1"]), (second, roots["pkg 2"])])
 
-    def test_workspace_build_timeout_is_separate_from_runtime_sla(self) -> None:
+    def test_workspace_discovery_timeout_is_separate_from_runtime_sla(self) -> None:
         with mock.patch.object(
             MODULE,
-            "WORKSPACE_TEST_BUILD_COMMAND",
+            "WORKSPACE_TEST_DISCOVERY_COMMAND",
             [sys.executable, "-c", "import time; time.sleep(10)"],
         ):
             started = time.perf_counter()
-            result = MODULE.build_workspace_tests(pathlib.Path.cwd(), build_timeout=0.1)
+            with self.assertRaises(SystemExit) as exit_context:
+                MODULE.discover_workspace_test_binaries(pathlib.Path.cwd(), build_timeout=0.1)
 
-        self.assertEqual(result, 1)
+        self.assertEqual(exit_context.exception.code, 1)
         self.assertLess(time.perf_counter() - started, 3.0)
 
     def test_default_build_discovery_timeout_is_a_generous_hang_guard(self) -> None:
@@ -137,7 +127,11 @@ class SuiteDeadlineTests(unittest.TestCase):
 
     def test_runtime_target_starts_after_workspace_build_discovery(self) -> None:
         with (
-            mock.patch.object(MODULE, "build_workspace_tests", return_value=0),
+            mock.patch.object(
+                MODULE,
+                "discover_workspace_test_binaries",
+                return_value=[(pathlib.Path("/tmp/test-one"), pathlib.Path.cwd())],
+            ),
             mock.patch.object(MODULE, "test_commands", return_value=[]),
             mock.patch.object(MODULE, "run_workspace_test_binaries", return_value=0),
             mock.patch.object(
@@ -151,6 +145,10 @@ class SuiteDeadlineTests(unittest.TestCase):
             ),
         ):
             self.assertEqual(MODULE.main(), 0)
+            MODULE.run_workspace_test_binaries.assert_called_once_with(
+                [(pathlib.Path("/tmp/test-one"), pathlib.Path.cwd())],
+                mock.ANY,
+            )
 
     def test_doctest_prewarm_runs_before_runtime_deadline_starts(self) -> None:
         with mock.patch.object(MODULE.subprocess, "run") as run:

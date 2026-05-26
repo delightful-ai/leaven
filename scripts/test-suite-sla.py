@@ -15,15 +15,6 @@ import time
 from workspace_packages import MILESTONE_PACKAGES, package_exclude_args
 
 
-WORKSPACE_TEST_BUILD_COMMAND = [
-    "cargo",
-    "test",
-    "--no-run",
-    "--workspace",
-    "--all-targets",
-    *package_exclude_args(MILESTONE_PACKAGES),
-]
-
 WORKSPACE_TEST_DISCOVERY_COMMAND = [
     "cargo",
     "test",
@@ -155,18 +146,38 @@ def run_process_group_with_timeout(
         time.sleep(0.05)
 
 
-def build_workspace_tests(workspace_root: Path, build_timeout: float | None = None) -> int:
-    print(
-        "building workspace test suite: " + " ".join(WORKSPACE_TEST_BUILD_COMMAND),
-        flush=True,
+def run_capture_with_timeout(
+    label: str,
+    command: list[str],
+    cwd: Path,
+    timeout: float | None,
+) -> tuple[int, str]:
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        start_new_session=True,
+        stdout=subprocess.PIPE,
+        text=True,
     )
-    return run_process_group_with_timeout(
-        "workspace test build/discovery",
-        WORKSPACE_TEST_BUILD_COMMAND,
-        workspace_root,
-        build_timeout,
-        stdout=subprocess.DEVNULL,
-    )
+    try:
+        stdout, _ = process.communicate(timeout=timeout)
+        return process.returncode, stdout
+    except subprocess.TimeoutExpired:
+        timeout_label = "none" if timeout is None else f"{timeout:.2f}s"
+        print(f"error: {label} exceeded timeout ({timeout_label})", flush=True)
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return process.wait(), ""
+        try:
+            stdout, _ = process.communicate(timeout=2.0)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            stdout, _ = process.communicate()
+        return 1, stdout
 
 
 def workspace_package_roots(workspace_root: Path) -> dict[str, Path]:
@@ -186,20 +197,27 @@ def workspace_package_roots(workspace_root: Path) -> dict[str, Path]:
     }
 
 
-def discover_workspace_test_binaries(workspace_root: Path) -> list[tuple[Path, Path]]:
+def discover_workspace_test_binaries(
+    workspace_root: Path,
+    build_timeout: float | None = None,
+) -> list[tuple[Path, Path]]:
     package_roots = workspace_package_roots(workspace_root)
-    metadata = subprocess.run(
-        WORKSPACE_TEST_DISCOVERY_COMMAND,
-        cwd=workspace_root,
-        check=False,
-        stdout=subprocess.PIPE,
-        text=True,
+    print(
+        "building and discovering workspace test suite: "
+        + " ".join(WORKSPACE_TEST_DISCOVERY_COMMAND),
+        flush=True,
     )
-    if metadata.returncode != 0:
-        raise SystemExit(metadata.returncode)
+    returncode, stdout = run_capture_with_timeout(
+        "workspace test build/discovery",
+        WORKSPACE_TEST_DISCOVERY_COMMAND,
+        workspace_root,
+        build_timeout,
+    )
+    if returncode != 0:
+        raise SystemExit(returncode)
     binaries: list[tuple[Path, Path]] = []
     seen: set[Path] = set()
-    for line in metadata.stdout.splitlines():
+    for line in stdout.splitlines():
         if not line.startswith("{"):
             continue
         try:
@@ -239,8 +257,7 @@ def prewarm_commands(commands: list[tuple[str, list[str]]], workspace_root: Path
     return 0
 
 
-def run_workspace_test_binaries(workspace_root: Path, deadline: float) -> int:
-    binaries = discover_workspace_test_binaries(workspace_root)
+def run_workspace_test_binaries(binaries: list[tuple[Path, Path]], deadline: float) -> int:
     if not binaries:
         print("error: no workspace test binaries discovered", flush=True)
         return 1
@@ -281,9 +298,7 @@ def main() -> int:
     args = parser.parse_args()
 
     workspace_root = Path.cwd()
-    returncode = build_workspace_tests(workspace_root, args.build_timeout)
-    if returncode != 0:
-        return returncode
+    binaries = discover_workspace_test_binaries(workspace_root, args.build_timeout)
     commands = test_commands(workspace_root)
     returncode = prewarm_commands(commands, workspace_root)
     if returncode != 0:
@@ -298,7 +313,7 @@ def main() -> int:
         if returncode != 0:
             return returncode
 
-    returncode = run_workspace_test_binaries(workspace_root, deadline)
+    returncode = run_workspace_test_binaries(binaries, deadline)
     if returncode != 0:
         return returncode
 
