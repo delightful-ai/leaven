@@ -12,6 +12,7 @@ use crate::{
     ReflectProposeSubmissionDocument, StagePayloadDocument,
 };
 
+mod evidence_audit;
 mod scope;
 mod support;
 mod validation;
@@ -219,7 +220,7 @@ impl PublicSeamPackage {
         &self,
         matrix: &ConformanceMatrix,
     ) -> Result<(), PublicSeamError> {
-        validation::validate_matrix_references(self, matrix)
+        evidence_audit::validate_matrix_references(self, matrix)
     }
 
     /// Audits proven row evidence so schema-only or topology-only closeouts cannot pass.
@@ -227,7 +228,7 @@ impl PublicSeamPackage {
         &self,
         matrix: &ConformanceMatrix,
     ) -> Result<(), PublicSeamError> {
-        validation::audit_conformance_evidence(self, matrix)
+        evidence_audit::audit_conformance_evidence(self, matrix)
     }
 
     /// Validates an arbitrary value against one active package schema.
