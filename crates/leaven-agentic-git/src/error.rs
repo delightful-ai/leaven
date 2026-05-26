@@ -11,10 +11,10 @@ pub enum GitAgenticGitError {
     MissingStore { repo: RepoKey },
     #[error("missing git program layout for repo `{repo}`")]
     MissingLayout { repo: RepoKey },
-    #[error("tree materialization is not implemented for repo `{repo}`")]
-    UnsupportedTreeMaterialization { repo: RepoKey },
-    #[error("tree readback is not implemented for repo `{repo}`")]
-    UnsupportedTreeReadback { repo: RepoKey },
+    #[error("git program materialization supports commit revisions only for repo `{repo}`")]
+    NonCommitMaterialization { repo: RepoKey },
+    #[error("git program readback supports commit revisions only for repo `{repo}`")]
+    NonCommitReadback { repo: RepoKey },
     #[error("git bundle `{path}` does not contain a head")]
     EmptyBundle { path: String },
     #[error(transparent)]

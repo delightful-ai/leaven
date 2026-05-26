@@ -49,14 +49,11 @@ impl GitProgramMaterializer {
                 .ok_or_else(|| GitAgenticGitError::MissingLayout { repo: repo.clone() })?;
             let checkout = workspace_path(layout)?;
             ensure_parent_dir(workspace, &checkout)?;
-            let commit = match repo_artifact.revision() {
-                GitRevision::Commit(commit) => commit,
-                GitRevision::Tree(_) => {
-                    return Err(GitAgenticGitError::UnsupportedTreeMaterialization {
-                        repo: repo.clone(),
-                    });
-                }
-            };
+            let commit = commit_revision(
+                repo,
+                repo_artifact.revision(),
+                GitRevisionUse::Materialization,
+            )?;
             let bundle = materialization_bundle(self.stores.store_for(repo)?, commit)?;
             let bundle_name = format!(".git/leaven-materialize-{}.bundle", RunId::new());
 
@@ -139,12 +136,8 @@ impl GitProgramReadback {
                     .path_for(repo)
                     .ok_or_else(|| GitAgenticGitError::MissingLayout { repo: repo.clone() })?,
             )?;
-            let parent_commit = match repo_artifact.revision() {
-                GitRevision::Commit(commit) => commit,
-                GitRevision::Tree(_) => {
-                    return Err(GitAgenticGitError::UnsupportedTreeReadback { repo: repo.clone() });
-                }
-            };
+            let parent_commit =
+                commit_revision(repo, repo_artifact.revision(), GitRevisionUse::Readback)?;
 
             if let Some(imported) =
                 self.import_output_proposal(repo, repo_count, &checkout, parent_commit, workspace)?
@@ -341,5 +334,29 @@ impl GitProgramReadback {
         let imported = self.import_bundle(repo, &bundle_path, parent)?;
         cleanup.remove();
         Ok(imported)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum GitRevisionUse {
+    Materialization,
+    Readback,
+}
+
+fn commit_revision<'a>(
+    repo: &RepoKey,
+    revision: &'a GitRevision,
+    usage: GitRevisionUse,
+) -> Result<&'a GitObjectId, GitAgenticGitError> {
+    match revision {
+        GitRevision::Commit(commit) => Ok(commit),
+        GitRevision::Tree(_) => match usage {
+            GitRevisionUse::Materialization => {
+                Err(GitAgenticGitError::NonCommitMaterialization { repo: repo.clone() })
+            }
+            GitRevisionUse::Readback => {
+                Err(GitAgenticGitError::NonCommitReadback { repo: repo.clone() })
+            }
+        },
     }
 }

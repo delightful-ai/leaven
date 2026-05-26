@@ -9,7 +9,9 @@ use std::time::Instant;
 
 use futures::executor::block_on;
 use futures::future::{BoxFuture, FutureExt};
-use leaven_agentic_git::{GitProgramMaterializer, GitProgramReadback, GitProgramStores};
+use leaven_agentic_git::{
+    GitAgenticGitError, GitProgramMaterializer, GitProgramReadback, GitProgramStores,
+};
 use leaven_artifact_git::{
     GitArtifactIdentityMode, GitObjectId, GitPath, GitProgramArtifact, GitProgramChange,
     GitProgramLayout, GitRepoArtifact, GitRepoChange, GitRevision, RepoKey, RepoRef,
@@ -68,6 +70,30 @@ fn materializer_checks_out_multiple_repos_at_artifact_revisions() {
 }
 
 #[test]
+fn materializer_rejects_tree_revisions_as_outside_commit_adapter_contract() {
+    let fixture = GitFixture::new();
+    let artifact = fixture.program_tree_artifact();
+    let materializer = GitProgramMaterializer::new(fixture.stores());
+    let workspace_root = tempfile::tempdir().unwrap();
+    let mut workspace = block_on(
+        LocalWorkspaceFactory::new(workspace_root.path()).allocate(WorkspaceConfig::default()),
+    )
+    .unwrap();
+    let mut view = workspace.view();
+
+    let error = materializer
+        .materialize_program(&artifact, &mut view)
+        .expect_err("tree revision should not enter commit materializer");
+
+    assert!(matches!(
+        error,
+        GitAgenticGitError::NonCommitMaterialization { repo } if repo == repo_key("program")
+    ));
+    drop(view);
+    block_on(workspace.cleanup()).unwrap();
+}
+
+#[test]
 fn materializer_does_not_expose_host_store_paths_to_workspace_commands() {
     block_on(async {
         let fixture = GitFixture::new();
@@ -120,6 +146,28 @@ fn readback_reports_no_change_for_clean_materialized_program() {
         drop(view);
         workspace.cleanup().await.unwrap();
     });
+}
+
+#[test]
+fn readback_rejects_tree_revisions_as_outside_commit_adapter_contract() {
+    let fixture = GitFixture::new();
+    let artifact = fixture.program_tree_artifact();
+    let root = tempfile::tempdir().unwrap();
+    let mut workspace =
+        block_on(LocalWorkspaceFactory::new(root.path()).allocate(WorkspaceConfig::default()))
+            .unwrap();
+    let mut view = workspace.view();
+
+    let error = GitProgramReadback::new(fixture.stores())
+        .read_back_change(&artifact, &mut view)
+        .expect_err("tree revision should not enter commit readback");
+
+    assert!(matches!(
+        error,
+        GitAgenticGitError::NonCommitReadback { repo } if repo == repo_key("program")
+    ));
+    drop(view);
+    block_on(workspace.cleanup()).unwrap();
 }
 
 #[test]
@@ -534,6 +582,7 @@ struct GitFixture {
     program_store: PathBuf,
     bench_store: PathBuf,
     program_parent: GitRevision,
+    program_tree: GitRevision,
     bench_parent: GitRevision,
     _temp: tempfile::TempDir,
 }
@@ -566,6 +615,9 @@ impl GitFixture {
         let program_parent = GitRevision::Commit(git_object(
             git_output(&program_source, ["rev-parse", "main"]).trim(),
         ));
+        let program_tree = GitRevision::Tree(git_object(
+            git_output(&program_source, ["rev-parse", "main^{tree}"]).trim(),
+        ));
         let bench_parent = GitRevision::Commit(git_object(
             git_output(&bench_source, ["rev-parse", "main"]).trim(),
         ));
@@ -574,6 +626,7 @@ impl GitFixture {
             program_store,
             bench_store,
             program_parent,
+            program_tree,
             bench_parent,
             _temp: temp,
         }
@@ -613,6 +666,26 @@ impl GitFixture {
     fn program_artifact(&self) -> GitProgramArtifact {
         GitProgramArtifact::new(
             BTreeMap::from([(repo_key("program"), self.program_repo_artifact())]),
+            GitProgramLayout::new(BTreeMap::from([(
+                repo_key("program"),
+                git_path("repos/program"),
+            )]))
+            .unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn program_tree_artifact(&self) -> GitProgramArtifact {
+        GitProgramArtifact::new(
+            BTreeMap::from([(
+                repo_key("program"),
+                GitRepoArtifact::new(
+                    RepoRef::global(repo_key("program")),
+                    self.program_tree.clone(),
+                    None,
+                    GitArtifactIdentityMode::Tree,
+                ),
+            )]),
             GitProgramLayout::new(BTreeMap::from([(
                 repo_key("program"),
                 git_path("repos/program"),
