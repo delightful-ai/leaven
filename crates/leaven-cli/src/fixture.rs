@@ -11,7 +11,7 @@ pub fn fixture_reflection_input() -> SkillBankReflectionInput<String> {
     let request = ReflectRequest::new(fixed_parent(), "rust-test-debugging/SKILL.md")
         .with_examples([{
             let mut case = ReflectiveCase::from_example(
-                ReflectiveValue::Text("cargo nextest run -p leaven-gepa --test agent_stage_routing failed after the proposal stage emitted no workspace diff.".to_owned()),
+                ReflectiveValue::Text("cargo test -p leaven-gepa-agentic-skill --test skill_reflection failed after the proposal stage emitted no workspace diff.".to_owned()),
                 None,
                 Some(ReflectiveValue::Text(
                 "The agent suggested changing a prompt but never inspected the materialized skill."
