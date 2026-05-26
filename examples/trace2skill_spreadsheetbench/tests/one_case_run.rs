@@ -1,7 +1,7 @@
 use std::fs;
 
 use trace2skill_spreadsheetbench::{
-    Trace2SkillOneCaseAnalystFanoutInput, Trace2SkillOneCaseInput, Trace2SkillOneCaseRunInput,
+    Trace2SkillOneCaseAnalystFanoutInput, Trace2SkillOneCaseRunInput,
     Trace2SkillOneCaseRunScoringInput, Trace2SkillOneCaseRunStatus,
     prepare_trace2skill_one_case_analyst_fanout, prepare_trace2skill_one_case_run,
     score_trace2skill_one_case_run,
@@ -16,12 +16,7 @@ fn prepares_run_dir_with_prompt_manifest_and_staged_workbooks() {
     let run_dir = fixture.temp.path().join("run");
 
     let report = prepare_trace2skill_one_case_run(Trace2SkillOneCaseRunInput {
-        case: Trace2SkillOneCaseInput {
-            case_file: &fixture.case_file,
-            spreadsheet_dir: &fixture.spreadsheet_dir,
-            system_prompt_file: &fixture.system_prompt,
-            released_skill_file: &fixture.released_skill,
-        },
+        case: fixture.case_input(),
         run_dir: &run_dir,
         output_workbook: None,
     })
@@ -89,12 +84,7 @@ fn scores_prepared_run_dir_and_writes_trajectory_evidence() {
     let temp = tempfile::tempdir().unwrap();
     let run_dir = temp.path().join("run");
     prepare_trace2skill_one_case_run(Trace2SkillOneCaseRunInput {
-        case: Trace2SkillOneCaseInput {
-            case_file: &fixture.case_file,
-            spreadsheet_dir: &fixture.spreadsheet_dir,
-            system_prompt_file: &fixture.system_prompt,
-            released_skill_file: &fixture.released_skill,
-        },
+        case: fixture.case_input(),
         run_dir: &run_dir,
         output_workbook: None,
     })
@@ -150,12 +140,7 @@ fn prepares_stage2_analyst_fanout_from_scored_run_and_upstream_prompt_sources() 
     let temp = tempfile::tempdir().unwrap();
     let run_dir = temp.path().join("run");
     prepare_trace2skill_one_case_run(Trace2SkillOneCaseRunInput {
-        case: Trace2SkillOneCaseInput {
-            case_file: &fixture.case_file,
-            spreadsheet_dir: &fixture.spreadsheet_dir,
-            system_prompt_file: &fixture.system_prompt,
-            released_skill_file: &fixture.released_skill,
-        },
+        case: fixture.case_input(),
         run_dir: &run_dir,
         output_workbook: None,
     })

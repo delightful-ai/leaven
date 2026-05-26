@@ -52,6 +52,15 @@ impl Fixture {
             released_skill,
         }
     }
+
+    pub fn case_input(&self) -> Trace2SkillOneCaseInput<'_> {
+        Trace2SkillOneCaseInput {
+            case_file: &self.case_file,
+            spreadsheet_dir: &self.spreadsheet_dir,
+            system_prompt_file: &self.system_prompt,
+            released_skill_file: &self.released_skill,
+        }
+    }
 }
 
 pub struct ExactCaseFixture {
