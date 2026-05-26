@@ -4,7 +4,7 @@ This subtree is the durable product and architecture contract. Specs here outran
 The top of the stack is:
 - `initial_library.md`: governing product and architecture spec for the current Leaven library shape.
 - `guiding_principles.md`: requirements and product constraints, not implementation layout.
-- `leaven_v0_2_1b_corrected_crate_topology_lib_rs.md`: topology intent and `lib.rs` map contract. Its crate inventory can lag the live workspace; verify live membership against root `Cargo.toml` and `crates/leaven/tests/topology_contract.rs`.
+- `leaven_v0_2_1b_corrected_crate_topology_lib_rs.md`: historical topology tombstone only. Live crate topology is root `Cargo.toml` plus `crates/leaven/tests/topology_contract.rs`.
 - `public-seam-v1/`: locked public seam v1 — plan IR, capability tokens, result receipts, stage payloads, evaluator/evidence envelopes, the Leaven ACP profile, and JSON Schemas for external-language workers. Read `00_architecture_judgment_v0.3.md` first for the governing judgments; `watch.v1` is deferred from v1.
 - `durable_runs_and_resume.md`: default-durable run/resume semantics, `RunStore` vocabulary, optimizer continuation policy, and the explicit `ephemeral` escape hatch.
 - `resume_compatibility_fingerprints.md`: durable resume compatibility domains,

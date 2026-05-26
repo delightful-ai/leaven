@@ -23,7 +23,8 @@ It is subordinate to:
 
 - `docs/specs/initial_library.md`
 - `docs/specs/guiding_principles.md`
-- `docs/specs/leaven_v0_2_1b_corrected_crate_topology_lib_rs.md`
+- root `Cargo.toml` and `crates/leaven/tests/topology_contract.rs` for live
+  crate topology
 
 ## 1. Design Correction
 
@@ -614,8 +615,8 @@ leaven-engine     -> leaven-core, leaven-kernel, leaven-store
 leaven-eval       -> leaven-core, leaven-kernel
 leaven-gepa       -> leaven-core, leaven-engine,
                      leaven-evidence, leaven-kernel, leaven-lm,
-                     leaven-population, leaven-preference,
-                     leaven-render, leaven-surface
+                     leaven-population, leaven-stage,
+                     leaven-surface
 leaven-run        -> leaven-core, leaven-engine, leaven-eval,
                      leaven-evidence, leaven-kernel, leaven-store,
                      leaven-store-file, leaven-store-inline
