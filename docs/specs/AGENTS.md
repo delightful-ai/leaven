@@ -49,6 +49,9 @@ The top of the stack is:
   agentic reflection contract: `ArtifactReflector`, `ReflectionWorkspace`,
   reflective case/run schema, attachments, and the SkillBank migration slice.
 - `milestone_examples_behavioral_contract.md`: executable behavior contract for milestone examples.
+- `philosophy_compliance_cleanup.md`: current open-finding ledger for
+  philosophy-driven maintainability risks. It is not a historical changelog or
+  duplicate of `docs/philosophy/*`.
 - `docs/testing/README.md`: proof model and coverage/SLA contract.
 
 ## Status Discipline
