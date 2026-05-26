@@ -187,9 +187,6 @@ Use the narrowest layer that proves the claim.
   contracts for deterministic workspace writes, proposer-scoped read views,
   explicit cleanup, absence of old `WorkspaceRenderer` names, and
   `Create + None + informed_by(history)` lineage.
-- `crates/leaven-derive/tests/derive_macros.rs`: `trybuild` contract proving
-  reserved derive macros fail explicitly until their real codegen contracts
-  land.
 - `crates/leaven-surface/tests/part_contract.rs`: public surface example
   coverage proving `Part` carries identity, address, and typed view semantics
   without a framework-wide kind taxonomy.
