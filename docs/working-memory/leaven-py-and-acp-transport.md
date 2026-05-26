@@ -1,7 +1,12 @@
 # Leaven Python SDK + ACP Transport Research
 
-Status: active research, pre-spec.
+Status: historical research snapshot, pre-spec.
 Updated: 2026-05-24.
+
+Current-state warning: row counts and ACP blockers in this note are dated
+conversation context. Verify implementation status against
+`docs/specs/public-seam-v1/conformance-matrix.yaml`, `crates/leaven-acp`, and
+the current `jj log` before using them as live work state.
 
 ## Authority
 

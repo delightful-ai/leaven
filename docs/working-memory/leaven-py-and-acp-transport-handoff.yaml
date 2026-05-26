@@ -1,7 +1,12 @@
 version: 1
 artifact_kind: leaven_goal_handoff
-status: draft
+status: historical_snapshot
 created: 2026-05-24
+current_state_warning: >-
+  This handoff preserves dated Python/ACP planning context. Row counts,
+  blockers, and pending task status were true for the originating snapshot only;
+  verify current implementation state against the active public-seam conformance
+  matrix, crates/leaven-acp, and jj log before using this as live work state.
 
 goal:
   slug: leaven_py_and_acp_transport
