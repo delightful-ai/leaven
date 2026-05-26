@@ -271,7 +271,9 @@ The vendoring discipline comes from
   design references.
 - **Ray Tune** — 2+ GB monorepo; `Trainable` API is simpler than ours.
 - **Pydantic** — already a runtime dependency (`pyproject.toml` pins
-  it). Read the live installed source under `.venv/`.
+  it). Use `uv run python -c "import inspect, pydantic; print(inspect.getfile(pydantic))"`
+  to locate the live installed source instead of relying on a checked-out
+  `.venv/` path.
 - **Optuna** — distributed optimization patterns less load-bearing for
   our scaffold than other options.
 - **Weave full repo** — 1.6 GB unconscionable; informal Python-source
