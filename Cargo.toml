@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
-# Bare `cargo build`/`check`/`nextest` and the default `just` gates skip the
-# example milestones. Run them explicitly through the `just milestone-*` recipes.
+# Bare `cargo build`/`check` and the default `just` gates skip the example
+# milestones. Run them explicitly through the `just milestone-*` recipes.
 default-members = ["crates/*"]
 members = [
     "crates/leaven",
