@@ -69,7 +69,7 @@ fn gepa_owns_surface_and_lowers_selected_part_edits() {
         ParetoFrontier::by_case().build(),
         unused_reflector(),
     );
-    let mut proposer = FixedSurfaceEdit::new("improved".to_owned());
+    let mut proposer = improved_reflector();
 
     let part = gepa.select_part(&artifact).unwrap();
     let edit = proposer
@@ -90,7 +90,7 @@ fn fixed_reflector_rejects_missing_parent_before_recording_proposal() {
         let mut graph = RunGraph::<SmokeProblem>::new(RunId::new());
         let mut budget = BudgetLedger::default();
         let mut ctx = RunContext::new(&mut graph, &mut budget);
-        let mut reflector = FixedSurfaceEdit::new("improved".to_owned());
+        let mut reflector = improved_reflector();
         let request = ReflectRequest {
             parent: leaven_kernel::CandidateId::new(),
             part: "answer".to_owned(),
@@ -121,7 +121,7 @@ fn fixed_reflector_surfaces_apply_failures_after_recording_proposal() {
                 0,
             )
             .unwrap();
-        let mut reflector = FixedSurfaceEdit::new("improved".to_owned());
+        let mut reflector = improved_reflector();
         let request = ReflectRequest {
             parent,
             part: "answer".to_owned(),
@@ -145,7 +145,7 @@ fn public_builder_supports_explicit_population_before_reflector() {
     let mut gepa = Gepa::builder()
         .surface(PartMapSurface)
         .population(ParetoFrontier::by_case().build())
-        .reflector(FixedSurfaceEdit::new("builder-edit".to_owned()));
+        .reflector(fixed_reflector("builder-edit"));
     let artifact = PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())]));
 
     let part = gepa.select_part(&artifact).unwrap();
@@ -164,7 +164,7 @@ fn public_builder_supports_explicit_population_before_reflector() {
 fn public_reference_builder_requires_surface_then_reflector() {
     let mut gepa = Gepa::reference()
         .surface(PartMapSurface)
-        .reflector(FixedSurfaceEdit::new("reference-edit".to_owned()));
+        .reflector(fixed_reflector("reference-edit"));
     let artifact = PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())]));
 
     let part = gepa.select_part(&artifact).unwrap();
@@ -750,7 +750,7 @@ fn gepa_default_sampler_uses_train_minibatches_without_validation_or_test_cases(
         let mut gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("improved".to_owned()),
+            improved_reflector(),
         )
         .reflective_dataset(OneReflectiveExample)
         .validation_policy(MinibatchThenValidation)
@@ -788,7 +788,7 @@ fn gepa_candidate_history_tracks_seed_and_accepted_children_by_assessment() {
         let mut gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("improved".to_owned()),
+            improved_reflector(),
         )
         .reflective_dataset(OneReflectiveExample)
         .batch_sampler(EpochShuffled::new(1))
@@ -838,7 +838,7 @@ fn train_accepted_child_without_validation_is_not_reference_admitted() {
         let mut gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("improved".to_owned()),
+            improved_reflector(),
         )
         .reflective_dataset(OneReflectiveExample)
         .batch_sampler(EpochShuffled::new(1))
@@ -1081,7 +1081,7 @@ fn gepa_run_surfaces_reflective_dataset_build_failure() {
         let mut gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("improved".to_owned()),
+            improved_reflector(),
         )
         .reflective_dataset(failing_dataset)
         .validation_policy(MinibatchThenValidation)
@@ -1154,7 +1154,7 @@ fn gepa_batch_sampler_builder_uses_custom_minibatches() {
         let mut gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("improved".to_owned()),
+            improved_reflector(),
         )
         .reflective_dataset(OneReflectiveExample)
         .batch_sampler(EpochShuffled::new(2).with_seed(7))
@@ -1209,7 +1209,7 @@ fn reference_profile_shares_rng_between_parent_selection_and_epoch_sampler() {
         let mut gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("improved".to_owned()),
+            improved_reflector(),
         )
         .reflective_dataset(OneReflectiveExample)
         .batch_sampler(EpochShuffled::new(2))
@@ -1293,7 +1293,7 @@ fn gepa_proposal_count_zero_normalizes_to_one_serial_proposal() {
         let mut gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("improved".to_owned()),
+            improved_reflector(),
         )
         .reflective_dataset(OneReflectiveExample)
         .batch_sampler(EpochShuffled::new(1))
@@ -1486,7 +1486,7 @@ fn full_validation_policy_evaluates_accepted_candidates_and_selects_validation_b
         let mut gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("improved".to_owned()),
+            improved_reflector(),
         )
         .reflective_dataset(OneReflectiveExample)
         .batch_sampler(EpochShuffled::new(1))
@@ -1548,7 +1548,7 @@ fn full_validation_policy_evaluates_accepted_candidates_and_selects_validation_b
         let mut restored = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("improved".to_owned()),
+            improved_reflector(),
         )
         .reflective_dataset(OneReflectiveExample)
         .batch_sampler(EpochShuffled::new(1))
@@ -1608,7 +1608,7 @@ fn reference_state_seed_validation_initializes_candidate_zero_before_train() {
         let mut gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("improved".to_owned()),
+            improved_reflector(),
         )
         .reflective_dataset(NoReflectiveExamples)
         .validation_policy(FullValidation)
@@ -1656,7 +1656,7 @@ fn reference_gepa_refuses_empty_validation_before_evaluator_work() {
         let mut gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("improved".to_owned()),
+            improved_reflector(),
         )
         .reflective_dataset(NoReflectiveExamples)
         .validation_policy(FullValidation)
@@ -1704,7 +1704,7 @@ fn gepa_reuses_evaluation_cache_per_candidate_case_across_different_requests() {
         let mut gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("improved".to_owned()),
+            improved_reflector(),
         )
         .reflective_dataset(NoReflectiveExamples)
         .validation_policy(FullValidation)
@@ -1753,7 +1753,7 @@ fn accepted_child_full_validation_reuses_case_cache_hits() {
         let mut gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("improved".to_owned()),
+            improved_reflector(),
         )
         .reflective_dataset(OneReflectiveExample)
         .batch_sampler(EpochShuffled::new(1))
@@ -2003,7 +2003,7 @@ fn accepted_child_enters_reference_state_only_after_full_validation() {
         let mut gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("improved".to_owned()),
+            improved_reflector(),
         )
         .reflective_dataset(OneReflectiveExample)
         .validation_policy(FullValidation)
@@ -2129,7 +2129,7 @@ fn budget_stop_after_train_acceptance_reports_child_not_admitted() {
         let mut gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("improved".to_owned()),
+            improved_reflector(),
         )
         .reflective_dataset(OneReflectiveExample)
         .validation_policy(FirstSeedThenFullValidation::default())
@@ -2183,7 +2183,7 @@ fn parent_and_child_screen_on_same_ordered_train_cases() {
         let mut gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("improved".to_owned()),
+            improved_reflector(),
         )
         .reflective_dataset(OneReflectiveExample)
         .batch_sampler(EpochShuffled::new(2).with_seed(7))
@@ -2249,7 +2249,7 @@ fn accepted_iteration_emits_reference_phase_order() {
         let mut gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("improved".to_owned()),
+            improved_reflector(),
         )
         .reflective_dataset(OneReflectiveExample)
         .validation_policy(FullValidation)
@@ -2494,7 +2494,7 @@ fn strict_equal_score_child_is_rejected_without_full_validation_or_admission() {
         let mut gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("improved".to_owned()),
+            improved_reflector(),
         )
         .reflective_dataset(OneReflectiveExample)
         .validation_policy(FullValidation)
@@ -2733,7 +2733,7 @@ fn gepa_checkpoint_restore_rejects_missing_validation_best_candidate() {
         let mut gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("improved".to_owned()),
+            improved_reflector(),
         )
         .reflective_dataset(NoReflectiveExamples)
         .validation_policy(FullValidation)
@@ -2848,7 +2848,7 @@ fn optimizer_compatibility_fingerprint_includes_checkpointed_strategy_state() {
 fn gepa_builder_default_reflector_path_uses_pareto_frontier_defaults() {
     let gepa = Gepa::builder()
         .surface(PartMapSurface)
-        .reflector(FixedSurfaceEdit::new("improved".to_owned()))
+        .reflector(improved_reflector())
         .max_iterations(2);
 
     assert_eq!(gepa.population().best(), None);
@@ -2859,7 +2859,7 @@ fn gepa_default_validation_policy_is_full_validation() {
     let gepa = Gepa::new(
         PartMapSurface,
         ParetoFrontier::by_case().build(),
-        FixedSurfaceEdit::new("improved".to_owned()),
+        improved_reflector(),
     )
     .reflective_dataset(NoReflectiveExamples);
 
@@ -3451,7 +3451,15 @@ type SmokeGepa = Gepa<
 >;
 
 fn unused_reflector() -> FixedSurfaceEdit<String> {
-    FixedSurfaceEdit::new("unused".to_owned())
+    fixed_reflector("unused")
+}
+
+fn improved_reflector() -> FixedSurfaceEdit<String> {
+    fixed_reflector("improved")
+}
+
+fn fixed_reflector(edit: &str) -> FixedSurfaceEdit<String> {
+    FixedSurfaceEdit::new(edit.to_owned())
 }
 
 fn smoke_gepa(reflector: FixedSurfaceEdit<String>) -> SmokeGepa {
@@ -3505,7 +3513,7 @@ fn resume_reflection_gepa() -> Gepa<
     Gepa::new(
         PartMapSurface,
         ParetoFrontier::by_case().build(),
-        FixedSurfaceEdit::new("improved".to_owned()),
+        improved_reflector(),
     )
     .reflective_dataset(OneReflectiveExample)
     .batch_sampler(EpochShuffled::new(1).with_seed(7))
@@ -4226,7 +4234,7 @@ impl GepaReflector<SamplingProblem, PartMapSurface> for CountingReflector {
         request: ReflectRequest<String>,
     ) -> Result<Option<leaven_kernel::CandidateId>, leaven_engine::OptimizerError> {
         *self.calls.lock().expect("calls lock") += 1;
-        FixedSurfaceEdit::new("improved".to_owned())
+        improved_reflector()
             .reflect_candidate(ctx, surface, request)
             .await
     }
