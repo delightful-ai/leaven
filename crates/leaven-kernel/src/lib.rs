@@ -69,10 +69,14 @@ pub mod prelude {
     //! vocabulary — the IDs plus the cost/error/fingerprint/metadata
     //! primitives — without enumerating each item.
 
-    pub use crate::ids::*;
     pub use crate::{
-        Amount, AmountError, Budget, BudgetExceeded, BudgetSnapshot, Cost, CostUnit, ErrorKind,
-        ErrorRecord, Fingerprint, FiniteF64, FiniteF64Error, MetadataBag, Metered,
-        StageAttemptFailure, StageAttemptOutcome, StageAttemptReceiptRef, StageRole,
+        AgentId, AgentRuntimeId, AgentSessionId, Amount, AmountError, ApplyAttemptId, AssessmentId,
+        BlobRef, Budget, BudgetExceeded, BudgetSnapshot, CandidateId, CaseId, CaseRunId,
+        CheckpointId, ContentId, Cost, CostUnit, ErrorKind, ErrorRecord, EvaluationRequestId,
+        EvaluationSetId, EvaluatorId, EvidenceRef, Fingerprint, FiniteF64, FiniteF64Error,
+        IterationId, MetadataBag, Metered, PopulationId, ProposalBatchId, ProposalId, ProposerId,
+        RenderId, RendererId, ResolvedEvaluationSetId, RunId, StageAttemptFailure,
+        StageAttemptOutcome, StageAttemptReceiptId, StageAttemptReceiptRef, StageCallId, StageId,
+        StageQueryId, StageRole, StopperId, TraceRef, WorkspaceEntryId, WorkspaceId,
     };
 }
