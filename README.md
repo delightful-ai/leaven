@@ -2,10 +2,6 @@
 
 *u walk away. it bakes.*
 
-<p align="center">
-  <img src="./assets/mark.png" alt="leaven mark" width="180">
-</p>
-
 Leaven is a Rust library for optimizing agents.
 
 Leaven can improve things you can change and measure: skills, codebases, harnesses, environments.
