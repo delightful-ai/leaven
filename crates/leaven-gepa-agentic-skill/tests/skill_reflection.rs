@@ -55,9 +55,7 @@ fn skill_bank_gepa_reflector_materializes_agent_edit_and_applies_child() {
         };
         let request = ReflectRequest::for_part(parent, part, "alpha/SKILL.md")
             .with_examples([ReflectiveCase::from_example(
-                ReflectiveValue::Text(
-                    "cargo nextest run -p leaven-gepa-agentic-skill failed".to_owned(),
-                ),
+                ReflectiveValue::Text("cargo test -p leaven-gepa-agentic-skill failed".to_owned()),
                 None,
                 Some(ReflectiveValue::Text(
                     "The prior skill ignored fixture drift.".to_owned(),

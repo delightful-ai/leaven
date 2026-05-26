@@ -49,7 +49,7 @@ fn fixture_skill_bank() -> SkillBank {
     );
     entries.insert(
         SkillPath::new("examples/failure.md").unwrap(),
-        SkillFile::text("nextest failed before the agent inspected the skill body.\n"),
+        SkillFile::text("cargo test failed before the agent inspected the skill body.\n"),
     );
     SkillBank::from_folders([SkillFolder::from_entries(name, entries).unwrap()]).unwrap()
 }

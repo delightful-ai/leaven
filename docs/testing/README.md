@@ -88,7 +88,8 @@ altitude until the default suite is back under the target.
 
 The SLA runner delegates workspace test scheduling to Cargo's native test
 runner. That keeps compile prewarm separate from measured execution without the
-extra nextest discovery fan-out that can dominate this workspace's hot loop.
+extra external runner discovery fan-out that can dominate this workspace's hot
+loop.
 
 Coverage has hard failure floors plus warning targets. The current hard floors
 are 80% line and 80% branch so coverage does not outrank executable seam
