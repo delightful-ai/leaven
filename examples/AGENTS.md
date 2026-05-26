@@ -18,6 +18,10 @@ Each `pN_*` directory is a workspace package with a runnable binary. Keep reusab
 - `skillreducer_tiny`: local `AGENTS.md`; paper-specific SkillReducer tiny live debloating proof. It is outside the Cargo workspace and writes live artifacts under `tmp/skillreducer_tiny/`.
 - `d2skill_tiny`: local `AGENTS.md`; paper-specific D2Skill tiny live paired-rollout skill-bank proof. It is outside the Cargo workspace and writes live artifacts under `tmp/d2skill_tiny/`.
 - `trace2skill_tiny_live`: local `AGENTS.md`; paper-specific Trace2Skill tiny live trajectory-to-skill proof. It is outside the Cargo workspace and writes live artifacts under `tmp/trace2skill_tiny_live/`.
+- `live_common.sh`: shared shell plumbing for tiny live proof scripts only:
+  Codex binary discovery, live-run gating, and the JSON `codex exec` wrapper.
+  Paper-specific proof contracts, prompts, fixtures, and output schemas stay in
+  each example directory.
 - `trace2skill_spreadsheetbench`: mechanics-smoke for Trace2Skill's official
   SpreadsheetBench-Verified 400-row manifest, run-artifact lowering, and exact
   one-case no-spend prompt/scorer preflight. `cargo test -p

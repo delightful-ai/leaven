@@ -23,19 +23,13 @@ esac
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 example_dir="$(cd "$script_dir/.." && pwd)"
 repo_root="$(cd "$example_dir/../.." && pwd)"
+source "$repo_root/examples/live_common.sh"
 bash "$repo_root/scripts/ensure_leaven_workspace.sh"
 
 run_id="$(date -u +%Y%m%dT%H%M%SZ)"
 out_dir="${LEAVEN_D2SKILL_OUT:-$repo_root/tmp/d2skill_tiny/$run_id}"
 work_dir="$out_dir/workspace"
-codex_bin="${LEAVEN_CODEX_BIN:-}"
-if [[ -z "$codex_bin" ]]; then
-  if command -v codex >/dev/null 2>&1; then
-    codex_bin="$(command -v codex)"
-  else
-    codex_bin="$HOME/.bun/bin/codex"
-  fi
-fi
+codex_bin="$(leaven_resolve_codex_bin)"
 
 mkdir -p "$work_dir/output" "$work_dir/prompts" "$work_dir/skill_bank/task" "$work_dir/skill_bank/step" "$out_dir"
 cp "$example_dir/fixtures/task.json" "$work_dir/task.json"
@@ -78,32 +72,10 @@ if [[ "$mode" == "--preflight" ]]; then
   exit 0
 fi
 
-if [[ "${LEAVEN_CODEX_LIVE:-}" != "1" ]]; then
-  echo "live D2Skill run requires LEAVEN_CODEX_LIVE=1" >&2
-  exit 2
-fi
-
-if [[ ! -x "$codex_bin" ]]; then
-  echo "Codex binary is not executable: $codex_bin" >&2
-  exit 2
-fi
+leaven_require_live_codex "D2Skill" "$codex_bin"
 
 run_codex() {
-  local prompt_file="$1"
-  local last_message="$2"
-  local stdout_file="$3"
-  local stderr_file="$4"
-  (
-    cd "$work_dir"
-    "$codex_bin" exec \
-      --json \
-      --skip-git-repo-check \
-      --model gpt-5.4-mini \
-      --config 'model_reasoning_effort="low"' \
-      --output-last-message "$last_message" \
-      --dangerously-bypass-approvals-and-sandbox \
-      - < "$prompt_file" > "$stdout_file" 2> "$stderr_file"
-  )
+  leaven_run_codex_json "$work_dir" "$codex_bin" "$@"
 }
 
 python3 - "$work_dir" <<'PY'
