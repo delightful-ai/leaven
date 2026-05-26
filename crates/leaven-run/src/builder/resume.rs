@@ -24,16 +24,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::convert::Infallible;
-
-    use leaven_core::{Artifact, ArtifactIdentity, Evidence, OptimizationProblem};
     use leaven_engine::{Engine, GraphSnapshotRef, StateFormat, StepStatus};
-    use leaven_kernel::{
-        BlobRef, Budget, BudgetSnapshot, CandidateId, ContentId, Fingerprint, RunId, now,
-    };
-    use serde::{Deserialize, Serialize};
+    use leaven_kernel::{BlobRef, Budget, BudgetSnapshot, CandidateId, Fingerprint, RunId, now};
 
     use super::*;
+    use crate::test_support::TestProblem;
     use crate::{OptimizeStore, run_store::StoreStart};
 
     #[test]
@@ -88,35 +83,5 @@ mod tests {
         ) -> Option<CandidateId> {
             None
         }
-    }
-
-    #[derive(Clone, Debug, Serialize, Deserialize)]
-    struct TestArtifact;
-
-    impl Artifact for TestArtifact {
-        type Change = ();
-        type ApplyError = Infallible;
-
-        fn identity(&self) -> ArtifactIdentity {
-            ArtifactIdentity::Content(ContentId::from_bytes([1; 32]))
-        }
-
-        fn apply_change(&self, _change: &Self::Change) -> Result<Self, Self::ApplyError> {
-            Ok(Self)
-        }
-    }
-
-    #[derive(Clone, Debug, Serialize, Deserialize)]
-    struct TestEvidence;
-
-    impl Evidence for TestEvidence {}
-
-    struct TestProblem;
-
-    impl OptimizationProblem for TestProblem {
-        type Artifact = TestArtifact;
-        type Case = ();
-        type Evidence = TestEvidence;
-        type ProposalAnnotations = ();
     }
 }

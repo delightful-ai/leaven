@@ -10,6 +10,8 @@ mod result;
 pub(crate) mod run_report;
 pub(crate) mod run_store;
 mod store;
+#[cfg(test)]
+pub(crate) mod test_support;
 
 pub use builder::{OptimizeBuilder, RunProblem, optimize};
 pub use compatibility::{

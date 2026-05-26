@@ -185,13 +185,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::convert::Infallible;
-
-    use leaven_core::{ArtifactIdentity, Evidence};
+    use leaven_core::ArtifactIdentity;
     use leaven_kernel::ContentId;
-    use serde::{Deserialize, Serialize};
 
     use super::*;
+    use crate::test_support::{TestArtifact, TestProblem};
 
     #[test]
     fn checkpoint_helpers_are_noops_without_local_persistence() {
@@ -215,35 +213,5 @@ mod tests {
             ArtifactIdentity::Content(ContentId::from_bytes([1; 32]))
         );
         assert!(artifact.apply_change(&()).is_ok());
-    }
-
-    #[derive(Clone, Debug, Serialize, Deserialize)]
-    struct TestArtifact;
-
-    impl Artifact for TestArtifact {
-        type Change = ();
-        type ApplyError = Infallible;
-
-        fn identity(&self) -> ArtifactIdentity {
-            ArtifactIdentity::Content(ContentId::from_bytes([1; 32]))
-        }
-
-        fn apply_change(&self, _change: &Self::Change) -> Result<Self, Self::ApplyError> {
-            Ok(Self)
-        }
-    }
-
-    #[derive(Clone, Debug, Serialize, Deserialize)]
-    struct TestEvidence;
-
-    impl Evidence for TestEvidence {}
-
-    struct TestProblem;
-
-    impl OptimizationProblem for TestProblem {
-        type Artifact = TestArtifact;
-        type Case = ();
-        type Evidence = TestEvidence;
-        type ProposalAnnotations = ();
     }
 }

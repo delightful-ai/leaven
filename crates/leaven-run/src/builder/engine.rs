@@ -464,13 +464,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::convert::Infallible;
-
-    use leaven_core::{ArtifactIdentity, CacheIdentity};
     use leaven_eval::NoTarget;
-    use leaven_kernel::ContentId;
 
     use super::*;
+    use crate::test_support::TestArtifact;
 
     #[test]
     fn stop_reason_from_events_reports_missing_engine_stop_event() {
@@ -484,25 +481,5 @@ mod tests {
                 .to_string()
                 .contains("optimizer finished without a stop reason")
         );
-    }
-
-    #[derive(Clone)]
-    struct TestArtifact;
-
-    impl Artifact for TestArtifact {
-        type Change = ();
-        type ApplyError = Infallible;
-
-        fn identity(&self) -> ArtifactIdentity {
-            ArtifactIdentity::Content(ContentId::from_bytes([1; 32]))
-        }
-
-        fn cache_identity(&self) -> Option<CacheIdentity> {
-            Some(CacheIdentity::Content(ContentId::from_bytes([1; 32])))
-        }
-
-        fn apply_change(&self, _change: &Self::Change) -> Result<Self, Self::ApplyError> {
-            Ok(Self)
-        }
     }
 }

@@ -180,11 +180,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use leaven_core::{ArtifactIdentity, Evidence};
-    use leaven_kernel::{ContentId, RunId};
-    use serde::{Deserialize, Serialize};
+    use leaven_core::ArtifactIdentity;
+    use leaven_kernel::RunId;
 
     use super::*;
+    use crate::test_support::{TestArtifact, TestArtifactError, TestProblem};
 
     #[test]
     fn local_optimize_store_open_wires_file_persistence_and_sqlite_cache() {
@@ -260,46 +260,5 @@ mod tests {
             .join("leaven-run-store-tests")
             .join(label)
             .join(RunId::new().to_string())
-    }
-
-    #[derive(Clone, Debug, Serialize, Deserialize)]
-    struct TestArtifact;
-
-    #[derive(Debug)]
-    struct TestArtifactError;
-
-    impl std::fmt::Display for TestArtifactError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.write_str("test artifact error")
-        }
-    }
-
-    impl std::error::Error for TestArtifactError {}
-
-    impl Artifact for TestArtifact {
-        type Change = ();
-        type ApplyError = TestArtifactError;
-
-        fn identity(&self) -> ArtifactIdentity {
-            ArtifactIdentity::Content(ContentId::from_bytes([1; 32]))
-        }
-
-        fn apply_change(&self, _change: &Self::Change) -> Result<Self, Self::ApplyError> {
-            Ok(self.clone())
-        }
-    }
-
-    #[derive(Clone, Debug, Serialize, Deserialize)]
-    struct TestEvidence;
-
-    impl Evidence for TestEvidence {}
-
-    struct TestProblem;
-
-    impl OptimizationProblem for TestProblem {
-        type Artifact = TestArtifact;
-        type Case = ();
-        type Evidence = TestEvidence;
-        type ProposalAnnotations = ();
     }
 }
