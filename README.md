@@ -1,7 +1,5 @@
 # Leaven
 
-*walk away. it bakes.*
-
 Leaven is a Rust library for optimizing agents.
 
 Leaven can improve things you can change and measure: skills, codebases, harnesses, environments.
