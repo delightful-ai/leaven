@@ -125,8 +125,10 @@ enum CliError {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::path::PathBuf;
 
     use leaven_artifact_skill::{SkillBank, SkillFile, SkillFolder, SkillName, SkillPath};
+    use leaven_gepa_agentic_skill::SkillBankReflectionInput;
 
     use super::run;
 
@@ -172,9 +174,7 @@ mod tests {
     fn proposal_render_reads_input_json() {
         let mut input = crate::fixture::fixture_reflection_input();
         input.part_label = "custom/SKILL.md".to_owned();
-        let path =
-            std::env::temp_dir().join(format!("leaven-doctor-input-{}.json", uuid::Uuid::new_v4()));
-        std::fs::write(&path, serde_json::to_vec(&input).unwrap()).unwrap();
+        let path = write_input_json(&input);
 
         let output = run([
             "doctor".to_owned(),
@@ -242,9 +242,7 @@ mod tests {
         .unwrap();
         input.part = "custom/SKILL.md".to_owned();
         input.part_label = "custom/SKILL.md".to_owned();
-        let path =
-            std::env::temp_dir().join(format!("leaven-doctor-input-{}.json", uuid::Uuid::new_v4()));
-        std::fs::write(&path, serde_json::to_vec(&input).unwrap()).unwrap();
+        let path = write_input_json(&input);
 
         let output = run([
             "doctor".to_owned(),
@@ -272,5 +270,12 @@ mod tests {
         .to_string();
 
         assert!(error.contains("cannot be used with"));
+    }
+
+    fn write_input_json(input: &SkillBankReflectionInput<String>) -> PathBuf {
+        let path =
+            std::env::temp_dir().join(format!("leaven-doctor-input-{}.json", uuid::Uuid::new_v4()));
+        std::fs::write(&path, serde_json::to_vec(input).unwrap()).unwrap();
+        path
     }
 }

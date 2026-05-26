@@ -89,10 +89,7 @@ fn proposal_render(
     format: OutputFormat,
     input_json: Option<PathBuf>,
 ) -> Result<String, DoctorError> {
-    let input = match input_json {
-        Some(path) => read_reflection_input(&path)?,
-        None => fixture_reflection_input(),
-    };
+    let input = load_input(input_json)?;
     let instructions = leaven_agent::AgentInstructions::task(format!(
         "Read TASK.md and edit {TARGET_CURRENT} in place."
     ));
@@ -305,6 +302,22 @@ trait DoctorText {
     fn to_text(&self) -> String;
 }
 
+fn push_field(output: &mut String, label: &str, value: impl std::fmt::Display) {
+    output.push_str(label);
+    output.push_str(": ");
+    output.push_str(&value.to_string());
+    output.push('\n');
+}
+
+fn push_gaps(output: &mut String, gaps: &[&str]) {
+    output.push_str("\nGaps:\n");
+    for gap in gaps {
+        output.push_str("  - ");
+        output.push_str(gap);
+        output.push('\n');
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 struct ProposalRenderDoctor {
     stage: &'static str,
@@ -320,20 +333,11 @@ struct ProposalRenderDoctor {
 impl DoctorText for ProposalRenderDoctor {
     fn to_text(&self) -> String {
         let mut output = String::new();
-        output.push_str("Stage: ");
-        output.push_str(self.stage);
-        output.push('\n');
-        output.push_str("Route: ");
-        output.push_str(self.route);
-        output.push('\n');
-        output.push_str("Proof: ");
-        output.push_str(self.proof);
-        output.push('\n');
-        output.push_str("Parent: ");
-        output.push_str(&self.parent);
-        output.push('\n');
-        output.push_str("Part: ");
-        output.push_str(&self.part);
+        push_field(&mut output, "Stage", self.stage);
+        push_field(&mut output, "Route", self.route);
+        push_field(&mut output, "Proof", self.proof);
+        push_field(&mut output, "Parent", &self.parent);
+        push_field(&mut output, "Part", &self.part);
         output.push_str("\n\nWorkspace files:\n");
         for file in &self.workspace_files {
             output.push_str("  - ");
@@ -352,12 +356,7 @@ impl DoctorText for ProposalRenderDoctor {
         );
         output.push_str("\n\nAgent task:\n");
         output.push_str(&self.agent_request.instructions.task);
-        output.push_str("\nGaps:\n");
-        for gap in self.gaps {
-            output.push_str("  - ");
-            output.push_str(gap);
-            output.push('\n');
-        }
+        push_gaps(&mut output, self.gaps);
         output
     }
 }
@@ -377,14 +376,15 @@ struct ProposalMaterializeDoctor {
 
 impl DoctorText for ProposalMaterializeDoctor {
     fn to_text(&self) -> String {
-        let mut output = format!(
-            "Stage: {}\nProof: {}\nParent: {}\nPart: {}\nFiles written: {}\nBytes written: {}\n",
-            self.stage, self.proof, self.parent, self.part, self.files_written, self.bytes_written
-        );
+        let mut output = String::new();
+        push_field(&mut output, "Stage", self.stage);
+        push_field(&mut output, "Proof", self.proof);
+        push_field(&mut output, "Parent", &self.parent);
+        push_field(&mut output, "Part", &self.part);
+        push_field(&mut output, "Files written", self.files_written);
+        push_field(&mut output, "Bytes written", self.bytes_written);
         if let Some(local_mount) = &self.local_mount {
-            output.push_str("Local mount: ");
-            output.push_str(local_mount);
-            output.push('\n');
+            push_field(&mut output, "Local mount", local_mount);
         }
         output.push_str("\nWorkspace files:\n");
         for file in &self.files {
@@ -394,12 +394,7 @@ impl DoctorText for ProposalMaterializeDoctor {
             output.push_str(&file.bytes.to_string());
             output.push('\n');
         }
-        output.push_str("\nGaps:\n");
-        for gap in self.gaps {
-            output.push_str("  - ");
-            output.push_str(gap);
-            output.push('\n');
-        }
+        push_gaps(&mut output, self.gaps);
         output
     }
 }
@@ -418,21 +413,15 @@ struct ProposalRoundtripDoctor {
 
 impl DoctorText for ProposalRoundtripDoctor {
     fn to_text(&self) -> String {
-        let mut output = format!(
-            "Stage: {}\nProof: {}\nParent: {}\nChild: {}\nProposal count: {}\nInformed-by refs: {}\nEdited path: {}\n\nGaps:\n",
-            self.stage,
-            self.proof,
-            self.parent,
-            self.child,
-            self.proposal_count,
-            self.informed_by_count,
-            self.edited_path
-        );
-        for gap in self.gaps {
-            output.push_str("  - ");
-            output.push_str(gap);
-            output.push('\n');
-        }
+        let mut output = String::new();
+        push_field(&mut output, "Stage", self.stage);
+        push_field(&mut output, "Proof", self.proof);
+        push_field(&mut output, "Parent", &self.parent);
+        push_field(&mut output, "Child", &self.child);
+        push_field(&mut output, "Proposal count", self.proposal_count);
+        push_field(&mut output, "Informed-by refs", self.informed_by_count);
+        push_field(&mut output, "Edited path", &self.edited_path);
+        push_gaps(&mut output, self.gaps);
         output
     }
 }
