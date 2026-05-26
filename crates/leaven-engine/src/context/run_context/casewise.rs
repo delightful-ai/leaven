@@ -12,10 +12,8 @@ use crate::{
     graph::storage::AssessmentRecordTarget,
 };
 
-use super::{
-    RunContext, RunContextError, candidate_count, request_granularity, request_purpose,
-    resolved_kind,
-};
+use super::support::{candidate_count, request_granularity, request_purpose, resolved_kind};
+use super::{RunContext, RunContextError};
 
 struct CasewiseCacheMiss {
     index: usize,
