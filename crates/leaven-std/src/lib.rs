@@ -59,7 +59,7 @@ pub mod surfaces {
 pub mod prelude {
     //! Common standard-library imports.
 
-    pub use leaven_evidence::{
+    pub use crate::evidence::{
         AgentAnalystCallError, AgentAnalystCallEvidence, AgentAnalystCallEvidenceInput,
         AgentAnalystCallStatus, AgentAnalystFanoutError, AgentAnalystFanoutEvidence,
         AgentAnalystRole, AgentPatchMergeDecision, AgentPatchMergeNode, AgentPatchMergeNodeInput,
@@ -74,7 +74,7 @@ pub mod prelude {
         ScalarEvidenceError, SkillTrajectoryUseEvidence, SkillTrajectoryUseEvidenceError,
         SkillUseConfidence, SkillUseEvent, SkillUseEvidence, SkillUseKind, SkillUseSource,
     };
-    pub use leaven_population::{
+    pub use crate::populations::{
         BradleyTerryFit, KeepBest, ParetoFrontier, ParetoFrontierBuilder, PartitionFilter,
         SkillPairedRolloutUtilityInput, SkillPairedRolloutUtilityInputError,
         SkillPairedRolloutUtilityUpdates, SkillPruningCandidate, SkillRetrievalCandidate,
@@ -88,8 +88,8 @@ pub mod prelude {
         SkillUtilityState, SkillUtilityTransfer, SkillUtilityUpdate, TopKFrontier,
         TopKParentSelectionPolicy, TopKParentSelector, TournamentPopulation,
     };
-    pub use leaven_preference::{HigherScoreIsBetter, LowerScoreIsBetter};
-    pub use leaven_surface::{
+    pub use crate::preferences::{HigherScoreIsBetter, LowerScoreIsBetter};
+    pub use crate::surfaces::{
         EditSurface, Part, PartAddress, PartSelection, PartView, SurfaceError, SurfaceFingerprint,
     };
 
