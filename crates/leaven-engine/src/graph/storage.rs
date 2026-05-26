@@ -2,14 +2,12 @@
 
 use indexmap::IndexMap;
 use leaven_core::{
-    Artifact, ArtifactIdentity, AssessmentTarget, CausalInputs, EvaluationRequest, InfoRef,
-    OptimizationProblem, ProposalBatch, ProposalBatchSemantics, ProposalEffect, ProposalEffectKind,
-    ProposalProvenance, ResolvedEvaluationSet,
+    Artifact, CausalInputs, EvaluationRequest, InfoRef, OptimizationProblem, ProposalBatch,
+    ProposalEffect, ProposalEffectKind, ProposalProvenance, ResolvedEvaluationSet,
 };
 use leaven_kernel::{
-    ApplyAttemptId, AssessmentId, CandidateId, ErrorRecord, EvaluationRequestId, EvaluatorId,
-    EvidenceRef, Fingerprint, IterationId, MetadataBag, ProposalBatchId, ProposalId, RunId,
-    StageId, Timestamp, now,
+    ApplyAttemptId, AssessmentId, CandidateId, EvaluationRequestId, EvaluatorId, EvidenceRef,
+    Fingerprint, IterationId, MetadataBag, ProposalBatchId, ProposalId, RunId, StageId, now,
 };
 use serde::{Deserialize, Serialize};
 
@@ -17,121 +15,13 @@ use super::indices::GraphIndices;
 use crate::{ReadScope, RunEvent};
 
 mod errors;
+mod records;
 
 pub use errors::{ApplyProposalError, RunGraphRestoreError};
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(bound(serialize = "A: Serialize", deserialize = "A: Deserialize<'de>"))]
-pub struct CandidateRecord<A: Artifact> {
-    pub id: CandidateId,
-    pub identity: ArtifactIdentity,
-    pub artifact: A,
-    pub origin: CandidateOrigin,
-    pub created_at: Timestamp,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub enum CandidateOrigin {
-    Seed {
-        seed_index: usize,
-    },
-    Proposal {
-        proposal_id: ProposalId,
-        apply_attempt_id: ApplyAttemptId,
-    },
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ProposalBatchRecord {
-    pub id: ProposalBatchId,
-    pub stage: StageId,
-    pub semantics: ProposalBatchSemantics,
-    pub proposal_ids: Vec<ProposalId>,
-    pub metadata: MetadataBag,
-    pub created_at: Timestamp,
-    pub iteration: Option<IterationId>,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(bound(
-    serialize = "P::Artifact: Serialize, <P::Artifact as Artifact>::Change: Serialize, P::ProposalAnnotations: Serialize",
-    deserialize = "P::Artifact: Deserialize<'de>, <P::Artifact as Artifact>::Change: Deserialize<'de>, P::ProposalAnnotations: Deserialize<'de>"
-))]
-pub struct ProposalRecord<P: OptimizationProblem> {
-    pub id: ProposalId,
-    pub batch_id: ProposalBatchId,
-    pub effect: ProposalEffect<P>,
-    pub provenance: ProposalProvenance,
-    pub annotations: P::ProposalAnnotations,
-    pub metadata: MetadataBag,
-    pub created_at: Timestamp,
-}
-
-impl<P: OptimizationProblem> Clone for ProposalRecord<P> {
-    fn clone(&self) -> Self {
-        Self {
-            id: self.id,
-            batch_id: self.batch_id,
-            effect: self.effect.clone(),
-            provenance: self.provenance.clone(),
-            annotations: self.annotations.clone(),
-            metadata: self.metadata.clone(),
-            created_at: self.created_at,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ApplyAttemptRecord {
-    pub id: ApplyAttemptId,
-    pub proposal_id: ProposalId,
-    pub outcome: ApplyAttemptOutcome,
-    pub created_at: Timestamp,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum ApplyAttemptOutcome {
-    Success { candidate_id: CandidateId },
-    Failure { error: ErrorRecord },
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AssessmentRecord {
-    pub id: AssessmentId,
-    pub request_id: EvaluationRequestId,
-    pub evaluator: EvaluatorId,
-    pub target: AssessmentRecordTarget,
-    pub evidence: EvidenceRef,
-    pub metadata: MetadataBag,
-    pub created_at: Timestamp,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum AssessmentRecordTarget {
-    Independent {
-        candidate: CandidateId,
-        target: AssessmentTarget,
-    },
-    Pairwise {
-        left: CandidateId,
-        right: CandidateId,
-        target: AssessmentTarget,
-    },
-    Listwise {
-        candidates: Vec<CandidateId>,
-        target: AssessmentTarget,
-    },
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct EvaluationRequestRecord {
-    pub id: EvaluationRequestId,
-    pub evaluator: EvaluatorId,
-    pub evaluator_fingerprint: Fingerprint,
-    pub request: EvaluationRequest,
-    pub resolved_set: ResolvedEvaluationSet,
-    pub created_at: Timestamp,
-}
+pub use records::{
+    ApplyAttemptOutcome, ApplyAttemptRecord, AssessmentRecord, AssessmentRecordTarget,
+    CandidateOrigin, CandidateRecord, EvaluationRequestRecord, ProposalBatchRecord, ProposalRecord,
+};
 
 pub struct RunGraph<P: OptimizationProblem> {
     pub(crate) run_id: RunId,
@@ -740,14 +630,4 @@ where
     }
     map.insert(key, value);
     Ok(())
-}
-
-impl AssessmentRecordTarget {
-    pub(crate) fn candidates(&self) -> Vec<CandidateId> {
-        match self {
-            Self::Independent { candidate, .. } => vec![*candidate],
-            Self::Pairwise { left, right, .. } => vec![*left, *right],
-            Self::Listwise { candidates, .. } => candidates.clone(),
-        }
-    }
 }

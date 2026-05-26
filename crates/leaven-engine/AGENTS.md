@@ -42,26 +42,25 @@ must not reach into graph storage to make progress.
   owns traits and orchestration, not concrete providers or backends.
 
 ## Proof Anchors
-- `tests/graph_surface.rs` proves graph mutation through `RunContext`,
+- `tests/engine_contract.rs::graph_surface` proves graph mutation through `RunContext`,
   lineage/view behavior, snapshot restore validation, and proposal/evaluation
   record consistency.
-- `tests/context_services.rs` is the fastest broad check for finalizing context
+- `tests/engine_contract.rs::context_services` is the fastest broad check for finalizing context
   services: evaluation requests, evidence storage, cache status, callbacks,
   trust refusals, and budget/event side effects.
-- `tests/context_services.rs::evaluation_requests_record_evaluator_fingerprint_as_runtime_job_identity`
+- `tests/engine_contract.rs::context_services::evaluation_requests_record_evaluator_fingerprint_as_runtime_job_identity`
   proves `RunContext` records evaluator fingerprints on evaluation request
   records even when the evaluator ID is unchanged. It is not public-seam job
   closeout by itself; deadline, capability fingerprint, base revision, and
   public job projection still need their owning primitives.
-- `tests/stage_trait_contracts.rs` proves static and dynamic stage trait
+- `tests/engine_contract.rs::stage_trait_contracts` proves static and dynamic stage trait
   contracts without moving strategy state into engine internals. It still uses
   raw stage contexts as dispatch fixtures; do not cite it alone as proof of the
   public finalization path.
-- `tests/engine_loop.rs` proves run loop, callbacks, trust policy,
+- `tests/engine_contract.rs::engine_loop` proves run loop, callbacks, trust policy,
   checkpointing, persistence envelopes, and cache restoration.
-- `tests/context_services.rs`, `tests/evaluator_registry.rs`,
-  `tests/case_set_resolution.rs`, `tests/budget_laws.rs`, and
-  `tests/trust_policy.rs` are narrow proof anchors for their named services.
+- `tests/engine_contract.rs::{context_services,evaluator_registry,case_set_resolution,budget_laws,trust_policy}`
+  are narrow proof anchors for their named services.
 - `cargo nextest run -p leaven-engine` proves engine-local execution contracts.
 - `cargo test -p leaven --test topology_contract` proves dependency edges when
   this crate's manifest or public exports change.
@@ -71,13 +70,13 @@ must not reach into graph storage to make progress.
   do: put mutation behind `RunContext` or an adjacent private engine service
   preserve: append-only graph records, causal vs informational lineage, and typed failed-apply evidence
   avoid: exposing `RunGraph` storage or constructors so callers/tests can mutate directly
-  verify: run `cargo nextest run -p leaven-engine --test graph_surface`
+  verify: run `cargo test -p leaven-engine --test engine_contract graph_surface`
 
 - when: adding a costful stage path or letting optimizer authors call a stage
   do: route through a `RunContext` finalizer such as `propose`, `record_proposal_batch`, `apply_batch`, `evaluate`, or `evaluate_with`
   preserve: one place for graph writes, budget charge, cache status, event emission, trust checks, evidence storage, and checkpointing
   avoid: making `proposal_context`, `evaluation_context`, `render_context`, or `materialize_context` the ordinary public path; those are current public holes and should be treated as raw/non-finalizing until sealed
-  verify: run `cargo nextest run -p leaven-engine --test context_services --test stage_trait_contracts`
+  verify: run `cargo test -p leaven-engine --test engine_contract context_services` and `cargo test -p leaven-engine --test engine_contract stage_trait_contracts`
 
 - when: adding a cache, checkpoint, trust, or budget rule shared by optimizers
   do: implement the execution policy here and keep strategy-specific decisions in optimizer crates
@@ -89,13 +88,13 @@ must not reach into graph storage to make progress.
   do: prove the resolved data exposure, not just the syntax of `EvaluationSet`
   preserve: validation/test hiding for optimizer and proposer search, including explicit case-id requests
   avoid: relying on `EvaluationSet::Cases` as a bypass around hidden partitions; the audit marks unresolved-shape trust checks as incomplete
-  verify: run `cargo nextest run -p leaven-engine --test trust_policy --test case_set_resolution --test context_services`
+  verify: run `cargo test -p leaven-engine --test engine_contract trust_policy`, `cargo test -p leaven-engine --test engine_contract case_set_resolution`, and `cargo test -p leaven-engine --test engine_contract context_services`
 
 - when: changing engine evaluation cache behavior
   do: key by semantic request shape and make cache hits graph-visible for the current request
   preserve: request kind, granularity, purpose, pair/listwise semantics, case-set identity, evaluator fingerprint, and candidate cache identities
   avoid: treating engine `EvaluationCache` as the LM response cache or as proof of Layer 1 runtime/cache roles
-  verify: run `cargo nextest run -p leaven-engine --test context_services --test evaluator_registry`
+  verify: run `cargo test -p leaven-engine --test engine_contract context_services` and `cargo test -p leaven-engine --test engine_contract evaluator_registry`
 
 ## Local Bait
 - `docs/specs/public-seam-v1/` locks the engine-bearing facts of the public
