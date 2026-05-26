@@ -4480,8 +4480,6 @@ dependencies = [
 name = "p5_evoskill_iteration"
 version = "0.0.0"
 dependencies = [
- "bytes",
- "leaven",
  "leaven-agent",
  "leaven-agent-codex-cli",
  "leaven-agentic",
@@ -4495,7 +4493,6 @@ dependencies = [
  "leaven-population",
  "leaven-store",
  "leaven-store-file",
- "leaven-surface",
  "leaven-workspace",
  "leaven-workspace-local",
  "serde",

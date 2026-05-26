@@ -11,8 +11,6 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-bytes = { workspace = true }
-leaven = { workspace = true, features = ["std"] }
 leaven-agent = { workspace = true }
 leaven-agent-codex-cli = { workspace = true }
 leaven-agentic = { workspace = true }
@@ -26,7 +24,6 @@ leaven-kernel = { workspace = true }
 leaven-population = { workspace = true }
 leaven-store = { workspace = true }
 leaven-store-file = { workspace = true }
-leaven-surface = { workspace = true }
 leaven-workspace = { workspace = true }
 leaven-workspace-local = { workspace = true }
 serde = { workspace = true }
