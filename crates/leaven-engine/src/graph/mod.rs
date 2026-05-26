@@ -1,7 +1,6 @@
 //! Append-only run graph.
 
 pub mod indices;
-pub mod query;
 mod scoped_view;
 pub mod storage;
 mod view;
