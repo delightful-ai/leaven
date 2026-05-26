@@ -21,8 +21,6 @@ This means a way to tell if something is good (numbers), valid (binary), or if i
 
 You should also be able to provide rich feedback on failures, though for agentic optimization, this is less necessary.
 
-You can use any number of these, combined, as signal for leaven to make your shit bubble n bake.
-
 ## How It Optimizes Anything
 
 The loop is small. Five moves per iteration:
