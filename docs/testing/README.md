@@ -210,18 +210,15 @@ Use the narrowest layer that proves the claim.
   materialization/readback, workspace proposal parsing, patch-plan validation,
   atomic patch application, change reporting, and rollback evidence for failed
   atomic application.
-- `crates/leaven-evidence/tests/scalar.rs`,
-  `crates/leaven-evidence/tests/command.rs`,
-  `crates/leaven-evidence/tests/casewise.rs`,
-  `crates/leaven-evidence/tests/attribution.rs`,
+- `crates/leaven-evidence/tests/evidence_contract.rs`,
   `crates/leaven-preference/tests/scalar.rs`,
-  `crates/leaven-population/tests/keep_best.rs`, and
+  `crates/leaven-population/tests/population_contract.rs`, and
   `crates/leaven-store-inline/tests/evidence.rs`: finite scalar,
   command/trajectory, analyst fan-out, patch merge-tree, attribution evidence,
   scalar preference, keep-best, and inline store behavior now covered by the
   canonical coverage gate.
 - `crates/leaven-population/tests/population_contract.rs` and
-  `crates/leaven-gepa/tests/gepa_smoke.rs`: P3 casewise Pareto frontier laws,
+  `crates/leaven-gepa/tests/gepa_contract.rs`: P3 casewise Pareto frontier laws,
   partition filtering, GEPA surface ownership, surface-edit lowering, candidate
   selector separation, and proposer read-scope coverage.
 - `crates/leaven-core/tests/proposal_contract.rs`: cold proposal constructors,

@@ -99,12 +99,12 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
   standard population implementations.
 
 ## Proof Anchors
-- `cargo nextest run -p leaven-population` proves keep-best, top-k frontier,
+- `cargo test -p leaven-population` proves keep-best, top-k frontier,
   top-k parent selector, tournament, skill utility state, paired rollout skill
   credit application, step-trajectory and skill-use-evidence credit extraction,
   two-stage routed skill retrieval, utility-guided skill pruning plans, and
   Pareto/frontier population laws, including finite fitted updates and partition
   filtering. It does not prove future beam, novelty, no-population, map-elites,
   lenient Pareto, Plackett-Luce, or tournament-config names.
-- `cargo nextest run -p leaven-gepa --test gepa_smoke` proves GEPA consumes population state without moving GEPA selectors or gates into this crate.
-- `cargo nextest run -p leaven --test scalar_keep_best --test pairwise_tournament --test gepa_parity` proves mature population implementations participate in public end-to-end workflows through the umbrella surface. It is not proof for placeholder population names.
+- `cargo test -p leaven-gepa --test gepa_contract gepa_smoke` proves GEPA consumes population state without moving GEPA selectors or gates into this crate.
+- `cargo test -p leaven --test scalar_keep_best --test pairwise_tournament --test gepa_parity` proves mature population implementations participate in public end-to-end workflows through the umbrella surface. It is not proof for placeholder population names.

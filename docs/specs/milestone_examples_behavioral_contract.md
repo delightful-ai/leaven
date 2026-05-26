@@ -10,7 +10,6 @@ examples under `examples/` count as real. It is subordinate to:
 - root `Cargo.toml` and `crates/leaven/tests/topology_contract.rs` for live
   crate topology
 - `docs/specs/guiding_principles.md`
-- `docs/specs/p1_scalar_keep_best_verification_contract.md`
 
 When this document disagrees with those specs, preserve the live topology:
 `leaven-core` stays cold, `leaven-engine` owns graph/context/runtime behavior,
@@ -474,18 +473,18 @@ Engine returns candidate whose artifact is "aaa"
 
 Unit tests:
 
-- `crates/leaven-evidence/tests/scalar.rs`
+- `crates/leaven-evidence/tests/evidence_contract/scalar.rs`
 - `crates/leaven-preference/tests/scalar.rs`
-- `crates/leaven-population/tests/keep_best.rs`
+- `crates/leaven-population/tests/population_contract/keep_best.rs`
 
 ### Verification
 
 ```bash
 cargo run -p p1_keep_best
-cargo nextest run -p leaven --test scalar_keep_best
-cargo nextest run -p leaven-evidence --test scalar
-cargo nextest run -p leaven-preference --test scalar
-cargo nextest run -p leaven-population --test keep_best
+cargo test -p leaven --test scalar_keep_best
+cargo test -p leaven-evidence --test evidence_contract scalar
+cargo test -p leaven-preference --test scalar
+cargo test -p leaven-population --test population_contract keep_best
 ```
 
 ## P2: Pairwise Tournament
@@ -685,8 +684,8 @@ print winner, judgment, ability scores
 
 ### Required Tests
 
-- `crates/leaven-evidence/tests/pairwise.rs`
-- `crates/leaven-population/tests/tournament.rs`
+- `crates/leaven-evidence/tests/evidence_contract/pairwise.rs`
+- `crates/leaven-population/tests/population_contract/tournament.rs`
 - `crates/leaven-engine/tests/engine_contract.rs::evaluator_registry`
 - example command below
 
@@ -701,8 +700,8 @@ Property tests:
 
 ```bash
 cargo run -p p2_pairwise_tournament
-cargo nextest run -p leaven-evidence --test pairwise
-cargo nextest run -p leaven-population --test tournament
+cargo test -p leaven-evidence --test evidence_contract pairwise
+cargo test -p leaven-population --test population_contract tournament
 cargo test -p leaven-engine --test engine_contract evaluator_registry
 ```
 
@@ -880,9 +879,9 @@ best candidate reflects improved part
 
 ### Required Tests
 
-- `crates/leaven-evidence/tests/casewise.rs`
-- `crates/leaven-population/tests/pareto_frontier.rs`
-- `crates/leaven-gepa/tests/gepa_smoke.rs`
+- `crates/leaven-evidence/tests/evidence_contract/casewise.rs`
+- `crates/leaven-population/tests/population_contract/pareto_frontier.rs`
+- `crates/leaven-gepa/tests/gepa_contract/gepa_smoke.rs`
 - example command below
 
 Property tests:
@@ -895,9 +894,9 @@ Property tests:
 
 ```bash
 cargo run -p p3_gepa_parity
-cargo nextest run -p leaven-evidence --test casewise
-cargo nextest run -p leaven-population --test pareto_frontier
-cargo nextest run -p leaven-gepa --test gepa_smoke
+cargo test -p leaven-evidence --test evidence_contract casewise
+cargo test -p leaven-population --test population_contract pareto_frontier
+cargo test -p leaven-gepa --test gepa_contract gepa_smoke
 ```
 
 ## P4: Meta-Harness Lite
@@ -1058,8 +1057,8 @@ Property tests:
 
 ```bash
 cargo run -p p4_meta_harness_lite
-cargo nextest run -p leaven-workspace --test workspace_path
-cargo nextest run -p leaven-engine --test materializer_contract
+cargo test -p leaven-workspace --test workspace_path
+cargo test -p leaven-engine --test engine_contract materializer_contract
 ```
 
 ## Milestone Gate
