@@ -103,7 +103,7 @@ pub mod prelude {
     };
 
     #[cfg(feature = "jj")]
-    pub use leaven_artifact_jj::{JjArtifact, JjArtifactError, JjChange};
+    pub use leaven_artifact_jj::{JjArtifact, JjChange};
 
     #[cfg(feature = "skill")]
     pub use leaven_artifact_skill::{

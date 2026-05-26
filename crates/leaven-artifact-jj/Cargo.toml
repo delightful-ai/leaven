@@ -16,7 +16,6 @@ leaven-core = { workspace = true }
 leaven-stage = { workspace = true }
 leaven-workspace = { workspace = true }
 serde = { workspace = true }
-thiserror = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }

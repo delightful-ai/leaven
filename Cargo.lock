@@ -3328,7 +3328,6 @@ dependencies = [
  "leaven-workspace",
  "leaven-workspace-local",
  "serde",
- "thiserror 2.0.18",
 ]
 
 [[package]]
