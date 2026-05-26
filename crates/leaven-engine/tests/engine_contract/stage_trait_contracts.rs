@@ -10,7 +10,7 @@ use leaven_engine::{
 };
 use leaven_kernel::{Cost, EvaluatorId, Fingerprint, MetadataBag, Metered, ProposerId, StageId};
 
-use super::support::{TestEvidence, TestProblem, TextArtifact, graph_and_budget};
+use super::support::{TestEvidence, TestProblem, TextArtifact, graph_and_budget, text_artifact};
 
 #[test]
 fn dyn_proposer_delegates_to_static_proposer() {
@@ -65,7 +65,7 @@ fn dyn_evaluator_delegates_to_static_evaluator() {
         let (mut graph, mut budget) = graph_and_budget();
         let candidate = {
             let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            ctx.insert_seed(TextArtifact("abc".to_owned()), 0).unwrap()
+            ctx.insert_seed(text_artifact("abc"), 0).unwrap()
         };
         let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
         let evaluator = ContractEvaluator;

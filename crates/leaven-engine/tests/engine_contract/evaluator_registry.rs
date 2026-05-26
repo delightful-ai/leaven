@@ -19,7 +19,7 @@ use leaven_kernel::{
 use leaven_store::EvidenceStore;
 use leaven_store_inline::InlineEvidenceStore;
 
-use super::support::{TestEvidence, TestProblem, TextArtifact};
+use super::support::{TestEvidence, TestProblem, text_artifact};
 
 #[test]
 fn engine_dispatches_registered_evaluator_through_run_context() {
@@ -30,9 +30,7 @@ fn engine_dispatches_registered_evaluator_through_run_context() {
             .budget(Budget::metric_calls(10))
             .evaluator(RegisteredEvaluator)
             .build();
-        let seed = engine
-            .insert_seed(TextArtifact("seed".to_owned()), 0)
-            .unwrap();
+        let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
         let mut optimizer = RegistryOptimizer {
             seed,
             best: None,
@@ -73,9 +71,7 @@ fn registry_evaluation_refuses_unknown_evaluator_without_mutation() {
         let mut engine = optimize::<TestProblem>()
             .budget(Budget::metric_calls(10))
             .build();
-        let seed = engine
-            .insert_seed(TextArtifact("seed".to_owned()), 0)
-            .unwrap();
+        let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
         let mut optimizer = MissingEvaluatorOptimizer {
             seed,
             saw_unknown: false,
@@ -103,12 +99,8 @@ fn ordered_pairwise_registry_cache_keeps_reversed_pairs_distinct() {
             .budget(Budget::metric_calls(10))
             .evaluator(OrderedPairwiseEvaluator)
             .build();
-        let left = engine
-            .insert_seed(TextArtifact("left".to_owned()), 0)
-            .unwrap();
-        let right = engine
-            .insert_seed(TextArtifact("right".to_owned()), 1)
-            .unwrap();
+        let left = engine.insert_seed(text_artifact("left"), 0).unwrap();
+        let right = engine.insert_seed(text_artifact("right"), 1).unwrap();
         let mut optimizer = ReversedOrderedPairCacheOptimizer { left, right };
 
         let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
@@ -148,9 +140,7 @@ fn registered_deterministic_evaluator_reuses_cache_for_identical_request() {
                 cache_policy: CachePolicy::Deterministic,
             })
             .build();
-        let seed = engine
-            .insert_seed(TextArtifact("seed".to_owned()), 0)
-            .unwrap();
+        let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
         let mut optimizer = RepeatRegisteredEvaluation { seed };
 
         let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
@@ -176,9 +166,7 @@ fn registered_casewise_evaluation_batches_misses_and_reuses_single_case_cache() 
                 cache_policy: CachePolicy::Deterministic,
             })
             .build();
-        let seed = engine
-            .insert_seed(TextArtifact("seed".to_owned()), 0)
-            .unwrap();
+        let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
         let mut optimizer = RepeatCasewiseEvaluation { seed };
 
         let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
@@ -198,9 +186,7 @@ fn registered_casewise_unknown_evaluator_records_error_without_mutation() {
         let mut engine = optimize::<TestProblem>()
             .budget(Budget::metric_calls(10))
             .build();
-        let seed = engine
-            .insert_seed(TextArtifact("seed".to_owned()), 0)
-            .unwrap();
+        let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
         let mut optimizer = CasewiseErrorOptimizer {
             seed,
             set: EvaluationSet::All,
@@ -230,9 +216,7 @@ fn registered_casewise_hidden_partition_is_refused_before_request_recording() {
             .trust_policy(TrustPolicy::default().hide_from_optimizers([secret.clone()]))
             .evaluator(CasewiseRegisteredEvaluator::good())
             .build();
-        let seed = engine
-            .insert_seed(TextArtifact("seed".to_owned()), 0)
-            .unwrap();
+        let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
         let mut optimizer = CasewiseErrorOptimizer {
             seed,
             set: EvaluationSet::Partition(secret),
@@ -262,9 +246,7 @@ fn registered_casewise_evaluator_error_records_dyn_stage_error() {
                 ..CasewiseRegisteredEvaluator::good()
             })
             .build();
-        let seed = engine
-            .insert_seed(TextArtifact("seed".to_owned()), 0)
-            .unwrap();
+        let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
         let mut optimizer = CasewiseErrorOptimizer {
             seed,
             set: EvaluationSet::All,
@@ -297,9 +279,7 @@ fn registered_casewise_batch_requires_case_targets() {
                 ..CasewiseRegisteredEvaluator::good()
             })
             .build();
-        let seed = engine
-            .insert_seed(TextArtifact("seed".to_owned()), 0)
-            .unwrap();
+        let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
         let mut optimizer = CasewiseErrorOptimizer {
             seed,
             set: EvaluationSet::All,
@@ -326,9 +306,7 @@ fn registered_casewise_batch_requires_every_requested_case() {
                 ..CasewiseRegisteredEvaluator::good()
             })
             .build();
-        let seed = engine
-            .insert_seed(TextArtifact("seed".to_owned()), 0)
-            .unwrap();
+        let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
         let mut optimizer = CasewiseErrorOptimizer {
             seed,
             set: EvaluationSet::All,
@@ -353,9 +331,7 @@ fn registered_casewise_batch_rejects_rows_outside_requested_cases() {
                 ..CasewiseRegisteredEvaluator::good()
             })
             .build();
-        let seed = engine
-            .insert_seed(TextArtifact("seed".to_owned()), 0)
-            .unwrap();
+        let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
         let mut optimizer = CasewiseErrorOptimizer {
             seed,
             set: EvaluationSet::All,
@@ -382,9 +358,7 @@ fn registered_casewise_batch_rejects_duplicate_rows_for_requested_cases() {
                 ..CasewiseRegisteredEvaluator::good()
             })
             .build();
-        let seed = engine
-            .insert_seed(TextArtifact("seed".to_owned()), 0)
-            .unwrap();
+        let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
         let mut optimizer = CasewiseErrorOptimizer {
             seed,
             set: EvaluationSet::All,
@@ -408,9 +382,7 @@ fn registered_evaluator_error_records_dyn_stage_error() {
             .budget(Budget::metric_calls(10))
             .evaluator(FailingRegisteredEvaluator)
             .build();
-        let seed = engine
-            .insert_seed(TextArtifact("seed".to_owned()), 0)
-            .unwrap();
+        let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
         let mut optimizer = FailingRegisteredEvaluation { seed };
 
         let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
@@ -438,9 +410,7 @@ fn registered_evaluation_hidden_partition_is_refused_before_request_recording() 
             .trust_policy(TrustPolicy::default().hide_from_optimizers([secret.clone()]))
             .evaluator(RegisteredEvaluator)
             .build();
-        let seed = engine
-            .insert_seed(TextArtifact("seed".to_owned()), 0)
-            .unwrap();
+        let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
         let mut optimizer = HiddenPartitionRegistryEvaluation {
             seed,
             secret,

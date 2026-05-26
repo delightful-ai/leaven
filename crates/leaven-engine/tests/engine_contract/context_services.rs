@@ -23,7 +23,7 @@ use leaven_kernel::{
 use leaven_store::{EvidenceStore, StoreError};
 use leaven_store_inline::{InlineEvidenceStore, InlineStore};
 
-use super::support::{TestEvidence, TestProblem, TextArtifact, graph_and_budget};
+use super::support::{TestEvidence, TestProblem, TextArtifact, graph_and_budget, text_artifact};
 
 #[test]
 fn case_reads_installed_case_set_and_is_none_without_one() {
@@ -148,9 +148,7 @@ fn proposal_context_exposes_read_scope_graph_and_budget_snapshot() {
         let hidden = PartitionId::from("hidden");
         {
             let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            seed_ctx
-                .insert_seed(TextArtifact("abc".to_owned()), 0)
-                .unwrap();
+            seed_ctx.insert_seed(text_artifact("abc"), 0).unwrap();
         }
         let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
             .with_trust_policy(TrustPolicy::default().hide_from_proposers([hidden.clone()]));
@@ -168,9 +166,7 @@ fn render_context_exposes_renderer_scope_graph_and_budget_snapshot() {
     let (mut graph, mut budget) = graph_and_budget();
     let candidate = {
         let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-        seed_ctx
-            .insert_seed(TextArtifact("abc".to_owned()), 0)
-            .unwrap()
+        seed_ctx.insert_seed(text_artifact("abc"), 0).unwrap()
     };
     let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget).with_trust_policy(
         TrustPolicy::default().hide_from_optimizers([PartitionId::from("optimizer-hidden")]),
@@ -223,9 +219,7 @@ fn evaluate_with_resolves_sets_stores_evidence_and_emits_events() {
         let store = InlineEvidenceStore::<TestEvidence>::new("inline");
         let candidate = {
             let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            seed_ctx
-                .insert_seed(TextArtifact("abc".to_owned()), 0)
-                .unwrap()
+            seed_ctx.insert_seed(text_artifact("abc"), 0).unwrap()
         };
         let evaluator = CountingEvaluator::new(CachePolicy::Never);
         let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
@@ -312,9 +306,7 @@ fn evaluation_requests_record_evaluator_fingerprint_as_runtime_job_identity() {
         let store = InlineEvidenceStore::<TestEvidence>::new("inline");
         let candidate = {
             let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            seed_ctx
-                .insert_seed(TextArtifact("abc".to_owned()), 0)
-                .unwrap()
+            seed_ctx.insert_seed(text_artifact("abc"), 0).unwrap()
         };
         let first = CountingEvaluator::new(CachePolicy::Never);
         let second = FingerprintedEvaluator {
@@ -382,15 +374,9 @@ fn pairwise_and_listwise_evaluations_record_non_independent_targets() {
         let candidates = {
             let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
             vec![
-                seed_ctx
-                    .insert_seed(TextArtifact("a".to_owned()), 0)
-                    .unwrap(),
-                seed_ctx
-                    .insert_seed(TextArtifact("b".to_owned()), 1)
-                    .unwrap(),
-                seed_ctx
-                    .insert_seed(TextArtifact("c".to_owned()), 2)
-                    .unwrap(),
+                seed_ctx.insert_seed(text_artifact("a"), 0).unwrap(),
+                seed_ctx.insert_seed(text_artifact("b"), 1).unwrap(),
+                seed_ctx.insert_seed(text_artifact("c"), 2).unwrap(),
             ]
         };
         let evaluator = ShapeEvaluator;
@@ -482,9 +468,7 @@ fn evaluation_error_records_request_and_stage_error_without_assessment_mutation(
         let store = InlineEvidenceStore::<TestEvidence>::new("inline");
         let candidate = {
             let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            seed_ctx
-                .insert_seed(TextArtifact("abc".to_owned()), 0)
-                .unwrap()
+            seed_ctx.insert_seed(text_artifact("abc"), 0).unwrap()
         };
         let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
             .with_case_set(&case_set)
@@ -530,9 +514,7 @@ fn metered_evaluation_errors_charge_budget_before_error_return() {
         let store = InlineEvidenceStore::<TestEvidence>::new("inline");
         let candidate = {
             let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            seed_ctx
-                .insert_seed(TextArtifact("abc".to_owned()), 0)
-                .unwrap()
+            seed_ctx.insert_seed(text_artifact("abc"), 0).unwrap()
         };
         let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
             .with_case_set(&case_set)
@@ -566,9 +548,7 @@ fn evidence_store_error_records_stage_error_after_request_without_assessment_mut
         let store = RejectingEvidenceStore;
         let candidate = {
             let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            seed_ctx
-                .insert_seed(TextArtifact("abc".to_owned()), 0)
-                .unwrap()
+            seed_ctx.insert_seed(text_artifact("abc"), 0).unwrap()
         };
         let evaluator = CountingEvaluator::new(CachePolicy::Never);
         let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
@@ -614,9 +594,7 @@ fn evaluation_requires_case_set_and_evidence_store() {
         let case_set = CaseSet::new(vec!["case"]);
         let candidate = {
             let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            seed_ctx
-                .insert_seed(TextArtifact("abc".to_owned()), 0)
-                .unwrap()
+            seed_ctx.insert_seed(text_artifact("abc"), 0).unwrap()
         };
         let evaluator = CountingEvaluator::new(CachePolicy::Never);
 
@@ -661,9 +639,7 @@ fn deterministic_evaluation_cache_skips_second_evaluator_call() {
         let store = InlineEvidenceStore::<TestEvidence>::new("inline");
         let candidate = {
             let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            seed_ctx
-                .insert_seed(TextArtifact("abcd".to_owned()), 0)
-                .unwrap()
+            seed_ctx.insert_seed(text_artifact("abcd"), 0).unwrap()
         };
         let evaluator = CountingEvaluator::new(CachePolicy::Deterministic);
 
@@ -703,12 +679,8 @@ fn casewise_cache_hit_rematerializes_rows_for_same_content_candidate() {
         let (first_candidate, second_candidate) = {
             let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
             (
-                seed_ctx
-                    .insert_seed(TextArtifact("abcd".to_owned()), 0)
-                    .unwrap(),
-                seed_ctx
-                    .insert_seed(TextArtifact("abcd".to_owned()), 1)
-                    .unwrap(),
+                seed_ctx.insert_seed(text_artifact("abcd"), 0).unwrap(),
+                seed_ctx.insert_seed(text_artifact("abcd"), 1).unwrap(),
             )
         };
         let evaluator = CountingEvaluator::new(CachePolicy::Deterministic);
@@ -778,9 +750,7 @@ fn deterministic_evaluation_cache_restores_from_checkpoint_without_recalling_eva
         let persistence = StoreRunPersistence::new(InlineStore::new("run"));
         let candidate = {
             let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            seed_ctx
-                .insert_seed(TextArtifact("abcd".to_owned()), 0)
-                .unwrap()
+            seed_ctx.insert_seed(text_artifact("abcd"), 0).unwrap()
         };
         let evaluator = CountingEvaluator::new(CachePolicy::Deterministic);
 
@@ -832,9 +802,7 @@ fn deterministic_evaluation_ignores_cache_entries_with_missing_graph_assessments
         let store = InlineEvidenceStore::<TestEvidence>::new("inline");
         let candidate = {
             let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            seed_ctx
-                .insert_seed(TextArtifact("abcd".to_owned()), 0)
-                .unwrap()
+            seed_ctx.insert_seed(text_artifact("abcd"), 0).unwrap()
         };
         let mut content = [0; 32];
         content[..4].copy_from_slice(b"abcd");
@@ -874,9 +842,7 @@ fn deterministic_evaluation_without_cache_store_reports_unavailable_bypass() {
         let store = InlineEvidenceStore::<TestEvidence>::new("inline");
         let candidate = {
             let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            seed_ctx
-                .insert_seed(TextArtifact("abcd".to_owned()), 0)
-                .unwrap()
+            seed_ctx.insert_seed(text_artifact("abcd"), 0).unwrap()
         };
         let evaluator = CountingEvaluator::new(CachePolicy::Deterministic);
 
@@ -920,7 +886,7 @@ fn deterministic_evaluation_cache_bypasses_external_artifacts_without_cache_iden
         let candidate = {
             let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
             seed_ctx
-                .insert_seed(TextArtifact("external:branch-main".to_owned()), 0)
+                .insert_seed(text_artifact("external:branch-main"), 0)
                 .unwrap()
         };
         let evaluator = CountingEvaluator::new(CachePolicy::Deterministic);
@@ -966,9 +932,7 @@ fn no_cache_policy_invokes_evaluator_and_records_each_request() {
         let store = InlineEvidenceStore::<TestEvidence>::new("inline");
         let candidate = {
             let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            seed_ctx
-                .insert_seed(TextArtifact("abc".to_owned()), 0)
-                .unwrap()
+            seed_ctx.insert_seed(text_artifact("abc"), 0).unwrap()
         };
         let evaluator = CountingEvaluator::new(CachePolicy::Never);
 
@@ -1042,9 +1006,7 @@ fn evaluate_budget_exhaustion_records_request_without_assessment_mutation() {
         let store = InlineEvidenceStore::<TestEvidence>::new("inline");
         let candidate = {
             let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            seed_ctx
-                .insert_seed(TextArtifact("abc".to_owned()), 0)
-                .unwrap()
+            seed_ctx.insert_seed(text_artifact("abc"), 0).unwrap()
         };
         let evaluator = CountingEvaluator::new(CachePolicy::Never);
         let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
@@ -1084,9 +1046,7 @@ fn read_scope_hides_assessments_from_forbidden_partitions() {
         );
         let candidate = {
             let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            seed_ctx
-                .insert_seed(TextArtifact("abc".to_owned()), 0)
-                .unwrap()
+            seed_ctx.insert_seed(text_artifact("abc"), 0).unwrap()
         };
         let evaluator = CountingEvaluator::new(CachePolicy::Never);
         let report = {
@@ -1130,9 +1090,7 @@ fn stage_engine_context_uses_scoped_graph_without_exposing_raw_view() {
         );
         let candidate = {
             let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            seed_ctx
-                .insert_seed(TextArtifact("abc".to_owned()), 0)
-                .unwrap()
+            seed_ctx.insert_seed(text_artifact("abc"), 0).unwrap()
         };
         let evaluator = CountingEvaluator::new(CachePolicy::Never);
         let report = {
@@ -1196,9 +1154,7 @@ fn hidden_partition_evaluation_request_records_trust_violation_without_mutation(
         let secret = PartitionId::from("secret");
         let candidate = {
             let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            seed_ctx
-                .insert_seed(TextArtifact("abc".to_owned()), 0)
-                .unwrap()
+            seed_ctx.insert_seed(text_artifact("abc"), 0).unwrap()
         };
         let evaluator = CountingEvaluator::new(CachePolicy::Never);
         let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
@@ -1249,9 +1205,7 @@ fn callbacks_receive_callback_read_scope() {
             .with_partition(secret.clone(), vec![leaven_kernel::CaseId::from_index(0)]);
         let candidate = {
             let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            seed_ctx
-                .insert_seed(TextArtifact("abc".to_owned()), 0)
-                .unwrap()
+            seed_ctx.insert_seed(text_artifact("abc"), 0).unwrap()
         };
         let assessment_id = {
             let evaluator = CountingEvaluator::new(CachePolicy::Never);
@@ -1308,9 +1262,7 @@ fn read_scope_hides_nested_assessment_sets_that_reference_forbidden_partitions()
             .with_partition(public.clone(), vec![leaven_kernel::CaseId::new(1)]);
         let candidate = {
             let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            seed_ctx
-                .insert_seed(TextArtifact("abc".to_owned()), 0)
-                .unwrap()
+            seed_ctx.insert_seed(text_artifact("abc"), 0).unwrap()
         };
         let evaluator = CountingEvaluator::new(CachePolicy::Never);
         let mut assessment_ids = Vec::new();
@@ -1469,7 +1421,7 @@ impl Proposer<TestProblem> for StageAttemptProposer {
         }
         Ok(Metered::new(
             ProposalBatch {
-                proposals: vec![Proposal::create(TextArtifact("stage".to_owned())).build()],
+                proposals: vec![Proposal::create(text_artifact("stage")).build()],
                 semantics: ProposalBatchSemantics::Alternatives,
                 metadata: MetadataBag::new(),
             },

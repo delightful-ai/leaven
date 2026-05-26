@@ -18,16 +18,18 @@ use leaven_kernel::{Cost, EvaluatorId, Fingerprint, MetadataBag, Metered, RunId,
 use leaven_store_inline::InlineEvidenceStore;
 use leaven_workspace::{Workspace, WorkspaceBackend, WorkspaceError, WorkspacePath, WorkspaceView};
 
-use super::support::{TestEvidence, TestProblem, TextArtifact, graph_and_budget, record_one};
+use super::support::{
+    TestEvidence, TestProblem, TextArtifact, graph_and_budget, record_one, text_artifact,
+};
 
 #[test]
 fn materializer_writes_are_deterministic_for_same_graph_view_and_input() {
     block_on(async {
         let (mut graph, mut budget) = graph_and_budget();
         let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-        ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap();
+        ctx.insert_seed(text_artifact("seed"), 0).unwrap();
         let materializer = DeterministicMaterializer;
-        let value = TextArtifact("artifact".to_owned());
+        let value = text_artifact("artifact");
         let left_root = temp_root("materializer-left");
         let right_root = temp_root("materializer-right");
         let mut left_workspace = fs_workspace(left_root.clone());
@@ -80,7 +82,7 @@ fn materializer_invoked_from_proposer_receives_proposer_read_scope() {
             .with_partition(hidden.clone(), vec![leaven_kernel::CaseId::new(0)]);
         let candidate = {
             let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap()
+            ctx.insert_seed(text_artifact("seed"), 0).unwrap()
         };
         let assessment = {
             let evaluator = TestEvaluator;
@@ -115,7 +117,7 @@ fn materializer_invoked_from_proposer_receives_proposer_read_scope() {
 
         let report = materializer
             .materialize_into(
-                &TextArtifact("artifact".to_owned()),
+                &text_artifact("artifact"),
                 &mut view,
                 proposal_ctx.materialize_context(),
             )
@@ -155,8 +157,8 @@ fn workspace_cleanup_is_explicit_and_called_once() {
 fn create_none_with_informed_history_has_no_causal_parent_edges() {
     let (mut graph, mut budget) = graph_and_budget();
     let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-    let seed = ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap();
-    let proposal = Proposal::create(TextArtifact("fresh".to_owned()))
+    let seed = ctx.insert_seed(text_artifact("seed"), 0).unwrap();
+    let proposal = Proposal::create(text_artifact("fresh"))
         .informed_by([InfoRef::Candidate(seed)])
         .build();
     let batch = record_one(&mut ctx, proposal);

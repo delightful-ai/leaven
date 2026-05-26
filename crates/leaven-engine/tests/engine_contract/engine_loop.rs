@@ -25,15 +25,13 @@ use leaven_kernel::{
 use leaven_store::{BlobStore, BlobWrite, CheckpointBytes, CheckpointStore, StoreError};
 use leaven_store_inline::InlineEvidenceStore;
 
-use super::support::{TestEvidence, TestProblem, TextArtifact, graph_and_budget, record_one};
+use super::support::{TestEvidence, TestProblem, graph_and_budget, record_one, text_artifact};
 
 #[test]
 fn engine_getters_expose_read_only_state() {
     let mut engine = Engine::<TestProblem>::builder().build();
 
-    let seed = engine
-        .insert_seed(TextArtifact("seed".to_owned()), 0)
-        .unwrap();
+    let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
 
     let _ = engine.graph();
     let _ = engine.budget();
@@ -89,9 +87,7 @@ fn engine_builder_stopper_stops_cleanly_before_first_step_with_current_best() {
         let mut engine = Engine::<TestProblem>::builder()
             .stopper(StopImmediately)
             .build();
-        let seed = engine
-            .insert_seed(TextArtifact("seed".to_owned()), 0)
-            .unwrap();
+        let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
         let cases = CaseSet::new(vec!["case"]);
         let store = InlineEvidenceStore::<TestEvidence>::new("inline");
         let mut optimizer = StatefulOptimizer {
@@ -130,9 +126,7 @@ fn metric_call_budget_stopper_stops_before_next_step_without_budget_error() {
             .budget(Budget::metric_calls(1))
             .metric_call_budget_stopper(1)
             .build();
-        let seed = engine
-            .insert_seed(TextArtifact("seed".to_owned()), 0)
-            .unwrap();
+        let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
         let cases = CaseSet::new(vec!["case"]);
         let store = InlineEvidenceStore::<TestEvidence>::new("inline");
         let mut optimizer = ChargeMetricThenContinue {
@@ -176,9 +170,7 @@ fn engine_notifies_optimizer_when_budget_stop_prevents_next_step() {
             .budget(Budget::metric_calls(1))
             .metric_call_budget_stopper(1)
             .build();
-        let seed = engine
-            .insert_seed(TextArtifact("seed".to_owned()), 0)
-            .unwrap();
+        let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
         let cases = CaseSet::new(vec!["case"]);
         let store = InlineEvidenceStore::<TestEvidence>::new("inline");
         let mut optimizer = StopNotifiedAfterCharge {
@@ -201,9 +193,7 @@ fn metric_budget_hard_guard_stops_as_budget_not_optimizer_error() {
         let mut engine = Engine::<TestProblem>::builder()
             .budget(Budget::metric_calls(0))
             .build();
-        let seed = engine
-            .insert_seed(TextArtifact("seed".to_owned()), 0)
-            .unwrap();
+        let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
         let cases = CaseSet::new(vec!["case"]);
         let store = InlineEvidenceStore::<TestEvidence>::new("inline");
         let mut optimizer = ChargeMetricThenContinue {
@@ -248,9 +238,7 @@ fn optimizer_can_request_clean_budget_stop_mid_step() {
         let mut engine = Engine::<TestProblem>::builder()
             .budget(Budget::metric_calls(10))
             .build();
-        let seed = engine
-            .insert_seed(TextArtifact("seed".to_owned()), 0)
-            .unwrap();
+        let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
         let cases = CaseSet::new(vec!["case"]);
         let store = InlineEvidenceStore::<TestEvidence>::new("inline");
         let mut optimizer = StopWithReason {
@@ -330,9 +318,7 @@ fn engine_checkpoints_explicit_optimizer_state_at_clean_run_boundaries() {
         let mut engine = Engine::<TestProblem>::builder()
             .persistence(persistence)
             .build();
-        let seed = engine
-            .insert_seed(TextArtifact("seed".to_owned()), 0)
-            .unwrap();
+        let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
         let cases = CaseSet::new(vec!["case"]);
         let store = InlineEvidenceStore::<TestEvidence>::new("inline");
         let mut optimizer = StatefulOptimizer {
@@ -383,9 +369,7 @@ fn engine_restores_explicit_optimizer_state_from_stored_run_checkpoint() {
         let mut engine = Engine::<TestProblem>::builder()
             .persistence(persistence.clone())
             .build();
-        let seed = engine
-            .insert_seed(TextArtifact("seed".to_owned()), 0)
-            .unwrap();
+        let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
         let cases = CaseSet::new(vec!["case"]);
         let evidence = InlineEvidenceStore::<TestEvidence>::new("inline");
         let mut optimizer = StatefulOptimizer {
@@ -431,7 +415,7 @@ fn store_run_persistence_writes_graph_cache_and_checkpoint_envelope() {
     let (mut graph, mut budget) = graph_and_budget();
     let seed = {
         let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-        ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap()
+        ctx.insert_seed(text_artifact("seed"), 0).unwrap()
     };
     let mut cache = EvaluationCache::default();
     cache.insert(
@@ -1092,11 +1076,8 @@ fn run_context_checkpoints_after_graph_mutation_boundaries() {
     let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
         .with_persistence(Some(&persistence));
 
-    ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap();
-    let batch = record_one(
-        &mut ctx,
-        Proposal::create(TextArtifact("child".to_owned())).build(),
-    );
+    ctx.insert_seed(text_artifact("seed"), 0).unwrap();
+    let batch = record_one(&mut ctx, Proposal::create(text_artifact("child")).build());
     ctx.apply_batch(batch).unwrap();
 
     assert_eq!(checkpoints.load(Ordering::SeqCst), 3);
@@ -1158,9 +1139,7 @@ where
 #[test]
 fn checkpointable_optimizer_round_trips_explicit_private_state_against_graph() {
     let mut engine = Engine::<TestProblem>::builder().build();
-    let seed = engine
-        .insert_seed(TextArtifact("seed".to_owned()), 0)
-        .unwrap();
+    let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
     let optimizer = StatefulOptimizer {
         selected: Some(seed),
         cursor: 7,
@@ -1439,9 +1418,7 @@ fn checkpointable_optimizer_restore_helper_surfaces_restore_state_errors() {
 #[test]
 fn checkpointable_optimizer_restore_helper_restores_explicit_json_state() {
     let mut engine = Engine::<TestProblem>::builder().build();
-    let seed = engine
-        .insert_seed(TextArtifact("seed".to_owned()), 0)
-        .unwrap();
+    let seed = engine.insert_seed(text_artifact("seed"), 0).unwrap();
     let mut checkpoint = checkpoint_referencing_graph(BlobRef {
         store: "recording".to_owned(),
         key: "graph".to_owned(),
