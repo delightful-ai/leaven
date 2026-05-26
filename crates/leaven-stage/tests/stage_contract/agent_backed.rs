@@ -5,14 +5,11 @@ use leaven_agent::{
     AgentRunContext, AgentRunRequest, AgentRuntime, AgentRuntimeError, AgentSession,
     FakeAgentAction, FakeAgentRuntime,
 };
-use leaven_core::{
-    Artifact, ArtifactIdentity, CacheIdentity, Evidence, OptimizationProblem, Proposal,
-    ProposalBatch, ProposalBatchSemantics,
-};
+use leaven_core::{Proposal, ProposalBatch, ProposalBatchSemantics};
 use leaven_engine::{Arity, Proposer, RunContext, RunEvent};
 use leaven_kernel::{
-    Budget, CandidateId, ContentId, Cost, MetadataBag, Metered, StageAttemptFailure,
-    StageAttemptOutcome, StageAttemptReceiptRef, StageRole, WorkspaceId,
+    CandidateId, Cost, MetadataBag, Metered, StageAttemptFailure, StageAttemptOutcome,
+    StageAttemptReceiptRef, StageRole, WorkspaceId,
 };
 use leaven_stage::{
     AgentBacked, AgentStageBootstrap, AgentStageCallContext, AgentStagePlan, AllowedQuerySet,
@@ -23,6 +20,8 @@ use leaven_stage::{
 use leaven_workspace::{WorkspaceBackend, WorkspaceError, WorkspacePath, WorkspaceView};
 use leaven_workspace_local::LocalWorkspaceFactory;
 use serde::Deserialize;
+
+use crate::support::{TestProblem, TextArtifact, graph_and_budget};
 
 #[test]
 fn agent_backed_fake_runtime_records_receipt_and_applies_candidate() {
@@ -731,52 +730,6 @@ impl StageOutputParser<TestProblem, ProposerSlot<ReflectRequest>> for JsonPropos
 #[derive(Deserialize)]
 struct ParsedProposal {
     suffix: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct TextArtifact(String);
-
-impl Artifact for TextArtifact {
-    type Change = String;
-    type ApplyError = std::convert::Infallible;
-
-    fn identity(&self) -> ArtifactIdentity {
-        ArtifactIdentity::Content(ContentId::hash_bytes(self.0.as_bytes()))
-    }
-
-    fn cache_identity(&self) -> Option<CacheIdentity> {
-        Some(CacheIdentity::Content(ContentId::hash_bytes(
-            self.0.as_bytes(),
-        )))
-    }
-
-    fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
-        Ok(Self(format!("{}{change}", self.0)))
-    }
-}
-
-#[derive(Clone, Debug)]
-struct TestEvidence;
-
-impl Evidence for TestEvidence {}
-
-struct TestProblem;
-
-impl OptimizationProblem for TestProblem {
-    type Artifact = TextArtifact;
-    type Case = ();
-    type Evidence = TestEvidence;
-    type ProposalAnnotations = ();
-}
-
-fn graph_and_budget() -> (
-    leaven_engine::RunGraph<TestProblem>,
-    leaven_engine::BudgetLedger,
-) {
-    (
-        leaven_engine::RunGraph::new(leaven_kernel::RunId::new()),
-        leaven_engine::BudgetLedger::new(Budget::unlimited()),
-    )
 }
 
 trait CandidateOutcome {

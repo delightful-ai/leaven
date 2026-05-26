@@ -1,21 +1,20 @@
 use futures::executor::block_on;
 use leaven_core::{
-    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, CacheIdentity,
-    EvaluationPurpose, EvaluationRequest, EvaluationSet, Evidence, OptimizationProblem,
-    ResolvedEvaluationRequest, ResolvedRequestKind,
+    Assessment, AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest,
+    EvaluationSet, ResolvedEvaluationRequest, ResolvedRequestKind,
 };
 use leaven_engine::{
     BudgetLedger, CachePolicy, CaseSet, EvaluationContext, EvaluationError, Evaluator, RunContext,
 };
-use leaven_kernel::{
-    Budget, ContentId, Cost, EvaluatorId, Fingerprint, MetadataBag, Metered, StageId,
-};
+use leaven_kernel::{Budget, Cost, EvaluatorId, Fingerprint, MetadataBag, Metered, StageId};
 use leaven_stage::{
     AllowedQuerySet, QueryRecordEffect, QueryTiming, StageQuery, StageQueryKind, StageQueryPolicy,
     StageReadAuthority,
 };
 use leaven_workspace::{WorkspaceConfig, WorkspaceFactory, WorkspacePath};
 use leaven_workspace_local::LocalWorkspaceFactory;
+
+use crate::support::{TestEvidence, TestProblem, TextArtifact, graph_and_budget};
 
 #[test]
 fn read_authority_writes_candidate_query_entry_and_receipt() {
@@ -347,43 +346,6 @@ fn read_authority_renders_visible_assessment_queries() {
     });
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct TextArtifact(String);
-
-impl Artifact for TextArtifact {
-    type Change = String;
-    type ApplyError = std::convert::Infallible;
-
-    fn identity(&self) -> ArtifactIdentity {
-        ArtifactIdentity::Content(ContentId::hash_bytes(self.0.as_bytes()))
-    }
-
-    fn cache_identity(&self) -> Option<CacheIdentity> {
-        Some(CacheIdentity::Content(ContentId::hash_bytes(
-            self.0.as_bytes(),
-        )))
-    }
-
-    fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
-        Ok(Self(format!("{}{change}", self.0)))
-    }
-}
-
-#[derive(Clone, Debug)]
-struct TestProblem;
-
-impl OptimizationProblem for TestProblem {
-    type Artifact = TextArtifact;
-    type Case = ();
-    type Evidence = TestEvidence;
-    type ProposalAnnotations = ();
-}
-
-#[derive(Clone, Debug)]
-struct TestEvidence;
-
-impl Evidence for TestEvidence {}
-
 struct StaticEvaluator;
 
 impl Evaluator<TestProblem> for StaticEvaluator {
@@ -421,14 +383,4 @@ impl Evaluator<TestProblem> for StaticEvaluator {
             Cost::zero(),
         ))
     }
-}
-
-fn graph_and_budget() -> (
-    leaven_engine::RunGraph<TestProblem>,
-    leaven_engine::BudgetLedger,
-) {
-    (
-        leaven_engine::RunGraph::new(leaven_kernel::RunId::new()),
-        BudgetLedger::new(Budget::unlimited()),
-    )
 }

@@ -18,5 +18,7 @@ mod serde_roundtrip;
 mod setup_workspace;
 #[path = "stage_contract/slot_marker.rs"]
 mod slot_marker;
+#[path = "stage_contract/support.rs"]
+mod support;
 #[path = "stage_contract/surface_values.rs"]
 mod surface_values;
