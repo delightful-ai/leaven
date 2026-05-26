@@ -12,20 +12,8 @@ import signal
 import subprocess
 import time
 
+from workspace_packages import MILESTONE_PACKAGES, package_exclude_args
 
-MILESTONE_PACKAGES = [
-    "p0_graph_skeleton",
-    "p1_keep_best",
-    "p2_pairwise_tournament",
-    "p3_gepa_parity",
-    "p4_meta_harness_lite",
-    "p5_evoskill_iteration",
-    "p5_skill_paper_reproductions",
-    "p6_optimizer_policy_self_opt",
-    "p7_self_optimization_kernel",
-    "p8_aime_gepa",
-    "trace2skill_spreadsheetbench",
-]
 
 WORKSPACE_TEST_BUILD_COMMAND = [
     "cargo",
@@ -37,7 +25,7 @@ WORKSPACE_TEST_BUILD_COMMAND = [
     "--list-type",
     "binaries-only",
     "--workspace",
-    *[arg for package in MILESTONE_PACKAGES for arg in ("--exclude", package)],
+    *package_exclude_args(MILESTONE_PACKAGES),
 ]
 
 WORKSPACE_TEST_RUN_COMMAND = [
@@ -49,7 +37,7 @@ WORKSPACE_TEST_RUN_COMMAND = [
     "--final-status-level",
     "slow",
     "--workspace",
-    *[arg for package in MILESTONE_PACKAGES for arg in ("--exclude", package)],
+    *package_exclude_args(MILESTONE_PACKAGES),
 ]
 
 DEFAULT_BUILD_DISCOVERY_TIMEOUT_SECONDS = 300.0
