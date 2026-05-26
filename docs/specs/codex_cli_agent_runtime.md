@@ -35,6 +35,9 @@ leaven-agent-codex-cli
   -> leaven-workspace
 ```
 
+Test-only local workspace and async executor dependencies stay in
+`dev-dependencies`; they are not runtime topology.
+
 Forbidden dependencies:
 
 ```text

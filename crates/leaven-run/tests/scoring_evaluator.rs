@@ -178,9 +178,7 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
             Arc::new(
                 |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
                     async move {
-                        let rendered = ctx.output.output.clone();
-                        Ok(Score::new(rendered.parse::<f64>().unwrap(), "ok")
-                            .with_output(ctx.report_text_output(rendered))
+                        Ok(numeric_report_score(ctx)
                             .with_trace("scorer accepted numeric output")
                             .with_cost(Cost::llm_calls(1)))
                     }
@@ -513,9 +511,7 @@ fn scoring_evaluator_passes_budget_snapshot_to_scorer() {
                     async move {
                         assert_eq!(ctx.budget.spent.metric_calls, 3);
                         assert_eq!(ctx.budget.limit.metric_calls, Some(16));
-                        let rendered = ctx.output.output.clone();
-                        Ok(Score::new(rendered.parse::<f64>().unwrap(), "ok")
-                            .with_output(ctx.report_text_output(rendered)))
+                        Ok(numeric_report_score(ctx))
                     }
                     .boxed()
                 },
@@ -577,12 +573,7 @@ fn scoring_evaluator_runs_case_jobs_with_bounded_parallelism_and_stable_order() 
             },
             Arc::new(
                 |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
-                    async move {
-                        let rendered = ctx.output.output.clone();
-                        Ok(Score::new(rendered.parse::<f64>().unwrap(), "ok")
-                            .with_output(ctx.report_text_output(rendered)))
-                    }
-                    .boxed()
+                    async move { Ok(numeric_report_score(ctx)) }.boxed()
                 },
             ),
             &identity("scoring-evaluator-parallel-test"),
@@ -1809,10 +1800,8 @@ fn runtime_score_outputs_project_through_public_seam_for_all_assessment_shapes()
         };
         let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
 
-        let scorer = scoring_evaluator(|ctx| {
-            Score::new(ctx.output.output.parse::<f64>().unwrap(), "independent")
-                .with_output(ctx.report_text_output(ctx.output.output.clone()))
-        });
+        let scorer =
+            scoring_evaluator(|ctx| numeric_report_score_with_feedback(ctx, "independent"));
         let independent = scorer
             .evaluate(
                 request(
@@ -2373,9 +2362,7 @@ fn public_job_scoring_evaluator()
         }),
         Arc::new(
             |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
-                let score = Score::new(ctx.output.output.parse::<f64>().unwrap(), "validation")
-                    .with_output(ctx.report_text_output(ctx.output.output.clone()));
-                async move { Ok(score) }.boxed()
+                async move { Ok(numeric_report_score_with_feedback(ctx, "validation")) }.boxed()
             },
         ),
         &identity("public-seam-evaluation-job"),
@@ -2482,6 +2469,21 @@ fn inline_output_text(output: &OutputRecord) -> &str {
         panic!("expected inline output")
     };
     text
+}
+
+fn numeric_report_score(
+    ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>,
+) -> Score {
+    numeric_report_score_with_feedback(ctx, "ok")
+}
+
+fn numeric_report_score_with_feedback(
+    ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>,
+    feedback: impl Into<String>,
+) -> Score {
+    let rendered = ctx.output.output.clone();
+    Score::new(rendered.parse::<f64>().unwrap(), feedback)
+        .with_output(ctx.report_text_output(rendered))
 }
 
 // Test helper. The scorer closure must produce a `Score` with context-scoped
