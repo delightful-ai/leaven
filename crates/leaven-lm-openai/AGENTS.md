@@ -46,7 +46,7 @@ runtime fingerprint that excludes secrets.
   statuses, and response parsing against local fixtures.
 - `docs/specs/lm_runtime_and_response_cache.md` section "OpenAI Provider
   Contract" owns the adapter contract.
-- Run `cargo nextest run -p leaven-lm-openai` to prove OpenAI mapping behavior,
+- Run `cargo test -p leaven-lm-openai` to prove OpenAI mapping behavior,
   retry behavior, and provider-side concurrency throttling without live provider
   calls.
 - The env test uses `OPENAI_API_KEY=test-key` in a child process; it proves
@@ -81,7 +81,7 @@ runtime fingerprint that excludes secrets.
   preserve: cache/replay identity changes when default model can affect output
   avoid: adding a model-looking argument for import ergonomics while requests
     still own the model
-  verify: run `cargo nextest run -p leaven-lm-openai`; add assertions that
+  verify: run `cargo test -p leaven-lm-openai`; add assertions that
     distinguish request model, default model, and fingerprint behavior
 
 - when: changing OpenAI request lowering
@@ -91,7 +91,7 @@ runtime fingerprint that excludes secrets.
     provider continuations are ignored, and provider hints lower only through
     neutral `ProviderHints`
   avoid: introducing live OpenAI calls into the default test path
-  verify: run `cargo nextest run -p leaven-lm-openai`
+  verify: run `cargo test -p leaven-lm-openai`
 
 - when: changing OpenAI timeout, retry, or throttle behavior
   do: keep the policy in `OpenAiConfig`, include behavior-affecting fields in
@@ -102,7 +102,7 @@ runtime fingerprint that excludes secrets.
     proactive throttling limits in-flight provider calls before transport
   avoid: leaking OpenAI retry or throttle policy into `leaven-lm`, GEPA, engine,
     or cache crates
-  verify: run `cargo nextest run -p leaven-lm-openai`
+  verify: run `cargo test -p leaven-lm-openai`
 
 - when: changing response parsing
   do: keep assistant text, provider response ID, continuation, and token usage
@@ -111,4 +111,4 @@ runtime fingerprint that excludes secrets.
     and non-success HTTP status returns provider error
   avoid: treating refusals/tool calls as assistant text until the neutral output
     contract explicitly supports them
-  verify: run `cargo nextest run -p leaven-lm-openai`
+  verify: run `cargo test -p leaven-lm-openai`

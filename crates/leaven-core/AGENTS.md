@@ -54,7 +54,7 @@ optimizer strategy state.
     the runtime semantics separately
   preserve: unresolved `EvaluationSet` vs resolved case IDs as distinct facts
   avoid: smuggling case lookup, dataset mutation, or trust filtering into core
-  verify: run `cargo nextest run -p leaven-core` and
+  verify: run `cargo test -p leaven-core` and
     `cargo test -p leaven --test topology_contract`
 
 - when: adding artifact identity or cache behavior
@@ -72,7 +72,7 @@ optimizer strategy state.
   causal vs informational lineage, batch cloning, and problem trait wiring.
 - `crates/leaven/tests/topology_contract.rs` proves `leaven-core` depends only
   on `leaven-kernel` and checks for common projection/engine leaks.
-- `cargo nextest run -p leaven-core` proves local algebra contracts.
+- `cargo test -p leaven-core` proves local algebra contracts.
 - `cargo test -p leaven --test topology_contract` proves dependency and
   cold-core leak boundaries when the public surface or manifest changes.
 

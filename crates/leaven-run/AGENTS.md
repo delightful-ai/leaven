@@ -105,7 +105,7 @@ persistence beyond the projected public-seam document.
   proposal submission, and proposal application reports lower into locked
   public-seam write receipts only when the request, assessment batch, proposal
   batch, and created candidates are backed by graph truth.
-- `cargo nextest run -p leaven-run` proves the product-builder contract.
+- `cargo test -p leaven-run` proves the product-builder contract.
 - `cargo test -p leaven --test topology_contract` proves this crate still
   composes engine/eval/evidence/store without absorbing their ownership.
 
@@ -222,16 +222,16 @@ persistence beyond the projected public-seam document.
   do: keep the public path in this crate and lower into engine/eval/store seams deliberately
   preserve: required budget, durable-by-default local run storage, explicit ephemeral opt-out, hidden validation/test defaults, callback/store wiring, and result facades that do not expose raw `RunGraph`
   avoid: putting GEPA strategy knobs, engine graph shortcuts, provider clients, or dataset execution machinery into the builder just because P8 needs them
-  verify: run `cargo nextest run -p leaven-run --test optimize_builder`
+  verify: run `cargo test -p leaven-run --test optimize_builder`
 
 - when: adding scorer async/failure support, rich scoring, stable cases, or single-task mode
   do: hard-cut the builder/evaluator/report path together instead of adding parallel simple-vs-rich product APIs
   preserve: one ordinary lowering route into `ScoringEvaluator` or its replacement, with typed errors and metered cost rather than score-zero fallbacks
   avoid: treating scalar-only `Score` as the final evidence model or smuggling generated output through trace/report strings
-  verify: run `cargo nextest run -p leaven-run --test scoring_evaluator --test optimize_builder`, then the affected product example
+  verify: run `cargo test -p leaven-run --test scoring_evaluator --test optimize_builder`, then the affected product example
 
 - when: moving evaluation planning out of this crate
   do: promote reusable dataset/split/request/report vocabulary into `leaven-eval` while keeping actual execution here or in engine
   preserve: `leaven-run` as product-builder composition, not the permanent hidden home for all evaluation lowering
   avoid: duplicating split-use/trust policy inside GEPA or examples
-  verify: run `cargo nextest run -p leaven-eval -p leaven-run`
+  verify: run `cargo test -p leaven-eval -p leaven-run`

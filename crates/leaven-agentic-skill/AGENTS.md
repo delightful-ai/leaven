@@ -53,7 +53,7 @@ optimizer rhythm.
   rejection, and reports over real `SkillBank` artifacts.
 - `docs/specs/agentic_skill_optimization_primitives.md` owns skill-specific
   responsibilities and the split from generic agentic workload code.
-- Run `cargo nextest run -p leaven-agentic-skill` to prove skill-specific
+- Run `cargo test -p leaven-agentic-skill` to prove skill-specific
   agentic helpers.
 
 ## Decision Cards
@@ -61,13 +61,13 @@ optimizer rhythm.
   do: change `SkillWorkspaceLayout`, materializer, parser, and tests together
   preserve: layout as projection ABI only; `SkillBank` identity still comes from validated skill folders, not workspace mount paths
   avoid: teaching Codex/Claude/OpenCode discovery semantics in this crate or deriving artifact identity from `.agents/skills`
-  verify: run `cargo nextest run -p leaven-agentic-skill` and keep the nested-layout test explicit
+  verify: run `cargo test -p leaven-agentic-skill` and keep the nested-layout test explicit
 
 - when: parsing agent-authored skill changes
   do: parse the final workspace tree back into a valid `SkillBank`, diff it against the parent, and emit artifact-native `SkillBankChange`
   preserve: loose-file rejection, invalid folder/path rejection, unchanged-workspace rejection, and executable-bit preservation
   avoid: treating provider transcript text as the proposal when the workspace tree is the claimed source of truth
-  verify: extend `skill_agentic.rs` near the parser rejection tests and run `cargo nextest run -p leaven-agentic-skill`
+  verify: extend `skill_agentic.rs` near the parser rejection tests and run `cargo test -p leaven-agentic-skill`
 
 - when: adding paper-specific skill optimization behavior
   do: put EvoSkill/Memento/Trace2Skill/D2Skill/SkillReducer rhythm in examples or product crates that compose this adapter
@@ -84,7 +84,7 @@ optimizer rhythm.
   avoid: encoding Trace2Skill batch sizes, utility thresholds, prompt wording,
   or result-selection policy in the patch-plan types
   verify: extend `skill_agentic.rs` around `SkillPatchPlan` tests and run
-  `cargo nextest run -p leaven-agentic-skill`
+  `cargo test -p leaven-agentic-skill`
 
 - when: recording hierarchical patch consolidation
   do: use `SkillPatchMergeTree` for graph provenance over already validated
@@ -95,7 +95,7 @@ optimizer rhythm.
   avoid: adding paper-specific worker counts, merge batch sizes, support
   thresholds, prompt wording, or final-metric selection to this crate
   verify: extend `skill_agentic.rs` around `SkillPatchMergeTree` tests and run
-  `cargo nextest run -p leaven-agentic-skill`
+  `cargo test -p leaven-agentic-skill`
 
 - when: applying validated patch plans
   do: use `SkillPatchApplication` so application is atomic, reports the
@@ -105,7 +105,7 @@ optimizer rhythm.
   avoid: applying partial edits directly to a `SkillBank` from paper/example
   code when a validated patch plan is available
   verify: extend `skill_agentic.rs` around `SkillPatchApplication` tests and
-  run `cargo nextest run -p leaven-agentic-skill`
+  run `cargo test -p leaven-agentic-skill`
 
 - when: lowering parsed patch artifacts
   do: use `SkillParsedPatchDocument` after the paper/example has translated
@@ -115,7 +115,7 @@ optimizer rhythm.
   avoid: making this crate parse Trace2Skill JSON keys, infer insertion
   locations from prose, or inspect model transcripts
   verify: extend `skill_agentic.rs` around parsed patch document tests and run
-  `cargo nextest run -p leaven-agentic-skill`
+  `cargo test -p leaven-agentic-skill`
 
 ## Local Bait
 - `.agents/skills` is a workspace projection choice, not the artifact identity.

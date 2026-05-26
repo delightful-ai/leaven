@@ -45,9 +45,9 @@ evaluation cache.
 - `docs/specs/lm_runtime_and_response_cache.md` is the local spec for key
   ingredients and response-cache boundaries. `docs/specs/default_cache_storage.md`
   owns the durable product default and SQLite storage expectations.
-- Run `cargo nextest run -p leaven-lm-cache` to prove response-cache behavior.
+- Run `cargo test -p leaven-lm-cache` to prove response-cache behavior.
 - If `LmRequest`, `ProviderHints`, `SamplingOptions`, or `OutputMode` changes,
-  pair this with `cargo nextest run -p leaven-lm`; those types define the key
+  pair this with `cargo test -p leaven-lm`; those types define the key
   material this crate serializes.
 
 ## Local Bait
@@ -76,7 +76,7 @@ evaluation cache.
     decide response reuse
   avoid: using cache backend paths, response IDs, continuation tokens, or clock
     time as identity
-  verify: run `cargo nextest run -p leaven-lm-cache -p leaven-lm`
+  verify: run `cargo test -p leaven-lm-cache -p leaven-lm`
 
 - when: changing cache policy behavior
   do: keep all five policy laws explicit: `Never`, `ReadWrite`, `ReadOnly`,
@@ -85,4 +85,4 @@ evaluation cache.
     cache hits do not charge new cost
   avoid: silently making `ReadOnly` write, or making `Refresh` read before the
     provider call, or making `CacheOnly` call the inner LM on a miss
-  verify: run `cargo nextest run -p leaven-lm-cache`
+  verify: run `cargo test -p leaven-lm-cache`

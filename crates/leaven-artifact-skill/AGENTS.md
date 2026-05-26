@@ -61,6 +61,6 @@ It models skills as artifacts and edit surfaces. It does not run agents, materia
   artifact family.
 
 ## Proof Anchors
-- `cargo nextest run -p leaven-artifact-skill --test skill_artifact` proves skill name/path validation, `SKILL.md` parsing, manifest-derived skill cards, route registry pool/key overlays, folder/bank invariants, rollback, rename semantics, content identity including permissions, and all five skill surfaces.
-- `cargo nextest run -p leaven-artifact-skill --test skill_token_profile` proves tokenizer-agnostic description/body/direct-reference token accounting, non-UTF-8 reference refusal, before/after deltas, and tokenizer-id mismatch refusal.
+- `cargo test -p leaven-artifact-skill --test skill_artifact` proves skill name/path validation, `SKILL.md` parsing, manifest-derived skill cards, route registry pool/key overlays, folder/bank invariants, rollback, rename semantics, content identity including permissions, and all five skill surfaces.
+- `cargo test -p leaven-artifact-skill --test skill_token_profile` proves tokenizer-agnostic description/body/direct-reference token accounting, non-UTF-8 reference refusal, before/after deltas, and tokenizer-id mismatch refusal.
 - `cargo test -p leaven --test topology_contract` proves this crate stays an artifact/surface crate and Codex app-server protocol types remain leaf-only.

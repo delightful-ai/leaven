@@ -61,7 +61,7 @@ must not reach into graph storage to make progress.
   checkpointing, persistence envelopes, and cache restoration.
 - `tests/engine_contract.rs::{context_services,evaluator_registry,case_set_resolution,budget_laws,trust_policy}`
   are narrow proof anchors for their named services.
-- `cargo nextest run -p leaven-engine` proves engine-local execution contracts.
+- `cargo test -p leaven-engine` proves engine-local execution contracts.
 - `cargo test -p leaven --test topology_contract` proves dependency edges when
   this crate's manifest or public exports change.
 

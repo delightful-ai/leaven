@@ -44,13 +44,13 @@ graph state, or GEPA rhythm.
 - `docs/specs/lm_runtime_and_response_cache.md` owns the LM/cache/provider
   split; use it before changing request, response, continuation, or fingerprint
   semantics.
-- Run `cargo nextest run -p leaven-lm` to prove this neutral vocabulary still
+- Run `cargo test -p leaven-lm` to prove this neutral vocabulary still
   satisfies its crate-level contract.
 - If a change affects `LmRequest` key material, also run
-  `cargo nextest run -p leaven-lm-cache`; that is where cache-key ingredients
+  `cargo test -p leaven-lm-cache`; that is where cache-key ingredients
   and continuation exclusion are proved.
 - If a change affects `ProviderHints`, run
-  `cargo nextest run -p leaven-lm-openai` too, because OpenAI currently lowers
+  `cargo test -p leaven-lm-openai` too, because OpenAI currently lowers
   prompt-cache keys, storage hints, and metadata through that neutral bag.
 
 ## Local Bait
@@ -81,7 +81,7 @@ graph state, or GEPA rhythm.
   preserve: cache keys can be rebuilt from provider fingerprint plus canonical
     request material without provider response IDs
   avoid: storing OpenAI/Anthropic wire structs or SDK enums in this neutral crate
-  verify: run `cargo nextest run -p leaven-lm -p leaven-lm-cache`; add the
+  verify: run `cargo test -p leaven-lm -p leaven-lm-cache`; add the
     provider mapping test only in the provider crate that lowers the field
 
 - when: changing model/default semantics
@@ -91,5 +91,5 @@ graph state, or GEPA rhythm.
     request model remains cache-key material
   avoid: constructor arguments that look like defaults but are ignored by
     providers
-  verify: run `cargo nextest run -p leaven-lm` plus each provider crate whose
+  verify: run `cargo test -p leaven-lm` plus each provider crate whose
     constructor or fingerprint semantics changed

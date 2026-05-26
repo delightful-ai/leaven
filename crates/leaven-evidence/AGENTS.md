@@ -125,12 +125,12 @@ Evidence here is data a stage or evaluator can produce and another component can
   the public API until the owning invariant exists.
 
 ## Proof Anchors
-- `cargo nextest run -p leaven-evidence` proves scalar, pairwise, paired
+- `cargo test -p leaven-evidence` proves scalar, pairwise, paired
   rollout, casewise, command/trajectory, `OutputRecord` visibility/data-class,
   skill-use telemetry, analyst fan-out, patch merge-tree, and attribution
   behavior. It does not currently prove every root-re-exported evidence name.
-- `cargo nextest run -p leaven-preference --test scalar` proves scalar preference callers rely on `ScalarEvidence`'s finite-score contract.
-- `cargo nextest run -p leaven-population --test tournament` proves pairwise evidence feeds fitted population state outside this crate.
+- `cargo test -p leaven-preference --test scalar` proves scalar preference callers rely on `ScalarEvidence`'s finite-score contract.
+- `cargo test -p leaven-population --test tournament` proves pairwise evidence feeds fitted population state outside this crate.
 - Before adding an evidence name to `leaven-std`, add a focused test in this
   crate and update the public-maturity/export ledger pressure from
   `reviews/2026-05-11-fuckery-extermination-today/cross-cutting/surface-requirements.md`.

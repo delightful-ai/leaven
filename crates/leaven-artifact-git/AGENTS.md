@@ -21,7 +21,7 @@ They do not execute Git commands.
   but it must not decide whether the candidate enters the frontier.
 
 ## Verification
-- `cargo nextest run -p leaven-artifact-git` proves Git path/ref/object
+- `cargo test -p leaven-artifact-git` proves Git path/ref/object
   validation, content/cache identity, ref lineage, and discarded-candidate ref
   cleanup over fixture-backed artifact state.
 - Run `cargo test -p leaven --test topology_contract` if dependencies or facade

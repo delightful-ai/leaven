@@ -29,7 +29,7 @@ consumers without network, credentials, or provider drift.
   crates; the mock only returns scripted model responses.
 
 ## Proof Anchors
-- `cargo nextest run -p leaven-lm-mock` proves scripted response order,
+- `cargo test -p leaven-lm-mock` proves scripted response order,
   exhaustion errors, stable identity, and fingerprint behavior.
 - Consumer crates should still run their own tests with this mock wired in; a
   mock pass is not live-provider proof.
@@ -58,7 +58,7 @@ consumers without network, credentials, or provider drift.
     handling
   preserve: mock success is lower-level proof, not live provider proof
   avoid: claiming OpenAI/Anthropic/local transport behavior from a FIFO script
-  verify: run `cargo nextest run -p leaven-lm-mock` plus the consumer crate's
+  verify: run `cargo test -p leaven-lm-mock` plus the consumer crate's
     focused test
 
 - when: extending mock capabilities
@@ -67,5 +67,5 @@ consumers without network, credentials, or provider drift.
     step
   avoid: growing a quasi-provider with retries, auth, network, or provider
     continuation semantics
-  verify: run `cargo nextest run -p leaven-lm-mock` and any consumer tests that
+  verify: run `cargo test -p leaven-lm-mock` and any consumer tests that
     rely on the new fake behavior

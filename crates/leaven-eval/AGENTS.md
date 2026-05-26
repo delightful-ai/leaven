@@ -63,7 +63,7 @@ It does not execute evaluations. Evaluator traits, registries, trust checks, cas
   do: define the durable data shape here, then let `leaven-run` lower ordinary builder inputs into it
   preserve: duplicate/missing case refusal, disjoint-default split policy, stable fingerprints, and explicit final-test exceptions
   avoid: encoding benchmark semantics as vector positions or magic partition strings in examples/GEPA
-  verify: run `cargo nextest run -p leaven-eval --test split_contract` and the `leaven-run` builder test that consumes it
+  verify: run `cargo test -p leaven-eval --test split_contract` and the `leaven-run` builder test that consumes it
 
 - when: adding deterministic case samplers
   do: keep inputs and outputs as `CaseId` plus lightweight grouping metadata,
@@ -72,18 +72,18 @@ It does not execute evaluations. Evaluator traits, registries, trust checks, cas
   preserve: no evaluator execution, no graph mutation, and no hidden
   dataset-provenance claims
   avoid: moving optimizer-specific acceptance/frontier policy into this crate
-  verify: run `cargo nextest run -p leaven-eval --test category_sampler`
+  verify: run `cargo test -p leaven-eval --test category_sampler`
 
 - when: adding reports
   do: keep reports as post-evaluation data with graph IDs, evidence refs, split roles, and summary projections
   preserve: absent/failed evidence as distinct from numeric zero, and final-test-only markers as report semantics
   avoid: making `report.rs` call evaluators, inspect `RunGraph` internals, or flatten hidden payloads into ordinary reports
-  verify: run `cargo nextest run -p leaven-eval -p leaven-run`
+  verify: run `cargo test -p leaven-eval -p leaven-run`
 
 ## Proof Anchors
-- `cargo nextest run -p leaven-eval` proves dataset IDs, split overlap policy,
+- `cargo test -p leaven-eval` proves dataset IDs, split overlap policy,
   unknown-case refusal, exact stratified split construction, split
   fingerprints, explicit paper-manifest lowering, deterministic sampler state,
   and train/validation/test use-policy boundaries.
-- `cargo nextest run -p leaven-run` proves product builders can consume lowered eval vocabulary without making this crate own builder ergonomics.
+- `cargo test -p leaven-run` proves product builders can consume lowered eval vocabulary without making this crate own builder ergonomics.
 - `cargo test -p leaven-engine --test engine_contract case_set_resolution` proves execution-time case-set resolution stays in the engine layer.

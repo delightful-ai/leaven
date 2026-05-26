@@ -21,7 +21,7 @@ admission semantics.
   crate only performs checkout/ref operations.
 
 ## Verification
-- `cargo nextest run -p leaven-workspace-git` proves local clone, checkout,
+- `cargo test -p leaven-workspace-git` proves local clone, checkout,
   command execution, local mount exposure, capture/readback, restore, branch/tag
   deletion, and cleanup over a fixture Git repo.
 - Run `cargo test -p leaven --test topology_contract` if artifact or store

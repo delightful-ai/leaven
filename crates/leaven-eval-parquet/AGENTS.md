@@ -12,5 +12,5 @@ It may know Arrow and Parquet schemas, batches, nullability, and format-level re
 - Column helpers expose physical values only. Paper examples must decide which columns are source ids, inputs, targets, categories, or judge metadata.
 
 ## Verification
-- Run `cargo nextest run -p leaven-eval-parquet` for row materialization behavior.
+- Run `cargo test -p leaven-eval-parquet` for row materialization behavior.
 - Run `cargo test -p leaven --test topology_contract` when adding or changing dependencies.

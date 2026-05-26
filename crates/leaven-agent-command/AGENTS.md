@@ -31,7 +31,7 @@ agentic stage adapter.
   retention, cancellation, and command records.
 - `docs/specs/agentic_stage_runtime.md` section "Harbor-style command-backed
   provider path" owns why this crate is the backend-neutral runtime substrate.
-- Run `cargo nextest run -p leaven-agent-command` to prove command-backed
+- Run `cargo test -p leaven-agent-command` to prove command-backed
   runtime behavior against the local workspace backend.
 
 ## Decision Cards
@@ -39,7 +39,7 @@ agentic stage adapter.
   do: put provider defaults and option names in the provider leaf, then lower to `CommandAgentConfig` / `CommandTemplate`
   preserve: this crate as reusable substrate over `WorkspaceView::run_command`
   avoid: adding provider enum variants, Codex flags, Claude/OpenCode defaults, or optimizer words here
-  verify: run the provider leaf tests plus `cargo nextest run -p leaven-agent-command`
+  verify: run the provider leaf tests plus `cargo test -p leaven-agent-command`
 
 - when: changing prompt delivery
   do: prefer `CommandPromptMode::StdinInstructions` when system, task, and context refs must survive together

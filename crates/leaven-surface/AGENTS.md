@@ -45,7 +45,7 @@ identity.
   preserve: projection/edit translation as pure functions over the artifact
   avoid: adding file materialization, workspace IO, or graph mutation to the
     surface contract
-  verify: run `cargo nextest run -p leaven-surface`
+  verify: run `cargo test -p leaven-surface`
 
 - when: building a path-like surface for a concrete artifact
   do: reuse `PathPartId`, `PathAddress`, and `PathSurfaceConfig` only if path is
@@ -53,14 +53,14 @@ identity.
   preserve: rename as remove/add for path identity
   avoid: pretending path identity provides logical continuity
   verify: add the concrete artifact-surface test plus
-    `cargo nextest run -p leaven-surface --test part_contract`
+    `cargo test -p leaven-surface --test part_contract`
 
 ## Proof Anchors
 - `src/lib.rs` is the vocabulary map and records the surface laws. Keep
   implementation in the owning surface module.
 - `tests/part_contract.rs` proves semantic payloads live in the surface view,
   not in an intrinsic artifact decomposition.
-- `cargo nextest run -p leaven-surface` proves the local projection vocabulary.
+- `cargo test -p leaven-surface` proves the local projection vocabulary.
 - `cargo test -p leaven --test topology_contract` proves `leaven-surface`
   remains below engine/run and keeps the intended dependency edge shape.
 

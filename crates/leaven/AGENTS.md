@@ -76,7 +76,7 @@ symbol, make it `pub(crate)` instead of routing it.
   quarantine changes.
 - `cargo test -p leaven --test public_surface_contract` proves the route
   classification after any `lib.rs`/route-module change.
-- `cargo nextest run -p leaven` proves the umbrella import and cross-crate
+- `cargo test -p leaven` proves the umbrella import and cross-crate
   workflow contracts.
 
 ## Local Bait
@@ -116,7 +116,7 @@ symbol, make it `pub(crate)` instead of routing it.
   do: route it through exactly one of `prelude`/`extend`/`plumbing`, then add or update its `SURFACE` row in `public_surface_contract.rs` with route and (for extend/plumbing) a consumer reason
   preserve: `prelude` as ordinary-only, `extend` symbols each justified by a named consumer, `lib.rs` as maps-only with no loose individual `pub use`
   avoid: re-adding `pub use ...::prelude::*` transitive wildcards, or routing an `extend`/`plumbing` symbol you cannot name a consumer for (make it `pub(crate)` instead)
-  verify: run `cargo test -p leaven --test public_surface_contract` and `cargo nextest run -p leaven`
+  verify: run `cargo test -p leaven --test public_surface_contract` and `cargo test -p leaven`
 
 - when: adding or renaming a feature
   do: prove the feature exposes a behavior-bearing adapter/facade or name it as scaffold/experimental outside defaults

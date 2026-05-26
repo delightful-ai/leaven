@@ -72,12 +72,12 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
   `GepaReflectiveDataset` default. Do not reintroduce the removed names.
 
 ## Proof Anchors
-- `cargo nextest run -p leaven-gepa` proves local GEPA surface ownership, edit lowering, selectors, gates, checkpoint/restore, validation, and proposer read-scope behavior.
-- `cargo nextest run -p leaven-gepa --test gepa_contract` is the focused local
+- `cargo test -p leaven-gepa` proves local GEPA surface ownership, edit lowering, selectors, gates, checkpoint/restore, validation, and proposer read-scope behavior.
+- `cargo test -p leaven-gepa --test gepa_contract` is the focused local
   gate for the current GEPA contract suite. Its `gepa_smoke` module proves
   surface lowering, fixed-edit proposer behavior, train-filtered population,
   checkpoint state, and hidden validation visibility tests.
-- `cargo nextest run -p leaven --test gepa_parity` proves the public P3 workflow:
+- `cargo test -p leaven --test gepa_parity` proves the public P3 workflow:
   explicit edit-surface GEPA, train-filtered Pareto updates, and best-candidate
   result. `FixedSurfaceEdit` in that proof is not product proof of GEPA
   reflection.
@@ -88,22 +88,22 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
   do: route through `GepaReflector::reflect_candidate(ctx, surface, request)` with a pre-built `ReflectRequest`; the optimizer builds the reflective dataset once via `ReflectiveDatasetBuilder`; agent-backed reflectors must use `RunContext::propose` before `apply_batch`
   preserve: build-once-pass-down (a reflector never projects its own data), causal parent provenance plus `informed_by` refs from `ReflectRequest::informed_by`, hidden validation/test defaults, typed proposal/reflection errors, and engine finalization semantics
   avoid: widening `SurfaceProposer<A, S>` in place as if artifact/surface/part is enough context, letting a reflector derive feedback internally, or letting GEPA read provider-specific LM fields
-  verify: run `cargo nextest run -p leaven-gepa --test gepa_contract`
+  verify: run `cargo test -p leaven-gepa --test gepa_contract`
 
 - when: changing what data reflection sees
   do: implement or swap a `ReflectiveDatasetBuilder` (named type or closure); the builder receives every parent assessment row id, not one bundled assessment; `GepaReflectiveDataset` is the GEPA-parity default and requires `P::Case: ReflectiveCaseInput` plus row-local projectable evidence, or `GepaReflectiveDataset::with_case_input(...)` for an explicit target-safe projection
   preserve: the builder as the single selection seam, separate from backend presentation (LM renderer vs agent workspace materialization), and full row provenance in each example/source ref
   avoid: keying projection on the evidence type, merging selection and presentation into one seam, or relying on `Display` for a whole target-bearing case envelope
-  verify: run `cargo nextest run -p leaven-gepa --test gepa_contract`
+  verify: run `cargo test -p leaven-gepa --test gepa_contract`
 
 - when: adding or renaming GEPA strategy slots
   do: give each slot a request type, output type, structured error, private/checkpoint state story, budget/cost behavior, event/report behavior where relevant, and explicit hidden-split rules
   preserve: GEPA as one optimizer value over shared engine/eval/evidence/render/population seams
   avoid: moving slot state into `leaven-engine`, exporting empty config structs as capability, or collapsing evidence/preference/population into two `f64`s
-  verify: run `cargo nextest run -p leaven-gepa --test gepa_contract` plus `cargo test -p leaven --test topology_contract` if manifests or exports change
+  verify: run `cargo test -p leaven-gepa --test gepa_contract` plus `cargo test -p leaven --test topology_contract` if manifests or exports change
 
 - when: changing population, acceptance, or selection logic
   do: keep scalar strict-improvement as one default adapter, not the trait signature
   preserve: casewise evidence shape until a strategy explicitly interprets it, and keep population as optimizer-private live state
   avoid: treating `CaseAssessmentEvidence.output()` or `CaseAssessmentEvidence.feedback()` as discardable before reflection and part selection have had a chance to consume them
-  verify: run `cargo nextest run -p leaven-gepa --test gepa_contract`
+  verify: run `cargo test -p leaven-gepa --test gepa_contract`

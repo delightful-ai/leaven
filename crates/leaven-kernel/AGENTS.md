@@ -49,7 +49,7 @@ without importing optimizer algebra or runtime machinery.
   preserve: the distinction between `Fingerprint` for behavior and `ContentId`
     for observable artifact content
   avoid: using `MetadataBag` as a cache-key side channel
-  verify: run `cargo nextest run -p leaven-kernel --test identity_metadata`
+  verify: run `cargo test -p leaven-kernel --test identity_metadata`
 
 - when: adding a new cost or budget value
   do: build it out of `Amount`, `Cost`, `CostAxis`, `Budget`, and
@@ -57,7 +57,7 @@ without importing optimizer algebra or runtime machinery.
   preserve: non-negative finite construction at the boundary
   avoid: moving engine ledger state, stop reasons, or callback accounting into
     kernel
-  verify: run `cargo nextest run -p leaven-kernel --test cost_amount`
+  verify: run `cargo test -p leaven-kernel --test cost_amount`
 
 ## Proof Anchors
 - `src/lib.rs` is the crate map and public re-export list. Keep behavior in the
@@ -67,7 +67,7 @@ without importing optimizer algebra or runtime machinery.
 - `tests/finite_f64.rs` proves generic finite-number semantics and metadata
   float construction.
 - `tests/identity_metadata.rs` proves typed identity and metadata behavior.
-- `cargo nextest run -p leaven-kernel` proves the mechanical substrate
+- `cargo test -p leaven-kernel` proves the mechanical substrate
   contract for local changes.
 
 ## Local Bait

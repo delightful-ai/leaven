@@ -36,6 +36,6 @@ It is not the candidate-evaluation workload crate. `AgentCase`,
 
 ## Verification
 
-- `cargo nextest run -p leaven-stage` proves the stage surface.
+- `cargo test -p leaven-stage` proves the stage surface.
 - `cargo test -p leaven --test topology_contract` proves dependency shape and
   facade inventory when this crate is added or its dependencies change.

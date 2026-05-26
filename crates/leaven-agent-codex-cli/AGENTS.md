@@ -31,7 +31,7 @@ raw stdout/stderr, and returns a provider-neutral `AgentSession`.
   non-copying, explicit Codex goal-mode opt-in, runtime identity/capabilities,
   last-message parsing, and stdout fallback.
 - `docs/specs/codex_cli_agent_runtime.md` owns this adapter's product path.
-- Run `cargo nextest run -p leaven-agent-codex-cli` to prove deterministic CLI
+- Run `cargo test -p leaven-agent-codex-cli` to prove deterministic CLI
   adapter behavior without live Codex.
 - Run `cargo check -p leaven-agent-codex-cli` to prove the direct provider leaf
   route.
@@ -41,13 +41,13 @@ raw stdout/stderr, and returns a provider-neutral `AgentSession`.
   do: assert the rendered command vector in `codex_cli_config_builds_backend_neutral_exec_template`
   preserve: `codex exec`, stdin-rendered instructions, `--output-last-message`, backend-neutral cwd, and execution through `leaven-agent-command`
   avoid: relying on host cwd, private Codex home copying, JSONL stdout as normalized transcript, or app-server protocol crates
-  verify: run `cargo nextest run -p leaven-agent-codex-cli`
+  verify: run `cargo test -p leaven-agent-codex-cli`
 
 - when: changing approval or sandbox defaults
   do: make the mode explicit in `CodexCliConfig` and tests
   preserve: `WorkspaceWrite` as the ordinary sandbox default and bypass as an opt-in configuration used by known live reproductions
   avoid: hiding `--dangerously-bypass-approvals-and-sandbox` behind a convenience constructor
-  verify: run `cargo nextest run -p leaven-agent-codex-cli` and inspect the expected argv in the config test
+  verify: run `cargo test -p leaven-agent-codex-cli` and inspect the expected argv in the config test
 
 - when: changing Codex goal-mode behavior
   do: keep it as an explicit `CodexCliConfig` flag that renders Codex's feature switch

@@ -36,7 +36,7 @@ GEPA, skill banks, run graphs, or optimizer rhythm.
   public error shapes.
 - `docs/specs/agentic_stage_runtime.md` section "Provider-Neutral
   `AgentRuntime`" owns this crate's boundary.
-- Run `cargo nextest run -p leaven-agent` to prove runtime vocabulary and fake
+- Run `cargo test -p leaven-agent` to prove runtime vocabulary and fake
   runtime contracts.
 
 ## Decision Cards
@@ -44,13 +44,13 @@ GEPA, skill banks, run graphs, or optimizer rhythm.
   do: keep the field about a single session in an already-materialized workspace
   preserve: `AgentRunRequest` as execution input, `AgentRunContext` as session/budget/cancel facts, and `AgentSession` as observed output
   avoid: candidate ids, proposal/evidence interpretation, case-suite partitions, GEPA selectors, provider protocol structs, or graph mutation handles
-  verify: run `cargo nextest run -p leaven-agent` and inspect that the new field is exercised through `runtime_contract.rs`, not only derived serialization
+  verify: run `cargo test -p leaven-agent` and inspect that the new field is exercised through `runtime_contract.rs`, not only derived serialization
 
 - when: changing output contracts
   do: make validation prove only provider-neutral facts visible here: file exists, JSON syntax parses, final assistant message exists, or workspace-diff roots are recorded
   preserve: schema-specific interpretation and workspace-diff parsing as parser/stage responsibilities
   avoid: turning `JsonSchemaRef` into a global schema engine or making `WorkspaceDiff` create artifacts
-  verify: run `cargo nextest run -p leaven-agent` and add one failing-contract case in `runtime_contract.rs`
+  verify: run `cargo test -p leaven-agent` and add one failing-contract case in `runtime_contract.rs`
 
 - when: using `FakeAgentRuntime`
   do: import it through `leaven_agent::test_support` for deterministic contract tests, examples, diagnostics, and adapter proofs before a provider is involved
