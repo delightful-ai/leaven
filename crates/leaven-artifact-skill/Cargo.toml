@@ -1,5 +1,6 @@
 [package]
 name = "leaven-artifact-skill"
+description = "Agent Skills artifact, route, surface, and token-profile vocabulary for Leaven."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
