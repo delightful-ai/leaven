@@ -170,18 +170,6 @@ impl<I> RunCase<I> {
     }
 }
 
-/// Empty scorer metadata projection for the ordinary product path.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct ScoreMetadataView;
-
-impl ScoreMetadataView {
-    /// Returns true because the current ordinary scorer projection is empty.
-    #[must_use]
-    pub const fn is_empty(self) -> bool {
-        true
-    }
-}
-
 #[derive(Clone, Debug, Default)]
 pub struct CaseDataReadLog(std::sync::Arc<std::sync::Mutex<Vec<CaseDataReadEvidence>>>);
 
@@ -213,7 +201,6 @@ pub struct ScoreCase<I, T = leaven_eval::NoTarget> {
     id: CaseId,
     input: I,
     target: Option<T>,
-    metadata: ScoreMetadataView,
 }
 
 impl<I: fmt::Debug, T> fmt::Debug for ScoreCase<I, T> {
@@ -223,7 +210,6 @@ impl<I: fmt::Debug, T> fmt::Debug for ScoreCase<I, T> {
             .field("id", &self.id)
             .field("input", &self.input)
             .field("target", &"<loaded through ScoreContext::load_target>")
-            .field("metadata", &self.metadata)
             .finish()
     }
 }
@@ -238,7 +224,6 @@ impl<I, T> ScoreCase<I, T> {
             id: case.id,
             input: case.input.clone(),
             target: case.target.clone(),
-            metadata: ScoreMetadataView,
         }
     }
 
@@ -256,12 +241,6 @@ impl<I, T> ScoreCase<I, T> {
 
     pub(crate) fn target_material(&self) -> Option<&T> {
         self.target.as_ref()
-    }
-
-    /// Explicit scorer metadata projection.
-    #[must_use]
-    pub const fn metadata(&self) -> ScoreMetadataView {
-        self.metadata
     }
 }
 

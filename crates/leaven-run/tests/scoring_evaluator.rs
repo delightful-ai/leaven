@@ -304,7 +304,6 @@ fn scoring_evaluator_hides_target_from_runner_and_loads_target_with_case_data_re
                         async move {
                             assert_eq!(ctx.case.id(), CaseId::new(700));
                             assert_eq!(ctx.case.input().addend, 2);
-                            assert!(ctx.case.metadata().is_empty());
                             let debug = format!("{:?}", ctx.case);
                             assert!(debug.contains("load_target"));
                             assert!(!debug.contains("42"));

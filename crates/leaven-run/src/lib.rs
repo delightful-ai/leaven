@@ -22,7 +22,7 @@ pub use error::OptimizeError;
 pub use evaluator::{JudgeCandidateOutput, JudgeScoreContext, JudgingEvaluator, ScoringEvaluator};
 pub use evidence::{
     IntoRunResult, ReportableOutput, RunCase, RunError, RunOutput, Score, ScoreCase, ScoreContext,
-    ScoreError, ScoreMetadataView, artifact_identity_output,
+    ScoreError, artifact_identity_output,
 };
 pub use leaven_engine::CachePolicy;
 pub use public_seam::{
@@ -49,7 +49,7 @@ pub mod prelude {
         OptimizationStopReason, OptimizeBuilder, OptimizeError, OptimizeStore, Optimized,
         ReportableOutput, RunCacheSummary, RunCase, RunCompatibilitySummary, RunError,
         RunEventSummary, RunNotResumableReason, RunOutput, RunProblem, RunReportPaths,
-        RunResumability, RunStorage, Score, ScoreCase, ScoreContext, ScoreError, ScoreMetadataView,
+        RunResumability, RunStorage, Score, ScoreCase, ScoreContext, ScoreError,
         StandardRunSummary, default_local_run_dir, optimize,
     };
 }

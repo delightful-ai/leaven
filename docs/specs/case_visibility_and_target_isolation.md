@@ -164,20 +164,22 @@ pub struct ScoreCaseView<'a, I, T = NoTarget> {
     input: &'a I,
     target: Option<&'a T>,
     split: Option<SplitRole>,
-    metadata: ScoreMetadataView<'a>,
 }
 ```
 
-`ScoreMetadataView` is not necessarily the full `MetadataBag`. The default
-ordinary scorer metadata view is empty. Domain adapters may project selected
-metadata keys into it when scoring semantics require them. Examples:
+The current ordinary scorer case view exposes no metadata projection. Domain
+adapters may add a selected, typed scorer metadata projection only when scoring
+semantics require it. That projection must not be an empty marker type. It must
+name the projected fields and prove their cache/fingerprint effect. Examples:
 
 - a benchmark license field needed to decide whether to skip scoring;
 - a rubric version used by a judge;
 - a verifier config id that is part of the scoring contract.
 
 If projected metadata can change the numeric score or feedback, it must
-participate in evaluator fingerprinting and cache correctness.
+participate in evaluator fingerprinting and cache correctness. Until such a
+typed projection exists, scorer metadata is a missing feature, not a public
+empty view.
 
 ## 7. Metadata Policy
 
@@ -355,4 +357,3 @@ cargo test -p leaven --test topology_contract
 ```
 
 Run `just check` before claiming the full behavior complete.
-
