@@ -3111,7 +3111,7 @@ AgentBacked<ProposerSlot<Req>, Runtime, Bootstrap, Parser> implements Proposer<P
 GEPA owns ReflectRequest, SelectedFeedback, LmBackedReflector, GepaReflector, and the agent-backed stage proposer bridge.
 GEPA LM-backed and agent-backed reflection route through RunContext::propose and then RunContext::apply_batch.
 The public AIME GEPA example exercises the LM-backed reflection path; FixedSurfaceEdit remains scaffold/proxy evidence only.
-JJ artifact materialization laws have a scaffold proof, but not full live jj apply semantics.
+JJ artifact file-snapshot materialization has deterministic proof, but not full live jj apply semantics.
 ```
 
 Still deferred:
@@ -3123,7 +3123,7 @@ generic type-erased parser registry
 automatic hidden verifier packaging
 universal Harbor/Inspect/SWE-bench task layout compilation
 RetryWithFeedback parse reruns
-full live jj command/apply implementation beyond the materializable scaffold
+full live jj command/apply implementation beyond file-snapshot materialization
 file-read tracking beyond leaven_query calls and parser-declared files
 ```
 
