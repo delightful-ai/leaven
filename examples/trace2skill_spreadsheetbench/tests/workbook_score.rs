@@ -1,8 +1,9 @@
-use std::path::{Path, PathBuf};
-
 use trace2skill_spreadsheetbench::{
     Trace2SkillOneCaseComparisonInput, compare_trace2skill_one_case_answer,
 };
+
+mod support;
+use support::ExactCaseFixture;
 
 #[test]
 fn scores_golden_workbook_answer_range_as_perfect_match() {
@@ -48,25 +49,4 @@ fn detects_init_workbook_mismatches_against_golden_answer_range() {
             .next()
             .is_some_and(|column| matches!(column, 'A' | 'B' | 'C' | 'D'))
     }));
-}
-
-struct ExactCaseFixture {
-    case_file: PathBuf,
-    init_workbook: PathBuf,
-    golden_workbook: PathBuf,
-}
-
-impl ExactCaseFixture {
-    fn new() -> Self {
-        let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let spreadsheet_dir =
-            repo.join("tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/13-1");
-        Self {
-            case_file: repo.join(
-                "tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/dataset_first_case.json",
-            ),
-            init_workbook: spreadsheet_dir.join("1_13-1_init.xlsx"),
-            golden_workbook: spreadsheet_dir.join("1_13-1_golden.xlsx"),
-        }
-    }
 }

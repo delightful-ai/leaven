@@ -9,10 +9,13 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 use trace2skill_spreadsheetbench::{
-    Trace2SkillOneCaseComparisonInput, Trace2SkillOneCaseInput, Trace2SkillOneCaseRunInput,
+    Trace2SkillOneCaseComparisonInput, Trace2SkillOneCaseRunInput,
     Trace2SkillOneCaseRunScoringInput, compare_trace2skill_one_case_answer,
     prepare_trace2skill_one_case_run, score_trace2skill_one_case_run,
 };
+
+mod support;
+use support::ExactCaseFixture;
 
 #[test]
 fn acp_external_python_worker_solves_real_spreadsheetbench_case_and_scores_run() {
@@ -133,42 +136,6 @@ fn assert_workbook_bound_to_acp_result(result: &Value, output_workbook: &Path) {
 fn sha256_hex(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
-}
-
-struct ExactCaseFixture {
-    case_file: PathBuf,
-    spreadsheet_dir: PathBuf,
-    system_prompt: PathBuf,
-    released_skill: PathBuf,
-}
-
-impl ExactCaseFixture {
-    fn new() -> Self {
-        let repo = workspace_root();
-        Self {
-            case_file: repo.join(
-                "tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/dataset_first_case.json",
-            ),
-            spreadsheet_dir: repo.join(
-                "tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/13-1",
-            ),
-            system_prompt: repo.join(
-                "tmp/repros/trace2skill-upstream/spreadsheet_agent/system_prompt/cli_skill_preloaded_full_system_v1.txt",
-            ),
-            released_skill: repo.join(
-                "tmp/repros/trace2skill-upstream/released_skills/trace2skill-xlsx-35B-combined/SKILL.md",
-            ),
-        }
-    }
-
-    fn case_input(&self) -> Trace2SkillOneCaseInput<'_> {
-        Trace2SkillOneCaseInput {
-            case_file: &self.case_file,
-            spreadsheet_dir: &self.spreadsheet_dir,
-            system_prompt_file: &self.system_prompt,
-            released_skill_file: &self.released_skill,
-        }
-    }
 }
 
 fn spawn_worker(
