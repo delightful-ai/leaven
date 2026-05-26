@@ -16,6 +16,9 @@ pub fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
+pub const FIXTURE_BLOB_SHA256: &str =
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
 pub fn prefixed_jcs_hash(prefix: &str, value: &Value) -> String {
     format!(
         "{prefix}{}",
@@ -31,7 +34,7 @@ pub fn fixture_blob_ref(id: &str, data_classes: &[&str]) -> Value {
     json!({
         "kind": "blob_ref",
         "id": id,
-        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "sha256": FIXTURE_BLOB_SHA256,
         "bytes": 32,
         "data_classes": data_classes
     })

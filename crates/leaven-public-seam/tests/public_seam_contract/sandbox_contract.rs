@@ -1,4 +1,4 @@
-use crate::support::package;
+use crate::support::{FIXTURE_BLOB_SHA256, package};
 use leaven_kernel::{Cost, Fingerprint, Metered};
 use leaven_public_seam::{
     CapabilityDocument, PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext,
@@ -162,7 +162,7 @@ fn sandbox_exec_output_file_refs_reject_unbound_captured_bytes() {
             workspace_file_path(),
             blob_ref(
                 "blob_sandbox_file",
-                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                FIXTURE_BLOB_SHA256,
                 11,
                 &["workspace.file"],
             ),
@@ -188,7 +188,7 @@ fn sandbox_exec_output_file_refs_reject_unbound_captured_bytes() {
             workspace_file_path(),
             blob_ref(
                 "blob_sandbox_file",
-                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                FIXTURE_BLOB_SHA256,
                 12,
                 &["workspace.file"],
             ),
@@ -362,7 +362,7 @@ impl PlanExecutionHost for SandboxHost {
         let stdout_ref = if self.corrupt_stdout_ref {
             blob_ref(
                 "blob_sandbox_stdout",
-                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                FIXTURE_BLOB_SHA256,
                 12,
                 &["transcript.raw"],
             )

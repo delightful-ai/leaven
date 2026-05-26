@@ -1,4 +1,4 @@
-use crate::support::package;
+use crate::support::{FIXTURE_BLOB_SHA256, package};
 use leaven_evidence::{
     DataClass, DataClassSet, OutputBlobAudit, OutputMetadata, OutputRecord, OutputVisibility,
 };
@@ -53,7 +53,7 @@ fn output_record_rejects_placeholder_or_under_described_blob_outputs() {
 
     let public_blob = PublicBlobRef::new(
         "blob_answer_42",
-        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        FIXTURE_BLOB_SHA256,
         42,
         DataClassSet::public(),
     )
@@ -82,13 +82,10 @@ fn output_record_projects_audited_blob_without_external_metadata() {
             store: "file".to_owned(),
             key: "answers/42.txt".to_owned(),
         },
-        OutputBlobAudit::new(
-            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-            42,
-        )
-        .unwrap()
-        .with_media_type("text/plain")
-        .with_uri("leaven-blob://answers/42.txt"),
+        OutputBlobAudit::new(FIXTURE_BLOB_SHA256, 42)
+            .unwrap()
+            .with_media_type("text/plain")
+            .with_uri("leaven-blob://answers/42.txt"),
     )
     .with_metadata(OutputMetadata::new(
         OutputVisibility::Public,
@@ -106,7 +103,7 @@ fn output_record_projects_audited_blob_without_external_metadata() {
             "blob_ref": {
                 "kind": "blob_ref",
                 "id": "blob_cd28ffaa6d6a549defa9f69964204e156c1f8ddfc65f39729643df3b6557e54d",
-                "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "sha256": FIXTURE_BLOB_SHA256,
                 "bytes": 42,
                 "media_type": "text/plain",
                 "uri": "leaven-blob://answers/42.txt",

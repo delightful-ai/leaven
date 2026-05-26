@@ -1,5 +1,6 @@
 use crate::support::{
-    bind_plan_result_hashes, package, prefixed_jcs_hash, submit_assessments_request_hash,
+    bind_plan_result_hashes, fixture_blob_ref, package, prefixed_jcs_hash,
+    submit_assessments_request_hash,
 };
 use leaven_public_seam::PublicSeamError;
 use serde_json::{Value, json};
@@ -468,13 +469,7 @@ fn score_output_record() -> Value {
         "value": "model answer matched target",
         "visibility": "public",
         "data_classes": ["candidate.output"],
-        "blob_ref": {
-            "kind": "blob_ref",
-            "id": "blob_candidate_artifact",
-            "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-            "bytes": 32,
-            "data_classes": ["candidate.artifact"]
-        },
+        "blob_ref": fixture_blob_ref("blob_candidate_artifact", &["candidate.artifact"]),
         "trace_refs": [
             {
                 "kind": "runner_completion",

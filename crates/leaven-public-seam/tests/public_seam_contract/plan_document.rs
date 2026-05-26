@@ -1,4 +1,4 @@
-use crate::support::{package, plan_call_result_hash, prefixed_jcs_hash};
+use crate::support::{FIXTURE_BLOB_SHA256, package, plan_call_result_hash, prefixed_jcs_hash};
 use std::collections::{BTreeMap, BTreeSet};
 
 use leaven_lm::{MessageContentPart, OutputMode, Role};
@@ -6108,12 +6108,7 @@ fn blob_ref(id: &'static str) -> Value {
 }
 
 fn blob_ref_with_data_classes(id: &'static str, data_classes: &[&str]) -> Value {
-    blob_ref_with_hash_and_data_classes(
-        id,
-        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-        12,
-        data_classes,
-    )
+    blob_ref_with_hash_and_data_classes(id, FIXTURE_BLOB_SHA256, 12, data_classes)
 }
 
 fn blob_ref_with_hash_and_data_classes(
