@@ -64,3 +64,17 @@ pub fn bind_plan_result_hashes(mut result: Value) -> Value {
     }
     result
 }
+
+pub fn submit_assessments_request_hash(
+    evaluation_request_id: Value,
+    assessment_ids: Value,
+) -> String {
+    prefixed_jcs_hash(
+        "fp_request_sha256_",
+        &json!({
+            "schema_version": "leaven.submit_assessments_request.v1",
+            "evaluation_request_id": evaluation_request_id,
+            "assessment_ids": assessment_ids
+        }),
+    )
+}

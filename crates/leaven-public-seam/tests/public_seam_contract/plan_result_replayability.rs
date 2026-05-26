@@ -1,5 +1,4 @@
-use crate::support::package;
-use crate::support::prefixed_jcs_hash;
+use crate::support::{package, submit_assessments_request_hash};
 use leaven_public_seam::{PublicSeamError, Replayability};
 use serde_json::{Value, json};
 
@@ -175,12 +174,8 @@ fn mixed_replayability_result<const N: usize>(
 
 fn bind_submit_assessments_request_hash(result: &mut Value) {
     let receipt = &mut result["receipts"][0];
-    receipt["request_hash"] = json!(prefixed_jcs_hash(
-        "fp_request_sha256_",
-        &json!({
-            "schema_version": "leaven.submit_assessments_request.v1",
-            "evaluation_request_id": receipt["evaluation_request_id"],
-            "assessment_ids": receipt["assessment_ids"]
-        }),
+    receipt["request_hash"] = json!(submit_assessments_request_hash(
+        receipt["evaluation_request_id"].clone(),
+        receipt["assessment_ids"].clone()
     ));
 }

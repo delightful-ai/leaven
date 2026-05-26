@@ -1,5 +1,4 @@
-use crate::support::package;
-use crate::support::prefixed_jcs_hash;
+use crate::support::{package, prefixed_jcs_hash, submit_assessments_request_hash};
 use leaven_public_seam::{
     AcpAuthenticateRequest, AcpBackpressure, AcpPermissionRequest, AcpProgressDisposition,
     AcpProgressPriority, AcpSessionLifecycle, AcpSessionState, AcpStdioWorkerLaunch,
@@ -2254,13 +2253,9 @@ fn write_receipt(write_kind: &str, receipt: &str) -> Value {
         "submit_assessments" => {
             value["evaluation_request_id"] = json!("evalreq_acp");
             value["assessment_ids"] = json!(["assess_acp"]);
-            value["request_hash"] = json!(prefixed_jcs_hash(
-                "fp_request_sha256_",
-                &json!({
-                    "schema_version": "leaven.submit_assessments_request.v1",
-                    "evaluation_request_id": "evalreq_acp",
-                    "assessment_ids": ["assess_acp"]
-                }),
+            value["request_hash"] = json!(submit_assessments_request_hash(
+                json!("evalreq_acp"),
+                json!(["assess_acp"])
             ));
         }
         "request_evaluation" => {

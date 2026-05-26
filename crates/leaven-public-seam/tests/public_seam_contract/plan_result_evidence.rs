@@ -1,4 +1,6 @@
-use crate::support::{bind_plan_result_hashes, package, prefixed_jcs_hash};
+use crate::support::{
+    bind_plan_result_hashes, package, prefixed_jcs_hash, submit_assessments_request_hash,
+};
 use leaven_public_seam::PublicSeamError;
 use serde_json::{Value, json};
 
@@ -490,13 +492,9 @@ fn bind_result_hashes(mut result: Value) -> Value {
         if receipt["kind"].as_str() == Some("write")
             && receipt["write_kind"].as_str() == Some("submit_assessments")
         {
-            receipt["request_hash"] = json!(prefixed_jcs_hash(
-                "fp_request_sha256_",
-                &json!({
-                    "schema_version": "leaven.submit_assessments_request.v1",
-                    "evaluation_request_id": receipt["evaluation_request_id"],
-                    "assessment_ids": receipt["assessment_ids"]
-                }),
+            receipt["request_hash"] = json!(submit_assessments_request_hash(
+                receipt["evaluation_request_id"].clone(),
+                receipt["assessment_ids"].clone()
             ));
         }
     }
