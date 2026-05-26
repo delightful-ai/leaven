@@ -20,6 +20,18 @@ use serde::Serialize;
 
 use crate::fixture::{fixture_reflection_input, fixture_workspace_layout};
 
+const TARGET_CURRENT: &str = "target/current";
+const RENDER_ONLY_GAPS: &[&str] = &[
+    "No agent session is executed.",
+    "No workspace mutation is parsed back into a ProposalBatch.",
+    "No proposal is applied through RunContext in this doctor command.",
+];
+const ROUNDTRIP_GAPS: &[&str] = &[
+    "The agent runtime is deterministic FakeAgentRuntime.",
+    "No live provider session is executed.",
+    "Optimizer quality is not evaluated by this doctor command.",
+];
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DoctorCommand {
     Summary,
@@ -80,10 +92,11 @@ fn proposal_render(
         Some(path) => read_reflection_input(&path)?,
         None => fixture_reflection_input(),
     };
-    let instructions =
-        leaven_agent::AgentInstructions::task("Read TASK.md and edit target/current in place.");
+    let instructions = leaven_agent::AgentInstructions::task(format!(
+        "Read TASK.md and edit {TARGET_CURRENT} in place."
+    ));
     let output_contract = OutputContract::WorkspaceDiff {
-        roots: vec![WorkspacePath::new("target/current").expect("constant path is valid")],
+        roots: vec![WorkspacePath::new(TARGET_CURRENT).expect("constant path is valid")],
         surface_fingerprint: None,
     };
     let workspace_files = vec![
@@ -107,11 +120,7 @@ fn proposal_render(
         part: input.part_label,
         workspace_files,
         agent_request: run_request,
-        gaps: vec![
-            "No agent session is executed.",
-            "No workspace mutation is parsed back into a ProposalBatch.",
-            "No proposal is applied through RunContext in this doctor command.",
-        ],
+        gaps: RENDER_ONLY_GAPS,
     };
 
     match format {
@@ -143,7 +152,7 @@ async fn materialize_report(
     let result = {
         let view = workspace.view();
         let mut current = view
-            .subdir(WorkspacePath::new("target/current").expect("constant path is valid"))
+            .subdir(WorkspacePath::new(TARGET_CURRENT).expect("constant path is valid"))
             .map_err(|source| DoctorError::Workspace(source.to_string()))?;
         SkillBankReflector::<String>::new(layout.clone())
             .project(&input, &mut current)
@@ -168,11 +177,7 @@ async fn materialize_report(
             files_written,
             bytes_written,
             files,
-            gaps: vec![
-                "No agent session is executed.",
-                "No workspace mutation is parsed back into a ProposalBatch.",
-                "No proposal is applied through RunContext in this doctor command.",
-            ],
+            gaps: RENDER_ONLY_GAPS,
         }
     };
     workspace
@@ -257,11 +262,7 @@ async fn roundtrip_report(
         proposal_count: 1,
         informed_by_count: proposal.provenance().informed_by_refs().len(),
         edited_path: write_path,
-        gaps: vec![
-            "The agent runtime is deterministic FakeAgentRuntime.",
-            "No live provider session is executed.",
-            "Optimizer quality is not evaluated by this doctor command.",
-        ],
+        gaps: ROUNDTRIP_GAPS,
     })
 }
 
@@ -312,7 +313,7 @@ struct ProposalRenderDoctor {
     part: String,
     workspace_files: Vec<AgentContextRef>,
     agent_request: AgentRunRequest,
-    gaps: Vec<&'static str>,
+    gaps: &'static [&'static str],
 }
 
 impl DoctorText for ProposalRenderDoctor {
@@ -351,7 +352,7 @@ impl DoctorText for ProposalRenderDoctor {
         output.push_str("\n\nAgent task:\n");
         output.push_str(&self.agent_request.instructions.task);
         output.push_str("\nGaps:\n");
-        for gap in &self.gaps {
+        for gap in self.gaps {
             output.push_str("  - ");
             output.push_str(gap);
             output.push('\n');
@@ -370,7 +371,7 @@ struct ProposalMaterializeDoctor {
     files_written: usize,
     bytes_written: u64,
     files: Vec<WorkspaceFileReport>,
-    gaps: Vec<&'static str>,
+    gaps: &'static [&'static str],
 }
 
 impl DoctorText for ProposalMaterializeDoctor {
@@ -393,7 +394,7 @@ impl DoctorText for ProposalMaterializeDoctor {
             output.push('\n');
         }
         output.push_str("\nGaps:\n");
-        for gap in &self.gaps {
+        for gap in self.gaps {
             output.push_str("  - ");
             output.push_str(gap);
             output.push('\n');
@@ -411,7 +412,7 @@ struct ProposalRoundtripDoctor {
     proposal_count: usize,
     informed_by_count: usize,
     edited_path: WorkspacePath,
-    gaps: Vec<&'static str>,
+    gaps: &'static [&'static str],
 }
 
 impl DoctorText for ProposalRoundtripDoctor {
@@ -426,7 +427,7 @@ impl DoctorText for ProposalRoundtripDoctor {
             self.informed_by_count,
             self.edited_path
         );
-        for gap in &self.gaps {
+        for gap in self.gaps {
             output.push_str("  - ");
             output.push_str(gap);
             output.push('\n');
@@ -526,7 +527,7 @@ fn simulated_skill_edit(
     layout: &SkillWorkspaceLayout,
 ) -> Result<(SkillName, WorkspacePath, Vec<u8>), DoctorError> {
     let (name, folder) = selected_skill_folder(input, layout)?;
-    let write_path = WorkspacePath::new("target/current")?
+    let write_path = WorkspacePath::new(TARGET_CURRENT)?
         .join(workspace_path(layout, name.as_str(), "SKILL.md")?.as_str())?;
     let description = format!(
         "{} Doctor simulated GEPA reflection edit.",
