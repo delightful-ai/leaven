@@ -301,9 +301,9 @@ precise boundary before implementation.
 
 62. **Codex app-server is a concrete provider runtime, not an engine concept.**  
     `leaven-agent-codex-app-server` implements `AgentRuntime` over an already
-    materialized workspace. `leaven-agent-codex` is only the Codex provider
-    facade. Neither crate knows optimizer, graph, proposal, assessment, skill,
-    or git vocabulary.
+    materialized workspace. There is no Codex provider-family facade crate;
+    Codex provider leaves are imported directly. They do not know optimizer,
+    graph, proposal, assessment, skill, or git vocabulary.
 
 63. **Codex app-server dependencies are leaf-only.**  
     `codex-app-server-protocol` is confined to
@@ -4846,12 +4846,11 @@ Leaven layers.
 
 - **Codex app-server is a leaf runtime adapter.**
   `leaven-agent-codex-app-server` implements provider-neutral `AgentRuntime`;
-  `leaven-agent-codex` remains a thin facade. Neither knows candidates,
+  no Codex facade crate is retained. Provider leaves do not know candidates,
   proposals, assessments, `RunGraph`, GEPA, git artifacts, or skill banks.
 - **Codex protocol dependencies are contained.** `codex-app-server-protocol`
   and process/protocol dependencies are confined to
-  `leaven-agent-codex-app-server` and feature-gated from umbrella/facade
-  crates.
+  `leaven-agent-codex-app-server` and absent from umbrella routes.
 - **Stdio app-server requires a local mount.** The stdio connector is honest
   about workspace semantics: pure-remote workspaces fail before launch unless
   they expose a real local mount. Non-stdio app-server execution should be a

@@ -33,8 +33,8 @@ raw stdout/stderr, and returns a provider-neutral `AgentSession`.
 - `docs/specs/codex_cli_agent_runtime.md` owns this adapter's product path.
 - Run `cargo nextest run -p leaven-agent-codex-cli` to prove deterministic CLI
   adapter behavior without live Codex.
-- Run `cargo check -p leaven-agent-codex --features cli` to prove facade feature
-  wiring.
+- Run `cargo check -p leaven-agent-codex-cli` to prove the direct provider leaf
+  route.
 
 ## Decision Cards
 - when: changing Codex CLI invocation

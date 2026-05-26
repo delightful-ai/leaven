@@ -25,9 +25,6 @@ workspace layouts beyond the command it needs to run.
 ## 1. Crate Boundary
 
 ```text
-leaven-agent-codex
-  optional facade feature `cli`
-
 leaven-agent-codex-cli
   -> leaven-agent
   -> leaven-agent-command
@@ -139,7 +136,7 @@ Required local checks:
 
 ```text
 cargo nextest run -p leaven-agent-codex-cli
-cargo check -p leaven-agent-codex --features cli
+cargo check -p leaven-agent-codex-cli
 cargo test -p leaven --test topology_contract
 ```
 

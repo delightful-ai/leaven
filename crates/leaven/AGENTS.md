@@ -53,7 +53,7 @@ symbol, make it `pub(crate)` instead of routing it.
 - Runtime logic, helper functions, domain behavior, provider lowering, store
   backends, optimizer strategies, and graph shortcuts belong in the owning
   crate, then may be re-exported here if the import experience calls for it.
-- Codex provider-family implementation stays in `leaven-agent-codex*`. This
+- Codex provider implementation stays in concrete `leaven-agent-codex-*` leaves. This
   crate must not expose Codex provider features until import-experience design
   names that surface.
 - Standard reusable behavior belongs in `leaven-std` or the concrete standard

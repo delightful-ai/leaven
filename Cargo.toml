@@ -7,7 +7,6 @@ members = [
     "crates/leaven",
     "crates/leaven-agent",
     "crates/leaven-agent-command",
-    "crates/leaven-agent-codex",
     "crates/leaven-agent-codex-app-server",
     "crates/leaven-agent-codex-cli",
     "crates/leaven-acp",
@@ -130,7 +129,6 @@ leaven-std = { path = "crates/leaven-std", version = "0.0.0" }
 leaven-workspace = { path = "crates/leaven-workspace", version = "0.0.0" }
 leaven-agent = { path = "crates/leaven-agent", version = "0.0.0" }
 leaven-agent-command = { path = "crates/leaven-agent-command", version = "0.0.0" }
-leaven-agent-codex = { path = "crates/leaven-agent-codex", version = "0.0.0" }
 leaven-agent-codex-app-server = { path = "crates/leaven-agent-codex-app-server", version = "0.0.0", default-features = false }
 leaven-agent-codex-cli = { path = "crates/leaven-agent-codex-cli", version = "0.0.0" }
 leaven-acp = { path = "crates/leaven-acp", version = "0.0.0" }

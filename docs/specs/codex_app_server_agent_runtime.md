@@ -11,9 +11,9 @@
 This document specifies the first real Codex provider adapter for Leaven:
 `leaven-agent-codex-app-server`.
 
-`leaven-agent-codex` is only the Codex provider-family facade. It must not
-own app-server protocol code directly because Codex app-server, Codex CLI,
-and future hosted/container transports have different operational semantics.
+There is no Codex provider-family facade crate. Codex app-server and Codex CLI
+stay as direct provider leaves because they have different operational
+semantics.
 
 The purpose is narrow:
 
@@ -50,9 +50,6 @@ stage adapter and it is not a repo optimizer.
 ```text
 leaven-agent
   owns provider-neutral AgentRuntime, AgentRunRequest, AgentSession
-
-leaven-agent-codex
-  owns Codex provider-family facade and optional re-exports
 
 leaven-agent-codex-app-server
   owns CodexAppServerRuntime: AgentRuntime
@@ -110,9 +107,7 @@ boundary.
 
 ## 2. Crate and Feature Shape
 
-`leaven-agent-codex-app-server` is the concrete app-server leaf provider
-crate. `leaven-agent-codex` is a facade crate and may depend optionally on
-`leaven-agent-codex-app-server` only for re-export ergonomics.
+`leaven-agent-codex-app-server` is the concrete app-server leaf provider crate.
 
 Allowed dependencies:
 
@@ -164,7 +159,6 @@ crate unless the user opts into a concrete provider feature.
 The crate must compile with:
 
 ```text
-cargo check -p leaven-agent-codex --no-default-features
 cargo check -p leaven-agent-codex-app-server --no-default-features
 cargo check -p leaven-agent-codex-app-server --features app-server
 cargo check -p leaven-agent-codex-app-server --features stdio
@@ -748,12 +742,11 @@ Required tests:
 Add or extend crate topology tests to prove:
 
 - no non-provider crate depends on `codex-app-server-protocol`
-- `leaven-agent-codex --no-default-features` does not enable provider deps
 - `leaven-agent-codex-app-server --no-default-features` does not enable provider deps
 - umbrella `leaven` does not enable Codex by default
 - no umbrella Codex feature exists until the import-experience design explicitly
-  names one. Users depend on `leaven-agent-codex-app-server` directly, or on the
-  `leaven-agent-codex` facade with a concrete provider feature.
+  names one. Users depend on `leaven-agent-codex-app-server` or
+  `leaven-agent-codex-cli` directly.
 
 ### 12.4 Live tests
 

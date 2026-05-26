@@ -6,7 +6,6 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "crates/leaven",
     "crates/leaven-agent",
     "crates/leaven-agent-command",
-    "crates/leaven-agent-codex",
     "crates/leaven-agent-codex-app-server",
     "crates/leaven-agent-codex-cli",
     "crates/leaven-acp",
@@ -62,7 +61,6 @@ const EXPECTED_CRATES: &[&str] = &[
     "leaven",
     "leaven-agent",
     "leaven-agent-command",
-    "leaven-agent-codex",
     "leaven-agent-codex-app-server",
     "leaven-agent-codex-cli",
     "leaven-acp",
@@ -145,10 +143,6 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
     (
         "leaven-agent-command",
         &["leaven-agent", "leaven-kernel", "leaven-workspace"],
-    ),
-    (
-        "leaven-agent-codex",
-        &["leaven-agent-codex-app-server", "leaven-agent-codex-cli"],
     ),
     (
         "leaven-agent-codex-app-server",
@@ -438,7 +432,7 @@ fn codex_app_server_protocol_is_leaf_only() {
 
     let umbrella = fs::read_to_string(root.join("crates/leaven/Cargo.toml")).unwrap();
     assert!(
-        !umbrella.contains("leaven-agent-codex")
+        !umbrella.contains("leaven-agent-codex-cli")
             && !umbrella.contains("leaven-agent-codex-app-server"),
         "umbrella leaven must not expose a Codex provider feature until import-experience design names one"
     );

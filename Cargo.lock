@@ -3204,14 +3204,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "leaven-agent-codex"
-version = "0.0.0"
-dependencies = [
- "leaven-agent-codex-app-server",
- "leaven-agent-codex-cli",
-]
-
-[[package]]
 name = "leaven-agent-codex-app-server"
 version = "0.0.0"
 dependencies = [
