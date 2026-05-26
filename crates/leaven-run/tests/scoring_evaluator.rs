@@ -502,9 +502,7 @@ fn scoring_evaluator_passes_budget_snapshot_to_scorer() {
         let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
         let evaluator = ScoringEvaluator::new(
             Arc::new(vec![input_case(0, 2)]),
-            Arc::new(|artifact: TextArtifact, case| {
-                async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
-            }),
+            default_string_runner(),
             Arc::new(
                 |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
                     async move {
@@ -868,9 +866,7 @@ fn scoring_evaluator_rejects_empty_placeholder_report_output() {
         let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
         let evaluator = ScoringEvaluator::new(
             Arc::new(vec![input_case(0, 2)]),
-            Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
-                async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
-            }),
+            default_string_runner(),
             Arc::new(
                 |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
                     async move {
@@ -1025,9 +1021,7 @@ fn scoring_evaluator_rejects_same_context_dummy_report_output() {
         let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
         let evaluator = ScoringEvaluator::new(
             Arc::new(vec![input_case(0, 2)]),
-            Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
-                async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
-            }),
+            default_string_runner(),
             Arc::new(
                 |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
                     async move {
@@ -1135,9 +1129,7 @@ fn scoring_evaluator_rejects_mutated_context_dummy_report_output() {
         let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
         let evaluator = ScoringEvaluator::new(
             Arc::new(vec![input_case(0, 2)]),
-            Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
-                async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
-            }),
+            default_string_runner(),
             Arc::new(
                 |mut ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
                     async move {
@@ -1185,9 +1177,7 @@ fn scoring_evaluator_rejects_report_output_from_another_scoring_context() {
         let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
         let evaluator = ScoringEvaluator::new(
             Arc::new(vec![input_case(0, 2), input_case(1, 3)]),
-            Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
-                async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
-            }),
+            default_string_runner(),
             Arc::new({
                 let stolen_output = Arc::clone(&stolen_output);
                 move |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
@@ -1731,9 +1721,7 @@ fn judging_evaluator_rejects_report_output_from_another_candidate_group() {
         let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
         let evaluator = JudgingEvaluator::new(
             Arc::new(vec![input_case(0, 2), input_case(1, 3)]),
-            Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
-                async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
-            }),
+            default_string_runner(),
             Arc::new({
                 let stolen_output = Arc::clone(&stolen_output);
                 move |ctx: JudgeScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
@@ -2251,9 +2239,7 @@ fn public_job_failing_lm_scoring_evaluator()
 -> ScoringEvaluator<TextArtifact, i32, leaven_eval::NoTarget, String> {
     ScoringEvaluator::new(
         Arc::new(vec![input_case(0, 2), input_case(1, 3)]),
-        Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
-            async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
-        }),
+        default_string_runner(),
         Arc::new(
             |_ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
                 async move {
@@ -2356,9 +2342,7 @@ fn public_job_scoring_evaluator()
 -> ScoringEvaluator<TextArtifact, i32, leaven_eval::NoTarget, String> {
     ScoringEvaluator::new(
         Arc::new(vec![input_case(0, 2), input_case(1, 3)]),
-        Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
-            async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
-        }),
+        default_string_runner(),
         Arc::new(
             |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
                 async move { Ok(numeric_report_score_with_feedback(&ctx, "validation")) }.boxed()
@@ -2372,9 +2356,7 @@ fn public_job_judging_evaluator()
 -> JudgingEvaluator<TextArtifact, i32, leaven_eval::NoTarget, String> {
     JudgingEvaluator::new(
         Arc::new(vec![input_case(0, 2), input_case(1, 3)]),
-        Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
-            async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
-        }),
+        default_string_runner(),
         Arc::new(
             |ctx: JudgeScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
                 let rendered = ctx
