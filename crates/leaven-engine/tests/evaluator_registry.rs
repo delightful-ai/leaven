@@ -312,6 +312,7 @@ fn registered_casewise_batch_requires_case_targets() {
         let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
 
         assert_eq!(result.best, Some(seed));
+        assert_eq!(engine.view().assessment_count(), 0);
     });
 }
 
@@ -339,6 +340,7 @@ fn registered_casewise_batch_requires_every_requested_case() {
         let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
 
         assert_eq!(result.best, Some(seed));
+        assert_eq!(engine.view().assessment_count(), 0);
     });
 }
 
@@ -368,6 +370,7 @@ fn registered_casewise_batch_rejects_rows_outside_requested_cases() {
         let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
 
         assert_eq!(result.best, Some(seed));
+        assert_eq!(engine.view().assessment_count(), 0);
     });
 }
 
@@ -397,6 +400,7 @@ fn registered_casewise_batch_rejects_duplicate_rows_for_requested_cases() {
         let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
 
         assert_eq!(result.best, Some(seed));
+        assert_eq!(engine.view().assessment_count(), 0);
     });
 }
 
