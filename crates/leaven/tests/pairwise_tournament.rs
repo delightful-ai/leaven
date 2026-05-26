@@ -3,8 +3,7 @@ use leaven::extend::{
     AssessmentGranularity, AssessmentTarget, CachePolicy, CandidateId, EvaluationRequest,
     Evaluator, InfoRef, Optimizer, Proposal, ProposalBatch, ProposalBatchSemantics, RunEvent,
 };
-use leaven::plumbing::ContentId;
-use leaven::prelude::{Artifact, ArtifactIdentity, Assessment, Budget, Cost, PairOrder};
+use leaven::prelude::{Assessment, Budget, Cost, PairOrder};
 use leaven::stdlib::{
     evidence::{PairwiseJudgment, PairwiseJudgmentEvidence},
     populations::{BradleyTerryFit, TournamentPopulation},
@@ -15,7 +14,10 @@ use leaven_kernel::{
     AssessmentId, EvaluatorId, Fingerprint, FiniteF64, MetadataBag, Metered, StageId,
 };
 use leaven_store_inline::InlineEvidenceStore;
-use std::convert::Infallible;
+
+mod support;
+
+use support::TextArtifact;
 
 #[test]
 fn engine_runs_pairwise_tournament_end_to_end() {
@@ -74,22 +76,6 @@ fn engine_runs_pairwise_tournament_end_to_end() {
             ],
         );
     });
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct TextArtifact(String);
-
-impl Artifact for TextArtifact {
-    type Change = String;
-    type ApplyError = Infallible;
-
-    fn identity(&self) -> ArtifactIdentity {
-        ArtifactIdentity::Content(ContentId::hash_bytes(self.0.as_bytes()))
-    }
-
-    fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
-        Ok(Self(change.clone()))
-    }
 }
 
 struct TournamentProblem;

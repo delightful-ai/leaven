@@ -4,8 +4,7 @@ use leaven::extend::{
     Evaluator, Optimizer, Proposal, ProposalBatch, ProposalBatchSemantics, ProposalContext,
     Proposer, RunContext, RunEvent,
 };
-use leaven::plumbing::ContentId;
-use leaven::prelude::{Artifact, ArtifactIdentity, Assessment, Budget, Cost};
+use leaven::prelude::{Assessment, Budget, Cost};
 use leaven::stdlib::{evidence::ScalarEvidence, populations::KeepBest};
 use leaven_core::{EvaluationPurpose, ResolvedEvaluationRequest, ResolvedRequestKind};
 use leaven_engine::{
@@ -14,8 +13,11 @@ use leaven_engine::{
 };
 use leaven_kernel::{EvaluatorId, Fingerprint, MetadataBag, Metered, ProposerId};
 use leaven_store_inline::InlineEvidenceStore;
-use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
+
+mod support;
+
+use support::TextArtifact;
 
 #[test]
 fn engine_runs_scalar_keep_best_end_to_end() {
@@ -86,22 +88,6 @@ fn engine_runs_scalar_keep_best_end_to_end() {
             callback_candidate_counts.lock().unwrap().len()
         );
     });
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct TextArtifact(String);
-
-impl Artifact for TextArtifact {
-    type Change = String;
-    type ApplyError = Infallible;
-
-    fn identity(&self) -> ArtifactIdentity {
-        ArtifactIdentity::Content(ContentId::hash_bytes(&self.0))
-    }
-
-    fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
-        Ok(Self(change.clone()))
-    }
 }
 
 struct ScalarProblem;
