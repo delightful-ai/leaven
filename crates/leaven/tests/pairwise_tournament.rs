@@ -84,7 +84,7 @@ impl Artifact for TextArtifact {
     type ApplyError = Infallible;
 
     fn identity(&self) -> ArtifactIdentity {
-        ArtifactIdentity::Content(content_id(self.0.as_bytes()))
+        ArtifactIdentity::Content(ContentId::hash_bytes(self.0.as_bytes()))
     }
 
     fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
@@ -280,8 +280,4 @@ fn assert_event_subsequence(events: &[&RunEvent], expected: &[EventKind]) {
         }
     }
     panic!("missing expected event subsequence at index {cursor}");
-}
-
-fn content_id(bytes: &[u8]) -> ContentId {
-    ContentId::hash_bytes(bytes)
 }

@@ -157,7 +157,7 @@ impl Artifact for OptimizerPolicy {
     type ApplyError = OptimizerPolicyError;
 
     fn identity(&self) -> ArtifactIdentity {
-        ArtifactIdentity::Content(content_id(format!("{self:?}").as_bytes()))
+        ArtifactIdentity::Content(ContentId::hash_bytes(format!("{self:?}").as_bytes()))
     }
 
     fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
@@ -791,8 +791,4 @@ fn case_by_id(cases: &[ConditionalQaCase], id: CaseId) -> Option<&ConditionalQaC
     usize::try_from(id.0)
         .ok()
         .and_then(|index| cases.get(index))
-}
-
-fn content_id(bytes: &[u8]) -> ContentId {
-    ContentId::hash_bytes(bytes)
 }

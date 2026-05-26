@@ -3171,7 +3171,7 @@ impl Artifact for PartMapArtifact {
             .iter()
             .flat_map(|(key, value)| [key.as_bytes(), value.as_bytes()].concat())
             .collect::<Vec<_>>();
-        ArtifactIdentity::Content(content_id(&bytes))
+        ArtifactIdentity::Content(ContentId::hash_bytes(bytes))
     }
 
     fn cache_identity(&self) -> Option<CacheIdentity> {
@@ -4311,8 +4311,4 @@ impl EditSurface<PartMapArtifact> for InvalidApplySurface {
             value: edit,
         })
     }
-}
-
-fn content_id(bytes: &[u8]) -> ContentId {
-    ContentId::hash_bytes(bytes)
 }

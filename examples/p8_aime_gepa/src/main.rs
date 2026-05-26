@@ -4052,11 +4052,13 @@ impl Artifact for AimePrompt {
     type ApplyError = AimePromptError;
 
     fn identity(&self) -> ArtifactIdentity {
-        ArtifactIdentity::Content(content_id(self.system.as_bytes()))
+        ArtifactIdentity::Content(ContentId::hash_bytes(self.system.as_bytes()))
     }
 
     fn cache_identity(&self) -> Option<CacheIdentity> {
-        Some(CacheIdentity::Content(content_id(self.system.as_bytes())))
+        Some(CacheIdentity::Content(ContentId::hash_bytes(
+            self.system.as_bytes(),
+        )))
     }
 
     fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
@@ -5856,10 +5858,6 @@ fn aime_score_feedback(target: &AimeTarget, raw_answer: &str) -> (f64, String) {
     }
 }
 
-fn content_id(bytes: &[u8]) -> ContentId {
-    ContentId::hash_bytes(bytes)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5939,7 +5937,7 @@ mod tests {
     #[test]
     fn aime_prompt_exposes_cache_safe_content_identity() {
         let prompt = AimePrompt::new("cache me");
-        let expected = content_id(prompt.system.as_bytes());
+        let expected = ContentId::hash_bytes(prompt.system.as_bytes());
 
         assert_eq!(prompt.identity(), ArtifactIdentity::Content(expected));
         assert_eq!(

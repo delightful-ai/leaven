@@ -139,7 +139,7 @@ impl Artifact for HarnessArtifact {
     type ApplyError = HarnessError;
 
     fn identity(&self) -> ArtifactIdentity {
-        ArtifactIdentity::Content(content_id(
+        ArtifactIdentity::Content(ContentId::hash_bytes(
             format!("{}\n{}", self.source, self.notes).as_bytes(),
         ))
     }
@@ -738,8 +738,4 @@ fn merge_report(report: &mut MaterializationReport, metered: Metered<Materializa
     report.files_written += metered.value.files_written;
     report.bytes_written += metered.value.bytes_written;
     report.truncations.extend(metered.value.truncations);
-}
-
-fn content_id(bytes: &[u8]) -> ContentId {
-    ContentId::hash_bytes(bytes)
 }

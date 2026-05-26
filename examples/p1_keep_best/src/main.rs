@@ -75,7 +75,7 @@ impl Artifact for TextArtifact {
     type ApplyError = TextError;
 
     fn identity(&self) -> ArtifactIdentity {
-        ArtifactIdentity::Content(content_id(self.0.as_bytes()))
+        ArtifactIdentity::Content(ContentId::hash_bytes(self.0.as_bytes()))
     }
 
     fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
@@ -233,8 +233,4 @@ impl Optimizer<ScalarProblem> for ScalarKeepBestOptimizer {
     fn best_candidate(&self, _graph: RunGraphView<'_, ScalarProblem>) -> Option<CandidateId> {
         self.population.best()
     }
-}
-
-fn content_id(bytes: &[u8]) -> ContentId {
-    ContentId::hash_bytes(bytes)
 }

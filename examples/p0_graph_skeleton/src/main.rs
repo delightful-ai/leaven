@@ -82,7 +82,7 @@ impl Artifact for TextArtifact {
     type ApplyError = TextError;
 
     fn identity(&self) -> ArtifactIdentity {
-        ArtifactIdentity::Content(content_id(self.0.as_bytes()))
+        ArtifactIdentity::Content(ContentId::hash_bytes(self.0.as_bytes()))
     }
 
     fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
@@ -104,7 +104,3 @@ impl OptimizationProblem for TextProblem {
 struct NoEvidence;
 
 impl Evidence for NoEvidence {}
-
-fn content_id(bytes: &[u8]) -> ContentId {
-    ContentId::hash_bytes(bytes)
-}

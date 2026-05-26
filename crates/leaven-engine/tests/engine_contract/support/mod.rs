@@ -29,14 +29,16 @@ impl Artifact for TextArtifact {
         if let Some(label) = self.0.strip_prefix("external:") {
             return ArtifactIdentity::External(label.to_owned());
         }
-        ArtifactIdentity::Content(text_content_id(&self.0))
+        ArtifactIdentity::Content(ContentId::hash_bytes(self.0.as_bytes()))
     }
 
     fn cache_identity(&self) -> Option<CacheIdentity> {
         if self.0.starts_with("external:") {
             return None;
         }
-        Some(CacheIdentity::Content(text_content_id(&self.0)))
+        Some(CacheIdentity::Content(ContentId::hash_bytes(
+            self.0.as_bytes(),
+        )))
     }
 
     fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
@@ -45,10 +47,6 @@ impl Artifact for TextArtifact {
             TextChange::Fail => Err(TextError),
         }
     }
-}
-
-fn text_content_id(text: &str) -> ContentId {
-    ContentId::hash_bytes(text)
 }
 
 #[derive(Clone, Debug, PartialEq)]

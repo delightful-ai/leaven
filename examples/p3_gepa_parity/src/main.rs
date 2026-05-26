@@ -117,7 +117,7 @@ impl Artifact for PartMapArtifact {
             .iter()
             .flat_map(|(key, value)| [key.as_bytes(), value.as_bytes()].concat())
             .collect::<Vec<_>>();
-        ArtifactIdentity::Content(content_id(&bytes))
+        ArtifactIdentity::Content(ContentId::hash_bytes(bytes))
     }
 
     fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
@@ -403,8 +403,4 @@ fn average_score(evidence: &CasewiseEvidence<ScalarEvidence>) -> f64 {
         .sum();
     let count = u32::try_from(evidence.outcomes().len()).expect("case count fits into u32");
     total / f64::from(count)
-}
-
-fn content_id(bytes: &[u8]) -> ContentId {
-    ContentId::hash_bytes(bytes)
 }

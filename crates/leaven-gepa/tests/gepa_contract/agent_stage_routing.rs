@@ -102,11 +102,13 @@ impl Artifact for TestArtifact {
     type ApplyError = std::convert::Infallible;
 
     fn identity(&self) -> ArtifactIdentity {
-        ArtifactIdentity::Content(content_id(&self.0))
+        ArtifactIdentity::Content(ContentId::hash_bytes(self.0.as_bytes()))
     }
 
     fn cache_identity(&self) -> Option<CacheIdentity> {
-        Some(CacheIdentity::Content(content_id(&self.0)))
+        Some(CacheIdentity::Content(ContentId::hash_bytes(
+            self.0.as_bytes(),
+        )))
     }
 
     fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
@@ -720,8 +722,4 @@ fn graph_and_budget() -> (
         leaven_engine::RunGraph::new(leaven_kernel::RunId::new()),
         leaven_engine::BudgetLedger::new(Budget::unlimited()),
     )
-}
-
-fn content_id(text: &str) -> ContentId {
-    ContentId::hash_bytes(text)
 }
