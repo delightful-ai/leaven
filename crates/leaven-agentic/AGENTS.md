@@ -30,12 +30,6 @@ provider protocol details or optimizer-specific search rhythm.
   artifact adapter, and dataset adapter dispatch payloads into the locked
   public-seam role-specific wire contract without making this crate the
   runtime, provider implementation, or schema validator.
-- `GoalLoop`, `GoalHandoff`, `GoalSpecCheck`, `GoalStagePlan`,
-  `GoalSpecCheckRequest`, `GoalStagePlanRequest`, `GoalExecutionRequest`, and
-  the `Goal*Signature` types are the typed pre-goal API for persistent agent
-  loops. They preserve original intent, reject proxy proofs, carry stage-plan
-  details forward, and require a proof denominator without knowing
-  provider-specific goal flags.
 - Repairing proposers own bounded re-prompt policy; repair is stage policy, not
   a provider-runtime responsibility.
 
@@ -64,9 +58,6 @@ provider protocol details or optimizer-specific search rhythm.
   agentic-owned reflection/proposal stage lowering crosses the locked
   public-seam owner with separate ReflectRequest, ReflectionResult,
   ProposeRequest, and binding stage receipts.
-- `crates/leaven-agentic/tests/agentic_contract/goal_handoff.rs` proves the
-  pre-goal checklist, typed request/output helpers, next-stage planning, and
-  execution prompt contracts.
 - `docs/specs/agentic_stage_runtime.md` owns the generic runtime/stage split.
 - Run `cargo nextest run -p leaven-agentic` to prove generic agentic adapter
   behavior.
@@ -108,22 +99,16 @@ provider runtime behavior.
   avoid: moving agentic task/environment semantics into `leaven-eval` or leaking hidden targets through materializers
   verify: run the preflight and evaluator paths in `cargo nextest run -p leaven-agentic --test agentic_contract agentic_workload`
 
-- when: changing persistent-goal handoff prompts
-  do: keep the pre-goal checklist explicit in `GoalHandoff`, expose typed request/output helpers through `GoalLoop`, and prove the no-hidden-runtime path in tests
-  preserve: original intent, designed surface, misleading proxy proof rejection, acceptance path, proof denominator, stage rationale, required changes, stop condition, and honest blocked closeout
-  avoid: moving Codex CLI flags or jj command execution into this generic adapter crate, or dropping typed `GoalStagePlan` fields before execution
-  verify: run `cargo test -p leaven-agentic --test agentic_contract goal_handoff`
-
 ## Local Bait
 - `docs/specs/public-seam-v1/` locks the public seam for external-worker
   reflection/proposal/assessment flow: stage payloads, evidence envelopes, and
   the ACP profile that delivers Leaven extension methods to workers. The
   structural split between reflection (diagnosis) and proposal (graph mutation
-  intent) is governing judgment; preserve it when shaping adapter parsers and
-  goal-loop handoff prompts. This crate now owns generic producer-side
-  stage-payload lowering helpers for reflect/propose plus runner, scorer,
-  judge, callback, artifact adapter, and dataset adapter payload roles, but
-  that is not ACP transport, provider execution, or graph mutation authority.
+  intent) is governing judgment; preserve it when shaping adapter parsers. This
+  crate now owns generic producer-side stage-payload lowering helpers for
+  reflect/propose plus runner, scorer, judge, callback, artifact adapter, and
+  dataset adapter payload roles, but that is not ACP transport, provider
+  execution, or graph mutation authority.
 - Agent workspace mutation is not graph mutation. Only parser-produced
   proposals or assessments enter the graph through `RunContext`.
 - Agentic evaluators are nondeterministic by default. Do not make evaluation
