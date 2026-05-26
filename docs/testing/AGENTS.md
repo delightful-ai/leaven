@@ -27,7 +27,9 @@ Use the weakest applicable classification in release notes and closeouts. A run 
 - `just milestone-examples` is not cheap while P5 is live-gated in the root `Justfile`.
 - `just coverage` does not tell whether a milestone is product-proof.
 - `cargo run -p p8_aime_gepa` does not prove live AIME, concrete provider transport, or LM cache behavior.
-- `cargo run -p xtask` currently proves only that the empty automation package builds and exits.
+- `cargo run -p xtask` proves only that the automation CLI builds and accepts
+  an empty invocation. Use `cargo run -p xtask -- git-trust-bench ...` or the
+  coverage recipe before citing the Git trust benchmark behavior.
 
 ## Verification
 - Full suite SLA: `just test`.

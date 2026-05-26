@@ -55,7 +55,9 @@ surface or encode the warning at the owning layer.
 - `examples`: executable milestone packages. They prove specific public workflows, mechanics, or proxy demos as classified by `examples/AGENTS.md`; do not treat coverage over an example as product maturity by default.
 - `reviews`: dated audit findings and critique packages. Treat them as evidence and prioritization input, not as stronger product law than specs/code/tests. When an audit exposes a public lie, fix the owning public surface or encode the warning in the nearest `AGENTS.md`; do not bury it in plans.
 - `scripts`: repo tooling with real local side effects; scripts must be deterministic and safe to rerun.
-- `xtask`: compiled repo automation package. It is currently skeletal; `xtask/AGENTS.md` owns the proof limits for adding real automation.
+- `xtask`: compiled repo automation package. Its current behavior-bearing
+  command is `git-trust-bench`; `xtask/AGENTS.md` owns the local side-effect
+  and proof limits for repo automation.
 
 ## How To Use This Hierarchy
 Read stacked `AGENTS.md` files from root to the working directory. Treat higher
