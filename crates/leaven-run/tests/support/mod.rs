@@ -1,4 +1,7 @@
+#![allow(dead_code)]
+
 use leaven_core::{Artifact, ArtifactIdentity};
+use leaven_evidence::OutputRecord;
 use leaven_kernel::{ContentId, Fingerprint};
 
 pub const TEST_RUNNER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([7; 32]);
@@ -29,4 +32,12 @@ impl Artifact for TextArtifact {
     fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
         Ok(Self(*change))
     }
+}
+
+pub fn expected_candidate_output(output: impl Into<String>) -> OutputRecord {
+    OutputRecord::candidate_inline(output)
+}
+
+pub fn candidate_artifact_output(output: impl Into<String>) -> OutputRecord {
+    OutputRecord::candidate_artifact_inline(output)
 }

@@ -927,7 +927,9 @@ fn scoring_identity(label: &str) -> ScoringEvaluatorIdentity {
 
 mod support;
 
-use support::{TEST_RUNNER_FINGERPRINT, TEST_SCORER_FINGERPRINT, TextArtifact};
+use support::{
+    TEST_RUNNER_FINGERPRINT, TEST_SCORER_FINGERPRINT, TextArtifact, candidate_artifact_output,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct PromptInput {
@@ -1381,10 +1383,6 @@ fn case_assessment_evidence(
             ),
         ]),
     )
-}
-
-fn candidate_artifact_output(text: impl Into<String>) -> OutputRecord {
-    OutputRecord::candidate_artifact_inline(text)
 }
 
 fn audited_candidate_blob_output() -> OutputRecord {

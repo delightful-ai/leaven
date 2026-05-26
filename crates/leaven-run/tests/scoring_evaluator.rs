@@ -30,7 +30,10 @@ use leaven_store_inline::InlineEvidenceStore;
 
 mod support;
 
-use support::{TEST_RUNNER_FINGERPRINT, TEST_SCORER_FINGERPRINT, TextArtifact};
+use support::{
+    TEST_RUNNER_FINGERPRINT, TEST_SCORER_FINGERPRINT, TextArtifact, candidate_artifact_output,
+    expected_candidate_output,
+};
 
 const TEST_DATASET_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([9; 32]);
 const TEST_SPLIT_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([10; 32]);
@@ -2472,14 +2475,6 @@ fn assert_projected_public_output(
             .data_classes()
             .contains(&DataClass::candidate_output())
     );
-}
-
-fn expected_candidate_output(output: impl Into<String>) -> OutputRecord {
-    OutputRecord::candidate_inline(output)
-}
-
-fn candidate_artifact_output(output: impl Into<String>) -> OutputRecord {
-    OutputRecord::candidate_artifact_inline(output)
 }
 
 fn inline_output_text(output: &OutputRecord) -> &str {
