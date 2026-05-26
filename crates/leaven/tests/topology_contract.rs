@@ -459,6 +459,28 @@ fn gepa_agent_stage_scaffold_is_not_a_root_public_route() {
     );
 }
 
+#[test]
+fn git_artifact_surfaces_are_not_empty_public_markers() {
+    let root = workspace_root();
+    let lib = fs::read_to_string(root.join("crates/leaven-artifact-git/src/lib.rs")).unwrap();
+    let std = fs::read_to_string(root.join("crates/leaven-std/src/lib.rs")).unwrap();
+
+    for symbol in [
+        "GitPathSurface",
+        "GitAgentKitSurface",
+        "GitSkillFrontmatterSurface",
+    ] {
+        assert!(
+            !lib.contains(symbol),
+            "`{symbol}` must not be exported by leaven-artifact-git until it has behavior"
+        );
+        assert!(
+            !std.contains(symbol),
+            "`{symbol}` must not be laundered through leaven-std while it is absent"
+        );
+    }
+}
+
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()

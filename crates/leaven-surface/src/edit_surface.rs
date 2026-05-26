@@ -9,10 +9,9 @@ use crate::{Part, SurfaceError};
 /// A surface defines what an artifact's "parts" are, how those parts
 /// are addressed, what a partial view of one looks like, and how an
 /// edit to a part becomes an artifact-native [`Change`]. The same
-/// artifact may have multiple surfaces — a git repo may expose
-/// `GitPathSurface`, `GitSkillFrontmatterSurface`, and
-/// `GitAgentKitSurface`, each chosen by a different optimizer or
-/// renderer.
+/// artifact may have multiple surfaces. For example, a git repo might expose
+/// a path-based surface or a skill-frontmatter surface, each chosen by a
+/// different optimizer or renderer.
 ///
 /// [`Change`]: Artifact::Change
 ///

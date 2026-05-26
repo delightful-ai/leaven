@@ -95,11 +95,10 @@ pub mod prelude {
 
     #[cfg(feature = "git")]
     pub use leaven_artifact_git::{
-        GitAgentKitSurface, GitArtifact, GitArtifactError, GitArtifactIdentityMode, GitChange,
-        GitDiff, GitDiffSummary, GitFsOp, GitLineage, GitObjectId, GitPath, GitPathSurface,
-        GitProgramArtifact, GitProgramChange, GitProgramLayout, GitRef, GitRefKey, GitRefKind,
-        GitRefName, GitRefTarget, GitRepoArtifact, GitRepoChange, GitRevision, GitRevisionKind,
-        GitSkillFrontmatterSurface, RemoteRef, RepoKey, RepoRef, RepoStoreRef,
+        GitArtifact, GitArtifactError, GitArtifactIdentityMode, GitChange, GitDiff, GitDiffSummary,
+        GitFsOp, GitLineage, GitObjectId, GitPath, GitProgramArtifact, GitProgramChange,
+        GitProgramLayout, GitRef, GitRefKey, GitRefKind, GitRefName, GitRefTarget, GitRepoArtifact,
+        GitRepoChange, GitRevision, GitRevisionKind, RemoteRef, RepoKey, RepoRef, RepoStoreRef,
     };
 
     #[cfg(feature = "jj")]

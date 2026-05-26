@@ -1,4 +1,4 @@
-//! Git-backed artifact vocabulary and git-specific edit surfaces.
+//! Git-backed artifact vocabulary.
 
 mod artifact;
 mod change;
@@ -7,7 +7,6 @@ mod error;
 mod path;
 mod program;
 mod reference;
-mod surface;
 
 pub use artifact::{GitArtifact, GitArtifactIdentityMode};
 pub use change::{GitChange, GitFsOp};
@@ -21,4 +20,3 @@ pub use program::{
 pub use reference::{
     GitLineage, GitObjectId, GitRef, GitRefKey, GitRefKind, GitRefName, GitRefTarget,
 };
-pub use surface::{GitAgentKitSurface, GitPathSurface, GitSkillFrontmatterSurface};
