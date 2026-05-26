@@ -7,12 +7,12 @@ This spec turns the remaining first-two-subsystems work into a concrete,
 testable contract. It is subordinate to:
 
 - `docs/specs/initial_library.md`
-- `docs/specs/first_two_subsystems.md`
-- `docs/specs/leaven_v0_2_1b_corrected_crate_topology_lib_rs.md`
+- root `Cargo.toml` and `crates/leaven/tests/topology_contract.rs` for live
+  crate topology
 
-When this document and those specs disagree, preserve the corrected v0.2.1b
-crate topology and the first-two-subsystems invariants. Do not add compatibility
-paths.
+When this document and current specs/code disagree, preserve the implemented
+hard-cutover invariants and update the stale document in the same change. Do
+not add compatibility paths.
 
 ## Goal
 

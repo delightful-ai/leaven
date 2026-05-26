@@ -3,7 +3,6 @@
 > Status: stakeholder alignment spec.  
 > Date: 2026-05-11.  
 > Governing specs: `docs/specs/initial_library.md`,
-> `docs/specs/first_two_subsystems.md`,
 > `docs/specs/agentic_stage_runtime.md`, and
 > `docs/specs/lm_runtime_and_response_cache.md`.  
 > Purpose: define what Leaven means by tracing before committing to concrete

@@ -80,7 +80,9 @@ The top of the stack is:
   train-filtered populations, or `MinibatchThenValidation` as GEPA defaults,
   treat the reference behavior document as the authority.
 - `milestone_examples_behavioral_contract.md` currently covers P0 through P4. For P5-P8, use the example package docs, `docs/testing/README.md`, and the recent review tree until a durable spec is added.
-- `docs/specs/tracing-vision/README.md` still references `first_two_subsystems.md` as governing context. Reconcile that stale reference before using tracing-vision text to route new code.
+- `docs/specs/tracing-vision/README.md` is stakeholder alignment, not a crate
+  topology source. Route tracing implementation through current specs,
+  `Cargo.toml`, and topology tests.
 
 ## Local Rules
 - Preserve spec vocabulary in code and tests unless the spec is being corrected in the same change.

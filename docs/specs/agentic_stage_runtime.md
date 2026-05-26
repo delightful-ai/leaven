@@ -3,7 +3,7 @@
 > Status: pre-implementation minor spec bump.  
 > Date: 2026-05-07.  
 > Governing spec: `docs/specs/initial_library.md`.  
-> Topology companion: `docs/specs/leaven_v0_2_1b_corrected_crate_topology_lib_rs.md`.  
+> Live topology: root `Cargo.toml` and `crates/leaven/tests/topology_contract.rs`.  
 > Stage-materialization companion: `docs/specs/agentic_stage_materialization.md`.  
 > Purpose: specify how Leaven runs agents without making the engine, artifacts,
 > or cold core know what an agent is.

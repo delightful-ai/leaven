@@ -1,7 +1,7 @@
 ## Boundary
 This is the repo-wide operating contract for Leaven. It gives horizon-level guidance for the Rust workspace; more specific `AGENTS.md` files add local deltas and must not silently contradict this file.
 
-Leaven is spec-first library work. The governing product truth starts in `docs/specs/initial_library.md`; narrower implementation slices may live beside it, such as `docs/specs/first_two_subsystems.md`.
+Leaven is spec-first library work. The governing product truth starts in `docs/specs/initial_library.md`; narrower implementation slices live beside it when their status lines mark them current. Superseded specs are provenance only.
 
 Product constraints and principles live in `docs/specs/guiding_principles.md`.
 

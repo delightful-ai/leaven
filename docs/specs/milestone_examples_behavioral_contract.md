@@ -7,11 +7,12 @@ This spec defines the code-level behavior required before the milestone
 examples under `examples/` count as real. It is subordinate to:
 
 - `docs/specs/initial_library.md`
-- `docs/specs/leaven_v0_2_1b_corrected_crate_topology_lib_rs.md`
+- root `Cargo.toml` and `crates/leaven/tests/topology_contract.rs` for live
+  crate topology
 - `docs/specs/guiding_principles.md`
 - `docs/specs/p1_scalar_keep_best_verification_contract.md`
 
-When this document disagrees with those specs, preserve the v0.2.2 topology:
+When this document disagrees with those specs, preserve the live topology:
 `leaven-core` stays cold, `leaven-engine` owns graph/context/runtime behavior,
 surfaces are explicit, and workspace population is `Materializer`, not
 `WorkspaceRenderer`. Do not add compatibility paths.

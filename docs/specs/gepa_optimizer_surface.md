@@ -22,7 +22,8 @@ It is subordinate to:
 
 - `docs/specs/initial_library.md`
 - `docs/specs/guiding_principles.md`
-- `docs/specs/leaven_v0_2_1b_corrected_crate_topology_lib_rs.md`
+- root `Cargo.toml` and `crates/leaven/tests/topology_contract.rs` for live
+  crate topology
 - `docs/specs/milestone_examples_behavioral_contract.md`
 - `docs/specs/agentic_stage_runtime.md`
 - `docs/specs/agentic_stage_materialization.md`
