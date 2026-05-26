@@ -1,7 +1,10 @@
 use std::convert::Infallible;
 
 use futures::executor::block_on;
-use leaven_agent::{AgentStatus, FakeAgentAction, FakeAgentRuntime};
+use leaven_agent::{
+    AgentStatus,
+    test_support::{FakeAgentAction, FakeAgentRuntime},
+};
 use leaven_agentic::{
     ArtifactReflector, ReadbackResult, ReflectionError, ReflectionLayoutConfig, ReflectionWorkspace,
 };

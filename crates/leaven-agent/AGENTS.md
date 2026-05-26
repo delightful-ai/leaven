@@ -53,8 +53,8 @@ GEPA, skill banks, run graphs, or optimizer rhythm.
   verify: run `cargo nextest run -p leaven-agent` and add one failing-contract case in `runtime_contract.rs`
 
 - when: using `FakeAgentRuntime`
-  do: use it for deterministic contract tests, examples, and adapter proofs before a provider is involved
-  preserve: its status as test/example support even though it is currently public and prelude-exported
+  do: import it through `leaven_agent::test_support` for deterministic contract tests, examples, diagnostics, and adapter proofs before a provider is involved
+  preserve: its status as explicit test/example support outside the crate root and prelude
   avoid: citing fake runtime behavior as evidence that a production provider path, approval policy, sandbox, or skill discovery works
   verify: pair fake-runtime tests with the concrete provider leaf test once provider lowering is the claim
 
@@ -65,8 +65,9 @@ GEPA, skill banks, run graphs, or optimizer rhythm.
   extension methods; there is no MCP layer in v1. Use it as the durable target
   when shaping runtime/output-contract changes, not as proof of an implemented
   bridge.
-- `FakeAgentRuntime` is a contract-test helper, not a provider architecture.
-  New real providers should implement `AgentRuntime` in provider leaves.
+- `FakeAgentRuntime` is a contract-test helper under `test_support`, not a
+  provider architecture. New real providers should implement `AgentRuntime` in
+  provider leaves.
 - `OutputContract::JsonSchema` validates the same final-assistant-message
   presence as `FinalMessage`; provider leaves own actual schema-constrained
   decoding/enforcement until a runtime-specific verifier is added.

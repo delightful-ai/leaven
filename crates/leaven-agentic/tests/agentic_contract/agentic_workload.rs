@@ -9,7 +9,8 @@ use std::sync::{
 use futures::future::{BoxFuture, FutureExt};
 use leaven_agent::{
     AgentInstructions, AgentRunContext, AgentRunRequest, AgentRuntime, AgentRuntimeError,
-    AgentSession, FakeAgentAction, FakeAgentRuntime, JsonSchemaRef, OutputContract,
+    AgentSession, JsonSchemaRef, OutputContract,
+    test_support::{FakeAgentAction, FakeAgentRuntime},
 };
 use leaven_agentic::{
     AgentCase, AgentCaseEvaluator, AgentCaseEvaluatorConfig, AgentCasePresentation,

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use leaven_agent::{FakeAgentAction, FakeAgentRuntime};
+use leaven_agent::test_support::{FakeAgentAction, FakeAgentRuntime};
 use leaven_agentic::AgenticProposerConfig;
 use leaven_agentic_skill::SkillWorkspaceLayout;
 use leaven_artifact_skill::{

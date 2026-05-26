@@ -7,7 +7,6 @@ mod session;
 mod transcript;
 
 pub use error::AgentRuntimeError;
-pub use fake::{FakeAgentAction, FakeAgentRuntime};
 pub use runtime::AgentRuntime;
 pub use session::{
     AgentContextRef, AgentInstructions, AgentLimits, AgentRunContext, AgentRunRequest,
@@ -25,8 +24,16 @@ pub mod prelude {
         AgentContextRef, AgentInstructions, AgentLimits, AgentRunContext, AgentRunRequest,
         AgentRuntime, AgentRuntimeCapabilities, AgentRuntimeError, AgentSession,
         AgentSessionArtifact, AgentSessionArtifactKind, AgentStatus, AgentToolPolicy,
-        AgentTranscript, CancellationRef, CommandRecord, FakeAgentAction, FakeAgentRuntime,
-        JsonSchemaRef, OutputContract, RawProviderEvent, ToolCallRecord, TranscriptEvent,
-        TranscriptRole, WorkspaceAccessMode, WorkspaceReadRecord, validate_output_contract,
+        AgentTranscript, CancellationRef, CommandRecord, JsonSchemaRef, OutputContract,
+        RawProviderEvent, ToolCallRecord, TranscriptEvent, TranscriptRole, WorkspaceAccessMode,
+        WorkspaceReadRecord, validate_output_contract,
     };
+}
+
+/// Explicit deterministic runtime support for tests, examples, and diagnostics.
+///
+/// These names are intentionally outside the crate root and prelude so fake
+/// provider behavior cannot masquerade as an ordinary runtime route.
+pub mod test_support {
+    pub use crate::fake::{FakeAgentAction, FakeAgentRuntime};
 }

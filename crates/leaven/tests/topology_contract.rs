@@ -460,6 +460,26 @@ fn gepa_agent_stage_scaffold_is_not_a_root_public_route() {
 }
 
 #[test]
+fn fake_agent_runtime_is_explicit_test_support() {
+    let root = workspace_root();
+    let lib = fs::read_to_string(root.join("crates/leaven-agent/src/lib.rs")).unwrap();
+
+    assert!(
+        !lib.contains("pub use fake::{FakeAgentAction, FakeAgentRuntime};"),
+        "fake runtime helpers must not be crate-root public provider routes"
+    );
+    assert!(
+        !lib.contains("CommandRecord, FakeAgentAction, FakeAgentRuntime"),
+        "fake runtime helpers must not flow through leaven_agent::prelude"
+    );
+    assert!(
+        lib.contains("pub mod test_support")
+            && lib.contains("pub use crate::fake::{FakeAgentAction, FakeAgentRuntime};"),
+        "fake runtime helpers should remain available only through explicit test_support"
+    );
+}
+
+#[test]
 fn git_artifact_surfaces_are_not_empty_public_markers() {
     let root = workspace_root();
     let lib = fs::read_to_string(root.join("crates/leaven-artifact-git/src/lib.rs")).unwrap();

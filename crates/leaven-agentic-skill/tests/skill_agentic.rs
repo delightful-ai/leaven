@@ -1,6 +1,9 @@
 use std::collections::BTreeMap;
 
-use leaven_agent::{AgentInstructions, FakeAgentAction, FakeAgentRuntime, OutputContract};
+use leaven_agent::{
+    AgentInstructions, OutputContract,
+    test_support::{FakeAgentAction, FakeAgentRuntime},
+};
 use leaven_agentic::{AgentPromptTarget, AgenticProposer, AgenticProposerConfig, AgenticRunInput};
 use leaven_agentic_skill::{
     SkillBankChangeReport, SkillBankDiff, SkillBankMaterializer, SkillBankProposalInput,

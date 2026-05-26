@@ -7,6 +7,7 @@ use std::process::Command as ProcessCommand;
 use leaven_agent::{
     AgentContextRef, AgentInstructions, AgentRunContext, AgentRunRequest, AgentRuntime,
     AgentSession, OutputContract,
+    test_support::{FakeAgentAction, FakeAgentRuntime},
 };
 use leaven_agentic_git::{GitProgramMaterializer, GitProgramReadback, GitProgramStores};
 use leaven_artifact_git::{
@@ -217,11 +218,11 @@ fn reflector_wrapper_runs_agentic_proposer_under_llvm_coverage() {
         let mut reflector = leaven_gepa_agentic_git::GepaGitProgramAgenticReflector::new(
             leaven_agentic::AgenticProposerConfig::new(ProposerId::from("gepa/git-agentic")),
             LocalWorkspaceFactory::temp(),
-            leaven_agent::FakeAgentRuntime::new(vec![
-                leaven_agent::FakeAgentAction::ReadFile {
+            FakeAgentRuntime::new(vec![
+                FakeAgentAction::ReadFile {
                     path: workspace_path("repos/program/program.txt"),
                 },
-                leaven_agent::FakeAgentAction::WriteFile {
+                FakeAgentAction::WriteFile {
                     path: workspace_path("repos/program/program.txt"),
                     bytes: b"program reflected through runtime\n".to_vec(),
                 },
@@ -420,12 +421,11 @@ async fn run_reflector_stage(
     reflection_value: &serde_json::Value,
     budget: &BudgetSnapshot,
 ) -> Metered<AgentSession> {
-    let reflect_runtime =
-        leaven_agent::FakeAgentRuntime::new(vec![leaven_agent::FakeAgentAction::WriteFile {
-            path: reflection_path.clone(),
-            bytes: serde_json::to_vec_pretty(reflection_value).unwrap(),
-        }])
-        .with_id("fake/reflector".into());
+    let reflect_runtime = FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
+        path: reflection_path.clone(),
+        bytes: serde_json::to_vec_pretty(reflection_value).unwrap(),
+    }])
+    .with_id("fake/reflector".into());
     reflect_runtime
         .run_session(
             view,
@@ -447,11 +447,11 @@ async fn run_proposer_stage(
     reflection_path: &WorkspacePath,
     budget: &BudgetSnapshot,
 ) -> Metered<AgentSession> {
-    let propose_runtime = leaven_agent::FakeAgentRuntime::new(vec![
-        leaven_agent::FakeAgentAction::ReadFile {
+    let propose_runtime = FakeAgentRuntime::new(vec![
+        FakeAgentAction::ReadFile {
             path: reflection_path.clone(),
         },
-        leaven_agent::FakeAgentAction::WriteFile {
+        FakeAgentAction::WriteFile {
             path: workspace_path("repos/program/program.txt"),
             bytes: b"program reflected through separated public seam stages\n".to_vec(),
         },

@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use futures::executor::block_on;
 use leaven_agent::{
     AgentRunContext, AgentRunRequest, AgentRuntime, AgentRuntimeError, AgentSession,
-    FakeAgentAction, FakeAgentRuntime,
+    test_support::{FakeAgentAction, FakeAgentRuntime},
 };
 use leaven_core::{Proposal, ProposalBatch, ProposalBatchSemantics};
 use leaven_engine::{Arity, Proposer, RunContext, RunEvent};

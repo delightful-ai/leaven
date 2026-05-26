@@ -6,8 +6,9 @@ use futures::future::{BoxFuture, FutureExt};
 use leaven_agent::{
     AgentInstructions, AgentRunContext, AgentRunRequest, AgentRuntime, AgentRuntimeCapabilities,
     AgentRuntimeError, AgentSession, AgentSessionArtifact, AgentSessionArtifactKind,
-    AgentToolPolicy, CancellationRef, FakeAgentAction, FakeAgentRuntime, OutputContract,
-    RawProviderEvent, TranscriptEvent, TranscriptRole, WorkspaceAccessMode,
+    AgentToolPolicy, CancellationRef, OutputContract, RawProviderEvent, TranscriptEvent,
+    TranscriptRole, WorkspaceAccessMode,
+    test_support::{FakeAgentAction, FakeAgentRuntime},
 };
 use leaven_kernel::{AgentRuntimeId, AgentSessionId, BudgetSnapshot, Cost, Fingerprint};
 use leaven_workspace::{

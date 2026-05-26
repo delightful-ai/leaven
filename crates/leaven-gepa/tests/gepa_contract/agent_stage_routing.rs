@@ -1,6 +1,9 @@
 use crate::support::{TestArtifact, TextProblem, WholeTextSurface};
 use futures::executor::block_on;
-use leaven_agent::{AgentSession, FakeAgentAction, FakeAgentRuntime};
+use leaven_agent::{
+    AgentSession,
+    test_support::{FakeAgentAction, FakeAgentRuntime},
+};
 use leaven_core::{
     Assessment, AssessmentTarget, Evidence, Proposal, ProposalBatch, ProposalBatchSemantics,
     ResolvedEvaluationRequest, ResolvedRequestKind,

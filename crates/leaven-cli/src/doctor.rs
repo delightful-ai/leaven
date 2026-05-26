@@ -2,7 +2,8 @@ use std::path::PathBuf;
 
 use futures::executor::block_on;
 use leaven_agent::{
-    AgentContextRef, AgentRunRequest, FakeAgentAction, FakeAgentRuntime, OutputContract,
+    AgentContextRef, AgentRunRequest, OutputContract,
+    test_support::{FakeAgentAction, FakeAgentRuntime},
 };
 use leaven_agentic::{AgenticProposerConfig, ArtifactReflector};
 use leaven_agentic_skill::SkillWorkspaceLayout;

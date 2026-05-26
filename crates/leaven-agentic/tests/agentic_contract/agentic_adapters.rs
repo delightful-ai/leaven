@@ -5,7 +5,10 @@ use std::sync::{
 };
 
 use futures::future::{BoxFuture, FutureExt};
-use leaven_agent::{AgentInstructions, AgentSession, FakeAgentAction, FakeAgentRuntime};
+use leaven_agent::{
+    AgentInstructions, AgentSession,
+    test_support::{FakeAgentAction, FakeAgentRuntime},
+};
 use leaven_agentic::{
     AgentPromptTarget, AgenticEvaluator, AgenticEvaluatorConfig, AgenticParseError,
     AgenticProposer, AgenticProposerConfig, AgenticRunInput, EvaluationInputBuilder,
