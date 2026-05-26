@@ -67,7 +67,7 @@ fn gepa_owns_surface_and_lowers_selected_part_edits() {
     let mut gepa = Gepa::new(
         PartMapSurface,
         ParetoFrontier::by_case().build(),
-        FixedSurfaceEdit::new("unused".to_owned()),
+        unused_reflector(),
     );
     let mut proposer = FixedSurfaceEdit::new("improved".to_owned());
 
@@ -194,7 +194,7 @@ proptest! {
         let gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("unused".to_owned()),
+            unused_reflector(),
         );
         let selected = if mutate_answer { "answer" } else { "search" };
         let untouched = if mutate_answer { "search" } else { "answer" };
@@ -298,11 +298,7 @@ fn gepa_candidate_selector_is_population_backed() {
             leaven_evidence::ScalarEvidence::new(1.0).unwrap(),
         )]),
     );
-    let mut gepa = Gepa::new(
-        PartMapSurface,
-        frontier,
-        FixedSurfaceEdit::new("unused".to_owned()),
-    );
+    let mut gepa = Gepa::new(PartMapSurface, frontier, unused_reflector());
 
     assert_eq!(gepa.select_candidate(ctx.graph()), Some(seed));
 }
@@ -356,7 +352,7 @@ fn gepa_explicit_strategies_are_owned_by_optimizer() {
     >::with_strategies(
         PartMapSurface,
         frontier,
-        FixedSurfaceEdit::new("unused".to_owned()),
+        unused_reflector(),
         SelectBestCandidate,
         leaven_gepa::RoundRobinPart::new(),
         ImprovementOrEqual,
@@ -375,7 +371,7 @@ fn gepa_explicit_strategies_are_owned_by_optimizer() {
 
 #[test]
 fn gepa_checkpoint_schema_changed_when_batch_sampler_state_was_added() {
-    let gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
+    let gepa = smoke_gepa(unused_reflector());
 
     let policy = <SmokeGepa as CheckpointableOptimizer<SmokeProblem>>::private_state_policy(&gepa);
 
@@ -396,7 +392,7 @@ fn gepa_checkpoint_state_restores_loop_and_selector_cursor() {
     let mut budget = BudgetLedger::default();
     let mut ctx = RunContext::new(&mut graph, &mut budget);
     ctx.insert_seed(artifact.clone(), 0).unwrap();
-    let mut gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
+    let mut gepa = smoke_gepa(unused_reflector());
 
     assert_eq!(gepa.select_part(&artifact).unwrap(), "answer");
     let state = gepa
@@ -408,7 +404,7 @@ fn gepa_checkpoint_state_restores_loop_and_selector_cursor() {
         PrivateStatePolicy::ExplicitSnapshot { .. }
     ));
 
-    let mut restored = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
+    let mut restored = smoke_gepa(unused_reflector());
     restored
         .restore_state(state, RestoreContext::new(ctx.graph()))
         .unwrap();
@@ -418,7 +414,7 @@ fn gepa_checkpoint_state_restores_loop_and_selector_cursor() {
 
 #[test]
 fn gepa_report_discloses_skip_perfect_threshold() {
-    let gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()))
+    let gepa = smoke_gepa(unused_reflector())
         .skip_perfect_score(false)
         .perfect_score(0.75);
     let report = gepa.report();
@@ -434,7 +430,7 @@ fn gepa_restore_checkpoint_state_uses_engine_resume_contract() {
     let mut budget = BudgetLedger::default();
     let mut ctx = RunContext::new(&mut graph, &mut budget);
     ctx.insert_seed(artifact, 0).unwrap();
-    let mut gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
+    let mut gepa = smoke_gepa(unused_reflector());
     let checkpoint = RunCheckpoint::new(
         RunId::new(),
         leaven_kernel::now(),
@@ -464,10 +460,9 @@ fn gepa_restore_checkpoint_state_uses_engine_resume_contract() {
 fn gepa_engine_stop_emits_detailed_report_for_budget_resume() {
     let captured = Arc::new(Mutex::new(None));
     let captured_sink = Arc::clone(&captured);
-    let mut gepa =
-        smoke_gepa(FixedSurfaceEdit::new("unused".to_owned())).on_report(move |report| {
-            *captured_sink.lock().unwrap() = Some(report.clone());
-        });
+    let mut gepa = smoke_gepa(unused_reflector()).on_report(move |report| {
+        *captured_sink.lock().unwrap() = Some(report.clone());
+    });
 
     Optimizer::<SmokeProblem>::on_engine_stop(&mut gepa, StopReason::BudgetReached).unwrap();
 
@@ -499,7 +494,7 @@ fn gepa_checkpoint_state_restores_population_frontier_membership() {
         ParetoFrontier::by_case()
             .partition_filter(std::collections::BTreeSet::from(["TRAIN".into()]))
             .build(),
-        FixedSurfaceEdit::new("unused".to_owned()),
+        unused_reflector(),
     );
     let evidence = CasewiseEvidence::new(vec![CaseOutcome::new(
         leaven_kernel::CaseId::new(0),
@@ -520,7 +515,7 @@ fn gepa_checkpoint_state_restores_population_frontier_membership() {
         ParetoFrontier::by_case()
             .partition_filter(std::collections::BTreeSet::from(["TRAIN".into()]))
             .build(),
-        FixedSurfaceEdit::new("unused".to_owned()),
+        unused_reflector(),
     );
     restored
         .restore_state(state, RestoreContext::new(ctx.graph()))
@@ -553,14 +548,14 @@ fn gepa_checkpoint_restore_rejects_missing_best_and_observed_candidates() {
     let mut budget = BudgetLedger::default();
     let mut ctx = RunContext::new(&mut graph, &mut budget);
     let seed = ctx.insert_seed(artifact, 0).unwrap();
-    let gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
+    let gepa = smoke_gepa(unused_reflector());
     let state = gepa
         .checkpoint_state(CheckpointContext::new(ctx.graph()))
         .unwrap();
     let mut missing_best = serde_json::to_value(&state).unwrap();
     missing_best["best"] = serde_json::to_value(leaven_kernel::CandidateId::new()).unwrap();
     let missing_best_state = serde_json::from_value(missing_best).unwrap();
-    let mut restored = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
+    let mut restored = smoke_gepa(unused_reflector());
 
     let error = restored
         .restore_state(missing_best_state, RestoreContext::new(ctx.graph()))
@@ -2754,7 +2749,7 @@ fn gepa_checkpoint_restore_rejects_missing_validation_best_candidate() {
             let mut restored = Gepa::new(
                 PartMapSurface,
                 ParetoFrontier::by_case().build(),
-                FixedSurfaceEdit::new("unused".to_owned()),
+                unused_reflector(),
             )
             .reflective_dataset(NoReflectiveExamples)
             .validation_policy(FullValidation);
@@ -2809,7 +2804,7 @@ fn gepa_checkpoint_state_includes_validation_policy_state() {
     let mut graph = RunGraph::<SmokeProblem>::new(RunId::new());
     let mut budget = BudgetLedger::default();
     let ctx = RunContext::new(&mut graph, &mut budget);
-    let gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
+    let gepa = smoke_gepa(unused_reflector());
 
     let state = gepa
         .checkpoint_state(CheckpointContext::new(ctx.graph()))
@@ -2824,7 +2819,7 @@ fn gepa_default_max_iterations_is_not_one_iteration_smoke_config() {
     let mut graph = RunGraph::<SmokeProblem>::new(RunId::new());
     let mut budget = BudgetLedger::default();
     let ctx = RunContext::new(&mut graph, &mut budget);
-    let gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
+    let gepa = smoke_gepa(unused_reflector());
 
     let state = gepa
         .checkpoint_state(CheckpointContext::new(ctx.graph()))
@@ -2836,10 +2831,8 @@ fn gepa_default_max_iterations_is_not_one_iteration_smoke_config() {
 
 #[test]
 fn optimizer_compatibility_fingerprint_includes_checkpointed_strategy_state() {
-    let seed_7 = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()))
-        .batch_sampler(EpochShuffled::new(3).with_seed(7));
-    let seed_8 = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()))
-        .batch_sampler(EpochShuffled::new(3).with_seed(8));
+    let seed_7 = smoke_gepa(unused_reflector()).batch_sampler(EpochShuffled::new(3).with_seed(7));
+    let seed_8 = smoke_gepa(unused_reflector()).batch_sampler(EpochShuffled::new(3).with_seed(8));
 
     let seed_7_fingerprint = Optimizer::<SmokeProblem>::optimizer_compatibility(&seed_7)
         .expect("GEPA exposes compatibility")
@@ -2881,7 +2874,7 @@ fn gepa_run_reports_missing_seed_before_evaluation() {
         let mut engine = Engine::<SmokeProblem>::builder()
             .evaluator(VisibilityEvaluator)
             .build();
-        let mut gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
+        let mut gepa = smoke_gepa(unused_reflector());
 
         let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
 
@@ -2903,7 +2896,7 @@ fn gepa_run_reports_empty_casewise_scores() {
                 0,
             )
             .unwrap();
-        let mut gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
+        let mut gepa = smoke_gepa(unused_reflector());
 
         let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
 
@@ -2925,7 +2918,7 @@ fn gepa_rejects_evaluator_that_returns_no_case_rows() {
                 0,
             )
             .unwrap();
-        let mut gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
+        let mut gepa = smoke_gepa(unused_reflector());
 
         let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
 
@@ -2950,7 +2943,7 @@ fn gepa_rejects_aggregate_rows_from_casewise_evaluator() {
                 0,
             )
             .unwrap();
-        let mut gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
+        let mut gepa = smoke_gepa(unused_reflector());
 
         let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
 
@@ -2975,7 +2968,7 @@ fn gepa_rejects_case_rows_for_wrong_candidate() {
                 0,
             )
             .unwrap();
-        let mut gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
+        let mut gepa = smoke_gepa(unused_reflector());
 
         let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
 
@@ -3017,7 +3010,7 @@ fn gepa_rejects_case_rows_that_do_not_match_requested_set() {
                     0,
                 )
                 .unwrap();
-            let mut gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
+            let mut gepa = smoke_gepa(unused_reflector());
 
             let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
 
@@ -3043,7 +3036,7 @@ fn gepa_zero_iterations_finishes_without_best_candidate() {
                 0,
             )
             .unwrap();
-        let mut gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned())).max_iterations(0);
+        let mut gepa = smoke_gepa(unused_reflector()).max_iterations(0);
 
         let run = engine.run(&mut gepa, &case_set, &store).await.unwrap();
 
@@ -3457,6 +3450,10 @@ type SmokeGepa = Gepa<
     NoReflectiveExamples,
 >;
 
+fn unused_reflector() -> FixedSurfaceEdit<String> {
+    FixedSurfaceEdit::new("unused".to_owned())
+}
+
 fn smoke_gepa(reflector: FixedSurfaceEdit<String>) -> SmokeGepa {
     Gepa::new(PartMapSurface, ParetoFrontier::by_case().build(), reflector)
         .validation_policy(MinibatchThenValidation)
@@ -3486,7 +3483,7 @@ fn resume_trace_gepa() -> Gepa<
     Gepa::new(
         PartMapSurface,
         ParetoFrontier::by_case().build(),
-        FixedSurfaceEdit::new("unused".to_owned()),
+        unused_reflector(),
     )
     .reflective_dataset(NoReflectiveExamples)
     .batch_sampler(EpochShuffled::new(1).with_seed(7))
