@@ -31,3 +31,13 @@ fn inline_receipt_store_round_trips_receipts_by_id() {
         );
     });
 }
+
+#[test]
+fn inline_receipt_store_sync_helpers_are_not_public_surface() {
+    let source = std::fs::read_to_string("src/receipt_store.rs").unwrap();
+
+    assert!(
+        !source.contains("pub fn write_sync(") && !source.contains("pub fn read_sync("),
+        "InlineReceiptStore exposes the async StageReceiptStore trait; sync helpers are implementation detail"
+    );
+}

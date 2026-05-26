@@ -46,7 +46,7 @@ impl StageReceiptStore for InlineReceiptStore {
 }
 
 impl InlineReceiptStore {
-    pub fn write_sync(
+    pub(crate) fn write_sync(
         &self,
         receipt: StageAttemptReceipt,
     ) -> Result<StageAttemptReceiptRef, ReceiptStoreError> {
@@ -67,7 +67,7 @@ impl InlineReceiptStore {
         })
     }
 
-    pub fn read_sync(
+    fn read_sync(
         &self,
         id: StageAttemptReceiptId,
     ) -> Result<Option<StageAttemptReceipt>, ReceiptStoreError> {
