@@ -1,6 +1,4 @@
-use leaven_kernel::Fingerprint;
-
-use crate::client::fingerprint_steps;
+use leaven_kernel::{Fingerprint, FingerprintBuilder};
 
 /// Script for deterministic mock LM responses.
 #[derive(Clone, Debug, Default)]
@@ -38,7 +36,23 @@ impl MockLmScript {
 
     /// Returns the script behavior fingerprint.
     pub(crate) fn fingerprint(&self) -> Fingerprint {
-        fingerprint_steps(&self.steps)
+        let mut builder = FingerprintBuilder::new();
+        builder.update(b"leaven-lm-mock-v1");
+        for step in &self.steps {
+            match step {
+                MockLmStep::Text {
+                    text,
+                    input_tokens,
+                    output_tokens,
+                } => {
+                    builder.update(b"text");
+                    builder.update(text.as_bytes());
+                    builder.update(input_tokens.to_le_bytes());
+                    builder.update(output_tokens.to_le_bytes());
+                }
+            }
+        }
+        builder.finish()
     }
 }
 

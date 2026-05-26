@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::sync::Arc;
 
-use leaven_kernel::{Fingerprint, FingerprintBuilder, Metered};
+use leaven_kernel::{Fingerprint, Metered};
 use leaven_lm::{Lm, LmError, LmId, LmRequest, LmResponse, Message, TokenUsage};
 use parking_lot::Mutex;
 
@@ -65,24 +65,4 @@ impl Default for MockLm {
     fn default() -> Self {
         Self::new(MockLmScript::default())
     }
-}
-
-pub fn fingerprint_steps(steps: &[MockLmStep]) -> Fingerprint {
-    let mut builder = FingerprintBuilder::new();
-    builder.update(b"leaven-lm-mock-v1");
-    for step in steps {
-        match step {
-            MockLmStep::Text {
-                text,
-                input_tokens,
-                output_tokens,
-            } => {
-                builder.update(b"text");
-                builder.update(text.as_bytes());
-                builder.update(input_tokens.to_le_bytes());
-                builder.update(output_tokens.to_le_bytes());
-            }
-        }
-    }
-    builder.finish()
 }
