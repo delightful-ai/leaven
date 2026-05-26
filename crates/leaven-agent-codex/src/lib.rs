@@ -12,7 +12,6 @@ pub mod app_server {
         CodexReasoningSummary, CodexSandboxMode,
     };
 
-    #[cfg(feature = "app-server")]
     pub use leaven_agent_codex_app_server::{
         CodexAppServerConnection, CodexAppServerConnector, CodexAppServerRuntime,
         CodexAppServerTransport,
