@@ -17,9 +17,7 @@ impl CodexCliRuntime {
     #[must_use]
     pub fn new(config: CodexCliConfig) -> Self {
         let command_config = config.command_config();
-        let parser = CodexCliSessionParser {
-            last_message_path: config.last_message_path,
-        };
+        let parser = config.session_parser();
         Self {
             inner: CommandAgentRuntime::new(command_config, parser),
         }
