@@ -1,16 +1,22 @@
 use std::fs;
 use std::path::Path;
-use std::process::Command as ProcessCommand;
 
-use leaven_artifact_git::{GitObjectId, GitRefKey, GitRefKind, GitRefName, GitRevision};
+use leaven_artifact_git::{GitObjectId, GitRevision};
 use leaven_workspace_git::{
     GitCommitImportRequest, GitCommitImporter, GitProjection, GitProjectionRequest,
     GitWorkspaceGitError,
 };
 
+#[path = "support/git.rs"]
+mod git_support;
+
+use git_support::{
+    assert_git_fails, branch_key, git_object, git_output, projection_fixture_repo, run_git, tag_key,
+};
+
 #[test]
 fn git_projection_contains_allowed_refs_without_hidden_objects_or_alternates() {
-    let source = fixture_repo();
+    let source = projection_fixture_repo();
     let projection_root = tempfile::tempdir().unwrap();
     let projection_path = projection_root.path().join("archive.git");
 
@@ -51,7 +57,7 @@ fn git_projection_contains_allowed_refs_without_hidden_objects_or_alternates() {
 
 #[test]
 fn git_commit_import_fscks_source_before_writing_durable_store() {
-    let source = fixture_repo();
+    let source = projection_fixture_repo();
     let durable = tempfile::tempdir().unwrap();
     run_git(durable.path(), ["init", "--bare"]);
 
@@ -73,7 +79,7 @@ fn git_commit_import_fscks_source_before_writing_durable_store() {
 
 #[test]
 fn git_commit_import_writes_child_revision_to_durable_store_after_validation() {
-    let source = fixture_repo();
+    let source = projection_fixture_repo();
     let durable = tempfile::tempdir().unwrap();
     run_git(durable.path(), ["init", "--bare"]);
 
@@ -98,7 +104,7 @@ fn git_commit_import_writes_child_revision_to_durable_store_after_validation() {
 
 #[test]
 fn git_commit_import_does_not_promote_source_scratch_or_trusted_refs() {
-    let source = fixture_repo();
+    let source = projection_fixture_repo();
     let durable = tempfile::tempdir().unwrap();
     run_git(durable.path(), ["init", "--bare"]);
 
@@ -140,99 +146,9 @@ fn git_commit_import_does_not_promote_source_scratch_or_trusted_refs() {
     );
 }
 
-fn fixture_repo() -> tempfile::TempDir {
-    let source = tempfile::Builder::new()
-        .prefix("leaven projection source ")
-        .tempdir()
-        .unwrap();
-    run_git(source.path(), ["init", "--initial-branch=main"]);
-    run_git(source.path(), ["config", "user.name", "Leaven Test"]);
-    run_git(
-        source.path(),
-        ["config", "user.email", "leaven@example.invalid"],
-    );
-
-    fs::write(source.path().join("program.txt"), "base\n").unwrap();
-    run_git(source.path(), ["add", "program.txt"]);
-    run_git(source.path(), ["commit", "-m", "base"]);
-
-    run_git(source.path(), ["checkout", "-b", "program/base"]);
-    fs::write(source.path().join("program.txt"), "program base\n").unwrap();
-    run_git(source.path(), ["add", "program.txt"]);
-    run_git(source.path(), ["commit", "-m", "program base"]);
-    run_git(source.path(), ["tag", "frontier/base"]);
-
-    run_git(source.path(), ["checkout", "-b", "program/peer"]);
-    fs::write(source.path().join("program.txt"), "program peer\n").unwrap();
-    run_git(source.path(), ["add", "program.txt"]);
-    run_git(source.path(), ["commit", "-m", "program peer"]);
-
-    run_git(source.path(), ["checkout", "program/base"]);
-    run_git(source.path(), ["checkout", "-b", "hidden/eval"]);
-    fs::write(source.path().join("hidden.txt"), "hidden evaluator data\n").unwrap();
-    run_git(source.path(), ["add", "hidden.txt"]);
-    run_git(source.path(), ["commit", "-m", "hidden eval"]);
-
-    source
-}
-
-fn branch_key(name: &str) -> GitRefKey {
-    GitRefKey::new(GitRefKind::Branch, GitRefName::new(name).unwrap())
-}
-
-fn tag_key(name: &str) -> GitRefKey {
-    GitRefKey::new(GitRefKind::Tag, GitRefName::new(name).unwrap())
-}
-
-fn git_object(cwd: &Path, rev: &str) -> GitObjectId {
-    GitObjectId::new(git_output(cwd, ["rev-parse", rev]).trim()).unwrap()
-}
-
 fn corrupt_loose_object(repo: &Path, object: &GitObjectId) {
     let hex = object.as_str();
     let object_path = repo.join(".git/objects").join(&hex[..2]).join(&hex[2..]);
     fs::remove_file(&object_path).unwrap();
     fs::write(object_path, b"not a git object").unwrap();
-}
-
-fn run_git<const N: usize>(cwd: &Path, args: [&str; N]) {
-    let output = ProcessCommand::new("git")
-        .args(args)
-        .current_dir(cwd)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "git {} failed: {}",
-        args.join(" "),
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
-fn git_output<const N: usize>(cwd: &Path, args: [&str; N]) -> String {
-    let output = ProcessCommand::new("git")
-        .args(args)
-        .current_dir(cwd)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "git {} failed: {}",
-        args.join(" "),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8(output.stdout).unwrap()
-}
-
-fn assert_git_fails<const N: usize>(cwd: &Path, args: [&str; N]) {
-    let output = ProcessCommand::new("git")
-        .args(args)
-        .current_dir(cwd)
-        .output()
-        .unwrap();
-    assert!(
-        !output.status.success(),
-        "git {} unexpectedly succeeded",
-        args.join(" ")
-    );
 }
