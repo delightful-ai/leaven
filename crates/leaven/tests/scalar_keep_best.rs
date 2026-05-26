@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex};
 
 mod support;
 
-use support::TextArtifact;
+use support::{TextArtifact, text_artifact};
 
 #[test]
 fn engine_runs_scalar_keep_best_end_to_end() {
@@ -31,7 +31,7 @@ fn engine_runs_scalar_keep_best_end_to_end() {
             .budget(Budget::metric_calls(10))
             .callback(callback)
             .build();
-        let seed = engine.insert_seed(TextArtifact("a".to_owned()), 0).unwrap();
+        let seed = engine.insert_seed(text_artifact("a"), 0).unwrap();
         let mut optimizer = ScalarKeepBestOptimizer {
             seed,
             done: false,

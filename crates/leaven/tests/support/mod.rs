@@ -6,6 +6,10 @@ use leaven::prelude::{Artifact, ArtifactIdentity};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TextArtifact(pub String);
 
+pub fn text_artifact(text: impl Into<String>) -> TextArtifact {
+    TextArtifact(text.into())
+}
+
 impl Artifact for TextArtifact {
     type Change = String;
     type ApplyError = Infallible;

@@ -17,7 +17,7 @@ use leaven_store_inline::InlineEvidenceStore;
 
 mod support;
 
-use support::TextArtifact;
+use support::{TextArtifact, text_artifact};
 
 #[test]
 fn engine_runs_pairwise_tournament_end_to_end() {
@@ -28,7 +28,7 @@ fn engine_runs_pairwise_tournament_end_to_end() {
             .budget(Budget::metric_calls(10))
             .evaluator(LengthPairwiseJudge)
             .build();
-        let seed = engine.insert_seed(TextArtifact("a".to_owned()), 0).unwrap();
+        let seed = engine.insert_seed(text_artifact("a"), 0).unwrap();
         let mut optimizer = PairwiseTournamentOptimizer {
             seed,
             done: false,
@@ -109,7 +109,7 @@ impl Optimizer<TournamentProblem> for PairwiseTournamentOptimizer {
                 StageId::custom("p2/create-contender"),
                 ProposalBatch {
                     proposals: vec![
-                        Proposal::create(TextArtifact("aaa".to_owned()))
+                        Proposal::create(text_artifact("aaa"))
                             .informed_by([InfoRef::Candidate(self.seed)])
                             .build(),
                     ],
