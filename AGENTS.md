@@ -72,6 +72,10 @@ Before editing, run the quick blind checks:
 - exception: does it mark stale specs, old plans, live-provider paths, or local
   bait that would otherwise look authoritative?
 
+Default `rg` searches skip vendored Python reference repos and archived
+public-seam drafts via `.ignore`. Search those trees by explicit path or with
+`rg -u` when provenance is the task.
+
 ## Global Invariants
 - Before planning code placement or implementation shape, apply topology discipline: identify which crate/module is allowed to know each fact, which boundary should refuse the dependency, and which public surface is the durable contract.
 - Public maturity is a separate gate from topology. Default-facing exports,

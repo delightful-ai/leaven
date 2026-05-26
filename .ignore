@@ -1,0 +1,6 @@
+# Keep default searches on active Leaven sources and specs.
+#
+# These trees are provenance/reference material. Search them explicitly with
+# `rg -u` or a direct path when that is the task.
+docs/specs/leaven_py/repos/**
+docs/specs/public-seam-v1-lock-draft.archived/**
