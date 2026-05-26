@@ -5,7 +5,7 @@
 //! checkpoint state. Some product-facing slots remain scaffold or advanced
 //! extension points; see the crate-local `AGENTS.md` before widening exports.
 
-pub mod agent_stage;
+mod agent_stage;
 pub mod builder;
 pub mod events;
 pub mod evidence;
@@ -59,6 +59,7 @@ pub use validation::{FullValidation, MinibatchThenValidation, ValidationPolicy};
 
 /// Explicit scaffold and test-support fixtures.
 pub mod test_support {
+    pub use crate::agent_stage::{GepaReflectionBootstrap, GepaStageProposer, gepa_stage_proposer};
     pub use crate::proposer::FixedSurfaceEdit;
 }
 

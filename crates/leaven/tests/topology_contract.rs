@@ -444,6 +444,21 @@ fn codex_app_server_protocol_is_leaf_only() {
     );
 }
 
+#[test]
+fn gepa_agent_stage_scaffold_is_not_a_root_public_route() {
+    let root = workspace_root();
+    let lib = fs::read_to_string(root.join("crates/leaven-gepa/src/lib.rs")).unwrap();
+
+    assert!(
+        !lib.contains("pub mod agent_stage;"),
+        "legacy GEPA agent-stage scaffold must route through test_support, not a root public module"
+    );
+    assert!(
+        lib.contains("pub use crate::agent_stage::{"),
+        "GEPA scaffold entrypoints should remain explicitly routed through test_support"
+    );
+}
+
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()

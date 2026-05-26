@@ -6,7 +6,13 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
 ## Routing
 - `src/optimizer.rs` owns GEPA loop state, checkpoint/restore shape, selected train partition, observed candidates, and population observation through `GepaPopulation`.
 - `src/selector.rs`, `src/part_selector.rs`, `src/gate.rs`, and `src/validation.rs` own GEPA-specific strategy policy.
-- `src/proposer.rs` owns GEPA reflection/proposal helpers that are provider-neutral; concrete LM/provider lowering belongs in `leaven-lm-*` or agent crates. The module is private; behavior-bearing types are curated at the crate root, and scaffolds route through `test_support`.
+- `src/proposer.rs` owns GEPA reflection/proposal helpers that are
+  provider-neutral; concrete LM/provider lowering belongs in `leaven-lm-*` or
+  agent crates. The module is private; behavior-bearing types are curated at
+  the crate root, and scaffolds route through `test_support`.
+- `src/agent_stage.rs` is private scaffold for the legacy `AgentBacked` GEPA
+  reflection slot. Its public route is `leaven_gepa::test_support`, not a root
+  `agent_stage` module.
 - Surface ownership is explicit: GEPA selects a part from an `EditSurface` and lowers edits through that surface into artifact-native changes. Artifact-specific surfaces belong in `leaven-surface` or `leaven-artifact-*`.
 - The current reference loop is: full-validate the seed into
   `GepaReferenceState`, select a parent from the validation frontier frequency
@@ -39,10 +45,10 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
 - Engine tests use local optimizer wrappers; do not move GEPA selector, gate, or checkpoint private state into `leaven-engine` to make those tests shorter.
 - `leaven-lm` is a neutral vocabulary dependency here, not permission to place OpenAI/Anthropic request fields or CLI/session behavior in GEPA.
 - Population defaults such as `ParetoFrontier` and `KeepBest` are consumed here; reusable population behavior still belongs in `leaven-population`.
-- The fixed-edit fixture is `test_support::FixedSurfaceEdit`. The name is
-  deliberately plain: it is scaffolding for GEPA's `Reflect` type parameter,
-  not reflection. Do not re-export or document it as production GEPA
-  reflection.
+- The fixed-edit fixture is `test_support::FixedSurfaceEdit`, and the legacy
+  `AgentBacked` GEPA reflection scaffold is also under `test_support`. These
+  names are scaffolding for GEPA extension slots, not production reflection.
+  Do not re-export or document them as production GEPA reflection.
 - Product-facing GEPA proof requires slot contracts for candidate selection,
   part selection, feedback/evidence rendering, reflection/proposal, acceptance,
   validation, population, merge, stopping, and checkpoint state. Topology and
