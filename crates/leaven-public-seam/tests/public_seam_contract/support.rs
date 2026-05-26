@@ -40,7 +40,7 @@ pub fn fixture_blob_ref(id: &str, data_classes: &[&str]) -> Value {
     })
 }
 
-pub fn plan_call_result_hash(name: &str, value: Value) -> String {
+pub fn plan_call_result_hash(name: &str, value: &Value) -> String {
     prefixed_jcs_hash(
         "fp_result_sha256_",
         &json!({
@@ -84,8 +84,8 @@ pub fn bind_plan_result_hashes(mut result: Value) -> Value {
 }
 
 pub fn submit_assessments_request_hash(
-    evaluation_request_id: Value,
-    assessment_ids: Value,
+    evaluation_request_id: &Value,
+    assessment_ids: &Value,
 ) -> String {
     prefixed_jcs_hash(
         "fp_request_sha256_",

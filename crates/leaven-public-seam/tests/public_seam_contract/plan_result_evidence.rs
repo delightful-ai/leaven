@@ -488,8 +488,8 @@ fn bind_result_hashes(mut result: Value) -> Value {
             && receipt["write_kind"].as_str() == Some("submit_assessments")
         {
             receipt["request_hash"] = json!(submit_assessments_request_hash(
-                receipt["evaluation_request_id"].clone(),
-                receipt["assessment_ids"].clone()
+                &receipt["evaluation_request_id"],
+                &receipt["assessment_ids"]
             ));
         }
     }

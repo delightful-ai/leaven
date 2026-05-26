@@ -2245,9 +2245,11 @@ fn write_receipt(write_kind: &str, receipt: &str) -> Value {
         "submit_assessments" => {
             value["evaluation_request_id"] = json!("evalreq_acp");
             value["assessment_ids"] = json!(["assess_acp"]);
+            let evaluation_request_id = json!("evalreq_acp");
+            let assessment_ids = json!(["assess_acp"]);
             value["request_hash"] = json!(submit_assessments_request_hash(
-                json!("evalreq_acp"),
-                json!(["assess_acp"])
+                &evaluation_request_id,
+                &assessment_ids
             ));
         }
         "request_evaluation" => {

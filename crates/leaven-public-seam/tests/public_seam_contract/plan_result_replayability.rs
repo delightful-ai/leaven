@@ -175,7 +175,7 @@ fn mixed_replayability_result<const N: usize>(
 fn bind_submit_assessments_request_hash(result: &mut Value) {
     let receipt = &mut result["receipts"][0];
     receipt["request_hash"] = json!(submit_assessments_request_hash(
-        receipt["evaluation_request_id"].clone(),
-        receipt["assessment_ids"].clone()
+        &receipt["evaluation_request_id"],
+        &receipt["assessment_ids"]
     ));
 }

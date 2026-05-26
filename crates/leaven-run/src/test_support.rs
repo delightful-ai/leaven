@@ -2,10 +2,10 @@ use leaven_core::{Artifact, ArtifactIdentity, Evidence, OptimizationProblem};
 use leaven_kernel::ContentId;
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub(crate) struct TestArtifact;
+pub struct TestArtifact;
 
 #[derive(Debug)]
-pub(crate) struct TestArtifactError;
+pub struct TestArtifactError;
 
 impl std::fmt::Display for TestArtifactError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -29,7 +29,7 @@ impl Artifact for TestArtifact {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct IntArtifact(pub i32);
+pub struct IntArtifact(pub i32);
 
 impl Artifact for IntArtifact {
     type Change = i32;
@@ -45,11 +45,11 @@ impl Artifact for IntArtifact {
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub(crate) struct TestEvidence;
+pub struct TestEvidence;
 
 impl Evidence for TestEvidence {}
 
-pub(crate) struct TestProblem;
+pub struct TestProblem;
 
 impl OptimizationProblem for TestProblem {
     type Artifact = TestArtifact;

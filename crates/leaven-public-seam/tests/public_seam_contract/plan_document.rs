@@ -1363,7 +1363,7 @@ fn agent_status_output_contract() -> Value {
 
 fn rebind_call_result_hash(result: &mut Value, receipt_index: usize, name: &str) {
     let value = result["values"][name].clone();
-    result["receipts"][receipt_index]["result_hash"] = json!(plan_call_result_hash(name, value));
+    result["receipts"][receipt_index]["result_hash"] = json!(plan_call_result_hash(name, &value));
 }
 
 fn rebind_failed_call_result_hash(result: &mut Value, receipt_index: usize, name: &str) {
