@@ -104,6 +104,15 @@ fn manifest_cache_and_budget_are_derived_from_typed_inputs() {
 }
 
 #[test]
+fn optimize_problem_shape_is_not_a_placeholder_identity() {
+    let shape = optimize_problem_shape();
+    let mut legacy = FingerprintBuilder::new();
+    legacy.update(b"leaven-run.problem-placeholder.v1");
+
+    assert_ne!(shape, legacy.finish());
+}
+
+#[test]
 fn atomic_manifest_write_rejects_paths_without_file_names() {
     let error = write_atomic(Path::new(""), b"manifest")
         .expect_err("compatibility manifest writes require a file path");

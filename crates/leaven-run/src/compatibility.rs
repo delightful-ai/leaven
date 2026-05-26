@@ -378,8 +378,7 @@ fn compare_manifests(
 
 fn optimize_problem_shape() -> Fingerprint {
     let mut fingerprint = FingerprintBuilder::new();
-    // Stable digest seed for manifest schema v4.
-    fingerprint.update(b"leaven-run.problem-placeholder.v1");
+    fingerprint.update(b"leaven-run.optimize-problem-shape.v1");
     fingerprint.finish()
 }
 
