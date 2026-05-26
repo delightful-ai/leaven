@@ -3326,23 +3326,17 @@ fake runtime without RunContext::propose/apply_batch
 tests that parse hardcoded proposal bytes but do not apply a candidate
 ```
 
-### 22.7 jj artifact crate is a skeleton
+### 22.7 jj artifact crate is a file-snapshot vocabulary
 
-`crates/leaven-artifact-jj` currently exports placeholder modules and empty structs/enums:
+`crates/leaven-artifact-jj` currently exports `JjArtifact` and `JjChange`.
+`JjArtifact` materializes a file map into a workspace slot, derives
+content/cache identity from that map, and reads back
+`.leaven/jj/change.patch` as `JjChange::Patch`.
 
-```text
-JjArtifact
-JjArtifactIdentityMode
-JjChange
-JjOp
-ConflictRegion
-JjChangesetSurface
-JjConflictSurface
-JjPathSurface
-```
-
-It has a materializable scaffold and deterministic tests. It is not yet full
-live jj command execution or production apply semantics.
+The old placeholder names (`JjArtifactIdentityMode`, `JjOp`, conflict-region
+types, and JJ surface markers) remain absent. This crate is still not full live
+JJ command execution, operation-log handling, conflict parsing, surface
+projection, or production apply semantics.
 
 ## 23. changelog
 
