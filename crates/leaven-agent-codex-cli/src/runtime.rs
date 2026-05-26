@@ -16,8 +16,7 @@ pub struct CodexCliRuntime {
 impl CodexCliRuntime {
     #[must_use]
     pub fn new(config: CodexCliConfig) -> Self {
-        let command_config = config.command_config();
-        let parser = config.session_parser();
+        let (command_config, parser) = config.into_runtime_parts();
         Self {
             inner: CommandAgentRuntime::new(command_config, parser),
         }

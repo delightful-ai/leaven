@@ -79,25 +79,85 @@ impl CodexCliConfig {
         }
     }
 
-    fn exec_args(&self) -> Vec<CommandTemplateArg> {
-        let mut args = vec![
-            CommandTemplateArg::literal("exec"),
-            CommandTemplateArg::literal("--json"),
-            CommandTemplateArg::literal("--skip-git-repo-check"),
-            CommandTemplateArg::literal("--model"),
-            CommandTemplateArg::literal(self.model.clone()),
-            CommandTemplateArg::literal("--config"),
-            CommandTemplateArg::literal(format!(
-                "model_reasoning_effort=\"{}\"",
-                self.reasoning_effort.as_wire()
-            )),
-            CommandTemplateArg::literal("--output-last-message"),
-            CommandTemplateArg::literal(self.last_message_path.as_str()),
-        ];
-        self.approval.push_args(&mut args);
-        args.push(CommandTemplateArg::literal("-"));
-        args
+    #[must_use]
+    pub(crate) fn into_runtime_parts(self) -> (CommandAgentConfig, CodexCliSessionParser) {
+        let Self {
+            codex_bin,
+            model,
+            reasoning_effort,
+            approval,
+            last_message_path,
+            timeout,
+            retain_raw_stdout,
+            retain_raw_stderr,
+            codex_home,
+        } = self;
+
+        let mut env = BTreeMap::new();
+        if let Some(codex_home) = codex_home {
+            env.insert("CODEX_HOME".to_owned(), codex_home);
+        }
+
+        let command_config = CommandAgentConfig {
+            id: AgentRuntimeId::new_const("codex-cli"),
+            fingerprint_seed: "codex-cli-v1".to_owned(),
+            setup: vec![mkdir_leaven_command()],
+            run: CommandTemplate {
+                program: codex_bin,
+                args: codex_exec_args(&model, reasoning_effort, approval, &last_message_path),
+                cwd: None,
+                env,
+                stdin: CommandPromptMode::StdinInstructions,
+                limits: CommandLimits {
+                    timeout,
+                    max_stdout_bytes: Some(4 * 1024 * 1024),
+                    max_stderr_bytes: Some(4 * 1024 * 1024),
+                    max_output_file_bytes: None,
+                },
+                user: None,
+            },
+            layout: CommandSessionLayout::default(),
+            retain_raw_stdout,
+            retain_raw_stderr,
+            cost: Cost::zero(),
+        };
+        let parser = CodexCliSessionParser { last_message_path };
+        (command_config, parser)
     }
+
+    fn exec_args(&self) -> Vec<CommandTemplateArg> {
+        codex_exec_args(
+            &self.model,
+            self.reasoning_effort,
+            self.approval,
+            &self.last_message_path,
+        )
+    }
+}
+
+fn codex_exec_args(
+    model: &str,
+    reasoning_effort: CodexCliReasoningEffort,
+    approval: CodexCliApproval,
+    last_message_path: &WorkspacePath,
+) -> Vec<CommandTemplateArg> {
+    let mut args = vec![
+        CommandTemplateArg::literal("exec"),
+        CommandTemplateArg::literal("--json"),
+        CommandTemplateArg::literal("--skip-git-repo-check"),
+        CommandTemplateArg::literal("--model"),
+        CommandTemplateArg::literal(model),
+        CommandTemplateArg::literal("--config"),
+        CommandTemplateArg::literal(format!(
+            "model_reasoning_effort=\"{}\"",
+            reasoning_effort.as_wire()
+        )),
+        CommandTemplateArg::literal("--output-last-message"),
+        CommandTemplateArg::literal(last_message_path.as_str()),
+    ];
+    approval.push_args(&mut args);
+    args.push(CommandTemplateArg::literal("-"));
+    args
 }
 
 impl Default for CodexCliConfig {
