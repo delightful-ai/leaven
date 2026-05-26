@@ -2,7 +2,7 @@
 
 *Optimize anything in Rust.*
 
-Project name: **leaven**. Crate: `leaven` (umbrella) + `leaven-core`, `leaven-engine`, `leaven-std`, `leaven-workspace`, `leaven-derive`. Metaphor: the small biological culture you mix into a substrate, walk away from, and come back to find transformed.
+Project name: **leaven**. Current crate truth lives in the root `Cargo.toml` and `crates/leaven/tests/topology_contract.rs`; the umbrella `leaven` crate re-exports behavior-bearing public routes rather than reserving placeholder crates. Metaphor: the small biological culture you mix into a substrate, walk away from, and come back to find transformed.
 
 > Status: v0.2.7, pre-implementation command-backed runtime bump.  
 > Date: 2026-05-07.  
@@ -5019,7 +5019,7 @@ Project name locked: **leaven**. A pre-implementation review of v0.2.1 flagged r
 
 #### Branding
 
-- Project named **leaven**. Tagline: *Optimize anything in Rust.* Crate plan: umbrella `leaven` re-exporting `leaven-core`, `leaven-engine`, `leaven-std`, `leaven-workspace`, `leaven-derive`. Metaphor matches the design's "set up conditions, walk away, come back to a transformed substrate" pattern.
+- Project named **leaven**. Tagline: *Optimize anything in Rust.* Crate plan: umbrella `leaven` re-exporting behavior-bearing public routes from current workspace crates, with placeholder crate reservations deleted instead of kept as public surface. Metaphor matches the design's "set up conditions, walk away, come back to a transformed substrate" pattern.
 
 #### Stress tests still pass
 

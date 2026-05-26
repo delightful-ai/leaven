@@ -435,6 +435,29 @@ fn codex_app_server_protocol_is_leaf_only() {
             && !umbrella.contains("leaven-agent-codex-app-server"),
         "umbrella leaven must not expose a Codex provider feature until import-experience design names one"
     );
+
+    assert!(
+        !root.join("crates/leaven-agent-codex").exists(),
+        "deleted Codex facade placeholder must not return without behavior-bearing topology and public-route proof"
+    );
+}
+
+#[test]
+fn deleted_placeholder_crates_stay_deleted() {
+    let root = workspace_root();
+
+    for deleted in [
+        "crates/leaven-derive",
+        "crates/leaven-render",
+        "crates/leaven-cuda",
+        "crates/leaven-python",
+        "crates/leaven-dsrs",
+    ] {
+        assert!(
+            !root.join(deleted).exists(),
+            "{deleted} must not return as a placeholder crate"
+        );
+    }
 }
 
 #[test]
