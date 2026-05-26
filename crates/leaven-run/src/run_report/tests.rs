@@ -1,14 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use leaven_core::{
-    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget,
-    CaseSetVersion, CausalInputs, EvaluationRequest, EvaluationSet, ProposalEffectKind,
-    ResolvedEvaluationRequest, ResolvedRequestKind,
+    Assessment, AssessmentGranularity, AssessmentTarget, CaseSetVersion, CausalInputs,
+    EvaluationRequest, EvaluationSet, ProposalEffectKind, ResolvedEvaluationRequest,
+    ResolvedRequestKind,
 };
 use leaven_eval::SplitPolicy;
 use leaven_evidence::{CaseAssessmentEvidence, OutputRecord, ScalarEvidence};
 use leaven_kernel::{
-    AssessmentId, BudgetSnapshot, CandidateId, CaseId, ContentId, Cost, ErrorKind, ErrorRecord,
+    AssessmentId, BudgetSnapshot, CandidateId, CaseId, Cost, ErrorKind, ErrorRecord,
     EvaluationRequestId, EvaluationSetId, EvaluatorId, Fingerprint, IterationId, MetadataBag,
     Metered, PopulationId, ProposalBatchId, ProposalId, RunId, StageAttemptFailure,
     StageAttemptOutcome, StageAttemptReceiptId, StageAttemptReceiptRef, StageCallId, StageId,
@@ -18,6 +18,7 @@ use leaven_store_inline::InlineEvidenceStore;
 
 use super::assessment::assessment_summary;
 use super::*;
+use crate::test_support::TestArtifact;
 
 mod assessment;
 mod events;
@@ -70,33 +71,6 @@ fn report_harness() -> ReportHarness {
         second,
         store: InlineEvidenceStore::<CaseAssessmentEvidence>::new("report-groups"),
         splits,
-    }
-}
-
-#[derive(Clone, Debug)]
-struct TestArtifact;
-
-#[derive(Debug)]
-struct TestArtifactError;
-
-impl std::fmt::Display for TestArtifactError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("test artifact error")
-    }
-}
-
-impl std::error::Error for TestArtifactError {}
-
-impl Artifact for TestArtifact {
-    type Change = ();
-    type ApplyError = TestArtifactError;
-
-    fn identity(&self) -> ArtifactIdentity {
-        ArtifactIdentity::Content(ContentId::from_bytes([7; ContentId::BYTES]))
-    }
-
-    fn apply_change(&self, _change: &Self::Change) -> Result<Self, Self::ApplyError> {
-        Ok(Self)
     }
 }
 

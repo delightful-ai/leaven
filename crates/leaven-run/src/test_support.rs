@@ -28,6 +28,22 @@ impl Artifact for TestArtifact {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct IntArtifact(pub i32);
+
+impl Artifact for IntArtifact {
+    type Change = i32;
+    type ApplyError = TestArtifactError;
+
+    fn identity(&self) -> ArtifactIdentity {
+        ArtifactIdentity::Content(ContentId::hash_bytes(self.0.to_le_bytes()))
+    }
+
+    fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
+        Ok(Self(*change))
+    }
+}
+
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub(crate) struct TestEvidence;
 
