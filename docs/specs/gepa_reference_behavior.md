@@ -1689,7 +1689,6 @@ Focused implementation gates as fixes land:
 
 - `cargo nextest run -p leaven-gepa --test gepa_smoke`
 - `cargo nextest run -p leaven-gepa --test lm_reflection`
-- `cargo nextest run -p leaven-gepa --test agent_stage_routing`
 - `cargo nextest run -p leaven-population`
 - `cargo nextest run -p p8_aime_gepa`
 - `cargo test -p leaven --test topology_contract`
@@ -2636,7 +2635,7 @@ to know `RunContext`, `EvaluationRequest`, `AssessmentId`, or
 | Reflective example shape | Flat strings or structured sections? | Keep a compact public record, but it must be able to represent AIME and DSPy shapes. Either enrich `ReflectiveExample` with named sections or add a structured companion record before DSPy parity. | `ReflectiveExample` now has ordered `side_info` plus flat `input`, `output`, `score`, `feedback`, and refs. P8 uses `side_info` for optimize-anything AIME reflection; future DSPy-profile trace parity still needs the DSPy `Inputs` / `Generated Outputs` / `Feedback` trace builder. |
 | Reflection proposer API | `GepaReflector`, `Proposer`, or both? | Keep `GepaReflector` as GEPA-facing convenience, but LM/agent-backed implementations should route through `RunContext::propose` so proposal recording/cost is uniform. | `GepaReflector` exists; LM path has proposer adapter support; API must keep build-once request invariant. |
 | Reflection LM config | How many knobs at ordinary layer? | Ordinary layer: `reflect_with_lm(lm, model)` plus small config methods. Customizer layer: `LmBackedReflectorConfig`, renderer, parser, prompt template, sampling/output. | `reflect_with_lm` and `with_reflector_config` exist. |
-| Agent-backed reflection | Where does it live? | `leaven::gepa` customizer route, not `prelude`; consumes same `ReflectRequest`. | `gepa_stage_proposer` and bootstrap are re-exported by `leaven-gepa`. |
+| Agent-backed reflection | Where does it live? | A bridge crate that materializes the artifact and consumes the same `ReflectRequest`; not `prelude`. | The old `gepa_stage_proposer` bootstrap was deleted instead of retained as scaffold. |
 | Merge API | How to expose merge? | Core profile disables. DSPy profile enables. Public API should have explicit `.merge(SystemAwareMerge::...)` / `.without_merge()` and report labels. | No real merge path. |
 | Skip policy | Is skip-perfect public? | Defaults should be encoded in profile. Customizer can expose `SkipPolicy` or builder knobs for `skip_perfect_score` and `perfect_score`. | `Gepa` exposes `.skip_perfect_score(...)` and `.perfect_score(...)`; empty reflective datasets skip with `NoReflectiveExamples`. |
 | Budget API | New GEPA budget type? | No ordinary new budget type. Use `Budget::metric_calls(...)`; GEPA report separates search metric calls, reflection cost, and final report evaluations. | Engine stopper exists; GEPA search/final distinction needs report work. |

@@ -10,9 +10,9 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
   provider-neutral; concrete LM/provider lowering belongs in `leaven-lm-*` or
   agent crates. The module is private; behavior-bearing types are curated at
   the crate root, and scaffolds route through `test_support`.
-- `src/agent_stage.rs` is private scaffold for the legacy `AgentBacked` GEPA
-  reflection slot. Its public route is `leaven_gepa::test_support`, not a root
-  `agent_stage` module.
+- The legacy `AgentBacked` GEPA bootstrap/proposer scaffold is deleted. Do not
+  reintroduce a GEPA-specific stage route until it materializes the artifact
+  under reflection and has product-facing tests.
 - Surface ownership is explicit: GEPA selects a part from an `EditSurface` and lowers edits through that surface into artifact-native changes. Artifact-specific surfaces belong in `leaven-surface` or `leaven-artifact-*`.
 - The current reference loop is: full-validate the seed into
   `GepaReferenceState`, select a parent from the validation frontier frequency
@@ -33,22 +33,19 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
   `GepaReflector` with that request, apply the returned proposal batch through
   `RunContext`, then update GEPA state. `FixedSurfaceEdit` lives under
   `leaven_gepa::test_support`; it is a scaffold reflector, not a product
-  reflection path. Agent-backed reflection must route through
-  `RunContext::propose` before `apply_batch`.
+  reflection path. Agent-backed reflection must materialize the artifact and
+  route through `RunContext::propose` before `apply_batch`.
 - Reflection is build-once-pass-down: `reflect_candidate` receives a fully
-  built `ReflectRequest` and never projects its own data. The LM-backed and
-  agent-backed reflectors therefore see byte-identical `examples`; the
-  `agent_stage_routing` regression test pins this. Do not reintroduce a
+  built `ReflectRequest` and never projects its own data. Do not reintroduce a
   reflector that derives feedback inside itself.
 
 ## Local Bait
 - Engine tests use local optimizer wrappers; do not move GEPA selector, gate, or checkpoint private state into `leaven-engine` to make those tests shorter.
 - `leaven-lm` is a neutral vocabulary dependency here, not permission to place OpenAI/Anthropic request fields or CLI/session behavior in GEPA.
 - Population defaults such as `ParetoFrontier` and `KeepBest` are consumed here; reusable population behavior still belongs in `leaven-population`.
-- The fixed-edit fixture is `test_support::FixedSurfaceEdit`, and the legacy
-  `AgentBacked` GEPA reflection scaffold is also under `test_support`. These
-  names are scaffolding for GEPA extension slots, not production reflection.
-  Do not re-export or document them as production GEPA reflection.
+- The fixed-edit fixture is `test_support::FixedSurfaceEdit`. It is scaffolding
+  for GEPA extension slots, not production reflection. Do not re-export or
+  document it as production GEPA reflection.
 - Product-facing GEPA proof requires slot contracts for candidate selection,
   part selection, feedback/evidence rendering, reflection/proposal, acceptance,
   validation, population, merge, stopping, and checkpoint state. Topology and
@@ -79,14 +76,7 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
 - `cargo nextest run -p leaven-gepa --test gepa_contract` is the focused local
   gate for the current GEPA contract suite. Its `gepa_smoke` module proves
   surface lowering, fixed-edit proposer behavior, train-filtered population,
-  checkpoint state, and hidden validation visibility tests. Its
-  `agent_stage_routing` module proves the agent-backed GEPA reflection slot:
-  provenance refs enter `ReflectRequest`, the fake runtime writes
-  `output/proposal.json`, the parser returns a proposal batch,
-  `RunContext::propose` records the batch, and `apply_batch` creates the
-  candidate. It also holds the divergence regression test
-  (`lm_and_agent_reflectors_receive_byte_identical_examples`) proving the LM
-  and agent reflectors receive byte-identical reflective examples.
+  checkpoint state, and hidden validation visibility tests.
 - `cargo nextest run -p leaven --test gepa_parity` proves the public P3 workflow:
   explicit edit-surface GEPA, train-filtered Pareto updates, and best-candidate
   result. `FixedSurfaceEdit` in that proof is not product proof of GEPA

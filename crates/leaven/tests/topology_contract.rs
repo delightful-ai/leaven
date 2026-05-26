@@ -454,8 +454,8 @@ fn gepa_agent_stage_scaffold_is_not_a_root_public_route() {
         "legacy GEPA agent-stage scaffold must route through test_support, not a root public module"
     );
     assert!(
-        lib.contains("pub use crate::agent_stage::{"),
-        "GEPA scaffold entrypoints should remain explicitly routed through test_support"
+        !lib.contains("mod agent_stage;") && !lib.contains("GepaReflectionBootstrap"),
+        "legacy GEPA agent-stage scaffold should stay deleted until a behavior-bearing route replaces it"
     );
 }
 

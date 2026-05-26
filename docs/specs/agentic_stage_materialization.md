@@ -3313,7 +3313,7 @@ Current proof anchors:
 
 ```text
 cargo nextest run -p leaven-gepa --test lm_reflection
-cargo nextest run -p leaven-gepa --test agent_stage_routing
+cargo nextest run -p leaven-gepa --test gepa_contract
 cargo test -p p8_aime_gepa
 ```
 

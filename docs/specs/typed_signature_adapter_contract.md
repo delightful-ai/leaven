@@ -711,7 +711,7 @@ The trait returns `Vec<ReflectiveCase>` instead of `Vec<ReflectiveExample>`. `Ge
 
 `DefaultReflectionRenderer` (`crates/leaven-gepa/src/reflection.rs:459-489`) is updated to walk `&[ReflectiveCase]` instead of `&[ReflectiveExample]`. The internal `render_reflective_examples` function is renamed `render_reflective_cases` and produces the same flat-per-row output. AIME paper-parity byte-stability is preserved because each AIME case has exactly one run and the field mapping is direct (`case.runs[0].side_info` → upstream side_info ordering; `case.input + run.produced + run.score + run.feedback` → fallback generic projection).
 
-The regression test `lm_and_agent_reflectors_receive_byte_identical_examples` at `crates/leaven-gepa/tests/agent_stage_routing.rs` is updated to construct `ReflectiveCase` and assert byte-identical reflective dataset content between paths.
+The LM reflection regression in `crates/leaven-gepa/tests/gepa_contract/lm_reflection.rs` constructs `ReflectiveCase` and asserts byte-stable rendered prompt content for the LM path. The old `agent_stage_routing` scaffold path has been deleted instead of retained as a byte-identity oracle.
 
 ---
 
@@ -780,7 +780,7 @@ The regression test `lm_and_agent_reflectors_receive_byte_identical_examples` at
 
 - `crates/leaven-gepa/src/reflection.rs`'s `DEFAULT_REFLECTION_PROMPT_TEMPLATE` (line 22). The paper template stays byte-identical.
 - `crates/leaven-gepa/src/proposer.rs`'s `LmBackedReflector` external interface. Internal `DefaultReflectionRenderer` is updated to walk `&[ReflectiveCase]` (the new schema); rendered byte output is unchanged for single-run cases.
-- The existing regression test `crates/leaven-gepa/tests/agent_stage_routing.rs::lm_and_agent_reflectors_receive_byte_identical_examples` is updated to construct `ReflectiveCase` and assert byte-identical reflective dataset content between paths. The test name and intent stay; only the construction code changes.
+- The LM reflection regression in `crates/leaven-gepa/tests/gepa_contract/lm_reflection.rs` constructs `ReflectiveCase` and asserts byte-stable rendered prompt content for single-run inputs. The old `agent_stage_routing` scaffold path is not retained.
 
 **Strictly untouched:**
 
@@ -821,8 +821,8 @@ Strictly unaffected: `gepa_reference_behavior.md`, `gepa_aime_paper_parity.md`, 
   - `from_example_constructor`: the flat constructor produces the same shape as the manual single-run construction (per §3.1 specified defaults: `case_id = None`, fresh `run_id`, `attempt_index = Some(0)`, etc.).
   - `gepa_reexport_attachment`: confirms `leaven_gepa::Attachment` and `leaven_evidence::Attachment` are the same type (the ergonomic re-export holds).
 
-- **`leaven-gepa` LM compat test** (existing test updated):
-  - `lm_and_agent_reflectors_receive_byte_identical_examples` (`crates/leaven-gepa/tests/agent_stage_routing.rs`) — updated to construct `ReflectiveCase`; rendered LM prompt bytes are unchanged for single-run inputs.
+- **`leaven-gepa` LM compat test**:
+  - `crates/leaven-gepa/tests/gepa_contract/lm_reflection.rs` constructs `ReflectiveCase`; rendered LM prompt bytes are unchanged for single-run inputs.
 
 - **`leaven-agentic` reflection tests** (`crates/leaven-agentic/tests/reflection_workspace.rs`):
   - `runs_end_to_end_with_fake_runtime`: a `FakeArtifactReflector` (Input=Output=()) + `FakeAgentRuntime` produces a `ReflectionRunOutcome`.

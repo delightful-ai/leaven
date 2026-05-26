@@ -336,7 +336,7 @@ Required tests:
 
 Focused commands:
 
-- `cargo nextest run -p leaven-gepa --test agent_stage_routing --test lm_reflection`
+- `cargo nextest run -p leaven-gepa --test gepa_contract lm_reflection`
 - `cargo nextest run -p leaven-gepa --test gepa_smoke`
 - `cargo nextest run -p p8_aime_gepa`
 - `cargo test -p leaven --test topology_contract`

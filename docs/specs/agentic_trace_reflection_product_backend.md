@@ -179,7 +179,7 @@ Current narrow gates:
 
 ```text
 cargo test -p leaven-agentic-git
-cargo test -p leaven-gepa --test gepa_smoke --test agent_stage_routing
+cargo test -p leaven-gepa --test gepa_contract
 cargo test -p p5_evoskill_iteration
 ```
 

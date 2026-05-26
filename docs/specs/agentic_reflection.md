@@ -83,8 +83,8 @@ target.
 
 - `GepaReflector<P, S>` (`leaven-gepa/src/proposer.rs`) is the swappable
   reflector trait. Implementors: `FixedSurfaceEdit` (scaffold fixture),
-  `LmBackedReflector` (real), and
-  `AgentBacked<ProposerSlot<ReflectRequest>, ..>` (the agent path).
+  `LmBackedReflector` (real), and agentic bridge crates that materialize the
+  artifact before reflection.
 - `ReflectRequest` carries `parent: CandidateId`, the selected `part`, and
   `Vec<ReflectiveExample>`. `ReflectiveDatasetBuilder` builds the examples once
   per step; this is the Rust analogue of GEPA's `make_reflective_dataset`.
@@ -93,9 +93,10 @@ target.
 
 ### 2.2 The agent reflector cannot see the artifact
 
-`gepa_stage_proposer` wires the agent reflector through `leaven-stage`'s
-`AgentBacked`. Its lifecycle is bootstrap → `setup_stage_workspace` →
-`StageReadAuthority::prewarm` → run → parse. Two facts break reflection:
+The deleted `gepa_stage_proposer` route wired the agent reflector through
+`leaven-stage`'s `AgentBacked`. Its lifecycle was bootstrap →
+`setup_stage_workspace` → `StageReadAuthority::prewarm` → run → parse. Two
+facts broke reflection:
 
 1. **`AgentStagePlan` has no materializer.** Its fields are `role`, `request`,
    `directive`, `query`, `output`, `metadata`. Nothing materializes the
@@ -105,11 +106,11 @@ target.
    created_at}`. No `StageQuery` variant returns artifact body; every kind is an
    `EntryProjection::Summary`.
 
-Consequence: the agent reflector receives the reflective examples and candidate
+Consequence: that agent reflector received the reflective examples and candidate
 *metadata*, but never the current artifact — the `<curr_param>` half of GEPA's
 own reflection prompt. The LM reflector, by contrast, reads
-`ctx.graph().artifact(parent)` directly. The `agent_stage_routing` test does
-not catch this: examples are not the artifact, and the `FakeAgentRuntime` is
+`ctx.graph().artifact(parent)` directly. The old `agent_stage_routing` test did
+not catch this: examples were not the artifact, and the `FakeAgentRuntime` was
 scripted to emit output regardless of input.
 
 ### 2.3 The interactive query path has no transport
@@ -270,8 +271,8 @@ Route GEPA agent reflection through a materializing agentic proposer.
   `source_refs` plus per-case / per-run refs carried in the reflective dataset.
 - Tests: an end-to-end agentic reflection test over a skill bank, plus the
   `leaven doctor proposal-roundtrip --json` byte-stable gate.
-- The earlier `gepa_stage_proposer` / `AgentBacked` path remains as **marked
-  scaffolding** (§7).
+- The earlier `gepa_stage_proposer` / `AgentBacked` path has been deleted
+  rather than preserved as scaffold (§7).
 
 Outcome: agentic GEPA reflection works for skill-bank artifacts.
 
@@ -317,7 +318,7 @@ being meaningful.
 - A GEPA run can use an agent as its reflector, and the agent receives the
   current artifact materialized into its workspace.
 - Skill-bank agentic reflection has an end-to-end test that fails if the
-  artifact is not delivered (unlike `agent_stage_routing` today).
+  artifact is not delivered.
 - Git/jj repositories can be materialized, edited by an agent, and read back as
   typed changes, with an integration test.
 - A single agentic stage proposer; no parallel half-paths in the product
@@ -338,13 +339,13 @@ layer C (workspace substrate) are unchanged. When Phase 5 lands, v0.4's layer B
 section must be updated to the converged proposer or this spec promoted to
 govern layer B outright.
 
-## 7. Scaffolding policy (interim exception)
+## 7. Scaffolding policy
 
-Repo policy is hard cutover with no parallel old/new paths. This spec takes a
-deliberate, time-boxed exception for Phases 1–4: `AgentBacked`,
-`gepa_stage_proposer`, `StageReadAuthority`, and the `StageQuery` machinery stay
-in the tree as **explicitly marked scaffolding**. Every retained scaffold
-surface must:
+Repo policy is hard cutover with no parallel old/new paths. The old
+GEPA-specific `gepa_stage_proposer` scaffold is not retained. Generic
+`AgentBacked`, `StageReadAuthority`, and `StageQuery` machinery remain in
+`leaven-stage` as stage substrate, but they are not GEPA product reflection
+proof until a materializing route exists. Every retained scaffold surface must:
 
 - carry a docstring stating it is pre-convergence scaffolding and pointing at
   this spec;
