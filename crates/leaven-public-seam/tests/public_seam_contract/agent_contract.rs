@@ -1,4 +1,4 @@
-use crate::support::package;
+use crate::support::{package, prefixed_jcs_hash};
 use leaven_agent::{AgentSession, CommandRecord};
 use leaven_kernel::{AgentSessionId, Cost, Fingerprint, Metered};
 use leaven_public_seam::{
@@ -552,14 +552,13 @@ fn blob_ref_for_bytes(id: &'static str, bytes: &[u8], data_classes: &[&str]) -> 
 
 fn rebind_call_result_hash(result: &mut Value, receipt_index: usize, name: &str) {
     let value = result["values"][name].clone();
-    result["receipts"][receipt_index]["result_hash"] = json!(format!(
-        "fp_result_sha256_{}",
-        jcs_canonicalize::sha256_jcs_hex(&json!({
+    result["receipts"][receipt_index]["result_hash"] = json!(prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &json!({
             "schema_version": "leaven.plan_call_result.v1",
             "name": name,
             "value": value
-        }))
-        .unwrap()
+        })
     ));
 }
 

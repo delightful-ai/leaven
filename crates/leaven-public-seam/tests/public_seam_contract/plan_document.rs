@@ -1,4 +1,4 @@
-use crate::support::package;
+use crate::support::{package, prefixed_jcs_hash};
 use std::collections::{BTreeMap, BTreeSet};
 
 use leaven_lm::{MessageContentPart, OutputMode, Role};
@@ -577,7 +577,7 @@ fn plan_execution_result_rejects_workspace_query_value_forgery_with_valid_hashes
         "data_classes": ["candidate.artifact", "public"],
         "replayability": "boundary_managed"
     });
-    result["receipts"][1]["result_hash"] = json!(test_prefixed_jcs_hash(
+    result["receipts"][1]["result_hash"] = json!(prefixed_jcs_hash(
         "fp_result_sha256_",
         &json!({
             "schema_version": "leaven.plan_query_result.v1",
@@ -589,7 +589,7 @@ fn plan_execution_result_rejects_workspace_query_value_forgery_with_valid_hashes
 
     let mut missing_class = workspace_query_result_fixture(&package, &plan, &context);
     missing_class["values"]["file"]["data_classes"] = json!(["public"]);
-    missing_class["receipts"][1]["result_hash"] = json!(test_prefixed_jcs_hash(
+    missing_class["receipts"][1]["result_hash"] = json!(prefixed_jcs_hash(
         "fp_result_sha256_",
         &json!({
             "schema_version": "leaven.plan_query_result.v1",
@@ -601,7 +601,7 @@ fn plan_execution_result_rejects_workspace_query_value_forgery_with_valid_hashes
 
     let mut stat_wrong_path = workspace_query_result_fixture(&package, &plan, &context);
     stat_wrong_path["values"]["stat"]["entries"][0]["path"] = json!("src/lib.rs");
-    stat_wrong_path["receipts"][3]["result_hash"] = json!(test_prefixed_jcs_hash(
+    stat_wrong_path["receipts"][3]["result_hash"] = json!(prefixed_jcs_hash(
         "fp_result_sha256_",
         &json!({
             "schema_version": "leaven.plan_query_result.v1",
@@ -613,7 +613,7 @@ fn plan_execution_result_rejects_workspace_query_value_forgery_with_valid_hashes
 
     let mut digest_wrong_algorithm = workspace_query_result_fixture(&package, &plan, &context);
     digest_wrong_algorithm["values"]["digest"]["digest"] = json!("blake3:readme");
-    digest_wrong_algorithm["receipts"][4]["result_hash"] = json!(test_prefixed_jcs_hash(
+    digest_wrong_algorithm["receipts"][4]["result_hash"] = json!(prefixed_jcs_hash(
         "fp_result_sha256_",
         &json!({
             "schema_version": "leaven.plan_query_result.v1",
@@ -625,7 +625,7 @@ fn plan_execution_result_rejects_workspace_query_value_forgery_with_valid_hashes
 
     let mut digest_wrong_workspace = workspace_query_result_fixture(&package, &plan, &context);
     digest_wrong_workspace["values"]["digest"]["workspace"] = json!("ws_planexec_other");
-    digest_wrong_workspace["receipts"][4]["result_hash"] = json!(test_prefixed_jcs_hash(
+    digest_wrong_workspace["receipts"][4]["result_hash"] = json!(prefixed_jcs_hash(
         "fp_result_sha256_",
         &json!({
             "schema_version": "leaven.plan_query_result.v1",
@@ -703,7 +703,7 @@ fn plan_execution_result_rejects_literal_workspace_handle_provenance_forgery() {
                 "op_var": "file",
                 "started_at": "2026-01-01T00:00:00Z",
                 "completed_at": "2026-01-01T00:00:01Z",
-                "op_hash": test_prefixed_jcs_hash(
+                "op_hash": prefixed_jcs_hash(
                     "fp_query_sha256_",
                     &json!({
                         "schema_version": "leaven.plan_query_op.v1",
@@ -712,8 +712,8 @@ fn plan_execution_result_rejects_literal_workspace_handle_provenance_forgery() {
                         "scope": scope
                     }),
                 ),
-                "read_scope_fingerprint": test_prefixed_jcs_hash("fp_scope_sha256_", &scope),
-                "projection_fingerprint": test_prefixed_jcs_hash(
+                "read_scope_fingerprint": prefixed_jcs_hash("fp_scope_sha256_", &scope),
+                "projection_fingerprint": prefixed_jcs_hash(
                     "fp_projection_sha256_",
                     &json!({
                         "workspace": "ws_planexec_materialized",
@@ -721,7 +721,7 @@ fn plan_execution_result_rejects_literal_workspace_handle_provenance_forgery() {
                     }),
                 ),
                 "graph_revision": "rev_planexec_base",
-                "result_hash": test_prefixed_jcs_hash(
+                "result_hash": prefixed_jcs_hash(
                     "fp_result_sha256_",
                     &json!({
                         "schema_version": "leaven.plan_query_result.v1",
@@ -1325,13 +1325,6 @@ fn assert_plan_execution_or_result_rejected(
     ));
 }
 
-fn test_prefixed_jcs_hash(prefix: &str, value: &Value) -> String {
-    format!(
-        "{prefix}{}",
-        jcs_canonicalize::sha256_jcs_hex(value).unwrap()
-    )
-}
-
 fn lm_answer_output_contract() -> Value {
     let schema = json!({
         "type": "object",
@@ -1345,7 +1338,7 @@ fn lm_answer_output_contract() -> Value {
     });
     json!({
         "kind": "json_schema",
-        "schema_fingerprint": test_prefixed_jcs_hash("fp_schema_sha256_", &schema),
+        "schema_fingerprint": prefixed_jcs_hash("fp_schema_sha256_", &schema),
         "schema": schema
     })
 }
@@ -1363,14 +1356,14 @@ fn agent_status_output_contract() -> Value {
     });
     json!({
         "kind": "json_schema",
-        "schema_fingerprint": test_prefixed_jcs_hash("fp_schema_sha256_", &schema),
+        "schema_fingerprint": prefixed_jcs_hash("fp_schema_sha256_", &schema),
         "schema": schema
     })
 }
 
 fn rebind_call_result_hash(result: &mut Value, receipt_index: usize, name: &str) {
     let value = result["values"][name].clone();
-    result["receipts"][receipt_index]["result_hash"] = json!(test_prefixed_jcs_hash(
+    result["receipts"][receipt_index]["result_hash"] = json!(prefixed_jcs_hash(
         "fp_result_sha256_",
         &json!({
             "schema_version": "leaven.plan_call_result.v1",
@@ -1388,7 +1381,7 @@ fn rebind_failed_call_result_hash(result: &mut Value, receipt_index: usize, name
         .get("charge_receipts")
         .cloned()
         .unwrap_or_else(|| json!([]));
-    result["receipts"][receipt_index]["result_hash"] = json!(test_prefixed_jcs_hash(
+    result["receipts"][receipt_index]["result_hash"] = json!(prefixed_jcs_hash(
         "fp_result_sha256_",
         &json!({
             "schema_version": "leaven.plan_call_result.v1",

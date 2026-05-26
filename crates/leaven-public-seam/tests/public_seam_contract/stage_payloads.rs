@@ -1,5 +1,5 @@
-use crate::support::package;
 use crate::support::workspace_root;
+use crate::support::{package, prefixed_jcs_hash};
 use leaven_public_seam::{PublicSeamError, StagePayloadRole, StageProposalEffect};
 use serde_json::{Value, json};
 
@@ -1097,10 +1097,7 @@ fn stage_receipts(reflection: &Value) -> Value {
 }
 
 fn stage_payload_fingerprint(value: &Value) -> String {
-    format!(
-        "fp_stage_payload_sha256_{}",
-        jcs_canonicalize::sha256_jcs_hex(value).unwrap()
-    )
+    prefixed_jcs_hash("fp_stage_payload_sha256_", value)
 }
 
 fn reflect_propose_submission_plan() -> Value {

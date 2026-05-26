@@ -1,4 +1,4 @@
-use crate::support::package;
+use crate::support::{package, prefixed_jcs_hash};
 use leaven_public_seam::{EvaluationJobKind, PublicSeamError};
 use serde_json::{Value, json};
 
@@ -422,7 +422,7 @@ fn evaluation_request_receipt_result(job: &leaven_public_seam::EvaluationJobDocu
 }
 
 fn evaluation_request_hash(job: &leaven_public_seam::EvaluationJobDocument) -> String {
-    fingerprint(
+    prefixed_jcs_hash(
         "fp_request_sha256_",
         &json!({
             "schema_version": "leaven.evaluation_request_identity.v1",
@@ -442,7 +442,7 @@ fn evaluation_request_hash(job: &leaven_public_seam::EvaluationJobDocument) -> S
 }
 
 fn evaluation_request_result_hash(job: &leaven_public_seam::EvaluationJobDocument) -> String {
-    fingerprint(
+    prefixed_jcs_hash(
         "fp_result_sha256_",
         &json!({
             "schema_version": "leaven.evaluation_request_receipt_result.v1",
@@ -452,13 +452,6 @@ fn evaluation_request_result_hash(job: &leaven_public_seam::EvaluationJobDocumen
             "case_ids": job.case_ids(),
             "candidate_ids": job.candidate_ids()
         }),
-    )
-}
-
-fn fingerprint(prefix: &str, value: &Value) -> String {
-    format!(
-        "{prefix}{}",
-        jcs_canonicalize::sha256_jcs_hex(value).unwrap()
     )
 }
 
