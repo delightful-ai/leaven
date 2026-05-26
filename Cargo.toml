@@ -129,10 +129,8 @@ leaven-std = { path = "crates/leaven-std", version = "0.0.0" }
 leaven-workspace = { path = "crates/leaven-workspace", version = "0.0.0" }
 leaven-agent = { path = "crates/leaven-agent", version = "0.0.0" }
 leaven-agent-command = { path = "crates/leaven-agent-command", version = "0.0.0" }
-leaven-agent-codex-app-server = { path = "crates/leaven-agent-codex-app-server", version = "0.0.0", default-features = false }
 leaven-agent-codex-cli = { path = "crates/leaven-agent-codex-cli", version = "0.0.0" }
 leaven-acp = { path = "crates/leaven-acp", version = "0.0.0" }
-leaven-cli = { path = "crates/leaven-cli", version = "0.0.0" }
 leaven-agentic = { path = "crates/leaven-agentic", version = "0.0.0" }
 leaven-agentic-git = { path = "crates/leaven-agentic-git", version = "0.0.0" }
 leaven-agentic-skill = { path = "crates/leaven-agentic-skill", version = "0.0.0" }
@@ -143,12 +141,10 @@ leaven-evidence = { path = "crates/leaven-evidence", version = "0.0.0" }
 leaven-eval = { path = "crates/leaven-eval", version = "0.0.0" }
 leaven-eval-parquet = { path = "crates/leaven-eval-parquet", version = "0.0.0" }
 leaven-gepa = { path = "crates/leaven-gepa", version = "0.0.0" }
-leaven-gepa-agentic-git = { path = "crates/leaven-gepa-agentic-git", version = "0.0.0" }
 leaven-gepa-agentic-skill = { path = "crates/leaven-gepa-agentic-skill", version = "0.0.0" }
 leaven-kernel = { path = "crates/leaven-kernel", version = "0.0.0" }
 leaven-lm = { path = "crates/leaven-lm", version = "0.0.0" }
 leaven-lm-cache = { path = "crates/leaven-lm-cache", version = "0.0.0" }
-leaven-lm-mock = { path = "crates/leaven-lm-mock", version = "0.0.0" }
 leaven-lm-openai = { path = "crates/leaven-lm-openai", version = "0.0.0" }
 leaven-population = { path = "crates/leaven-population", version = "0.0.0" }
 leaven-preference = { path = "crates/leaven-preference", version = "0.0.0" }
