@@ -1,6 +1,6 @@
 # Leaven
 
-*u walk away. it bakes.*
+*walk away. it bakes.*
 
 Leaven is a Rust library for optimizing agents.
 
