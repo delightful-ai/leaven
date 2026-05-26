@@ -86,4 +86,4 @@ It does not execute evaluations. Evaluator traits, registries, trust checks, cas
   fingerprints, explicit paper-manifest lowering, deterministic sampler state,
   and train/validation/test use-policy boundaries.
 - `cargo nextest run -p leaven-run` proves product builders can consume lowered eval vocabulary without making this crate own builder ergonomics.
-- `cargo nextest run -p leaven-engine --test case_set_resolution` proves execution-time case-set resolution stays in the engine layer.
+- `cargo test -p leaven-engine --test engine_contract case_set_resolution` proves execution-time case-set resolution stays in the engine layer.

@@ -332,7 +332,7 @@ print summary
 
 ### Required Tests
 
-Existing or new tests in `crates/leaven-engine/tests/graph_surface.rs` must
+Existing or new tests in `crates/leaven-engine/tests/engine_contract.rs::graph_surface` must
 cover:
 
 - create proposal has no causal parent,
@@ -347,7 +347,7 @@ cover:
 
 ```bash
 cargo run -p p0_graph_skeleton
-cargo nextest run -p leaven-engine --test graph_surface
+cargo test -p leaven-engine --test engine_contract graph_surface
 ```
 
 ## P1: Scalar Keep-Best
@@ -686,7 +686,7 @@ print winner, judgment, ability scores
 
 - `crates/leaven-evidence/tests/pairwise.rs`
 - `crates/leaven-population/tests/tournament.rs`
-- `crates/leaven-engine/tests/evaluator_registry.rs`
+- `crates/leaven-engine/tests/engine_contract.rs::evaluator_registry`
 - example command below
 
 Property tests:
@@ -702,7 +702,7 @@ Property tests:
 cargo run -p p2_pairwise_tournament
 cargo nextest run -p leaven-evidence --test pairwise
 cargo nextest run -p leaven-population --test tournament
-cargo nextest run -p leaven-engine --test evaluator_registry
+cargo test -p leaven-engine --test engine_contract evaluator_registry
 ```
 
 ## P3: GEPA Parity Over An Edit Surface

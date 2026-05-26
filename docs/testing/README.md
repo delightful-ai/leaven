@@ -154,36 +154,36 @@ Use the narrowest layer that proves the claim.
 
 ## Current Suites
 
-- `crates/leaven-engine/tests/graph_surface.rs`: scenario and example coverage
+- `crates/leaven-engine/tests/engine_contract.rs::graph_surface`: scenario and example coverage
   for proposal application, lineage, sibling/candidate-tree views,
   informed-by edges, failed apply attempts, and recent failure refs through
   `RunContext`, plus an append-only graph law test.
-- `crates/leaven-engine/tests/context_services.rs`: proposal/evaluation
+- `crates/leaven-engine/tests/engine_contract.rs::context_services`: proposal/evaluation
   context scenarios for budget charging, error recording, cache policy,
   evidence references, durable evaluation-request recording on failed
   evaluations, proposal/evaluation/render context views, read-scoped
   assessment queries, and graph-backed evidence lookup.
-- `crates/leaven-engine/tests/budget_laws.rs`: budget axis and sub-stage
+- `crates/leaven-engine/tests/engine_contract.rs::budget_laws`: budget axis and sub-stage
   charging laws, including typed refusal of invalid seconds amounts.
 - `crates/leaven-kernel/tests/kernel_contract.rs`: consolidated kernel
   contract harness covering property and regression coverage
   for finite, non-negative `Amount` construction, serde round trips, and
   saturating cost combination.
-- `crates/leaven-engine/tests/case_set_resolution.rs`: evaluation-set
+- `crates/leaven-engine/tests/engine_contract.rs::case_set_resolution`: evaluation-set
   resolution examples for partitions, explicit cases, set combinators,
   deterministic sampling, and typed refusal for tag-index-dependent sets.
-- `crates/leaven-engine/tests/trust_policy.rs`: read-scope and actor-policy
+- `crates/leaven-engine/tests/engine_contract.rs::trust_policy`: read-scope and actor-policy
   examples for hidden partitions and typed trust refusals.
-- `crates/leaven-engine/tests/engine_loop.rs`: engine run-loop scenarios for
+- `crates/leaven-engine/tests/engine_contract.rs::engine_loop`: engine run-loop scenarios for
   continuation, optimizer completion, trust-policy wiring, callback dispatch,
   max-iteration refusal, and optimizer error closeout.
-- `crates/leaven-engine/tests/stage_trait_contracts.rs`: static-to-dynamic
+- `crates/leaven-engine/tests/engine_contract.rs::stage_trait_contracts`: static-to-dynamic
   stage adapter contracts for proposer, evaluator, preference, and stopper
   traits.
-- `crates/leaven-engine/tests/population_event_contract.rs`: public event
+- `crates/leaven-engine/tests/engine_contract.rs::population_event_contract`: public event
   contract proving population reweighting uses finite weights and population
   observer defaults emit no events.
-- `crates/leaven-engine/tests/materializer_contract.rs`: P4 materializer
+- `crates/leaven-engine/tests/engine_contract.rs::materializer_contract`: P4 materializer
   contracts for deterministic workspace writes, proposer-scoped read views,
   explicit cleanup, absence of old `WorkspaceRenderer` names, and
   `Create + None + informed_by(history)` lineage.

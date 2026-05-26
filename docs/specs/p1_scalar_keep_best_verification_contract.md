@@ -135,7 +135,7 @@ them into standard crates only when they become reusable library surface.
 ### RunGraph Requirements
 
 1. Create proposal creates candidate without causal parent.
-   - Already covered by `crates/leaven-engine/tests/graph_surface.rs`.
+   - Already covered by `crates/leaven-engine/tests/engine_contract.rs::graph_surface`.
 
 2. Change proposal requires the target to appear in causal inputs.
    - Test: invalid `Change { target } + CausalInputs::None` records failed

@@ -367,7 +367,8 @@ Narrow verification commands for implementation slices:
 
 ```bash
 cargo nextest run -p leaven-lm-cache
-cargo nextest run -p leaven-engine --test context_services --test engine_loop
+cargo test -p leaven-engine --test engine_contract context_services
+cargo test -p leaven-engine --test engine_contract engine_loop
 cargo nextest run -p leaven-run --test optimize_builder --test scoring_evaluator
 cargo test -p leaven --test topology_contract
 ```

@@ -39,4 +39,4 @@ It may interpret evidence into `leaven-core::Preference`, but it must not own po
 - `cargo nextest run -p leaven-preference` proves the scalar stateless
   preference behavior. It does not prove ranking/Pareto placeholder names.
 - `cargo nextest run -p leaven-population --test tournament` proves fitted pairwise preference state belongs in population, not here.
-- `cargo nextest run -p leaven-engine --test stage_trait_contracts` proves engine-level preference relation object contracts outside this crate.
+- `cargo test -p leaven-engine --test engine_contract stage_trait_contracts` proves engine-level preference relation object contracts outside this crate.
