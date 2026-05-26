@@ -33,7 +33,7 @@ Use the weakest applicable classification in release notes and closeouts. A run 
 
 ## Verification
 - Full suite runtime target and hard completion timeout: `just test`.
-- Single nextest selector: `just test-one <selector>`.
-- Repeated flake probe: `just test-stress 20 <selector>`.
+- Single cargo-test selector: `just test-one <cargo test args>`.
+- Repeated flake probe: `just test-stress 20 <cargo test args>`.
 - Coverage gate: `just coverage`.
 - Completion gate: `just check`.

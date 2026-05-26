@@ -21,8 +21,8 @@ claim under test. Use narrower recipes only while iterating:
 ```bash
 just lint
 just test
-just test-one <nextest selector>
-just test-stress 20 <nextest selector>
+just test-one <cargo test args>
+just test-stress 20 <cargo test args>
 just coverage
 just coverage-fast --package <crate>
 just coverage-smoke-fast --package <crate> --test <integration-test-name>
