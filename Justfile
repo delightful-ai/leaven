@@ -23,12 +23,12 @@ test:
     python3 scripts/test-suite-sla.py --warn-seconds 30 --timeout-seconds 600
 
 test-one +args:
-    cargo nextest run --workspace \
+    cargo test --workspace \
       {{milestone_excludes}} \
       {{args}}
 
 test-stress count +args:
-    for i in $(seq 1 {{count}}); do echo "stress run $i/{{count}}"; cargo nextest run --workspace {{milestone_excludes}} {{args}}; done
+    for i in $(seq 1 {{count}}); do echo "stress run $i/{{count}}"; cargo test --workspace {{milestone_excludes}} {{args}}; done
 
 bench-git-trust +args:
     cargo run -p xtask -- git-trust-bench {{args}}
