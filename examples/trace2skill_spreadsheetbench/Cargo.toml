@@ -1,6 +1,6 @@
 [package]
 name = "trace2skill_spreadsheetbench"
-description = "Trace2Skill SpreadsheetBench manifest lowering smoke."
+description = "Trace2Skill SpreadsheetBench case replay and ACP external-worker proof."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

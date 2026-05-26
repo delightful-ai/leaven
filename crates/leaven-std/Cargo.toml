@@ -1,6 +1,6 @@
 [package]
 name = "leaven-std"
-description = "Standard evidence, preference, population, and surface imports for leaven."
+description = "Standard evidence, preference, population, and surface imports for Leaven."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

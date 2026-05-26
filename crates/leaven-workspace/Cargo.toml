@@ -1,6 +1,6 @@
 [package]
 name = "leaven-workspace"
-description = "Workspace backends (local, docker, e2b, git-worktree, k8s) for leaven agentic stages."
+description = "Provider-neutral workspace contracts for Leaven stages."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

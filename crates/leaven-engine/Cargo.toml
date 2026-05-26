@@ -1,6 +1,6 @@
 [package]
 name = "leaven-engine"
-description = "Engine, run loop, evaluation cache, and run stores for leaven."
+description = "Engine, run loop, evaluation cache, and run stores for Leaven."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
