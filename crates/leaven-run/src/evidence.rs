@@ -171,10 +171,10 @@ impl<I> RunCase<I> {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct CaseDataReadLog(std::sync::Arc<std::sync::Mutex<Vec<CaseDataReadEvidence>>>);
+pub(crate) struct CaseDataReadLog(std::sync::Arc<std::sync::Mutex<Vec<CaseDataReadEvidence>>>);
 
 impl CaseDataReadLog {
-    pub fn record_target_read(&self, case: CaseId) {
+    pub(crate) fn record_target_read(&self, case: CaseId) {
         self.0
             .lock()
             .expect("case data read log lock was poisoned")
@@ -187,7 +187,7 @@ impl CaseDataReadLog {
             ));
     }
 
-    pub fn snapshot(&self) -> Vec<CaseDataReadEvidence> {
+    pub(crate) fn snapshot(&self) -> Vec<CaseDataReadEvidence> {
         self.0
             .lock()
             .expect("case data read log lock was poisoned")
