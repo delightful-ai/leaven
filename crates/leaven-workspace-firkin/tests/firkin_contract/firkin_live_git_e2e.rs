@@ -2,9 +2,6 @@
 
 use std::collections::BTreeMap;
 use std::error::Error;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Command as ProcessCommand;
 use std::sync::Arc;
 
 use firkin_e2b_contract::{RuntimeAdapter, StartPodRequest};
@@ -13,11 +10,8 @@ use firkin_e2b_wire::{
     PodVolumeMountRequest,
 };
 use firkin_single_node::AppleVzLocalRuntimeDriver;
-use leaven_agentic_git::{GitProgramMaterializer, GitProgramReadback, GitProgramStores};
-use leaven_artifact_git::{
-    GitArtifactIdentityMode, GitObjectId, GitPath, GitProgramArtifact, GitProgramChange,
-    GitProgramLayout, GitRepoArtifact, GitRevision, RepoKey, RepoRef,
-};
+use leaven_agentic_git::{GitProgramMaterializer, GitProgramReadback};
+use leaven_artifact_git::{GitProgramChange, GitRevision};
 use leaven_kernel::RunId;
 use leaven_workspace::{WorkspaceConfig, WorkspaceFactory, WorkspacePath};
 use leaven_workspace_firkin::{
@@ -25,6 +19,8 @@ use leaven_workspace_firkin::{
     FirkinWorkspaceContext, FirkinWorkspaceFactory,
 };
 use tokio::runtime::Runtime;
+
+use super::git_program_support::{GitProgramFixture, git_output, workspace_path};
 
 #[test]
 #[ignore = "signed live Apple/VZ Firkin Git workspace proof; boots a VM"]
@@ -102,7 +98,7 @@ fn run_live_git_body(
     driver: AppleVzLocalRuntimeDriver,
     pod_id: &str,
 ) -> Result<(), Box<dyn Error>> {
-    let fixture = GitFixture::new();
+    let fixture = GitProgramFixture::new();
     let runtime = Arc::new(FirkinRuntimeAdapterRuntime::new(driver, "workspace")?);
     let factory = FirkinWorkspaceFactory::new(
         runtime,
@@ -166,109 +162,4 @@ fn run_live_git_body(
     futures::executor::block_on(workspace_a.cleanup())?;
     futures::executor::block_on(workspace_b.cleanup())?;
     Ok(())
-}
-
-struct GitFixture {
-    store: PathBuf,
-    parent: GitRevision,
-    _temp: tempfile::TempDir,
-}
-
-impl GitFixture {
-    fn new() -> Self {
-        let temp = tempfile::tempdir().unwrap();
-        let source = temp.path().join("source");
-        let store = temp.path().join("program.git");
-        create_repo(&source);
-        run_git_at(temp.path(), ["clone", "--bare", "source", "program.git"]);
-        let parent = GitRevision::Commit(git_object(&source, "main"));
-        Self {
-            store,
-            parent,
-            _temp: temp,
-        }
-    }
-
-    fn stores(&self) -> GitProgramStores {
-        GitProgramStores::new(BTreeMap::from([(repo_key("program"), self.store.clone())])).unwrap()
-    }
-
-    fn artifact(&self) -> GitProgramArtifact {
-        GitProgramArtifact::new(
-            BTreeMap::from([(
-                repo_key("program"),
-                GitRepoArtifact::new(
-                    RepoRef::global(repo_key("program")),
-                    self.parent.clone(),
-                    None,
-                    GitArtifactIdentityMode::Commit,
-                ),
-            )]),
-            GitProgramLayout::new(BTreeMap::from([(
-                repo_key("program"),
-                git_path("repos/program"),
-            )]))
-            .unwrap(),
-        )
-        .unwrap()
-    }
-}
-
-fn create_repo(root: &Path) {
-    fs::create_dir_all(root).unwrap();
-    run_git(root, ["init", "--initial-branch=main"]);
-    run_git(root, ["config", "user.name", "Leaven Test"]);
-    run_git(root, ["config", "user.email", "leaven@example.invalid"]);
-    fs::write(root.join("program.txt"), "program base\n").unwrap();
-    run_git(root, ["add", "program.txt"]);
-    run_git(root, ["commit", "-m", "base"]);
-}
-
-fn run_git<const N: usize>(cwd: &Path, args: [&str; N]) {
-    run_git_at(cwd, args);
-}
-
-fn run_git_at<const N: usize>(cwd: &Path, args: [&str; N]) {
-    let output = ProcessCommand::new("git")
-        .args(args)
-        .current_dir(cwd)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "git {} failed: {}",
-        args.join(" "),
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
-fn git_output<const N: usize>(cwd: &Path, args: [&str; N]) -> String {
-    let output = ProcessCommand::new("git")
-        .args(args)
-        .current_dir(cwd)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "git {} failed: {}",
-        args.join(" "),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8(output.stdout).unwrap()
-}
-
-fn repo_key(key: &str) -> RepoKey {
-    RepoKey::new(key).unwrap()
-}
-
-fn git_path(path: &str) -> GitPath {
-    GitPath::new(path).unwrap()
-}
-
-fn workspace_path(path: &str) -> WorkspacePath {
-    WorkspacePath::new(path).unwrap()
-}
-
-fn git_object(cwd: &Path, rev: &str) -> GitObjectId {
-    GitObjectId::new(git_output(cwd, ["rev-parse", rev]).trim()).unwrap()
 }
