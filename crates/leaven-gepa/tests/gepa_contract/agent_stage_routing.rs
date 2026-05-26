@@ -1,8 +1,8 @@
+use crate::support::{TestArtifact, TextProblem, WholeTextSurface};
 use futures::executor::block_on;
 use leaven_agent::{AgentSession, FakeAgentAction, FakeAgentRuntime};
 use leaven_core::{
-    Artifact, ArtifactIdentity, Assessment, AssessmentTarget, CacheIdentity, Evidence,
-    OptimizationProblem, Proposal, ProposalBatch, ProposalBatchSemantics,
+    Assessment, AssessmentTarget, Evidence, Proposal, ProposalBatch, ProposalBatchSemantics,
     ResolvedEvaluationRequest, ResolvedRequestKind,
 };
 use leaven_engine::{
@@ -17,8 +17,8 @@ use leaven_gepa::{
     ReflectiveValue,
 };
 use leaven_kernel::{
-    AssessmentId, Budget, BudgetSnapshot, CandidateId, ContentId, Cost, EvaluatorId, Fingerprint,
-    MetadataBag, Metered, StageAttemptOutcome, StageCallId, StageRole,
+    AssessmentId, Budget, BudgetSnapshot, CandidateId, Cost, EvaluatorId, Fingerprint, MetadataBag,
+    Metered, StageAttemptOutcome, StageCallId, StageRole,
 };
 use leaven_population::ParetoFrontier;
 use leaven_stage::{
@@ -26,7 +26,6 @@ use leaven_stage::{
     StageOutputParser, StageQuery, StageQueryKind, receipt_store::StageReceiptStore,
 };
 use leaven_store_inline::InlineEvidenceStore;
-use leaven_surface::{EditSurface, Part, PartAddress, SurfaceError, SurfaceFingerprint};
 use leaven_workspace::{WorkspacePath, WorkspaceView};
 
 fn reflective_case(
@@ -95,28 +94,6 @@ fn gepa_reflection_bootstrap_prewarms_parent_and_feedback_queries() {
 }
 
 #[derive(Clone, Debug)]
-struct TestArtifact(String);
-
-impl Artifact for TestArtifact {
-    type Change = String;
-    type ApplyError = std::convert::Infallible;
-
-    fn identity(&self) -> ArtifactIdentity {
-        ArtifactIdentity::Content(ContentId::hash_bytes(self.0.as_bytes()))
-    }
-
-    fn cache_identity(&self) -> Option<CacheIdentity> {
-        Some(CacheIdentity::Content(ContentId::hash_bytes(
-            self.0.as_bytes(),
-        )))
-    }
-
-    fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
-        Ok(Self(format!("{}{change}", self.0)))
-    }
-}
-
-#[derive(Clone, Debug)]
 struct TestEvidence;
 
 impl Evidence for TestEvidence {}
@@ -127,14 +104,7 @@ impl leaven_gepa::GepaCaseEvidence for TestEvidence {
     }
 }
 
-struct TestProblem;
-
-impl OptimizationProblem for TestProblem {
-    type Artifact = TestArtifact;
-    type Case = ();
-    type Evidence = TestEvidence;
-    type ProposalAnnotations = ();
-}
+type TestProblem = TextProblem<TestEvidence>;
 
 /// Reflective-dataset builder fixture: `TestEvidence` has no GEPA-parity
 /// projection, so the agent routing test scripts one fixed example.
@@ -673,44 +643,6 @@ impl Evaluator<TestProblem> for ConstantEvaluator {
         }
         let cost = Cost::metric_calls(assessments.len() as u64);
         Ok(Metered::new(assessments, cost))
-    }
-}
-
-#[derive(Clone, Debug)]
-struct WholeTextSurface;
-
-impl EditSurface<TestArtifact> for WholeTextSurface {
-    type PartId = &'static str;
-    type Address = PartAddress;
-    type View<'a> = &'a str;
-    type Edit = String;
-
-    fn fingerprint(&self) -> SurfaceFingerprint {
-        SurfaceFingerprint(Fingerprint::from_bytes([4; 32]))
-    }
-
-    fn parts<'a>(
-        &self,
-        artifact: &'a TestArtifact,
-    ) -> Result<Vec<Part<Self::PartId, Self::Address, Self::View<'a>>>, SurfaceError> {
-        Ok(vec![Part {
-            id: "text",
-            address: PartAddress("text".to_owned()),
-            view: artifact.0.as_str(),
-        }])
-    }
-
-    fn change_part(
-        &self,
-        _artifact: &TestArtifact,
-        id: Self::PartId,
-        edit: Self::Edit,
-    ) -> Result<<TestArtifact as Artifact>::Change, SurfaceError> {
-        if id == "text" {
-            Ok(edit)
-        } else {
-            Err(SurfaceError::UnknownPart)
-        }
     }
 }
 

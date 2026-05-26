@@ -6,3 +6,5 @@ mod gepa_smoke;
 mod lm_reflection;
 #[path = "gepa_contract/reflective_case_schema.rs"]
 mod reflective_case_schema;
+#[path = "gepa_contract/support.rs"]
+mod support;

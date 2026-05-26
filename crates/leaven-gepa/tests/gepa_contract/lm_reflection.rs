@@ -1,10 +1,10 @@
 use std::sync::{Arc, Mutex};
 
+use crate::support::{TestArtifact, TextProblem, WholeTextSurface};
 use futures::executor::block_on;
 use leaven_core::{
-    Artifact, ArtifactIdentity, Assessment, AssessmentTarget, CacheIdentity, ExternalRef, InfoRef,
-    OptimizationProblem, ProposalBatch, ProposalBatchSemantics, ResolvedEvaluationRequest,
-    ResolvedRequestKind,
+    Artifact, Assessment, AssessmentTarget, ExternalRef, InfoRef, OptimizationProblem,
+    ProposalBatch, ProposalBatchSemantics, ResolvedEvaluationRequest, ResolvedRequestKind,
 };
 use leaven_engine::{
     BudgetLedger, CachePolicy, CaseSet, Engine, EvaluationContext, EvaluationError, Evaluator,
@@ -18,8 +18,8 @@ use leaven_gepa::{
     ReflectionRenderInput, ReflectionRenderer, ReflectiveCase, ReflectiveValue,
 };
 use leaven_kernel::{
-    AssessmentId, Budget, CandidateId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint,
-    MetadataBag, Metered, ProposerId, StageId,
+    AssessmentId, Budget, CandidateId, CaseId, Cost, EvaluatorId, Fingerprint, MetadataBag,
+    Metered, ProposerId, StageId,
 };
 use leaven_lm::{Lm, LmError, LmId, LmRequest, LmResponse, Message, Role, TokenUsage};
 use leaven_population::ParetoFrontier;
@@ -766,36 +766,7 @@ fn lm_backed_reflector_surfaces_parser_failures_without_candidate() {
     });
 }
 
-#[derive(Clone, Debug)]
-struct TestArtifact(String);
-
-impl Artifact for TestArtifact {
-    type Change = String;
-    type ApplyError = std::convert::Infallible;
-
-    fn identity(&self) -> ArtifactIdentity {
-        ArtifactIdentity::Content(ContentId::hash_bytes(self.0.as_bytes()))
-    }
-
-    fn cache_identity(&self) -> Option<CacheIdentity> {
-        Some(CacheIdentity::Content(ContentId::hash_bytes(
-            self.0.as_bytes(),
-        )))
-    }
-
-    fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
-        Ok(Self(format!("{}{change}", self.0)))
-    }
-}
-
-struct TestProblem;
-
-impl OptimizationProblem for TestProblem {
-    type Artifact = TestArtifact;
-    type Case = &'static str;
-    type Evidence = CaseAssessmentEvidence;
-    type ProposalAnnotations = ();
-}
+type TestProblem = TextProblem<CaseAssessmentEvidence, &'static str>;
 
 struct SecretProblem;
 
@@ -1023,44 +994,6 @@ impl Evaluator<SecretProblem> for ParseFailureEvaluator {
         }
         let cost = Cost::metric_calls(assessments.len() as u64);
         Ok(Metered::new(assessments, cost))
-    }
-}
-
-#[derive(Clone, Debug)]
-struct WholeTextSurface;
-
-impl EditSurface<TestArtifact> for WholeTextSurface {
-    type PartId = &'static str;
-    type Address = PartAddress;
-    type View<'a> = &'a str;
-    type Edit = String;
-
-    fn fingerprint(&self) -> SurfaceFingerprint {
-        SurfaceFingerprint(Fingerprint::from_bytes([4; 32]))
-    }
-
-    fn parts<'a>(
-        &self,
-        artifact: &'a TestArtifact,
-    ) -> Result<Vec<Part<Self::PartId, Self::Address, Self::View<'a>>>, SurfaceError> {
-        Ok(vec![Part {
-            id: "text",
-            address: PartAddress("text".to_owned()),
-            view: artifact.0.as_str(),
-        }])
-    }
-
-    fn change_part(
-        &self,
-        _artifact: &TestArtifact,
-        id: Self::PartId,
-        edit: Self::Edit,
-    ) -> Result<<TestArtifact as Artifact>::Change, SurfaceError> {
-        if id == "text" {
-            Ok(edit)
-        } else {
-            Err(SurfaceError::UnknownPart)
-        }
     }
 }
 
