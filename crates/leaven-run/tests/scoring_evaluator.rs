@@ -9,15 +9,15 @@ use std::{
 
 use futures::{FutureExt, channel::oneshot, executor::block_on};
 use leaven_core::{
-    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget,
-    CaseSetVersion, EvaluationPurpose, EvaluationSet, PairOrder, ResolvedEvaluationRequest,
-    ResolvedEvaluationSet, ResolvedRequestKind,
+    Assessment, AssessmentGranularity, AssessmentTarget, CaseSetVersion, EvaluationPurpose,
+    EvaluationSet, PairOrder, ResolvedEvaluationRequest, ResolvedEvaluationSet,
+    ResolvedRequestKind,
 };
 use leaven_engine::{BudgetLedger, CachePolicy, Evaluator, RunContext, RunEvent, RunGraph};
 use leaven_eval::Case;
 use leaven_evidence::{CaseAssessmentEvidence, DataClass, OutputRecord};
 use leaven_kernel::{
-    Budget, CandidateId, CaseId, ContentId, Cost, EvaluationRequestId, EvaluatorId, Fingerprint,
+    Budget, CandidateId, CaseId, Cost, EvaluationRequestId, EvaluatorId, Fingerprint,
     ResolvedEvaluationSetId, RunId, StageId, now,
 };
 use leaven_run::{
@@ -28,8 +28,10 @@ use leaven_run::{
 };
 use leaven_store_inline::InlineEvidenceStore;
 
-const TEST_RUNNER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([7; 32]);
-const TEST_SCORER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([8; 32]);
+mod support;
+
+use support::{TEST_RUNNER_FINGERPRINT, TEST_SCORER_FINGERPRINT, TextArtifact};
+
 const TEST_DATASET_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([9; 32]);
 const TEST_SPLIT_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([10; 32]);
 
@@ -2589,12 +2591,6 @@ where
     (graph, budget, candidate)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct TextArtifact(i32);
-
-#[derive(Debug)]
-struct TextArtifactError;
-
 #[derive(Debug)]
 struct JudgeSourceError;
 
@@ -2605,27 +2601,6 @@ impl std::fmt::Display for JudgeSourceError {
 }
 
 impl std::error::Error for JudgeSourceError {}
-
-impl std::fmt::Display for TextArtifactError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("text artifact error")
-    }
-}
-
-impl std::error::Error for TextArtifactError {}
-
-impl Artifact for TextArtifact {
-    type Change = i32;
-    type ApplyError = TextArtifactError;
-
-    fn identity(&self) -> ArtifactIdentity {
-        ArtifactIdentity::Content(ContentId::hash_bytes(self.0.to_le_bytes()))
-    }
-
-    fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
-        Ok(Self(*change))
-    }
-}
 
 #[test]
 fn scoring_evaluator_identity_and_cache_policy_are_stable() {

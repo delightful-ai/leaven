@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use futures::{FutureExt, executor::block_on};
 use leaven_core::{
-    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget,
-    EvaluationPurpose, EvaluationRequest, EvaluationSet, Evidence, OptimizationProblem, Proposal,
-    ProposalBatch, ProposalBatchSemantics, ResolvedEvaluationRequest,
+    Assessment, AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest,
+    EvaluationSet, Evidence, OptimizationProblem, Proposal, ProposalBatch, ProposalBatchSemantics,
+    ResolvedEvaluationRequest,
 };
 use leaven_engine::{
     ApplyOutcome, BudgetLedger, CachePolicy, CaseSet, EvaluationContext, EvaluationError,
@@ -15,8 +15,8 @@ use leaven_evidence::{
     OutputBlobAudit, OutputMetadata, OutputRecord, OutputVisibility, ScalarEvidence,
 };
 use leaven_kernel::{
-    AssessmentId, Budget, CandidateId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint,
-    MetadataBag, Metered, ProposalBatchId, ProposalId, RunId, StageId,
+    AssessmentId, Budget, CandidateId, CaseId, Cost, EvaluatorId, Fingerprint, MetadataBag,
+    Metered, ProposalBatchId, ProposalId, RunId, StageId,
 };
 use leaven_run::{
     PublicAssessmentWriteReceiptContext, PublicAssessmentWriteReceiptProjectionError,
@@ -917,16 +917,17 @@ fn workspace_root() -> std::path::PathBuf {
 fn scoring_identity(label: &str) -> ScoringEvaluatorIdentity {
     ScoringEvaluatorIdentity {
         label: label.to_owned(),
-        runner: RuntimeFingerprint::new(Fingerprint::from_bytes([71; 32])),
-        scorer: RuntimeFingerprint::new(Fingerprint::from_bytes([72; 32])),
+        runner: RuntimeFingerprint::new(TEST_RUNNER_FINGERPRINT),
+        scorer: RuntimeFingerprint::new(TEST_SCORER_FINGERPRINT),
         dataset: Fingerprint::from_bytes([73; 32]),
         splits: Fingerprint::from_bytes([74; 32]),
         cache_policy: CachePolicy::Never,
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct TextArtifact(i32);
+mod support;
+
+use support::{TEST_RUNNER_FINGERPRINT, TEST_SCORER_FINGERPRINT, TextArtifact};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct PromptInput {
@@ -936,30 +937,6 @@ struct PromptInput {
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct AnswerTarget {
     answer: i32,
-}
-
-#[derive(Debug)]
-struct TextArtifactError;
-
-impl std::fmt::Display for TextArtifactError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("text artifact error")
-    }
-}
-
-impl std::error::Error for TextArtifactError {}
-
-impl Artifact for TextArtifact {
-    type Change = i32;
-    type ApplyError = TextArtifactError;
-
-    fn identity(&self) -> ArtifactIdentity {
-        ArtifactIdentity::Content(ContentId::hash_bytes(self.0.to_le_bytes()))
-    }
-
-    fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
-        Ok(Self(*change))
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

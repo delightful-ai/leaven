@@ -9,8 +9,7 @@ use std::{
 
 use futures::executor::block_on;
 use leaven_core::{
-    Artifact, ArtifactIdentity, AssessmentGranularity, EvaluationPurpose, EvaluationRequest,
-    EvaluationSet,
+    Artifact, AssessmentGranularity, EvaluationPurpose, EvaluationRequest, EvaluationSet,
 };
 use leaven_engine::{
     Callback, CheckpointContext, CheckpointError, CheckpointableOptimizer, Optimizer,
@@ -20,7 +19,7 @@ use leaven_engine::{
 };
 use leaven_eval::Case;
 use leaven_evidence::CaseAssessmentEvidence;
-use leaven_kernel::{Budget, CandidateId, CaseId, ContentId, EvaluatorId, Fingerprint, RunId};
+use leaven_kernel::{Budget, CandidateId, CaseId, EvaluatorId, Fingerprint, RunId};
 use leaven_run::{
     CachePolicy, EvaluationCacheBackend, EvaluationCacheBypassReason, OptimizationStopReason,
     OptimizeBuilder, OptimizeError, OptimizeStore, ResumeCompatibilityError, RunCase,
@@ -31,8 +30,10 @@ use leaven_store::{EvidenceStore, StoreError};
 use leaven_store_inline::InlineEvidenceStore;
 use rusqlite::Connection;
 
-const TEST_RUNNER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([7; 32]);
-const TEST_SCORER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([8; 32]);
+mod support;
+
+use support::{TEST_RUNNER_FINGERPRINT, TEST_SCORER_FINGERPRINT, TextArtifact};
+
 const ALT_RUNNER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([9; 32]);
 const ALT_SCORER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([10; 32]);
 
@@ -2269,34 +2270,7 @@ async fn text_score(
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-struct TextArtifact(i32);
-
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 struct TextCase(i32);
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 struct TextTarget(i32);
-
-#[derive(Debug)]
-struct TextArtifactError;
-
-impl std::fmt::Display for TextArtifactError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("text artifact error")
-    }
-}
-
-impl std::error::Error for TextArtifactError {}
-
-impl Artifact for TextArtifact {
-    type Change = i32;
-    type ApplyError = TextArtifactError;
-
-    fn identity(&self) -> ArtifactIdentity {
-        ArtifactIdentity::Content(ContentId::hash_bytes(self.0.to_le_bytes()))
-    }
-
-    fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
-        Ok(Self(*change))
-    }
-}
