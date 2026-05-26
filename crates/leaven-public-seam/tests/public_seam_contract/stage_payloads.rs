@@ -1,5 +1,5 @@
 use crate::support::workspace_root;
-use crate::support::{package, prefixed_jcs_hash};
+use crate::support::{fixture_blob_ref, package, prefixed_jcs_hash};
 use leaven_public_seam::{PublicSeamError, StagePayloadRole, StageProposalEffect};
 use serde_json::{Value, json};
 
@@ -286,13 +286,8 @@ fn reflect_request_rejects_missing_source_refs_or_query_policy() {
     ));
 
     let mut score_output_blob_ref_gap = reflect_request();
-    score_output_blob_ref_gap["examples"][0]["score"]["output"]["blob_ref"] = json!({
-        "kind": "blob_ref",
-        "id": "blob_score_output",
-        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-        "bytes": 32,
-        "data_classes": ["external.secret"]
-    });
+    score_output_blob_ref_gap["examples"][0]["score"]["output"]["blob_ref"] =
+        fixture_blob_ref("blob_score_output", &["external.secret"]);
     assert!(matches!(
         package
             .validate_stage_payload_document(&score_output_blob_ref_gap)
@@ -554,13 +549,8 @@ fn score_and_judge_contexts_reject_nested_output_data_class_gaps() {
     let package = package();
 
     let mut scorer_blob_gap = score_context();
-    scorer_blob_gap["output"]["blob_ref"] = json!({
-        "kind": "blob_ref",
-        "id": "blob_scorer_output",
-        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-        "bytes": 32,
-        "data_classes": ["external.secret"]
-    });
+    scorer_blob_gap["output"]["blob_ref"] =
+        fixture_blob_ref("blob_scorer_output", &["external.secret"]);
     assert!(matches!(
         package
             .validate_stage_payload_document(&scorer_blob_gap)

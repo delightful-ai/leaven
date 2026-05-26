@@ -1,4 +1,6 @@
-use crate::support::{package, prefixed_jcs_hash, submit_assessments_request_hash};
+use crate::support::{
+    fixture_blob_ref, package, prefixed_jcs_hash, submit_assessments_request_hash,
+};
 use leaven_public_seam::{
     AcpAuthenticateRequest, AcpBackpressure, AcpPermissionRequest, AcpProgressDisposition,
     AcpProgressPriority, AcpSessionLifecycle, AcpSessionState, AcpStdioWorkerLaunch,
@@ -2141,13 +2143,7 @@ fn sandbox_exec_primary_with_file(path: &str) -> Value {
 }
 
 fn acp_blob_ref(id: &str, data_classes: &[&str]) -> Value {
-    json!({
-        "kind": "blob_ref",
-        "id": id,
-        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-        "bytes": 32,
-        "data_classes": data_classes
-    })
+    fixture_blob_ref(id, data_classes)
 }
 
 fn proposal_batch_primary() -> Value {

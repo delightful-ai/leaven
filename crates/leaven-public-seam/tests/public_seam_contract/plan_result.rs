@@ -1,4 +1,4 @@
-use crate::support::{bind_plan_result_hashes, package};
+use crate::support::{bind_plan_result_hashes, fixture_blob_ref, package};
 use leaven_public_seam::PublicSeamError;
 use serde_json::{Value, json};
 
@@ -864,13 +864,7 @@ fn bind_result_hashes_in_place(result: &mut Value) {
 }
 
 fn blob_ref(id: &str, data_classes: impl IntoIterator<Item = &'static str>) -> Value {
-    json!({
-        "kind": "blob_ref",
-        "id": id,
-        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-        "bytes": 32,
-        "data_classes": data_classes.into_iter().collect::<Vec<_>>()
-    })
+    fixture_blob_ref(id, &data_classes.into_iter().collect::<Vec<_>>())
 }
 
 fn typed_failure_result() -> Value {

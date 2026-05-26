@@ -27,6 +27,16 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
+pub fn fixture_blob_ref(id: &str, data_classes: &[&str]) -> Value {
+    json!({
+        "kind": "blob_ref",
+        "id": id,
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "bytes": 32,
+        "data_classes": data_classes
+    })
+}
+
 pub fn plan_call_result_hash(name: &str, value: Value) -> String {
     prefixed_jcs_hash(
         "fp_result_sha256_",
