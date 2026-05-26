@@ -145,16 +145,19 @@ AgenticProposer  real Materializer, read-back parser              | NO receipts,
 - `leaven-artifact-skill` — **real.** `impl Artifact for SkillBank`, three
   `EditSurface` impls, proof-anchor test. `leaven-agentic-skill` ships
   `SkillBankMaterializer` and `SkillBankWorkspaceProposalParser`.
-- `leaven-artifact-git` — **placeholder.** Its `AGENTS.md`: "shape
-  reservations ... not a Git backend ... not proof of VCS artifact editing." No
-  materializer, no edit surface.
-- `leaven-artifact-jj` — **stub.** `JjArtifact` has a `MaterializableArtifact`
-  impl, but `materialize_into` returns `MaterializationReport::default()` and
-  writes nothing; no edit surface. The behavior-bearing types are tracked-run
-  vocabulary, not artifact editing.
+- `leaven-artifact-git` — **behavior-bearing artifact vocabulary.** It owns
+  normalized paths, refs, object ids, diffs, ref lineage, and Git program
+  artifact records. It still has no edit-surface implementation, workspace
+  backend, or Git command execution.
+- `leaven-artifact-jj` — **behavior-bearing materializable snapshot
+  vocabulary.** `JjArtifact` writes its file map into a workspace slot, derives
+  content/cache identity from the file map, and reads back
+  `.leaven/jj/change.patch` as `JjChange::Patch`. It still has no operation-log
+  handling, conflict parser, JJ surface projection, or workspace execution.
 
-Repo integration testing is therefore blocked on building these crates out, not
-on the reflection wiring.
+Repo integration testing is therefore blocked on the missing edit surfaces,
+workspace execution, receipt/read-authority convergence, and reflection wiring,
+not on empty artifact placeholder crates.
 
 ## 3. Target architecture
 
@@ -288,10 +291,11 @@ stay out of the reflection critical path.
 
 ### Phase 4 — Git and Jujutsu artifact crates — deferred to v0.0.2-alpha
 
-Build `leaven-artifact-git` from its placeholder state and `leaven-artifact-jj`
-past its stub. Each needs: a real `MaterializableArtifact` (check out a working
-tree), `ReconstructibleArtifact::read_back_change` (diff the tree into a typed
-`Change`), and an `EditSurface` so GEPA can select a part. This phase unblocks
+Build the remaining repo artifact behavior beyond the current vocabulary.
+`leaven-artifact-git` needs a materialization/readback owner outside the cold
+artifact vocabulary, and `leaven-artifact-jj` needs real JJ operation-log and
+diff readback semantics beyond its file-snapshot materialization. Each repo
+path still needs an `EditSurface` so GEPA can select a part. This phase unblocks
 repo integration testing — the headline use case — and nothing before it does.
 
 ### Phase 5 — Full convergence — deferred to v0.0.2-alpha
