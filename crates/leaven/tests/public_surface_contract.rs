@@ -7,7 +7,7 @@
 //! that routing honest, so internal plumbing cannot drift back into the
 //! ordinary import experience.
 //!
-//! It enforces five properties:
+//! It enforces six properties:
 //!
 //! 1. Every symbol re-exported by a route module appears in `SURFACE` exactly
 //!    once.
