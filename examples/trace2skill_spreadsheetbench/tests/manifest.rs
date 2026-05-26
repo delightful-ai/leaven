@@ -1,8 +1,9 @@
-use std::{fs, path::PathBuf};
-
 use leaven_eval::SplitRole;
 use leaven_kernel::{CaseId, MetadataKey, MetadataValue};
 use trace2skill_spreadsheetbench::load_verified_400_manifest;
+
+mod support;
+use support::{unique_temp_dir, verified_400_manifest_path};
 
 fn assert_string_metadata(value: Option<&MetadataValue>, expected: &str) {
     let Some(MetadataValue::String(actual)) = value else {
@@ -21,7 +22,7 @@ fn assert_u64_metadata(value: Option<&MetadataValue>, expected: u64) {
 #[test]
 fn lowers_upstream_verified_400_manifest_to_cases_and_paper_splits() {
     let root = unique_temp_dir("trace2skill-manifest");
-    let manifest_path = fixture_manifest_path(&root);
+    let manifest_path = verified_400_manifest_path(&root);
     let manifest = load_verified_400_manifest(&manifest_path).unwrap();
 
     assert_eq!(manifest.dataset.cases().len(), 400);
@@ -83,58 +84,4 @@ fn lowers_upstream_verified_400_manifest_to_cases_and_paper_splits() {
             .required_roles()
             .contains(&SplitRole::Test)
     );
-}
-
-fn fixture_manifest_path(root: &PathBuf) -> PathBuf {
-    let path = root.join("dataset.json");
-    let rows = (0..400)
-        .map(|index| {
-            let (id, spreadsheet_path, answer_position) = match index {
-                0 => (
-                    "13-1".to_owned(),
-                    "spreadsheet/13-1".to_owned(),
-                    "A3:D32".to_owned(),
-                ),
-                199 => (
-                    "52575".to_owned(),
-                    "spreadsheet/52575".to_owned(),
-                    "B2:B8".to_owned(),
-                ),
-                399 => (
-                    "59902".to_owned(),
-                    "spreadsheet/59902".to_owned(),
-                    "C5:C28".to_owned(),
-                ),
-                _ => (
-                    format!("row-{index}"),
-                    format!("spreadsheet/row-{index}"),
-                    "A1:A1".to_owned(),
-                ),
-            };
-            serde_json::json!({
-                "id": id,
-                "instruction": format!("task {index}"),
-                "spreadsheet_path": spreadsheet_path,
-                "instruction_type": "synthetic",
-                "answer_position": answer_position,
-                "answer_sheet": null,
-                "data_position": null,
-            })
-        })
-        .collect::<Vec<_>>();
-    fs::write(&path, serde_json::to_vec(&rows).unwrap()).unwrap();
-    path
-}
-
-fn unique_temp_dir(label: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!(
-        "{label}-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    fs::create_dir_all(&root).unwrap();
-    root
 }

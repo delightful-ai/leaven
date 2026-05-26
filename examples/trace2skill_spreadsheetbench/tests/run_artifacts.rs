@@ -14,12 +14,15 @@ use trace2skill_spreadsheetbench::{
     load_verified_400_manifest,
 };
 
+mod support;
+use support::{unique_temp_dir, verified_400_manifest_path};
+
 #[test]
 fn builds_training_corpus_from_upstream_results_and_logs_without_model_work() {
     let root = unique_temp_dir("trace2skill-artifacts");
     let fixture = write_upstream_run_fixture(&root);
 
-    let manifest_path = fixture_manifest_path(&root);
+    let manifest_path = verified_400_manifest_path(&root);
     let manifest = load_verified_400_manifest(&manifest_path).unwrap();
     let corpus = build_training_corpus_from_run_artifacts(
         &manifest,
@@ -313,42 +316,4 @@ fn write_prompt_templates(root: &Path) {
         )
         .unwrap();
     }
-}
-
-fn unique_temp_dir(label: &str) -> std::path::PathBuf {
-    let root = std::env::temp_dir().join(format!(
-        "{label}-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    fs::create_dir_all(&root).unwrap();
-    root
-}
-
-fn fixture_manifest_path(root: &PathBuf) -> PathBuf {
-    let path = root.join("dataset.json");
-    let rows = (0..400)
-        .map(|index| {
-            let id = match index {
-                0 => "13-1".to_owned(),
-                199 => "52575".to_owned(),
-                399 => "59902".to_owned(),
-                _ => format!("row-{index}"),
-            };
-            serde_json::json!({
-                "id": id,
-                "instruction": format!("task {index}"),
-                "spreadsheet_path": format!("spreadsheet/{index}"),
-                "instruction_type": "synthetic",
-                "answer_position": "A1:A1",
-                "answer_sheet": null,
-                "data_position": null,
-            })
-        })
-        .collect::<Vec<_>>();
-    fs::write(&path, serde_json::to_vec(&rows).unwrap()).unwrap();
-    path
 }
