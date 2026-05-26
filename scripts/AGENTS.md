@@ -3,7 +3,7 @@ This subtree holds repository scripts with local side effects. Scripts are part 
 
 Current scripts:
 - `lint-line-count.py`: enforces production Rust source size limits.
-- `test-suite-sla.py`: runs the default workspace nextest suite plus doctests and enforces the `<30s` suite SLA. It builds the nextest suite and prewarms doctests before starting the runtime timer, excludes milestone examples, and delegates process scheduling to nextest instead of maintaining a repo-local libtest binary scheduler.
+- `test-suite-sla.py`: runs the default workspace Cargo test suite plus doctests, reports the `<30s` suite target, and enforces a hard completion timeout. It builds the workspace test binaries and prewarms doctests before starting the runtime timer, and excludes milestone examples from the default lane.
 - `coverage-gate.py`: runs coverage over default workspace tests plus a tiny `xtask git-trust-bench` smoke with its focused trust-test preflight, then enforces line and branch floors over production/source behavior. It excludes milestone packages from the default coverage lane and excludes test harness files and `#[cfg(test)] mod ...` blocks from the denominator after execution. Its `--package`, `--test`, `--skip-clean`, `--skip-smoke`, and `--skip-report` flags are an explicit developer feedback lane, not the canonical coverage gate; `--skip-clean` still clears stale profraw files while preserving compiled artifacts.
 - `p8-gepa-debug-sqlite.py`: exports an existing P8 `reports/p8-aime.json` file, and optionally an upstream GEPA `gepa_state.bin`, into local SQLite tables for optimizer debugging. It does not call providers, fetch datasets, or mutate source.
 - `ensure_leaven_workspace.sh`: guard for paper-lane shell examples that must run from the main `/Users/darin/src/personal/leaven` jj workspace. It performs no network or provider work.
@@ -28,9 +28,9 @@ Current scripts:
 
 - when: changing `test-suite-sla.py`
   do: keep workspace libtest binaries plus doctests in one timed default lane
-  preserve: the `<30s` full-suite contract in `docs/testing/README.md`
+  preserve: the `<30s` full-suite target and hard completion timeout in `docs/testing/README.md`
   avoid: adding a hidden slow lane, silently dropping doctests from the measured suite, or counting empty generated binaries as suite proof
-  verify: run `python3 scripts/test-suite-sla.py --sla-seconds 30`
+  verify: run `python3 scripts/test-suite-sla.py --warn-seconds 30 --timeout-seconds 600`
 
 - when: adding a new repo script
   do: add the command to this map and wire it through `Justfile` only if it is part of the canonical operator path

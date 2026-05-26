@@ -57,22 +57,20 @@ class DoctestDetectionTests(unittest.TestCase):
 
 
 class SuiteDeadlineTests(unittest.TestCase):
-    def test_nextest_command_preserves_workspace_excludes(self) -> None:
+    def test_cargo_test_command_preserves_workspace_excludes(self) -> None:
         command = MODULE.WORKSPACE_TEST_RUN_COMMAND
 
-        self.assertEqual(command[:3], ["cargo", "nextest", "run"])
+        self.assertEqual(command[:3], ["cargo", "test", "--workspace"])
         self.assertIn("--workspace", command)
         self.assertIn("--exclude", command)
         self.assertIn("p8_aime_gepa", command)
+        self.assertIn("--quiet", command)
 
-    def test_workspace_build_command_uses_nextest_binary_list_for_prewarm(self) -> None:
+    def test_workspace_build_command_compiles_test_binaries_for_prewarm(self) -> None:
         command = MODULE.WORKSPACE_TEST_BUILD_COMMAND
 
-        self.assertEqual(command[:3], ["cargo", "nextest", "list"])
-        self.assertIn("--message-format", command)
-        self.assertIn("oneline", command)
-        self.assertIn("--list-type", command)
-        self.assertIn("binaries-only", command)
+        self.assertEqual(command[:3], ["cargo", "test", "--no-run"])
+        self.assertIn("--no-run", command)
         self.assertIn("--workspace", command)
         self.assertIn("--exclude", command)
         self.assertIn("trace2skill_spreadsheetbench", command)
@@ -92,7 +90,7 @@ class SuiteDeadlineTests(unittest.TestCase):
     def test_default_build_discovery_timeout_is_a_generous_hang_guard(self) -> None:
         self.assertEqual(MODULE.DEFAULT_BUILD_DISCOVERY_TIMEOUT_SECONDS, 300.0)
 
-    def test_runtime_sla_starts_after_workspace_build_discovery(self) -> None:
+    def test_runtime_target_starts_after_workspace_build_discovery(self) -> None:
         with (
             mock.patch.object(MODULE, "build_workspace_tests", return_value=0),
             mock.patch.object(MODULE, "test_commands", return_value=[]),
@@ -101,7 +99,8 @@ class SuiteDeadlineTests(unittest.TestCase):
                 MODULE.argparse.ArgumentParser,
                 "parse_args",
                 return_value=MODULE.argparse.Namespace(
-                    sla_seconds=30.0,
+                    warn_seconds=30.0,
+                    timeout_seconds=600.0,
                     build_timeout=MODULE.DEFAULT_BUILD_DISCOVERY_TIMEOUT_SECONDS,
                 ),
             ),

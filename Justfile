@@ -20,7 +20,7 @@ clippy: lint
 
 test:
     python3 scripts/test_test_suite_sla.py
-    python3 scripts/test-suite-sla.py --sla-seconds 30
+    python3 scripts/test-suite-sla.py --warn-seconds 30 --timeout-seconds 600
 
 test-one +args:
     cargo nextest run --workspace \

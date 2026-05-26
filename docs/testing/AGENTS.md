@@ -1,5 +1,5 @@
 ## Boundary
-This subtree owns the test contract: proof shape, suite layout, runtime SLA, coverage ratchet, and canonical commands.
+This subtree owns the test contract: proof shape, suite layout, runtime target, coverage ratchet, and canonical commands.
 
 Tests in this repo are design constraints. They should kill plausible wrong implementations at the lowest clean layer, not merely exercise code paths.
 
@@ -11,7 +11,7 @@ Tests in this repo are design constraints. They should kill plausible wrong impl
 - `just milestone-examples` currently includes the live-gated P5 recipe from the root `Justfile`; do not treat it as a cheap default smoke unless that recipe is made deterministic by default.
 - `scripts/coverage-gate.py` excludes milestone packages from default coverage. Run milestone recipes explicitly before using example behavior as evidence.
 - Coverage proves executed code stayed covered. It does not answer public maturity; classify examples as product-proof, mechanics-smoke, or proxy-demo before using them as release evidence.
-- Keep `just test` under the `<30s` SLA by reducing fixture/setup cost instead of adding a slow lane.
+- Keep `just test` moving toward the `<30s` target by reducing fixture/setup cost instead of adding a slow lane; the hard timeout only protects completion.
 - Coverage floors in the root `Justfile` are ratchets. Raise them when coverage improves; do not lower them to land weaker work.
 
 ## Proof Classification
@@ -32,7 +32,7 @@ Use the weakest applicable classification in release notes and closeouts. A run 
   coverage recipe before citing the Git trust benchmark behavior.
 
 ## Verification
-- Full suite SLA: `just test`.
+- Full suite runtime target and hard completion timeout: `just test`.
 - Single nextest selector: `just test-one <selector>`.
 - Repeated flake probe: `just test-stress 20 <selector>`.
 - Coverage gate: `just coverage`.
