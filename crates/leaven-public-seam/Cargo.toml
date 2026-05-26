@@ -23,7 +23,6 @@ sha2.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-expect-test.workspace = true
 futures.workspace = true
 leaven-engine.workspace = true
 tempfile.workspace = true

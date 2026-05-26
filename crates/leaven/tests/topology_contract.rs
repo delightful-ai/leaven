@@ -233,7 +233,6 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-population",
             "leaven-stage",
             "leaven-surface",
-            "leaven-workspace",
         ],
     ),
     (

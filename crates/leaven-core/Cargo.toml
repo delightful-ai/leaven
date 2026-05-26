@@ -15,8 +15,3 @@ chrono = { workspace = true }
 leaven-kernel = { workspace = true }
 serde = { workspace = true }
 smol_str = { workspace = true }
-
-[dev-dependencies]
-proptest = { workspace = true }
-expect-test = { workspace = true }
-futures = { workspace = true }

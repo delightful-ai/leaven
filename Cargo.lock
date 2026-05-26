@@ -1461,12 +1461,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dissimilar"
-version = "1.0.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aeda16ab4059c5fd2a83f2b9c9e9c981327b18aa8e3b313f7e6563799d4f093e"
-
-[[package]]
 name = "document-features"
 version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1614,16 +1608,6 @@ name = "error-code"
 version = "3.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dea2df4cf52843e0452895c455a1a2cfbb842a1e7329671acf418fdc53ed4c59"
-
-[[package]]
-name = "expect-test"
-version = "1.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63af43ff4431e848fb47472a920f14fa71c24de13255a5692e93d4e90302acb0"
-dependencies = [
- "dissimilar",
- "once_cell",
-]
 
 [[package]]
 name = "fallible-iterator"
@@ -3164,7 +3148,6 @@ dependencies = [
  "leaven-core",
  "leaven-engine",
  "leaven-eval",
- "leaven-evidence",
  "leaven-gepa",
  "leaven-kernel",
  "leaven-lm",
@@ -3363,10 +3346,7 @@ name = "leaven-core"
 version = "0.0.0"
 dependencies = [
  "chrono",
- "expect-test",
- "futures",
  "leaven-kernel",
- "proptest",
  "serde",
  "smol_str",
 ]
@@ -3382,7 +3362,6 @@ dependencies = [
  "leaven-kernel",
  "leaven-store",
  "leaven-store-inline",
- "leaven-surface",
  "leaven-workspace",
  "parking_lot",
  "proptest",
@@ -3436,7 +3415,6 @@ name = "leaven-gepa"
 version = "0.0.0"
 dependencies = [
  "futures",
- "leaven-agent",
  "leaven-core",
  "leaven-engine",
  "leaven-evidence",
@@ -3446,8 +3424,6 @@ dependencies = [
  "leaven-stage",
  "leaven-store-inline",
  "leaven-surface",
- "leaven-workspace",
- "leaven-workspace-local",
  "proptest",
  "serde",
  "serde_json",
@@ -3586,7 +3562,6 @@ name = "leaven-public-seam"
 version = "0.0.0"
 dependencies = [
  "chrono",
- "expect-test",
  "futures",
  "jcs-canonicalize",
  "jsonschema",
