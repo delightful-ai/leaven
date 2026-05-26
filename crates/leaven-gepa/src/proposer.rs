@@ -12,7 +12,8 @@ use crate::reflection::{
     ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer,
 };
 
-/// Placeholder reflector used only so bare `Gepa<S>` never means a scaffold.
+/// Hidden sentinel reflector used only so bare `Gepa<S>` has no runnable
+/// reflection path.
 #[doc(hidden)]
 #[derive(Clone, Debug, Default)]
 pub struct MissingReflector;

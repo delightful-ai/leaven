@@ -117,19 +117,6 @@ pub struct Gepa<
     report_sink: Option<GepaReportSink>,
 }
 
-/// Internal helper trait used only to give `Gepa` a default generic slot.
-/// Hidden from docs: it is required `pub` solely so the public `Gepa` default
-/// type parameter resolves, never an intended import.
-#[doc(hidden)]
-pub trait EditSurfacePlaceholder {
-    /// Edit type placeholder.
-    type Edit;
-}
-
-impl<T> EditSurfacePlaceholder for T {
-    type Edit = ();
-}
-
 /// One GEPA proposal attempt, including skipped and rejected attempts.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GepaProposalAttempt {
