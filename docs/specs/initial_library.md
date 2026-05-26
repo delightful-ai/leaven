@@ -403,8 +403,9 @@ host-mounted app-server experiments.
     evidence and checkpoints. Examples should stop inventing bespoke session
     persistence once this lands.
 
-The implementation plan is
-`docs/plans/2026-05-07-harbor-style-agent-runtime.md`.
+The current contracts are `docs/specs/agentic_stage_runtime.md`,
+`docs/specs/codex_cli_agent_runtime.md`, and
+`docs/specs/codex_app_server_agent_runtime.md`.
 
 ---
 
@@ -4808,8 +4809,10 @@ a local-mount adapter.
 - **Session durability becomes implementation-facing.** Agent sessions and
   transcripts must be serializable enough for evidence stores and checkpoint
   resume so milestone examples stop hand-rolling persistence.
-- **Companion plan added.** See
-  `docs/plans/2026-05-07-harbor-style-agent-runtime.md`.
+- **Runtime contracts landed.** Current truth lives in
+  `docs/specs/agentic_stage_runtime.md`,
+  `docs/specs/codex_cli_agent_runtime.md`, and
+  `docs/specs/codex_app_server_agent_runtime.md`.
 
 ### v0.2.6 (2026-05-07) - live EvoSkill iteration proof
 
