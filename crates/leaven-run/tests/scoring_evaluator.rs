@@ -38,6 +38,12 @@ use support::{
 const TEST_DATASET_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([9; 32]);
 const TEST_SPLIT_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([10; 32]);
 
+type StringRunner = Arc<
+    dyn Fn(TextArtifact, RunCase<i32>) -> BoxFuture<'static, Result<RunOutput<String>, RunError>>
+        + Send
+        + Sync,
+>;
+
 fn identity(label: &str) -> ScoringEvaluatorIdentity {
     ScoringEvaluatorIdentity {
         label: label.to_owned(),
@@ -2508,11 +2514,7 @@ fn judging_evaluator(
     )
 }
 
-fn default_string_runner() -> Arc<
-    impl Fn(TextArtifact, RunCase<i32>) -> BoxFuture<'static, Result<RunOutput<String>, RunError>>
-    + Send
-    + Sync,
-> {
+fn default_string_runner() -> StringRunner {
     Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
         async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
     })
