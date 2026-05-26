@@ -17,17 +17,14 @@ use leaven_agentic::{
     ProposalRepairFeedback, ProposalRepairPolicy, ProposalRepairPromptBuilder,
     RepairingAgenticProposer, RepairingAgenticProposerConfig,
 };
-use leaven_core::{
-    Artifact, ArtifactIdentity, Evidence, OptimizationProblem, Proposal, ProposalBatch,
-    ProposalBatchSemantics,
-};
+use leaven_core::{Evidence, OptimizationProblem, Proposal, ProposalBatch, ProposalBatchSemantics};
 use leaven_engine::{
     BudgetLedger, MaterializationReport, MaterializeContext, MaterializeError, Materializer,
     ProposalContext, ProposalError, Proposer, RenderContext, RenderError, Renderer, RunContext,
     RunGraph,
 };
 use leaven_kernel::{
-    AgentRuntimeId, ContentId, Cost, Fingerprint, MetadataBag, MetadataKey, MetadataValue, Metered,
+    AgentRuntimeId, Cost, Fingerprint, MetadataBag, MetadataKey, MetadataValue, Metered,
     ProposerId, RunId,
 };
 use leaven_workspace::{
@@ -35,6 +32,8 @@ use leaven_workspace::{
     WorkspacePath, WorkspaceView,
 };
 use leaven_workspace_local::LocalWorkspaceFactory;
+
+use crate::support::TestArtifact;
 
 #[test]
 fn default_repair_policy_is_two_attempts() {
@@ -341,27 +340,6 @@ fn repairing_proposer_preserves_stage_and_cleanup_failure() {
         ));
     });
 }
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct TestArtifact(String);
-
-impl Artifact for TestArtifact {
-    type Change = String;
-    type ApplyError = TestApplyError;
-
-    fn identity(&self) -> ArtifactIdentity {
-        let byte = u8::try_from(self.0.len()).unwrap_or(u8::MAX);
-        ArtifactIdentity::Content(ContentId::from_bytes([byte; 32]))
-    }
-
-    fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
-        Ok(Self(change.clone()))
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-#[error("test apply failed")]
-struct TestApplyError;
 
 #[derive(Clone, Debug)]
 struct TestEvidence;

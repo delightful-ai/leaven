@@ -8,3 +8,5 @@ mod public_seam_stage;
 mod reflection_workspace;
 #[path = "agentic_contract/repairing_proposer.rs"]
 mod repairing_proposer;
+#[path = "agentic_contract/support.rs"]
+mod support;

@@ -12,9 +12,9 @@ use leaven_agentic::{
     EvidenceParser, ProposalParser,
 };
 use leaven_core::{
-    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget,
-    EvaluationPurpose, EvaluationRequest, EvaluationSet, OptimizationProblem, Proposal,
-    ProposalBatch, ProposalBatchSemantics, ResolvedEvaluationRequest, ResolvedRequestKind,
+    Assessment, AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest,
+    EvaluationSet, OptimizationProblem, Proposal, ProposalBatch, ProposalBatchSemantics,
+    ResolvedEvaluationRequest, ResolvedRequestKind,
 };
 use leaven_engine::{
     BudgetLedger, CaseSet, MaterializationReport, MaterializeContext, MaterializeError,
@@ -22,14 +22,16 @@ use leaven_engine::{
     RunGraph,
 };
 use leaven_kernel::{
-    Amount, CandidateId, ContentId, Cost, EvaluationSetId, EvaluatorId, Fingerprint, MetadataBag,
-    Metered, ProposerId, RunId,
+    Amount, CandidateId, Cost, EvaluationSetId, EvaluatorId, Fingerprint, MetadataBag, Metered,
+    ProposerId, RunId,
 };
 use leaven_store_inline::InlineEvidenceStore;
 use leaven_workspace::{
     CapturedOutput, Command, CommandOutput, ExitStatus, FactoryError, Workspace, WorkspaceBackend,
     WorkspaceConfig, WorkspaceError, WorkspaceFactory, WorkspacePath,
 };
+
+use crate::support::TestArtifact;
 
 #[test]
 fn agentic_proposer_runs_runtime_parses_proposals_and_cleans_workspace() {
@@ -622,27 +624,6 @@ fn independent_request(candidate: CandidateId) -> EvaluationRequest {
         purpose: EvaluationPurpose::Search,
     }
 }
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct TestArtifact(String);
-
-impl Artifact for TestArtifact {
-    type Change = String;
-    type ApplyError = TestApplyError;
-
-    fn identity(&self) -> ArtifactIdentity {
-        let byte = u8::try_from(self.0.len()).unwrap_or(u8::MAX);
-        ArtifactIdentity::Content(ContentId::from_bytes([byte; 32]))
-    }
-
-    fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
-        Ok(Self(change.clone()))
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-#[error("test apply failed")]
-struct TestApplyError;
 
 #[derive(Clone, Debug)]
 struct TestEvidence {
