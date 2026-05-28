@@ -401,6 +401,32 @@ fn registered_casewise_batch_rejects_duplicate_rows_for_requested_cases() {
 }
 
 #[test]
+fn registered_casewise_rejected_duplicate_batch_does_not_seed_cache() {
+    block_on(async {
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let cases = CaseSet::new(vec!["case 0", "case 1"]);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut engine = optimize::<TestProblem>()
+            .budget(Budget::metric_calls(10))
+            .evaluator(CasewiseRegisteredEvaluator {
+                calls: calls.clone(),
+                behavior: CasewiseBehavior::DuplicateFirstCase,
+                cache_policy: CachePolicy::Deterministic,
+            })
+            .build();
+        let seed = engine
+            .insert_seed(TextArtifact("seed".to_owned()), 0)
+            .unwrap();
+        let mut optimizer = RetryCasewiseRejectedBatchOptimizer { seed };
+
+        let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
+
+        assert_eq!(result.best, Some(seed));
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    });
+}
+
+#[test]
 fn registered_evaluator_error_records_dyn_stage_error() {
     block_on(async {
         let store = InlineEvidenceStore::<TestEvidence>::new("inline");
@@ -624,6 +650,41 @@ impl CasewiseExpectedError {
                 );
             }
         }
+    }
+}
+
+struct RetryCasewiseRejectedBatchOptimizer {
+    seed: CandidateId,
+}
+
+impl Optimizer<TestProblem> for RetryCasewiseRejectedBatchOptimizer {
+    async fn step(
+        &mut self,
+        ctx: &mut RunContext<'_, TestProblem>,
+    ) -> Result<StepStatus, OptimizerError> {
+        for _ in 0..2 {
+            let error = ctx
+                .evaluate_independent_casewise_cached(
+                    EvaluatorId::PRIMARY,
+                    self.seed,
+                    EvaluationSet::All,
+                    EvaluationPurpose::Search,
+                )
+                .await
+                .expect_err("rejected duplicate casewise batch must not become a cache hit");
+            CasewiseExpectedError::Evaluation(
+                "casewise batch returned duplicate rows for requested cases",
+            )
+            .assert_matches(&error);
+        }
+        Ok(StepStatus::Done)
+    }
+
+    fn best_candidate(
+        &self,
+        _graph: leaven_engine::RunGraphView<'_, TestProblem>,
+    ) -> Option<CandidateId> {
+        Some(self.seed)
     }
 }
 
