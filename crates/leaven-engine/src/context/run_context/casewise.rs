@@ -29,6 +29,12 @@ struct CasewiseCacheRows {
     cache_hits: usize,
 }
 
+struct ResolvedCasewiseCacheMiss {
+    index: usize,
+    cache_key: Result<EvaluationCacheKey, CacheBypassReason>,
+    assessment: AssessmentId,
+}
+
 impl<P: OptimizationProblem> RunContext<'_, P> {
     /// Evaluate one candidate casewise while preserving per-case cache keys.
     ///
@@ -257,23 +263,29 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
                 "casewise batch returned rows outside requested cases".to_owned(),
             )));
         }
+        let mut resolved_misses = Vec::with_capacity(missing.len());
         for miss in missing {
             let assessment = pop_casewise_batch_assessment(&mut by_case, miss.case)?;
-            if let Ok(cache_key) = miss.cache_key
-                && let Some(cache) = self.cache.as_mut()
-            {
-                cache.insert(cache_key, vec![assessment]);
-            }
-            rows.push((miss.index, vec![assessment]));
+            resolved_misses.push(ResolvedCasewiseCacheMiss {
+                index: miss.index,
+                cache_key: miss.cache_key,
+                assessment,
+            });
         }
         // Duplicate detection: any leftover rows after popping one per `miss`
         // indicate the evaluator returned more rows than requested for a case.
-        // The in-set rows already in cache are still legitimate evaluations,
-        // but the evaluator misbehaved — surface it.
         if by_case.values().any(|assessments| !assessments.is_empty()) {
             return Err(RunContextError::Evaluation(EvaluationError::Message(
                 "casewise batch returned duplicate rows for requested cases".to_owned(),
             )));
+        }
+        for miss in resolved_misses {
+            if let Ok(cache_key) = miss.cache_key
+                && let Some(cache) = self.cache.as_mut()
+            {
+                cache.insert(cache_key, vec![miss.assessment]);
+            }
+            rows.push((miss.index, vec![miss.assessment]));
         }
         if self.cache.is_some() {
             self.checkpoint()?;
