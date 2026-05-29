@@ -1,0 +1,61 @@
+{
+  "image_digest": "local/r2e-bootstrap/delightful-ai__leaven@sha256:964475e5ba9bf0d0697fc33f5ab3a7b03fd5bf5092cdbfdfc5f98476794c1499",
+  "image_tag": "local/r2e-bootstrap/delightful-ai__leaven:7061a10e55a1-nonroot",
+  "warm_snapshot_digest": "local/r2e-bootstrap/delightful-ai__leaven@sha256:76c725cfa02e7166cfa8a974d533a4fcdd345d9daf1e9b1d294603d051ce6088",
+  "warm_snapshot_tag": "local/r2e-bootstrap/delightful-ai__leaven:local-head-warm-snapshot",
+  "language": "rust",
+  "repo": "delightful-ai/leaven",
+  "ref": "9ee1d2e9e44ef2d2926d64d1233965719d1926dd",
+  "rebuild_cmds": [
+    "export PATH=/usr/local/cargo/bin:$PATH && cd /workspace && cargo fetch && uv run --with openpyxl python -c 'import openpyxl' && cargo test --workspace --no-run"
+  ],
+  "test_cmds": [
+    "export PATH=/usr/local/cargo/bin:$PATH && cd /workspace && cargo test --workspace"
+  ],
+  "smoke_passed": true,
+  "iterations": 17,
+  "build_time_sec": 315.0,
+  "llm_provider": "anthropic/claude-opus-4-8",
+  "llm_cost_estimate_usd": 0.6991600000000001,
+  "dockerfile_reconstruction": "Hand-repaired Repo2RLEnv bootstrap recipe in envs/delightful-ai__leaven/7061a10e55a1__63203e22/Dockerfile. The generated recipe was replaced because the initial smoke failure was caused by root-owned test execution and missing runtime dependencies, not by leaven source behavior.",
+  "transcript_path": "envs/delightful-ai__leaven/7061a10e55a1__63203e22/transcript.jsonl",
+  "pushed_to_registry": false,
+  "verify_passed": true,
+  "verify_detail": "exit=0; docker exec leaven-r2e-warm-20260529-125452 bash -lc 'cd /workspace && git reset --hard HEAD && cargo test --workspace'",
+  "extra": {
+    "runs_as_user": "leaven",
+    "original_repo2rlenv_target_ref": "7061a10e55a192df3f7734bb16a0302014e46e26",
+    "git_metadata_included": true,
+    "warm_container": "leaven-r2e-warm-20260529-125452",
+    "warm_pool_containers": [
+      "leaven-r2e-pool-1",
+      "leaven-r2e-pool-2"
+    ],
+    "commit_runtime_caveat": "Repo2RLEnv commit_runtime reuses pr_runtime cleanup, including git clean -fdx with dependency/build excludes but no tmp exclude. Leaven's current SpreadsheetBench tests depend on untracked tmp fixtures, so commit_runtime validation must preserve tmp, materialize those fixtures as tracked/runtime inputs, or avoid tests that require them.",
+    "vendor_preload": [
+      {
+        "path": "/vendor/github.com/openai/codex",
+        "source": "https://github.com/openai/codex.git"
+      },
+      {
+        "path": "/vendor/github.com/apple/containerization",
+        "source": "https://github.com/delightful-ai/firkin.git"
+      }
+    ],
+    "required_system_packages": [
+      "ca-certificates",
+      "git",
+      "build-essential",
+      "pkg-config",
+      "libssl-dev",
+      "python3",
+      "python3-pip",
+      "python3-venv"
+    ],
+    "required_python_tools": [
+      "uv",
+      "openpyxl"
+    ],
+    "build_context_note": "The repo .dockerignore excludes target/envs/reviews and most tmp data, includes .git for commit_runtime compatibility, and preserves the exact SpreadsheetBench fixture files required by trace2skill_spreadsheetbench tests."
+  }
+}
