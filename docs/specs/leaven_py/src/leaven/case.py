@@ -1,64 +1,54 @@
-"""Case record — the unit of evaluation work.
+"""Case — one immutable case in the task world.
 
-A Case carries input, target (hidden from runners/reflectors by default),
-and metadata. Loaded via `cx.case.load(case_id, include=[...])`; the
-include set determines which fields are projected (target-safe by default).
+`split` is a free user-defined label string (NOT a fixed train/val/test enum);
+one label per case. `files` values are `lv.assets.path(...)` refs; `setup` is a
+`lv.setup.bash(...)` step.
+
+`target` is OPTIONAL — not every task is labeled (the seam's `Case<I, T=NoTarget>`).
+For the labeled/supervised path, `case.expect("answer")` returns the target value
+or raises a clear error, so a scorer never needs a bare `case.target["answer"]`
+(which is `None`-unsafe) or an `assert`. For the unlabeled path, simply omit
+`target=`; a target-free task scores from the rollout output/trajectory alone.
+
+Cases project differently per consuming stage (a rollout never sees
+`case.target`); those projections are engine-internal. Public users always
+write `lv.Case`.
+
+Governing spec: `docs/specs/leaven_python.md` — Task and Case.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from ._receipts import QueryReceipt
+from .assets import AssetRef
+from .setup import SetupStep
+
+__all__ = ["Case"]
 
 
 class Case(BaseModel):
-    """A loaded case. Carries the read receipt for downstream evidence binding."""
+    """One immutable case. `split` is a free user label, not a fixed enum.
+    `target` is optional (not every task is labeled)."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", arbitrary_types_allowed=True)
 
     id: str
-    """Case identifier (paper-source-derived where applicable)."""
+    input: Mapping[str, Any]
+    target: Mapping[str, Any] | None = None
+    files: Mapping[str, AssetRef] | None = None
+    setup: SetupStep | None = None
+    split: str | None = None
+    metadata: Mapping[str, Any] | None = None
 
-    input: dict[str, Any]
-    """Inputs visible to runners. Always projected."""
+    def expect(self, key: str) -> Any:
+        """Return `target[key]` for the supervised path, or raise a clear error.
 
-    target: dict[str, Any] | None = None
-    """Hidden answer(s). Visible only to evaluators/scorers/judges, never to
-    runners or reflectors. None when the caller did not include target in the
-    load projection."""
-
-    metadata: dict[str, Any] | None = None
-    """Source-side metadata (split, difficulty, etc.). Visible per projection."""
-
-    target_ref: str | None = None
-    """Opaque target reference for evidence binding without exposing target value."""
-
-    receipt: QueryReceipt
-    """Read receipt — pass into `EvidenceEnvelope.read_receipts` to bind."""
-
-
-class CaseSet(BaseModel):
-    """A named set of cases — train / validation / test."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    name: str
-    """Set name (typically 'train', 'val', 'test')."""
-
-    cases: list[Case]
-
-
-class CaseSplits(BaseModel):
-    """A train/val/test bundle as loaded from a benchmark."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    train: CaseSet
-    val: CaseSet | None = None
-    test: CaseSet | None = None
-
-
-__all__ = ["Case", "CaseSet", "CaseSplits"]
+        Avoids the `None`-unsafe `case.target[key]` and the bare `assert` in a
+        scorer: an unlabeled case (or a missing key) raises `KeyError` with a
+        message naming the case, not an opaque `TypeError`.
+        """
+        raise NotImplementedError("see leaven_python.md — Task and Case (Case.expect)")

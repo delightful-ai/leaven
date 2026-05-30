@@ -1,79 +1,44 @@
-"""Output contract helpers — `lv.output.files(...)`, `lv.output.json_schema(...)`, `lv.output.text(...)`.
+"""Output contracts — `lv.output.json(...)`, `lv.output.text(...)`, `lv.output.files(...)`.
 
-These build the typed output contracts passed to `cx.sandbox.exec(output=...)`,
-`cx.agent.run(output=...)`, etc. They constrain what the engine accepts back
-and shape the typed result the user reads.
+Output contracts tell the engine how to parse produced files into
+`RolloutResult.output`. `parse_as=` is a pydantic model type the produced JSON
+is parsed into. `json` also accepts a bare `parse_as=` for inline judge-scorer
+use (spec line 621).
+
+Governing spec: `docs/specs/leaven_python.md` — Rollout / RolloutResult.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import Any, Literal
-
 from pydantic import BaseModel, ConfigDict
+
+__all__ = ["OutputContract", "files", "json", "text"]
 
 
 class OutputContract(BaseModel):
-    """Base for output contracts. Don't construct directly; use the builders below."""
+    """An immutable output-parsing contract; `kind` discriminates."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", arbitrary_types_allowed=True)
 
-    kind: Literal["files", "json_schema", "text"]
-
-
-class FilesOutput(OutputContract):
-    """Capture named files from a sandbox/agent run."""
-
-    kind: Literal["files"] = "files"
-    paths: list[str]
-    """Workspace-relative paths to capture after the call completes."""
-    max_bytes: int | None = None
-    """Cap on captured bytes per path."""
+    kind: str
+    path: str | None = None
+    parse_as: type | None = None
 
 
-class JsonSchemaOutput(OutputContract):
-    """Enforce a JSON-schema-shaped return value."""
+def json(*, path: str | None = None, parse_as: type | None = None) -> OutputContract:
+    """Parse a produced JSON file (or inline response) into `parse_as`.
 
-    kind: Literal["json_schema"] = "json_schema"
-    schema_: dict[str, Any]
-    """JSON Schema 2020-12 the response must validate against."""
-    parse_to: Any | None = None
-    """Optional pydantic model class to parse the response into."""
-
-
-class TextOutput(OutputContract):
-    """Plain text response with optional length cap."""
-
-    kind: Literal["text"] = "text"
-    max_chars: int | None = None
-
-
-def files(paths: Sequence[str], *, max_bytes: int | None = None) -> FilesOutput:
-    """Output contract: capture these workspace-relative paths."""
-    return FilesOutput(paths=list(paths), max_bytes=max_bytes)
-
-
-def json_schema(model_or_schema: Any) -> JsonSchemaOutput:
-    """Output contract: response must match the given JSON Schema or pydantic model.
-
-    Accepts a pydantic `BaseModel` subclass (extracts its JSON schema) or a
-    raw JSON Schema dict. When given a model, the parsed result lifts back
-    into an instance of that model.
+    Spec: `lv.output.json(path="output/result.json", parse_as=Answer)`; or a
+    bare `lv.output.json(parse_as=Verdict)` inside an agentic scorer.
     """
-    raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+    raise NotImplementedError("see leaven_python.md — output contracts")
 
 
-def text(*, max_chars: int | None = None) -> TextOutput:
-    """Output contract: plain text response with optional length cap."""
-    return TextOutput(max_chars=max_chars)
+def text(*, path: str | None = None) -> OutputContract:
+    """Capture produced text output (optionally from `path`)."""
+    raise NotImplementedError("see leaven_python.md — output contracts")
 
 
-__all__ = [
-    "FilesOutput",
-    "JsonSchemaOutput",
-    "OutputContract",
-    "TextOutput",
-    "files",
-    "json_schema",
-    "text",
-]
+def files(*paths: str, **kwargs: object) -> OutputContract:
+    """Capture produced output files by workspace-relative path."""
+    raise NotImplementedError("see leaven_python.md — output contracts")

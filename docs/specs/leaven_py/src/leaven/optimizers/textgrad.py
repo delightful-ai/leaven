@@ -1,23 +1,17 @@
-"""`lv.optimizers.textgrad(...)` — TextGrad config (reserved scaffold)."""
+"""TextGrad — reserved optimizer name (raises NotImplementedError in V1).
+
+Governing spec: `docs/specs/leaven_python.md` — Optimizers (reserved names).
+"""
 
 from __future__ import annotations
 
-from typing import Literal
+from . import Optimizer
 
-from .config import OptimizerConfig
-
-
-class TextGrad(OptimizerConfig):
-    """TextGrad optimizer config (reserved scaffold; pending Rust implementation)."""
-
-    name: Literal["textgrad"] = "textgrad"
-    learning_rate: float = 0.1
-    max_iterations: int = 50
+__all__ = ["textgrad"]
 
 
-def textgrad(*, learning_rate: float = 0.1, max_iterations: int = 50) -> TextGrad:
-    """TextGrad optimizer config builder (reserved scaffold)."""
-    return TextGrad(learning_rate=learning_rate, max_iterations=max_iterations)
-
-
-__all__ = ["TextGrad", "textgrad"]
+def textgrad(*args: object, **kwargs: object) -> Optimizer:
+    """Reserved optimizer name; not behavior-bearing in V1."""
+    raise NotImplementedError(
+        "reserved optimizer name; GEPA is the only behavior-bearing optimizer in V1"
+    )

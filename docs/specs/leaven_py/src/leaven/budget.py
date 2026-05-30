@@ -1,55 +1,34 @@
-"""Budget composition — `lv.budget(usd=..., calls=...)` for runs and stages.
+"""Budget declaration — `lv.budget(usd=..., calls=...)`.
 
-Budgets are enforced engine-side via the locked capability document; the
-Python builder is a typed declaration that lowers into the wire shape.
+`calls=` counts metric/LM calls. Budget tracking for engine-mediated agent
+sessions is a known unspecified gap in V1 (spec lines 843-847, 1443-1445).
+
+Governing spec: `docs/specs/leaven_python.md` — Runtime / budget.
 """
 
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
+__all__ = ["Budget", "budget"]
+
 
 class Budget(BaseModel):
-    """A budget envelope; pass via `lv.environment(budget=...)`."""
+    """Immutable budget declaration.
+
+    `usd=` caps spend; `calls=` caps metric/LM calls. Agent-session budget
+    accounting is flagged unspecified in V1.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     usd: float | None = None
-    """Aggregate USD cap across all costful effects in the run."""
-
     calls: int | None = None
-    """Aggregate call count cap (LM + agent + sandbox combined)."""
-
-    lm_tokens: int | None = None
-    """Aggregate token count cap across all LM calls."""
-
-    wall_seconds: float | None = None
-    """Wall-clock cap for the entire run."""
-
-    concurrent_calls: int | None = None
-    """Concurrency cap on simultaneous in-flight effect calls."""
 
 
-def budget(
-    *,
-    usd: float | None = None,
-    calls: int | None = None,
-    lm_tokens: int | None = None,
-    wall_seconds: float | None = None,
-    concurrent_calls: int | None = None,
-) -> Budget:
-    """Build a budget envelope.
+def budget(*, usd: float | None = None, calls: int | None = None) -> Budget:
+    """Construct a `Budget`.
 
-    All fields optional; unset means no cap on that dimension. At least one
-    cap should be set in practice (the engine warns on fully-uncapped budgets).
+    Spec: `lv.budget(usd=200, calls=2000)`.
     """
-    return Budget(
-        usd=usd,
-        calls=calls,
-        lm_tokens=lm_tokens,
-        wall_seconds=wall_seconds,
-        concurrent_calls=concurrent_calls,
-    )
-
-
-__all__ = ["Budget", "budget"]
+    raise NotImplementedError("see leaven_python.md — Runtime / budget")

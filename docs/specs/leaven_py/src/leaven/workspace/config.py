@@ -1,17 +1,18 @@
-"""Workspace backend config base."""
+"""Workspace config — internal frozen dataclass.
+
+Governing spec: `docs/specs/leaven_python.md` — Runtime / workspace.
+"""
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
-
-
-class WorkspaceConfig(BaseModel):
-    """Common workspace config. Backend-specific subclasses add fields."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    backend: str
-    """Backend name (e.g. 'local', 'docker', 'git', 'firkin')."""
-
+from dataclasses import dataclass
 
 __all__ = ["WorkspaceConfig"]
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceConfig:
+    """Workspace config produced by `lv.workspace.*` builders."""
+
+    kind: str
+    root: str | None = None

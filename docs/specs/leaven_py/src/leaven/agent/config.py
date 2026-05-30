@@ -1,22 +1,18 @@
-"""Agent runtime config base."""
+"""Agent config — internal frozen dataclass.
+
+Governing spec: `docs/specs/leaven_python.md` — Codex as the default agent.
+"""
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
-
-
-class AgentConfig(BaseModel):
-    """Common agent runtime config. Provider-specific subclasses add fields."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    provider: str
-    """Runtime name (e.g. 'codex', 'claude_code', 'command')."""
-
-    role: str | None = None
-    """Optional role binding (e.g. 'executor', 'proposer')."""
-
-    timeout_s: float | None = None
-
+from dataclasses import dataclass
 
 __all__ = ["AgentConfig"]
+
+
+@dataclass(frozen=True, slots=True)
+class AgentConfig:
+    """Agent config produced by `lv.agent.*` builders."""
+
+    kind: str
+    model: str | None = None

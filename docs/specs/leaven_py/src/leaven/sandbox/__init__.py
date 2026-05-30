@@ -1,9 +1,20 @@
-"""Sandbox backend configs — `lv.sandbox.docker(...)`, `lv.sandbox.local()`."""
+"""`lv.sandbox.*` — sandbox backend builders.
+
+Governing spec: `docs/specs/leaven_python.md` — Runtime / sandbox.
+"""
 
 from __future__ import annotations
 
 from .config import SandboxConfig
-from .docker import DockerSandbox, docker
-from .local import LocalSandbox, local
 
-__all__ = ["DockerSandbox", "LocalSandbox", "SandboxConfig", "docker", "local"]
+__all__ = ["SandboxConfig", "docker", "local"]
+
+
+def docker(*, image: str, **kwargs: object) -> SandboxConfig:
+    """Docker sandbox (`lv.sandbox.docker(image="python:3.12")`)."""
+    raise NotImplementedError("see leaven_python.md — Runtime / sandbox")
+
+
+def local(**kwargs: object) -> SandboxConfig:
+    """Local sandbox (`lv.sandbox.local()`)."""
+    raise NotImplementedError("see leaven_python.md — Runtime / sandbox")

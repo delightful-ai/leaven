@@ -1,12 +1,14 @@
-"""Adapter namespaces — `lv.x.dspy.*`, future `lv.x.skill_bank.*`, etc.
+"""`lv.x.*` — external-ecosystem adapters.
 
-Per spec: artifact and provider semantics that aren't core Leaven live under
-`x.*` so the core import surface stays clean. Each adapter ships its own
-typed payloads, schema fingerprints, and capability constraints.
+Typed integration with an external ecosystem, lowered into core Leaven types,
+lifted back for the user. `dspy` is the proof case; `verifiers` / `harbor` are
+reserved adapter namespaces.
+
+Governing spec: `docs/specs/leaven_python.md` — DSPy / adapter namespaces.
 """
 
 from __future__ import annotations
 
-from . import dspy
+from . import dspy, harbor, verifiers
 
-__all__ = ["dspy"]
+__all__ = ["dspy", "harbor", "verifiers"]

@@ -1,35 +1,20 @@
-"""LM config base — what every provider config produces."""
+"""LM config — internal frozen dataclass.
+
+Provider-neutral LM config (internal config, not a wire record).
+
+Governing spec: `docs/specs/leaven_python.md` — Runtime / lm.
+"""
 
 from __future__ import annotations
 
-from typing import Literal
+from dataclasses import dataclass
 
-from pydantic import BaseModel, ConfigDict
-
-LmCacheMode = Literal["off", "read_only", "read_write"]
+__all__ = ["LmConfig"]
 
 
-class LmConfig(BaseModel):
-    """Common LM config fields. Provider-specific subclasses add fields."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
+@dataclass(frozen=True, slots=True)
+class LmConfig:
+    """LM config produced by `lv.lm.*` builders."""
 
     provider: str
-    """Provider name (e.g. 'anthropic', 'openai', 'local', 'mock')."""
-
-    model: str
-    """Provider-specific model id."""
-
-    role: str | None = None
-    """Optional role binding (e.g. 'reflector', 'grader')."""
-
-    cache: LmCacheMode = "read_write"
-    """Engine cache mode for this provider."""
-
-    timeout_s: float | None = None
-    """Per-call timeout."""
-
-    max_retries: int = 2
-
-
-__all__ = ["LmCacheMode", "LmConfig"]
+    model: str | None = None

@@ -1,31 +1,49 @@
-"""`lv.runs.open(path)` — inspect a completed run from outside.
+"""runs — `lv.runs.open(path)` to inspect a completed run.
 
-Same `Optimized[A]` type as `lv.optimize(...).run()` returns; the engine is
-spawned read-only against the run directory. Useful for retrospective
-analysis, ablation reports, sharing run state with teammates.
+`Run` mirrors the `Evolved` surface (`.best/.frontier/.summary/
+.test_assessments/.lineage/.replay`) but is a distinct read-only class: it
+opens a completed run directory for inspection rather than driving a live run.
+
+Governing spec: `docs/specs/leaven_python.md` — evolve (inspection).
 """
 
 from __future__ import annotations
 
-from pathlib import Path
+from collections.abc import Iterable
 from typing import Any
 
-from .result import Optimized
+from .evolve import Assessment, Candidate, ReplayResult, RunSummary
+
+__all__ = ["Run", "open"]
 
 
-def open(path: str | Path) -> Optimized[Any]:
-    """Open a completed run from its run directory.
+class Run:
+    """A read-only view of a completed run directory."""
 
-    The artifact type is `Any` here because the run's artifact type is
-    determined at write time; callers can cast if they know the type.
-    A future API revision may make this generic over a passed artifact type.
+    best: Candidate[Any]
+    frontier: list[Candidate[Any]]
+    summary: RunSummary
+
+    def test_assessments(self) -> Iterable[Assessment]:
+        """Per-case assessments over the test split."""
+        raise NotImplementedError("see leaven_python.md — runs.open")
+
+    def assessment(self, case_id: str) -> Assessment:
+        """The assessment for one case."""
+        raise NotImplementedError("see leaven_python.md — runs.open")
+
+    def lineage(self, candidate_id: str) -> Iterable[Candidate[Any]]:
+        """The ancestry chain for a candidate."""
+        raise NotImplementedError("see leaven_python.md — runs.open")
+
+    async def replay(self, case_id: str) -> ReplayResult:
+        """Deterministically replay one case's assessment."""
+        raise NotImplementedError("see leaven_python.md — runs.open")
+
+
+def open(path: str) -> Run:
+    """Open a completed run directory for inspection.
+
+    Spec: `lv.runs.open(".leaven/runs/2026-05-25-codex-ctf")`.
     """
-    raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
-
-
-def list_local(root: str | Path = ".leaven/runs") -> list[str]:
-    """List run directory names under the local leaven root."""
-    raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
-
-
-__all__ = ["list_local", "open"]
+    raise NotImplementedError("see leaven_python.md — runs.open")

@@ -1,92 +1,142 @@
-"""Context objects — `RunContext`, `StageContext`, `EvalContext`.
+"""Context — the product `cx` passed explicitly to every stage function.
 
-The `cx` parameter passed into every decorated stage function. Carries the
-builder namespaces (`cx.case`, `cx.workspace`, etc.) plus the batch context
-manager and stage metadata.
+`cx` is passed EXPLICITLY to every stage fn (NO ContextVar magic). Context
+fields are UNIFORM across all context types (no field optional-across-boundary).
 
-Three flavors:
-- `RunContext` — runner/scorer stages (per-candidate, per-case work)
-- `StageContext` — reflector/proposer/judge stages (per stage call)
-- `EvalContext` — evaluator stages (per evaluation request, may iterate many cases)
+This module owns the structural product `Context` Protocol and the handle
+protocols it exposes. The concrete typed `RunContext` / `StageContext` /
+`EvalContext` live in `lv.adapters.contexts` and are the annotation surface for
+advanced authoring.
 
-All three share the same builder surface; they differ in stage-metadata
-fields and the lifecycle methods available.
+`Context` is NOT a top-level product noun (cx is passed, not imported);
+advanced annotation uses `lv.adapters.contexts`.
+
+Governing spec: `docs/specs/leaven_python.md` — constraints on implementation
+(no ContextVar; uniform context fields).
 """
 
 from __future__ import annotations
 
-from .builders.agent import AgentBuilder
-from .builders.assessments import AssessmentsBuilder
-from .builders.batch import BatchBuilder
-from .builders.case import CaseBuilder
-from .builders.lm import LmBuilder
-from .builders.proposals import ProposalsBuilder
-from .builders.sandbox import SandboxBuilder
-from .builders.workspace import WorkspaceBuilder
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+from pydantic import BaseModel, ConfigDict
+
+from ._handles import WorkspaceView
+
+if TYPE_CHECKING:
+    from .case import Case
+    from .output import OutputContract
+
+__all__ = [
+    "AgentHandle",
+    "AgentRunResult",
+    "BatchContext",
+    "CaseReader",
+    "Context",
+    "LmHandle",
+    "SandboxHandle",
+    "WorkspaceHandleProto",
+]
 
 
-class _ContextBase:
-    """Shared builder surface across all context flavors."""
+class AgentRunResult[T](BaseModel):
+    """Result of an engine-mediated `cx.agent.run(...)` call.
 
-    case: CaseBuilder
-    workspace: WorkspaceBuilder
-    lm: LmBuilder
-    agent: AgentBuilder
-    sandbox: SandboxBuilder
-    assessments: AssessmentsBuilder
-    proposals: ProposalsBuilder
-
-    def batch(self) -> BatchBuilder:
-        """Open a batch context. Multiple ops collapse into one ACP round-trip."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
-
-    @property
-    def stage_id(self) -> str:
-        """The stage call id (engine-minted, immutable within the stage)."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
-
-    @property
-    def capability_fingerprint(self) -> str:
-        """Capability document fingerprint for this stage's authority."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
-
-
-class RunContext(_ContextBase):
-    """Context passed to `@lv.runner` and `@lv.scorer` stages."""
-
-    @property
-    def candidate_id(self) -> str:
-        """The candidate being evaluated in this run."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
-
-    @property
-    def case_id(self) -> str:
-        """The case being evaluated in this run."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
-
-
-class StageContext(_ContextBase):
-    """Context passed to `@lv.reflector`, `@lv.proposer`, `@lv.judge` stages."""
-
-    @property
-    def parent_candidate_id(self) -> str | None:
-        """Parent candidate id for proposers; None for reflectors operating
-        on a candidate set without an explicit parent."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
-
-
-class EvalContext(_ContextBase):
-    """Context passed to `@lv.evaluator` stages.
-
-    Evaluators are higher-privileged than runner/scorer — they iterate over
-    cases, decide what to load, choose what to evaluate. The context carries
-    the evaluation request handle plus all of the builder surface.
+    Generic; an unparameterized `AgentRunResult` binds `T` to `Any` (pydantic
+    default), so a bare annotation works, while `AgentRunResult[Verdict]` makes
+    `verdict.parsed.score` type-check when `T` is given.
     """
 
-    @property
-    def evaluation_request_id(self) -> str:
-        """The evaluation request id this evaluator was invoked for."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+    model_config = ConfigDict(frozen=True, extra="forbid", arbitrary_types_allowed=True)
+
+    parsed: T
 
 
-__all__ = ["EvalContext", "RunContext", "StageContext"]
+@runtime_checkable
+class LmHandle(Protocol):
+    """Engine-mediated LM handle exposed on `cx.lm`."""
+
+    async def complete(self, *args: object, **kwargs: object) -> object: ...
+    async def complete_text(self, prompt: str, **kwargs: object) -> str: ...
+
+
+@runtime_checkable
+class AgentHandle(Protocol):
+    """Engine-mediated agent handle exposed on `cx.agent`."""
+
+    async def run(
+        self,
+        *,
+        workspace: WorkspaceView | None = None,
+        instructions: str,
+        output: OutputContract | None = None,
+        **kwargs: object,
+    ) -> AgentRunResult: ...
+
+
+@runtime_checkable
+class SandboxHandle(Protocol):
+    """Engine-mediated sandbox handle exposed on `cx.sandbox`."""
+
+    async def exec(self, *, workspace: object, argv: Sequence[str], **kwargs: object) -> object: ...
+
+
+@runtime_checkable
+class WorkspaceHandleProto(Protocol):
+    """Engine-mediated workspace handle exposed on `cx.workspace`."""
+
+    async def materialize_candidate(self, candidate: object) -> WorkspaceView: ...
+
+
+@runtime_checkable
+class CaseReader(Protocol):
+    """Engine-mediated case reader exposed on `cx.case`.
+
+    `load(include=...)` re-reads the current case with an explicit projection
+    set (e.g. include extra metadata or files); the engine enforces visibility,
+    so a rollout still cannot pull a hidden target through it.
+    """
+
+    async def load(self, *, include: Sequence[str] | None = None) -> Case: ...
+
+
+@runtime_checkable
+class BatchContext(Protocol):
+    """The `async with cx.batch() as b:` transaction handle.
+
+    Its `.workspace` / `.sandbox` / `.agent` mirror the same handles, collapsing
+    multiple ops into one transaction.
+    """
+
+    lm: LmHandle
+    agent: AgentHandle
+    sandbox: SandboxHandle
+    workspace: WorkspaceHandleProto
+
+    async def __aenter__(self) -> BatchContext: ...
+    async def __aexit__(self, *exc: object) -> None: ...
+
+
+@runtime_checkable
+class Context(Protocol):
+    """The product `cx` passed to every stage function.
+
+    Uniform fields across all context types. No ContextVar; `cx` is an explicit
+    parameter.
+
+    Per-role capability differences (e.g. a reflector LM call may not egress
+    `case.target`) are enforced at RUNTIME by the engine via capability tokens
+    and data-class propagation (raising `CapabilityError` on violation), NOT
+    modeled as a different Python type per role. There is ONE `Context`; the
+    advanced `EvalContext` extends it for the batched-effect evaluator path.
+    """
+
+    lm: LmHandle
+    agent: AgentHandle
+    sandbox: SandboxHandle
+    workspace: WorkspaceHandleProto
+    case: CaseReader
+
+    async def trace(self, *events: object) -> None: ...
+    def batch(self) -> BatchContext: ...

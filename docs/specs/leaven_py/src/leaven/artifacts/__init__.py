@@ -1,16 +1,31 @@
-"""Built-in artifact types — what gets optimized.
+"""`lv.artifacts.*` — artifact adapters describing the mutable behavior package.
 
-Common artifacts live here as first-class top-level types. Less common or
-paper-specific artifacts live under `leaven.x.*` adapter namespaces.
+`prompt` / `directory` / `codex_kit` / `skill_bank` / `repo`, plus `unsafe`
+(reached as `lv.artifacts.unsafe`, NOT top-level). Each adapter knows its own
+identity/fingerprint, projection, typed readback, and mutable-paths contract.
 
-The boundary: if an artifact ships with Leaven core because >1 paper or
-common workflow uses it, it's here. Otherwise it lives in an adapter
-namespace owned by its semantics.
+Governing spec: `docs/specs/leaven_python.md` — Artifact adapters / codex_kit.
 """
 
 from __future__ import annotations
 
-from .prompt import PromptArtifact
-from .skill_bank import SkillBank
+from .base import Artifact
+from .codex_kit import CodexKitArtifact, codex_kit
+from .directory import directory
+from .prompt import PromptArtifact, prompt
+from .repo import repo
+from .skill_bank import skill_bank
+from .unsafe import UnsafePath, unsafe
 
-__all__ = ["PromptArtifact", "SkillBank"]
+__all__ = [
+    "Artifact",
+    "CodexKitArtifact",
+    "PromptArtifact",
+    "UnsafePath",
+    "codex_kit",
+    "directory",
+    "prompt",
+    "repo",
+    "skill_bank",
+    "unsafe",
+]

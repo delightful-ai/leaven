@@ -1,26 +1,28 @@
-"""Optimizer registry — `lv.optimizers.gepa(...)`, `lv.optimizers.mipro(...)`, etc.
+"""`lv.optimizers.*` — the optimizer registry.
 
-Each builder returns a typed config the engine instantiates the corresponding
-Rust optimizer with. New optimizers require a new Rust crate; Python users
-configure existing ones.
+`gepa` is the ONLY behavior-bearing optimizer in V1. `mipro`, `textgrad`, and
+`trace` are RESERVED names that raise `NotImplementedError`. New optimizers
+require a new Rust crate; Python users configure existing ones.
+
+Governing spec: `docs/specs/leaven_python.md` — Optimizers.
 """
 
 from __future__ import annotations
 
-from .config import OptimizerConfig
-from .gepa import Gepa, gepa
-from .mipro import Mipro, mipro
-from .seed_best import SeedBest, seed_best
-from .textgrad import TextGrad, textgrad
+from pydantic import BaseModel, ConfigDict
 
-__all__ = [
-    "Gepa",
-    "Mipro",
-    "OptimizerConfig",
-    "SeedBest",
-    "TextGrad",
-    "gepa",
-    "mipro",
-    "seed_best",
-    "textgrad",
-]
+__all__ = ["Optimizer", "gepa", "mipro", "textgrad", "trace"]
+
+
+class Optimizer(BaseModel):
+    """Base marker for optimizer configs."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", arbitrary_types_allowed=True)
+
+    kind: str
+
+
+from .gepa import gepa  # noqa: E402
+from .mipro import mipro  # noqa: E402
+from .textgrad import textgrad  # noqa: E402
+from .trace import trace  # noqa: E402

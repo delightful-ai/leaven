@@ -1,45 +1,45 @@
-"""Trust profiles — execution policy + capability defaults bundled together.
+"""Trust profiles — fixed execution-policy + capability-default enum.
 
-Pass to `@lv.runner(trust_profile=...)`, `@lv.evaluator(...)`, and
-`lv.environment(trust_profile=...)`. The engine lowers the profile into the
-locked capability document; Python authors declare, Rust enforces.
+The `trust_profile=` declaration bundles execution policy and capability
+defaults from a fixed enum. The engine enforces; the Python surface only
+declares.
 
-Spec: `docs/specs/leaven_python.md` · seam: public-seam-v1 trust bundles.
-
-V1 is a fixed four-value enum. New profiles require a spec revision.
+Governing spec: `docs/specs/leaven_python.md` — Runtime / "trust profile
+bundles execution policy + capability defaults from a fixed enum".
 """
 
 from __future__ import annotations
 
 from enum import StrEnum
 
+__all__ = ["TrustProfile", "trust"]
+
 
 class TrustProfile(StrEnum):
-    """Named trust bundles for stages and environments."""
+    """The fixed V1 trust-profile enum.
 
-    TRUSTED_LOCAL_OPERATOR = "trusted_local_operator"
-    """Operator machine — local sandbox backends allowed; broadest effects."""
+    Spec: `trusted_local_operator`, `managed_sandbox`, `package_scorer`,
+    `remote_untrusted`.
+    """
 
-    MANAGED_SANDBOX = "managed_sandbox"
-    """Default for paper repros — engine-managed sandbox, gated capabilities."""
-
-    PACKAGE_SCORER = "package_scorer"
-    """Third-party scorer packages — score-only, no arbitrary workspace/agent access."""
-
-    REMOTE_UNTRUSTED = "remote_untrusted"
-    """Remote ACP workers — strictest checks, minimal implicit authority."""
+    trusted_local_operator = "trusted_local_operator"
+    managed_sandbox = "managed_sandbox"
+    package_scorer = "package_scorer"
+    remote_untrusted = "remote_untrusted"
 
 
-# String-friendly aliases for the convention `trust_profile="managed_sandbox"`.
-TRUSTED_LOCAL_OPERATOR = TrustProfile.TRUSTED_LOCAL_OPERATOR
-MANAGED_SANDBOX = TrustProfile.MANAGED_SANDBOX
-PACKAGE_SCORER = TrustProfile.PACKAGE_SCORER
-REMOTE_UNTRUSTED = TrustProfile.REMOTE_UNTRUSTED
+class _Trust:
+    """Ergonomic `lv.trust.*` namespace exposing the profile values.
 
-__all__ = [
-    "MANAGED_SANDBOX",
-    "PACKAGE_SCORER",
-    "REMOTE_UNTRUSTED",
-    "TRUSTED_LOCAL_OPERATOR",
-    "TrustProfile",
-]
+    `lv.trust` is the top-level product noun; `TrustProfile` is the enum type
+    behind `trust_profile=` strings/values and is NOT in the top-level
+    allow-list.
+    """
+
+    trusted_local_operator: TrustProfile = TrustProfile.trusted_local_operator
+    managed_sandbox: TrustProfile = TrustProfile.managed_sandbox
+    package_scorer: TrustProfile = TrustProfile.package_scorer
+    remote_untrusted: TrustProfile = TrustProfile.remote_untrusted
+
+
+trust = _Trust()

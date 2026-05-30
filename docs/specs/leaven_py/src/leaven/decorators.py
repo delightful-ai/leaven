@@ -1,287 +1,93 @@
-"""Stage decorators — `@lv.evaluator`, `@lv.reflector`, `@lv.proposer`, etc.
+"""Stage decorators + the served-worker entry point.
 
-Each decorator wraps an async function into a stage handler that the engine
-calls via the ACP wire. The decorator is sugar over `register_stage(...)`;
-both forms produce the same `RegisteredStage` value.
+`@lv.runner` `@lv.scorer` `@lv.reflector` `@lv.proposer` `@lv.evaluator` are
+role-tagging sugar (optional in-process; load-bearing only for served ACP
+workers). They do NOT register globally — each returns the function unchanged
+(tagged) or, for `scorer`/`evaluator`, support a parameterized form.
 
-A decorated function can run two ways:
-- Composed into an `lv.optimize(..., evaluator=..., runner=..., scorer=...)` call
-  (the engine reaches it in-process via the embedded ACP loop)
-- Standalone via `if __name__ == "__main__": lv.serve_stage(my_stage)`
-  (the engine spawns the script as a subprocess and reaches it over stdio)
+`lv.serve(...)` is the out-of-process worker entry point: it registers ONLY
+Python-authored stages; engine-mediated built-ins are not served.
 
-The user code is identical in both cases; only the way the engine reaches
-the stage differs.
-
-Scaffold note: the decorators construct real `RegisteredStage` values so
-user code composes cleanly. The engine binding lives in
-`lv.optimize(...).run()` and `lv.serve_stage(...)` — both raise
-NotImplementedError until the implementation lands.
+Governing spec: `docs/specs/leaven_python.md` — The Python authoring surface /
+How Python code reaches the engine.
 """
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from typing import Any, Literal, overload
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, overload
 
-from pydantic import BaseModel, ConfigDict
-
-from .case import Case
-from .context import EvalContext, RunContext, StageContext
-from .evaluation_job import EvaluationJob, Granularity
-from .proposal import ProposalBatch
-from .score import Score
-from .stage_payloads import JudgeRequest, ProposeRequest, ReflectionResult, ReflectRequest
 from .trust import TrustProfile
 
-StageRole = Literal["evaluator", "reflector", "proposer", "runner", "scorer", "judge"]
+if TYPE_CHECKING:
+    from .adapters.evaluator import EvaluatorFn
+    from .score import Scorer
+    from .stages import ProposeFn, ReflectFn, RolloutFn
+
+__all__ = ["evaluator", "proposer", "reflector", "runner", "scorer", "serve"]
 
 
-class RegisteredStage[A, O](BaseModel):
-    """A registered stage handle. Pass to `lv.optimize(...)` or `lv.serve_stage(...)`.
+def runner[F: RolloutFn](fn: F) -> F:
+    """Tag an async function as the rollout stage. Returns it unchanged.
 
-    `A` is the artifact type the stage operates on; `O` is the stage's
-    return type. Both are erased at runtime; the typing is for IDE support.
+    Optional sugar (a bare function in the slot works); load-bearing only when
+    served out-of-process. The scaffold is a no-op pass-through.
     """
-
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid")
-
-    role: StageRole
-    id: str
-    trust_profile: TrustProfile = TrustProfile.MANAGED_SANDBOX
-    func: Any
-    """The wrapped async user function. Engine-internal."""
-
-
-# Type aliases for stage function signatures.
-EvaluatorFunc = Callable[[EvaluationJob, EvalContext], Awaitable[Any]]
-ReflectorFunc = Callable[[ReflectRequest, StageContext], Awaitable[ReflectionResult]]
-ProposerFunc = Callable[[ProposeRequest, StageContext], Awaitable[ProposalBatch]]
-RunnerFunc = Callable[[Any, Case, RunContext], Awaitable[Any]]
-ScorerFunc = Callable[[Any, Case, RunContext], Awaitable[Score]]
-JudgeFunc = Callable[[JudgeRequest, StageContext], Awaitable[Any]]
-
-
-def _resolve_trust(profile: TrustProfile | str) -> TrustProfile:
-    return profile if isinstance(profile, TrustProfile) else TrustProfile(profile)
-
-
-def _make_registered(
-    role: StageRole,
-    func: Callable[..., Awaitable[Any]],
-    stage_id: str | None,
-    trust_profile: TrustProfile | str,
-) -> RegisteredStage[Any, Any]:
-    """Internal: build a RegisteredStage from a decorated function.
-
-    Used by all six decorators. The scaffold returns a real value so user
-    code composes cleanly; engine wiring lives in `lv.optimize(...).run()`
-    and `lv.serve_stage(...)`.
-    """
-    return RegisteredStage(
-        role=role,
-        id=stage_id or f"{getattr(func, '__module__', 'leaven')}.{getattr(func, '__name__', 'stage')}",
-        trust_profile=_resolve_trust(trust_profile),
-        func=func,
-    )
+    return fn
 
 
 @overload
-def evaluator(func: EvaluatorFunc) -> RegisteredStage[Any, Any]: ...
+def scorer[F: Scorer](fn: F) -> F: ...
 @overload
+def scorer[F: Scorer](*, name: str) -> Callable[[F], F]: ...
+def scorer(fn=None, *, name=None):
+    """Tag an async function as a scorer.
+
+    Default name is the function's `__name__`. `@lv.scorer(name="...")` is a
+    PURE OVERRIDE for when the report name should differ from the function name
+    — do NOT pass `name=` redundantly when it equals `__name__`. The optimizer
+    references the primary score by the scorer OBJECT (`gepa(score=correctness)`);
+    the name-string is convenience only. The scaffold is a no-op pass-through.
+    """
+    if fn is None:
+        return lambda f: f
+    return fn
+
+
+def reflector[F: ReflectFn](fn: F) -> F:
+    """Tag an async function as the reflect stage. Returns it unchanged."""
+    return fn
+
+
+def proposer[F: ProposeFn](fn: F) -> F:
+    """Tag an async function as the propose stage. Returns it unchanged."""
+    return fn
+
+
 def evaluator(
     *,
-    id: str | None = None,
-    trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
-    granularity: Granularity = "per_case",
-) -> Callable[[EvaluatorFunc], RegisteredStage[Any, Any]]: ...
-def evaluator(
-    func: EvaluatorFunc | None = None,
-    *,
-    id: str | None = None,
-    trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
-    granularity: Granularity = "per_case",
-) -> Any:
-    """Decorate an async function as an evaluator stage."""
+    id: str,
+    trust_profile: TrustProfile | str = TrustProfile.managed_sandbox,
+    granularity: str = "per_case",
+) -> Callable[[EvaluatorFn], EvaluatorFn]:
+    """The advanced evaluator decorator (returns the fn for `Stages.evaluator`).
 
-    def wrap(f: EvaluatorFunc) -> RegisteredStage[Any, Any]:
-        return _make_registered("evaluator", f, id, trust_profile)
-
-    return wrap(func) if func is not None else wrap
-
-
-@overload
-def reflector(func: ReflectorFunc) -> RegisteredStage[Any, ReflectionResult]: ...
-@overload
-def reflector(
-    *,
-    stage_id: str | None = None,
-    trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
-) -> Callable[[ReflectorFunc], RegisteredStage[Any, ReflectionResult]]: ...
-def reflector(
-    func: ReflectorFunc | None = None,
-    *,
-    stage_id: str | None = None,
-    trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
-) -> Any:
-    """Decorate an async function as a reflector stage.
-
-    Reflectors produce typed `ReflectionResult`s. They are forbidden from
-    carrying `case.target` data classes — the seam enforces target egress.
+    `granularity` is a free string at the product layer (wire owns the
+    `Granularity` enum). Spec line 783.
     """
-
-    def wrap(f: ReflectorFunc) -> RegisteredStage[Any, ReflectionResult]:
-        return _make_registered("reflector", f, stage_id, trust_profile)
-
-    return wrap(func) if func is not None else wrap
+    raise NotImplementedError("see leaven_python.md — Advanced authoring")
 
 
-@overload
-def proposer(func: ProposerFunc) -> RegisteredStage[Any, ProposalBatch]: ...
-@overload
-def proposer(
+def serve(
     *,
-    stage_id: str | None = None,
-    trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
-    repair_attempts: int = 0,
-) -> Callable[[ProposerFunc], RegisteredStage[Any, ProposalBatch]]: ...
-def proposer(
-    func: ProposerFunc | None = None,
-    *,
-    stage_id: str | None = None,
-    trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
-    repair_attempts: int = 0,
-) -> Any:
-    """Decorate an async function as a proposer stage.
+    rollout: RolloutFn | None = None,
+    score: Scorer | Sequence[Scorer] | None = None,
+    reflect: ReflectFn | None = None,
+    propose: ProposeFn | None = None,
+) -> None:
+    """Out-of-process worker entry point (external-driver deployment mode only).
 
-    Proposers consume a `ReflectionResult` and emit a `ProposalBatch`.
-    `repair_attempts` configures parse-retry budget on malformed output.
+    Registers only Python-authored stages; engine-mediated built-ins are
+    configured in the plan, not served here. Spec lines 963-980.
     """
-
-    def wrap(f: ProposerFunc) -> RegisteredStage[Any, ProposalBatch]:
-        return _make_registered("proposer", f, stage_id, trust_profile)
-
-    return wrap(func) if func is not None else wrap
-
-
-@overload
-def runner(func: RunnerFunc) -> RegisteredStage[Any, Any]: ...
-@overload
-def runner(
-    *,
-    id: str | None = None,
-    trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
-) -> Callable[[RunnerFunc], RegisteredStage[Any, Any]]: ...
-def runner(
-    func: RunnerFunc | None = None,
-    *,
-    id: str | None = None,
-    trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
-) -> Any:
-    """Decorate an async function as a runner stage.
-
-    Runners execute one candidate against one case and return the output the
-    scorer will consume.
-    """
-
-    def wrap(f: RunnerFunc) -> RegisteredStage[Any, Any]:
-        return _make_registered("runner", f, id, trust_profile)
-
-    return wrap(func) if func is not None else wrap
-
-
-@overload
-def scorer(func: ScorerFunc) -> RegisteredStage[Any, Score]: ...
-@overload
-def scorer(
-    *,
-    id: str | None = None,
-    trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
-) -> Callable[[ScorerFunc], RegisteredStage[Any, Score]]: ...
-def scorer(
-    func: ScorerFunc | None = None,
-    *,
-    id: str | None = None,
-    trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
-) -> Any:
-    """Decorate an async function as a scorer stage.
-
-    Scorers receive (output, case, cx) and return a `Score`.
-    """
-
-    def wrap(f: ScorerFunc) -> RegisteredStage[Any, Score]:
-        return _make_registered("scorer", f, id, trust_profile)
-
-    return wrap(func) if func is not None else wrap
-
-
-@overload
-def judge(func: JudgeFunc) -> RegisteredStage[Any, Any]: ...
-@overload
-def judge(
-    *,
-    stage_id: str | None = None,
-    trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
-) -> Callable[[JudgeFunc], RegisteredStage[Any, Any]]: ...
-def judge(
-    func: JudgeFunc | None = None,
-    *,
-    stage_id: str | None = None,
-    trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
-) -> Any:
-    """Decorate an async function as a judge stage (pairwise or listwise)."""
-
-    def wrap(f: JudgeFunc) -> RegisteredStage[Any, Any]:
-        return _make_registered("judge", f, stage_id, trust_profile)
-
-    return wrap(func) if func is not None else wrap
-
-
-def register_stage(
-    role: StageRole,
-    func: Callable[..., Awaitable[Any]],
-    *,
-    id: str | None = None,
-    trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
-    **role_kwargs: Any,
-) -> RegisteredStage[Any, Any]:
-    """Function form of the stage decorators; equivalent to `@lv.<role>(...)`.
-
-    Useful for dynamic registration. The decorator forms are sugar over this.
-    """
-    return _make_registered(role, func, id, trust_profile)
-
-
-def serve_stage(*stages: RegisteredStage[Any, Any]) -> None:
-    """Run one or more stages as a standalone ACP worker process.
-
-    Usage:
-        if __name__ == "__main__":
-            lv.serve_stage(my_stage)
-
-    Reads `LEAVEN_CAPABILITY_TOKEN`, `LEAVEN_ENDPOINT`, and
-    `LEAVEN_CAPABILITY_FINGERPRINT` from env per the locked ACP profile,
-    spawns the ACP server loop, and dispatches stage calls until the
-    session terminates.
-    """
-    raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
-
-
-__all__ = [
-    "EvaluatorFunc",
-    "JudgeFunc",
-    "ProposerFunc",
-    "ReflectorFunc",
-    "RegisteredStage",
-    "RunnerFunc",
-    "ScorerFunc",
-    "StageRole",
-    "evaluator",
-    "judge",
-    "proposer",
-    "reflector",
-    "register_stage",
-    "runner",
-    "scorer",
-    "serve_stage",
-]
+    raise NotImplementedError("see leaven_python.md — lv.serve")

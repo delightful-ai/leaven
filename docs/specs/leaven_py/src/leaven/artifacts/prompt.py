@@ -1,35 +1,26 @@
-"""PromptArtifact — the simplest case: a template string the optimizer evolves."""
+"""`lv.artifacts.prompt(...)` — a prompt-template artifact.
+
+Governing spec: `docs/specs/leaven_python.md` — Artifact adapters.
+"""
 
 from __future__ import annotations
 
-from typing import Self
+from .base import Artifact
 
-from pydantic import BaseModel, ConfigDict, Field
+__all__ = ["PromptArtifact", "prompt"]
 
 
-class PromptArtifact(BaseModel):
-    """A prompt template plus optional few-shot examples.
+class PromptArtifact(Artifact):
+    """A prompt template artifact; `.render(**input)` fills its slots."""
 
-    Template uses Python `.format(**case.input)` substitution by convention.
-    Optimizers evolve the template string; examples may also be evolved
-    depending on the optimizer.
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
+    kind: str = "prompt"
     template: str
-    """The prompt template. `{var}` placeholders bind to case input keys."""
 
-    examples: list[str] = Field(default_factory=list)
-    """Few-shot examples prepended to the rendered prompt, in order."""
-
-    candidate_id: str | None = None
-    """Set when this artifact came from the engine; None for hand-built seeds."""
-
-    @classmethod
-    def empty(cls) -> Self:
-        """An empty seed artifact (template = empty string)."""
-        return cls(template="")
+    def render(self, **kwargs: object) -> str:
+        """Render the template against case input."""
+        raise NotImplementedError("see leaven_python.md — Artifact adapters / prompt")
 
 
-__all__ = ["PromptArtifact"]
+def prompt(template: str, **kwargs: object) -> PromptArtifact:
+    """Build a prompt-template artifact (`lv.artifacts.prompt("Answer: {q}")`)."""
+    raise NotImplementedError("see leaven_python.md — Artifact adapters / prompt")

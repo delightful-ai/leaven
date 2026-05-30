@@ -1,63 +1,43 @@
-"""`lv.optimizers.gepa(...)` — GEPA (reflective two-phase optimization) config."""
+"""GEPA — the only behavior-bearing optimizer in V1.
+
+`score=` is the primary-comparison scorer, passed as the scorer OBJECT (typed,
+rename-safe), a name string (convenience), or a `lv.gepa.compare.*`
+`CompareConfig`. `train=`/`validation=` accept the `lv.gepa.*` policy objects or
+a split-name string. `reflective_dataset=` is the build-once-pass-down hook.
+
+Governing spec: `docs/specs/leaven_python.md` — Optimizers.
+"""
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import TYPE_CHECKING
 
-from ..frontier import FrontierConfig
-from ..lm.config import LmConfig
-from .config import OptimizerConfig
+from . import Optimizer
 
-ParentSelector = Literal["round_robin", "best", "weighted", "pareto"]
+if TYPE_CHECKING:
+    from ..gepa.compare import CompareConfig
+    from ..gepa.component import ComponentPolicy
+    from ..gepa.frontier import FrontierPolicy
+    from ..gepa.gate import GatePolicy
+    from ..gepa.reflective_dataset import ReflectiveDatasetHook
+    from ..gepa.sampling import SamplingPolicy
+    from ..gepa.validation import ValidationPolicy
+    from ..score import Scorer
 
-
-class Gepa(OptimizerConfig):
-    """GEPA optimizer config."""
-
-    name: Literal["gepa"] = "gepa"
-
-    population_size: int = 10
-    """Working population size; engine spawns candidates up to this cap."""
-
-    frontier: FrontierConfig | None = None
-    """Frontier policy; `lv.frontier.top_k(3)` is the EvoSkill default."""
-
-    parent_selector: ParentSelector = "round_robin"
-    """Strategy for picking which parent to reflect against next."""
-
-    reflection_lm: LmConfig | None = None
-    """LM for reflection calls. Inherits environment LM if omitted."""
-
-    minibatch_size: int = 4
-    """Cases per reflection minibatch."""
-
-    max_iterations: int | None = None
-    """Hard cap on optimization iterations. None = budget-bounded."""
+__all__ = ["gepa"]
 
 
 def gepa(
     *,
-    population_size: int = 10,
-    frontier: FrontierConfig | None = None,
-    parent_selector: ParentSelector = "round_robin",
-    reflection_lm: LmConfig | None = None,
-    minibatch_size: int = 4,
-    max_iterations: int | None = None,
-) -> Gepa:
-    """GEPA optimizer config builder.
-
-    GEPA (Genetic Evolutionary Prompt Adaptation) is the reflective two-phase
-    optimizer. Stage roles: reflector (understands), proposer (decides).
-    Defaults match the paper's EvoSkill configuration.
-    """
-    return Gepa(
-        population_size=population_size,
-        frontier=frontier,
-        parent_selector=parent_selector,
-        reflection_lm=reflection_lm,
-        minibatch_size=minibatch_size,
-        max_iterations=max_iterations,
-    )
-
-
-__all__ = ["Gepa", "ParentSelector", "gepa"]
+    score: Scorer | str | CompareConfig,
+    train: SamplingPolicy | str | None = None,
+    validation: ValidationPolicy | str | None = None,
+    population_size: int = 8,
+    frontier: FrontierPolicy | None = None,
+    reflective_dataset: ReflectiveDatasetHook | None = None,
+    gate: GatePolicy | None = None,
+    component: ComponentPolicy | None = None,
+    **kwargs: object,
+) -> Optimizer:
+    """Configure the GEPA optimizer. Spec lines 1128-1166."""
+    raise NotImplementedError("see leaven_python.md — Optimizers / gepa")
