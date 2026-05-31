@@ -604,7 +604,9 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         policy: &CachePolicy,
         cache_key: Option<&EvaluationCacheKey>,
     ) -> Result<Option<EvaluationReport>, RunContextError> {
-        let assessment_ids = self.cached_assessment_ids(policy, cache_key)?;
+        let Some(assessment_ids) = self.cached_assessment_ids(policy, cache_key) else {
+            return Ok(None);
+        };
         let Some(assessment_ids) = self.materialize_cached_evaluation_hit(
             evaluator,
             request_id,
