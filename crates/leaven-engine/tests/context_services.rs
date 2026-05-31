@@ -699,6 +699,60 @@ fn casewise_cache_hit_rematerializes_rows_for_same_content_candidate() {
 }
 
 #[test]
+fn deterministic_evaluation_cache_rematerializes_hit_for_same_content_candidate() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let mut cache = leaven_engine::EvaluationCache::default();
+        let case_set = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let (first_candidate, second_candidate) = {
+            let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            (
+                seed_ctx
+                    .insert_seed(TextArtifact("abcd".to_owned()), 0)
+                    .unwrap(),
+                seed_ctx
+                    .insert_seed(TextArtifact("abcd".to_owned()), 1)
+                    .unwrap(),
+            )
+        };
+        let evaluator = CountingEvaluator::new(CachePolicy::Deterministic);
+
+        let first = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_cache(&mut cache)
+                .with_evidence_store(&store);
+            ctx.evaluate_with(&evaluator, independent_request(first_candidate))
+                .await
+                .unwrap()
+        };
+        let (second, second_row_candidate) = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_cache(&mut cache)
+                .with_evidence_store(&store);
+            let report = ctx
+                .evaluate_with(&evaluator, independent_request(second_candidate))
+                .await
+                .unwrap();
+            let row = ctx
+                .graph()
+                .assessment(report.assessment_ids[0])
+                .expect("rematerialized row is in graph");
+            (report, row.independent_candidate())
+        };
+
+        assert_eq!(first.cache, CacheStatus::Miss);
+        assert_eq!(second.cache, CacheStatus::Hit);
+        assert_eq!(second.cost, Cost::zero());
+        assert_eq!(evaluator.calls(), 1);
+        assert_ne!(first.assessment_ids, second.assessment_ids);
+        assert_eq!(second_row_candidate, Some(second_candidate));
+    });
+}
+
+#[test]
 fn deterministic_evaluation_cache_restores_from_checkpoint_without_recalling_evaluator() {
     block_on(async {
         let (mut graph, mut budget) = graph_and_budget();
