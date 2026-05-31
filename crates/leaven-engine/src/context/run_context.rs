@@ -461,7 +461,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             &resolved_request,
             &policy,
             cache_key.as_ref().ok(),
-        ) {
+        )? {
             return Ok(report);
         }
 
@@ -523,7 +523,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             &resolved_request,
             &policy,
             cache_key.as_ref().ok(),
-        ) {
+        )? {
             return Ok(report);
         }
 
@@ -603,8 +603,20 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         resolved_request: &ResolvedEvaluationRequest,
         policy: &CachePolicy,
         cache_key: Option<&EvaluationCacheKey>,
-    ) -> Option<EvaluationReport> {
-        let assessment_ids = self.cached_assessment_ids(policy, cache_key)?;
+    ) -> Result<Option<EvaluationReport>, RunContextError> {
+        let Some(assessment_ids) = self.cached_assessment_ids(policy, cache_key) else {
+            return Ok(None);
+        };
+        let Some(assessment_ids) = self.materialize_cached_evaluation_hit(
+            evaluator,
+            request_id,
+            resolved_request,
+            policy,
+            assessment_ids,
+        )?
+        else {
+            return Ok(None);
+        };
         let report = EvaluationReport {
             request_id,
             resolved_set: resolved_request.set.id,
@@ -613,7 +625,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             cache: CacheStatus::Hit,
         };
         self.emit_evaluation_completed(evaluator, &report);
-        Some(report)
+        Ok(Some(report))
     }
 
     fn cached_assessment_ids(
@@ -637,6 +649,179 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             return None;
         }
         Some(assessment_ids)
+    }
+
+    fn materialize_cached_evaluation_hit(
+        &mut self,
+        evaluator_id: &EvaluatorId,
+        request_id: EvaluationRequestId,
+        resolved_request: &ResolvedEvaluationRequest,
+        policy: &CachePolicy,
+        assessment_ids: Vec<AssessmentId>,
+    ) -> Result<Option<Vec<AssessmentId>>, RunContextError> {
+        let mut remapped = Vec::with_capacity(assessment_ids.len());
+        let mut recorded_alias_rows = false;
+        for assessment in assessment_ids {
+            let Some(record) = self.graph.assessments.get(&assessment) else {
+                return Err(RunContextError::Evaluation(EvaluationError::Message(
+                    format!("evaluation cache hit referenced missing assessment `{assessment}`"),
+                )));
+            };
+            let cached_request_id = record.request_id;
+            let cached_target = record.target.clone();
+            let metadata = record.metadata.clone();
+            let evidence = record.evidence.clone();
+            let Some(cached_request) = self.graph.evaluation_requests.get(&cached_request_id)
+            else {
+                return Ok(None);
+            };
+            let cached_kind = resolved_kind(&cached_request.request);
+            let Some(target) = self.remap_cached_assessment_target(
+                policy,
+                &cached_kind,
+                &resolved_request.kind,
+                &cached_target,
+            ) else {
+                return Ok(None);
+            };
+
+            if target.candidates() == cached_target.candidates() {
+                remapped.push(assessment);
+                continue;
+            }
+
+            let id = self.graph.record_assessment(
+                request_id,
+                evaluator_id.clone(),
+                target,
+                metadata,
+                evidence,
+            );
+            recorded_alias_rows = true;
+            remapped.push(id);
+        }
+        if recorded_alias_rows {
+            self.checkpoint()?;
+        }
+        Ok(Some(remapped))
+    }
+
+    fn remap_cached_assessment_target(
+        &self,
+        policy: &CachePolicy,
+        cached_kind: &ResolvedRequestKind,
+        requested_kind: &ResolvedRequestKind,
+        cached_target: &AssessmentRecordTarget,
+    ) -> Option<AssessmentRecordTarget> {
+        match (cached_kind, requested_kind, cached_target) {
+            (
+                ResolvedRequestKind::Independent {
+                    candidates: cached_candidates,
+                },
+                ResolvedRequestKind::Independent {
+                    candidates: requested_candidates,
+                },
+                AssessmentRecordTarget::Independent { candidate, target },
+            ) => {
+                let mapping =
+                    self.candidate_alias_mapping(policy, cached_candidates, requested_candidates)?;
+                let candidate = mapping.get(candidate).copied()?;
+                Some(AssessmentRecordTarget::Independent {
+                    candidate,
+                    target: target.clone(),
+                })
+            }
+            (
+                ResolvedRequestKind::Pairwise {
+                    left: cached_left,
+                    right: cached_right,
+                    order: cached_order,
+                },
+                ResolvedRequestKind::Pairwise {
+                    left: requested_left,
+                    right: requested_right,
+                    order: requested_order,
+                },
+                AssessmentRecordTarget::Pairwise {
+                    left,
+                    right,
+                    target,
+                },
+            ) => {
+                if cached_order != requested_order {
+                    return None;
+                }
+                let cached_candidates = [*cached_left, *cached_right];
+                let requested_candidates = [*requested_left, *requested_right];
+                let mapping = self.candidate_alias_mapping(
+                    policy,
+                    &cached_candidates,
+                    &requested_candidates,
+                )?;
+                let left = mapping.get(left).copied()?;
+                let right = mapping.get(right).copied()?;
+                Some(AssessmentRecordTarget::Pairwise {
+                    left,
+                    right,
+                    target: target.clone(),
+                })
+            }
+            (
+                ResolvedRequestKind::Listwise {
+                    candidates: cached_candidates,
+                },
+                ResolvedRequestKind::Listwise {
+                    candidates: requested_candidates,
+                },
+                AssessmentRecordTarget::Listwise { candidates, target },
+            ) => {
+                let mapping =
+                    self.candidate_alias_mapping(policy, cached_candidates, requested_candidates)?;
+                let candidates = candidates
+                    .iter()
+                    .map(|candidate| mapping.get(candidate).copied())
+                    .collect::<Option<Vec<_>>>()?;
+                Some(AssessmentRecordTarget::Listwise {
+                    candidates,
+                    target: target.clone(),
+                })
+            }
+            _ => None,
+        }
+    }
+
+    fn candidate_alias_mapping(
+        &self,
+        policy: &CachePolicy,
+        cached_candidates: &[CandidateId],
+        requested_candidates: &[CandidateId],
+    ) -> Option<BTreeMap<CandidateId, CandidateId>> {
+        if cached_candidates.len() != requested_candidates.len() {
+            return None;
+        }
+        let validate_identity = !matches!(policy, CachePolicy::UserKey(_) | CachePolicy::Never);
+        let mut mapping = BTreeMap::new();
+        for (cached, requested) in cached_candidates.iter().zip(requested_candidates) {
+            if validate_identity
+                && self.candidate_cache_identity(*cached)?
+                    != self.candidate_cache_identity(*requested)?
+            {
+                return None;
+            }
+            if let Some(existing) = mapping.insert(*cached, *requested)
+                && existing != *requested
+            {
+                return None;
+            }
+        }
+        Some(mapping)
+    }
+
+    fn candidate_cache_identity(&self, candidate: CandidateId) -> Option<CacheIdentity> {
+        self.graph
+            .candidates
+            .get(&candidate)
+            .and_then(|record| record.artifact.cache_identity())
     }
 
     fn evaluation_cache_key(
