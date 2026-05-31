@@ -723,14 +723,9 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
                 },
                 AssessmentRecordTarget::Independent { candidate, target },
             ) => {
-                let Some(mapping) =
-                    self.candidate_alias_mapping(policy, cached_candidates, requested_candidates)
-                else {
-                    return None;
-                };
-                let Some(candidate) = mapping.get(candidate).copied() else {
-                    return None;
-                };
+                let mapping =
+                    self.candidate_alias_mapping(policy, cached_candidates, requested_candidates)?;
+                let candidate = mapping.get(candidate).copied()?;
                 Some(AssessmentRecordTarget::Independent {
                     candidate,
                     target: target.clone(),
@@ -758,16 +753,13 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
                 }
                 let cached_candidates = [*cached_left, *cached_right];
                 let requested_candidates = [*requested_left, *requested_right];
-                let Some(mapping) =
-                    self.candidate_alias_mapping(policy, &cached_candidates, &requested_candidates)
-                else {
-                    return None;
-                };
-                let (Some(left), Some(right)) =
-                    (mapping.get(left).copied(), mapping.get(right).copied())
-                else {
-                    return None;
-                };
+                let mapping = self.candidate_alias_mapping(
+                    policy,
+                    &cached_candidates,
+                    &requested_candidates,
+                )?;
+                let left = mapping.get(left).copied()?;
+                let right = mapping.get(right).copied()?;
                 Some(AssessmentRecordTarget::Pairwise {
                     left,
                     right,
@@ -783,18 +775,12 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
                 },
                 AssessmentRecordTarget::Listwise { candidates, target },
             ) => {
-                let Some(mapping) =
-                    self.candidate_alias_mapping(policy, cached_candidates, requested_candidates)
-                else {
-                    return None;
-                };
-                let Some(candidates) = candidates
+                let mapping =
+                    self.candidate_alias_mapping(policy, cached_candidates, requested_candidates)?;
+                let candidates = candidates
                     .iter()
                     .map(|candidate| mapping.get(candidate).copied())
-                    .collect::<Option<Vec<_>>>()
-                else {
-                    return None;
-                };
+                    .collect::<Option<Vec<_>>>()?;
                 Some(AssessmentRecordTarget::Listwise {
                     candidates,
                     target: target.clone(),
