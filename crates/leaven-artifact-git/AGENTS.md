@@ -16,6 +16,11 @@ They do not execute Git commands.
   `GitAgentKitSurface`, and `GitSkillFrontmatterSurface` must stay absent until
   they implement real surface behavior with contract tests. Reusable skill
   artifact rules live in `leaven-artifact-skill`.
+- Repo-backed `AgentKit` identity uses `GitRepoArtifact` / `GitProgramArtifact`
+  revision identity from this crate, but kit slot validation (`manifest.toml`,
+  `system_prompt.md`, `AGENTS.md`, `skills/`) belongs in the AgentKit artifact
+  crate. Do not add AgentKit semantic validation, Codex profile lowering, or
+  provider mount rules here.
 - Frontier/admission decisions belong in optimizer or population crates. This
   crate may record a `frontier/*` tag ref after a strategy decides it exists,
   but it must not decide whether the candidate enters the frontier.

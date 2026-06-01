@@ -15,6 +15,11 @@ provider-specific agent protocol details.
 - A workspace checkout is not artifact identity. Readback must produce typed
   `GitProgramChange` values only after concrete revisions are imported into the
   durable store.
+- Repo-backed AgentKit materialization may compose Git program checkout with an
+  AgentKit profile projection. This crate may participate in the Git checkout
+  and typed `GitProgramChange` readback path, but Codex CLI flags, app-server
+  config, system-prompt channel lowering, and provider protocol details stay in
+  provider leaves or the AgentKit profile adapter.
 - Keep hidden/evaluator-only visibility policy outside this crate unless a
   materialization request explicitly carries it.
 - Do not mount durable bare stores into proposer workspaces as a visibility

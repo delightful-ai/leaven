@@ -364,5 +364,8 @@ Phase 5 is the hard cutover that ends the exception.
 - **This spec's status.** Written as a companion evolving layer B. May be
   promoted to formally supersede `agentic_stage_materialization.md` layer B
   after Phase 5.
-- **Composite agent kits.** Whether agent-kit materialization (harness + skills
-  + manifest) is a Phase 4 sibling or a later phase.
+- **Composite agent kits.** First slice is a repo-backed `AgentKit` view over
+  `GitProgramArtifact`, with Codex as the first materialization profile. The
+  slice includes `manifest.toml`, `system_prompt.md`, `AGENTS.md`, and
+  `skills/`. `hooks/` is scaffold only; `harness/` is optional and not required
+  for simple Codex kits.

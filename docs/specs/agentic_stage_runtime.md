@@ -125,14 +125,18 @@ Agentic optimizers will often optimize a composite artifact:
 
 ```rust
 pub struct AgentKit {
-    pub harness: HarnessArtifact,
+    pub system_prompt: Option<SystemPromptArtifact>,
+    pub harness: Option<HarnessArtifact>,
     pub skills: SkillDir,
     pub manifest: AgentManifest,
     pub agent_docs: AgentDocs,
+    pub hooks: AgentHookScaffold,
 }
 
 pub struct AgentManifest {
-    pub entrypoint: HarnessEntrypoint,
+    pub schema: AgentKitSchemaVersion,
+    pub system_prompt: Option<AgentKitPath>,
+    pub entrypoint: Option<HarnessEntrypoint>,
     pub enabled_skills: Vec<SkillId>,
     pub skill_mounts: BTreeMap<SkillId, SkillMount>,
     pub tool_policy: ToolPolicyName,
@@ -141,20 +145,42 @@ pub struct AgentManifest {
 ```
 
 This is semantic state. If the optimizer can enable a skill, change a mount,
-change the entrypoint, update `AGENTS.md`, or rewrite a harness, that value is
-part of the candidate.
+change the entrypoint, update `system_prompt.md`, update `AGENTS.md`, or
+rewrite a harness, that value is part of the candidate.
+
+For repo-backed agent kits, the durable artifact identity is the underlying
+`GitProgramArtifact` or `GitRepoArtifact` revision. `AgentKit` is the typed
+semantic view over a repo subtree, not a replacement identity. The first Codex
+profile recognizes:
+
+```text
+manifest.toml      Leaven-facing slot/profile contract
+system_prompt.md   first-class candidate prompt state
+AGENTS.md          first-class agent-facing candidate docs
+skills/            Agent Skills bank, validated through skill artifact rules
+hooks/             reserved scaffold until hook execution has typed laws/tests
+harness/           optional runnable glue; absent for simple Codex kits
+```
+
+Codex is a materialization profile over this kit. It may project `AGENTS.md` to
+the runtime root, `skills/` to `.agents/skills`, and `system_prompt.md` to the
+provider instruction channel, but those Codex paths and channels are
+operational projection, not artifact identity.
 
 An edit surface over that artifact can expose targetable parts:
 
 ```rust
 pub enum AgentKitPartId {
+    SystemPrompt,
     Harness,
     Skill(SkillId),
     Manifest,
     AgentDocs,
+    Hooks,
 }
 
 pub enum AgentKitChange {
+    SystemPrompt(SystemPromptChange),
     Harness(HarnessChange),
     Skill {
         skill: SkillId,
@@ -162,6 +188,7 @@ pub enum AgentKitChange {
     },
     Manifest(ManifestChange),
     AgentDocs(AgentDocsChange),
+    Hooks(AgentHookScaffoldChange),
     Atomic(Vec<AgentKitChange>),
 }
 ```
@@ -176,13 +203,15 @@ A materializer projects the composite artifact into a workspace ABI:
 
 ```text
 /workspace/
-  agent.toml
+  manifest.toml
+  system_prompt.md
   AGENTS.md
-  harness/
-    main.py
   skills/
-    refactor.md
-    pytest-debugging.md
+    refactor/SKILL.md
+    pytest-debugging/SKILL.md
+  hooks/                  # scaffold only until execution laws exist
+  harness/                # optional
+    main.py
   task/
     input.json
   output/
@@ -207,9 +236,13 @@ where
         ctx: MaterializeContext<'_, P>,
     ) -> Result<Metered<MaterializationReport>, MaterializeError> {
         self.write_manifest(&kit.manifest, ws, &ctx).await?;
-        self.write_harness(&kit.harness, ws, &ctx).await?;
+        self.write_system_prompt(&kit.system_prompt, ws, &ctx).await?;
+        if let Some(harness) = &kit.harness {
+            self.write_harness(harness, ws, &ctx).await?;
+        }
         self.write_skills(&kit.skills, &kit.manifest, ws, &ctx).await?;
         self.write_agent_docs(&kit.agent_docs, ws, &ctx).await?;
+        self.write_hook_scaffold(&kit.hooks, ws, &ctx).await?;
 
         Ok(Metered::new(
             MaterializationReport::default(),
