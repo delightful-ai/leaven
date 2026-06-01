@@ -3251,6 +3251,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "leaven-agentic-agent-kit"
+version = "0.0.0"
+dependencies = [
+ "leaven-artifact-agent-kit",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "leaven-agentic-git"
 version = "0.0.0"
 dependencies = [
