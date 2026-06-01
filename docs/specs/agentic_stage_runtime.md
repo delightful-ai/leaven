@@ -165,7 +165,11 @@ harness/           optional runnable glue; absent for simple Codex kits
 Codex is a materialization profile over this kit. It may project `AGENTS.md` to
 the runtime root, `skills/` to `.agents/skills`, and `system_prompt.md` to the
 provider instruction channel, but those Codex paths and channels are
-operational projection, not artifact identity.
+operational projection, not artifact identity. This is a projection contract
+until live Codex conformance proves the target surface consumes the projected
+system prompt, instructions, and skills. `hooks/` is not part of the default
+Codex projection; it remains non-executable scaffold until hook execution has
+typed laws, trust rules, and provider-specific tests.
 
 An edit surface over that artifact can expose targetable parts:
 

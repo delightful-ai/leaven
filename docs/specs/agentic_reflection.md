@@ -367,5 +367,9 @@ Phase 5 is the hard cutover that ends the exception.
 - **Composite agent kits.** First slice is a repo-backed `AgentKit` view over
   `GitProgramArtifact`, with Codex as the first materialization profile. The
   slice includes `manifest.toml`, `system_prompt.md`, `AGENTS.md`, and
-  `skills/`. `hooks/` is scaffold only; `harness/` is optional and not required
-  for simple Codex kits.
+  `skills/`. This proves deterministic Codex workspace projection, not live
+  Codex consumption; promotion to an ordinary default route requires the opt-in
+  live Codex conformance gate for the target surface to prove consumption of
+  the projected system prompt, `AGENTS.md`, and skills. `hooks/` is scaffold
+  only and is not materialized by the default Codex profile; `harness/` is
+  optional and not required for simple Codex kits.

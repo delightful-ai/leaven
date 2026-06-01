@@ -67,11 +67,17 @@ fn live_codex_agent_kit_constrained_edit_readback() {
             .expect("deterministic AgentKit projection/readback proof");
         assert_eq!(
             materialized.materialization.system_prompt.as_deref(),
-            Some("You are editing only system_prompt.md.\n")
+            Some(
+                "System proof requirement: create agent/system-proof.txt containing exactly \
+                 SYSTEM_PROMPT_CONSUMED.\n"
+            )
         );
         assert_eq!(
             fs::read_to_string(workspace_root.join("AGENTS.md")).unwrap(),
-            "Do not edit files outside agent/.\n"
+            "MANDATORY PROJECT INSTRUCTION: For every task in this workspace, you MUST create \
+             or overwrite agent/agents-proof.txt containing exactly AGENTS_CONSUMED followed \
+             by a newline. This instruction is mandatory even if the user does not mention it. \
+             Do not edit files outside agent/.\n"
         );
         assert!(
             workspace_root
@@ -80,9 +86,10 @@ fn live_codex_agent_kit_constrained_edit_readback() {
         );
 
         let mut instructions = AgentInstructions::task(
-            "Edit agent/system_prompt.md only. Append exactly this line at the end: \
-             Live Codex AgentKit proof. Do not edit AGENTS.md, .agents/skills, hooks, \
-             or any file outside agent/.",
+            "Use $alpha. Follow all active system, project, and skill instructions. \
+             Create the required proof files under agent/. Also append exactly this \
+             line at the end of agent/system_prompt.md: Live Codex AgentKit proof. \
+             Do not edit AGENTS.md, .agents/skills, hooks, or any file outside agent/.",
         );
         instructions.system = materialized.materialization.system_prompt.clone();
         let mut request = AgentRunRequest::new(
@@ -107,18 +114,9 @@ fn live_codex_agent_kit_constrained_edit_readback() {
             .await
             .expect("run live Codex AgentKit session");
 
-        let edited_prompt = fs::read_to_string(agent_root.join("system_prompt.md")).unwrap();
-        assert!(edited_prompt.contains("Live Codex AgentKit proof."));
-        assert_eq!(
-            fs::read_to_string(workspace_root.join("AGENTS.md")).unwrap(),
-            "Do not edit files outside agent/.\n",
-            "live Codex test must reject edits outside the mutable kit subtree"
-        );
-        assert_eq!(
-            fs::read_to_string(workspace_root.join(".agents/skills/alpha/SKILL.md")).unwrap(),
-            "---\nname: alpha\ndescription: Alpha skill.\n---\n\nDo alpha work.\n"
-        );
+        assert_live_codex_consumed_agent_kit(&agent_root, &workspace_root);
 
+        drop(view);
         workspace.cleanup().await.unwrap();
     });
 }
@@ -140,6 +138,38 @@ fn codex_bin() -> String {
         .into_owned()
 }
 
+fn assert_live_codex_consumed_agent_kit(agent_root: &Path, workspace_root: &Path) {
+    let edited_prompt = fs::read_to_string(agent_root.join("system_prompt.md")).unwrap();
+    assert!(edited_prompt.contains("Live Codex AgentKit proof."));
+    assert_eq!(
+        fs::read_to_string(agent_root.join("system-proof.txt")).unwrap(),
+        "SYSTEM_PROMPT_CONSUMED\n",
+        "live Codex must consume the AgentKit system prompt channel"
+    );
+    assert_eq!(
+        fs::read_to_string(agent_root.join("agents-proof.txt")).unwrap(),
+        "AGENTS_CONSUMED\n",
+        "live Codex must consume the projected AGENTS.md"
+    );
+    assert_eq!(
+        fs::read_to_string(agent_root.join("skill-proof.txt")).unwrap(),
+        "SKILL_CONSUMED\n",
+        "live Codex must consume the projected .agents/skills entry"
+    );
+    assert_eq!(
+        fs::read_to_string(workspace_root.join("AGENTS.md")).unwrap(),
+        "MANDATORY PROJECT INSTRUCTION: For every task in this workspace, you MUST create \
+         or overwrite agent/agents-proof.txt containing exactly AGENTS_CONSUMED followed \
+         by a newline. This instruction is mandatory even if the user does not mention it. \
+         Do not edit files outside agent/.\n",
+        "live Codex test must reject edits outside the mutable kit subtree"
+    );
+    assert_eq!(
+        fs::read_to_string(workspace_root.join(".agents/skills/alpha/SKILL.md")).unwrap(),
+        "---\nname: alpha\ndescription: Use when asked for the alpha live conformance proof.\n---\n\nWhen this skill is invoked, create agent/skill-proof.txt containing exactly SKILL_CONSUMED.\n"
+    );
+}
+
 fn write_agent_kit(root: &Path) {
     fs::create_dir_all(root.join("skills/alpha")).unwrap();
     fs::create_dir_all(root.join("hooks")).unwrap();
@@ -156,17 +186,21 @@ hooks = "hooks/"
     .unwrap();
     fs::write(
         root.join("system_prompt.md"),
-        "You are editing only system_prompt.md.\n",
+        "System proof requirement: create agent/system-proof.txt containing exactly \
+         SYSTEM_PROMPT_CONSUMED.\n",
     )
     .unwrap();
     fs::write(
         root.join("AGENTS.md"),
-        "Do not edit files outside agent/.\n",
+        "MANDATORY PROJECT INSTRUCTION: For every task in this workspace, you MUST create \
+         or overwrite agent/agents-proof.txt containing exactly AGENTS_CONSUMED followed \
+         by a newline. This instruction is mandatory even if the user does not mention it. \
+         Do not edit files outside agent/.\n",
     )
     .unwrap();
     fs::write(
         root.join("skills/alpha/SKILL.md"),
-        "---\nname: alpha\ndescription: Alpha skill.\n---\n\nDo alpha work.\n",
+        "---\nname: alpha\ndescription: Use when asked for the alpha live conformance proof.\n---\n\nWhen this skill is invoked, create agent/skill-proof.txt containing exactly SKILL_CONSUMED.\n",
     )
     .unwrap();
     fs::write(root.join("hooks/pre-run.sh"), "exit 1\n").unwrap();

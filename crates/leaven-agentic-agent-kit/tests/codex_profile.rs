@@ -30,6 +30,10 @@ fn materializes_codex_profile_from_repo_subtree() {
             .iter()
             .all(|mount| mount.applied == AgentKitMountApplied::Copy)
     );
+    assert!(
+        !workspace.join("hooks/pre-run.sh").exists(),
+        "Codex AgentKit projection must not materialize hook scaffold by default"
+    );
 }
 
 #[test]
@@ -57,6 +61,7 @@ fn symlink_preferred_falls_back_to_copy_and_records_it() {
 
 fn write_agent_kit(root: &Path) {
     fs::create_dir_all(root.join("skills/alpha")).unwrap();
+    fs::create_dir_all(root.join("hooks")).unwrap();
     fs::write(
         root.join("manifest.toml"),
         r#"
@@ -64,6 +69,7 @@ schema = "v1"
 system_prompt = "system_prompt.md"
 agent_docs = "AGENTS.md"
 skills = "skills/"
+hooks = "hooks/"
 "#,
     )
     .unwrap();
@@ -74,4 +80,5 @@ skills = "skills/"
         "---\nname: alpha\ndescription: Alpha skill.\n---\n\nDo alpha work.\n",
     )
     .unwrap();
+    fs::write(root.join("hooks/pre-run.sh"), "exit 1\n").unwrap();
 }
