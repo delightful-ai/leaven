@@ -24,6 +24,7 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "crates/leaven-eval-parquet",
     "crates/leaven-evidence",
     "crates/leaven-gepa",
+    "crates/leaven-gepa-agentic-agent-kit",
     "crates/leaven-gepa-agentic-git",
     "crates/leaven-gepa-agentic-skill",
     "crates/leaven-kernel",
@@ -80,6 +81,7 @@ const EXPECTED_CRATES: &[&str] = &[
     "leaven-eval-parquet",
     "leaven-evidence",
     "leaven-gepa",
+    "leaven-gepa-agentic-agent-kit",
     "leaven-gepa-agentic-git",
     "leaven-gepa-agentic-skill",
     "leaven-kernel",
@@ -249,6 +251,16 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-population",
             "leaven-stage",
             "leaven-surface",
+        ],
+    ),
+    (
+        "leaven-gepa-agentic-agent-kit",
+        &[
+            "leaven-agentic-agent-kit",
+            "leaven-artifact-agent-kit",
+            "leaven-artifact-git",
+            "leaven-core",
+            "leaven-gepa",
         ],
     ),
     (

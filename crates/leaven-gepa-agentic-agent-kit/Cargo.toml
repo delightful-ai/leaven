@@ -1,0 +1,27 @@
+[package]
+name = "leaven-gepa-agentic-agent-kit"
+description = "GEPA bridge smoke for repo-backed AgentKit reflection."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+leaven-agentic-agent-kit = { workspace = true }
+leaven-artifact-agent-kit = { workspace = true }
+leaven-artifact-git = { workspace = true }
+leaven-core = { workspace = true }
+leaven-gepa = { workspace = true }
+
+thiserror = { workspace = true }
+
+[dev-dependencies]
+futures = { workspace = true }
+leaven-engine = { workspace = true }
+leaven-evidence = { workspace = true }
+leaven-kernel = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
