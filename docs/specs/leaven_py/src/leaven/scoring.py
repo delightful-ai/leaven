@@ -1,7 +1,7 @@
 """Built-in scoring helpers — common math users would otherwise rewrite.
 
-Use directly (`lv.scoring.exact_match(...)`) or compose into your own scorer.
-Not a complete catalog; user scorers can do anything via `@lv.scorer`.
+Use directly (`lv.scoring.exact_match(...)`) or compose into a `@lv.reward`.
+Not a complete catalog; rewards can do anything via `@lv.reward`.
 """
 
 from __future__ import annotations

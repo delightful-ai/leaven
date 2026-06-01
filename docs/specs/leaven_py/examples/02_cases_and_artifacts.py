@@ -58,19 +58,30 @@ def main() -> None:
     print("fixture path :", FIXTURE)
     print("fixture lines:", sum(1 for _ in FIXTURE.open()))
 
-    # train = lv.cases.from_jsonl(str(FIXTURE), name="arithmetic-train", limit=6)
-    # val   = lv.cases.from_jsonl(str(FIXTURE), name="arithmetic-val", limit=2)
-    # splits = lv.cases.splits(train=train, val=val)
+    # cases = lv.cases.from_jsonl(str(FIXTURE), name="arithmetic", limit=8)
+    # The engine reads train/val/test from each Case's `split` tag — there is
+    # no separate `train=`/`val=` argument. Loaders carry the tag through from
+    # the source rows; hand-built cases set it directly (below).
 
-    # Manual construction (works today; no loader involved).
-    case = lv.Case(
-        id="ar-demo",
+    # Manual construction (works today; no loader involved). `split=` is the tag
+    # the engine reads when it lowers a `Task` into train/val/test sets.
+    train_case = lv.Case(
+        id="ar-train",
         input={"question": "2 + 3"},
         target={"answer": "5"},
         metadata={"difficulty": "trivial"},
+        split="train",
+    )
+    val_case = lv.Case(
+        id="ar-val",
+        input={"question": "7 + 6"},
+        target={"answer": "13"},
+        metadata={"difficulty": "trivial"},
+        split="val",
     )
     print()
-    print("hand-built case:", case.id, "/", case.input, "→", case.target)
+    print("hand-built train case:", train_case.id, "/", train_case.input, "→", train_case.target, f"[{train_case.split}]")
+    print("hand-built val case  :", val_case.id, "/", val_case.input, "→", val_case.target, f"[{val_case.split}]")
 
 
 if __name__ == "__main__":

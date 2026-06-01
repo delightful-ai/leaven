@@ -3,7 +3,9 @@
 `lv.runtime(...)` bundles workspace + LM(s) + agent(s) + sandbox + trust
 profile + budget + cache into a single value passed to `lv.optimize(...)`.
 
-This file shows every slot the runtime accepts. It does not run an
+This file shows every slot the runtime accepts, then composes a minimal
+`lv.optimize(seed=..., environment=..., optimizer=..., runtime=...)` so the
+runtime's place in the front door is visible. It does not run an
 optimization — just composes the typed config and prints its shape.
 """
 
@@ -13,7 +15,7 @@ import leaven as lv
 
 
 def main() -> None:
-    # Minimal: one LM, default sandbox, default cache, trusted local profile.
+    # Minimal: one mock LM, default sandbox, default cache, trusted local profile.
     minimal = lv.runtime.local(budget=lv.budget(usd=10))
     print("minimal:", minimal.trust_profile, "/ budget:", minimal.budget)
 
@@ -44,6 +46,23 @@ def main() -> None:
     print("  trust     :", runtime.trust_profile.value)
     print("  budget    :", runtime.budget)
     print("  cache     :", runtime.cache_config.backend if runtime.cache_config else "(engine default)")
+
+    # Where the runtime lands: the fourth argument to `lv.optimize(...)`, beside
+    # the seed artifact, the environment (task + rollout + rubric), and the
+    # optimizer. The runtime supplies execution, budget, and trust; it owns no
+    # task or scoring semantics.
+    builder = lv.optimize(
+        seed=lv.PromptArtifact(template="Answer: {question}\nA:"),
+        environment=lv.Environment(
+            task=lv.Task(cases=[]),
+            rollout=lv.Rollout.agent(),
+            rubric=lv.Rubric([]),
+        ),
+        optimizer=lv.optimizers.gepa(population_size=4),
+        runtime=minimal,
+    )
+    print()
+    print("composed builder runtime trust:", builder.runtime.trust_profile.value)
 
 
 if __name__ == "__main__":

@@ -1,9 +1,10 @@
-"""Composable stage objects for `lv.evolve(...)`.
+"""Composable stage objects for the optimization surface.
 
-Decorators remain useful for authoring Python stage functions, but the high-level
-surface composes explicit, swappable stage objects. This mirrors FlashEvolve's
-stage composition while lowering into Leaven's evaluator/proposer/assessment
-machinery.
+`Rollout` is how the current artifact runs on a case (used by `Environment`).
+`Reflect` and `Propose` are the optimizer's outer-loop stage overrides. Scoring
+is authored with `@lv.reward` (a `Rubric`), not a stage object. Decorators
+remain the authoring sugar for the function-backed forms (`Rollout.fn`,
+`Reflect.fn`, `Propose.fn`).
 """
 
 from __future__ import annotations
@@ -78,7 +79,7 @@ class Rollout(BaseModel):
 
 
 class Reflect(BaseModel):
-    """Reflection stage configuration."""
+    """Reflection stage configuration (optimizer outer-loop override)."""
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid")
 
@@ -96,22 +97,8 @@ class Reflect(BaseModel):
         return cls(kind="default_gepa")
 
 
-class ScoreStage(BaseModel):
-    """How to score one rollout result for one case."""
-
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid")
-
-    kind: Literal["function"]
-    stage: RegisteredStage[Any, Any]
-
-    @classmethod
-    def fn(cls, stage: RegisteredStage[Any, Any]) -> ScoreStage:
-        """Use a registered `@lv.scorer` stage."""
-        return cls(kind="function", stage=stage)
-
-
 class Propose(BaseModel):
-    """Proposal stage configuration."""
+    """Proposal stage configuration (optimizer outer-loop override)."""
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid")
 
@@ -136,44 +123,4 @@ class Propose(BaseModel):
         return cls(kind="agent_edit", agent_config=agent, layout=layout or edit_artifact())
 
 
-class Evaluate(BaseModel):
-    """Evaluation stage configuration."""
-
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid")
-
-    kind: Literal["function", "pipeline"]
-    stage: RegisteredStage[Any, Any] | None = None
-    rollout_stage: Rollout | None = None
-    score_stage: ScoreStage | None = None
-    split: str = "val"
-
-    @classmethod
-    def fn(cls, stage: RegisteredStage[Any, Any]) -> Evaluate:
-        """Use a registered `@lv.evaluator` stage."""
-        return cls(kind="function", stage=stage)
-
-    @classmethod
-    def pipeline(
-        cls,
-        *,
-        rollout: Rollout,
-        score: ScoreStage,
-        split: str = "val",
-    ) -> Evaluate:
-        """Evaluate candidates by running a rollout and then a score stage."""
-        return cls(kind="pipeline", rollout_stage=rollout, score_stage=score, split=split)
-
-
-class Stages(BaseModel):
-    """The swappable stage composition for an evolution run."""
-
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid")
-
-    rollout: Rollout
-    score: ScoreStage
-    reflect: Reflect | None = None
-    propose: Propose | None = None
-    evaluate: Evaluate
-
-
-__all__ = ["Evaluate", "Propose", "Reflect", "Rollout", "ScoreStage", "Stages"]
+__all__ = ["Propose", "Reflect", "Rollout"]

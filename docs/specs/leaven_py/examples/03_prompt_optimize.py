@@ -1,10 +1,12 @@
 """Example 03 — the canonical minimal sketch.
 
-The smallest meaningful Leaven program: optimize a prompt for an
-arithmetic QA task with GEPA against a local runtime with a mock LM.
+The smallest meaningful Leaven program: optimize a prompt for an arithmetic
+QA task with GEPA, exact-match scored, against a local runtime with a mock LM.
 
-~25 lines of user code; everything else is composition of typed configs.
-This is the 200-line-target's lower bound: trivial problems write tiny.
+The whole program is `seed x Environment(task, rollout, rubric) x optimizer x
+runtime`. The rollout is target-FREE (`InputCaseView` has no `.target`); the
+rubric reads the target (`ScoringCaseView`). Everything else is composition of
+typed configs — trivial problems write tiny.
 """
 
 from __future__ import annotations
@@ -18,46 +20,41 @@ HERE = Path(__file__).parent
 FIXTURE = HERE / "fixtures" / "arithmetic.jsonl"
 
 
-# ---- Stage bodies the user writes -----------------------------------------
-
-
+# ----- rollout: how the current artifact runs on one case -------------------
+# `Rollout.fn` wraps a plain async runner. The rollout `cx` is TARGET-FREE: it
+# sees `case.input`, can drive `cx.lm` / `cx.agent` / `cx.sandbox`, but `case`
+# is an `InputCaseView` — it has no `.target` attribute at all (structural).
 @lv.runner
-async def run(
-    prompt: lv.PromptArtifact,
-    case: lv.Case,
-    cx,
-) -> str:
-    response = await cx.lm.complete(
-        prompt=prompt.template.format(**case.input),
-        max_tokens=64,
-    )
-    return response.text.strip()
+async def run(prompt: lv.PromptArtifact, case: lv.InputCaseView, cx: lv.RolloutContext) -> str:
+    reply = await cx.lm.complete(prompt=prompt.template.format(**case.input), max_tokens=64)
+    return reply.text.strip()
 
 
-@lv.scorer
-async def score(output: str, case: lv.Case, cx) -> lv.Score:
-    return lv.Score.exact_match(output, (case.target or {})["answer"])
+# ----- rubric: how the rollout's output scores ------------------------------
+# `@lv.reward` is the authoring sugar; `Rubric([...])` collects rewards. The
+# rubric `cx` is scorer-role: `case` is a `ScoringCaseView`, so `case.target`
+# is readable here (gated + receipted under the hood).
+@lv.reward
+async def exact(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
+    return 1.0 if output == (case.target or {})["answer"] else 0.0
 
 
-# ---- Composition ----------------------------------------------------------
-
-
+# ----- composition ----------------------------------------------------------
 async def amain() -> None:
-    pipeline = lv.optimize(
+    result = await lv.optimize(
         seed=lv.PromptArtifact(template="Answer: {question}\nA:"),
-        train=lv.cases.from_jsonl(str(FIXTURE), name="train", limit=6),
-        val=lv.cases.from_jsonl(str(FIXTURE), name="val", limit=2),
+        environment=lv.Environment(
+            task=lv.Task(cases=lv.cases.from_jsonl(str(FIXTURE), limit=8).cases),
+            rollout=lv.Rollout.fn(run),
+            rubric=lv.Rubric([exact]),
+        ),
         optimizer=lv.optimizers.gepa(population_size=8),
         runtime=lv.runtime.local(budget=lv.budget(usd=20)),
-        runner=run,
-        scorer=score,
-    )
+    ).run()
 
-    # `.run()` raises NotImplementedError in the scaffold — once the engine
-    # is wired, this returns an `Optimized[PromptArtifact]` typed result.
-    print("pipeline composed; .run() awaiting engine wiring.")
-    print("  optimizer :", pipeline.optimizer)  # type: ignore[attr-defined]
-    print("  train     :", pipeline.train)       # type: ignore[attr-defined]
+    # `.run()` raises NotImplementedError in the scaffold; once the engine is
+    # wired, `result.best.artifact` is a fully-typed `PromptArtifact`.
+    print(result.best.artifact.template)
 
 
 if __name__ == "__main__":

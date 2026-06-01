@@ -1,20 +1,21 @@
 """Example 07 — standalone Python worker the engine spawns over ACP stdio.
 
-Stages can compose into an in-process `lv.optimize(...)` call OR run as
-standalone Python scripts the engine reaches over ACP stdio JSON-RPC.
-The decorator + function shape is IDENTICAL in both cases.
+A decorated stage (here a `@lv.judge`) can compose into an in-process
+`lv.optimize(...)` call OR run as a standalone Python script the engine reaches
+over ACP stdio JSON-RPC. The decorator + function shape is IDENTICAL in both
+cases.
 
 Standalone usage looks like:
 
     if __name__ == "__main__":
-        lv.serve_stage(my_scorer)
+        lv.serve_stage(my_judge)
 
 The engine spawns this file with `LEAVEN_CAPABILITY_TOKEN`,
 `LEAVEN_ENDPOINT`, and `LEAVEN_CAPABILITY_FINGERPRINT` env vars per the
 locked ACP profile. `lv.serve_stage(...)` reads them, opens the ACP
 loop, and dispatches stage calls until the session terminates.
 
-This pattern is how third-party scorers / judges / reflectors ship — one
+This pattern is how third-party judges / reflectors / proposers ship — one
 script, one decorator, one `serve_stage` call.
 """
 
@@ -24,7 +25,6 @@ from pydantic import BaseModel, Field
 
 import leaven as lv
 from leaven.assessment import AssessmentWrite
-from leaven.context import StageContext
 from leaven.evidence import EvidenceEnvelope
 from leaven.stage_payloads import JudgeRequest
 
@@ -38,7 +38,7 @@ class JudgeOutcome(BaseModel):
     stage_id="examples/llm-pairwise-judge",
     trust_profile=lv.TrustProfile.PACKAGE_SCORER,
 )
-async def judge(req: JudgeRequest, cx: StageContext) -> AssessmentWrite:
+async def judge(req: JudgeRequest, cx: lv.JudgeContext) -> AssessmentWrite:
     case = await cx.case.load(req.case_id, include=("input", "target"))
 
     response = await cx.lm.complete(

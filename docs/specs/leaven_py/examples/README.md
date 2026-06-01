@@ -1,6 +1,6 @@
 # Examples
 
-Ten runnable example scripts that show the full Leaven Python surface.
+Nine runnable example scripts that show the full Leaven Python surface.
 Every example is composable Python that imports cleanly, typechecks under
 `ty`, and prints something illustrative. Bodies that would normally hit
 the engine raise `NotImplementedError` (caught and printed as `(expected)`)
@@ -13,7 +13,7 @@ From `docs/specs/leaven_py/`:
 ```bash
 uv sync                           # one-time
 uv run python examples/01_runtime.py
-just examples                     # run all eight in order
+just examples                     # run all nine in order
 just example 03                   # run just one (by number prefix)
 ```
 
@@ -21,20 +21,19 @@ just example 03                   # run just one (by number prefix)
 
 | # | File | Shows |
 |---|------|-------|
-| 01 | `01_runtime.py` | Every slot `lv.runtime(...)` accepts: workspace, multi-role LMs, multi-role agents, sandbox, trust profile, budget, cache. |
-| 02 | `02_cases_and_artifacts.py` | `lv.PromptArtifact`, `lv.SkillBank` + skill files, JSONL case loader call shape, hand-built `lv.Case`. |
-| 03 | `03_prompt_optimize.py` | **The canonical minimal sketch** — 25-line `@lv.runner` + `@lv.scorer` + `lv.optimize(...).run()` shape against arithmetic fixtures. |
-| 04 | `04_evoskill_skill_bank.py` | **The canonical big sketch** — GEPA + workspace materialize + agent run + skill bank, EvoSkill-class shape in ~80 lines. |
-| 05 | `05_evaluator_with_judge.py` | Rich `@lv.evaluator` body — `cx.case.load`, `cx.batch()` for fan-out, `cx.agent.run` with `lv.output.json_schema(...)`, assessment + public/private evidence. |
-| 06 | `06_reflect_propose_custom.py` | Custom `@lv.reflector` + `@lv.proposer` overriding GEPA defaults — the load-bearing reflection/proposal stage split. |
-| 07 | `07_serve_stage_worker.py` | Standalone Python worker — `lv.serve_stage(my_judge)` script the engine spawns over ACP stdio. Same decorator shape as in-process. |
+| 01 | `01_runtime.py` | Every slot `lv.runtime(...)` accepts: workspace, multi-role LMs, multi-role agents, sandbox, trust profile, budget, cache; then a minimal `lv.optimize(...)` compose showing where the runtime lands. |
+| 02 | `02_cases_and_artifacts.py` | `lv.PromptArtifact`, `lv.SkillBank` + skill files, JSONL case loader call shape, hand-built `lv.Case` with `split=` tags. |
+| 03 | `03_prompt_optimize.py` | **The canonical minimal sketch** — `Rollout.fn(run)` + `Rubric([exact])` + `lv.optimize(environment=...).run()`, typed `InputCaseView`/`RolloutContext` (target-free) and `ScoringCaseView`/`RubricContext`. |
+| 04 | `04_evoskill_skill_bank.py` | **The canonical big sketch** — `Rollout.agent()` + multi-reward `Rubric` + `gepa(propose=Propose.agent_edit(...))` over a SkillBank, EvoSkill-class shape with no runner body. |
+| 05 | `05_evaluator_with_judge.py` | **Advanced seam** — rich `@lv.evaluator` body (`cx.case.load`, `cx.batch()` fan-out, `cx.agent.run` with `lv.output.json_schema(...)`, public/private evidence). Ordinary scoring is a `Rubric`; reach here only when it isn't enough. |
+| 06 | `06_reflect_propose_custom.py` | Custom `@lv.reflector` + `@lv.proposer` attached via `gepa(reflect=Reflect.fn(...), propose=Propose.fn(...))` — the load-bearing reflection/proposal stage split, typed `ReflectContext`/`ProposeContext`. |
+| 07 | `07_serve_stage_worker.py` | Standalone Python worker — `lv.serve_stage(my_judge)` script the engine spawns over ACP stdio. Same `@lv.judge` decorator shape as in-process, typed `JudgeContext`. |
 | 08 | `08_dspy_dropin.py` | `dspy.configure(lm=lv.x.dspy.LeavenDSPyLM(...))` — existing DSPy modules unmodified through Leaven's LM seam. |
-| 09 | `09_full_repro.py` | **The big repro sketch** — all 6 stage roles in one file (runner + scorer + reflector + proposer + judge + evaluator), multi-LM runtime, EvoSkill-shaped composition. Stress-tests the full surface. |
-| 10 | `10_stage_composition.py` | **The new surface direction** — `Artifact x Task x Stages x Runtime` with explicit, swappable stage objects. |
+| 09 | `09_full_repro.py` | **The front-door showcase** — every product role on the new surface: `Rollout.agent()` + multi-reward `Rubric` in the `Environment`; `gepa(reflect=, propose=, judge=, objective=)` outer loop with a multi-LM runtime. |
 
 ## Fixtures
 
-`fixtures/arithmetic.jsonl` — 8 trivial-to-medium arithmetic QA cases used by examples 03, 04, 06. Each line is one `{id, input, target, metadata}` record matching the JSONL loader's default fields.
+`fixtures/arithmetic.jsonl` — 8 trivial-to-medium arithmetic QA cases used by examples 03, 04, 06, 09. Each line is one `{id, input, target, metadata}` record matching the JSONL loader's default fields.
 
 ## What this is not
 

@@ -56,7 +56,7 @@ class _CacheNamespace:
 
 
 class Runtime(BaseModel):
-    """A composed runtime. Pass to `lv.evolve(runtime=...)`."""
+    """A composed runtime. Pass to `lv.optimize(runtime=...)`."""
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid")
 

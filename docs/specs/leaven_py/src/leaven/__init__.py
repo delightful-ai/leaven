@@ -59,11 +59,9 @@ from .decorators import (
     reflector,
     register_stage,
     runner,
-    scorer,
     serve_stage,
 )
 from .environment import Environment
-from .evolution import EvolutionBuilder, evolve
 from .optimize import OptimizeBuilder, optimize
 
 # ----- Result + inspection -------------------------------------------------
@@ -71,7 +69,7 @@ from .result import Candidate, Optimized, ReplayResult, RunSummary, Split
 from .rubric import RewardValue, Rubric, reward
 from .runtime import Cache, Runtime, runtime
 from .score import Score
-from .stages import Evaluate, Propose, Reflect, Rollout, ScoreStage, Stages
+from .stages import Propose, Reflect, Rollout
 from .task import Task
 
 # ----- Trust profile constants ---------------------------------------------
@@ -100,8 +98,8 @@ roles = AgentRoles
 # Deleting them would remove the function, not just the module attribute.
 for _leaky in (
     "agent_instructions", "assessment", "builders",
-    "case", "context", "contexts", "decorators", "evaluation_job",
-    "environment", "evidence", "evolution", "output_record", "proposal", "result",
+    "case", "contexts", "decorators", "evaluation_job",
+    "environment", "evidence", "output_record", "proposal", "result",
     "rubric", "score", "stage_payloads", "stages", "task",
 ):
     if _leaky in globals():
@@ -119,9 +117,7 @@ __all__ = [
     "CaseSet",
     "CaseSplits",
     "Environment",
-    "Evaluate",
     "EvaluatorContext",
-    "EvolutionBuilder",
     "InputCaseView",
     "JudgeContext",
     "OptimizeBuilder",
@@ -140,12 +136,10 @@ __all__ = [
     "RunSummary",
     "Runtime",
     "Score",
-    "ScoreStage",
     "ScoringCaseView",
     "SkillBank",
     "SkillFile",
     "Split",
-    "Stages",
     "Task",
     "TrustProfile",
     # versioning
@@ -163,7 +157,6 @@ __all__ = [
     "dspy_context",
     # decorators + stage registration
     "evaluator",
-    "evolve",
     "frontier",
     "judge",
     "layouts",
@@ -180,7 +173,6 @@ __all__ = [
     "runs",
     "runtime",
     "sandbox",
-    "scorer",
     "scoring",
     "serve_stage",
     "setup",

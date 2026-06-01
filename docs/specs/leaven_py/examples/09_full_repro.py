@@ -1,15 +1,18 @@
-"""Example 09 — full EvoSkill-shaped repro exercising all 6 stage roles.
+"""Example 09 — full front-door showcase across every product role.
 
-The big sketch. A real user writing a paper-shaped optimization would put
-this in one file (or a thin orchestration file referencing modules per
-stage). Every stage role gets exercised: runner, scorer, reflector,
-proposer, judge, evaluator. Plus inspection.
+The big sketch. A real user writing a paper-shaped optimization would put this
+in one file (or a thin orchestration file referencing modules per stage). It
+exercises every role the front door exposes on the new surface:
 
-This file does not call `.run()` — bodies that would hit the engine raise
-NotImplementedError and the example catches them. The point is the SHAPE
-firing taste; not running an optimization end-to-end.
+- the inner loop as an `Environment`: `Rollout.agent()` + a multi-reward `Rubric`
+- the outer loop on the optimizer: a custom reflector, a custom proposer, and an
+  optional pairwise judge, attached via `gepa(reflect=, propose=, judge=, ...)`
 
-Spec: docs/specs/leaven_python.md "The Python authoring surface".
+Scoring here is a `Rubric` of `@lv.reward` functions — the ordinary path. The
+hand-authored `@lv.evaluator` escape hatch is a separate, advanced surface; see
+example 05 for that. This file does not call `.run()` to completion — bodies
+that would hit the engine raise NotImplementedError and the example catches it.
+The point is the SHAPE firing taste, not running an optimization end-to-end.
 """
 
 from __future__ import annotations
@@ -17,13 +20,8 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from pydantic import BaseModel, Field
-
 import leaven as lv
 from leaven.assessment import AssessmentWrite
-from leaven.builders.assessments import AssessmentSubmission
-from leaven.context import EvalContext, StageContext
-from leaven.evaluation_job import EvaluationJob
 from leaven.evidence import EvidenceEnvelope
 from leaven.proposal import ProposalBatch
 from leaven.stage_payloads import (
@@ -38,61 +36,28 @@ HERE = Path(__file__).parent
 FIXTURE = HERE / "fixtures" / "arithmetic.jsonl"
 
 
-# ----- Typed JSON-schema outputs the agent + judge return ------------------
+# ----- inner loop: rubric — a weighted reward vector ------------------------
 
 
-class SkillBuilderProposal(BaseModel):
-    """Structured output from the skill-builder agent."""
-
-    rationale: str
-    files: list[dict[str, str]] = Field(default_factory=list)
-
-
-class PairwiseJudgment(BaseModel):
-    """Structured judgment between two candidates."""
-
-    preferred_candidate: str
-    confidence: float = Field(ge=0.0, le=1.0)
-    reasoning: str
-
-
-# ----- Stage 1: runner — execute candidate against case ---------------------
-
-
-@lv.runner
-async def run(bank: lv.SkillBank, case: lv.Case, cx) -> str:
-    """Materialize the skill bank into a workspace, run an agent, return output."""
-    ws = await cx.workspace.materialize_candidate(
-        cx.candidate_id, surface="full_repo", lifetime="stage_call",
-    )
-    await cx.workspace.write_skills(ws, bank)
-    session = await cx.agent.run(
-        workspace=ws,
-        instructions=lv.AgentInstructions(
-            task=case.input["question"],
-        ),
-        timeout_s=240,
-    )
-    return (session.final_message or "").strip()
-
-
-# ----- Stage 2: scorer — produce a Score from output + case -----------------
-
-
-@lv.scorer
-async def score(output: str, case: lv.Case, cx) -> lv.Score:
+@lv.reward(weight=1.0)
+async def correct(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> lv.RewardValue:
     target = (case.target or {}).get("answer", "")
-    return lv.Score(
+    return lv.RewardValue(
         value=lv.scoring.multi_tolerance(output, target),
         feedback=f"candidate answered {output!r}; target was {target!r}",
     )
 
 
-# ----- Stage 3: reflector — produce a typed diagnosis from failing examples -
+@lv.reward(weight=0.3)
+async def shows_work(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
+    return 1.0 if "=" in str(output) else 0.0
+
+
+# ----- outer loop: reflector — typed diagnosis from failing examples --------
 
 
 @lv.reflector(stage_id="examples/09-reflector")
-async def reflect(req: ReflectRequest, cx: StageContext) -> ReflectionResult:
+async def reflect(req: ReflectRequest, cx: lv.ReflectContext) -> ReflectionResult:
     failing = [ex for ex in req.examples if (ex.score or 0.0) < 0.5]
     summary = ", ".join(f"{ex.case_id}={ex.score:.2f}" for ex in failing[:8])
     diagnostic = await cx.lm.complete(
@@ -112,11 +77,11 @@ async def reflect(req: ReflectRequest, cx: StageContext) -> ReflectionResult:
     )
 
 
-# ----- Stage 4: proposer — emit a typed change batch from a reflection ------
+# ----- outer loop: proposer — typed change batch from a reflection ----------
 
 
 @lv.proposer(stage_id="examples/09-proposer", repair_attempts=2)
-async def propose(req: ProposeRequest, cx: StageContext) -> ProposalBatch:
+async def propose(req: ProposeRequest, cx: lv.ProposeContext) -> ProposalBatch:
     ws = await cx.workspace.materialize_candidate(
         req.parent_candidate_id, surface="skills_only", lifetime="stage_call",
     )
@@ -127,17 +92,16 @@ async def propose(req: ProposeRequest, cx: StageContext) -> ProposalBatch:
             task="Propose a typed skill-bank change addressing REFLECTION.md.",
             system=lv.roles.SKILL_PROPOSER,
         ),
-        output=lv.output.json_schema(SkillBuilderProposal),
         timeout_s=180,
     )
     return ProposalBatch.from_skill_proposal(session.parsed)
 
 
-# ----- Stage 5: judge — pairwise preference between two candidates ---------
+# ----- outer loop: judge — pairwise preference between two candidates -------
 
 
 @lv.judge(stage_id="examples/09-pairwise-judge")
-async def judge(req: JudgeRequest, cx: StageContext) -> AssessmentWrite:
+async def judge(req: JudgeRequest, cx: lv.JudgeContext) -> AssessmentWrite:
     case = await cx.case.load(req.case_id, include=("input", "target"))
     response = await cx.lm.complete(
         messages=[
@@ -150,16 +114,14 @@ async def judge(req: JudgeRequest, cx: StageContext) -> AssessmentWrite:
                 ),
             },
         ],
-        response_format=lv.output.json_schema(PairwiseJudgment),
         model_role="judge",
     )
-    parsed: PairwiseJudgment = response.parsed
     return AssessmentWrite.pairwise(
         candidates=req.candidates,
         case=req.case_id,
-        preference=parsed.preferred_candidate,
+        preference=req.candidates[0],  # judge picks; demo uses first
         evidence=EvidenceEnvelope.public_only(
-            payload={"reasoning": parsed.reasoning, "confidence": parsed.confidence},
+            payload={"reasoning": response.text},
             data_classes=[lv.data_class.OPTIMIZER_VISIBLE],
         ),
         effect_receipts=[response.receipt],
@@ -167,88 +129,48 @@ async def judge(req: JudgeRequest, cx: StageContext) -> AssessmentWrite:
     )
 
 
-# ----- Stage 6: evaluator — full eval loop with batched effects ------------
-
-
-@lv.evaluator(
-    id="examples/09-evaluator",
-    trust_profile=lv.TrustProfile.MANAGED_SANDBOX,
-    granularity="per_case",
-)
-async def evaluate(job: EvaluationJob, cx: EvalContext) -> AssessmentSubmission:
-    assessments: list[AssessmentWrite] = []
-    for item in job.independent_cases():
-        assert item.candidate_id is not None
-        ws = await cx.workspace.materialize_candidate(
-            item.candidate_id, surface="full_repo", lifetime="stage_call",
-        )
-        async with cx.batch() as b:
-            diff = b.workspace.git_diff(ws, against="parent")
-            tests = b.sandbox.exec(
-                workspace=ws, argv=["pytest", "-q", "--json-report"], timeout_s=60,
-                output=lv.output.files(["report.json"], max_bytes=64_000),
-                input_classes=[lv.data_class.CASE_TARGET, lv.data_class.WORKSPACE_FILE],
-                forbidden_input_classes=[lv.data_class.WORKSPACE_SECRET],
-            )
-        composite = 1.0 if tests.exit_code == 0 else 0.0
-        assessments.append(
-            AssessmentWrite.independent_case(
-                candidate=item.candidate_id, case=item.case_id,
-                score=lv.Score(
-                    value=composite,
-                    feedback=f"pytest {'passed' if tests.exit_code == 0 else 'failed'}",
-                ),
-                evidence=EvidenceEnvelope.public_private(
-                    public={"tests_passed": tests.exit_code == 0,
-                            "data_classes": [lv.data_class.OPTIMIZER_VISIBLE]},
-                    private={"git_diff": diff.text,
-                             "data_classes": [lv.data_class.CASE_TARGET, lv.data_class.EVALUATOR_PRIVATE]},
-                    target_derived=True,
-                ),
-                read_receipts=[diff.receipt],
-                effect_receipts=[tests.receipt],
-                replayability="boundary_managed",
-            ),
-        )
-    return await cx.assessments.submit(job.evaluation_request_id, assessments)
-
-
-# ----- Composition: an EvoSkill-shaped optimization ------------------------
+# ----- composition: an EvoSkill-shaped optimization, all roles wired --------
 
 
 async def amain() -> None:
-    runtime = lv.runtime(
-        workspace=lv.workspace.local(root=".agents"),
-        lm={
-            "executor": lv.lm.anthropic(model="claude-opus-4-7"),
-            "reflector": lv.lm.anthropic(model="claude-opus-4-7"),
-            "judge": lv.lm.openai(model="gpt-5", reasoning_effort="medium"),
-        },
-        agent=lv.agent.codex(model="gpt-5-codex"),
-        sandbox=lv.sandbox.docker(image="python:3.12"),
-        trust_profile=lv.TrustProfile.MANAGED_SANDBOX,
-        budget=lv.budget(usd=200, calls=2000),
+    environment = lv.Environment(
+        task=lv.Task(
+            cases=lv.cases.from_jsonl(str(FIXTURE), limit=8).cases,
+            sandbox=lv.sandbox.docker(image="python:3.12"),
+        ),
+        rollout=lv.Rollout.agent(),
+        rubric=lv.Rubric([correct, shows_work]),
     )
     optimizer = lv.optimizers.gepa(
-        population_size=10, frontier=lv.frontier.top_k(3),
+        population_size=10,
+        frontier=lv.frontier.top_k(3),
         parent_selector="round_robin",
         reflection_lm=lv.lm.anthropic(model="claude-opus-4-7"),
         minibatch_size=4,
+        objective="objective",
+        reflect=lv.Reflect.fn(reflect),
+        propose=lv.Propose.fn(propose),
+        judge=judge,
     )
-    pipeline = lv.optimize(
+    result = await lv.optimize(
         seed=lv.SkillBank.empty(),
-        train=lv.cases.from_jsonl(str(FIXTURE), name="train", limit=6),
-        val=lv.cases.from_jsonl(str(FIXTURE), name="val", limit=2),
-        optimizer=optimizer, runtime=runtime,
-        # All six stage roles passed in one composition:
-        runner=run, scorer=score, reflector=reflect, proposer=propose,
-        judge=judge, evaluator=evaluate,
-    )
-    print("full repro pipeline composed with all 6 stage roles:")
-    for role in ("runner", "scorer", "reflector", "proposer", "judge", "evaluator"):
-        stage = getattr(pipeline, role)
-        print(f"  {role:9}: {stage.id if stage else '(none)'}")
-    print(f"  optimizer: {pipeline.optimizer.name} pop={pipeline.optimizer.population_size}")  # type: ignore[attr-defined]
+        environment=environment,
+        optimizer=optimizer,
+        runtime=lv.runtime(
+            workspace=lv.workspace.local(root=".agents"),
+            lm={
+                "executor": lv.lm.anthropic(model="claude-opus-4-7"),
+                "reflector": lv.lm.anthropic(model="claude-opus-4-7"),
+                "judge": lv.lm.openai(model="gpt-5", reasoning_effort="medium"),
+            },
+            agent=lv.agent.codex(model="gpt-5-codex"),
+            sandbox=lv.sandbox.docker(image="python:3.12"),
+            trust_profile=lv.TrustProfile.MANAGED_SANDBOX,
+            budget=lv.budget(usd=200, calls=2000),
+        ),
+    ).run()
+
+    print(len(result.best.artifact.files), "skill files in the best bank")
 
 
 if __name__ == "__main__":

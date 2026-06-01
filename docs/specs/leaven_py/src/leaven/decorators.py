@@ -5,13 +5,14 @@ calls via the ACP wire. The decorator is sugar over `register_stage(...)`;
 both forms produce the same `RegisteredStage` value.
 
 A decorated function can run two ways:
-- Composed into an `lv.optimize(..., evaluator=..., runner=..., scorer=...)` call
-  (the engine reaches it in-process via the embedded ACP loop)
+- Composed into an `lv.optimize(...)` run (the engine reaches it in-process via
+  the embedded ACP loop)
 - Standalone via `if __name__ == "__main__": lv.serve_stage(my_stage)`
   (the engine spawns the script as a subprocess and reaches it over stdio)
 
-The user code is identical in both cases; only the way the engine reaches
-the stage differs.
+The user code is identical in both cases; only the way the engine reaches the
+stage differs. Scoring is authored with `@lv.reward` (a `Rubric`), not a stage
+decorator.
 
 Scaffold note: the decorators construct real `RegisteredStage` values so
 user code composes cleanly. The engine binding lives in
@@ -27,14 +28,19 @@ from typing import Any, Literal, overload
 from pydantic import BaseModel, ConfigDict
 
 from .case import Case
-from .context import EvalContext, RunContext, StageContext
+from .contexts import (
+    EvaluatorContext,
+    JudgeContext,
+    ProposeContext,
+    ReflectContext,
+    RolloutContext,
+)
 from .evaluation_job import EvaluationJob, Granularity
 from .proposal import ProposalBatch
-from .score import Score
 from .stage_payloads import JudgeRequest, ProposeRequest, ReflectionResult, ReflectRequest
 from .trust import TrustProfile
 
-StageRole = Literal["evaluator", "reflector", "proposer", "runner", "scorer", "judge"]
+StageRole = Literal["evaluator", "reflector", "proposer", "runner", "judge"]
 
 
 class RegisteredStage[A, O](BaseModel):
@@ -55,12 +61,11 @@ class RegisteredStage[A, O](BaseModel):
 
 
 # Type aliases for stage function signatures.
-EvaluatorFunc = Callable[[EvaluationJob, EvalContext], Awaitable[Any]]
-ReflectorFunc = Callable[[ReflectRequest, StageContext], Awaitable[ReflectionResult]]
-ProposerFunc = Callable[[ProposeRequest, StageContext], Awaitable[ProposalBatch]]
-RunnerFunc = Callable[[Any, Case, RunContext], Awaitable[Any]]
-ScorerFunc = Callable[[Any, Case, RunContext], Awaitable[Score]]
-JudgeFunc = Callable[[JudgeRequest, StageContext], Awaitable[Any]]
+EvaluatorFunc = Callable[[EvaluationJob, EvaluatorContext], Awaitable[Any]]
+ReflectorFunc = Callable[[ReflectRequest, ReflectContext], Awaitable[ReflectionResult]]
+ProposerFunc = Callable[[ProposeRequest, ProposeContext], Awaitable[ProposalBatch]]
+RunnerFunc = Callable[[Any, Case, RolloutContext], Awaitable[Any]]
+JudgeFunc = Callable[[JudgeRequest, JudgeContext], Awaitable[Any]]
 
 
 def _resolve_trust(profile: TrustProfile | str) -> TrustProfile:
@@ -77,7 +82,7 @@ def _make_registered(
 ) -> RegisteredStage[Any, Any]:
     """Internal: build a RegisteredStage from a decorated function.
 
-    Used by all six decorators. The scaffold returns a real value so user
+    Used by all stage decorators. The scaffold returns a real value so user
     code composes cleanly; engine wiring lives in `lv.optimize(...).run()`
     and `lv.serve_stage(...)`.
     """
@@ -106,7 +111,13 @@ def evaluator(
     trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
     granularity: Granularity = "per_case",
 ) -> Any:
-    """Decorate an async function as an evaluator stage."""
+    """Decorate an async function as an evaluator stage (advanced / seam).
+
+    Evaluators drive a whole evaluation job with batched effects and custom
+    assessments. Ordinary scoring is a `Rubric` (`@lv.reward`); reach for an
+    evaluator only when you need batched effects across cases or hand-authored
+    evidence.
+    """
 
     def wrap(f: EvaluatorFunc) -> RegisteredStage[Any, Any]:
         return _make_registered("evaluator", f, id, trust_profile, granularity=granularity)
@@ -182,41 +193,15 @@ def runner(
     id: str | None = None,
     trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
 ) -> Any:
-    """Decorate an async function as a runner stage.
+    """Decorate an async function as a runner stage (a function rollout).
 
     Runners execute one candidate against one case and return the output the
-    scorer will consume.
+    rubric will score. Wrap with `Rollout.fn(run)` to use as an environment
+    rollout.
     """
 
     def wrap(f: RunnerFunc) -> RegisteredStage[Any, Any]:
         return _make_registered("runner", f, id, trust_profile)
-
-    return wrap(func) if func is not None else wrap
-
-
-@overload
-def scorer(func: ScorerFunc) -> RegisteredStage[Any, Score]: ...
-@overload
-def scorer(
-    *,
-    id: str | None = None,
-    trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
-) -> Callable[[ScorerFunc], RegisteredStage[Any, Score]]: ...
-def scorer(
-    func: ScorerFunc | None = None,
-    *,
-    id: str | None = None,
-    trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
-) -> Any:
-    """Decorate an async function as a scorer stage.
-
-    Scorers receive (output, case, cx) and return a `Score`. For rollout
-    pipelines, `cx.rollout_workspace` is the engine-prepared workspace that
-    the runner/command/agent just used.
-    """
-
-    def wrap(f: ScorerFunc) -> RegisteredStage[Any, Score]:
-        return _make_registered("scorer", f, id, trust_profile)
 
     return wrap(func) if func is not None else wrap
 
@@ -280,7 +265,6 @@ __all__ = [
     "ReflectorFunc",
     "RegisteredStage",
     "RunnerFunc",
-    "ScorerFunc",
     "StageRole",
     "evaluator",
     "judge",
@@ -288,6 +272,5 @@ __all__ = [
     "reflector",
     "register_stage",
     "runner",
-    "scorer",
     "serve_stage",
 ]

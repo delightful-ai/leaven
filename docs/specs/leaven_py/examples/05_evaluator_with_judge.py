@@ -1,14 +1,16 @@
-"""Example 05 — rich evaluator body with judge call + batched ops + evidence.
+"""Example 05 — ADVANCED SEAM: rich evaluator body (judge call + batched ops + evidence).
 
-When the runner/scorer split isn't enough — when you need to inspect cases,
-materialize workspaces, fan out multiple typed effects in one round-trip,
-and submit assessments with public/private evidence — you write an
-`@lv.evaluator` instead.
+ADVANCED / seam-only path. Ordinary scoring is a `Rubric` of `@lv.reward`
+functions (see examples 03 and 04) — that is what you reach for first. Write an
+`@lv.evaluator` ONLY when the rubric isn't enough: when you need to inspect
+cases, materialize workspaces, fan out multiple typed effects in one
+round-trip, and submit hand-authored assessments with public/private evidence.
 
 This example shows the full inside of an evaluator body, mirroring the
 locked-spec sketch at
 `docs/specs/public-seam-v1/examples/evaluator_dspy_codex.v0.3.py` but
-trimmed for clarity. It's the evaluator shape EvoSkill-class repros need.
+trimmed for clarity. It's the evaluator shape EvoSkill-class repros need when a
+plain rubric can't express the scoring.
 """
 
 from __future__ import annotations
@@ -18,7 +20,6 @@ from pydantic import BaseModel, Field
 import leaven as lv
 from leaven.assessment import AssessmentWrite
 from leaven.builders.assessments import AssessmentSubmission
-from leaven.context import EvalContext
 from leaven.evaluation_job import EvaluationJob
 from leaven.evidence import EvidenceEnvelope
 
@@ -34,7 +35,7 @@ class JudgeResult(BaseModel):
     trust_profile=lv.TrustProfile.MANAGED_SANDBOX,
     granularity="per_case",
 )
-async def evaluate(job: EvaluationJob, cx: EvalContext) -> AssessmentSubmission:
+async def evaluate(job: EvaluationJob, cx: lv.EvaluatorContext) -> AssessmentSubmission:
     assessments: list[AssessmentWrite] = []
 
     for item in job.independent_cases():
@@ -104,8 +105,8 @@ async def evaluate(job: EvaluationJob, cx: EvalContext) -> AssessmentSubmission:
 
 def main() -> None:
     print("evaluator decorated:", evaluate)
-    print("  role         :", evaluate.role)  # type: ignore[attr-defined]
-    print("  trust_profile:", evaluate.trust_profile)  # type: ignore[attr-defined]
+    print("  role         :", evaluate.role)
+    print("  trust_profile:", evaluate.trust_profile)
 
 
 if __name__ == "__main__":

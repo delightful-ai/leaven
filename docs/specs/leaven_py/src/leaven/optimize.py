@@ -1,16 +1,14 @@
 """`lv.optimize(...).run()` — the entry point for an optimization run.
 
-Composes a seed artifact, case sets, an optimizer config, a runtime, and stage
-handlers into a runnable optimization. The builder is typed by the artifact
-type so `result.best.artifact` is fully typed.
+Composes a seed artifact, an environment (task + rollout + rubric), an
+optimizer config, and a runtime into a runnable optimization. The builder is
+typed by the artifact type so `result.best.artifact` is fully typed. Train /
+validation / test splits come from `Case.split` tags on the environment's task.
 """
 
 from __future__ import annotations
 
-from typing import Any
-
-from .case import CaseSet
-from .decorators import RegisteredStage
+from .environment import Environment
 from .optimizers.config import OptimizerConfig
 from .result import Optimized
 from .runtime import Runtime
@@ -20,17 +18,9 @@ class OptimizeBuilder[A]:
     """Builder returned by `lv.optimize(...)`. Call `.run()` to execute."""
 
     seed: A
-    train: CaseSet
-    val: CaseSet | None
-    test: CaseSet | None
+    environment: Environment
     optimizer: OptimizerConfig
     runtime: Runtime
-    runner: RegisteredStage[A, Any] | None
-    scorer: RegisteredStage[A, Any] | None
-    evaluator: RegisteredStage[A, Any] | None
-    proposer: RegisteredStage[A, Any] | None
-    reflector: RegisteredStage[A, Any] | None
-    judge: RegisteredStage[A, Any] | None
 
     async def run(self) -> Optimized[A]:
         """Execute the optimization. Returns when the optimizer terminates.
@@ -53,39 +43,23 @@ class OptimizeBuilder[A]:
 def optimize[A](
     *,
     seed: A,
-    train: CaseSet,
+    environment: Environment,
     optimizer: OptimizerConfig,
     runtime: Runtime,
-    val: CaseSet | None = None,
-    test: CaseSet | None = None,
-    runner: RegisteredStage[A, Any] | None = None,
-    scorer: RegisteredStage[A, Any] | None = None,
-    evaluator: RegisteredStage[A, Any] | None = None,
-    proposer: RegisteredStage[A, Any] | None = None,
-    reflector: RegisteredStage[A, Any] | None = None,
-    judge: RegisteredStage[A, Any] | None = None,
 ) -> OptimizeBuilder[A]:
     """Compose an optimization run. Call `.run()` to execute.
 
-    Required: `seed`, `train`, `optimizer`, `runtime`.
-    Almost-always-required: `runner` + `scorer`, OR `evaluator`.
-    Optional: `val`, `test`, `proposer` (overrides optimizer default),
-    `reflector` (overrides optimizer default), `judge` (for
-    pairwise/listwise optimizers).
+    `environment` bundles the task (cases with split tags, sandbox needs), the
+    rollout (how the current artifact runs on a case), and the rubric (how the
+    result scores). The optimizer owns the outer loop (reflect / propose /
+    judge). Train / validation / test splits are read from `Case.split` on the
+    environment's task; the runtime supplies execution, budget, and trust.
     """
     b = OptimizeBuilder[A]()
     b.seed = seed
-    b.train = train
-    b.val = val
-    b.test = test
+    b.environment = environment
     b.optimizer = optimizer
     b.runtime = runtime
-    b.runner = runner
-    b.scorer = scorer
-    b.evaluator = evaluator
-    b.proposer = proposer
-    b.reflector = reflector
-    b.judge = judge
     return b
 
 
