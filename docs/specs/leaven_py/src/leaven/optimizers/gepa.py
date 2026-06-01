@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
+from ..decorators import RegisteredStage
 from ..frontier import FrontierConfig
 from ..lm.config import LmConfig
+from ..stages import Propose, Reflect
 from .config import OptimizerConfig
 
 ParentSelector = Literal["round_robin", "best", "weighted", "pareto"]
+Objective = Literal["instance", "objective", "hybrid", "cartesian"]
+"""How the rubric's reward vector drives selection (GEPA `frontier_type`).
+
+Named rewards are the objective dimensions; `instance` = per-case Pareto
+(default), `objective` = per-reward-dimension Pareto, `hybrid`/`cartesian` per
+GEPA. Reward weights feed the aggregate scalar used for tie-breaks.
+"""
 
 
 class Gepa(OptimizerConfig):
@@ -34,6 +43,18 @@ class Gepa(OptimizerConfig):
     max_iterations: int | None = None
     """Hard cap on optimization iterations. None = budget-bounded."""
 
+    objective: Objective = "instance"
+    """Pareto frontier axis over the rubric's reward vector (GEPA frontier_type)."""
+
+    reflect: Reflect | None = None
+    """Reflection stage override; None uses GEPA's built-in reflector."""
+
+    propose: Propose | None = None
+    """Proposal stage override; None uses GEPA's built-in proposer."""
+
+    judge: RegisteredStage[Any, Any] | None = None
+    """Optional pairwise/listwise judge (from `@lv.judge`)."""
+
 
 def gepa(
     *,
@@ -43,6 +64,10 @@ def gepa(
     reflection_lm: LmConfig | None = None,
     minibatch_size: int = 4,
     max_iterations: int | None = None,
+    objective: Objective = "instance",
+    reflect: Reflect | None = None,
+    propose: Propose | None = None,
+    judge: RegisteredStage[Any, Any] | None = None,
 ) -> Gepa:
     """GEPA optimizer config builder.
 
@@ -57,7 +82,11 @@ def gepa(
         reflection_lm=reflection_lm,
         minibatch_size=minibatch_size,
         max_iterations=max_iterations,
+        objective=objective,
+        reflect=reflect,
+        propose=propose,
+        judge=judge,
     )
 
 
-__all__ = ["Gepa", "ParentSelector", "gepa"]
+__all__ = ["Gepa", "Objective", "ParentSelector", "gepa"]
