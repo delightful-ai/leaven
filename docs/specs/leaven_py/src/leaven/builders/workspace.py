@@ -1,4 +1,9 @@
-"""`cx.workspace.*` — materialize workspaces, read files, run git queries."""
+"""`cx.workspace.*` — materialize workspaces, read files, run git queries.
+
+Split into two surfaces for role-scoping: `WorkspaceReads` (inspect a prepared
+handle) is available to every role; `WorkspaceBuilder` adds materialization and
+writes and is granted only to privileged roles (proposer, evaluator).
+"""
 
 from __future__ import annotations
 
@@ -60,31 +65,12 @@ class WorkspaceSnapshot(BaseModel):
     receipt: QueryReceipt
 
 
-class WorkspaceBuilder:
-    """Workspace operations bound to a context."""
+class WorkspaceReads:
+    """Read/query operations on a workspace handle the engine already prepared.
 
-    async def materialize_candidate(
-        self,
-        candidate_id: str,
-        *,
-        surface: WorkspaceSurface = "full_repo",
-        lifetime: WorkspaceLifetime = "stage_call",
-    ) -> WorkspaceHandle:
-        """Materialize a candidate's artifact into a fresh workspace.
-
-        Returned handle auto-releases at the end of the stage_call (or run, or
-        manually). Pass the handle into downstream `cx.sandbox.exec` /
-        `cx.agent.run` / `cx.workspace.*` calls.
-
-        Normal rollout pipelines should use `cx.rollout_workspace`; this method
-        is for advanced evaluator/proposer/reflector code that deliberately
-        materializes an additional workspace.
-        """
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
-
-    async def release(self, handle: WorkspaceHandle) -> None:
-        """Explicit release; only needed for `lifetime='manual'` handles."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+    Available to EVERY stage role. None of these materialize or mutate; they
+    inspect an existing handle (typically `cx.rollout_workspace`).
+    """
 
     async def read_file(
         self,
@@ -94,15 +80,6 @@ class WorkspaceBuilder:
         max_bytes: int | None = None,
     ) -> WorkspaceFile:
         """Read one workspace-relative file."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
-
-    async def write_file(
-        self,
-        handle: WorkspaceHandle,
-        path: str,
-        content: str | bytes,
-    ) -> CallReceipt:
-        """Write a workspace-relative file. Receipt binds the change."""
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
     async def list(
@@ -143,6 +120,47 @@ class WorkspaceBuilder:
         """Git log as a workspace_diff-family value (broad projection per seam)."""
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
+
+class WorkspaceBuilder(WorkspaceReads):
+    """Full workspace surface: reads plus materialization and writes.
+
+    Granted only to privileged roles (proposer, evaluator). Rollout/rubric
+    contexts receive `WorkspaceReads`, so they structurally cannot materialize
+    a candidate or write into a workspace.
+    """
+
+    async def materialize_candidate(
+        self,
+        candidate_id: str,
+        *,
+        surface: WorkspaceSurface = "full_repo",
+        lifetime: WorkspaceLifetime = "stage_call",
+    ) -> WorkspaceHandle:
+        """Materialize a candidate's artifact into a fresh workspace.
+
+        Returned handle auto-releases at the end of the stage_call (or run, or
+        manually). Pass the handle into downstream `cx.sandbox.exec` /
+        `cx.agent.run` / `cx.workspace.*` calls.
+
+        Normal rollout pipelines should use `cx.rollout_workspace`; this method
+        is for advanced proposer/evaluator code that deliberately materializes
+        an additional workspace.
+        """
+        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+
+    async def release(self, handle: WorkspaceHandle) -> None:
+        """Explicit release; only needed for `lifetime='manual'` handles."""
+        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+
+    async def write_file(
+        self,
+        handle: WorkspaceHandle,
+        path: str,
+        content: str | bytes,
+    ) -> CallReceipt:
+        """Write a workspace-relative file. Receipt binds the change."""
+        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+
     async def write_skills(self, handle: WorkspaceHandle, bank: Any) -> CallReceipt:
         """Skill-bank convenience: write a SkillBank into the workspace layout.
 
@@ -157,6 +175,7 @@ __all__ = [
     "WorkspaceDiff",
     "WorkspaceFile",
     "WorkspaceListing",
+    "WorkspaceReads",
     "WorkspaceSnapshot",
     "WorkspaceStatus",
 ]

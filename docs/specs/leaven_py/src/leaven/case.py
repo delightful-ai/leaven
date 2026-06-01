@@ -46,6 +46,30 @@ class Case(BaseModel):
     """Optional split tag used when a `Task` is lowered into train/val/test sets."""
 
 
+class InputCaseView(BaseModel):
+    """Case projection a ROLLOUT (and reflector) sees: input + metadata, NO
+    target. Target-freedom is structural — there is no `.target` attribute.
+    (wire: RunnerRequest.target_forbidden = const true)
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str
+    input: dict[str, Any]
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ScoringCaseView(InputCaseView):
+    """Case projection a RUBRIC/scorer sees: input + metadata + gated target.
+
+    `.target` reads ergonomically but is backed by a gated, receipted
+    dereference (wire: ScoreContext.target_handle), prefetched for this role.
+    Reading the target does NOT grant egressing it into an LM call.
+    """
+
+    target: dict[str, Any] | None = None
+
+
 class CaseSet(BaseModel):
     """A named set of cases — train / validation / test."""
 
@@ -67,4 +91,4 @@ class CaseSplits(BaseModel):
     test: CaseSet | None = None
 
 
-__all__ = ["Case", "CaseSet", "CaseSplits"]
+__all__ = ["Case", "CaseSet", "CaseSplits", "InputCaseView", "ScoringCaseView"]

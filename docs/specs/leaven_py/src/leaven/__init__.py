@@ -41,7 +41,15 @@ from .artifacts.skill_bank import SkillFile
 
 # ----- Composition + entry -------------------------------------------------
 from .budget import Budget, budget
-from .case import Case, CaseSet, CaseSplits
+from .case import Case, CaseSet, CaseSplits, InputCaseView, ScoringCaseView
+from .contexts import (
+    EvaluatorContext,
+    JudgeContext,
+    ProposeContext,
+    ReflectContext,
+    RolloutContext,
+    RubricContext,
+)
 
 # ----- Stage decorators + registration -------------------------------------
 from .decorators import (
@@ -92,7 +100,7 @@ roles = AgentRoles
 # Deleting them would remove the function, not just the module attribute.
 for _leaky in (
     "agent_instructions", "assessment", "builders",
-    "case", "context", "decorators", "evaluation_job",
+    "case", "context", "contexts", "decorators", "evaluation_job",
     "environment", "evidence", "evolution", "output_record", "proposal", "result",
     "rubric", "score", "stage_payloads", "stages", "task",
 ):
@@ -112,20 +120,28 @@ __all__ = [
     "CaseSplits",
     "Environment",
     "Evaluate",
+    "EvaluatorContext",
     "EvolutionBuilder",
+    "InputCaseView",
+    "JudgeContext",
     "OptimizeBuilder",
     "Optimized",
     "PromptArtifact",
     "Propose",
+    "ProposeContext",
     "Reflect",
+    "ReflectContext",
     "ReplayResult",
     "RewardValue",
     "Rollout",
+    "RolloutContext",
     "Rubric",
+    "RubricContext",
     "RunSummary",
     "Runtime",
     "Score",
     "ScoreStage",
+    "ScoringCaseView",
     "SkillBank",
     "SkillFile",
     "Split",
