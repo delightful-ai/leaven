@@ -1726,10 +1726,9 @@ fn gepa_keeps_evaluation_cache_purpose_scoped_across_different_requests() {
             seen.lock().expect("seen lock").as_slice(),
             &[
                 vec![case_zero, case_one],
-                vec![case_zero],
-                vec![case_zero, case_one]
+                vec![case_zero, case_zero, case_zero]
             ],
-            "GEPA should keep validation and search cache rows distinct"
+            "GEPA should keep validation rows distinct while batching search-purpose misses"
         );
     });
 }
