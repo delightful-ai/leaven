@@ -3457,6 +3457,8 @@ name = "leaven-gepa-agentic-agent-kit"
 version = "0.0.0"
 dependencies = [
  "futures",
+ "leaven-agent",
+ "leaven-agent-codex-cli",
  "leaven-agentic-agent-kit",
  "leaven-artifact-agent-kit",
  "leaven-artifact-git",
@@ -3465,6 +3467,8 @@ dependencies = [
  "leaven-evidence",
  "leaven-gepa",
  "leaven-kernel",
+ "leaven-workspace",
+ "leaven-workspace-local",
  "tempfile",
  "thiserror 2.0.18",
 ]

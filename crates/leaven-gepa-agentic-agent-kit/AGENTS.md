@@ -28,5 +28,8 @@ and `leaven-gepa-agentic-git`.
   `RunContext::propose` plus `apply_batch`.
 - `cargo test -p leaven-gepa-agentic-agent-kit` includes the ignored live gate
   without spending provider calls.
+- `LEAVEN_CODEX_LIVE=1 cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit -- --ignored`
+  runs the opt-in local Codex proof. It requires local Codex auth and may spend
+  provider budget.
 - `cargo test -p leaven --test topology_contract` proves this bridge stays free
   of Codex provider protocol dependencies.
