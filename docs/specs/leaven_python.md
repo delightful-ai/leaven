@@ -69,10 +69,11 @@ deployment."* That sentence is still operative.
 
 ## What the user writes
 
-The high-level Leaven program in Python is artifact + task + swappable
-stages + optimizer + runtime. This is the public shape that should feel
-closest to FlashEvolve, while the task records stay close to Inspect's
-`Task` / case vocabulary:
+The high-level Leaven program in Python is `seed × environment × optimizer ×
+runtime`. The environment bundles the task (cases with split tags, sandbox
+needs), the rollout (how the current artifact runs on a case), and the rubric
+(how the result scores); task records stay close to Inspect's `Task` / case
+vocabulary:
 
 ```python
 import leaven as lv
@@ -85,37 +86,35 @@ task = lv.Task(
             target={"answer": "5"},
             files={"README.md": "Answer the arithmetic question."},
             setup=lv.setup.bash("mkdir -p output"),
+            split="train",
         )
     ],
     sandbox=lv.sandbox.docker(image="python:3.12"),
 )
 
-artifact = lv.artifacts.directory("./agent_harness")
 rollout = lv.Rollout.command(
     argv=["uv", "run", "python", "target/current/run.py"],
     layout=lv.layouts.case_workspace(),
     output=lv.output.files(["output/result.json"]),
 )
 
-@lv.scorer
-async def score(output: object, case: lv.Case, cx: lv.RunContext) -> lv.Score:
+@lv.reward
+async def correct(output: object, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
     result_file = await cx.workspace.read_file(
         cx.rollout_workspace, "output/result.json")
-    return lv.Score.exact_match(result_file.content, case.target["answer"])
+    return 1.0 if result_file.content == case.target["answer"] else 0.0
 
-score_stage = lv.ScoreStage.fn(score)
-
-result = await lv.evolve(
-    artifact=artifact,
-    task=task,
-    stages=lv.Stages(
+result = await lv.optimize(
+    seed=lv.artifacts.directory("./agent_harness"),
+    environment=lv.Environment(
+        task=task,
         rollout=rollout,
-        score=score_stage,
-        reflect=lv.Reflect.default_gepa(),
-        propose=lv.Propose.agent_edit(agent=lv.agent.codex(model="gpt-5-codex")),
-        evaluate=lv.Evaluate.pipeline(rollout=rollout, score=score_stage, split="val"),
+        rubric=lv.Rubric([correct]),
     ),
-    optimizer=lv.optimizers.gepa(population_size=8),
+    optimizer=lv.optimizers.gepa(
+        population_size=8,
+        propose=lv.Propose.agent_edit(agent=lv.agent.codex(model="gpt-5-codex")),
+    ),
     runtime=lv.runtime.local(budget=lv.budget(usd=20)),
 ).run()
 ```
@@ -123,10 +122,11 @@ result = await lv.evolve(
 The ownership rule is load-bearing:
 
 ```text
-Artifact = mutable behavior package
-Task     = benchmark world: cases, files, setup, hidden targets, sandbox needs
-Stages   = swappable algorithm roles and their layout requirements
-Runtime  = workspace/sandbox allocation, effects, receipts, trust, budget
+seed        = the mutable artifact being optimized
+Environment = task (cases, split tags, hidden targets, sandbox needs)
+              + rollout (how the artifact runs) + rubric (how it scores)
+Optimizer   = the outer loop: reflect / propose / judge (GEPA-coupled in V1)
+Runtime     = workspace/sandbox allocation, effects, receipts, trust, budget
 ```
 
 `Rollout` is the interpretation of the current artifact version for one
@@ -142,21 +142,23 @@ same roles. The smallest meaningful sketch is still ~20 lines:
 import leaven as lv
 
 @lv.runner
-async def run(prompt: lv.PromptArtifact, case: lv.Case, cx: lv.RunContext):
+async def run(prompt: lv.PromptArtifact, case: lv.InputCaseView, cx: lv.RolloutContext) -> str:
     response = await cx.lm.complete(prompt=prompt.template.format(**case.input))
     return response.text.strip()
 
-@lv.scorer
-async def score(output: str, case: lv.Case, cx: lv.RunContext):
-    return lv.Score.exact_match(output, case.target["answer"])
+@lv.reward
+async def correct(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
+    return 1.0 if output == case.target["answer"] else 0.0
 
 result = await lv.optimize(
     seed=lv.PromptArtifact(template="Answer: {question}\nA:"),
-    train=lv.cases.from_jsonl("train.jsonl"),
-    val=lv.cases.from_jsonl("val.jsonl"),
+    environment=lv.Environment(
+        task=lv.Task(cases=lv.cases.from_jsonl("cases.jsonl").cases),  # cases tagged with split=
+        rollout=lv.Rollout.fn(run),
+        rubric=lv.Rubric([correct]),
+    ),
     optimizer=lv.optimizers.gepa(population_size=8),
     runtime=lv.runtime.local(budget=lv.budget(usd=20)),
-    runner=run, scorer=score,
 ).run()
 
 print(result.best.artifact.template)
@@ -297,43 +299,48 @@ seam; it is not an alternative trust path.
 
 ## The Python authoring surface
 
-Six stage roles. Each is a decorator over an async function with a typed
-context object.
+A Leaven program is `seed × environment × optimizer × runtime`. The
+environment is the inner loop — how the artifact runs (`rollout`) and how the
+result scores (`rubric`). The optimizer is the outer loop — how the search
+reflects and proposes. Stages are authored as decorators over async functions,
+each receiving a **role-scoped `cx`** that exposes only the capabilities and
+case projection its role is allowed:
 
-- `@lv.evaluator(id=..., trust_profile=..., granularity=...)` for full
-  evaluation logic that scores candidates against cases. Receives
-  `(job: EvaluationJob, cx: EvalContext)`.
-- `@lv.reflector(stage_id=...)` for reflection over evaluation results
-  to produce a typed diagnosis. Receives `(req: ReflectRequest, cx: StageContext)`.
-- `@lv.proposer(stage_id=...)` for proposing typed changes to a parent
-  candidate. Receives `(req: ProposeRequest, cx: StageContext)`.
-- `@lv.runner` for running one candidate against one case. Receives
-  `(artifact, case, cx: RunContext)`. The simplest stage; sufficient for
-  most prompt-optimization repros.
-- `@lv.scorer` for scoring a runner's output. Receives
-  `(output, case, cx: RunContext)`. Returns `Score`.
-- `@lv.judge(stage_id=...)` for pairwise or listwise judgment between
-  candidates. Receives `(req: JudgeRequest, cx: StageContext)`.
+- `@lv.runner` → `RolloutContext`; the function rollout. `case` is an
+  `InputCaseView` (target-free). Wrap with `Rollout.fn(run)`.
+- `@lv.reward(weight=...)` → `RubricContext`; a reward. `case` is a
+  `ScoringCaseView` (target readable). Collect with `Rubric([...])`.
+- `@lv.reflector(stage_id=...)` → `ReflectContext`; diagnosis over the
+  target-safe reflective dataset. Receives `(req: ReflectRequest, cx)`.
+- `@lv.proposer(stage_id=...)` → `ProposeContext`; emits a typed `ProposalBatch`
+  (submit, never apply). Receives `(req: ProposeRequest, cx)`.
+- `@lv.judge(stage_id=...)` → `JudgeContext`; pairwise or listwise preference.
+  Receives `(req: JudgeRequest, cx)`.
+- `@lv.evaluator(...)` → `EvaluatorContext`; the advanced seam escape hatch for
+  batched effects and hand-authored assessments. Ordinary scoring is a `Rubric`,
+  not an evaluator. Receives `(job: EvaluationJob, cx)`.
 
 Each decorator is sugar over a registration call. `lv.register_stage(role,
 spec, func)` is the underlying API. Both are exposed; the decorator is
 the recommended form for most code, the function form is the recommended
 form for dynamic stage registration (rare).
 
-Stages can run in-process with the optimization (registered via
-`lv.optimize(..., evaluator=evaluate, runner=run, scorer=score)`) or
-out-of-process as standalone Python workers (via
-`lv.serve_stage(my_stage)` in a script's `__main__`). The engine spawns
+Function stages run in-process with the optimization (composed into the
+environment as `Rollout.fn(run)` / `Rubric([reward])`, or onto the optimizer
+as `gepa(reflect=..., propose=...)`) or out-of-process as standalone Python
+workers (via `lv.serve_stage(my_stage)` in a script's `__main__`). The engine spawns
 out-of-process stages by command path with capability env vars per the
 locked ACP profile. The decorator shape and the function signature are
 identical in both cases; only the way the engine reaches the stage
 differs.
 
-Context objects (`RunContext`, `StageContext`, `EvalContext`) carry
-query/effect builders for graph reads, case loading, workspace
-materialization, LM completion, agent runs, sandbox exec, workspace
-queries, assessment submission, proposal submission. These are not
-arbitrary methods — they construct typed Plan IR ops that the engine
+The role-scoped context objects (`RolloutContext`, `RubricContext`,
+`ReflectContext`, `ProposeContext`, `JudgeContext`, `EvaluatorContext`) carry
+only the query/effect builders their role is permitted — LM completion, agent
+runs, sandbox exec, workspace reads, and (for privileged roles) candidate
+materialization, proposal submission, or assessment submission. The capability
+boundary is structural: a runner's `cx` has no `proposals`, and its `case` has
+no `.target`. These builders construct typed Plan IR ops that the engine
 validates against the locked seam before execution.
 
 The builder geometry:
@@ -360,7 +367,7 @@ intent declaratively and the wire is efficient.
 Runtime composition takes a single call:
 
 ```python
-env = lv.runtime(
+rt = lv.runtime(
     workspace=lv.workspace.local(root=".agents"),
     lm=lv.lm.anthropic(model="claude-opus-4-7"),
     agent=lv.agent.codex(model="gpt-5-codex"),
@@ -388,25 +395,29 @@ opt = lv.optimizers.gepa(
     parent_selector="round_robin",
     reflection_lm=lv.lm.anthropic(model="claude-opus-4-7"),
     minibatch_size=4,
+    objective="instance",   # frontier axis over the rubric's reward vector
+    reflect=lv.Reflect.fn(reflect),  # optional; defaults to GEPA's built-in
+    propose=lv.Propose.agent_edit(agent=lv.agent.codex(model="gpt-5-codex")),
 )
 ```
 
 The optimizer config is a typed Python record that crosses the wire as
 JSON. The engine instantiates the Rust optimizer with the config. The
-Python user picks knobs; the engine runs the loop.
+Python user picks knobs; the engine runs the loop. Named rewards are the
+objective dimensions; reward weights feed the aggregate scalar GEPA tracks per
+candidate; reward feedback and output are the actionable side info projected
+(target-safe) into the reflective dataset.
 
 The `lv.optimize(...).run()` entry point composes everything:
 
 ```python
 result = await lv.optimize(
     seed=lv.SkillBank.empty(),
-    train=officeqa.train, val=officeqa.val, test=officeqa.test,
+    environment=lv.Environment(task=task, rollout=rollout, rubric=rubric),
     optimizer=opt,
-    runtime=env,
-    runner=run, scorer=score,
-    proposer=propose,  # optional; defaults to optimizer's built-in
-    reflector=reflect,  # optional; defaults to optimizer's built-in
+    runtime=rt,
 ).run()
+# Train / validation / test splits come from `Case.split` on the task.
 ```
 
 The result is typed `Optimized[Artifact]`:
@@ -614,13 +625,14 @@ The implementation must honor:
   profiles are policy declarations the engine enforces at capability
   boundaries (LM, agent, sandbox, workspace); the engine sandboxes
   effects, not arbitrary Python code at the stage body.
-- **Don't put RunContext fields that are optional across execution
-  boundaries.** If `RunContext` carries a field that's present in some
-  context types and absent in others (e.g. pydantic-ai's `tool_manager`
-  which is present in `RunContext` but absent in `TemporalRunContext`),
-  user code that reads the field silently fails on the execution path
-  that omits it. Either every context type (`RunContext`, `StageContext`,
-  `EvalContext`) has the field, or it is not a context field — surface
+- **Don't put context fields that are optional across roles.** If a context
+  carries a field present for some roles and absent for others (e.g.
+  pydantic-ai's `tool_manager`, present in `RunContext` but absent in
+  `TemporalRunContext`), user code that reads it silently fails on the role
+  that omits it. This is exactly why the role contexts (`RolloutContext`,
+  `RubricContext`, `ReflectContext`, `ProposeContext`, `JudgeContext`,
+  `EvaluatorContext`) are separate types: a capability either exists on a
+  role's context or it does not — surface
   it through a builder method that raises explicitly when unavailable
   in the current execution mode.
 
