@@ -114,15 +114,68 @@ D3 (seed passed separately) and D4 (sandbox declared on `Task`).
 
 ### D5. {==Multi-objective contract==}{>>You flagged "leaven SHOULD work multi-obj." Decide the *contract* now even if the impl scalarizes by default: `Rubric` carries the reward vector; the optimizer declares the reduction (`gepa(objective="weighted" | "pareto" | …)`). GEPA already runs a validation Pareto frontier — but that's a different axis (over instances) than reward-dimensions. Lock the contract so it isn't designed away; defer true reward-dimension Pareto.<<}{id="c5" by="AI" at="2026-06-01T16:30:00.000Z"}
 
+**Resolved 2026-06-01:** `Rubric` carries the reward *vector* (named rewards +
+weights) and per-reward metrics persist in evidence. The optimizer declares the
+reduction via `objective=`; V1 ships `"weighted"` (scalarize for selection),
+`"pareto"` reserved for true reward-dimension multi-objective later. The
+contract (vector in, reduction declared) is locked now so it can't be designed
+away.
+
 ### D6. {==Adopt the `load_environment(config) -> Environment` factory packaging?==}{>>verifiers' portable-module convention is also how a CLI / remote worker would load a Leaven problem. My lean: adopt it as the packaging contract (a Leaven problem = a module exposing `def environment(config) -> lv.Environment`), but it's defer-able to V2. Worth it for V1, or call-site `lv.Environment(...)` only?<<}{id="c6" by="AI" at="2026-06-01T16:30:00.000Z"}
+
+**Resolved 2026-06-01:** Call-site `lv.Environment(...)` is the V1 surface. The
+`load_environment(config) -> Environment` factory is reserved as the documented
+packaging path for shareable / CLI-loadable / remote-worker problems, but not
+required in V1.
 
 ### D7. {==`@reward` return type — `float` or rich `RewardValue`?==}{>>You said rich text returns, obviously. So a reward fn returns `RewardValue(value: float, feedback: str|RichText, output: OutputRecord|None)`, with bare `float` as the degenerate case. Decide the `OutputRecord` kinds that ship in V1 (text / json / blob / agent_session / workspace_diff).<<}{id="c7" by="AI" at="2026-06-01T16:30:00.000Z"}
 
+**Resolved 2026-06-01:** A reward returns `float` (degenerate) or
+`RewardValue(value, feedback, output)` for rich/feedbacked returns. V1
+`OutputRecord` kinds: text / json / blob / agent_session / workspace_diff.
+
 ### D8. {==One verb: `optimize` or `evolve`?==}{>>The product word is "optimize anything"; the gate + authoring surface already say `optimize`. My lean: keep `optimize(seed, environment, optimizer, runtime)`, retire `evolve` (or keep as a deprecated alias for one release). But "evolve" reads nicer for the FlashEvolve framing — genuinely your call.<<}{id="c8" by="AI" at="2026-06-01T16:30:00.000Z"}
+
+**Resolved 2026-06-01:** One verb — `optimize(seed, environment, optimizer,
+runtime)`. `evolve` / `EvolutionBuilder` are removed (no deprecated alias; hard
+cutover per repo policy).
 
 ### D9. {==`lv.x.verifiers` scope once we have native nouns==}{>>Shrinks to "import + run an existing verifiers `Env` module unchanged" (the migration path), NOT a parallel native surface. Confirm it's adapter-only.<<}{id="c9" by="AI" at="2026-06-01T16:30:00.000Z"}
 
+**Resolved 2026-06-01:** Adapter-only. `lv.x.verifiers` = import + run an
+existing verifiers `Env` module unchanged (`load_environment`,
+`rubric_as_scorer`, row→Case projection). It is NOT a parallel native surface —
+native `Environment` / `Rubric` own that now.
+
 ### D10. {==Codex-native default before live proof==}{>>The redesign leans on Codex as the default rollout/materialization substrate, but no live Codex has run the loop yet (skill-bank reflection is proven only with `FakeAgentRuntime`; the 55-check smoke rubric is designed, not built). My lean: write the surface as Codex-native (right shape) but keep examples honest with the existing `NotImplementedError`-at-the-boundary discipline; the live loop is the open gate, not a silent claim. OK?<<}{id="c10" by="AI" at="2026-06-01T16:30:00.000Z"}
+
+**Resolved 2026-06-01:** Write the surface Codex-native (the right shape), but
+examples keep the `NotImplementedError`-at-the-boundary discipline; the live
+Codex loop stays the named open gate, never a silent claim.
+
+## cx surface — resolved 2026-06-01
+
+Full design + per-role table: `2026-06-01-cx-surface-design.md`. Three decisions,
+all confirmed:
+
+1. **Class-per-role contexts, renamed off `RunContext`.** `RolloutContext` /
+   `RubricContext` / `ReflectContext` / `ProposeContext` / `JudgeContext` /
+   `EvaluatorContext` over shared mixins. The scaffold's runner/scorer class
+   `RunContext` (`context.py:56`) collides with the engine-internal Rust
+   `RunContext` the spec forbids exposing as a Python concept
+   (`leaven_python.md:573`) — rename is mandatory. Role-scoping is **structural**
+   (per-role `cx.case` loader type), not a runtime raise; the audit requires
+   runner views be structurally target-free.
+2. **`case.target` stays ergonomic, gated underneath.** A rubric/scorer reads
+   `case.target` as a field, backed by a gated + receipted dereference (wire
+   `ScoreContext.target_handle`), prefetched at case-load for roles allowed to
+   see it. Read ≠ egress: target-read does not grant target-egress into LM calls.
+3. **Proposer `submit` only, never `apply`.** Python emits a typed proposal; the
+   engine's `RunContext::propose` finalizer (charge/record/emit/checkpoint)
+   applies. No `cx.proposals.submit_and_apply`.
+
+Open gate (D10): the entire cx surface is `NotImplementedError` today; batch /
+sandbox-exec lowering / Codex-native rollout are wire-locked but unproven live.
 
 ## Not doing
 

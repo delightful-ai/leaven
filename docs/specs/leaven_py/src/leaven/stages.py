@@ -57,12 +57,17 @@ class Rollout(BaseModel):
     def agent(
         cls,
         *,
-        agent: AgentConfig,
-        instructions: str,
+        agent: AgentConfig | None = None,
+        instructions: str | None = None,
         layout: WorkspaceLayout | None = None,
         output: OutputContract | None = None,
     ) -> Rollout:
-        """Run an agent inside the stage workspace."""
+        """Run an agent inside the stage workspace.
+
+        Codex-native default: with no `agent`, the runtime's configured agent
+        runs; with no `instructions`, the engine derives them from the case
+        input. The agent owns its own multi-turn loop.
+        """
         return cls(
             kind="agent",
             agent_config=agent,

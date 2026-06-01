@@ -25,9 +25,9 @@ import leaven as lv
 # rollout-`cx` is TARGET-FREE: it sees `case.input`, can drive `cx.lm` /
 # `cx.agent` / `cx.sandbox` / `cx.workspace`, but it CANNOT read `case.target`
 # and CANNOT mutate the graph. The function's return value IS `output`.
-async def run(prompt: lv.PromptArtifact, case: lv.Case, cx) -> str:
+async def run(prompt: lv.PromptArtifact, case: lv.InputCaseView, cx: lv.RolloutContext) -> str:
     reply = await cx.lm.complete(prompt=prompt.template.format(**case.input))
-    return reply.text.strip()
+    return reply.text.strip()  # `case` has no `.target` attribute at all — structural
 
 
 # ----- rubric: how the rollout's output scores ------------------------------
@@ -36,8 +36,8 @@ async def run(prompt: lv.PromptArtifact, case: lv.Case, cx) -> str:
 # `case.target` IS readable here, and `cx` is available for judge-style rewards
 # (`cx.lm`) or inspecting `cx.rollout_workspace`. Still no graph mutation.
 @lv.reward
-async def exact(output: str, case: lv.Case, cx) -> float:
-    return 1.0 if output == (case.target or {})["answer"] else 0.0
+async def exact(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
+    return 1.0 if output == case.target["answer"] else 0.0  # ScoringCaseView → target readable
 
 
 # ----- composition ----------------------------------------------------------

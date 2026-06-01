@@ -54,11 +54,13 @@ from .decorators import (
     scorer,
     serve_stage,
 )
+from .environment import Environment
 from .evolution import EvolutionBuilder, evolve
 from .optimize import OptimizeBuilder, optimize
 
 # ----- Result + inspection -------------------------------------------------
 from .result import Candidate, Optimized, ReplayResult, RunSummary, Split
+from .rubric import RewardValue, Rubric, reward
 from .runtime import Cache, Runtime, runtime
 from .score import Score
 from .stages import Evaluate, Propose, Reflect, Rollout, ScoreStage, Stages
@@ -91,8 +93,8 @@ roles = AgentRoles
 for _leaky in (
     "agent_instructions", "assessment", "builders",
     "case", "context", "decorators", "evaluation_job",
-    "evidence", "evolution", "output_record", "proposal", "result",
-    "score", "stage_payloads", "stages", "task",
+    "environment", "evidence", "evolution", "output_record", "proposal", "result",
+    "rubric", "score", "stage_payloads", "stages", "task",
 ):
     if _leaky in globals():
         del globals()[_leaky]
@@ -108,6 +110,7 @@ __all__ = [
     "Case",
     "CaseSet",
     "CaseSplits",
+    "Environment",
     "Evaluate",
     "EvolutionBuilder",
     "OptimizeBuilder",
@@ -116,7 +119,9 @@ __all__ = [
     "Propose",
     "Reflect",
     "ReplayResult",
+    "RewardValue",
     "Rollout",
+    "Rubric",
     "RunSummary",
     "Runtime",
     "Score",
@@ -153,6 +158,7 @@ __all__ = [
     "proposer",
     "reflector",
     "register_stage",
+    "reward",
     "roles",
     "runner",
     "runs",
