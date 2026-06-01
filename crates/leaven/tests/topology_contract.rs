@@ -175,10 +175,7 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-workspace",
         ],
     ),
-    (
-        "leaven-agentic-agent-kit",
-        &["leaven-artifact-agent-kit"],
-    ),
+    ("leaven-agentic-agent-kit", &["leaven-artifact-agent-kit"]),
     (
         "leaven-agentic-skill",
         &[

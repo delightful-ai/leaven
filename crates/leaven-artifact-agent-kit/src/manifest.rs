@@ -2,7 +2,7 @@ use leaven_artifact_git::{GitProgramArtifact, GitRepoArtifact};
 
 use crate::{AgentKitPath, AgentKitPathError, AgentKitProfiles, HookScaffoldStatus};
 
-/// Parsed `manifest.toml` for a repo-backed AgentKit.
+/// Parsed `manifest.toml` for a repo-backed `AgentKit`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AgentKitManifest {
     pub schema: AgentKitSchema,
@@ -15,7 +15,7 @@ pub struct AgentKitManifest {
 }
 
 impl AgentKitManifest {
-    /// Parses and validates an AgentKit manifest from TOML.
+    /// Parses and validates an `AgentKit` manifest from TOML.
     ///
     /// # Errors
     ///
@@ -56,7 +56,7 @@ impl AgentKitManifest {
     }
 }
 
-/// Repo artifact identity that backs an AgentKit view.
+/// Repo artifact identity that backs an `AgentKit` view.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AgentKitRepoArtifact {
     /// Single repository revision.
@@ -65,11 +65,11 @@ pub enum AgentKitRepoArtifact {
     Program(GitProgramArtifact),
 }
 
-/// AgentKit manifest schema version.
+/// `AgentKit` manifest schema version.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentKitSchema {
-    /// Initial repo-backed AgentKit manifest schema.
+    /// Initial repo-backed `AgentKit` manifest schema.
     V1,
 }
 
@@ -149,8 +149,11 @@ impl TryFrom<RawCodexProfile> for crate::AgentKitProfileCodex {
             system_prompt_channel: value
                 .system_prompt_channel
                 .unwrap_or(defaults.system_prompt_channel),
-            agent_docs_mount: parse_slot("profiles.codex.agent_docs_mount", value.agent_docs_mount)?
-                .unwrap_or(defaults.agent_docs_mount),
+            agent_docs_mount: parse_slot(
+                "profiles.codex.agent_docs_mount",
+                value.agent_docs_mount,
+            )?
+            .unwrap_or(defaults.agent_docs_mount),
             skills_mount: parse_slot("profiles.codex.skills_mount", value.skills_mount)?
                 .unwrap_or(defaults.skills_mount),
         })

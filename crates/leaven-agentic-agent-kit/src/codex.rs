@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use leaven_artifact_agent_kit::{AgentKitManifest, AgentKitManifestError, AgentKitPath};
 
-/// Requested filesystem mount policy for AgentKit projection.
+/// Requested filesystem mount policy for `AgentKit` projection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AgentKitMountMode {
     /// Always copy files into the run workspace.
@@ -22,10 +22,10 @@ pub enum AgentKitMountApplied {
     Symlink,
 }
 
-/// Report for one projected AgentKit file.
+/// Report for one projected `AgentKit` file.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AgentKitMountReport {
-    /// Source path in the checked-out AgentKit subtree.
+    /// Source path in the checked-out `AgentKit` subtree.
     pub source: PathBuf,
     /// Target path in the run workspace.
     pub target: PathBuf,
@@ -39,7 +39,7 @@ pub struct AgentKitMountReport {
     pub bytes_written: u64,
 }
 
-/// Codex projection output for an AgentKit.
+/// Codex projection output for an `AgentKit`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CodexAgentKitMaterialization {
     /// Provider instruction text read from the manifest's system prompt slot.
@@ -52,20 +52,20 @@ pub struct CodexAgentKitMaterialization {
     pub bytes_written: u64,
 }
 
-/// Materializes a checked-out AgentKit subtree into Codex's workspace ABI.
+/// Materializes a checked-out `AgentKit` subtree into Codex's workspace ABI.
 #[derive(Clone, Copy, Debug)]
 pub struct CodexAgentKitMaterializer {
     mount_mode: AgentKitMountMode,
 }
 
 impl CodexAgentKitMaterializer {
-    /// Constructs a Codex AgentKit materializer.
+    /// Constructs a Codex `AgentKit` materializer.
     #[must_use]
     pub const fn new(mount_mode: AgentKitMountMode) -> Self {
         Self { mount_mode }
     }
 
-    /// Materializes a checked-out AgentKit subtree into a run workspace.
+    /// Materializes a checked-out `AgentKit` subtree into a run workspace.
     ///
     /// # Errors
     ///
@@ -115,10 +115,10 @@ impl CodexAgentKitMaterializer {
     }
 }
 
-/// Codex AgentKit materialization failure.
+/// Codex `AgentKit` materialization failure.
 #[derive(Debug, thiserror::Error)]
 pub enum CodexAgentKitMaterializerError {
-    /// The AgentKit manifest is invalid.
+    /// The `AgentKit` manifest is invalid.
     #[error("invalid AgentKit manifest")]
     Manifest(#[from] AgentKitManifestError),
     /// A filesystem operation failed.
@@ -143,7 +143,12 @@ fn project_path(
         fs::create_dir_all(target).map_err(|err| io_error(target, err))?;
         for entry in fs::read_dir(source).map_err(|err| io_error(source, err))? {
             let entry = entry.map_err(|err| io_error(source, err))?;
-            project_path(&entry.path(), &target.join(entry.file_name()), requested, mounts)?;
+            project_path(
+                &entry.path(),
+                &target.join(entry.file_name()),
+                requested,
+                mounts,
+            )?;
         }
         return Ok(());
     }
@@ -167,14 +172,11 @@ fn materialize_file(
     let mut symlink_fallback = false;
 
     if requested == AgentKitMountMode::SymlinkPreferred {
-        match try_symlink(source, target) {
-            Ok(()) => {
-                applied = AgentKitMountApplied::Symlink;
-            }
-            Err(_) => {
-                symlink_fallback = true;
-                fs::copy(source, target).map_err(|err| io_error(target, err))?;
-            }
+        if let Ok(()) = try_symlink(source, target) {
+            applied = AgentKitMountApplied::Symlink;
+        } else {
+            symlink_fallback = true;
+            fs::copy(source, target).map_err(|err| io_error(target, err))?;
         }
     } else {
         fs::copy(source, target).map_err(|err| io_error(target, err))?;

@@ -4,15 +4,14 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use leaven_agent::{
-    AgentInstructions, AgentLimits, AgentRunContext, AgentRunRequest, AgentRuntime,
-    OutputContract,
+    AgentInstructions, AgentLimits, AgentRunContext, AgentRunRequest, AgentRuntime, OutputContract,
 };
+use leaven_agent_codex_cli::{CodexCliConfig, CodexCliRuntime};
 use leaven_agentic_agent_kit::AgentKitMountMode;
 use leaven_artifact_git::{
     GitArtifactIdentityMode, GitPath, GitProgramArtifact, GitProgramLayout, GitRepoArtifact,
     GitRevision, RepoKey, RepoRef,
 };
-use leaven_agent_codex_cli::{CodexCliConfig, CodexCliRuntime};
 use leaven_gepa::ReflectRequest;
 use leaven_gepa_agentic_agent_kit::{
     AgentKitReflectionPart, CodexAgentKitReflectionInput, CodexAgentKitReflectionSmoke,
@@ -74,7 +73,11 @@ fn live_codex_agent_kit_constrained_edit_readback() {
             fs::read_to_string(workspace_root.join("AGENTS.md")).unwrap(),
             "Do not edit files outside agent/.\n"
         );
-        assert!(workspace_root.join(".agents/skills/alpha/SKILL.md").exists());
+        assert!(
+            workspace_root
+                .join(".agents/skills/alpha/SKILL.md")
+                .exists()
+        );
 
         let mut instructions = AgentInstructions::task(
             "Edit agent/system_prompt.md only. Append exactly this line at the end: \
@@ -156,7 +159,11 @@ hooks = "hooks/"
         "You are editing only system_prompt.md.\n",
     )
     .unwrap();
-    fs::write(root.join("AGENTS.md"), "Do not edit files outside agent/.\n").unwrap();
+    fs::write(
+        root.join("AGENTS.md"),
+        "Do not edit files outside agent/.\n",
+    )
+    .unwrap();
     fs::write(
         root.join("skills/alpha/SKILL.md"),
         "---\nname: alpha\ndescription: Alpha skill.\n---\n\nDo alpha work.\n",

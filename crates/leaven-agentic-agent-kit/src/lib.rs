@@ -1,4 +1,4 @@
-//! AgentKit materialization adapters for agentic workflows.
+//! `AgentKit` materialization adapters for agentic workflows.
 
 mod codex;
 

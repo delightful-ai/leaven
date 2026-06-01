@@ -105,25 +105,25 @@ public-seam drafts via `.ignore`. Search those trees by explicit path or with
   do: read the governing spec and the narrowest slice doc first, then implement the smallest coherent surface
   preserve: spec vocabulary, durable events/evidence, hard cutover semantics
   avoid: treating philosophy essays or prior plans as stronger than the current spec and code
-  verify: run `just check` before claiming completion
+  verify: run the owning crate/test target plus any topology or public-surface proof the change affects; reserve `just check` for broad/shared/release gates
 
 - when: adding or changing `leaven-core` public API
   do: add or update the contract test that proves the public promise at the lowest clean layer
   preserve: cold-core dependency boundaries and `RunContext` as graph mutation authority
   avoid: making fields/functions public only for tests or convenience
-  verify: run `cargo test -p leaven-core` during iteration, then `just check`
+  verify: run `cargo test -p leaven-core` plus the nearest downstream contract touched by the API; use `just check` when the change intentionally exercises workspace-wide compatibility
 
 - when: adding a test
   do: name the claim and choose exactly one shape: law, example, scenario, or regression
   preserve: the `<30s` full-suite runtime target, hard completion timeout, and coverage ratchet
   avoid: ceremony tests, broad e2e assertions for facts expressible lower down, and hidden slow lanes
-  verify: run `just test`; it warns on the runtime target and enforces the hard timeout
+  verify: run the exact new or changed test first; run `just test` when the suite harness, runtime SLA, or broad cross-crate behavior changed
 
 - when: changing crate boundaries or dependencies
   do: run a topology check before editing, then update the crate-boundary contract and nearest ownership docs in the same change
   preserve: cold core below engine/std/workspace/derive and adapter/runtime dependencies outside cold crates
   avoid: dependency shortcuts that make future seams harder to see, logic in `lib.rs`, and public exports that exist only to make tests convenient
-  verify: run `cargo test -p leaven --test topology_contract` during iteration, then `just check`
+  verify: run `cargo test -p leaven --test topology_contract` plus the owning crate tests; escalate to `just check` only for broad topology churn or release confidence
 
 - when: changing default features, preludes, facade re-exports, or example proof status
   do: update the public-maturity classification for the affected route and add/adjust the export or proof gate in the same change
@@ -151,8 +151,10 @@ The skill descriptions own trigger routing. Do not duplicate their full routing 
 ## Verification Policy
 - The workspace pins nightly via `rust-toolchain.toml`. The `dev` profile keeps LLVM as the default backend with line-table debuginfo, disables Cargo incremental compilation, and uses many codegen units for local edit/compile/test loops; the pinned nightly ICEs when incremental compilation and the parallel rustc frontend are combined. `.cargo/config.toml` still enables the parallel rustc frontend (`-Zthreads`) for reliable hot-loop speed without per-command `CARGO_INCREMENTAL=0` wrappers.
 - `just test`: canonical full test suite; builds and discovers workspace test binaries with Cargo, runs the discovered libtest binaries plus doctests, warns on the `<30s` runtime target, and enforces the hard completion timeout configured in the root `Justfile`.
-- `just check`: completion gate; runs formatting, production line-count lint, clippy, the default workspace test lane, and line/branch coverage.
-- Use narrower commands only while iterating. Before claiming behavior is complete, run `just check` unless the user explicitly requested a narrower proof.
+- `just check`: full workspace/release gate; runs formatting, production line-count lint, clippy, the default workspace test lane, and line/branch coverage. It is intentionally expensive and should not be the default closeout for a narrow crate, docs, or topology slice.
+- Default closeout proof is the strongest focused command set for the touched ownership surface: exact integration tests, owning crate tests, targeted clippy/fmt when Rust changed, touched scripts, and `cargo test -p leaven --test topology_contract` when membership, dependencies, facades, or crate boundaries changed.
+- Escalate to `just check` when the change touches shared engine/run/core behavior with broad blast radius, workspace test or coverage tooling/floors, default features/preludes/facades, release/PR readiness, or when the user asks for the full gate.
+- When you do not run `just check`, say so explicitly in the closeout and list the focused commands that were run.
 - Child `AGENTS.md` files should add verification deltas tied to local change types, not repeat root commands.
 
 ## Hazards / Exceptions

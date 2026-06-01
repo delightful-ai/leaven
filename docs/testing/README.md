@@ -4,9 +4,17 @@ Leaven uses tests to collapse the remaining implementation space after the
 type, trait, and error surfaces are honest. Every test must name a real claim
 and kill a plausible wrong implementation.
 
-## Canonical Check
+## Verification Lanes
 
-Run the full local gate before claiming behavior is complete:
+Use the narrowest command set that proves the touched ownership surface before
+claiming a narrow change is complete. For a small crate or docs slice, that is
+usually the exact integration test, the owning crate test lane, targeted
+clippy/fmt when Rust changed, and topology only if membership or dependency
+edges changed.
+
+Run the full local gate for broad shared behavior, workspace tooling or
+coverage-floor changes, facade/default-feature/public-route changes,
+release/PR readiness, or when a reviewer asks for workspace confidence:
 
 ```bash
 just check
@@ -16,7 +24,7 @@ just check
 workspace library/tool targets, the default workspace libtest suite, doctests,
 and the line/branch coverage summary. The default gate excludes milestone example
 packages; use the explicit milestone recipes when an example workflow is the
-claim under test. Use narrower recipes only while iterating:
+claim under test. Focused proof commands include:
 
 ```bash
 just lint
@@ -108,7 +116,7 @@ when the changed proof is confined to one or two integration test targets. This
 lane clears stale profraw files, reuses compiled `cargo-llvm-cov` artifacts,
 and skips the `xtask` git-trust smoke binaries, so it is only an iteration aid.
 It refuses non-default milestone packages and does not replace `just coverage`
-or `just check` as completion evidence.
+or `just check` when full workspace/release confidence is required.
 
 When the only question is whether the touched tests still pass under coverage
 instrumentation, use `just coverage-smoke-fast --package <crate> --test

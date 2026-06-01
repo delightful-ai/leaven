@@ -12,7 +12,7 @@ use leaven_artifact_git::{
 use leaven_core::Artifact;
 use leaven_gepa::ReflectRequest;
 
-/// AgentKit part targeted by a GEPA reflection request.
+/// `AgentKit` part targeted by a GEPA reflection request.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AgentKitReflectionPart {
     /// The `system_prompt.md` slot.
@@ -23,7 +23,7 @@ pub enum AgentKitReflectionPart {
     Skill { name: String },
 }
 
-/// Inputs for the deterministic Codex AgentKit reflection smoke.
+/// Inputs for the deterministic Codex `AgentKit` reflection smoke.
 #[derive(Clone, Debug)]
 pub struct CodexAgentKitReflectionInput {
     pub artifact: GitProgramArtifact,
@@ -47,7 +47,7 @@ impl CodexAgentKitReflectionInput {
     }
 }
 
-/// Deterministic report for the provider-free AgentKit reflection smoke.
+/// Deterministic report for the provider-free `AgentKit` reflection smoke.
 #[derive(Clone, Debug)]
 pub struct CodexAgentKitReflectionReport {
     /// Codex profile projection report.
@@ -62,7 +62,7 @@ pub struct CodexAgentKitReflectionReport {
     pub hook_scaffold_ignored: bool,
 }
 
-/// Provider-free smoke bridge for Codex AgentKit GEPA reflection.
+/// Provider-free smoke bridge for Codex `AgentKit` GEPA reflection.
 #[derive(Clone, Copy, Debug)]
 pub struct CodexAgentKitReflectionSmoke {
     materializer: CodexAgentKitMaterializer,
@@ -77,7 +77,7 @@ impl CodexAgentKitReflectionSmoke {
         }
     }
 
-    /// Projects the AgentKit and imports a typed child Git revision change.
+    /// Projects the `AgentKit` and imports a typed child Git revision change.
     ///
     /// This is deterministic proof plumbing. The caller supplies the child
     /// revision that a real Git readback adapter would discover after a
@@ -122,10 +122,10 @@ impl CodexAgentKitReflectionSmoke {
     }
 }
 
-/// Provider-free AgentKit reflection smoke failure.
+/// Provider-free `AgentKit` reflection smoke failure.
 #[derive(Debug, thiserror::Error)]
 pub enum CodexAgentKitReflectionSmokeError {
-    /// The AgentKit manifest could not be read.
+    /// The `AgentKit` manifest could not be read.
     #[error("failed to read AgentKit manifest at {path}")]
     ReadManifest {
         /// Manifest path.
@@ -134,7 +134,7 @@ pub enum CodexAgentKitReflectionSmokeError {
         #[source]
         source: std::io::Error,
     },
-    /// The AgentKit manifest is invalid.
+    /// The `AgentKit` manifest is invalid.
     #[error("invalid AgentKit manifest")]
     Manifest(#[from] AgentKitManifestError),
     /// The Codex profile projection failed.
@@ -153,10 +153,11 @@ pub enum CodexAgentKitReflectionSmokeError {
 
 fn load_manifest(root: &Path) -> Result<AgentKitManifest, CodexAgentKitReflectionSmokeError> {
     let path = root.join("manifest.toml");
-    let text =
-        fs::read_to_string(&path).map_err(|source| CodexAgentKitReflectionSmokeError::ReadManifest {
+    let text = fs::read_to_string(&path).map_err(|source| {
+        CodexAgentKitReflectionSmokeError::ReadManifest {
             path: path.clone(),
             source,
-        })?;
+        }
+    })?;
     Ok(AgentKitManifest::from_toml_str(&text)?)
 }

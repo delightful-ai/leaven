@@ -1,4 +1,4 @@
-//! GEPA bridge smoke for repo-backed AgentKit reflection.
+//! GEPA bridge smoke for repo-backed `AgentKit` reflection.
 
 mod reflector;
 

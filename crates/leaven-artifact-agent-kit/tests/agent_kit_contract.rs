@@ -51,7 +51,10 @@ hooks = "hooks/"
     )
     .unwrap();
 
-    assert_eq!(manifest.hook_status(), Some(HookScaffoldStatus::ScaffoldOnly));
+    assert_eq!(
+        manifest.hook_status(),
+        Some(HookScaffoldStatus::ScaffoldOnly)
+    );
 }
 
 #[test]
@@ -63,7 +66,10 @@ system_prompt = "/tmp/system_prompt.md"
 "#,
     )
     .unwrap_err();
-    assert!(matches!(absolute, AgentKitManifestError::InvalidPath { .. }));
+    assert!(matches!(
+        absolute,
+        AgentKitManifestError::InvalidPath { .. }
+    ));
 
     let escaping = AgentKitManifest::from_toml_str(
         r#"
@@ -72,7 +78,10 @@ system_prompt = "../system_prompt.md"
 "#,
     )
     .unwrap_err();
-    assert!(matches!(escaping, AgentKitManifestError::InvalidPath { .. }));
+    assert!(matches!(
+        escaping,
+        AgentKitManifestError::InvalidPath { .. }
+    ));
 }
 
 #[test]
@@ -85,7 +94,10 @@ system_prompt = "system_prompt.md"
     )
     .unwrap();
 
-    assert_eq!(manifest.profiles.codex.agent_docs_mount.as_str(), "AGENTS.md");
+    assert_eq!(
+        manifest.profiles.codex.agent_docs_mount.as_str(),
+        "AGENTS.md"
+    );
     assert_eq!(
         manifest.profiles.codex.skills_mount.as_str(),
         ".agents/skills"

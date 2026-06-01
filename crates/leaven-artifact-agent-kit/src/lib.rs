@@ -1,4 +1,4 @@
-//! Repo-backed AgentKit artifact manifest and profile vocabulary.
+//! Repo-backed `AgentKit` artifact manifest and profile vocabulary.
 
 mod manifest;
 mod path;

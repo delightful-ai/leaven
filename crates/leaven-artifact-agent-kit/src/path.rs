@@ -1,7 +1,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-/// Portable path inside an AgentKit repo subtree.
+/// Portable path inside an `AgentKit` repo subtree.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, serde::Serialize)]
 #[serde(transparent)]
 pub struct AgentKitPath(String);
@@ -50,13 +50,13 @@ impl TryFrom<String> for AgentKitPath {
     }
 }
 
-/// Invalid path inside an AgentKit subtree.
+/// Invalid path inside an `AgentKit` subtree.
 #[derive(Debug, Clone, Eq, PartialEq, thiserror::Error)]
 pub enum AgentKitPathError {
     /// Paths must not be empty.
     #[error("agent kit path is empty")]
     Empty,
-    /// AgentKit paths are portable POSIX-style relative paths.
+    /// `AgentKit` paths are portable POSIX-style relative paths.
     #[error("agent kit path must be relative")]
     Absolute,
     /// Empty path components are not accepted.

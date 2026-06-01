@@ -1,21 +1,13 @@
 use crate::AgentKitPath;
 
-/// Provider profile projections for an AgentKit.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// Provider profile projections for an `AgentKit`.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct AgentKitProfiles {
     /// Codex workspace projection profile.
     pub codex: AgentKitProfileCodex,
 }
 
-impl Default for AgentKitProfiles {
-    fn default() -> Self {
-        Self {
-            codex: AgentKitProfileCodex::default(),
-        }
-    }
-}
-
-/// Codex projection settings for a provider-neutral AgentKit.
+/// Codex projection settings for a provider-neutral `AgentKit`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AgentKitProfileCodex {
     /// Where `system_prompt.md` is supplied to Codex.

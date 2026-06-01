@@ -7,9 +7,7 @@ use leaven_artifact_git::{
     GitArtifactIdentityMode, GitPath, GitProgramArtifact, GitProgramChange, GitProgramLayout,
     GitRepoArtifact, GitRevision, RepoKey, RepoRef,
 };
-use leaven_core::{
-    InfoRef, OptimizationProblem, Proposal, ProposalBatch, ProposalBatchSemantics,
-};
+use leaven_core::{InfoRef, OptimizationProblem, Proposal, ProposalBatch, ProposalBatchSemantics};
 use leaven_engine::{
     Arity, BudgetLedger, ProposalContext, ProposalError, Proposer, RunContext, RunGraph,
 };
@@ -163,7 +161,11 @@ hooks = "hooks/"
 "#,
     )
     .unwrap();
-    fs::write(root.join("system_prompt.md"), "Prefer durable repo identity.\n").unwrap();
+    fs::write(
+        root.join("system_prompt.md"),
+        "Prefer durable repo identity.\n",
+    )
+    .unwrap();
     fs::write(root.join("AGENTS.md"), "Keep system_prompt.md separate.\n").unwrap();
     fs::write(
         root.join("skills/alpha/SKILL.md"),
