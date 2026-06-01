@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use leaven_core::{CacheIdentity, CaseSetVersion};
+use leaven_core::{AssessmentGranularity, CacheIdentity, CaseSetVersion, EvaluationPurpose};
 use leaven_kernel::{AssessmentId, CandidateId, CaseId, Fingerprint};
 use serde::{Deserialize, Serialize};
 
@@ -43,6 +43,19 @@ pub enum CacheBypassReason {
     MissingCandidateIdentity { candidate: CandidateId },
 }
 
+/// Evaluator-visible request shape that participates in evaluation-cache identity.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
+pub enum EvaluationCacheRequestKind {
+    /// Independent scoring of each candidate.
+    Independent,
+    /// Pairwise comparison where left/right order can affect evidence.
+    OrderedPairwise,
+    /// Pairwise comparison where the evaluator declares symmetric evidence.
+    UnorderedPairwise,
+    /// Listwise ranking of a candidate group.
+    Listwise,
+}
+
 /// Key used for engine-owned evaluation caching.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct EvaluationCacheKey {
@@ -54,6 +67,12 @@ pub struct EvaluationCacheKey {
     pub case_set_version: CaseSetVersion,
     /// Resolved case IDs.
     pub case_ids: Vec<CaseId>,
+    /// Evaluator-visible request kind.
+    pub request_kind: EvaluationCacheRequestKind,
+    /// Aggregate vs per-case evidence shape requested from the evaluator.
+    pub granularity: AssessmentGranularity,
+    /// Why the evaluation is being run.
+    pub purpose: EvaluationPurpose,
     /// Candidate cache identities in request order.
     pub candidates: Vec<CacheIdentity>,
 }
@@ -129,10 +148,10 @@ impl EvaluationCache {
 
 #[cfg(test)]
 mod tests {
-    use leaven_core::{CacheIdentity, CaseSetVersion};
+    use leaven_core::{AssessmentGranularity, CacheIdentity, CaseSetVersion, EvaluationPurpose};
     use leaven_kernel::{AssessmentId, CaseId, ContentId, Fingerprint};
 
-    use crate::{CachePolicy, EvaluationCache, EvaluationCacheKey};
+    use crate::{CachePolicy, EvaluationCache, EvaluationCacheKey, EvaluationCacheRequestKind};
 
     #[test]
     fn cache_snapshot_round_trips_entries_for_resume() {
@@ -141,6 +160,9 @@ mod tests {
             policy: CachePolicy::Deterministic,
             case_set_version: CaseSetVersion("cases-v1".to_owned()),
             case_ids: vec![CaseId::new(1)],
+            request_kind: EvaluationCacheRequestKind::Independent,
+            granularity: AssessmentGranularity::Aggregate,
+            purpose: EvaluationPurpose::Search,
             candidates: vec![CacheIdentity::Content(ContentId::from_bytes([2; 32]))],
         };
         let assessments = vec![AssessmentId::new(), AssessmentId::new()];
@@ -161,6 +183,9 @@ mod tests {
             policy: CachePolicy::Deterministic,
             case_set_version: CaseSetVersion("cases-v1".to_owned()),
             case_ids: vec![CaseId::new(1)],
+            request_kind: EvaluationCacheRequestKind::Independent,
+            granularity: AssessmentGranularity::Aggregate,
+            purpose: EvaluationPurpose::Search,
             candidates: vec![CacheIdentity::Content(ContentId::from_bytes([1; 32]))],
         };
         let second = EvaluationCacheKey {
@@ -168,6 +193,9 @@ mod tests {
             policy: CachePolicy::DeterministicWithSeed(3),
             case_set_version: CaseSetVersion("cases-v1".to_owned()),
             case_ids: vec![CaseId::new(2)],
+            request_kind: EvaluationCacheRequestKind::Listwise,
+            granularity: AssessmentGranularity::PerCase,
+            purpose: EvaluationPurpose::Validation,
             candidates: vec![CacheIdentity::Content(ContentId::from_bytes([2; 32]))],
         };
         let mut cache = EvaluationCache::default();

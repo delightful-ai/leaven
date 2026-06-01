@@ -10,14 +10,17 @@ use std::{
 
 use bytes::Bytes;
 use futures::executor::block_on;
-use leaven_core::{CacheIdentity, CaseSetVersion, PartitionId, Proposal};
+use leaven_core::{
+    AssessmentGranularity, CacheIdentity, CaseSetVersion, EvaluationPurpose, PartitionId, Proposal,
+};
 use leaven_engine::{
     CacheIndexSnapshot, CachePolicy, Callback, CaseSet, CheckpointContext, CheckpointError,
-    CheckpointableOptimizer, Engine, EvaluationCache, EvaluationCacheKey, EvaluationCacheSnapshot,
-    GraphSnapshotRef, Optimizer, OptimizerError, OptimizerStateSnapshot, OptimizerStateWrite,
-    PrivateStatePolicy, RestoreContext, RunCheckpoint, RunCheckpointRequest, RunContext, RunEvent,
-    RunGraph, RunGraphSnapshot, RunGraphView, RunPersistence, RunPersistenceError, StateFormat,
-    StepStatus, StopReason, Stopper, StoreRunPersistence, TrustPolicy, optimize,
+    CheckpointableOptimizer, Engine, EvaluationCache, EvaluationCacheKey,
+    EvaluationCacheRequestKind, EvaluationCacheSnapshot, GraphSnapshotRef, Optimizer,
+    OptimizerError, OptimizerStateSnapshot, OptimizerStateWrite, PrivateStatePolicy,
+    RestoreContext, RunCheckpoint, RunCheckpointRequest, RunContext, RunEvent, RunGraph,
+    RunGraphSnapshot, RunGraphView, RunPersistence, RunPersistenceError, StateFormat, StepStatus,
+    StopReason, Stopper, StoreRunPersistence, TrustPolicy, optimize,
     restore_checkpointable_optimizer_state,
 };
 use leaven_kernel::{
@@ -442,6 +445,9 @@ fn store_run_persistence_writes_graph_cache_and_checkpoint_envelope() {
             policy: CachePolicy::Deterministic,
             case_set_version: CaseSetVersion("v1".to_owned()),
             case_ids: vec![CaseId::new(0)],
+            request_kind: EvaluationCacheRequestKind::Independent,
+            granularity: AssessmentGranularity::Aggregate,
+            purpose: EvaluationPurpose::Search,
             candidates: vec![CacheIdentity::Content(ContentId::from_bytes([4; 32]))],
         },
         vec![AssessmentId::new()],
@@ -533,6 +539,9 @@ fn store_run_persistence_keeps_latest_on_clean_resume_boundary() {
             policy: CachePolicy::Deterministic,
             case_set_version: CaseSetVersion("v1".to_owned()),
             case_ids: vec![CaseId::new(0)],
+            request_kind: EvaluationCacheRequestKind::Independent,
+            granularity: AssessmentGranularity::Aggregate,
+            purpose: EvaluationPurpose::Search,
             candidates: vec![CacheIdentity::Content(ContentId::from_bytes([4; 32]))],
         },
         vec![AssessmentId::new()],
@@ -973,6 +982,9 @@ fn store_run_persistence_reports_store_write_refusals() {
             policy: CachePolicy::Deterministic,
             case_set_version: CaseSetVersion("v1".to_owned()),
             case_ids: vec![CaseId::new(0)],
+            request_kind: EvaluationCacheRequestKind::Independent,
+            granularity: AssessmentGranularity::Aggregate,
+            purpose: EvaluationPurpose::Search,
             candidates: vec![CacheIdentity::Content(ContentId::from_bytes([4; 32]))],
         },
         vec![AssessmentId::new()],

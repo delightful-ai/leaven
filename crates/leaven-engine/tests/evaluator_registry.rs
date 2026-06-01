@@ -164,6 +164,43 @@ fn registered_deterministic_evaluator_reuses_cache_for_identical_request() {
 }
 
 #[test]
+fn deterministic_registry_cache_keeps_independent_and_pairwise_shapes_distinct() {
+    block_on(async {
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let cases = CaseSet::new(vec!["case"]);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut engine = optimize::<TestProblem>()
+            .budget(Budget::metric_calls(10))
+            .evaluator(ShapeSensitiveEvaluator {
+                calls: calls.clone(),
+            })
+            .build();
+        let left = engine
+            .insert_seed(TextArtifact("left".to_owned()), 0)
+            .unwrap();
+        let right = engine
+            .insert_seed(TextArtifact("right".to_owned()), 1)
+            .unwrap();
+        let mut optimizer = IndependentThenPairwiseEvaluation { left, right };
+
+        let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
+
+        assert_eq!(result.best, Some(right));
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert_eq!(engine.view().evaluation_request_count(), 2);
+        assert_eq!(engine.view().assessment_count(), 3);
+        assert_eq!(
+            engine
+                .view()
+                .pairwise_assessments(left, right)
+                .iter()
+                .count(),
+            1
+        );
+    });
+}
+
+#[test]
 fn registered_casewise_evaluation_batches_misses_and_reuses_single_case_cache() {
     block_on(async {
         let store = InlineEvidenceStore::<TestEvidence>::new("inline");
@@ -570,6 +607,56 @@ impl Optimizer<TestProblem> for RepeatCasewiseEvaluation {
     }
 }
 
+struct IndependentThenPairwiseEvaluation {
+    left: CandidateId,
+    right: CandidateId,
+}
+
+impl Optimizer<TestProblem> for IndependentThenPairwiseEvaluation {
+    async fn step(
+        &mut self,
+        ctx: &mut RunContext<'_, TestProblem>,
+    ) -> Result<StepStatus, OptimizerError> {
+        let independent = ctx
+            .evaluate(
+                EvaluatorId::PRIMARY,
+                EvaluationRequest::Independent {
+                    candidates: vec![self.left, self.right],
+                    set: EvaluationSet::All,
+                    granularity: AssessmentGranularity::Aggregate,
+                    purpose: EvaluationPurpose::Search,
+                },
+            )
+            .await
+            .map_err(|err| OptimizerError::Message(err.to_string()))?;
+        let pairwise = ctx
+            .evaluate(
+                EvaluatorId::PRIMARY,
+                EvaluationRequest::Pairwise {
+                    left: self.left,
+                    right: self.right,
+                    set: EvaluationSet::All,
+                    granularity: AssessmentGranularity::Aggregate,
+                    purpose: EvaluationPurpose::Search,
+                    order: PairOrder::Ordered,
+                },
+            )
+            .await
+            .map_err(|err| OptimizerError::Message(err.to_string()))?;
+
+        assert_eq!(independent.assessment_ids.len(), 2);
+        assert_eq!(pairwise.assessment_ids.len(), 1);
+        Ok(StepStatus::Done)
+    }
+
+    fn best_candidate(
+        &self,
+        _graph: leaven_engine::RunGraphView<'_, TestProblem>,
+    ) -> Option<CandidateId> {
+        Some(self.right)
+    }
+}
+
 struct CasewiseErrorOptimizer {
     seed: CandidateId,
     set: EvaluationSet,
@@ -804,6 +891,64 @@ impl Evaluator<TestProblem> for CountingRegisteredEvaluator {
             }],
             Cost::metric_calls(1),
         ))
+    }
+}
+
+struct ShapeSensitiveEvaluator {
+    calls: Arc<AtomicUsize>,
+}
+
+impl Evaluator<TestProblem> for ShapeSensitiveEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([9; 32])
+    }
+
+    fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
+        CachePolicy::Deterministic
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, TestProblem>,
+    ) -> Result<Metered<Vec<Assessment<TestProblem>>>, EvaluationError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        match request.kind {
+            ResolvedRequestKind::Independent { candidates } => {
+                let assessments = candidates
+                    .into_iter()
+                    .map(|candidate| Assessment::Independent {
+                        candidate,
+                        target: AssessmentTarget::Unscoped,
+                        evidence: TestEvidence { score: 5.0 },
+                        cost: Cost::metric_calls(1),
+                        metadata: MetadataBag::new(),
+                    })
+                    .collect();
+                Ok(Metered::new(assessments, Cost::metric_calls(1)))
+            }
+            ResolvedRequestKind::Pairwise { left, right, order } => {
+                assert_eq!(order, PairOrder::Ordered);
+                Ok(Metered::new(
+                    vec![Assessment::Pairwise {
+                        left,
+                        right,
+                        target: AssessmentTarget::Unscoped,
+                        evidence: TestEvidence { score: 1.0 },
+                        cost: Cost::metric_calls(1),
+                        metadata: MetadataBag::new(),
+                    }],
+                    Cost::metric_calls(1),
+                ))
+            }
+            ResolvedRequestKind::Listwise { .. } => Err(EvaluationError::Message(
+                "shape-sensitive evaluator does not support listwise requests".to_owned(),
+            )),
+        }
     }
 }
 

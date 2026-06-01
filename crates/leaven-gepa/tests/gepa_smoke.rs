@@ -1682,7 +1682,7 @@ fn reference_gepa_refuses_empty_validation_before_evaluator_work() {
 }
 
 #[test]
-fn gepa_reuses_evaluation_cache_per_candidate_case_across_different_requests() {
+fn gepa_keeps_evaluation_cache_purpose_scoped_across_different_requests() {
     block_on(async {
         let seen = Arc::new(Mutex::new(Vec::new()));
         let case_zero = leaven_kernel::CaseId::new(0);
@@ -1719,19 +1719,22 @@ fn gepa_reuses_evaluation_cache_per_candidate_case_across_different_requests() {
 
         assert_eq!(
             gepa.reference_state().total_metric_calls(),
-            2,
-            "parent screening should reuse the seed-validation row for case 0"
+            5,
+            "search-time screening must not reuse validation-purpose rows"
         );
         assert_eq!(
             seen.lock().expect("seen lock").as_slice(),
-            &[vec![case_zero, case_one]],
-            "GEPA should batch cache misses while backfilling per-case cache entries"
+            &[
+                vec![case_zero, case_one],
+                vec![case_zero, case_zero, case_zero]
+            ],
+            "GEPA should keep validation rows distinct while batching search-purpose misses"
         );
     });
 }
 
 #[test]
-fn accepted_child_full_validation_reuses_case_cache_hits() {
+fn accepted_child_full_validation_does_not_reuse_train_screening_cache_hits() {
     block_on(async {
         let seen = Arc::new(Mutex::new(Vec::new()));
         let case_zero = leaven_kernel::CaseId::new(0);
@@ -1769,13 +1772,18 @@ fn accepted_child_full_validation_reuses_case_cache_hits() {
 
         assert_eq!(
             seen.lock().expect("seen lock").as_slice(),
-            &[vec![case_zero, case_one], vec![case_zero], vec![case_one]],
-            "accepted-child full validation should reuse the child train-screening row and only evaluate missing validation cases"
+            &[
+                vec![case_zero, case_one],
+                vec![case_zero],
+                vec![case_zero],
+                vec![case_zero, case_one],
+            ],
+            "accepted-child full validation should not reuse search-purpose train-screening rows"
         );
         assert_eq!(
             gepa.reference_state().total_metric_calls(),
-            4,
-            "GEPA metric calls should count only seed validation, child train miss, and child validation miss"
+            6,
+            "GEPA metric calls should count purpose-scoped validation and search rows separately"
         );
         assert_eq!(gepa.reference_state().full_validation_evals(), 2);
         assert!(gepa.events().iter().any(|event| matches!(

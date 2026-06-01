@@ -20,10 +20,11 @@ use crate::graph::storage::{ApplyAttemptOutcome, ApplyProposalError};
 use crate::{
     Actor, ApplyOneReport, ApplyOutcome, ApplyReport, BudgetHandle, BudgetLedger,
     CacheBypassReason, CachePolicy, CacheStatus, CaseSet, DynCallback, DynEvaluator, ErrorPolicy,
-    EvaluationCache, EvaluationCacheKey, EvaluationContext, EvaluationError, EvaluationReport,
-    EvaluationResolveError, Evaluator, OptimizerStateWrite, ProposalBatchReport, ProposalContext,
-    ProposalError, Proposer, ReadScope, RenderContext, RunCheckpointRequest, RunEvent, RunGraph,
-    RunGraphView, RunPersistence, TrustPolicy, TrustViolation,
+    EvaluationCache, EvaluationCacheKey, EvaluationCacheRequestKind, EvaluationContext,
+    EvaluationError, EvaluationReport, EvaluationResolveError, Evaluator, OptimizerStateWrite,
+    ProposalBatchReport, ProposalContext, ProposalError, Proposer, ReadScope, RenderContext,
+    RunCheckpointRequest, RunEvent, RunGraph, RunGraphView, RunPersistence, TrustPolicy,
+    TrustViolation,
 };
 
 use super::proposal_context::StageAttemptEventSink;
@@ -869,8 +870,22 @@ fn evaluation_cache_key<P: OptimizationProblem>(
         policy,
         case_set_version: request.set.case_set_version.clone(),
         case_ids: request.set.case_ids.clone(),
+        request_kind: evaluation_cache_request_kind(&request.kind),
+        granularity: request.granularity,
+        purpose: request.purpose.clone(),
         candidates,
     })
+}
+
+fn evaluation_cache_request_kind(kind: &ResolvedRequestKind) -> EvaluationCacheRequestKind {
+    match kind {
+        ResolvedRequestKind::Independent { .. } => EvaluationCacheRequestKind::Independent,
+        ResolvedRequestKind::Pairwise { order, .. } => match order {
+            leaven_core::PairOrder::Ordered => EvaluationCacheRequestKind::OrderedPairwise,
+            leaven_core::PairOrder::Unordered => EvaluationCacheRequestKind::UnorderedPairwise,
+        },
+        ResolvedRequestKind::Listwise { .. } => EvaluationCacheRequestKind::Listwise,
+    }
 }
 
 fn request_candidate_cache_identities<P: OptimizationProblem>(

@@ -1398,7 +1398,7 @@ fn run_builder_sqlite_cache_keeps_only_search_rows_at_search_checkpoint() {
     .unwrap();
 
     assert_eq!(result.summary().optimization_cost.metric_calls, 1);
-    assert_eq!(result.summary().final_report_cost.metric_calls, 2);
+    assert_eq!(result.summary().final_report_cost.metric_calls, 3);
     let connection = Connection::open(run_dir.join("run.sqlite")).unwrap();
     let cached_entries: i64 = connection
         .query_row("SELECT COUNT(*) FROM evaluation_cache_entries", [], |row| {
