@@ -13,9 +13,9 @@ use leaven_core::{
 };
 use leaven_engine::{
     BudgetLedger, CacheBypassReason, CachePolicy, CacheStatus, Callback, CaseSet,
-    EvaluationCacheKey, EvaluationContext, EvaluationError, Evaluator, ProposalContext,
-    ProposalError, Proposer, RunCheckpointRequest, RunContext, RunEvent, RunGraphView,
-    RunPersistence, StoreRunPersistence, TrustPolicy,
+    EvaluationCacheKey, EvaluationCacheRequestKind, EvaluationContext, EvaluationError, Evaluator,
+    ProposalContext, ProposalError, Proposer, RunCheckpointRequest, RunContext, RunEvent,
+    RunGraphView, RunPersistence, StoreRunPersistence, TrustPolicy,
 };
 use leaven_kernel::{
     AssessmentId, Budget, CaseId, ContentId, Cost, ErrorKind, EvaluatorId, Fingerprint,
@@ -774,6 +774,9 @@ fn deterministic_evaluation_ignores_cache_entries_with_missing_graph_assessments
                 policy: CachePolicy::Deterministic,
                 case_set_version: CaseSetVersion("0".to_owned()),
                 case_ids: vec![leaven_kernel::CaseId::from_index(0)],
+                request_kind: EvaluationCacheRequestKind::Independent,
+                granularity: AssessmentGranularity::Aggregate,
+                purpose: EvaluationPurpose::Search,
                 candidates: vec![CacheIdentity::Content(ContentId::from_bytes(content))],
             },
             vec![AssessmentId::new()],

@@ -19,7 +19,7 @@ mod trust;
 pub use budget::{BudgetHandle, BudgetLedger};
 pub use cache::{
     CacheBypassReason, CachePolicy, CacheStatus, EvaluationCache, EvaluationCacheEntry,
-    EvaluationCacheKey, EvaluationCacheSnapshot,
+    EvaluationCacheKey, EvaluationCacheRequestKind, EvaluationCacheSnapshot,
 };
 pub use case_set::{CaseSet, CaseSetBuilder, EvaluationResolveError, UnsupportedEvaluationSet};
 pub use context::{
