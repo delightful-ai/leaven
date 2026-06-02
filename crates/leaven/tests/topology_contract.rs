@@ -347,9 +347,14 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
     (
         "leaven-seam-service",
         &[
+            "leaven-agent",
+            "leaven-agent-codex-cli",
+            "leaven-kernel",
             "leaven-lm-mock",
             "leaven-public-seam",
             "leaven-seam-runtime",
+            "leaven-workspace",
+            "leaven-workspace-local",
         ],
     ),
     ("leaven-seam-stdio", &["leaven-seam-runtime"]),

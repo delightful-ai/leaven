@@ -1,0 +1,933 @@
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+
+use futures::executor::block_on;
+use leaven_agent::{AgentRunContext, AgentRuntime};
+use leaven_agent_codex_cli::{CodexCliApproval, CodexCliConfig, CodexCliRuntime, CodexCliSandbox};
+use leaven_kernel::{AgentSessionId, BudgetSnapshot};
+use leaven_lm_mock::{MockLm, MockLmScript};
+use leaven_public_seam::{
+    AgentCommandOutputRefs, CapabilityDocument, PlanAgentRunOutcome, PlanAgentRunRequest,
+    PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
+    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanWorkspaceMaterializeOutcome,
+    PlanWorkspaceMaterializeRequest, PublicSeamError, PublicSeamPackage,
+};
+use leaven_seam_runtime::{SeamPlanRequest, SeamService, SeamServiceError, SeamStageRunRequest};
+use leaven_workspace::{Workspace, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
+use leaven_workspace_local::LocalWorkspaceFactory;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use sha2::{Digest, Sha256};
+
+/// Configured public-seam service that executes supported Plan IR effects.
+#[derive(Clone, Debug)]
+pub struct ConfiguredSeamService {
+    package: PublicSeamPackage,
+    config: SeamServiceConfig,
+    capability: Option<CapabilityDocument>,
+}
+
+impl ConfiguredSeamService {
+    /// Loads the active public-seam package from a repository root.
+    pub fn from_repo(
+        root: impl AsRef<Path>,
+        config: SeamServiceConfig,
+    ) -> Result<Self, ConfiguredSeamServiceError> {
+        let package = PublicSeamPackage::active_from_repo(root)?;
+        Self::from_package(package, config)
+    }
+
+    /// Builds a service from an already loaded public-seam package.
+    pub fn from_package(
+        package: PublicSeamPackage,
+        config: SeamServiceConfig,
+    ) -> Result<Self, ConfiguredSeamServiceError> {
+        config.lm.validate()?;
+        let capability = config
+            .capability
+            .clone()
+            .map(CapabilityDocument::from_value)
+            .transpose()?;
+        Ok(Self {
+            package,
+            config,
+            capability,
+        })
+    }
+
+    /// Service configuration.
+    pub const fn config(&self) -> &SeamServiceConfig {
+        &self.config
+    }
+}
+
+impl SeamService for ConfiguredSeamService {
+    fn handle_plan(&self, request: SeamPlanRequest<'_>) -> Result<Value, SeamServiceError> {
+        let context = self.config.context.to_execution_context();
+        let mut host = ConfiguredPlanHost {
+            lm: self.config.lm.to_mock_lm(),
+            workspace_config: self.config.workspace.clone(),
+            workspace_factory: self.config.workspace.to_factory(),
+            agent: self.config.agent.to_codex_runtime(),
+            workspaces: BTreeMap::new(),
+        };
+        let report = match &self.capability {
+            Some(capability) => self.package.execute_plan_document_with_capability(
+                request.params(),
+                &context,
+                capability,
+                &mut host,
+            ),
+            None => self
+                .package
+                .execute_plan_document(request.params(), &context, &mut host),
+        }
+        .map_err(|error| SeamServiceError::execution(error.to_string()))?;
+        extension_result_for_plan_report(request.method(), request.params(), report.value())
+            .map_err(|error| SeamServiceError::execution(error.to_string()))
+    }
+
+    fn handle_stage_run(
+        &self,
+        _request: SeamStageRunRequest<'_>,
+    ) -> Result<Value, SeamServiceError> {
+        Err(SeamServiceError::unavailable("leaven/stage.run"))
+    }
+}
+
+fn extension_result_for_plan_report(
+    method: &str,
+    plan: &Value,
+    result: &Value,
+) -> Result<Value, PublicSeamError> {
+    let values = result
+        .get("values")
+        .and_then(Value::as_object)
+        .ok_or_else(|| PublicSeamError::InvalidPlan {
+            message: "public seam method result missing values".to_owned(),
+        })?;
+    let primary_kind = method_primary_kind(method);
+    let primary = plan
+        .get("return")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter_map(|name| values.get(name))
+        .find(|value| value.get("kind").and_then(Value::as_str) == Some(primary_kind))
+        .or_else(|| {
+            plan.get("return")
+                .and_then(Value::as_array)
+                .and_then(|returns| returns.first())
+                .and_then(Value::as_str)
+                .and_then(|name| values.get(name))
+        })
+        .ok_or_else(|| PublicSeamError::InvalidPlan {
+            message: format!("public seam method result missing returned `{primary_kind}` value"),
+        })?;
+    let data_classes = primary
+        .get("data_classes")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!([]));
+    Ok(serde_json::json!({
+        "method": method,
+        "primary": primary,
+        "receipts": result.get("receipts").cloned().unwrap_or_else(|| serde_json::json!([])),
+        "redactions": result.get("redactions").cloned().unwrap_or_else(|| serde_json::json!([])),
+        "capability_fingerprint": result.get("capability_fingerprint").cloned().unwrap_or_else(|| serde_json::json!("fp_cap_sha256_missing")),
+        "policy_fingerprint": result.get("policy_fingerprint").cloned().unwrap_or_else(|| serde_json::json!("fp_policy_sha256_missing")),
+        "data_classes": data_classes
+    }))
+}
+
+fn method_primary_kind(method: &str) -> &'static str {
+    match method {
+        "leaven/lm.complete" => "lm_response",
+        "leaven/agent.run" => "agent_session",
+        "leaven/workspace.materialize" | "leaven/workspace.release" => "workspace_handle",
+        "leaven/sandbox.exec" => "sandbox_exec",
+        _ => "extension",
+    }
+}
+
+/// Serve-process configuration for executable public-seam methods.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct SeamServiceConfig {
+    /// Execution context projected into Plan Result receipts.
+    pub context: SeamExecutionContextConfig,
+    /// Optional capability document used for capability-bound Plan execution.
+    pub capability: Option<Value>,
+    /// Workspace provider configuration.
+    pub workspace: SeamWorkspaceConfig,
+    /// Agent provider configuration.
+    pub agent: SeamAgentConfig,
+    /// LM provider configuration.
+    pub lm: SeamLmConfig,
+}
+
+impl Default for SeamServiceConfig {
+    fn default() -> Self {
+        Self {
+            context: SeamExecutionContextConfig::default(),
+            capability: None,
+            workspace: SeamWorkspaceConfig::default(),
+            agent: SeamAgentConfig::default(),
+            lm: SeamLmConfig::default(),
+        }
+    }
+}
+
+/// Stable execution metadata for one local seam service.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct SeamExecutionContextConfig {
+    /// Capability fingerprint used for receipts.
+    pub capability_fingerprint: String,
+    /// Policy fingerprint used for receipts.
+    pub policy_fingerprint: String,
+    /// Base graph revision used for no-write plans.
+    pub base_revision: String,
+    /// Execution start timestamp.
+    pub started_at: String,
+    /// Execution completion timestamp.
+    pub completed_at: String,
+}
+
+impl SeamExecutionContextConfig {
+    fn to_execution_context(&self) -> PlanExecutionContext {
+        PlanExecutionContext::new(
+            &self.capability_fingerprint,
+            &self.policy_fingerprint,
+            &self.base_revision,
+            &self.started_at,
+            &self.completed_at,
+        )
+    }
+}
+
+impl Default for SeamExecutionContextConfig {
+    fn default() -> Self {
+        Self {
+            capability_fingerprint: "fp_cap_sha256_leaven_seam_local".to_owned(),
+            policy_fingerprint: "fp_policy_sha256_leaven_seam_local".to_owned(),
+            base_revision: "rev_leaven_seam_local_base".to_owned(),
+            started_at: "2026-01-01T00:00:00Z".to_owned(),
+            completed_at: "2026-01-01T00:00:01Z".to_owned(),
+        }
+    }
+}
+
+/// Workspace provider configuration for public-seam execution.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct SeamWorkspaceConfig {
+    /// Parent directory for local temp workspaces. Uses the OS temp directory when omitted.
+    pub parent: Option<PathBuf>,
+    /// UTF-8 seed files written into every materialized workspace.
+    pub seed_files: BTreeMap<String, String>,
+}
+
+impl SeamWorkspaceConfig {
+    fn to_factory(&self) -> LocalWorkspaceFactory {
+        self.parent
+            .clone()
+            .map_or_else(LocalWorkspaceFactory::temp, LocalWorkspaceFactory::new)
+    }
+}
+
+impl Default for SeamWorkspaceConfig {
+    fn default() -> Self {
+        Self {
+            parent: None,
+            seed_files: BTreeMap::new(),
+        }
+    }
+}
+
+/// Agent provider configuration for public-seam execution.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum SeamAgentConfig {
+    /// No agent provider is wired.
+    None,
+    /// Run agent sessions through the Codex CLI.
+    CodexCli {
+        /// Codex executable path.
+        codex_bin: String,
+        /// Codex model.
+        model: String,
+        /// Optional process timeout in seconds.
+        timeout_s: Option<u64>,
+        /// Optional CODEX_HOME override.
+        codex_home: Option<String>,
+        /// Run Codex with full bypass flags. Intended for explicit live proof only.
+        bypass_approvals_and_sandbox: bool,
+    },
+}
+
+impl SeamAgentConfig {
+    fn to_codex_runtime(&self) -> Option<CodexCliRuntime> {
+        match self {
+            Self::None => None,
+            Self::CodexCli {
+                codex_bin,
+                model,
+                timeout_s,
+                codex_home,
+                bypass_approvals_and_sandbox,
+            } => {
+                let mut config = CodexCliConfig::new(codex_bin.clone());
+                config.model.clone_from(model);
+                config.timeout = timeout_s.map(std::time::Duration::from_secs);
+                config.codex_home.clone_from(codex_home);
+                if *bypass_approvals_and_sandbox {
+                    config.approval = CodexCliApproval::BypassSandboxAndApprovals;
+                } else {
+                    config.approval = CodexCliApproval::Sandbox(CodexCliSandbox::WorkspaceWrite);
+                }
+                Some(CodexCliRuntime::new(config))
+            }
+        }
+    }
+}
+
+impl Default for SeamAgentConfig {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+/// Configured LM provider for public-seam execution.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum SeamLmConfig {
+    /// Deterministic local LM script. This is mechanics evidence, not live
+    /// provider proof.
+    Mock {
+        /// Responses consumed in order by executed `lm_complete` calls.
+        responses: Vec<MockLmResponseConfig>,
+    },
+}
+
+impl SeamLmConfig {
+    fn validate(&self) -> Result<(), ConfiguredSeamServiceError> {
+        match self {
+            Self::Mock { responses } if responses.is_empty() => {
+                Err(ConfiguredSeamServiceError::EmptyMockLmScript)
+            }
+            Self::Mock { .. } => Ok(()),
+        }
+    }
+
+    fn to_mock_lm(&self) -> MockLm {
+        match self {
+            Self::Mock { responses } => {
+                let script = responses
+                    .iter()
+                    .fold(MockLmScript::new(), |script, response| {
+                        script.then_text(
+                            response.text.clone(),
+                            response.input_tokens,
+                            response.output_tokens,
+                        )
+                    });
+                MockLm::new(script)
+            }
+        }
+    }
+}
+
+impl Default for SeamLmConfig {
+    fn default() -> Self {
+        Self::Mock {
+            responses: vec![MockLmResponseConfig::default()],
+        }
+    }
+}
+
+/// One deterministic mock LM response.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct MockLmResponseConfig {
+    /// Assistant text returned by the mock LM.
+    pub text: String,
+    /// Input-token count charged by the response.
+    pub input_tokens: u64,
+    /// Output-token count charged by the response.
+    pub output_tokens: u64,
+}
+
+impl Default for MockLmResponseConfig {
+    fn default() -> Self {
+        Self {
+            text: "ok".to_owned(),
+            input_tokens: 1,
+            output_tokens: 1,
+        }
+    }
+}
+
+struct ConfiguredPlanHost {
+    lm: MockLm,
+    workspace_config: SeamWorkspaceConfig,
+    workspace_factory: LocalWorkspaceFactory,
+    agent: Option<CodexCliRuntime>,
+    workspaces: BTreeMap<String, Workspace>,
+}
+
+impl PlanExecutionHost for ConfiguredPlanHost {
+    fn lm_complete(
+        &mut self,
+        request: PlanLmCompleteRequest<'_>,
+    ) -> Result<PlanLmCompleteOutcome, PublicSeamError> {
+        block_on(request.execute_with_lm(&self.lm))
+    }
+
+    fn emit_run_event(
+        &mut self,
+        request: PlanEmitRunEventRequest<'_>,
+    ) -> Result<PlanEmitRunEventOutcome, PublicSeamError> {
+        Err(PublicSeamError::InvalidPlan {
+            message: format!(
+                "configured seam service cannot emit run event `{}` yet",
+                request.name()
+            ),
+        })
+    }
+
+    fn workspace_materialize(
+        &mut self,
+        request: PlanWorkspaceMaterializeRequest<'_>,
+    ) -> Result<PlanWorkspaceMaterializeOutcome, PublicSeamError> {
+        let workspace_id = materialized_workspace_id(request.candidate()?);
+        let mut workspace = block_on(self.workspace_factory.allocate(WorkspaceConfig::default()))
+            .map_err(|error| PublicSeamError::InvalidPlan {
+            message: format!("local workspace allocation failed: {error}"),
+        })?;
+        {
+            let mut view = workspace.view();
+            for (path, contents) in &self.workspace_config.seed_files {
+                let path =
+                    WorkspacePath::new(path).map_err(|error| PublicSeamError::InvalidPlan {
+                        message: format!("invalid configured seed file path `{path}`: {error}"),
+                    })?;
+                view.write_file(&path, contents.as_bytes())
+                    .map_err(|error| PublicSeamError::InvalidPlan {
+                        message: format!("failed to write seed file `{}`: {error}", path.as_str()),
+                    })?;
+            }
+        }
+        self.workspaces.insert(workspace_id.clone(), workspace);
+        Ok(PlanWorkspaceMaterializeOutcome::new(
+            workspace_id,
+            request.lifetime()?,
+            "fp_runtime_sha256_leaven_local_workspace",
+        ))
+    }
+
+    fn agent_run(
+        &mut self,
+        request: PlanAgentRunRequest<'_>,
+    ) -> Result<PlanAgentRunOutcome, PublicSeamError> {
+        let name = request.name().to_owned();
+        let workspace_id = request.live_workspace()?.to_owned();
+        let agent = self
+            .agent
+            .as_ref()
+            .ok_or_else(|| PublicSeamError::InvalidPlan {
+                message: "configured seam service does not provide an agent runtime".to_owned(),
+            })?;
+        if let Some(runtime) = request.runtime()
+            && runtime.as_str() != agent.id().as_str()
+        {
+            return Err(PublicSeamError::InvalidPlan {
+                message: format!(
+                    "configured agent runtime `{}` cannot satisfy requested runtime `{}`",
+                    agent.id().as_str(),
+                    runtime.as_str()
+                ),
+            });
+        }
+        let workspace =
+            self.workspaces
+                .get_mut(&workspace_id)
+                .ok_or_else(|| PublicSeamError::InvalidPlan {
+                    message: format!("workspace `{workspace_id}` is not materialized"),
+                })?;
+        let agent_request = request.into_agent_run_request();
+        let budget = BudgetSnapshot::default();
+        let mut view = workspace.view();
+        let session = block_on(agent.run_session(
+            &mut view,
+            agent_request,
+            AgentRunContext::new(AgentSessionId::new(), &budget),
+        ))
+        .map_err(|error| PublicSeamError::InvalidPlan {
+            message: format!("agent runtime failed: {error}"),
+        })?;
+        let command_refs = session
+            .value
+            .commands
+            .iter()
+            .enumerate()
+            .map(|(index, command)| {
+                AgentCommandOutputRefs::new(
+                    blob_ref_for_bytes(
+                        &format!("blob_{name}_command_{index}_stdout"),
+                        &command.output.stdout.bytes,
+                        &["transcript.raw"],
+                    ),
+                    blob_ref_for_bytes(
+                        &format!("blob_{name}_command_{index}_stderr"),
+                        &command.output.stderr.bytes,
+                        &["transcript.raw"],
+                    ),
+                )
+            })
+            .collect::<Vec<_>>();
+        PlanAgentRunOutcome::from_agent_session_with_command_output_refs(
+            session,
+            agent.fingerprint(),
+            blob_ref_for_bytes(
+                &format!("blob_{name}_transcript"),
+                format!("{name} transcript").as_bytes(),
+                &["transcript.raw"],
+            ),
+            format!("agentrec_{name}"),
+            command_refs,
+        )
+    }
+}
+
+fn materialized_workspace_id(candidate: &str) -> String {
+    let stem = candidate.strip_prefix("cand_").unwrap_or(candidate);
+    let sanitized = stem
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    format!("ws_{sanitized}_materialized")
+}
+
+fn blob_ref_for_bytes(id: &str, bytes: &[u8], data_classes: &[&str]) -> Value {
+    serde_json::json!({
+        "kind": "blob_ref",
+        "id": id,
+        "sha256": format!("{:x}", Sha256::digest(bytes)),
+        "bytes": bytes.len(),
+        "data_classes": data_classes
+    })
+}
+
+/// Error while constructing a configured public-seam service.
+#[derive(Debug, thiserror::Error)]
+pub enum ConfiguredSeamServiceError {
+    /// The public-seam package could not be loaded.
+    #[error(transparent)]
+    PublicSeam(#[from] PublicSeamError),
+    /// Capability document parsing failed.
+    #[error(transparent)]
+    Capability(#[from] leaven_public_seam::CapabilityError),
+    /// A mock LM must include at least one response.
+    #[error("mock LM config must include at least one response")]
+    EmptyMockLmScript,
+}
+
+#[cfg(test)]
+mod tests {
+    use leaven_seam_runtime::{JsonRpcErrorCode, SeamRuntime};
+    use serde_json::{Value, json};
+
+    use super::{
+        ConfiguredSeamService, MockLmResponseConfig, SeamAgentConfig, SeamExecutionContextConfig,
+        SeamLmConfig, SeamServiceConfig,
+    };
+
+    #[test]
+    fn seam_runtime_executes_lm_complete_through_configured_service() {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
+        let service = ConfiguredSeamService::from_package(
+            package.clone(),
+            SeamServiceConfig {
+                lm: SeamLmConfig::Mock {
+                    responses: vec![MockLmResponseConfig {
+                        text: "configured service ok".to_owned(),
+                        input_tokens: 7,
+                        output_tokens: 3,
+                    }],
+                },
+                ..SeamServiceConfig::default()
+            },
+        )
+        .unwrap();
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        let response = runtime.handle_value(&lm_complete_request());
+
+        assert!(
+            !response.is_error(),
+            "unexpected error: {:?}",
+            response.value()
+        );
+        assert_eq!(
+            response.value()["result"]["primary"]["message"]["content"][0]["text"],
+            "configured service ok"
+        );
+        assert_eq!(
+            response.value()["result"]["primary"]["cost"],
+            json!({
+                "input_tokens": 7,
+                "output_tokens": 3,
+                "lm_calls": 1
+            })
+        );
+        assert_eq!(
+            response.value()["result"]["receipts"][0]["call_kind"],
+            "lm_complete"
+        );
+    }
+
+    #[test]
+    fn seam_runtime_reports_provider_execution_failure_distinct_from_unwired_method() {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
+        let service =
+            ConfiguredSeamService::from_package(package.clone(), SeamServiceConfig::default())
+                .unwrap();
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        let response = runtime.handle_value(&two_call_request_with_one_mock_response());
+
+        assert!(response.is_error());
+        assert_eq!(
+            response.value()["error"]["code"],
+            JsonRpcErrorCode::ExecutionFailed.code()
+        );
+        assert!(
+            response.value()["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("mock script exhausted")
+        );
+    }
+
+    #[test]
+    fn seam_runtime_executes_agent_run_in_materialized_workspace_through_codex_adapter() {
+        let fake_codex = fake_codex_bin();
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
+        let plan = agent_run_request();
+        let service = ConfiguredSeamService::from_package(
+            package.clone(),
+            SeamServiceConfig {
+                context: planexec_context(),
+                capability: Some(effect_capability()),
+                agent: SeamAgentConfig::CodexCli {
+                    codex_bin: fake_codex.display().to_string(),
+                    model: "gpt-5.4-mini".to_owned(),
+                    timeout_s: Some(5),
+                    codex_home: None,
+                    bypass_approvals_and_sandbox: false,
+                },
+                ..SeamServiceConfig::default()
+            },
+        )
+        .unwrap();
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        let response = runtime.handle_value(&plan);
+
+        assert!(
+            !response.is_error(),
+            "unexpected error: {:?}",
+            response.value()
+        );
+        assert_eq!(
+            response.value()["result"]["primary"]["kind"],
+            "agent_session"
+        );
+        assert_eq!(response.value()["result"]["primary"]["status"], "completed");
+        assert_eq!(
+            response.value()["result"]["primary"]["receipt"],
+            "agentrec_completion"
+        );
+        assert_eq!(
+            response.value()["result"]["receipts"][0]["call_kind"],
+            "workspace_materialize"
+        );
+        assert_eq!(
+            response.value()["result"]["receipts"][1]["call_kind"],
+            "agent_run"
+        );
+        assert_eq!(
+            response.value()["result"]["primary"]["commands"][1]["status"],
+            "completed"
+        );
+    }
+
+    fn lm_complete_request() -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "id": "lm-1",
+            "method": "leaven/lm.complete",
+            "params": lm_plan()
+        })
+    }
+
+    fn two_call_request_with_one_mock_response() -> Value {
+        let mut plan = lm_plan();
+        let second = plan["ops"][0].clone();
+        plan["ops"].as_array_mut().unwrap().push(second);
+        plan["ops"][1]["name"] = json!("completion_2");
+        plan["ops"][1]["idempotency_key"] = json!("lm-service-0002");
+        plan["return"] = json!(["completion", "completion_2"]);
+        json!({
+            "jsonrpc": "2.0",
+            "id": "lm-2",
+            "method": "leaven/lm.complete",
+            "params": plan
+        })
+    }
+
+    fn agent_run_request() -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "id": "agent-1",
+            "method": "leaven/agent.run",
+            "params": {
+                "schema_version": "leaven.plan.v1",
+                "plan_id": "planagentservice001",
+                "consistency": {
+                    "kind": "latest_at_start"
+                },
+                "mode": {
+                    "kind": "execute"
+                },
+                "ops": [
+                    {
+                        "kind": "call",
+                        "name": "workspace",
+                        "idempotency_key": "agent-service-0001",
+                        "call": {
+                            "kind": "workspace_materialize",
+                            "candidate": "cand_planexec",
+                            "surface": "program",
+                            "mode": "copy_on_write",
+                            "lifetime": "manual_release"
+                        }
+                    },
+                    {
+                        "kind": "call",
+                        "name": "completion",
+                        "deps": ["workspace"],
+                        "idempotency_key": "agent-service-0002",
+                        "call": {
+                            "kind": "agent_run",
+                            "runtime": "codex-cli",
+                            "workspace": "ws_planexec_materialized",
+                            "instructions": {
+                                "system": "Stay within the workspace.",
+                                "task": "Write a short final answer."
+                            },
+                            "tool_policy": {
+                                "allow_shell": false
+                            },
+                            "output": {
+                                "kind": "final_message",
+                                "max_bytes": 1024
+                            },
+                            "limits": {
+                                "timeout_s": 5,
+                                "max_turns": 1,
+                                "max_usd_micro": 1000
+                            },
+                            "input_classes": ["public"]
+                        }
+                    }
+                ],
+                "return": ["workspace", "completion"],
+                "commit": {
+                    "kind": "graph_writes_atomic",
+                    "on_stale": "reject"
+                }
+            }
+        })
+    }
+
+    fn lm_plan() -> Value {
+        json!({
+            "schema_version": "leaven.plan.v1",
+            "plan_id": "planlmservice001",
+            "consistency": {
+                "kind": "latest_at_start"
+            },
+            "mode": {
+                "kind": "execute"
+            },
+            "ops": [
+                {
+                    "kind": "call",
+                    "name": "completion",
+                    "idempotency_key": "lm-service-0001",
+                    "call": {
+                        "kind": "lm_complete",
+                        "purpose": "test.seam_service",
+                        "model": "gpt-4.1-mini",
+                        "messages": [
+                            {
+                                "role": "developer",
+                                "content": [{"kind": "text", "text": "return the final answer"}]
+                            },
+                            {
+                                "role": "user",
+                                "content": [{"kind": "text", "text": "solve"}]
+                            }
+                        ],
+                        "output": {
+                            "kind": "final_message",
+                            "max_bytes": 256
+                        },
+                        "input_classes": ["public"]
+                    }
+                }
+            ],
+            "return": ["completion"],
+            "commit": {
+                "kind": "no_graph_writes"
+            }
+        })
+    }
+
+    fn repo_root() -> &'static std::path::Path {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(std::path::Path::parent)
+            .unwrap()
+    }
+
+    fn planexec_context() -> SeamExecutionContextConfig {
+        SeamExecutionContextConfig {
+            capability_fingerprint: "fp_cap_sha256_planexec".to_owned(),
+            policy_fingerprint: "fp_policy_sha256_planexec".to_owned(),
+            base_revision: "rev_planexec_base".to_owned(),
+            started_at: "2026-05-23T00:00:00Z".to_owned(),
+            completed_at: "2026-05-23T00:00:01Z".to_owned(),
+        }
+    }
+
+    fn effect_capability() -> Value {
+        json!({
+            "schema_version": "leaven.capability.v1",
+            "jti": "jti_planexec_call_authority",
+            "capability_fingerprint": "fp_cap_sha256_planexec",
+            "policy_fingerprint": "fp_policy_sha256_planexec",
+            "subject_fingerprint": "fp_subject_sha256_planexec",
+            "issuer": {
+                "kind": "run_engine",
+                "id": "engine_local"
+            },
+            "subject": {
+                "kind": "stage_call",
+                "run": "run_demo",
+                "stage_call_id": "sc_planexec_call_authority",
+                "role": "scorer"
+            },
+            "audience": ["leaven.acp.worker"],
+            "issued_at": "2026-05-23T00:00:00Z",
+            "expires_at": "2026-05-23T00:20:00Z",
+            "expiry_behavior": "drain_inflight_no_new_ops",
+            "token_binding": {
+                "kind": "opaque_lookup",
+                "token_id": "ltok_planexec_call_authority"
+            },
+            "revocation": {
+                "mode": "issuer_epoch",
+                "revocation_epoch": 7,
+                "check": "on_every_request"
+            },
+            "renewal": {
+                "mode": "renew_before_expiry",
+                "max_extensions": 2,
+                "max_total_lifetime_s": 3600
+            },
+            "grants": [
+                {
+                    "action": "workspace.materialize",
+                    "resource": {
+                        "candidate_ids": ["cand_planexec"]
+                    },
+                    "constraints": {
+                        "workspace_ops": ["materialize"]
+                    }
+                },
+                {
+                    "action": "agent.run",
+                    "resource": {
+                        "workspace_ids": ["ws_planexec_materialized"]
+                    },
+                    "constraints": {
+                        "allowed_input_classes": ["public"]
+                    },
+                    "limits": {
+                        "timeout_s": 30,
+                        "max_usd_micro": 1000
+                    }
+                }
+            ],
+            "budgets": {},
+            "execution_policy": {
+                "profile": "managed_sandbox",
+                "network": "leaven_endpoint_only",
+                "subprocess": "deny_except_sandbox_exec",
+                "filesystem": "workspace_handles_only",
+                "byo_effects": "forbidden"
+            },
+            "delegation": {
+                "may_delegate": false,
+                "max_depth": 0,
+                "must_attenuate": true,
+                "allowed_actions": []
+            }
+        })
+    }
+
+    fn fake_codex_bin() -> std::path::PathBuf {
+        let dir = tempfile::tempdir().unwrap().keep();
+        let path = dir.join("fake-codex");
+        std::fs::write(
+            &path,
+            r#"#!/bin/sh
+last=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output-last-message" ]; then
+    shift
+    last="$1"
+  fi
+  shift || true
+done
+mkdir -p "$(dirname "$last")"
+printf 'fake codex final\n' > "$last"
+printf '{"type":"message","content":"ok"}\n'
+"#,
+        )
+        .unwrap();
+        make_executable(&path);
+        path
+    }
+
+    #[cfg(unix)]
+    fn make_executable(path: &std::path::Path) {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut permissions = std::fs::metadata(path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(path, permissions).unwrap();
+    }
+
+    #[cfg(not(unix))]
+    fn make_executable(_path: &std::path::Path) {}
+}
