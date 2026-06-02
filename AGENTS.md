@@ -107,13 +107,13 @@ public-seam drafts via `.ignore`. Search those trees by explicit path or with
   do: read the governing spec and the narrowest slice doc first, then implement the smallest coherent surface
   preserve: spec vocabulary, durable events/evidence, hard cutover semantics
   avoid: treating philosophy essays or prior plans as stronger than the current spec and code
-  verify: run the owning crate/test target plus any topology or public-surface proof the change affects; reserve `just check` for broad/shared/release gates
+  verify: run the owning crate/test target plus any topology or public-surface proof the change affects; reserve `just release-check` for broad/shared/release gates
 
 - when: adding or changing `leaven-core` public API
   do: add or update the contract test that proves the public promise at the lowest clean layer
   preserve: cold-core dependency boundaries and `RunContext` as graph mutation authority
   avoid: making fields/functions public only for tests or convenience
-  verify: run `cargo test -p leaven-core` plus the nearest downstream contract touched by the API; use `just check` when the change intentionally exercises workspace-wide compatibility
+  verify: run `cargo test -p leaven-core` plus the nearest downstream contract touched by the API; use `just release-check` when the change intentionally exercises workspace-wide compatibility
 
 - when: adding a test
   do: name the claim and choose exactly one shape: law, example, scenario, or regression
@@ -125,7 +125,7 @@ public-seam drafts via `.ignore`. Search those trees by explicit path or with
   do: run a topology check before editing, then update the crate-boundary contract and nearest ownership docs in the same change
   preserve: cold core below engine/std/workspace/derive and adapter/runtime dependencies outside cold crates
   avoid: dependency shortcuts that make future seams harder to see, logic in `lib.rs`, and public exports that exist only to make tests convenient
-  verify: run `cargo test -p leaven --test topology_contract` plus the owning crate tests; escalate to `just check` only for broad topology churn or release confidence
+  verify: run `cargo test -p leaven --test topology_contract` plus the owning crate tests; escalate to `just release-check` only for broad topology churn or release confidence
 
 - when: changing default features, preludes, facade re-exports, or example proof status
   do: update the public-maturity classification for the affected route and add/adjust the export or proof gate in the same change
@@ -151,12 +151,14 @@ Repo-local design skills are rollout-scoped context. Read each applicable Leaven
 The skill descriptions own trigger routing. Do not duplicate their full routing table here.
 
 ## Verification Policy
-- The workspace pins nightly via `rust-toolchain.toml`. The `dev` profile keeps LLVM as the default backend with line-table debuginfo, disables Cargo incremental compilation, and uses many codegen units for local edit/compile/test loops; the pinned nightly ICEs when incremental compilation and the parallel rustc frontend are combined. `.cargo/config.toml` still enables the parallel rustc frontend (`-Zthreads`) for reliable hot-loop speed without per-command `CARGO_INCREMENTAL=0` wrappers.
-- `just test`: canonical full test suite; builds and discovers workspace test binaries with Cargo, runs the discovered libtest binaries plus doctests, warns on the `<30s` runtime target, and enforces the hard completion timeout configured in the root `Justfile`.
-- `just check`: full workspace/release gate; runs formatting, production line-count lint, clippy, the default workspace test lane, and line/branch coverage. It is intentionally expensive and should not be the default closeout for a narrow crate, docs, or topology slice.
+- The workspace pins nightly via `rust-toolchain.toml`. The `dev` profile keeps LLVM as the default backend with line-table debuginfo, enables Cargo incremental compilation for local edit/compile/test loops, and uses many codegen units. `.cargo/config.toml` still enables the parallel rustc frontend (`-Zthreads`); if the incremental canary regresses, remove that frontend flag before disabling incremental.
+- `just test`: canonical full test suite; builds workspace libtests with nextest, runs those libtests in parallel plus workspace doctests, warns on the `<30s` runtime target, and enforces the hard completion timeout configured in the root `Justfile`.
+- `just check`: default developer gate; runs formatting, production line-count lint, clippy, and the default workspace test lane without coverage.
+- `just coverage`: explicit line/branch coverage gate. It is intentionally separate from ordinary local checks because coverage uses instrumented Cargo artifacts and can be much slower than the default dev loop.
+- `just release-check`: full workspace/release gate; runs `just check` plus `just coverage`. It is intentionally expensive and should not be the default closeout for a narrow crate, docs, or topology slice.
 - Default closeout proof is the strongest focused command set for the touched ownership surface: exact integration tests, owning crate tests, targeted clippy/fmt when Rust changed, touched scripts, and `cargo test -p leaven --test topology_contract` when membership, dependencies, facades, or crate boundaries changed.
-- Escalate to `just check` when the change touches shared engine/run/core behavior with broad blast radius, workspace test or coverage tooling/floors, default features/preludes/facades, release/PR readiness, or when the user asks for the full gate.
-- When you do not run `just check`, say so explicitly in the closeout and list the focused commands that were run.
+- Escalate to `just check` when the change touches shared engine/run/core behavior with broad blast radius, workspace test tooling, default features/preludes/facades, or when the user asks for the default gate. Escalate to `just release-check` for coverage tooling/floors, release/PR readiness, or when the user asks for the full release gate.
+- When you do not run `just check` or `just release-check`, say so explicitly in the closeout and list the focused commands that were run.
 - Child `AGENTS.md` files should add verification deltas tied to local change types, not repeat root commands.
 
 ## Hazards / Exceptions

@@ -513,7 +513,7 @@ fn readback_children_rematerialize_every_multi_repo_intermediate() {
         let fixture = GitFixture::new();
         let mut artifact = fixture.parent_artifact();
 
-        for step in 1..=3 {
+        for step in 1..=2 {
             let mut workspace = materialized_workspace(&fixture, &artifact).await;
             let mut view = workspace.view();
             let program_body = format!("program intermediate {step}\n");

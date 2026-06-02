@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 import pathlib
 import sys
 import tempfile
@@ -19,10 +18,6 @@ assert SPEC is not None
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(MODULE)
-
-
-def json_line(payload: object) -> str:
-    return json.dumps(payload)
 
 
 class DoctestDetectionTests(unittest.TestCase):
@@ -62,87 +57,55 @@ class DoctestDetectionTests(unittest.TestCase):
 
 
 class SuiteDeadlineTests(unittest.TestCase):
-    def test_cargo_test_command_preserves_workspace_excludes(self) -> None:
-        command = MODULE.WORKSPACE_TEST_DISCOVERY_COMMAND
+    def test_nextest_build_command_preserves_workspace_excludes(self) -> None:
+        command = MODULE.NEXTEST_BUILD_COMMAND
 
-        self.assertEqual(command[:4], ["cargo", "test", "--workspace", "--all-targets"])
+        self.assertEqual(command[:5], ["cargo", "nextest", "run", "--workspace", "--all-targets"])
         self.assertIn("--no-run", command)
-        self.assertIn("--message-format=json", command)
         self.assertIn("--workspace", command)
         self.assertIn("--all-targets", command)
         self.assertIn("--exclude", command)
         self.assertIn("p8_aime_gepa", command)
 
-    def test_workspace_test_binary_discovery_reads_executable_artifacts_once(self) -> None:
-        first = pathlib.Path("/tmp/test-one")
-        second = pathlib.Path("/tmp/test-two")
-        payload = "\n".join(
-            [
-                json_line({"reason": "compiler-message"}),
-                json_line({
-                    "reason": "compiler-artifact",
-                    "package_id": "pkg 1",
-                    "profile": {"test": True},
-                    "executable": str(first),
-                }),
-                json_line({
-                    "reason": "compiler-artifact",
-                    "package_id": "pkg 1",
-                    "profile": {"test": True},
-                    "executable": str(first),
-                }),
-                json_line({"reason": "compiler-artifact", "executable": None}),
-                json_line({
-                    "reason": "compiler-artifact",
-                    "package_id": "pkg 1",
-                    "profile": {"test": False},
-                    "executable": "/tmp/real-app-binary",
-                }),
-                "not json",
-                json_line({
-                    "reason": "compiler-artifact",
-                    "package_id": "pkg 2",
-                    "profile": {"test": True},
-                    "executable": str(second),
-                }),
-            ]
-        )
-        roots = {"pkg 1": pathlib.Path("/repo/one"), "pkg 2": pathlib.Path("/repo/two")}
-        with (
-            mock.patch.object(MODULE, "workspace_package_roots", return_value=roots),
-            mock.patch.object(MODULE, "run_capture_with_timeout") as run,
-        ):
-            run.return_value = (0, payload)
+    def test_nextest_run_command_preserves_workspace_excludes(self) -> None:
+        command = MODULE.NEXTEST_RUN_COMMAND
 
-            binaries = MODULE.discover_workspace_test_binaries(pathlib.Path.cwd())
-
-        self.assertEqual(binaries, [(first, roots["pkg 1"]), (second, roots["pkg 2"])])
+        self.assertEqual(command[:5], ["cargo", "nextest", "run", "--workspace", "--all-targets"])
+        self.assertNotIn("--no-run", command)
+        self.assertIn("--exclude", command)
+        self.assertIn("p8_aime_gepa", command)
 
     def test_workspace_discovery_timeout_is_separate_from_runtime_sla(self) -> None:
         with mock.patch.object(
             MODULE,
-            "WORKSPACE_TEST_DISCOVERY_COMMAND",
+            "NEXTEST_BUILD_COMMAND",
             [sys.executable, "-c", "import time; time.sleep(10)"],
         ):
             started = time.perf_counter()
-            with self.assertRaises(SystemExit) as exit_context:
-                MODULE.discover_workspace_test_binaries(pathlib.Path.cwd(), build_timeout=0.1)
+            result = MODULE.build_workspace_tests(pathlib.Path.cwd(), build_timeout=0.1)
 
-        self.assertEqual(exit_context.exception.code, 1)
+        self.assertEqual(result, 1)
         self.assertLess(time.perf_counter() - started, 3.0)
 
     def test_default_build_discovery_timeout_is_a_generous_hang_guard(self) -> None:
         self.assertEqual(MODULE.DEFAULT_BUILD_DISCOVERY_TIMEOUT_SECONDS, 300.0)
 
+    def test_missing_nextest_fails_with_actionable_install_hint(self) -> None:
+        with mock.patch.object(MODULE.shutil, "which", return_value=None):
+            with self.assertRaises(SystemExit) as exit_context:
+                MODULE.ensure_nextest_available()
+
+        self.assertIn("cargo install cargo-nextest", str(exit_context.exception))
+
     def test_runtime_target_starts_after_workspace_build_discovery(self) -> None:
         with (
             mock.patch.object(
                 MODULE,
-                "discover_workspace_test_binaries",
-                return_value=[(pathlib.Path("/tmp/test-one"), pathlib.Path.cwd())],
+                "ensure_nextest_available",
             ),
+            mock.patch.object(MODULE, "build_workspace_tests", return_value=0),
             mock.patch.object(MODULE, "test_commands", return_value=[]),
-            mock.patch.object(MODULE, "run_workspace_test_binaries", return_value=0),
+            mock.patch.object(MODULE, "run_workspace_libtests", return_value=0),
             mock.patch.object(
                 MODULE.argparse.ArgumentParser,
                 "parse_args",
@@ -154,10 +117,8 @@ class SuiteDeadlineTests(unittest.TestCase):
             ),
         ):
             self.assertEqual(MODULE.main(), 0)
-            MODULE.run_workspace_test_binaries.assert_called_once_with(
-                [(pathlib.Path("/tmp/test-one"), pathlib.Path.cwd())],
-                mock.ANY,
-            )
+            MODULE.build_workspace_tests.assert_called_once_with(pathlib.Path.cwd(), 300.0)
+            MODULE.run_workspace_libtests.assert_called_once_with(mock.ANY, pathlib.Path.cwd())
 
     def test_doctest_prewarm_runs_before_runtime_deadline_starts(self) -> None:
         with mock.patch.object(MODULE.subprocess, "run") as run:

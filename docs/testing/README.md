@@ -17,14 +17,17 @@ coverage-floor changes, facade/default-feature/public-route changes,
 release/PR readiness, or when a reviewer asks for workspace confidence:
 
 ```bash
-just check
+just release-check
 ```
 
-`just check` runs formatting, the production line-count lint, clippy with
-workspace library/tool targets, the default workspace libtest suite, doctests,
-and the line/branch coverage summary. The default gate excludes milestone example
-packages; use the explicit milestone recipes when an example workflow is the
-claim under test. Focused proof commands include:
+`just release-check` runs formatting, the production line-count lint, clippy
+with workspace library/tool targets, the nextest-backed default workspace
+libtest suite, doctests, and the line/branch coverage summary. The default developer gate is
+`just check`, which runs lint plus the default test lane without coverage.
+Coverage is an explicit gate, not part of ordinary local check. The default
+lanes exclude milestone example packages; use the explicit milestone recipes
+when an example workflow is the claim under test. Focused proof commands
+include:
 
 ```bash
 just lint
@@ -32,6 +35,7 @@ just test
 just test-one <cargo test args>
 just test-stress 20 <cargo test args>
 just build-incremental-canary
+just check
 just coverage
 just coverage-fast --package <crate>
 just coverage-smoke-fast --package <crate> --test <integration-test-name>
@@ -87,11 +91,10 @@ prewarming workspace doctests. Crossing 30s is a warning, not the hard failure
 condition; failed subprocesses and the 600s timeout still fail the command.
 Those preflight steps are still mandatory and must fail on compile errors, but
 compiler wall time is not evidence that the runtime suite crossed the target.
-The target covers default
-workspace lib/bin/integration/example test targets through
-`cargo test --workspace --all-targets` and workspace doctests for library/tool
-packages that contain executable Rust doctest fences. Milestone examples stay
-out of the default SLA and run through explicit
+The target covers default workspace lib/bin/integration/example test targets
+through `cargo nextest run --workspace --all-targets` and workspace doctests
+for library/tool packages that contain executable Rust doctest fences.
+Milestone examples stay out of the default SLA and run through explicit
 `just milestone-*` recipes. The current hard timeout is 600s so `just check`
 still proves the suite completes while the 30s target remains visible. If the
 suite crosses the target, do not add a second slow lane; reduce fixture cost,
@@ -114,12 +117,12 @@ The canary runs the old incremental-plus-parallel-rustc ICE repro for
 `trace2skill_spreadsheetbench` and the focused CLI/ACP/public-seam check under
 `CARGO_INCREMENTAL=1`.
 
-The SLA runner delegates workspace test discovery to Cargo, then executes the
-discovered libtest binaries directly under the runtime deadline. Doctests are
-run in a separate explicit lane, so the workspace discovery command uses
-`--all-targets` to avoid running the doctest harness twice. That keeps compile
-prewarm separate from measured execution without the external runner discovery
-fan-out that can dominate this workspace's hot loop.
+The SLA runner builds workspace libtests with `cargo nextest run --no-run`,
+then runs them once through nextest under the runtime deadline. Doctests are run
+in a separate explicit lane because nextest does not run Rust doctests. That
+keeps compile prewarm separate from measured execution while preserving
+parallel libtest execution instead of serially launching every discovered test
+binary.
 
 Coverage has hard failure floors plus warning targets. The current hard floors
 are 80% line and 80% branch so coverage does not outrank executable seam
@@ -133,7 +136,7 @@ when the changed proof is confined to one or two integration test targets. This
 lane clears stale profraw files, reuses compiled `cargo-llvm-cov` artifacts,
 and skips the `xtask` git-trust smoke binaries, so it is only an iteration aid.
 It refuses non-default milestone packages and does not replace `just coverage`
-or `just check` when full workspace/release confidence is required.
+or `just release-check` when full workspace/release confidence is required.
 
 When the only question is whether the touched tests still pass under coverage
 instrumentation, use `just coverage-smoke-fast --package <crate> --test
@@ -146,7 +149,8 @@ direction. It is not a maturity claim. The default coverage gate keeps hard
 behavior after excluding non-default milestone packages from workspace
 execution, and reports higher warning targets when the workspace falls below
 the desired ratchet. It runs the workspace tests plus `xtask` under
-`cargo llvm-cov` before reporting. The enforced denominator excludes test
+`cargo llvm-cov` before reporting. This belongs to `just coverage` and
+`just release-check`, not the default `just check`. The enforced denominator excludes test
 harness files and `#[cfg(test)] mod ...` blocks after execution, so tests can
 exercise production code without becoming code that must itself be covered.
 Line and branch coverage are both enforced from the lcov report so generic

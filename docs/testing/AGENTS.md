@@ -10,7 +10,7 @@ Tests in this repo are design constraints. They should kill plausible wrong impl
 - `just milestone-p8` is a P8 public-builder proof for LM-backed GEPA reflection through provider-neutral `leaven-lm`. Do not cite it as proof of concrete provider transport, LM cache behavior, or live AIME improvement.
 - `just milestone-examples` currently includes the live-gated P5 recipe from the root `Justfile`; do not treat it as a cheap default smoke unless that recipe is made deterministic by default.
 - `scripts/coverage-gate.py` excludes milestone packages from default coverage. Run milestone recipes explicitly before using example behavior as evidence.
-- Coverage proves executed code stayed covered. It does not answer public maturity; classify examples as product-proof, mechanics-smoke, or proxy-demo before using them as release evidence.
+- Coverage proves executed code stayed covered. It does not answer public maturity; classify examples as product-proof, mechanics-smoke, or proxy-demo before using them as release evidence. Keep coverage as an explicit `just coverage` / `just release-check` lane, not part of default `just check`.
 - Keep `just test` moving toward the `<30s` target by reducing fixture/setup cost instead of adding a slow lane; the hard timeout only protects completion.
 - Coverage floors in the root `Justfile` are ratchets. Raise them when coverage improves; do not lower them to land weaker work.
 
@@ -23,7 +23,7 @@ Use the weakest applicable classification in release notes and closeouts. A run 
 
 ## Stale Proof Traps
 - `cargo check --workspace --examples` misses all milestone packages.
-- Default `just test`, `just lint`, and `just coverage` intentionally skip milestone packages.
+- Default `just test`, `just lint`, `just check`, and `just coverage` intentionally skip milestone packages.
 - `just milestone-examples` is not cheap while P5 is live-gated in the root `Justfile`.
 - `just coverage` does not tell whether a milestone is product-proof.
 - `cargo run -p p8_aime_gepa` does not prove live AIME, concrete provider transport, or LM cache behavior.
@@ -35,5 +35,6 @@ Use the weakest applicable classification in release notes and closeouts. A run 
 - Full suite runtime warning and hard completion timeout: `just test`.
 - Single cargo-test selector: `just test-one <cargo test args>`.
 - Repeated flake probe: `just test-stress 20 <cargo test args>`.
+- Default developer gate: `just check`.
 - Coverage gate: `just coverage`.
-- Completion gate: `just check`.
+- Full release gate: `just release-check`.

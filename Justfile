@@ -121,4 +121,6 @@ coverage-fast +args:
 coverage-smoke-fast +args:
     python3 scripts/coverage-gate.py --line-floor 0 --branch-floor 0 --skip-clean --skip-smoke --skip-report {{args}}
 
-check: lint test coverage
+check: lint test
+
+release-check: check coverage
