@@ -43,7 +43,7 @@ where
         let response = match serde_json::from_str::<Value>(&line) {
             Ok(value) => runtime.handle_value(&value),
             Err(error) => JsonRpcResponse::error(
-                Value::Null,
+                &Value::Null,
                 JsonRpcErrorCode::ParseError,
                 format!("failed to parse JSON-RPC line: {error}"),
             ),

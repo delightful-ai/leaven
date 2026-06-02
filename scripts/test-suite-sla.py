@@ -208,6 +208,8 @@ def discover_workspace_test_binaries(
             continue
         if message.get("reason") != "compiler-artifact":
             continue
+        if not message.get("profile", {}).get("test", False):
+            continue
         executable = message.get("executable")
         if executable is None:
             continue

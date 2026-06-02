@@ -82,18 +82,27 @@ class SuiteDeadlineTests(unittest.TestCase):
                 json_line({
                     "reason": "compiler-artifact",
                     "package_id": "pkg 1",
+                    "profile": {"test": True},
                     "executable": str(first),
                 }),
                 json_line({
                     "reason": "compiler-artifact",
                     "package_id": "pkg 1",
+                    "profile": {"test": True},
                     "executable": str(first),
                 }),
                 json_line({"reason": "compiler-artifact", "executable": None}),
+                json_line({
+                    "reason": "compiler-artifact",
+                    "package_id": "pkg 1",
+                    "profile": {"test": False},
+                    "executable": "/tmp/real-app-binary",
+                }),
                 "not json",
                 json_line({
                     "reason": "compiler-artifact",
                     "package_id": "pkg 2",
+                    "profile": {"test": True},
                     "executable": str(second),
                 }),
             ]

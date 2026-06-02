@@ -12,8 +12,8 @@ fn stdio_serves_one_response_per_non_empty_request_line() {
     let runtime = runtime(RejectingService);
     let input = format!(
         "\n{}\nnot json\n{}\n",
-        request("leaven/lm.complete", plan_params()),
-        request("leaven/stage.run", stage_run_request())
+        request("leaven/lm.complete", &plan_params()),
+        request("leaven/stage.run", &stage_run_request())
     );
     let mut output = Vec::new();
 
@@ -30,7 +30,7 @@ fn stdio_serves_one_response_per_non_empty_request_line() {
 #[test]
 fn stdio_returns_valid_stage_run_results_from_the_runtime() {
     let runtime = runtime(StageRunService);
-    let input = format!("{}\n", request("leaven/stage.run", stage_run_request()));
+    let input = format!("{}\n", request("leaven/stage.run", &stage_run_request()));
     let mut output = Vec::new();
 
     let report = serve_reader_writer(&runtime, Cursor::new(input), &mut output).unwrap();
@@ -87,7 +87,7 @@ impl SeamService for StageRunService {
     }
 }
 
-fn request(method: &str, params: Value) -> Value {
+fn request(method: &str, params: &Value) -> Value {
     json!({
         "jsonrpc": "2.0",
         "id": "req_stdio",
