@@ -1,5 +1,6 @@
 mod doctor;
 mod fixture;
+mod seam;
 mod serve;
 
 use std::path::PathBuf;
@@ -7,6 +8,7 @@ use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand, error::ErrorKind};
 use doctor::{DoctorCommand, OutputFormat};
+use seam::SeamServeCommand;
 use serve::ServeCommand;
 
 fn main() -> ExitCode {
@@ -37,6 +39,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<String, CliError> {
     match cli.command {
         None => Ok(DoctorCommand::Summary.run()?),
         Some(TopCommand::Doctor { command }) => Ok(doctor_command(command).run()?),
+        Some(TopCommand::Seam { command }) => Ok(seam_command(command).run()?),
         Some(TopCommand::Serve(args)) => Ok(args.into_command().run()?),
     }
 }
@@ -55,8 +58,37 @@ enum TopCommand {
         #[command(subcommand)]
         command: Option<DoctorSubcommand>,
     },
+    /// Run the public seam server.
+    Seam {
+        #[command(subcommand)]
+        command: SeamSubcommand,
+    },
     /// Run the engine as the ACP client over inherited stdio (the wire the SDK spawns).
     Serve(ServeArgs),
+}
+
+#[derive(Debug, Subcommand)]
+enum SeamSubcommand {
+    /// Serve the locked Leaven public seam over inherited stdio.
+    Serve(SeamServeArgs),
+}
+
+#[derive(Debug, Args)]
+struct SeamServeArgs {
+    /// Run the public seam server over this process's own stdin/stdout.
+    #[arg(long, required = true)]
+    stdio: bool,
+    /// Repo root the locked public-seam package loads from.
+    #[arg(long, default_value = ".")]
+    root: PathBuf,
+}
+
+impl SeamServeArgs {
+    fn into_command(self) -> SeamServeCommand {
+        // `--stdio` is the only supported transport mode; clap requires it.
+        debug_assert!(self.stdio, "clap requires --stdio");
+        SeamServeCommand { root: self.root }
+    }
 }
 
 #[derive(Debug, Args)]
@@ -141,12 +173,20 @@ fn doctor_command(command: Option<DoctorSubcommand>) -> DoctorCommand {
     }
 }
 
+fn seam_command(command: SeamSubcommand) -> SeamServeCommand {
+    match command {
+        SeamSubcommand::Serve(args) => args.into_command(),
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 enum CliError {
     #[error("{0}")]
     Parse(#[from] clap::Error),
     #[error(transparent)]
     Doctor(#[from] doctor::DoctorError),
+    #[error(transparent)]
+    Seam(#[from] seam::SeamCommandError),
     #[error(transparent)]
     Serve(#[from] serve::ServeError),
 }

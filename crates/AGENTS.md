@@ -20,11 +20,16 @@ Root `AGENTS.md` owns the full routing map. This file adds local crate-family ru
   schema fingerprints, matrix harness data, and deferred-marker enforcement. It
   must not absorb worker runtime, provider lowering, graph mutation, or
   generated-struct-only proof.
-- ACP transport: `leaven-acp` owns the hot stdio process/session transport for
-  the locked public seam. It starts external workers and carries JSON-RPC over
-  stdin/stdout, while delegating Leaven method/result truth back to
-  `leaven-public-seam`. It must not become an MCP bridge, provider runtime, or
-  graph mutation layer.
+- Public seam runtime: `leaven-seam-runtime` owns transport-neutral dispatch for
+  the locked public seam, and `leaven-seam-stdio` owns the line-delimited stdio
+  adapter around that runtime. They expose the public seam directly; method
+  semantics stay in `leaven-public-seam` and service implementations stay in
+  their runtime/provider owners.
+- Legacy bidirectional bridge transport: `leaven-acp` owns the current hot
+  process/session mechanics used by bridge proofs. It starts external workers
+  and carries JSON-RPC over stdin/stdout, while delegating Leaven method/result
+  truth back to `leaven-public-seam`. It must not become the public SDK seam
+  server, an MCP bridge, provider runtime, or graph mutation layer.
 - Optimizers: `leaven-gepa` owns strategy state and search rhythm today. Future
   MIPRO, TextGrad, and trace optimizers should return as behavior-bearing crates
   with local tests, not public reservation crates.
@@ -59,12 +64,15 @@ cross-family rules that apply before you know a leaf's details.
 - Agent runtime leaves keep provider CLI/protocol details local; generic session
   vocabulary stays in `leaven-agent`, command substrate in
   `leaven-agent-command`, and stage parsing in `leaven-agentic`.
-- The ACP transport leaf for the locked public seam is `leaven-acp`, a hot
-  agent/worker transport adapter, not a public-seam wire-contract bucket. It
-  may migrate to the official `agentclientprotocol/rust-sdk` for stdio JSON-RPC
-  and process/session mechanics after external dependency approval, but Leaven
-  method/result authority stays in `leaven-public-seam`, graph mutation stays
-  in `leaven-engine` through `RunContext`, and MCP-over-ACP remains out of V1.
+- The public server leaves for the locked public seam are
+  `leaven-seam-runtime` and `leaven-seam-stdio`. Keep them as validation,
+  dispatch, and transport adapters; concrete LM, agent, sandbox, optimizer, and
+  graph execution belongs behind injected services in owning crates.
+- The legacy `leaven-acp` bridge may migrate to the official
+  `agentclientprotocol/rust-sdk` only for a future upstream-agent interop slice,
+  after external dependency approval. Leaven method/result authority stays in
+  `leaven-public-seam`, graph mutation stays in `leaven-engine` through
+  `RunContext`, and MCP-over-ACP remains out of V1.
 - Do not add placeholder artifact/optimizer/render/domain leaves as workspace
   members. Add the crate only when its first public names have behavior-bearing
   tests and local ownership guidance.

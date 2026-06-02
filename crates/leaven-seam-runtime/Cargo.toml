@@ -1,0 +1,16 @@
+[package]
+name = "leaven-seam-runtime"
+description = "Transport-neutral runtime dispatcher for the Leaven public seam."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+leaven-public-seam = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

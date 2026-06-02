@@ -1,0 +1,19 @@
+[package]
+name = "leaven-seam-stdio"
+description = "Line-delimited stdio adapter for the Leaven public seam runtime."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+leaven-seam-runtime = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+leaven-public-seam = { workspace = true }
+
+[lints]
+workspace = true
