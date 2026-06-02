@@ -194,7 +194,7 @@ print(json.dumps({
     assert!(
         dispatch
             .run_rollout(
-                &mut session,
+                session.session_mut(),
                 "cand_value_gap",
                 "case_value_gap",
                 &json!({"question": "5 + 7", "prompt": "Expression: 5 + 7"}),
@@ -214,7 +214,7 @@ fn optimize_prompt_rejects_an_empty_case_set() {
     let mut session = spawn(&script, package, profile);
     let lm = MockArithmeticLm;
     let result = optimize_prompt(
-        &mut session,
+        session.session_mut(),
         OptimizeConfig {
             lm: &lm,
             run_id: "empty".to_owned(),

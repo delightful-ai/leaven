@@ -1,3 +1,31 @@
+use serde_json::{Value, json};
+
+/// The locked V1 extension-method profile rows, in canonical order.
+///
+/// Each row carries the locked `params_schema`/`result_schema` binding, the
+/// `required_action` capability path, and `produces_receipt`, exactly as the
+/// profile validator demands. This is the single source the canonical locked
+/// profile document is assembled from, so the engine client, the bridge, and the
+/// conformance tests stop re-encoding the 26-method table by hand.
+pub(super) fn locked_extension_method_rows() -> Vec<Value> {
+    locked_extension_methods()
+        .into_iter()
+        .map(|method| {
+            let (params, result) =
+                schema_binding_for_method(method).expect("locked method has a schema binding");
+            let action =
+                required_action_for_method(method).expect("locked method has a required action");
+            json!({
+                "method": method,
+                "params_schema": params.schema_file(),
+                "result_schema": result.schema_file(),
+                "required_action": action,
+                "produces_receipt": true
+            })
+        })
+        .collect()
+}
+
 /// Schema bound to a Leaven ACP extension method's params or result.
 ///
 /// The 25 worker callbacks bind the Plan IR schemas, while the one host->worker

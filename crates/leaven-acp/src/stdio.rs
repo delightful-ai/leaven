@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeMap,
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, Stdin, Stdout, Write, stdin, stdout},
     path::PathBuf,
     process::{Child, ChildStdin, ChildStdout, Command, ExitStatus, Stdio},
     sync::{Arc, Mutex, MutexGuard},
@@ -159,87 +159,79 @@ impl AcpProcessCommand {
     }
 }
 
-/// Live ACP stdio session backed by a child process.
-pub struct AcpStdioProcessSession {
+/// Generic ACP stdio session over one line-framed JSON-RPC reader/writer pair.
+///
+/// This is the demultiplexing transport core: it owns the locked profile binding,
+/// the worker session lifecycle, the capability fingerprint, the read loop that
+/// classifies every inbound line, the host→worker `call_extension`/
+/// `dispatch_stage_run` legs, and the worker→host effect-callback servicing. It is
+/// agnostic to where the bytes come from. [`AcpStdioProcessSession`] specializes it
+/// over a spawned child's stdin/stdout; [`AcpStdioInheritedSession`] specializes it
+/// over the process's own inherited stdin/stdout, so `leaven serve --stdio` runs
+/// the same client loop against its parent without spawning a child.
+pub struct AcpStdioSession<R: BufRead, W: Write> {
     package: PublicSeamPackage,
     profile: AcpProfileDocument,
     session: Arc<Mutex<AcpWorkerSession>>,
     capability_fingerprint: String,
-    child: Child,
-    stdin: Arc<Mutex<ChildStdin>>,
-    stdout: BufReader<ChildStdout>,
+    stdin: Arc<Mutex<W>>,
+    stdout: R,
     next_request: u64,
+}
+
+/// Live ACP stdio session backed by a child process.
+///
+/// The Leaven engine is the ACP client; this session spawns and owns the external
+/// worker (the ACP agent) and shares the demultiplexing transport core
+/// [`AcpStdioSession`] over the child's piped stdin/stdout.
+pub struct AcpStdioProcessSession {
+    core: AcpStdioSession<BufReader<ChildStdout>, ChildStdin>,
+    child: Child,
+}
+
+/// ACP stdio session running the client loop over the process's own stdio.
+///
+/// This is the inverse spawn direction of [`AcpStdioProcessSession`]: the Leaven
+/// engine is still the ACP client driving the demultiplexing transport core, but
+/// its parent spawned *it* and passed the locked capability env. The session reads
+/// the parent's JSON-RPC over inherited stdin and writes its own dispatches to
+/// inherited stdout — no child process is spawned. `leaven serve --stdio` runs
+/// here.
+pub struct AcpStdioInheritedSession {
+    core: AcpStdioSession<BufReader<Stdin>, Stdout>,
 }
 
 /// Cancellation handle that can interrupt a pending stdio extension call.
 #[derive(Clone)]
-pub struct AcpStdioCancellationHandle {
+pub struct AcpStdioCancellationHandle<W: Write> {
     session: Arc<Mutex<AcpWorkerSession>>,
-    stdin: Arc<Mutex<ChildStdin>>,
+    stdin: Arc<Mutex<W>>,
 }
 
-impl AcpStdioProcessSession {
-    /// Spawns an external worker process and binds it to the locked ACP profile.
-    pub fn spawn(
+impl<R: BufRead, W: Write> AcpStdioSession<R, W> {
+    /// Binds a reader/writer pair to the locked ACP profile and session lifecycle.
+    ///
+    /// `capability_fingerprint` is the launched session fingerprint the transport
+    /// stamps onto every worker→host effect reply. Callers that spawn a child use
+    /// [`AcpStdioProcessSession::spawn`]; callers that inherit the process stdio use
+    /// [`AcpStdioInheritedSession::bind`].
+    fn new(
         package: PublicSeamPackage,
         profile: AcpProfileDocument,
-        command: AcpProcessCommand,
-        bearer_token: impl Into<String>,
-        endpoint: impl Into<String>,
-        capability_fingerprint: impl Into<String>,
-    ) -> AcpTransportResult<Self> {
-        let AcpProcessCommand {
-            program,
-            args,
-            env,
-            current_dir,
-        } = command;
-        let session = AcpWorkerSession::start(&profile)?;
-        let capability_fingerprint = capability_fingerprint.into();
-        let launch = AcpStdioWorkerLaunch::new(
-            &profile,
-            &session,
-            bearer_token,
-            endpoint,
-            capability_fingerprint.clone(),
-        )?;
-        let mut process = Command::new(&program);
-        process.args(&args);
-        if let Some(current_dir) = &current_dir {
-            process.current_dir(current_dir);
-        }
-        process.envs(&env);
-        process.envs(launch.worker_env());
-        process
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        let mut child = process.spawn().map_err(|source| AcpTransportError::Io {
-            action: "spawning ACP stdio worker",
-            source,
-        })?;
-        let stdin = child
-            .stdin
-            .take()
-            .ok_or_else(|| AcpTransportError::Protocol {
-                message: "ACP stdio worker did not expose stdin".to_owned(),
-            })?;
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| AcpTransportError::Protocol {
-                message: "ACP stdio worker did not expose stdout".to_owned(),
-            })?;
-        Ok(Self {
+        session: AcpWorkerSession,
+        capability_fingerprint: String,
+        stdin: W,
+        stdout: R,
+    ) -> Self {
+        Self {
             package,
             profile,
             session: Arc::new(Mutex::new(session)),
             capability_fingerprint,
-            child,
             stdin: Arc::new(Mutex::new(stdin)),
-            stdout: BufReader::new(stdout),
+            stdout,
             next_request: 0,
-        })
+        }
     }
 
     /// Profile-derived session facts for the live worker process.
@@ -251,7 +243,7 @@ impl AcpStdioProcessSession {
 
     /// Handle that can deliver ACP session cancellation while a call is in flight.
     #[must_use]
-    pub fn cancellation_handle(&self) -> AcpStdioCancellationHandle {
+    pub fn cancellation_handle(&self) -> AcpStdioCancellationHandle<W> {
         AcpStdioCancellationHandle {
             session: Arc::clone(&self.session),
             stdin: Arc::clone(&self.stdin),
@@ -507,17 +499,9 @@ impl AcpStdioProcessSession {
             })
     }
 
-    /// Waits for the worker process to exit.
-    pub fn wait_for_exit(&mut self) -> AcpTransportResult<ExitStatus> {
-        self.child.wait().map_err(|source| AcpTransportError::Io {
-            action: "waiting for ACP stdio worker",
-            source,
-        })
-    }
-
     fn write_message(&self, value: &Value) -> AcpTransportResult<()> {
         let mut stdin = self.lock_stdin()?;
-        write_json_line(&mut stdin, value)
+        write_json_line(&mut *stdin, value)
     }
 
     fn read_message(&mut self, method: &str, id: &str) -> AcpTransportResult<Value> {
@@ -617,7 +601,7 @@ impl AcpStdioProcessSession {
             })
     }
 
-    fn lock_stdin(&self) -> AcpTransportResult<MutexGuard<'_, ChildStdin>> {
+    fn lock_stdin(&self) -> AcpTransportResult<MutexGuard<'_, W>> {
         self.stdin.lock().map_err(|_| AcpTransportError::Protocol {
             message: "ACP stdio writer lock is poisoned".to_owned(),
         })
@@ -631,11 +615,11 @@ impl AcpStdioProcessSession {
     fn write_cancellation(&self, cancellation: &CancellationParts) -> AcpTransportResult<()> {
         let notification = cancellation_notification(cancellation);
         let mut stdin = self.lock_stdin()?;
-        write_json_line(&mut stdin, &notification)
+        write_json_line(&mut *stdin, &notification)
     }
 }
 
-impl AcpStdioCancellationHandle {
+impl<W: Write> AcpStdioCancellationHandle<W> {
     /// Sends ACP cancellation to the worker while another thread waits for a response.
     pub fn cancel_with_error(
         &self,
@@ -656,7 +640,7 @@ impl AcpStdioCancellationHandle {
         let mut stdin = self.stdin.lock().map_err(|_| AcpTransportError::Protocol {
             message: "ACP stdio writer lock is poisoned".to_owned(),
         })?;
-        write_json_line(&mut stdin, &notification)
+        write_json_line(&mut *stdin, &notification)
     }
 }
 
@@ -689,7 +673,7 @@ fn cancellation_notification(cancellation: &CancellationParts) -> Value {
     })
 }
 
-fn write_json_line(writer: &mut ChildStdin, value: &Value) -> AcpTransportResult<()> {
+fn write_json_line<W: Write>(writer: &mut W, value: &Value) -> AcpTransportResult<()> {
     serde_json::to_writer(&mut *writer, value).map_err(|source| AcpTransportError::Json {
         action: "encoding ACP stdio JSON-RPC line",
         source,
@@ -703,8 +687,193 @@ fn write_json_line(writer: &mut ChildStdin, value: &Value) -> AcpTransportResult
         })
 }
 
+impl AcpStdioProcessSession {
+    /// Spawns an external worker process and binds it to the locked ACP profile.
+    ///
+    /// The Leaven engine is the ACP client: it spawns the worker (the ACP agent),
+    /// injects the locked capability env, and drives the demultiplexing transport
+    /// core over the child's piped stdin/stdout.
+    pub fn spawn(
+        package: PublicSeamPackage,
+        profile: AcpProfileDocument,
+        command: AcpProcessCommand,
+        bearer_token: impl Into<String>,
+        endpoint: impl Into<String>,
+        capability_fingerprint: impl Into<String>,
+    ) -> AcpTransportResult<Self> {
+        let AcpProcessCommand {
+            program,
+            args,
+            env,
+            current_dir,
+        } = command;
+        let session = AcpWorkerSession::start(&profile)?;
+        let capability_fingerprint = capability_fingerprint.into();
+        let launch = AcpStdioWorkerLaunch::new(
+            &profile,
+            &session,
+            bearer_token,
+            endpoint,
+            capability_fingerprint.clone(),
+        )?;
+        let mut process = Command::new(&program);
+        process.args(&args);
+        if let Some(current_dir) = &current_dir {
+            process.current_dir(current_dir);
+        }
+        process.envs(&env);
+        process.envs(launch.worker_env());
+        process
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let mut child = process.spawn().map_err(|source| AcpTransportError::Io {
+            action: "spawning ACP stdio worker",
+            source,
+        })?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| AcpTransportError::Protocol {
+                message: "ACP stdio worker did not expose stdin".to_owned(),
+            })?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| AcpTransportError::Protocol {
+                message: "ACP stdio worker did not expose stdout".to_owned(),
+            })?;
+        let core = AcpStdioSession::new(
+            package,
+            profile,
+            session,
+            capability_fingerprint,
+            stdin,
+            BufReader::new(stdout),
+        );
+        Ok(Self { core, child })
+    }
+
+    /// The demultiplexing transport core driving this child-process session.
+    ///
+    /// Callers reuse the shared transport legs (`call_extension`,
+    /// `dispatch_stage_run`, `serve_next_inbound_request`, cancellation, session
+    /// updates) through the core, so a host loop written against
+    /// [`AcpStdioSession`] runs unchanged over a spawned child or inherited stdio.
+    pub fn session_mut(&mut self) -> &mut AcpStdioSession<BufReader<ChildStdout>, ChildStdin> {
+        &mut self.core
+    }
+
+    /// Profile-derived session facts for the live worker process.
+    pub fn worker_session_snapshot(&self) -> AcpWorkerSession {
+        self.core.worker_session_snapshot()
+    }
+
+    /// Handle that can deliver ACP session cancellation while a call is in flight.
+    #[must_use]
+    pub fn cancellation_handle(&self) -> AcpStdioCancellationHandle<ChildStdin> {
+        self.core.cancellation_handle()
+    }
+
+    /// Sends one locked Leaven ACP extension request and waits for its response.
+    pub fn call_extension(
+        &mut self,
+        method: &str,
+        params: &Value,
+        host: &impl AcpEffectHost,
+    ) -> AcpTransportResult<AcpJsonRpcResponseDocument> {
+        self.core.call_extension(method, params, host)
+    }
+
+    /// Sends one `leaven/stage.run` dispatch and waits for its stage-run result.
+    pub fn dispatch_stage_run(
+        &mut self,
+        stage_run_request: &Value,
+        host: &impl AcpEffectHost,
+    ) -> AcpTransportResult<AcpStageRunResponseDocument> {
+        self.core.dispatch_stage_run(stage_run_request, host)
+    }
+
+    /// Reads one inbound line and services a worker-initiated extension request.
+    pub fn serve_next_inbound_request(
+        &mut self,
+        host: &impl AcpEffectHost,
+    ) -> AcpTransportResult<AcpJsonRpcRequestDocument> {
+        self.core.serve_next_inbound_request(host)
+    }
+
+    /// Sends ACP session cancellation to the live worker and records lifecycle facts.
+    pub fn cancel_with_error(
+        &mut self,
+        reason: impl Into<String>,
+        receipt: impl Into<String>,
+        error: Value,
+    ) -> AcpTransportResult<()> {
+        self.core.cancel_with_error(reason, receipt, error)
+    }
+
+    /// Reads and applies one ACP session progress update.
+    pub fn read_next_session_update(&mut self) -> AcpTransportResult<AcpProgressDisposition> {
+        self.core.read_next_session_update()
+    }
+
+    /// Waits for the worker process to exit.
+    pub fn wait_for_exit(&mut self) -> AcpTransportResult<ExitStatus> {
+        self.child.wait().map_err(|source| AcpTransportError::Io {
+            action: "waiting for ACP stdio worker",
+            source,
+        })
+    }
+}
+
 impl Drop for AcpStdioProcessSession {
     fn drop(&mut self) {
         drop(self.child.kill());
+    }
+}
+
+impl AcpStdioInheritedSession {
+    /// Binds the process's own inherited stdin/stdout to the locked ACP profile.
+    ///
+    /// This is the inverse spawn direction: the parent already spawned this process
+    /// (for example `leaven serve --stdio`) and injected the locked capability env,
+    /// so there is no child to launch. The engine is still the ACP client driving
+    /// the demultiplexing core; it dispatches `leaven/stage.run` to the parent over
+    /// inherited stdout and services the parent's `leaven/lm.complete` callbacks
+    /// from inherited stdin. The launch facts (token/endpoint/fingerprint) are
+    /// validated to honor the same launch contract a spawned worker receives.
+    pub fn bind(
+        package: PublicSeamPackage,
+        profile: AcpProfileDocument,
+        bearer_token: impl Into<String>,
+        endpoint: impl Into<String>,
+        capability_fingerprint: impl Into<String>,
+    ) -> AcpTransportResult<Self> {
+        let session = AcpWorkerSession::start(&profile)?;
+        let capability_fingerprint = capability_fingerprint.into();
+        // Validate the launch contract (non-empty token/endpoint/fingerprint,
+        // stdio transport) exactly as a spawned worker launch does, even though
+        // the env was injected by the parent rather than projected by this process.
+        AcpStdioWorkerLaunch::new(
+            &profile,
+            &session,
+            bearer_token,
+            endpoint,
+            capability_fingerprint.clone(),
+        )?;
+        let core = AcpStdioSession::new(
+            package,
+            profile,
+            session,
+            capability_fingerprint,
+            stdout(),
+            BufReader::new(stdin()),
+        );
+        Ok(Self { core })
+    }
+
+    /// The demultiplexing transport core driving this inherited-stdio session.
+    pub fn session_mut(&mut self) -> &mut AcpStdioSession<BufReader<Stdin>, Stdout> {
+        &mut self.core
     }
 }

@@ -14,6 +14,8 @@ path = "src/main.rs"
 [dependencies]
 clap = { workspace = true }
 futures = { workspace = true }
+leaven-acp = { workspace = true }
+leaven-acp-stage-bridge = { workspace = true }
 leaven-agent = { workspace = true }
 leaven-agentic = { workspace = true }
 leaven-agentic-skill = { workspace = true }
@@ -23,12 +25,16 @@ leaven-engine = { workspace = true }
 leaven-gepa = { workspace = true }
 leaven-gepa-agentic-skill = { workspace = true }
 leaven-kernel = { workspace = true }
+leaven-public-seam = { workspace = true }
 leaven-workspace = { workspace = true }
 leaven-workspace-local = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

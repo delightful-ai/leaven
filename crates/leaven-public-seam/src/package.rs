@@ -388,6 +388,19 @@ impl PublicSeamPackage {
         crate::AcpProfileDocument::from_schema_valid_value(value)
     }
 
+    /// Builds and validates the canonical locked V1 Leaven ACP profile document.
+    ///
+    /// This is the one stdio profile the engine client speaks across both spawn
+    /// directions: it carries the pinned ACP version, the locked auth env-var
+    /// names, bounded-channel flow control, and the full 26-row locked
+    /// extension-method table. Callers that need a valid profile to start a session
+    /// use this instead of re-encoding the method table by hand.
+    pub fn locked_acp_profile_document(
+        &self,
+    ) -> Result<crate::AcpProfileDocument, PublicSeamError> {
+        self.validate_acp_profile_document(&crate::acp_profile::locked_acp_profile_value())
+    }
+
     /// Validates an ACP JSON-RPC request carrying locked Plan IR params.
     pub fn validate_acp_jsonrpc_request_document(
         &self,

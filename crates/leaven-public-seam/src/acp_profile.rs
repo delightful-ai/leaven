@@ -457,6 +457,41 @@ fn locked_extension_methods() -> [&'static str; 26] {
     methods::locked_extension_methods()
 }
 
+/// Builds the canonical locked V1 Leaven ACP profile document JSON.
+///
+/// This assembles the one stdio profile the engine client speaks: the pinned ACP
+/// version, the locked auth env-var names, the bounded-channel flow control, and
+/// the full 26-row locked extension-method table from
+/// [`methods::locked_extension_method_rows`]. It is the single canonical profile
+/// so spawn/inherited sessions and conformance tests stop re-encoding the table.
+pub fn locked_acp_profile_value() -> Value {
+    serde_json::json!({
+        "schema_version": "leaven.acp_profile.v1",
+        "base_protocol": "agent-client-protocol",
+        "pinned_acp_version": "0.4.0",
+        "transports": ["stdio_jsonrpc", "unix_socket_jsonrpc"],
+        "auth": {
+            "token_env": "LEAVEN_CAPABILITY_TOKEN",
+            "endpoint_env": "LEAVEN_ENDPOINT",
+            "fingerprint_env": "LEAVEN_CAPABILITY_FINGERPRINT",
+            "http_header": "Authorization: Bearer <token>",
+            "authenticate_maps_to": "leaven.capability.v1"
+        },
+        "permission_model": {
+            "source": "ACP session/request_permission",
+            "answer": "programmatic capability grant check",
+            "denial": "PlanError + Redaction"
+        },
+        "extension_methods": methods::locked_extension_method_rows(),
+        "flow_control": {
+            "bounded_channel_required": true,
+            "default_max_inflight_updates": 32,
+            "backpressure": "pause_worker",
+            "heartbeat_ms": 1000
+        }
+    })
+}
+
 fn required_action_for_method(method: &str) -> Option<&'static str> {
     methods::required_action_for_method(method)
 }

@@ -13,7 +13,9 @@
 //! product-proof of the SDK bidirectional seam for the prompt/LM/exact-match
 //! path.
 
-use leaven_acp::AcpStdioProcessSession;
+use std::io::{BufRead, Write};
+
+use leaven_acp::AcpStdioSession;
 use serde_json::Value;
 
 use crate::artifact::PromptArtifact;
@@ -103,8 +105,8 @@ pub struct OptimizeConfig<'a, L: HostLm> {
 ///
 /// Returns the best candidate after evaluating the seed and accepting any strict
 /// improvements the reflector proposes.
-pub fn optimize_prompt<L: HostLm>(
-    session: &mut AcpStdioProcessSession,
+pub fn optimize_prompt<R: BufRead, W: Write, L: HostLm>(
+    session: &mut AcpStdioSession<R, W>,
     config: OptimizeConfig<'_, L>,
 ) -> Result<Optimized, StageBridgeError> {
     let OptimizeConfig {
@@ -185,8 +187,8 @@ struct Evaluation {
 }
 
 /// Evaluates one artifact over a case slice via live rollouts + host scoring.
-fn evaluate<L: HostLm>(
-    session: &mut AcpStdioProcessSession,
+fn evaluate<R: BufRead, W: Write, L: HostLm>(
+    session: &mut AcpStdioSession<R, W>,
     dispatch: &mut RunnerDispatch<'_, L>,
     artifact: &PromptArtifact,
     cases: &[OptCase],

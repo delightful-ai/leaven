@@ -43,7 +43,8 @@ fn example_03_optimizes_a_prompt_over_the_live_bidirectional_seam() {
         max_iterations: 2,
     };
 
-    let optimized = optimize_prompt(&mut session, config).expect("optimization runs end to end");
+    let optimized =
+        optimize_prompt(session.session_mut(), config).expect("optimization runs end to end");
 
     println!("example_03_ok=true");
     println!("cases={}", cases.len());

@@ -1,11 +1,13 @@
 mod doctor;
 mod fixture;
+mod serve;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand, error::ErrorKind};
 use doctor::{DoctorCommand, OutputFormat};
+use serve::ServeCommand;
 
 fn main() -> ExitCode {
     match run(std::env::args().skip(1)) {
@@ -32,7 +34,11 @@ fn main() -> ExitCode {
 fn run(args: impl IntoIterator<Item = String>) -> Result<String, CliError> {
     let cli = Cli::try_parse_from(std::iter::once("leaven".to_owned()).chain(args))
         .map_err(CliError::Parse)?;
-    cli.into_doctor_command().run().map_err(CliError::Doctor)
+    match cli.command {
+        None => Ok(DoctorCommand::Summary.run()?),
+        Some(TopCommand::Doctor { command }) => Ok(doctor_command(command).run()?),
+        Some(TopCommand::Serve(args)) => Ok(args.into_command().run()?),
+    }
 }
 
 #[derive(Debug, Parser)]
@@ -42,15 +48,6 @@ struct Cli {
     command: Option<TopCommand>,
 }
 
-impl Cli {
-    fn into_doctor_command(self) -> DoctorCommand {
-        match self.command {
-            None => DoctorCommand::Summary,
-            Some(TopCommand::Doctor { command }) => doctor_command(command),
-        }
-    }
-}
-
 #[derive(Debug, Subcommand)]
 enum TopCommand {
     /// Run local Leaven diagnostics.
@@ -58,6 +55,36 @@ enum TopCommand {
         #[command(subcommand)]
         command: Option<DoctorSubcommand>,
     },
+    /// Run the engine as the ACP client over inherited stdio (the wire the SDK spawns).
+    Serve(ServeArgs),
+}
+
+#[derive(Debug, Args)]
+struct ServeArgs {
+    /// Run the bidirectional client loop over this process's own stdin/stdout.
+    #[arg(long, required = true)]
+    stdio: bool,
+    /// Repo root the locked public-seam package loads from.
+    #[arg(long, default_value = ".")]
+    root: PathBuf,
+    /// The optimize plan file (seed + cases + loop config + named reward/reflect).
+    #[arg(long)]
+    plan: PathBuf,
+    /// Where the `Optimized` result JSON is written (stdout is the JSON-RPC channel).
+    #[arg(long)]
+    out: PathBuf,
+}
+
+impl ServeArgs {
+    fn into_command(self) -> ServeCommand {
+        // `--stdio` is the only supported transport mode; clap requires it.
+        debug_assert!(self.stdio, "clap requires --stdio");
+        ServeCommand {
+            root: self.root,
+            plan: self.plan,
+            out: self.out,
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -120,6 +147,8 @@ enum CliError {
     Parse(#[from] clap::Error),
     #[error(transparent)]
     Doctor(#[from] doctor::DoctorError),
+    #[error(transparent)]
+    Serve(#[from] serve::ServeError),
 }
 
 #[cfg(test)]

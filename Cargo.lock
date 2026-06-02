@@ -3357,6 +3357,8 @@ version = "0.0.0"
 dependencies = [
  "clap",
  "futures",
+ "leaven-acp",
+ "leaven-acp-stage-bridge",
  "leaven-agent",
  "leaven-agentic",
  "leaven-agentic-skill",
@@ -3366,10 +3368,12 @@ dependencies = [
  "leaven-gepa",
  "leaven-gepa-agentic-skill",
  "leaven-kernel",
+ "leaven-public-seam",
  "leaven-workspace",
  "leaven-workspace-local",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
  "uuid",
 ]

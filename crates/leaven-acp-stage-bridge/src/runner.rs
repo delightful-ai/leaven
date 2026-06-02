@@ -5,7 +5,9 @@
 //! `leaven/lm.complete` callbacks against the host LM, and parses the worker's
 //! text stage output into a [`RolloutOutcome`].
 
-use leaven_acp::AcpStdioProcessSession;
+use std::io::{BufRead, Write};
+
+use leaven_acp::AcpStdioSession;
 use serde_json::{Value, json};
 
 use crate::artifact::PromptArtifact;
@@ -50,9 +52,9 @@ impl<'lm, L: HostLm> RunnerDispatch<'lm, L> {
     ///
     /// `candidate_id` and `case_id` flow into the wire request; `case_input` is the
     /// projected, target-free case input the worker renders the prompt against.
-    pub fn run_rollout(
+    pub fn run_rollout<R: BufRead, W: Write>(
         &mut self,
-        session: &mut AcpStdioProcessSession,
+        session: &mut AcpStdioSession<R, W>,
         candidate_id: &str,
         case_id: &str,
         case_input: &Value,

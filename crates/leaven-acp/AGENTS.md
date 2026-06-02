@@ -17,6 +17,20 @@ provider adapter.
   writes/reads, the demultiplexing read loop, live progress-update handling,
   worker-initiated effect-callback servicing, host->worker stage dispatch,
   cancellation notification, and subprocess cleanup.
+- `AcpStdioSession<R, W>` is the generic demultiplexing transport core over one
+  line-framed reader/writer pair. It owns every shared transport leg
+  (`call_extension`, `dispatch_stage_run`, `serve_next_inbound_request`,
+  cancellation, session updates) so the same client loop runs unchanged over a
+  spawned child or inherited process stdio. Specializations must reuse this core,
+  not re-implement the demux.
+  - `AcpStdioProcessSession` specializes it over a spawned child's piped
+    stdin/stdout (the engine spawns the worker) and adds child cleanup/exit.
+  - `AcpStdioInheritedSession` specializes it over the process's own inherited
+    stdin/stdout for the inverse spawn direction: the parent spawned this process
+    (for example `leaven serve --stdio`) and injected the locked capability env,
+    so no child is launched. The engine is still the ACP client; it dispatches to
+    the parent over inherited stdout and services the parent's callbacks from
+    inherited stdin.
 - `lib.rs` is a map only.
 
 ## Bidirectional Transport
