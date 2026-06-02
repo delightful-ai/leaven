@@ -59,8 +59,10 @@ spec_package:
       completion evidence for the SDK or Codex agentic runtime.
     - >-
       User approved live proof spend on 2026-06-02 with a total ceiling of
-      5 USD. Native Codex auth is expected to work; the preferred Codex proof
-      path is `codex exec --model gpt-5.4-mini ...`.
+      5 USD. Native Codex auth is expected to work; direct
+      `codex exec --model gpt-5.4-mini ...` is only an auth/model smoke or
+      adapter-level diagnostic. The acceptance proof must run through Leaven
+      end-to-end.
 
 designed_surface:
   public_surface:
@@ -99,10 +101,12 @@ live_proof_budget:
   total_usd_ceiling: 5
   codex_model: gpt-5.4-mini
   codex_auth_route: native_codex_cli_auth
-  preferred_codex_command_shape: "codex exec --model gpt-5.4-mini ..."
+  codex_smoke_command_shape: "codex exec --model gpt-5.4-mini ..."
   rules:
     - Spend-bearing live proof must stay inside the 5 USD total ceiling.
     - Deterministic/mock tests remain mechanics evidence only.
+    - Direct `codex exec` can prove native auth/model reachability, not Leaven integration.
+    - Codex acceptance evidence must flow through Python SDK -> Leaven public seam -> `leaven/agent.run` -> materialized workspace.
     - Missing auth or a broken native Codex CLI path is a blocker, not a substitute proof.
     - Default tests still must not require credentials or spend.
 
@@ -237,7 +241,7 @@ acceptance:
         - "`leaven/agent.run`"
         - typed proposal submission
         - lineage/receipt capture
-        - real Codex process/session evidence from `codex exec --model gpt-5.4-mini`, not a fake agent transcript
+        - real Codex process/session evidence reached through Leaven's `leaven/agent.run` path, not direct `codex exec` alone and not a fake agent transcript
       companion_no_spend_proof:
         kind: deterministic_agent_runtime_mechanics
         purpose: >-
