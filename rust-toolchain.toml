@@ -1,7 +1,6 @@
 # The workspace builds on nightly so `.cargo/config.toml` can enable the
-# parallel rustc frontend (`-Zthreads`). Cargo incremental is disabled in the
-# dev profile because the pinned nightly ICEs when incremental and `-Zthreads`
-# are combined.
+# parallel rustc frontend (`-Zthreads`). Cargo incremental is enabled in the
+# dev profile and guarded by `just build-incremental-canary`.
 [toolchain]
 channel = "nightly"
 components = [

@@ -30,6 +30,10 @@ test-one +args:
 test-stress count +args:
     for i in $(seq 1 {{count}}); do echo "stress run $i/{{count}}"; cargo test --workspace {{milestone_excludes}} {{args}}; done
 
+build-incremental-canary:
+    CARGO_INCREMENTAL=1 cargo test -p trace2skill_spreadsheetbench --test workbook_score --no-run
+    CARGO_INCREMENTAL=1 cargo check -p leaven-cli -p leaven-acp-stage-bridge -p leaven-public-seam
+
 bench-git-trust +args:
     cargo run -p xtask -- git-trust-bench {{args}}
 

@@ -31,6 +31,7 @@ just lint
 just test
 just test-one <cargo test args>
 just test-stress 20 <cargo test args>
+just build-incremental-canary
 just coverage
 just coverage-fast --package <crate>
 just coverage-smoke-fast --package <crate> --test <integration-test-name>
@@ -96,6 +97,22 @@ still proves the suite completes while the 30s target remains visible. If the
 suite crosses the target, do not add a second slow lane; reduce fixture cost,
 property-test case count, setup work, doctest harness fan-out, or assertion
 altitude until the default suite is back under the target.
+
+## Build Policy Canary
+
+Dev builds keep Cargo incremental compilation enabled. The workspace also uses
+the nightly parallel rustc frontend through `.cargo/config.toml`; if a pinned
+nightly regresses, the fallback is to remove that frontend flag before disabling
+incremental. Use this canary before changing `profile.dev`, `.cargo/config.toml`,
+or `rust-toolchain.toml`:
+
+```bash
+just build-incremental-canary
+```
+
+The canary runs the old incremental-plus-parallel-rustc ICE repro for
+`trace2skill_spreadsheetbench` and the focused CLI/ACP/public-seam check under
+`CARGO_INCREMENTAL=1`.
 
 The SLA runner delegates workspace test discovery to Cargo, then executes the
 discovered libtest binaries directly under the runtime deadline. Doctests are

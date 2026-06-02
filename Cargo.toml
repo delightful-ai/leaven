@@ -83,14 +83,14 @@ debug = "line-tables-only"
 # Many codegen units favor local edit/compile/test loops over dev binary
 # quality; release builds keep their separate profile.
 #
-# Keep the default LLVM backend. Local measurement on the `leaven-run` test
-# binaries showed no meaningful wall-time win from Cranelift, and the pinned
-# nightly ICEs when incremental compilation and the parallel rustc frontend are
-# combined. Keep incremental off in the profile so clean local commands do not
-# need `CARGO_INCREMENTAL=0` wrappers.
+# Incremental compilation is the hot-loop contract. The old rustc ICE path was
+# Cargo incremental plus the nightly parallel rustc frontend; keep the
+# incremental cache on, and use `just build-incremental-canary` before changing
+# this profile or `.cargo/config.toml`. If that canary regresses, remove the
+# parallel frontend first rather than turning incremental off.
 [profile.dev]
 debug = "line-tables-only"
-incremental = false
+incremental = true
 codegen-units = 1024
 
 # Coverage profile: `scripts/coverage-gate.py` builds under `--profile coverage`.
