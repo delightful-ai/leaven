@@ -7,13 +7,18 @@ purpose: >
   hard to satisfy with shape checks, canned examples, topology success, or goal
   prose. The specs remain the correctness standard; this matrix says what must
   be proven from them.
+terminology_note: >
+  Rows and code identifiers containing acp are legacy names for the Leaven
+  worker profile/public-seam transport unless a row explicitly says upstream
+  Agent Client Protocol. V1 proves Leaven-owned JSON-RPC worker-seam behavior,
+  not upstream ACP SDK conformance.
 
 matrix_rules:
   - A row is not proven by schema compilation unless the row says shape_only.
   - A row is not proven by active examples unless the row says fixture_only.
   - A row touching authorization, data visibility, mutation, receipts, costs, or replay must include a negative proof.
   - A row touching public exports, default features, or facades must include route maturity classification.
-  - A row touching worker behavior must prove ACP profile behavior, not a private Rust-only shortcut.
+  - A row touching worker behavior must prove Leaven worker-profile behavior, not a private Rust-only shortcut.
   - A row touching archived or downloaded drafts must prove hard cutover to this package.
   - A proven row must cite at least one adversarial review file that names the row and signs off on row promotion; old partial or blocker reviews may remain as provenance but cannot be the only review evidence.
 
@@ -1044,7 +1049,7 @@ rows:
   - id: ps1.stage.run_dispatch
     area: stage_payloads
     requirement: >
-      Host-to-worker stage dispatch rides one generic leaven/stage.run extension
+      Host-to-worker stage dispatch rides one generic leaven/stage.run seam
       method bound to leaven.stage_run.v1 (request: stage kind plus a role-scoped
       stage payload; result: the stage output), separate from the Plan IR effect
       callbacks.
@@ -1054,10 +1059,10 @@ rows:
       - docs/specs/public-seam-v1/schemas/leaven.stage_run.v1.schema.json
       - docs/specs/public-seam-v1/manifest.json
     owner_boundary: >
-      public-seam wire-contract owner for the method/schema; ACP transport owner
+      public-seam wire-contract owner for the method/schema; Leaven worker transport owner
       drives the host-to-worker dispatch leg; engine/bridge owns stage execution.
     positive_proof: >
-      The locked ACP profile advertises leaven/stage.run with stage.run capability
+      The locked Leaven worker profile advertises leaven/stage.run with stage.run capability
       action and the leaven.stage_run.v1 request/result schema binding, and a
       schema-valid runner dispatch request plus a text-output result validate
       through the owning seam.
@@ -1364,18 +1369,18 @@ rows:
 
   - id: ps1.acp.transport_profile
     area: acp
-    requirement: ACP is the worker lifecycle protocol; the engine is ACP client and the worker is ACP agent.
+    requirement: The Leaven worker profile is the worker lifecycle/transport contract for the public seam.
     spec_refs:
       - docs/specs/public-seam-v1/00_architecture_judgment_v0.3.md
       - docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
     owner_boundary: agent/worker transport implementation owner
     positive_proof: >
-      A worker session starts through the ACP profile with the documented
-      engine-client/worker-agent inversion and pinned ACP version.
+      A worker session starts through the Leaven worker profile with the documented
+      engine/worker role inversion and pinned worker-profile version.
     negative_proof: >
       A private process protocol or MCP bridge cannot satisfy the public worker
       seam while manifest.mcp_status is not_in_v1.
-    fake_pass_rejected: Rust in-process trait calls labeled as ACP.
+    fake_pass_rejected: Rust in-process trait calls labeled as worker transport.
     minimum_closeout_level: integrated_surface
     positive_test_evidence:
       - crates/leaven-acp/tests/stdio_session_contract.rs::stdio_session_starts_worker_process_with_profile_roles_and_env
@@ -1420,7 +1425,7 @@ rows:
 
   - id: ps1.acp.auth_permissions
     area: acp
-    requirement: ACP authenticate resolves capability documents, and ACP permission requests are answered by grants with PlanError and redaction denials.
+    requirement: Worker-profile authenticate resolves capability documents, and permission requests are answered by grants with PlanError and redaction denials.
     spec_refs:
       - docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
       - docs/specs/public-seam-v1/schemas/leaven.capability.v1.schema.json
@@ -1429,12 +1434,12 @@ rows:
       - accept_acp_permission_denials_typed_planerror_redactions
     owner_boundary: agent/worker transport plus engine trust layer
     positive_proof: >
-      Allowed ACP extension calls succeed after authenticate and include
+      Allowed Leaven seam calls succeed after authenticate and include
       capability fingerprint in results.
     negative_proof: >
       Denied permission requests return closed PlanError values and redaction
       information without executing the requested operation.
-    fake_pass_rejected: Prompting a human or always granting ACP permissions during tests.
+    fake_pass_rejected: Prompting a human or always granting worker permissions during tests.
     minimum_closeout_level: semantic_denial
     positive_test_evidence:
       - crates/leaven-public-seam/tests/public_seam_contract/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
@@ -1461,7 +1466,7 @@ rows:
 
   - id: ps1.acp.extension_results
     area: acp
-    requirement: Leaven ACP extension method results return primary values plus receipts, redactions, capability fingerprint, and data classes.
+    requirement: Leaven worker-profile method results return primary values plus receipts, redactions, capability fingerprint, and data classes.
     spec_refs:
       - docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
       - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
@@ -1520,17 +1525,17 @@ rows:
 
   - id: ps1.acp.lifecycle_backpressure
     area: acp
-    requirement: Cancellation uses ACP session cancellation, progress uses ACP updates, and updates are bounded.
+    requirement: Cancellation uses Leaven worker-session cancellation, progress uses Leaven worker-session updates, and updates are bounded.
     spec_refs:
       - docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
     owner_boundary: agent/worker transport implementation owner
     positive_proof: >
       Cancellation stops in-flight worker activity and records receipts/errors;
-      progress events flow through bounded ACP update queues.
+      progress events flow through bounded worker-session update queues.
     negative_proof: >
       A blocked or overproducing worker cannot grow unbounded queues or ignore
       session cancellation.
-    fake_pass_rejected: Fire-and-forget progress logs outside ACP lifecycle control.
+    fake_pass_rejected: Fire-and-forget progress logs outside worker-session lifecycle control.
     minimum_closeout_level: semantic_denial
     positive_test_evidence:
       - crates/leaven-acp/tests/stdio_session_contract.rs::stdio_session_cancellation_interrupts_in_flight_extension_call_and_worker_observes_cancel
@@ -1578,18 +1583,18 @@ rows:
 
   - id: ps1.acp.no_mcp_v1
     area: acp
-    requirement: There is no MCP-over-ACP layer in V1.
+    requirement: There is no MCP bridge layer in V1.
     spec_refs:
       - docs/specs/public-seam-v1/manifest.json
       - docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
       - docs/specs/public-seam-v1/goal-readiness-gate.yaml
     owner_boundary: agent/worker transport implementation owner
     positive_proof: >
-      Worker callbacks route through Leaven ACP extension methods without
+      Worker callbacks route through Leaven seam methods without
       requiring MCP objects, MCP tool definitions, or MCP negotiation.
     negative_proof: >
       Enabling an MCP bridge is impossible in V1 default/product paths and any
-      archived MCP-over-ACP draft payload is refused as current contract.
+      archived MCP bridge draft payload is refused as current contract.
     fake_pass_rejected: Renaming MCP concepts while preserving an MCP negotiation dependency.
     minimum_closeout_level: semantic_denial
     positive_test_evidence:
@@ -2043,7 +2048,7 @@ rows:
 
   - id: ps1.worker_protocol.deprecated
     area: deferred
-    requirement: worker_protocol.v1 is deprecated and replaced by the ACP profile.
+    requirement: worker_protocol.v1 is deprecated and replaced by the Leaven worker profile.
     spec_refs:
       - docs/specs/public-seam-v1/manifest.json
       - docs/specs/public-seam-v1/schemas/leaven.worker_protocol.v1.schema.json
@@ -2051,7 +2056,7 @@ rows:
     owner_boundary: agent/worker transport implementation owner
     positive_proof: >
       Compatibility markers point to leaven.acp_profile.v1 and product worker
-      paths use ACP extension methods.
+      paths use Leaven seam methods.
     negative_proof: >
       New worker-protocol runtime behavior cannot be implemented or exposed as
       V1 product behavior.

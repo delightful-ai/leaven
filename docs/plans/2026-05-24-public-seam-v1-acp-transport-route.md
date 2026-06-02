@@ -1,7 +1,13 @@
 # Public Seam V1 ACP Transport Route
 
-Status: planning note, not implemented proof
+Status: superseded terminology / planning note, not implemented proof
 Created: 2026-05-24T18:46:40Z
+
+Supersession note (2026-06-02): this plan predates the terminology cleanup.
+Current V1 product language is "Leaven public seam" and "Leaven worker profile"
+over Leaven-owned stdio JSON-RPC. Do not use this plan's ACP wording as product
+law, and do not infer upstream Agent Client Protocol conformance or an upstream
+ACP SDK dependency from it.
 
 ## Purpose
 

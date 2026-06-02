@@ -1,11 +1,15 @@
 ## Boundary
 
-This crate owns hot ACP stdio process/session transport behavior for the
-locked Leaven public seam. It starts external worker processes, carries
-line-framed JSON-RPC over stdin/stdout, binds the profile-derived
-engine-client/worker-agent lifecycle facts to that live process, and delegates
-all Leaven method, Plan IR, Plan Result, receipt, redaction, data-class, and
-capability-envelope validation to `leaven-public-seam`.
+This crate has a legacy name. In V1 it owns hot Leaven worker stdio
+process/session transport behavior for the locked Leaven public seam. It does
+not implement upstream Agent Client Protocol conformance and does not depend on
+an upstream ACP SDK.
+
+It starts external worker processes, carries line-framed JSON-RPC over
+stdin/stdout, binds the profile-derived engine/worker lifecycle facts to that
+live process, and delegates all Leaven method, Plan IR, Plan Result, receipt,
+redaction, data-class, and capability-envelope validation to
+`leaven-public-seam`.
 
 It is not a provider runtime, graph mutation layer, engine `RunContext`, MCP
 bridge, schema-codegen crate, LM client, concrete sandbox backend, or agent
@@ -17,7 +21,7 @@ provider adapter.
   writes/reads, the demultiplexing read loop, live progress-update handling,
   worker-initiated effect-callback servicing, host->worker stage dispatch,
   cancellation notification, and subprocess cleanup.
-- `AcpStdioSession<R, W>` is the generic demultiplexing transport core over one
+- `AcpStdioSession<R, W>` is the legacy-named generic demultiplexing transport core over one
   line-framed reader/writer pair. It owns every shared transport leg
   (`call_extension`, `dispatch_stage_run`, `serve_next_inbound_request`,
   cancellation, session updates) so the same client loop runs unchanged over a
@@ -28,16 +32,14 @@ provider adapter.
   - `AcpStdioInheritedSession` specializes it over the process's own inherited
     stdin/stdout for the inverse spawn direction: the parent spawned this process
     (for example `leaven serve --stdio`) and injected the locked capability env,
-    so no child is launched. The engine is still the ACP client; it dispatches to
-    the parent over inherited stdout and services the parent's callbacks from
-    inherited stdin.
+    so no child is launched. The engine side dispatches to the parent over
+    inherited stdout and services the parent's callbacks from inherited stdin.
 - `lib.rs` is a map only.
 
 ## Bidirectional Transport
 The read loop is a demultiplexer: every inbound line classifies as a
 `session/update` notification, a host→worker response by id, or a
-worker-initiated extension request (the worker is the ACP agent; the engine is
-the ACP client). Worker-initiated requests are validated as locked Plan IR
+worker-initiated Leaven request. Worker-initiated requests are validated as locked Plan IR
 through `validate_acp_jsonrpc_request_document` (which gates the method through
 the profile, rejecting private/MCP inbound exactly as the host→worker
 direction), dispatched to the `AcpEffectHost` trait, validated as an extension
@@ -70,7 +72,10 @@ truth (schema, profile binding, envelope validators) stays in
 - Graph mutation stays in `leaven-engine` through `RunContext`.
 - Provider execution stays in `leaven-lm*`, `leaven-agent*`, and workspace
   backends.
-- MCP-over-ACP is not V1 and must not appear in default/product paths here.
+- Upstream ACP agent interop is not this crate's current V1 responsibility. If
+  Leaven later uses upstream ACP to swap agent runtimes, that belongs behind an
+  explicit agent-provider adapter slice, not by relabeling this worker seam.
+- MCP bridge behavior is not V1 and must not appear in default/product paths here.
 
 ## Public Maturity
 
@@ -79,11 +84,10 @@ external-worker process boundary over stdio JSON-RPC and black-box subprocess
 tests. It is not re-exported by `leaven`, `leaven::prelude`, default features,
 or product examples as ordinary app-facing API.
 
-The vendored `agentclientprotocol/rust-sdk` remains the preferred future ACP
-substrate, but this crate currently avoids that dependency because the local
-checkout requires uncached crates.io packages. The locked V1 semantics are
-still stdio JSON-RPC plus Leaven `leaven/*` extension envelopes; do not fetch
-external crates or change that dependency choice without the user's approval.
+The locked V1 semantics are stdio JSON-RPC plus Leaven `leaven/*` envelopes.
+Do not fetch upstream ACP crates, add an ACP SDK dependency, or change the
+dependency choice without a fresh design slice that explains whether the goal is
+agent-provider interop or worker-seam transport.
 
 ## Proof Anchors
 

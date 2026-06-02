@@ -5,7 +5,7 @@ The top of the stack is:
 - `initial_library.md`: governing product and architecture spec for the current Leaven library shape.
 - `guiding_principles.md`: requirements and product constraints, not implementation layout.
 - `leaven_v0_2_1b_corrected_crate_topology_lib_rs.md`: historical topology tombstone only. Live crate topology is root `Cargo.toml` plus `crates/leaven/tests/topology_contract.rs`.
-- `public-seam-v1/`: locked public seam v1 — plan IR, capability tokens, result receipts, stage payloads, evaluator/evidence envelopes, the Leaven ACP profile, and JSON Schemas for external-language workers. Read `00_architecture_judgment_v0.3.md` first for the governing judgments; `watch.v1` is deferred from v1.
+- `public-seam-v1/`: locked public seam v1 — plan IR, capability tokens, result receipts, stage payloads, evaluator/evidence envelopes, the Leaven worker profile, and JSON Schemas for external-language workers. The V1 seam is Leaven-owned JSON-RPC, not upstream Agent Client Protocol conformance. Read `00_architecture_judgment_v0.3.md` first for the governing judgments; `watch.v1` is deferred from v1.
 - `durable_runs_and_resume.md`: default-durable run/resume semantics, `RunStore` vocabulary, optimizer continuation policy, and the explicit `ephemeral` escape hatch.
 - `resume_compatibility_fingerprints.md`: durable resume compatibility domains,
   manifest comparison, runtime fingerprint obligations, cache/budget
@@ -60,10 +60,10 @@ The top of the stack is:
 - Specs marked `implementation spec` can govern a slice even before the whole product story is solved, but still require code/test proof before public maturity claims.
 - Do not route from directory presence or historical diagrams alone. `crates/leaven/tests/topology_contract.rs` is the executable inventory guard for current workspace crates.
 - Provider-adapter specs such as Codex CLI/app-server own provider boundaries only. They do not move agent, engine, GEPA, or skill concepts into provider crates.
-- Codex app-server is a provider runtime path, not ACP public-seam proof. It can
-  support an ACP worker only when routed through the locked public-seam ACP
-  transport adapter and black-box process/session tests. Do not use
-  app-server-specific success to promote `public-seam-v1` ACP rows.
+- Codex app-server is a provider runtime path, not public-seam transport proof.
+  It can support a Leaven worker only when routed through the locked
+  public-seam worker transport and black-box process/session tests. Do not use
+  app-server-specific success to promote `public-seam-v1` worker-transport rows.
 - Eval/GEPA nomenclature specs distinguish public product words from lowered machinery. Do not expose lowered graph/eval vocabulary at the Layer 1 user surface.
 - GEPA loop semantics come from `gepa_reference_behavior.md`. AIME, DSPy,
   optimize-anything, and Leaven-plus profiles may refine model/data/operator

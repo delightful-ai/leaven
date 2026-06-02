@@ -25,7 +25,7 @@ authority:
   resolution:
     - The active public-seam-v1 package is the V1 lock and the correctness standard.
     - The v0.3 draft payload is incorporated through this package's active prose, schemas, examples, and manifest.
-    - MCP-over-ACP draft material is not part of V1 while manifest.mcp_status remains not_in_v1.
+    - MCP bridge draft material is not part of V1 while manifest.mcp_status remains not_in_v1.
     - Watch remains deferred from V1 while manifest.watch_status remains deferred_to_v1.1.
 
 contract_jsons:
@@ -50,7 +50,7 @@ correctness_standards:
   - Examples must validate against the active schemas they demonstrate.
   - Reflection and proposal payloads stay structurally separate.
   - Score.output is required wherever Score appears in public contract results.
-  - ACP is the worker transport; Leaven worker callbacks are ACP extension methods.
+  - Leaven worker profile is the worker transport; Leaven worker callbacks are Leaven seam methods.
   - Capability tokens enforce subject fingerprints, bindings, revocation, renewal, expiry, and aggregate budgets.
   - Data-class propagation is monotonic by default, with only explicit deny overrides.
   - Plan results carry typed values, typed receipts, started_at/completed_at, and the closed PlanError enum.
@@ -72,7 +72,7 @@ current_implementation_truth:
     - path: crates/leaven-public-seam
       fact: Owns the locked V1 public seam wire contract, active package loading, schema/profile validation, conformance matrix harness, capability checks, Plan IR execution harness, Plan Result receipt validation, stage/evidence/evaluator envelopes, public maturity classification, and hard-cutover markers.
     - path: crates/leaven-acp
-      fact: Owns the hot ACP stdio process/session boundary for external-language workers, with black-box subprocess tests for JSON-RPC transport, Leaven extension-result envelopes, lifecycle/backpressure, and cancellation.
+      fact: Owns the hot Leaven worker stdio process/session boundary for external-language workers, with black-box subprocess tests for JSON-RPC transport, Leaven extension-result envelopes, lifecycle/backpressure, and cancellation.
     - path: crates/leaven-run
       fact: Projects runtime assessment/evaluation evidence into the public seam where rows require RunContext/run-layer production proof.
   remaining_completion_gates:
@@ -93,7 +93,7 @@ goal_launch_gate:
     - Which routes are ordinary public contract, advanced public contract, explicit scaffold, or private fixture.
     - Which conformance checks become executable tests rather than plan text.
   must_keep_out_of_v1:
-    - MCP-over-ACP implementation.
+    - MCP bridge implementation.
     - watch.v1 runtime behavior beyond explicit deferred markers.
     - compatibility shims for older draft payloads.
     - public claims based only on topology success or example shape validation.
@@ -131,4 +131,4 @@ explicit_non_goals:
   - This gate does not patch repo-local skills.
   - This gate does not implement the public seam.
   - This gate does not make the archived draft or Downloads bundles authoritative.
-  - This gate does not revive MCP-over-ACP or watch.v1 in V1.
+  - This gate does not revive MCP bridge behavior or watch.v1 in V1.

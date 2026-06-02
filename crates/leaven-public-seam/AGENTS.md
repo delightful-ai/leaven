@@ -34,7 +34,10 @@ behavior.
 - Conformance-matrix row parsing, uniqueness checks, spec-reference checks,
   notes-denominator parsing, and row evidence/status helpers.
 - V1 hard-cutover markers: MCP is not V1, `watch.v1` runtime behavior is
-  deferred, and `worker_protocol.v1` is deprecated in favor of the ACP profile.
+  deferred, and `worker_protocol.v1` is deprecated in favor of the Leaven
+  worker profile. Legacy `acp` identifiers in this crate refer to that
+  Leaven-owned worker profile unless a doc explicitly says upstream Agent
+  Client Protocol.
 
 ## Route Away
 
@@ -43,13 +46,13 @@ behavior.
   schema fingerprints are public-seam wire identifiers, not cache behavior
   fingerprints.
 - Graph mutation remains private to `leaven-engine` through `RunContext`.
-- ACP process/session behavior belongs in `leaven-acp`, not in this crate. The
+- Worker process/session behavior belongs in `leaven-acp`, not in this crate. The
   current route note is
   `docs/plans/2026-05-24-public-seam-v1-acp-transport-route.md`: keep the
   Leaven `leaven/*` method/result contract here, prove transport behavior with
-  black-box subprocess tests before promoting ACP rows, and migrate the hot
-  transport substrate to the official `agentclientprotocol/rust-sdk` only after
-  external dependency approval.
+  black-box subprocess tests before promoting worker-transport rows. Do not add
+  upstream ACP SDK dependencies or claim upstream ACP conformance without a new
+  agent-provider interoperability design slice.
 - Provider/runtime lowering belongs in `leaven-lm*`, `leaven-agent*`, and
   workspace crates.
 
@@ -97,15 +100,17 @@ transport session, ACP permission handler, or runtime delegation workflow.
 Crate-root exports for `V1Scope`, `WorkerTransportKind`,
 `WorkerTransportRequest`, and `AuthorizedWorkerTransport` are advanced public
 seam contracts. They prove locked V1 transport-scope selection and MCP/watch/
-legacy-worker exclusion only; they are not an ACP process implementation,
+legacy-worker exclusion only; they are not a worker process implementation,
 session lifecycle, authentication handshake, permission loop, or worker runtime.
 
 Crate-root exports for `AcpProfileDocument`, `AcpExtensionMethod`,
 `AcpAuthenticateRequest`, `AcpAuthenticatedSession`, `AcpPermissionRequest`,
 `AcpPermissionDecision`, `AcpExtensionResultDocument`,
 `AcpJsonRpcRequestDocument`, and `AcpJsonRpcResponseDocument` are advanced
-public seam contracts. They prove locked Leaven ACP profile semantics,
-including the exact V1 extension-method set; authenticate resolution from
+public seam contracts. They are legacy-named types for the locked Leaven worker
+profile; they do not prove upstream Agent Client Protocol conformance. They
+prove locked Leaven worker profile semantics, including the exact V1 method set;
+authenticate resolution from
 opaque capability tokens through the capability registry; authenticated-session
 binding for programmatic permission decisions against capability grants; typed
 denial envelopes; per-method schema binding for profile methods (the 25
@@ -121,14 +126,13 @@ envelope binding for the `leaven/stage.run` dispatch
 method through the profile, carries the stage-run schema instead of Plan IR, and
 binds the response id to the dispatched request id; and schema-backed,
 hash-bound extension-result envelopes at the wire-contract layer only. Generic
-ACP `extension` primaries are checked against
-the locked schema branch and ACP envelope fields, while concrete PlanResult
+`extension` primaries are checked against
+the locked schema branch and worker-profile envelope fields, while concrete PlanResult
 value kinds still run the full PlanResult semantic validator. LM, agent, and
-sandbox ACP extension primaries additionally bind their cost object to the
-carried call receipt cost, so ACP envelopes cannot shrink or omit cost
-provenance while retaining a hash-bound primary. They are not an ACP process
-implementation, engine-client runtime, worker-agent runtime, provider call, or
-graph mutation route.
+sandbox worker-profile extension primaries additionally bind their cost object to the
+carried call receipt cost, so worker-profile envelopes cannot shrink or omit cost
+provenance while retaining a hash-bound primary. They are not a worker process
+implementation, upstream ACP runtime, provider call, or graph mutation route.
 
 Crate-root exports for `AcpWorkerSession`, `AcpSessionLifecycle`,
 `AcpSessionState`, `AcpSessionUpdate`, `AcpSessionCancellation`,
@@ -138,21 +142,21 @@ prove the engine-client/worker-agent role vocabulary, stdio-first session
 model, bounded progress-update queue, receipt-bound cancellation PlanError
 facts, and locked `flow_control.backpressure` strategy at the contract layer.
 They are not stdio
-JSON-RPC I/O, process startup, provider execution, full ACP lifecycle control,
+JSON-RPC I/O, process startup, provider execution, upstream ACP lifecycle control,
 or production worker scheduling.
 
 Crate-root export `AcpStdioWorkerLaunch` is an advanced public seam contract
-for the locked stdio ACP launch environment only. It proves the profile-owned
+for the locked stdio Leaven worker launch environment only. It proves the profile-owned
 `LEAVEN_CAPABILITY_TOKEN`, `LEAVEN_ENDPOINT`, and
 `LEAVEN_CAPABILITY_FINGERPRINT` environment bindings, engine-client/
 worker-agent role facts, and bearer-token redaction from run-artifact launch
 facts. It is not stdio JSON-RPC I/O, process spawning, provider execution,
-session supervision, or a full ACP transport implementation.
+session supervision, or upstream ACP transport implementation.
 
-Codex app-server is a provider runtime leaf, not ACP transport proof by itself.
-A Codex-backed path can count as ACP evidence only when it crosses a real ACP
-process/session boundary and returns locked Leaven extension results through
-this crate's validators.
+Codex app-server is a provider runtime leaf, not worker transport proof by
+itself. A Codex-backed path can count as public-seam worker evidence only when
+it crosses a real Leaven worker process/session boundary and returns locked
+Leaven extension results through this crate's validators.
 
 Crate-root exports for `PlanDocument`, `PlanOperationKind`,
 `PlanExecutionContext`, `PlanExecutionHost`, `PlanExecutionReport`,
@@ -354,13 +358,13 @@ capability-granted effects, surfaces, schemas, and apply permission.
 the effect and proposal `read_receipts`, so an agent-shaped change cannot pass
 as a receipted proposal with only decorative stdout or omitted session
 provenance. This is still a Plan IR authority check, not proof that the agent
-runtime produced the session. These checks are not ACP delivery, provider
+runtime produced the session. These checks are not worker transport delivery, provider
 runtime execution, general cache backend behavior, graph mutation authority,
 full Plan IR coverage, evaluator runtime production, or engine RunGraph
 revision reads.
 The sandbox execution route treats completed stdout/stderr blob refs as audit
 facts, not optional decoration: live host outcomes, replayed Plan Results, and
-ACP extension results must preserve them. This is still public-seam harness
+worker-profile extension results must preserve them. This is still public-seam harness
 validation, not a claim that a production sandbox runtime or streaming
 transport has shipped.
 
@@ -466,7 +470,7 @@ ride a stage-run dispatch past the runner guard; a dispatch result returns the
 stage's typed `OutputRecord` (V1 minimally a runner-stage text output). This is
 intentionally separate from the Plan IR effect callbacks: `leaven/stage.run`
 binds the stage-run schema in both directions and does not bind Plan IR or Plan
-Result. They are not an ACP process implementation, transport dispatch loop,
+Result. They are not a worker process implementation, transport dispatch loop,
 stage execution runtime, reward-vector contract, or graph mutation route, and
 V1 dispatches only the target-free runner stage.
 
@@ -607,17 +611,17 @@ backpressure, or runtime watch support.
   schema shape but do not declare candidate/artifact output provenance, plus
   scorer and judge outputs whose nested blob or trace data classes are not
   covered by the enclosing output record. It does not prove runtime stage
-  lowering, ACP transport, provider calls, proposal graph mutation, or
+  lowering, worker transport, provider calls, proposal graph mutation, or
   independent output-identity truth for arbitrary stage JSON.
 - `tests/stage_run.rs` proves the host->worker `leaven/stage.run` dispatch wire:
   a schema-valid runner dispatch request (stage kind plus role-scoped payload)
   and a text-output dispatch result validate through `validate_stage_run_*`,
   while a request carrying `case.target` material or a non-runner payload role,
   a non-text result output, and a Plan Result envelope smuggled as a stage-run
-  result are all rejected. It does not prove ACP transport dispatch delivery,
+  result are all rejected. It does not prove worker transport dispatch delivery,
   stage execution, or non-runner stage kinds (deferred to later slices).
-- `tests/acp_profile.rs` proves locked Leaven ACP profile semantics for pinned
-  ACP version, stdio-first transport preference, Leaven-only extension methods,
+- `tests/acp_profile.rs` proves locked Leaven worker profile semantics for pinned
+  worker-profile version, stdio-first transport preference, Leaven-only seam methods,
   capability-action mapping, locked Plan IR/Plan Result schema bindings,
   bounded update declarations, profile-derived engine-client/worker-agent
   session facts, bounded progress-update queue behavior, lifecycle cancellation
@@ -625,17 +629,17 @@ backpressure, or runtime watch support.
   sessions, `PlanError`/redaction denials,
   active-schema extension-result primary/receipt payloads across the full
   locked callback surface, method-specific primary value families,
-  receipt-category binding, ACP-envelope JCS `result_hash` binding even for
+  receipt-category binding, worker-profile envelope JCS `result_hash` binding even for
   locked-schema primary values that cannot carry their own receipt field,
   primary receipt binding when the primary schema includes a receipt,
   and monotonic result data-class coverage. It rejects MCP/private-process substitutes,
-  unpinned/latest ACP versions, non-stdio-first transport drift,
+  unpinned/latest worker-profile versions, non-stdio-first transport drift,
   human/always-grant permission substitutes, unbounded update declarations,
   archived/private schema bindings, bare method-specific result payloads,
   cross-method payloads, wrong receipt classes, unschematized primary/receipt
   payloads, unbound or forged result hashes including generic extension and
   receiptless workspace primaries, unbound primary receipts, and
-  result data-class gaps. It does not prove ACP process startup,
+  result data-class gaps. It does not prove worker process startup,
   stdio JSON-RPC I/O, provider calls, or full worker lifecycle control.
 - `tests/plan_result.rs` proves active-schema Plan Result envelopes carry typed
   success and failure values, query/call/write audit receipts, errors, charges,
@@ -675,12 +679,12 @@ backpressure, or runtime watch support.
 
 ## Hazards
 
-- Do not accept archived draft directories, downloaded zips, or MCP-over-ACP
+- Do not accept archived draft directories, downloaded zips, or MCP bridge
   draft payloads as current V1 input.
 - Do not mark conformance rows proven from schema compilation alone unless the
   row explicitly says `shape_only`.
 - Do not add generated structs that round-trip JSON but are never executable and
   call that the seam.
 - Do not cite Codex app-server provider connectivity, `AgentRuntime` tests, or
-  `FakeAgentRuntime` behavior as ACP transport evidence unless the test uses the
-  ACP transport adapter and a child process over stdio JSON-RPC.
+  `FakeAgentRuntime` behavior as worker transport evidence unless the test uses
+  the Leaven worker transport adapter and a child process over stdio JSON-RPC.

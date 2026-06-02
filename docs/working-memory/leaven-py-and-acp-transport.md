@@ -1,12 +1,17 @@
 # Leaven Python SDK + ACP Transport Research
 
-Status: historical research snapshot, pre-spec.
+Status: historical research snapshot, pre-spec; terminology superseded.
 Updated: 2026-05-24.
 
 Current-state warning: row counts and ACP blockers in this note are dated
 conversation context. Verify implementation status against
 `docs/specs/public-seam-v1/conformance-matrix.yaml`, `crates/leaven-acp`, and
 the current `jj log` before using them as live work state.
+
+Terminology warning added 2026-06-02: this note uses "ACP" for what is now
+described as the Leaven public seam / Leaven worker profile. The current V1
+implementation is Leaven-owned stdio JSON-RPC and does not prove upstream Agent
+Client Protocol conformance.
 
 ## Authority
 

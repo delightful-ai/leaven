@@ -30,11 +30,16 @@ Reflection produces diagnosis.
 
 Proposal produces graph mutation intent.
 
-ACP handles worker lifecycle and transport.
+The Leaven worker profile handles external-worker lifecycle and transport over
+the public seam.
 
-Leaven extension methods on ACP handle all worker callbacks uniformly: graph queries, case reads, workspace operations, LM dispatch, agent runs, sandbox exec, human review, proposal submission, assessment submission.
+Leaven `leaven/*` seam methods handle all worker callbacks uniformly: graph queries, case reads, workspace operations, LM dispatch, agent runs, sandbox exec, human review, proposal submission, assessment submission.
 
 Leaven handles domain truth, policy, receipts, costs, redactions, and graph mutation.
+
+Upstream Agent Client Protocol is not the V1 worker seam. If Leaven later uses
+upstream ACP, it is an explicit agent-provider interoperability adapter, not the
+default SDK/public-seam transport.
 
 Adapters own artifact semantics.
 

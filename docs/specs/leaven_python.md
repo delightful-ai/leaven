@@ -42,7 +42,7 @@ They are peers that share the same engine, not a stack.
 It is not the same as the public seam V1 spec. The public seam V1 spec
 locks the wire contract for external-language workers — plan IR, capability
 tokens, result receipts, stage payloads, evidence envelopes, the Leaven
-ACP profile, JSON schemas. This spec uses that wire and adds the Python
+worker profile, JSON schemas. This spec uses that wire and adds the Python
 projection on top of it. If this spec and `docs/specs/public-seam-v1/`
 disagree about the wire, the seam wins.
 
@@ -223,7 +223,7 @@ is a separate larger surface.
 
 ## The wire
 
-The wire is the locked Leaven ACP profile per
+The wire is the locked Leaven worker profile per
 `docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md`.
 Stdio JSON-RPC, kind-discriminated JSON Schema payloads, capability
 tokens via env-var bearer + fingerprint, session-bound permission
@@ -231,7 +231,7 @@ decisions, bounded progress updates, cancellation-with-receipts.
 
 Leaven owns this wire. The implementation is in-house, in a Leaven crate
 (`leaven-acp`). It does not depend on the upstream `agent-client-protocol`
-SDK. The reasons are:
+SDK and is not upstream Agent Client Protocol conformance. The reasons are:
 
 - **Schema lock.** Leaven's seam is schema-locked at
   `docs/specs/public-seam-v1/schemas/`; conformance is gated by
@@ -239,13 +239,17 @@ SDK. The reasons are:
   schemaless-drift failure mode is inverted by construction. Inheriting
   an upstream SDK risks inheriting its release cadence and its
   abstractions for things Leaven explicitly does not have (proxy chains,
-  protocol-version negotiation, MCP-over-ACP, dynamic handler
+  protocol-version negotiation, MCP bridge behavior, dynamic handler
   registration).
 - **Surface size.** The SDK is ~13,500 LOC; the in-house Leaven version
   is ~1,200 LOC because Leaven omits ~6,500 LOC of features it does not
   consume.
 - **Multi-language safety.** Owning the wire keeps the schema-codegen
   pipeline uniform across future TS / Go / shell SDKs.
+
+Upstream ACP remains relevant only as a possible future agent-provider
+interop adapter, where Leaven wants to swap agent runtimes. It is not the V1
+SDK-driving seam.
 
 The wire is stable across language SDKs. The Python SDK speaks it. A
 future TypeScript SDK will speak the same wire. A future Go SDK will too.
@@ -330,7 +334,7 @@ environment as `Rollout.fn(run)` / `Rubric([reward])`, or onto the optimizer
 as `gepa(reflect=..., propose=...)`) or out-of-process as standalone Python
 workers (via `lv.serve_stage(my_stage)` in a script's `__main__`). The engine spawns
 out-of-process stages by command path with capability env vars per the
-locked ACP profile. The decorator shape and the function signature are
+locked Leaven worker profile. The decorator shape and the function signature are
 identical in both cases; only the way the engine reaches the stage
 differs.
 
@@ -355,7 +359,7 @@ async with cx.batch() as b:
     tests = b.sandbox.exec(workspace=ws, argv=[...])
     agent = b.agent.run(workspace=ws, instructions=...)
 # After exiting the context manager, diff/tests/agent are real values.
-# The batch was sent as one ACP call; the context manager handles the await.
+# The batch was sent as one Leaven seam call; the context manager handles the await.
 ```
 
 The batch context manager is the load-bearing ergonomic — it lets the
@@ -500,8 +504,9 @@ produces any of them, the spec has been compromised:
 
 - A pyo3 wrapper of `leaven-run` shipped as `leaven`. Bypasses the
   wire; recreates the rejected manylinux/ABI/language-lock failure mode.
-- ACP conformance rows promoted to `proven` from in-process Rust tests
-  labeled as ACP. The matrix explicitly names this as `fake_pass_rejected`.
+- Worker-transport conformance rows promoted to `proven` from in-process Rust tests
+  labeled as public-seam transport. The matrix explicitly names this as
+  `fake_pass_rejected`.
 - A working `@lv.evaluator` decorator with no `lv.optimize()` /
   `lv.runtime()` / `lv.optimizers.gepa()`. The stage-only framing
   this spec rejects.
@@ -598,8 +603,9 @@ The implementation must honor:
   `lv.cases.from_parquet` are generic loaders. Paper-specific catalogs
   (OfficeQA, SealQA, BrowseComp) live in separate
   `leaven_benchmarks_<name>` packages users opt in to.
-- **Don't depend on the upstream ACP SDK.** Path B per the conversation;
-  reasons in the wire section above.
+- **Don't depend on the upstream ACP SDK for the V1 SDK seam.** Path B per the
+  conversation; reasons in the wire section above. Upstream ACP can return only
+  as an explicit agent-provider interoperability adapter.
 - **Don't language-lock the wire.** Any decision that would make a TS or
   Go SDK awkward later is a failure. The wire's properties
   (snake_case, no `null` literals, JS-safe integers, opaque cursors,
@@ -692,15 +698,16 @@ silence: this spec deliberately does not specify:
 This spec was authored on 2026-05-24 during a long design conversation
 that walked through:
 
-- The public seam V1 maturity (32/39 conformance rows proven; 3 blocked
-  on ACP transport; 4 pending on runtime row work).
+- The public seam V1 maturity snapshot at authorship time (32/39 conformance
+  rows proven; 3 blocked on the then-named worker transport; 4 pending on runtime
+  row work). The transport terminology is now Leaven worker profile.
 - The archived `COMPREHENSIVE_DESIGN_PASS_NOTES.md` from the pre-lock
   seam draft, which named pyo3 as rejected at line 29, evaluator
   interior as host-language at line 33, the 200-line target at line 21,
   and the DSPy drop-in shape at line 735. Most decisions in this spec
   are restatements of design positions reached during the seam lock.
 - Four research files produced by parallel research agents on EvoSkill
-  glue, ACP SDK code inventory, multi-language future-proofing, and
+  glue, worker-transport/ACP SDK code inventory, multi-language future-proofing, and
   external-worker prior art. Findings are captured in
   `docs/working-memory/leaven-py-research/`.
 - Five concrete Python sketches at

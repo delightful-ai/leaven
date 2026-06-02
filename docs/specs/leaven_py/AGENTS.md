@@ -13,19 +13,20 @@ beyond the one wired path described next.
 
 ### The one wired path (example 03, prompt/LM/exact-match)
 
-`examples/03_prompt_optimize.py` runs FOR REAL over the locked ACP
+`examples/03_prompt_optimize.py` runs FOR REAL over the locked Leaven worker
 bidirectional seam. The wired surface is exactly the slice-3 path and no
 more: `optimize().run()`, `cx.lm.complete(prompt=...)`, `cases.from_jsonl`,
 and the `Environment`/`Task`/`Rollout.fn`/`Rubric`/`runtime.local` records
 those compose. Everything else stays `NotImplementedError`.
 
 Directionality (the crux, fixed by `docs/specs/leaven_python.md` "the wire"):
-`optimize().run()` SPAWNS `leaven serve --stdio` as a child — the child is the
-ACP client (it owns the tiny real GEPA accept loop, the deterministic host mock
-LM, and INITIATES `leaven/stage.run`). This package is the ACP agent
-(`leaven/_serve.py`): it SERVES `leaven/stage.run` by running the user's
-`@lv.runner`, and INITIATES `leaven/lm.complete` BACK to the child. It is the
-Python generalization of the proven Rust worker
+`optimize().run()` SPAWNS `leaven serve --stdio` as a child. The Rust child
+owns the tiny real GEPA accept loop, the deterministic host mock LM, and
+INITIATES `leaven/stage.run`. This Python package (`leaven/_serve.py`) serves
+`leaven/stage.run` by running the user's `@lv.runner`, and INITIATES
+`leaven/lm.complete` BACK to the child. That is a Leaven-owned JSON-RPC worker
+seam, not upstream Agent Client Protocol. It is the Python generalization of
+the proven Rust worker
 `crates/leaven-acp-stage-bridge/worker/serve_stage_runner.py`.
 
 Honest scope: the seam, stage dispatch, and GEPA-shaped accept are real; the LM
@@ -190,7 +191,7 @@ Round 4 vendored (2026-05-24) — high-taste references:
   `constr(...)`/`conint(...)` calls in type positions.
 - `uv run ruff check src/leaven examples` passes linting.
 - `cargo build -p leaven-cli` then `uv run python examples/03_prompt_optimize.py`
-  runs the one wired path FOR REAL over the live ACP seam: it spawns
+  runs the one wired path FOR REAL over the live Leaven worker seam: it spawns
   `leaven serve --stdio`, optimizes the seed prompt, and prints `seed score: 0.000`
   / `best score: 1.000` plus the optimized template. This is the slice-3 product
   proof. The remaining examples print composed types and canonical sketches only.

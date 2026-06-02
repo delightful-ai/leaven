@@ -26,7 +26,7 @@
   "key_decisions": [
     "Reflection and proposal are structurally separate (ReflectionResultV1 + ProposeRequestV1).",
     "Score.output is required on Score.",
-    "ACP is the worker transport; Leaven extension methods carry all callbacks; no MCP layer in v1.",
+    "Leaven worker profile is the worker transport; Leaven seam methods carry all callbacks; no MCP layer in v1.",
     "Host->worker stage dispatch rides one generic leaven/stage.run method bound to leaven.stage_run.v1 (request: stage kind + role-scoped stage payload; result: the stage output); worker callbacks stay on the Plan IR effect methods.",
     "Watch deferred to v1.1; finite diff queries via consistency.since_revision.",
     "Schema fingerprinting: RFC 8785 JCS + SHA-256.",
