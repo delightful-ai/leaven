@@ -1,0 +1,20 @@
+[package]
+name = "leaven-seam-service"
+description = "Configured executable services behind the Leaven public seam runtime."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+futures = { workspace = true }
+leaven-lm-mock = { workspace = true }
+leaven-public-seam = { workspace = true }
+leaven-seam-runtime = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

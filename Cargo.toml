@@ -39,6 +39,7 @@ members = [
     "crates/leaven-public-seam",
     "crates/leaven-run",
     "crates/leaven-seam-runtime",
+    "crates/leaven-seam-service",
     "crates/leaven-seam-stdio",
     "crates/leaven-stage",
     "crates/leaven-std",
@@ -156,12 +157,14 @@ leaven-gepa-agentic-skill = { path = "crates/leaven-gepa-agentic-skill", version
 leaven-kernel = { path = "crates/leaven-kernel", version = "0.0.0" }
 leaven-lm = { path = "crates/leaven-lm", version = "0.0.0" }
 leaven-lm-cache = { path = "crates/leaven-lm-cache", version = "0.0.0" }
+leaven-lm-mock = { path = "crates/leaven-lm-mock", version = "0.0.0" }
 leaven-lm-openai = { path = "crates/leaven-lm-openai", version = "0.0.0" }
 leaven-population = { path = "crates/leaven-population", version = "0.0.0" }
 leaven-preference = { path = "crates/leaven-preference", version = "0.0.0" }
 leaven-public-seam = { path = "crates/leaven-public-seam", version = "0.0.0" }
 leaven-run = { path = "crates/leaven-run", version = "0.0.0" }
 leaven-seam-runtime = { path = "crates/leaven-seam-runtime", version = "0.0.0" }
+leaven-seam-service = { path = "crates/leaven-seam-service", version = "0.0.0" }
 leaven-seam-stdio = { path = "crates/leaven-seam-stdio", version = "0.0.0" }
 leaven-stage = { path = "crates/leaven-stage", version = "0.0.0" }
 leaven-store = { path = "crates/leaven-store", version = "0.0.0" }

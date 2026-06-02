@@ -19,17 +19,21 @@ pub enum JsonRpcErrorCode {
     MethodNotFound,
     /// The request is valid but no runtime owner is wired for the method.
     MethodUnavailable,
+    /// The runtime owner failed while executing a wired method.
+    ExecutionFailed,
     /// The runtime owner returned a malformed public-seam result.
     InvalidResult,
 }
 
 impl JsonRpcErrorCode {
-    const fn code(self) -> i64 {
+    /// Numeric JSON-RPC code.
+    pub const fn code(self) -> i64 {
         match self {
             Self::ParseError => -32700,
             Self::InvalidRequest => -32600,
             Self::MethodNotFound => -32601,
             Self::MethodUnavailable => -32004,
+            Self::ExecutionFailed => -32006,
             Self::InvalidResult => -32005,
         }
     }
@@ -168,9 +172,7 @@ impl<S: SeamService> SeamRuntime<S> {
                     ),
                 }
             }
-            Err(error) => {
-                error_response(id, JsonRpcErrorCode::MethodUnavailable, error.to_string())
-            }
+            Err(error) => error_response(id, error.code(), error.to_string()),
         }
     }
 
@@ -207,9 +209,7 @@ impl<S: SeamService> SeamRuntime<S> {
                     ),
                 }
             }
-            Err(error) => {
-                error_response(id, JsonRpcErrorCode::MethodUnavailable, error.to_string())
-            }
+            Err(error) => error_response(id, error.code(), error.to_string()),
         }
     }
 }
@@ -306,6 +306,7 @@ impl SeamService for RejectingSeamService {
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 #[error("{message}")]
 pub struct SeamServiceError {
+    kind: SeamServiceErrorKind,
     message: String,
 }
 
@@ -313,12 +314,35 @@ impl SeamServiceError {
     /// Creates a method-unavailable service error.
     pub fn unavailable(method: impl Into<String>) -> Self {
         Self {
+            kind: SeamServiceErrorKind::Unavailable,
             message: format!(
                 "Leaven seam method `{}` is not implemented by this service",
                 method.into()
             ),
         }
     }
+
+    /// Creates an execution failure for a wired method.
+    pub fn execution(message: impl Into<String>) -> Self {
+        Self {
+            kind: SeamServiceErrorKind::Execution,
+            message: message.into(),
+        }
+    }
+
+    /// JSON-RPC code this service error maps to.
+    pub const fn code(&self) -> JsonRpcErrorCode {
+        match self.kind {
+            SeamServiceErrorKind::Unavailable => JsonRpcErrorCode::MethodUnavailable,
+            SeamServiceErrorKind::Execution => JsonRpcErrorCode::ExecutionFailed,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SeamServiceErrorKind {
+    Unavailable,
+    Execution,
 }
 
 /// Runtime construction error.

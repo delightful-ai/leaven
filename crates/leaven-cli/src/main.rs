@@ -81,13 +81,19 @@ struct SeamServeArgs {
     /// Repo root the locked public-seam package loads from.
     #[arg(long, default_value = ".")]
     root: PathBuf,
+    /// JSON config for executable seam providers.
+    #[arg(long)]
+    config: Option<PathBuf>,
 }
 
 impl SeamServeArgs {
     fn into_command(self) -> SeamServeCommand {
         // `--stdio` is the only supported transport mode; clap requires it.
         debug_assert!(self.stdio, "clap requires --stdio");
-        SeamServeCommand { root: self.root }
+        SeamServeCommand {
+            root: self.root,
+            config: self.config,
+        }
     }
 }
 

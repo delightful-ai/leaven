@@ -21,10 +21,11 @@ Root `AGENTS.md` owns the full routing map. This file adds local crate-family ru
   must not absorb worker runtime, provider lowering, graph mutation, or
   generated-struct-only proof.
 - Public seam runtime: `leaven-seam-runtime` owns transport-neutral dispatch for
-  the locked public seam, and `leaven-seam-stdio` owns the line-delimited stdio
-  adapter around that runtime. They expose the public seam directly; method
-  semantics stay in `leaven-public-seam` and service implementations stay in
-  their runtime/provider owners.
+  the locked public seam, `leaven-seam-service` owns configured executable
+  service implementations behind that runtime, and `leaven-seam-stdio` owns the
+  line-delimited stdio adapter. They expose the public seam directly; method
+  semantics stay in `leaven-public-seam`, provider protocol details stay in
+  provider crates, and transport stays out of service implementations.
 - Legacy bidirectional bridge transport: `leaven-acp` owns the current hot
   process/session mechanics used by bridge proofs. It starts external workers
   and carries JSON-RPC over stdin/stdout, while delegating Leaven method/result
@@ -65,9 +66,10 @@ cross-family rules that apply before you know a leaf's details.
   vocabulary stays in `leaven-agent`, command substrate in
   `leaven-agent-command`, and stage parsing in `leaven-agentic`.
 - The public server leaves for the locked public seam are
-  `leaven-seam-runtime` and `leaven-seam-stdio`. Keep them as validation,
-  dispatch, and transport adapters; concrete LM, agent, sandbox, optimizer, and
-  graph execution belongs behind injected services in owning crates.
+  `leaven-seam-runtime`, `leaven-seam-service`, and `leaven-seam-stdio`. Keep
+  runtime/stdio as validation, dispatch, and transport adapters; concrete LM,
+  agent, sandbox, optimizer, and graph execution belongs behind configured
+  service implementations and their provider/runtime owner crates.
 - The legacy `leaven-acp` bridge may migrate to the official
   `agentclientprotocol/rust-sdk` only for a future upstream-agent interop slice,
   after external dependency approval. Leaven method/result authority stays in

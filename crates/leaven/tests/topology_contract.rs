@@ -38,6 +38,7 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "crates/leaven-public-seam",
     "crates/leaven-run",
     "crates/leaven-seam-runtime",
+    "crates/leaven-seam-service",
     "crates/leaven-seam-stdio",
     "crates/leaven-stage",
     "crates/leaven-std",
@@ -99,6 +100,7 @@ const EXPECTED_CRATES: &[&str] = &[
     "leaven-public-seam",
     "leaven-run",
     "leaven-seam-runtime",
+    "leaven-seam-service",
     "leaven-seam-stdio",
     "leaven-stage",
     "leaven-std",
@@ -342,6 +344,14 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
         ],
     ),
     ("leaven-seam-runtime", &["leaven-public-seam"]),
+    (
+        "leaven-seam-service",
+        &[
+            "leaven-lm-mock",
+            "leaven-public-seam",
+            "leaven-seam-runtime",
+        ],
+    ),
     ("leaven-seam-stdio", &["leaven-seam-runtime"]),
     (
         "leaven-stage",
