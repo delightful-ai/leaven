@@ -57,6 +57,10 @@ spec_package:
     - >-
       A mock prompt-optimization example is useful smoke evidence, but it is not
       completion evidence for the SDK or Codex agentic runtime.
+    - >-
+      User approved live proof spend on 2026-06-02 with a total ceiling of
+      5 USD. Native Codex auth is expected to work; the preferred Codex proof
+      path is `codex exec --model gpt-5.4-mini ...`.
 
 designed_surface:
   public_surface:
@@ -88,6 +92,19 @@ designed_surface:
     - Python authors stage behavior and run composition, not optimizer strategy state or graph mutation internals.
     - The public seam is Leaven-owned JSON-RPC, not upstream ACP conformance; ACP naming must not become product truth.
     - Live-provider-backed `lm.complete`, live Codex `agent.run`, workspace materialization, stage dispatch, and proposal/assessment writes are all required to prove the SDK path.
+
+live_proof_budget:
+  status: approved
+  approved_at: 2026-06-02
+  total_usd_ceiling: 5
+  codex_model: gpt-5.4-mini
+  codex_auth_route: native_codex_cli_auth
+  preferred_codex_command_shape: "codex exec --model gpt-5.4-mini ..."
+  rules:
+    - Spend-bearing live proof must stay inside the 5 USD total ceiling.
+    - Deterministic/mock tests remain mechanics evidence only.
+    - Missing auth or a broken native Codex CLI path is a blocker, not a substitute proof.
+    - Default tests still must not require credentials or spend.
 
 intent_preservation:
   verdict: preserved_if_acceptance_denominator_holds
@@ -220,7 +237,7 @@ acceptance:
         - "`leaven/agent.run`"
         - typed proposal submission
         - lineage/receipt capture
-        - real Codex process/session evidence, not a fake agent transcript
+        - real Codex process/session evidence from `codex exec --model gpt-5.4-mini`, not a fake agent transcript
       companion_no_spend_proof:
         kind: deterministic_agent_runtime_mechanics
         purpose: >-
@@ -290,10 +307,12 @@ explicit_non_goals:
   - Claiming every `leaven/*` method is production-ready if some providers remain explicitly unsupported.
 
 decision:
-  status: review_before_set_goal
+  status: set_goal
   reason: >-
     This handoff intentionally rejects the reward-hack completion path. The
-    goal should be set only if the user agrees that completion means the Python
-    SDK product surface drives a real optimization through the durable Leaven
-    public seam, with reward vectors, Codex materialized-workspace agent work,
-    live-provider-backed LM wiring, and honest inspection evidence.
+    user agreed that completion means the Python SDK product surface drives a
+    real optimization through the durable Leaven public seam, with reward
+    vectors, Codex gpt-5.4-mini materialized-workspace agent work,
+    live-provider-backed LM wiring, and honest inspection evidence. Live proof
+    spend is approved up to 5 USD total; deterministic/mock paths remain
+    mechanics evidence only.
