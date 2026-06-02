@@ -63,6 +63,11 @@ spec_package:
       `codex exec --model gpt-5.4-mini ...` is only an auth/model smoke or
       adapter-level diagnostic. The acceptance proof must run through Leaven
       end-to-end.
+    - >-
+      The goal is the latest Python-plan foundation slice: build the durable
+      public-seam SDK substrate and prove it works end-to-end. It is not a claim
+      that every future provider, method family, paper workflow, or production
+      hardening task is finished.
 
 designed_surface:
   public_surface:
@@ -309,6 +314,7 @@ explicit_non_goals:
   - Windows wheel support in this goal.
   - Paper-close EvoSkill reproduction in this goal; this goal builds the SDK/seam path it will need.
   - Claiming every `leaven/*` method is production-ready if some providers remain explicitly unsupported.
+  - Completing every future Python SDK feature beyond the foundation needed to prove the public-seam E2E route.
 
 decision:
   status: set_goal
@@ -319,4 +325,5 @@ decision:
     vectors, Codex gpt-5.4-mini materialized-workspace agent work,
     live-provider-backed LM wiring, and honest inspection evidence. Live proof
     spend is approved up to 5 USD total; deterministic/mock paths remain
-    mechanics evidence only.
+    mechanics evidence only. The goal is the latest Python-plan foundation
+    slice, not the entire eventual SDK roadmap.
