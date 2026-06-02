@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use leaven_acp::{AcpProcessCommand, AcpStdioProcessSession};
+use leaven_acp::{AcpProcessCommand, AcpStdioProcessSession, RejectAllEffectHost};
 use leaven_public_seam::{AcpProfileDocument, PublicSeamPackage};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -46,7 +46,11 @@ fn acp_external_python_worker_solves_real_spreadsheetbench_case_and_scores_run()
     let mut session = spawn_worker(&package, &profile, &script, &run_dir, "solve");
 
     let response = session
-        .call_extension("leaven/agent.run", &agent_run_plan_params())
+        .call_extension(
+            "leaven/agent.run",
+            &agent_run_plan_params(),
+            &RejectAllEffectHost,
+        )
         .unwrap();
     assert_eq!(response.method(), "leaven/agent.run");
     assert_eq!(response.primary_kind(), "agent_session");
@@ -95,7 +99,11 @@ fn acp_external_python_worker_success_without_workbook_does_not_clear_benchmark_
     let mut session = spawn_worker(&package, &profile, &script, &run_dir, "fake_artifact");
 
     let response = session
-        .call_extension("leaven/agent.run", &agent_run_plan_params())
+        .call_extension(
+            "leaven/agent.run",
+            &agent_run_plan_params(),
+            &RejectAllEffectHost,
+        )
         .unwrap();
     assert_eq!(response.primary_kind(), "agent_session");
     assert!(
@@ -219,8 +227,19 @@ fn extension_method(method: &str, action: &str) -> Value {
     })
 }
 
+fn stage_run_method() -> Value {
+    json!({
+        "method": "leaven/stage.run",
+        "params_schema": "leaven.stage_run.v1.schema.json",
+        "result_schema": "leaven.stage_run.v1.schema.json",
+        "required_action": "stage.run",
+        "produces_receipt": true
+    })
+}
+
 fn locked_profile_methods() -> Vec<Value> {
     vec![
+        stage_run_method(),
         extension_method("leaven/graph.query", "graph.query"),
         extension_method("leaven/case.load", "case.read"),
         extension_method("leaven/case.input", "case.read"),

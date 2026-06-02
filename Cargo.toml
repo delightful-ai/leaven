@@ -10,6 +10,7 @@ members = [
     "crates/leaven-agent-codex-app-server",
     "crates/leaven-agent-codex-cli",
     "crates/leaven-acp",
+    "crates/leaven-acp-stage-bridge",
     "crates/leaven-cli",
     "crates/leaven-agentic",
     "crates/leaven-agentic-agent-kit",
@@ -57,6 +58,7 @@ members = [
     "examples/p6_optimizer_policy_self_opt",
     "examples/p7_self_optimization_kernel",
     "examples/p8_aime_gepa",
+    "examples/p9_python_acp_gepa_codex",
     "examples/trace2skill_spreadsheetbench",
     "xtask",
 ]
@@ -134,6 +136,7 @@ leaven-agent = { path = "crates/leaven-agent", version = "0.0.0" }
 leaven-agent-command = { path = "crates/leaven-agent-command", version = "0.0.0" }
 leaven-agent-codex-cli = { path = "crates/leaven-agent-codex-cli", version = "0.0.0" }
 leaven-acp = { path = "crates/leaven-acp", version = "0.0.0" }
+leaven-acp-stage-bridge = { path = "crates/leaven-acp-stage-bridge", version = "0.0.0" }
 leaven-agentic = { path = "crates/leaven-agentic", version = "0.0.0" }
 leaven-agentic-agent-kit = { path = "crates/leaven-agentic-agent-kit", version = "0.0.0" }
 leaven-agentic-git = { path = "crates/leaven-agentic-git", version = "0.0.0" }

@@ -14,6 +14,7 @@ Each `pN_*` directory is a workspace package with a runnable binary. Keep reusab
 - `p6_optimizer_policy_self_opt`: product-proof for trust-policy self-optimization; `just milestone-p6` proves optimizer-policy self-optimization over hidden validation/test partitions and hidden-test refusal.
 - `p7_self_optimization_kernel`: product-proof for the promotion-gate milestone; `just milestone-p7` proves immutable public surfaces, hidden holdout refusal, promotion gates, final-test selection, and rollback metadata.
 - `p8_aime_gepa`: local `AGENTS.md`; `just milestone-p8` is a product-proof for the public builder path through LM-backed GEPA reflection over provider-neutral `leaven-lm`, with deterministic local model output. It is not proof of a live provider, LM cache behavior, or live AIME improvement.
+- `p9_python_acp_gepa_codex`: local `AGENTS.md`; `just milestone-p9` is a live mechanics proof for live Codex execution plus a Python worker across the locked ACP stdio seam, ending in a durable tiny GEPA-shaped accept decision. It is not proof of a Python SDK implementation, durable Codex agent-kit installation, Codex hooks, or full GEPA optimizer policy.
 - `memento_skills_read_write`: local `AGENTS.md`; paper-specific Memento-Skills tiny live Read-Write proof. It is outside the Cargo workspace and writes live artifacts under `tmp/memento_skills_read_write/`.
 - `skillreducer_tiny`: local `AGENTS.md`; paper-specific SkillReducer tiny live debloating proof. It is outside the Cargo workspace and writes live artifacts under `tmp/skillreducer_tiny/`.
 - `d2skill_tiny`: local `AGENTS.md`; paper-specific D2Skill tiny live paired-rollout skill-bank proof. It is outside the Cargo workspace and writes live artifacts under `tmp/d2skill_tiny/`.
@@ -125,5 +126,5 @@ When adding or changing an example, classify it before citing it as acceptance e
 
 ## Verification
 - For one example, use its `just milestone-pN` command and read the package map above for what that command proves.
-- `just milestone-examples` expands through `milestone-p5`, and `milestone-p5` sets `LEAVEN_CODEX_LIVE=1`; do not cite `just milestone-examples` as a cheap deterministic proof.
+- `just milestone-examples` expands through `milestone-p5` and `milestone-p9`; both set live-provider gates. Do not cite `just milestone-examples` as a cheap deterministic proof.
 - For shared example behavior, run the affected deterministic `just milestone-pN` commands and explicitly decide whether the live p5 proof is required. Final behavior gate remains `just check` when the change is not documentation-only.

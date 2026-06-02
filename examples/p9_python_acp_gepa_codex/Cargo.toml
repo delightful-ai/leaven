@@ -1,0 +1,26 @@
+[package]
+name = "p9_python_acp_gepa_codex"
+description = "Leaven P9 live Codex plus Python ACP GEPA-shaped proof."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+chrono = { workspace = true }
+jcs-canonicalize = { workspace = true }
+leaven-acp = { workspace = true }
+leaven-agent = { workspace = true }
+leaven-agent-codex-cli = { workspace = true }
+leaven-kernel = { workspace = true }
+leaven-public-seam = { workspace = true }
+leaven-workspace = { workspace = true }
+leaven-workspace-local = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

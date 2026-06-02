@@ -3175,6 +3175,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "leaven-acp-stage-bridge"
+version = "0.0.0"
+dependencies = [
+ "jcs-canonicalize",
+ "leaven-acp",
+ "leaven-public-seam",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "leaven-agent"
 version = "0.0.0"
 dependencies = [
@@ -4581,6 +4593,25 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tokio",
+]
+
+[[package]]
+name = "p9_python_acp_gepa_codex"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "jcs-canonicalize",
+ "leaven-acp",
+ "leaven-agent",
+ "leaven-agent-codex-cli",
+ "leaven-kernel",
+ "leaven-public-seam",
+ "leaven-workspace",
+ "leaven-workspace-local",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
  "tokio",
 ]
 

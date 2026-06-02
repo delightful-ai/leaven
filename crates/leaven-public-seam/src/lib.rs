@@ -18,6 +18,7 @@ mod plan_execution;
 mod proposal_authority;
 mod result;
 mod stage_payload;
+mod stage_run;
 mod watch;
 
 pub use acp_profile::{
@@ -25,7 +26,8 @@ pub use acp_profile::{
     AcpExtensionResultDocument, AcpJsonRpcRequestDocument, AcpJsonRpcResponseDocument,
     AcpPermissionDecision, AcpPermissionRequest, AcpProfileDocument, AcpProgressDisposition,
     AcpProgressPriority, AcpSessionCancellation, AcpSessionLifecycle, AcpSessionState,
-    AcpSessionUpdate, AcpStdioWorkerLaunch, AcpWorkerSession,
+    AcpSessionUpdate, AcpStageRunRequestDocument, AcpStageRunResponseDocument,
+    AcpStdioWorkerLaunch, AcpWorkerSession,
 };
 pub use call_authority::{
     CallAuthorityDenial, CallAuthorityDenialKind, CallAuthorityError, CallAuthorityReport,
@@ -66,4 +68,5 @@ pub use stage_payload::{
     ReflectProposeHandoffDocument, ReflectProposeSubmissionDocument, StagePayloadDocument,
     StagePayloadRole, StageProposalEffect,
 };
+pub use stage_run::{StageRunKind, StageRunRequestDocument, StageRunResultDocument};
 pub use watch::DeferredWatchReplacement;

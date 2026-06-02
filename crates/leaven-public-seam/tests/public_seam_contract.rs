@@ -32,6 +32,8 @@ mod proposal_authority;
 mod sandbox_contract;
 #[path = "public_seam_contract/stage_payloads.rs"]
 mod stage_payloads;
+#[path = "public_seam_contract/stage_run.rs"]
+mod stage_run;
 #[path = "public_seam_contract/support.rs"]
 mod support;
 #[path = "public_seam_contract/workspace_query_contract.rs"]

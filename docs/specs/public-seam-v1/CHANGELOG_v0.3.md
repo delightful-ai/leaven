@@ -53,3 +53,5 @@ Added `git_status`.
 Added typed LM tools and tool-call IDs.
 
 Added sandbox streaming policy.
+
+Added one generic host-to-worker stage-dispatch method `leaven/stage.run` bound to `leaven.stage_run.v1` (request: stage kind plus a role-scoped stage payload; result: the stage output), separate from the Plan IR effect callbacks. V1 dispatches the target-free runner stage and returns a text `OutputRecord`.

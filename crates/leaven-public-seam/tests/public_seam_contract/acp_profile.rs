@@ -49,6 +49,12 @@ fn acp_profile_validates_pinned_stdio_leaven_methods_and_bounded_updates() {
             .unwrap()
             .produces_receipt()
     );
+
+    let stage_run = profile.method("leaven/stage.run").unwrap();
+    assert_eq!(stage_run.required_action(), "stage.run");
+    assert_eq!(stage_run.params_schema(), "leaven.stage_run.v1.schema.json");
+    assert_eq!(stage_run.result_schema(), "leaven.stage_run.v1.schema.json");
+    assert!(stage_run.produces_receipt());
 }
 
 #[test]
@@ -554,6 +560,164 @@ fn acp_jsonrpc_requests_and_responses_bind_plan_ir_and_extension_results() {
     assert_eq!(response.id(), "req-lm-001");
     assert_eq!(response.method(), "leaven/lm.complete");
     assert_eq!(response.primary_kind(), "lm_response");
+}
+
+#[test]
+fn acp_stage_run_jsonrpc_envelope_binds_dispatch_and_result() {
+    let package = package();
+    let profile = package
+        .validate_acp_profile_document(&acp_profile())
+        .unwrap();
+
+    let request_value = json!({
+        "jsonrpc": "2.0",
+        "id": "req-stage-001",
+        "method": "leaven/stage.run",
+        "params": stage_run_request_params()
+    });
+    let request = package
+        .validate_acp_stage_run_request_document(&profile, &request_value)
+        .unwrap();
+    assert_eq!(request.id(), "req-stage-001");
+    assert_eq!(request.request().stage().as_str(), "runner");
+
+    let response_value = json!({
+        "jsonrpc": "2.0",
+        "id": "req-stage-001",
+        "result": stage_run_result_value()
+    });
+    let response = package
+        .validate_acp_stage_run_response_document(&request, &response_value)
+        .unwrap();
+    assert_eq!(response.id(), "req-stage-001");
+    assert_eq!(response.result().output().kind(), "text");
+    assert_eq!(response.result().stage_call_id(), "sc_runner_envelope");
+}
+
+#[test]
+fn acp_stage_run_jsonrpc_envelope_rejects_wrong_method_target_and_mismatched_id() {
+    let package = package();
+    let profile = package
+        .validate_acp_profile_document(&acp_profile())
+        .unwrap();
+
+    // A non-stage.run method cannot ride the stage-run params past the profile.
+    let mut wrong_method = json!({
+        "jsonrpc": "2.0",
+        "id": "req-stage-002",
+        "method": "leaven/lm.complete",
+        "params": stage_run_request_params()
+    });
+    assert!(
+        package
+            .validate_acp_stage_run_request_document(&profile, &wrong_method)
+            .is_err()
+    );
+
+    // Target material in the runner payload is refused at the envelope too.
+    wrong_method["method"] = json!("leaven/stage.run");
+    wrong_method["params"]["payload"]["case_input"]["case.target"] = json!("secret");
+    assert!(matches!(
+        package
+            .validate_acp_stage_run_request_document(&profile, &wrong_method)
+            .unwrap_err(),
+        PublicSeamError::InvalidStageRun { .. }
+    ));
+
+    // A request that carries no params is refused before schema validation.
+    assert!(matches!(
+        package
+            .validate_acp_stage_run_request_document(
+                &profile,
+                &json!({
+                    "jsonrpc": "2.0",
+                    "id": "req-stage-004",
+                    "method": "leaven/stage.run"
+                })
+            )
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    // A request envelope with a non-2.0 jsonrpc, an extra member, or a
+    // response-shaped result field is refused even with valid params.
+    for malformed in [
+        json!({
+            "jsonrpc": "1.0",
+            "id": "req-stage-005",
+            "method": "leaven/stage.run",
+            "params": stage_run_request_params()
+        }),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "req-stage-006",
+            "method": "leaven/stage.run",
+            "params": stage_run_request_params(),
+            "extra": true
+        }),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "req-stage-007",
+            "method": "leaven/stage.run",
+            "params": stage_run_request_params(),
+            "result": {}
+        }),
+    ] {
+        assert!(
+            package
+                .validate_acp_stage_run_request_document(&profile, &malformed)
+                .is_err()
+        );
+    }
+}
+
+#[test]
+fn acp_stage_run_jsonrpc_response_rejects_missing_result_error_and_mismatched_id() {
+    let package = package();
+    let profile = package
+        .validate_acp_profile_document(&acp_profile())
+        .unwrap();
+    let request = package
+        .validate_acp_stage_run_request_document(
+            &profile,
+            &json!({
+                "jsonrpc": "2.0",
+                "id": "req-stage-003",
+                "method": "leaven/stage.run",
+                "params": stage_run_request_params()
+            }),
+        )
+        .unwrap();
+
+    // A response with no result, an error field, or a mismatched id is refused.
+    assert!(matches!(
+        package
+            .validate_acp_stage_run_response_document(
+                &request,
+                &json!({"jsonrpc": "2.0", "id": "req-stage-003"})
+            )
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+    for malformed in [
+        json!({
+            "jsonrpc": "2.0",
+            "id": "req-stage-003",
+            "result": stage_run_result_value(),
+            "error": {"code": 1}
+        }),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "req-stage-999",
+            "result": stage_run_result_value()
+        }),
+    ] {
+        assert!(
+            package
+                .validate_acp_stage_run_response_document(&request, &malformed)
+                .is_err()
+        );
+    }
 }
 
 #[test]
@@ -1574,6 +1738,40 @@ fn acp_extension_results_reject_forged_result_hashes_for_extension_and_receiptle
     }
 }
 
+fn stage_run_request_params() -> Value {
+    json!({
+        "schema_version": "leaven.stage_run.v1",
+        "message": "stage_run_request",
+        "stage": "runner",
+        "payload": {
+            "schema_version": "leaven.stage_payloads.v1",
+            "role": "runner",
+            "run": "run_envelope",
+            "stage_call_id": "sc_runner_envelope",
+            "candidate": "cand_envelope",
+            "case": "case_envelope",
+            "case_input": {"question": "2 + 3"},
+            "target_forbidden": true
+        }
+    })
+}
+
+fn stage_run_result_value() -> Value {
+    json!({
+        "schema_version": "leaven.stage_run.v1",
+        "message": "stage_run_result",
+        "stage": "runner",
+        "stage_call_id": "sc_runner_envelope",
+        "output": {
+            "kind": "text",
+            "summary": "runner output",
+            "value": "5",
+            "visibility": "optimizer_visible",
+            "data_classes": ["candidate.output"]
+        }
+    })
+}
+
 fn acp_profile() -> Value {
     json!({
         "schema_version": "leaven.acp_profile.v1",
@@ -1632,6 +1830,7 @@ fn acp_plan_params() -> Value {
 
 fn locked_profile_methods() -> Vec<Value> {
     vec![
+        stage_run_method(),
         extension_method("leaven/graph.query", "graph.query"),
         extension_method("leaven/case.load", "case.read"),
         extension_method("leaven/case.input", "case.read"),
@@ -1820,6 +2019,16 @@ fn extension_method(method: &str, action: &str) -> Value {
         "params_schema": "leaven.plan.v1.schema.json",
         "result_schema": "leaven.plan_result.v1.schema.json",
         "required_action": action,
+        "produces_receipt": true
+    })
+}
+
+fn stage_run_method() -> Value {
+    json!({
+        "method": "leaven/stage.run",
+        "params_schema": "leaven.stage_run.v1.schema.json",
+        "result_schema": "leaven.stage_run.v1.schema.json",
+        "required_action": "stage.run",
         "produces_receipt": true
     })
 }

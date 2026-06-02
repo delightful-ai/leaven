@@ -123,6 +123,7 @@ fn acp_profile_routes_callbacks_without_mcp_negotiation() {
     let methods = package.acp_extension_methods().unwrap();
     let scope = package.v1_scope().unwrap();
 
+    assert!(methods.contains(&"leaven/stage.run".to_owned()));
     assert!(methods.contains(&"leaven/graph.query".to_owned()));
     assert!(methods.contains(&"leaven/lm.complete".to_owned()));
     assert!(methods.contains(&"leaven/proposal.submit_batch".to_owned()));
@@ -537,7 +538,7 @@ fn conformance_matrix_rows_are_unique_honest_and_reference_real_files() {
     let package = package();
     let matrix = package.conformance_matrix().unwrap();
 
-    assert_eq!(matrix.rows.len(), 39);
+    assert_eq!(matrix.rows.len(), 40);
     let proven = matrix
         .proven_rows()
         .into_iter()

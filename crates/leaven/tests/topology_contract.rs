@@ -9,6 +9,7 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "crates/leaven-agent-codex-app-server",
     "crates/leaven-agent-codex-cli",
     "crates/leaven-acp",
+    "crates/leaven-acp-stage-bridge",
     "crates/leaven-cli",
     "crates/leaven-agentic",
     "crates/leaven-agentic-agent-kit",
@@ -56,6 +57,7 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "examples/p6_optimizer_policy_self_opt",
     "examples/p7_self_optimization_kernel",
     "examples/p8_aime_gepa",
+    "examples/p9_python_acp_gepa_codex",
     "examples/trace2skill_spreadsheetbench",
     "xtask",
 ];
@@ -67,6 +69,7 @@ const EXPECTED_CRATES: &[&str] = &[
     "leaven-agent-codex-app-server",
     "leaven-agent-codex-cli",
     "leaven-acp",
+    "leaven-acp-stage-bridge",
     "leaven-agentic",
     "leaven-agentic-agent-kit",
     "leaven-agentic-git",
@@ -117,6 +120,7 @@ const EXPECTED_BINARIES: &[&str] = &[
     "examples/p6_optimizer_policy_self_opt",
     "examples/p7_self_optimization_kernel",
     "examples/p8_aime_gepa",
+    "examples/p9_python_acp_gepa_codex",
     "examples/trace2skill_spreadsheetbench",
     "xtask",
 ];
@@ -164,6 +168,10 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
         ],
     ),
     ("leaven-acp", &["leaven-public-seam"]),
+    (
+        "leaven-acp-stage-bridge",
+        &["leaven-acp", "leaven-public-seam"],
+    ),
     (
         "leaven-agentic",
         &[

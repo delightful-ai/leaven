@@ -143,6 +143,13 @@ pub enum PublicSeamError {
         message: String,
     },
 
+    /// A schema-valid `leaven/stage.run` dispatch violates a public-seam semantic constraint.
+    #[error("invalid public seam stage run: {message}")]
+    InvalidStageRun {
+        /// Human-readable reason.
+        message: String,
+    },
+
     /// A pinned public-seam mini-language rejected unsupported syntax.
     #[error("invalid public seam pinned dialect: {message}")]
     InvalidDialect {

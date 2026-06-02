@@ -42,6 +42,8 @@ Unbounded update queues are forbidden in production Leaven workers.
 
 Leaven extension methods cover the full worker callback surface.
 
+Stage dispatch (engine to worker): `leaven/stage.run`. The engine dispatches one stage to the worker as a single generic method carrying a stage kind plus a role-scoped stage payload, and the worker returns that stage's typed output. This is the inverse direction from the callbacks below: the engine is still the ACP client and the worker is still the ACP agent, but here the engine asks the worker to run a stage rather than the worker asking the engine to perform an effect. `leaven/stage.run` binds the dedicated `leaven.stage_run.v1` request and result schemas, not the Plan IR effect schemas the callbacks use.
+
 Graph operations: `leaven/graph.query`, `leaven/case.load`, `leaven/case.input`, `leaven/case.target`, `leaven/case.metadata`.
 
 Workspace operations: `leaven/workspace.materialize`, `leaven/workspace.snapshot`, `leaven/workspace.list`, `leaven/workspace.read_file`, `leaven/workspace.stat`, `leaven/workspace.digest`, `leaven/workspace.git_log`, `leaven/workspace.git_diff`, `leaven/workspace.git_status`, `leaven/workspace.capture_artifacts`, `leaven/workspace.release`.

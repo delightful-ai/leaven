@@ -9,7 +9,8 @@ use crate::{
     EvaluationJobDocument, EvaluationRequestReceiptDocument, EvidenceEnvelopeDocument,
     OutputRecordDocument, PinnedDialectEvaluator, PlanDocument, PlanResultDocument,
     ProposalAuthorityReport, PublicSeamError, ReflectProposeHandoffDocument,
-    ReflectProposeSubmissionDocument, StagePayloadDocument,
+    ReflectProposeSubmissionDocument, StagePayloadDocument, StageRunRequestDocument,
+    StageRunResultDocument,
 };
 
 mod evidence_audit;
@@ -512,6 +513,81 @@ impl PublicSeamPackage {
             value,
         )?;
         StagePayloadDocument::from_schema_valid_value(value)
+    }
+
+    /// Validates a `leaven/stage.run` dispatch request through the active V1 stage-run schema.
+    ///
+    /// This is the host->worker stage-dispatch leg of the locked ACP profile: one
+    /// generic method carrying a stage kind plus a role-scoped payload. The
+    /// embedded payload is re-validated through the runner-stage semantic checks
+    /// so target material cannot ride a stage-run dispatch past the runner guard.
+    pub fn validate_stage_run_request_document(
+        &self,
+        value: &Value,
+    ) -> Result<StageRunRequestDocument, PublicSeamError> {
+        self.validate_arbitrary_value(
+            "leaven.stage_run.v1.schema.json",
+            "/stage_run_request",
+            value,
+        )?;
+        StageRunRequestDocument::from_schema_valid_value(value)
+    }
+
+    /// Validates a `leaven/stage.run` dispatch result through the active V1 stage-run schema.
+    ///
+    /// V1 returns a runner-stage `OutputRecord` of kind `text`; the output reuses
+    /// the locked output-record semantics, so a stage-run result cannot return a
+    /// shapeless payload in place of a reportable stage output.
+    pub fn validate_stage_run_result_document(
+        &self,
+        value: &Value,
+    ) -> Result<StageRunResultDocument, PublicSeamError> {
+        self.validate_arbitrary_value(
+            "leaven.stage_run.v1.schema.json",
+            "/stage_run_result",
+            value,
+        )?;
+        StageRunResultDocument::from_schema_valid_value(value)
+    }
+
+    /// Validates an ACP JSON-RPC request carrying a `leaven/stage.run` dispatch.
+    ///
+    /// The host->worker stage-dispatch leg of the locked ACP profile binds the
+    /// stage-run schema, not Plan IR. The envelope gates the method through the
+    /// profile and re-validates the embedded stage-run request semantically, so a
+    /// non-`leaven/stage.run` method or target-bearing payload cannot ride a
+    /// stage-run dispatch.
+    pub fn validate_acp_stage_run_request_document(
+        &self,
+        profile: &crate::AcpProfileDocument,
+        value: &Value,
+    ) -> Result<crate::AcpStageRunRequestDocument, PublicSeamError> {
+        let params = value
+            .get("params")
+            .ok_or_else(|| PublicSeamError::InvalidScope {
+                message: "ACP stage-run request must carry stage-run params".to_owned(),
+            })?;
+        let request = self.validate_stage_run_request_document(params)?;
+        crate::AcpStageRunRequestDocument::from_validated_params(profile, value, request)
+    }
+
+    /// Validates an ACP JSON-RPC response carrying a `leaven/stage.run` result.
+    ///
+    /// The result is a typed stage-run output, not a Plan Result envelope. The
+    /// response id must bind the dispatched request id; the embedded result is
+    /// re-validated through the stage-run output semantics.
+    pub fn validate_acp_stage_run_response_document(
+        &self,
+        request: &crate::AcpStageRunRequestDocument,
+        value: &Value,
+    ) -> Result<crate::AcpStageRunResponseDocument, PublicSeamError> {
+        let result = value
+            .get("result")
+            .ok_or_else(|| PublicSeamError::InvalidScope {
+                message: "ACP stage-run response must carry a stage-run result".to_owned(),
+            })?;
+        let result = self.validate_stage_run_result_document(result)?;
+        crate::AcpStageRunResponseDocument::from_validated_result(request, value, result)
     }
 
     /// Validates a reflect-then-propose handoff through active V1 stage schemas and semantic checks.

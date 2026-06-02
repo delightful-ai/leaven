@@ -7,7 +7,7 @@ coverage_line_floor := '80.00'
 coverage_branch_floor := '80.00'
 coverage_line_warn := '92.56'
 coverage_branch_warn := '88.39'
-milestone_excludes := '--exclude p0_graph_skeleton --exclude p1_keep_best --exclude p2_pairwise_tournament --exclude p3_gepa_parity --exclude p4_meta_harness_lite --exclude p5_evoskill_iteration --exclude p5_skill_paper_reproductions --exclude p6_optimizer_policy_self_opt --exclude p7_self_optimization_kernel --exclude p8_aime_gepa --exclude trace2skill_spreadsheetbench'
+milestone_excludes := '--exclude p0_graph_skeleton --exclude p1_keep_best --exclude p2_pairwise_tournament --exclude p3_gepa_parity --exclude p4_meta_harness_lite --exclude p5_evoskill_iteration --exclude p5_skill_paper_reproductions --exclude p6_optimizer_policy_self_opt --exclude p7_self_optimization_kernel --exclude p8_aime_gepa --exclude p9_python_acp_gepa_codex --exclude trace2skill_spreadsheetbench'
 
 lint:
     cargo fmt --check
@@ -103,7 +103,10 @@ milestone-p7:
 milestone-p8:
     cargo run -p p8_aime_gepa
 
-milestone-examples: milestone-p0 milestone-p1 milestone-p2 milestone-p3 milestone-p4 milestone-p5 milestone-p6 milestone-p7 milestone-p8
+milestone-p9:
+    LEAVEN_P9_LIVE=1 LEAVEN_CODEX_LIVE=1 cargo run -p p9_python_acp_gepa_codex -- --live
+
+milestone-examples: milestone-p0 milestone-p1 milestone-p2 milestone-p3 milestone-p4 milestone-p5 milestone-p6 milestone-p7 milestone-p8 milestone-p9
 
 coverage:
     python3 scripts/coverage-gate.py --line-floor {{coverage_line_floor}} --branch-floor {{coverage_branch_floor}} --line-warn {{coverage_line_warn}} --branch-warn {{coverage_branch_warn}}

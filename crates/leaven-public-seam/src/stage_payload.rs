@@ -494,6 +494,21 @@ impl StagePayloadRole {
             ))),
         }
     }
+
+    /// Wire spelling of the stage payload role.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Reflector => "reflector",
+            Self::ReflectionResult => "reflection_result",
+            Self::Proposer => "proposer",
+            Self::Runner => "runner",
+            Self::Scorer => "scorer",
+            Self::Judge => "judge",
+            Self::Callback => "callback",
+            Self::ArtifactAdapter => "artifact_adapter",
+            Self::DatasetAdapter => "dataset_adapter",
+        }
+    }
 }
 
 /// Proposal effects allowed by a public-seam propose request.

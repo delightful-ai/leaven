@@ -1,6 +1,9 @@
 use std::{fs, os::unix::fs::PermissionsExt, path::Path, thread, time::Duration};
 
-use leaven_acp::{AcpProcessCommand, AcpStdioProcessSession, AcpTransportError};
+use leaven_acp::{
+    AcpEffectHost, AcpProcessCommand, AcpStdioProcessSession, AcpTransportError,
+    RejectAllEffectHost,
+};
 use leaven_public_seam::{AcpProfileDocument, AcpProgressDisposition, PublicSeamPackage};
 use serde_json::{Value, json};
 use tempfile::TempDir;
@@ -37,7 +40,11 @@ printf '%s\n' "$LEAVEN_TEST_RESPONSE" | sed "s/__CAPABILITY_FINGERPRINT__/$LEAVE
     assert_eq!(worker_session.worker_role(), "worker_agent");
 
     let response = session
-        .call_extension("leaven/lm.complete", &acp_plan_params())
+        .call_extension(
+            "leaven/lm.complete",
+            &acp_plan_params(),
+            &RejectAllEffectHost,
+        )
         .unwrap();
     assert_eq!(response.method(), "leaven/lm.complete");
     assert_eq!(response.primary_kind(), "lm_response");
@@ -107,7 +114,11 @@ print(json.dumps(response, sort_keys=True), flush=True)
     .unwrap();
 
     let result = session
-        .call_extension("leaven/lm.complete", &acp_plan_params())
+        .call_extension(
+            "leaven/lm.complete",
+            &acp_plan_params(),
+            &RejectAllEffectHost,
+        )
         .unwrap();
     assert_eq!(result.method(), "leaven/lm.complete");
     assert_eq!(result.primary_kind(), "lm_response");
@@ -123,6 +134,154 @@ print(json.dumps(response, sort_keys=True), flush=True)
         .expect("python worker wrote observed request");
     assert_eq!(observed["method"], json!("leaven/lm.complete"));
     assert_eq!(observed["params"]["return"], json!(["input"]));
+    std::mem::forget(script);
+    std::mem::forget(temp);
+}
+
+/// Host effect handler that records the worker-initiated `leaven/lm.complete`
+/// params and answers with a valid `lm_response` extension result. The
+/// capability fingerprint is intentionally omitted so the transport stamps the
+/// launched session fingerprint on the reply.
+struct RecordingLmCompleteHost {
+    observed_params: std::sync::Mutex<Option<Value>>,
+}
+
+impl RecordingLmCompleteHost {
+    fn new() -> Self {
+        Self {
+            observed_params: std::sync::Mutex::new(None),
+        }
+    }
+}
+
+impl AcpEffectHost for RecordingLmCompleteHost {
+    fn lm_complete(&self, params: &Value) -> Result<Value, AcpTransportError> {
+        *self.observed_params.lock().unwrap() = Some(params.clone());
+        let mut result = extension_result(
+            "leaven/lm.complete",
+            lm_response_primary(),
+            call_receipt("lm_complete", "lmrec_acp"),
+            &["completion.raw"],
+        );
+        result
+            .as_object_mut()
+            .unwrap()
+            .remove("capability_fingerprint");
+        Ok(result)
+    }
+}
+
+#[test]
+fn stdio_session_services_python_worker_initiated_lm_complete_request() {
+    // The inverse of `stdio_session_runs_python_external_worker_program_end_to_end`:
+    // the worker is the ACP agent and *initiates* `leaven/lm.complete` back into
+    // the engine, and the host services the inbound request and responds.
+    let package = package();
+    let profile = profile(&package, 32, "pause_worker");
+    let temp = TempDir::new().unwrap();
+    let observed_response = temp.path().join("observed-response.json");
+    let script = python_worker_script(
+        r#"
+import json
+import os
+import sys
+
+# Worker-side lifecycle progress precedes the worker-initiated request.
+print(json.dumps({
+    "jsonrpc": "2.0",
+    "method": "session/update",
+    "params": {"message": "python worker starting rollout", "priority": "critical"},
+}), flush=True)
+
+# The worker is the ACP agent: it initiates leaven/lm.complete back into the host.
+request = {
+    "jsonrpc": "2.0",
+    "id": "worker-req-7",
+    "method": "leaven/lm.complete",
+    "params": {
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "plan_worker_lm_complete",
+        "consistency": {"kind": "latest_at_start"},
+        "mode": {"kind": "dry_run"},
+        "ops": [{
+            "kind": "let",
+            "name": "prompt",
+            "expr": {
+                "kind": "literal",
+                "value": "what is 2 + 2?",
+                "data_classes": ["public"],
+            },
+        }],
+        "return": ["prompt"],
+        "commit": {"kind": "no_graph_writes"},
+    },
+}
+print(json.dumps(request, sort_keys=True), flush=True)
+
+# The host services the inbound request and replies under the worker's id.
+response = json.loads(sys.stdin.readline())
+assert response["jsonrpc"] == "2.0", response
+assert response["id"] == "worker-req-7", response
+assert "result" in response, response
+result = response["result"]
+assert result["method"] == "leaven/lm.complete", result
+assert result["primary"]["kind"] == "lm_response", result
+# The transport stamped the launched session fingerprint onto the reply.
+assert result["capability_fingerprint"] == os.environ["LEAVEN_CAPABILITY_FINGERPRINT"], result
+
+with open(os.environ["LEAVEN_TEST_OBSERVED_RESPONSE"], "w", encoding="utf-8") as handle:
+    json.dump(response, handle, sort_keys=True)
+"#,
+    );
+    let script_path = script.path().join("worker.py");
+    let mut session = AcpStdioProcessSession::spawn(
+        package,
+        profile,
+        AcpProcessCommand::new("python3")
+            .arg(script_path.to_str().unwrap())
+            .env(
+                "LEAVEN_TEST_OBSERVED_RESPONSE",
+                observed_response.to_str().unwrap(),
+            ),
+        "secret-token",
+        "stdio://worker/session",
+        "fp_cap_sha256_acp",
+    )
+    .unwrap();
+
+    let host = RecordingLmCompleteHost::new();
+    let request = session.serve_next_inbound_request(&host).unwrap();
+    assert_eq!(request.id(), "worker-req-7");
+    assert_eq!(request.method(), "leaven/lm.complete");
+    // The worker's session/update preceding the request was applied as lifecycle
+    // control, not confused with the inbound request.
+    assert_eq!(
+        session
+            .worker_session_snapshot()
+            .lifecycle()
+            .inflight_updates(),
+        1
+    );
+
+    let observed_params = host
+        .observed_params
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("host received the worker's Plan IR params");
+    assert_eq!(observed_params["plan_id"], json!("plan_worker_lm_complete"));
+    assert_eq!(observed_params["return"], json!(["prompt"]));
+
+    assert!(session.wait_for_exit().unwrap().success());
+    let observed: Value = serde_json::from_str(&fs::read_to_string(observed_response).unwrap())
+        .expect("python worker wrote observed response");
+    assert_eq!(observed["id"], json!("worker-req-7"));
+    assert_eq!(observed["result"]["method"], json!("leaven/lm.complete"));
+    assert_eq!(observed["result"]["primary"]["kind"], json!("lm_response"));
+    assert_eq!(
+        observed["result"]["capability_fingerprint"],
+        json!("fp_cap_sha256_acp")
+    );
     std::mem::forget(script);
     std::mem::forget(temp);
 }
@@ -547,7 +706,11 @@ with open(os.environ["LEAVEN_TEST_OBSERVED_REQUESTS"], "w", encoding="utf-8") as
 
     for (index, (method, primary_kind)) in expected.iter().enumerate() {
         let response = session
-            .call_extension(method, &acp_plan_params_for_method(method))
+            .call_extension(
+                method,
+                &acp_plan_params_for_method(method),
+                &RejectAllEffectHost,
+            )
             .unwrap_or_else(|error| panic!("program call {index} {method} failed: {error:?}"));
         assert_eq!(response.id(), format!("leaven-acp-{index}"));
         assert_eq!(response.method(), *method);
@@ -572,6 +735,125 @@ with open(os.environ["LEAVEN_TEST_OBSERVED_REQUESTS"], "w", encoding="utf-8") as
     }
     std::mem::forget(script);
     std::mem::forget(temp);
+}
+
+/// Host effect handler that answers `leaven/lm.complete` while asserting a
+/// capability fingerprint from a *different* session. The transport must refuse
+/// it instead of letting a host answer on behalf of another session.
+struct ForeignFingerprintLmCompleteHost;
+
+impl AcpEffectHost for ForeignFingerprintLmCompleteHost {
+    fn lm_complete(&self, _params: &Value) -> Result<Value, AcpTransportError> {
+        let mut result = extension_result(
+            "leaven/lm.complete",
+            lm_response_primary(),
+            call_receipt("lm_complete", "lmrec_acp"),
+            &["completion.raw"],
+        );
+        result["capability_fingerprint"] = json!("fp_cap_sha256_other_session");
+        Ok(result)
+    }
+}
+
+#[test]
+fn stdio_session_rejects_inbound_host_result_with_foreign_capability_fingerprint() {
+    let package = package();
+    let profile = profile(&package, 32, "pause_worker");
+    let script = python_worker_script(
+        r#"
+import json
+import sys
+
+print(json.dumps({
+    "jsonrpc": "2.0",
+    "id": "worker-req-fp",
+    "method": "leaven/lm.complete",
+    "params": {
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "plan_worker_lm_complete",
+        "consistency": {"kind": "latest_at_start"},
+        "mode": {"kind": "dry_run"},
+        "ops": [{
+            "kind": "let",
+            "name": "prompt",
+            "expr": {"kind": "literal", "value": "x", "data_classes": ["public"]},
+        }],
+        "return": ["prompt"],
+        "commit": {"kind": "no_graph_writes"},
+    },
+}), flush=True)
+"#,
+    );
+    let script_path = script.path().join("worker.py");
+    let mut session = AcpStdioProcessSession::spawn(
+        package,
+        profile,
+        AcpProcessCommand::new("python3").arg(script_path.to_str().unwrap()),
+        "secret-token",
+        "stdio://worker/session",
+        "fp_cap_sha256_acp",
+    )
+    .unwrap();
+    assert!(matches!(
+        session.serve_next_inbound_request(&ForeignFingerprintLmCompleteHost),
+        Err(AcpTransportError::EffectFingerprintMismatch { actual, .. })
+            if actual == "fp_cap_sha256_other_session"
+    ));
+    std::mem::forget(script);
+}
+
+#[test]
+fn stdio_session_rejects_private_and_mcp_inbound_worker_requests() {
+    // The no-private, no-MCP guarantee holds in the inbound direction too: a
+    // worker that initiates a non-Leaven or MCP method is rejected before any
+    // host lowering runs, mirroring the host->worker rejection.
+    let package = package();
+    let profile = profile(&package, 32, "pause_worker");
+    for method in ["private/run_lm", "leaven/mcp.bridge"] {
+        let script = python_worker_script(&format!(
+            r#"
+import json
+import sys
+
+print(json.dumps({{
+    "jsonrpc": "2.0",
+    "id": "worker-req-private",
+    "method": "{method}",
+    "params": {{
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "plan_private_inbound",
+        "consistency": {{"kind": "latest_at_start"}},
+        "mode": {{"kind": "dry_run"}},
+        "ops": [{{
+            "kind": "let",
+            "name": "prompt",
+            "expr": {{"kind": "literal", "value": "x", "data_classes": ["public"]}},
+        }}],
+        "return": ["prompt"],
+        "commit": {{"kind": "no_graph_writes"}},
+    }},
+}}), flush=True)
+"#,
+        ));
+        let script_path = script.path().join("worker.py");
+        let mut session = AcpStdioProcessSession::spawn(
+            package.clone(),
+            profile.clone(),
+            AcpProcessCommand::new("python3").arg(script_path.to_str().unwrap()),
+            "secret-token",
+            "stdio://worker/session",
+            "fp_cap_sha256_acp",
+        )
+        .unwrap();
+        assert!(
+            matches!(
+                session.serve_next_inbound_request(&RejectAllEffectHost),
+                Err(AcpTransportError::PublicSeam(_))
+            ),
+            "inbound method `{method}` must be rejected by the locked profile"
+        );
+        std::mem::forget(script);
+    }
 }
 
 #[test]
@@ -628,11 +910,19 @@ print(json.dumps({
     .unwrap();
 
     let response = session
-        .call_extension("leaven/workspace.materialize", &acp_plan_params())
+        .call_extension(
+            "leaven/workspace.materialize",
+            &acp_plan_params(),
+            &RejectAllEffectHost,
+        )
         .unwrap();
     assert_eq!(response.primary_kind(), "workspace_handle");
     assert!(matches!(
-        session.call_extension("leaven/lm.complete", &acp_plan_params()),
+        session.call_extension(
+            "leaven/lm.complete",
+            &acp_plan_params(),
+            &RejectAllEffectHost
+        ),
         Err(AcpTransportError::PublicSeam(_))
     ));
     std::mem::forget(script);
@@ -681,7 +971,11 @@ printf '%s\n' "$LEAVEN_TEST_RESPONSE" | sed "s/__CAPABILITY_FINGERPRINT__/$LEAVE
     .unwrap();
 
     session
-        .call_extension("leaven/lm.complete", &acp_plan_params())
+        .call_extension(
+            "leaven/lm.complete",
+            &acp_plan_params(),
+            &RejectAllEffectHost,
+        )
         .unwrap();
     assert_eq!(
         fs::canonicalize(fs::read_to_string(&pwd_log).unwrap().trim()).unwrap(),
@@ -710,11 +1004,15 @@ fn stdio_session_rejects_private_mcp_or_bare_process_protocols() {
         ),
     );
     assert!(matches!(
-        private_session.call_extension("private/run_lm", &acp_plan_params()),
+        private_session.call_extension("private/run_lm", &acp_plan_params(), &RejectAllEffectHost),
         Err(AcpTransportError::PublicSeam(_))
     ));
     assert!(matches!(
-        private_session.call_extension("leaven/mcp.bridge", &acp_plan_params()),
+        private_session.call_extension(
+            "leaven/mcp.bridge",
+            &acp_plan_params(),
+            &RejectAllEffectHost
+        ),
         Err(AcpTransportError::PublicSeam(_))
     ));
 
@@ -730,7 +1028,11 @@ printf '%s\n' '{"jsonrpc":"2.0","id":"leaven-acp-0","result":{"message":{"role":
         "{}".to_owned(),
     );
     assert!(matches!(
-        bare_payload_session.call_extension("leaven/lm.complete", &acp_plan_params()),
+        bare_payload_session.call_extension(
+            "leaven/lm.complete",
+            &acp_plan_params(),
+            &RejectAllEffectHost
+        ),
         Err(AcpTransportError::PublicSeam(_))
     ));
 }
@@ -754,7 +1056,7 @@ printf '%s\n' "$LEAVEN_TEST_RESPONSE" | sed "s/__CAPABILITY_FINGERPRINT__/$LEAVE
             response_for(case.method, request_id, case.result),
         );
         let response = session
-            .call_extension(case.method, &acp_plan_params())
+            .call_extension(case.method, &acp_plan_params(), &RejectAllEffectHost)
             .unwrap_or_else(|error| panic!("case {index} {} failed: {error:?}", case.method));
         assert_eq!(response.method(), case.method);
         assert_eq!(response.primary_kind(), case.primary_kind);
@@ -833,7 +1135,7 @@ printf '%s\n' "$LEAVEN_TEST_RESPONSE" | sed "s/__CAPABILITY_FINGERPRINT__/$LEAVE
         ),
     );
     assert!(matches!(
-        cross_method.call_extension("leaven/agent.run", &acp_plan_params()),
+        cross_method.call_extension("leaven/agent.run", &acp_plan_params(), &RejectAllEffectHost),
         Err(AcpTransportError::PublicSeam(_))
     ));
 
@@ -856,7 +1158,11 @@ printf '%s\n' "$LEAVEN_TEST_RESPONSE" | sed "s/__CAPABILITY_FINGERPRINT__/$LEAVE
         response_for("leaven/lm.complete", "leaven-acp-0", missing_receipts),
     );
     assert!(matches!(
-        semantic_fake.call_extension("leaven/lm.complete", &acp_plan_params()),
+        semantic_fake.call_extension(
+            "leaven/lm.complete",
+            &acp_plan_params(),
+            &RejectAllEffectHost
+        ),
         Err(AcpTransportError::PublicSeam(_))
     ));
 }
@@ -889,7 +1195,11 @@ printf '%s\n' "$LEAVEN_TEST_RESPONSE" | sed "s/__CAPABILITY_FINGERPRINT__/$LEAVE
     );
 
     let error = session
-        .call_extension("leaven/lm.complete", &acp_plan_params())
+        .call_extension(
+            "leaven/lm.complete",
+            &acp_plan_params(),
+            &RejectAllEffectHost,
+        )
         .unwrap_err();
     assert!(
         error.to_string().contains("worker must pause"),
@@ -955,7 +1265,11 @@ printf '%s\n' "$cancel" > "$LEAVEN_TEST_CANCEL_LOG"
     assert_eq!(cancellation["params"]["error"]["code"], json!("cancelled"));
 
     assert!(matches!(
-        session.call_extension("leaven/lm.complete", &acp_plan_params()),
+        session.call_extension(
+            "leaven/lm.complete",
+            &acp_plan_params(),
+            &RejectAllEffectHost
+        ),
         Err(AcpTransportError::Protocol { .. })
     ));
 }
@@ -1001,7 +1315,11 @@ printf '%s\n' "$cancel" > "$LEAVEN_TEST_CANCEL_LOG"
     );
     let cancellation = session.cancellation_handle();
     let call = thread::spawn(move || {
-        let result = session.call_extension("leaven/lm.complete", &acp_plan_params());
+        let result = session.call_extension(
+            "leaven/lm.complete",
+            &acp_plan_params(),
+            &RejectAllEffectHost,
+        );
         (session, result)
     });
 
@@ -1033,7 +1351,11 @@ printf '%s\n' "$cancel" > "$LEAVEN_TEST_CANCEL_LOG"
         json!("valrec_inflight_cancel")
     );
     assert!(matches!(
-        session.call_extension("leaven/lm.complete", &acp_plan_params()),
+        session.call_extension(
+            "leaven/lm.complete",
+            &acp_plan_params(),
+            &RejectAllEffectHost
+        ),
         Err(AcpTransportError::Protocol { .. })
     ));
 }
@@ -1072,7 +1394,11 @@ printf '%s\n' "$LEAVEN_TEST_RESPONSE" | sed "s/__CAPABILITY_FINGERPRINT__/$LEAVE
     );
     let cancellation = session.cancellation_handle();
     let call = thread::spawn(move || {
-        let result = session.call_extension("leaven/lm.complete", &acp_plan_params());
+        let result = session.call_extension(
+            "leaven/lm.complete",
+            &acp_plan_params(),
+            &RejectAllEffectHost,
+        );
         (session, result)
     });
 
@@ -1533,6 +1859,7 @@ fn acp_profile() -> Value {
 
 fn locked_profile_methods() -> Vec<Value> {
     vec![
+        stage_run_method(),
         extension_method("leaven/graph.query", "graph.query"),
         extension_method("leaven/case.load", "case.read"),
         extension_method("leaven/case.input", "case.read"),
@@ -1567,6 +1894,16 @@ fn extension_method(method: &str, action: &str) -> Value {
         "params_schema": "leaven.plan.v1.schema.json",
         "result_schema": "leaven.plan_result.v1.schema.json",
         "required_action": action,
+        "produces_receipt": true
+    })
+}
+
+fn stage_run_method() -> Value {
+    json!({
+        "method": "leaven/stage.run",
+        "params_schema": "leaven.stage_run.v1.schema.json",
+        "result_schema": "leaven.stage_run.v1.schema.json",
+        "required_action": "stage.run",
         "produces_receipt": true
     })
 }

@@ -7,15 +7,79 @@ use std::{
 };
 
 use leaven_public_seam::{
-    AcpJsonRpcResponseDocument, AcpProfileDocument, AcpProgressDisposition, AcpProgressPriority,
-    AcpSessionState, AcpStdioWorkerLaunch, AcpWorkerSession, PublicSeamError, PublicSeamPackage,
+    AcpJsonRpcRequestDocument, AcpJsonRpcResponseDocument, AcpProfileDocument,
+    AcpProgressDisposition, AcpProgressPriority, AcpSessionState, AcpStageRunResponseDocument,
+    AcpStdioWorkerLaunch, AcpWorkerSession, PublicSeamError, PublicSeamPackage,
 };
 use serde_json::{Value, json};
+
+/// Classification of one inbound JSON-RPC line on the demultiplexing read loop.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum InboundLine {
+    /// `session/update` lifecycle notification (no id, no result).
+    SessionUpdate,
+    /// Worker-initiated extension request (id + method + params, no result).
+    WorkerRequest,
+    /// Host→worker response keyed by the outstanding request id.
+    HostResponse,
+}
 
 pub const SESSION_UPDATE_METHOD: &str = "session/update";
 pub const SESSION_CANCEL_METHOD: &str = "session/cancel";
 
 pub type AcpTransportResult<T> = Result<T, AcpTransportError>;
+
+/// Host effect handler for worker-initiated ACP extension requests.
+///
+/// The worker is the ACP agent and the engine is the ACP client, so the worker
+/// runs a stage and calls Leaven extension methods *back* into the engine. The
+/// transport validates each inbound request's Plan IR params, hands them to this
+/// host, and validates the host's extension result before writing it back. The
+/// host owns no graph mutation, no transport framing, and no JSON-RPC ids; it
+/// only lowers a validated request into a Leaven extension result envelope.
+///
+/// For the bidirectional spike only `lm_complete` is wired. Every other locked
+/// method rejects through the default `service` dispatch until its host lowering
+/// lands.
+pub trait AcpEffectHost {
+    /// Services a worker-initiated `leaven/lm.complete` request.
+    ///
+    /// `params` is the validated Plan IR document carried by the inbound
+    /// request. The returned value must be a Leaven extension result envelope;
+    /// the transport validates it and stamps the launched capability fingerprint
+    /// before writing it back to the worker.
+    fn lm_complete(&self, params: &Value) -> AcpTransportResult<Value>;
+
+    /// Dispatches one validated inbound request to its host lowering.
+    ///
+    /// The default routes `leaven/lm.complete` to [`AcpEffectHost::lm_complete`]
+    /// and rejects every other locked method as unimplemented for this slice.
+    fn service(&self, method: &str, params: &Value) -> AcpTransportResult<Value> {
+        match method {
+            "leaven/lm.complete" => self.lm_complete(params),
+            other => Err(AcpTransportError::EffectUnimplemented {
+                method: other.to_owned(),
+            }),
+        }
+    }
+}
+
+/// Effect host that refuses every worker-initiated request.
+///
+/// Host→worker `call_extension` callers that do not expect worker callbacks pass
+/// this so the single demultiplexing read loop still has a host to dispatch to.
+/// If a worker unexpectedly initiates a request, the demux rejects it instead of
+/// silently mishandling the line.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct RejectAllEffectHost;
+
+impl AcpEffectHost for RejectAllEffectHost {
+    fn lm_complete(&self, _params: &Value) -> AcpTransportResult<Value> {
+        Err(AcpTransportError::EffectUnimplemented {
+            method: "leaven/lm.complete".to_owned(),
+        })
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum AcpTransportError {
@@ -37,6 +101,16 @@ pub enum AcpTransportError {
     WorkerExited { method: String, id: String },
     #[error("invalid ACP stdio protocol message: {message}")]
     Protocol { message: String },
+    #[error("ACP effect host has no lowering for worker-initiated method `{method}`")]
+    EffectUnimplemented { method: String },
+    #[error(
+        "ACP effect host result for `{method}` carries capability fingerprint `{actual}`, not the launched session fingerprint `{expected}`"
+    )]
+    EffectFingerprintMismatch {
+        method: String,
+        expected: String,
+        actual: String,
+    },
     #[error("ACP stdio worker progress update was refused: {message}")]
     Backpressure { message: String },
     #[error("ACP stdio session cancelled by `{receipt}`: {reason}")]
@@ -90,6 +164,7 @@ pub struct AcpStdioProcessSession {
     package: PublicSeamPackage,
     profile: AcpProfileDocument,
     session: Arc<Mutex<AcpWorkerSession>>,
+    capability_fingerprint: String,
     child: Child,
     stdin: Arc<Mutex<ChildStdin>>,
     stdout: BufReader<ChildStdout>,
@@ -120,12 +195,13 @@ impl AcpStdioProcessSession {
             current_dir,
         } = command;
         let session = AcpWorkerSession::start(&profile)?;
+        let capability_fingerprint = capability_fingerprint.into();
         let launch = AcpStdioWorkerLaunch::new(
             &profile,
             &session,
             bearer_token,
             endpoint,
-            capability_fingerprint,
+            capability_fingerprint.clone(),
         )?;
         let mut process = Command::new(&program);
         process.args(&args);
@@ -158,6 +234,7 @@ impl AcpStdioProcessSession {
             package,
             profile,
             session: Arc::new(Mutex::new(session)),
+            capability_fingerprint,
             child,
             stdin: Arc::new(Mutex::new(stdin)),
             stdout: BufReader::new(stdout),
@@ -182,10 +259,16 @@ impl AcpStdioProcessSession {
     }
 
     /// Sends one locked Leaven ACP extension request and waits for its response.
+    ///
+    /// While waiting, the demultiplexing read loop also services any
+    /// worker-initiated extension requests (worker→host effect callbacks)
+    /// through `host`, replying before this call's response arrives. Host→worker
+    /// callers that expect no callbacks pass [`RejectAllEffectHost`].
     pub fn call_extension(
         &mut self,
         method: &str,
         params: &Value,
+        host: &impl AcpEffectHost,
     ) -> AcpTransportResult<AcpJsonRpcResponseDocument> {
         if self.lock_session()?.lifecycle().state() == AcpSessionState::Cancelled {
             return Err(AcpTransportError::Protocol {
@@ -206,8 +289,11 @@ impl AcpStdioProcessSession {
         self.write_message(&request_value)?;
 
         loop {
-            let value = self.read_message(method, request.id())?;
-            if self.handle_session_update(&value)?.is_some() {
+            let (value, line) = self.read_until_actionable(method, request.id())?;
+            if line == InboundLine::WorkerRequest {
+                // Service the worker→host effect callback and keep waiting for
+                // this call's own response.
+                self.service_inbound_request(&value, host)?;
                 continue;
             }
             if let Some(cancellation) = self.cancellation_snapshot()? {
@@ -220,6 +306,180 @@ impl AcpStdioProcessSession {
                 .package
                 .validate_acp_jsonrpc_response_document(&request, &value)
                 .map_err(AcpTransportError::from);
+        }
+    }
+
+    /// Sends one `leaven/stage.run` dispatch and waits for its stage-run result.
+    ///
+    /// This is the host→worker stage-dispatch leg of the locked profile: the
+    /// engine tells the worker to run one stage, carrying a role-scoped stage-run
+    /// request (not Plan IR). While waiting, the demultiplexing read loop services
+    /// the worker's `leaven/lm.complete` (and later other) effect callbacks
+    /// through `host`, replying before this dispatch's result arrives. The result
+    /// is validated as a locked stage-run result, so a worker cannot answer a
+    /// stage dispatch with a Plan Result or a shapeless payload.
+    pub fn dispatch_stage_run(
+        &mut self,
+        stage_run_request: &Value,
+        host: &impl AcpEffectHost,
+    ) -> AcpTransportResult<AcpStageRunResponseDocument> {
+        if self.lock_session()?.lifecycle().state() == AcpSessionState::Cancelled {
+            return Err(AcpTransportError::Protocol {
+                message: "ACP stdio session refuses stage dispatch after cancellation".to_owned(),
+            });
+        }
+        let request_id = format!("leaven-acp-{}", self.next_request);
+        self.next_request += 1;
+        let request_value = json!({
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": "leaven/stage.run",
+            "params": stage_run_request
+        });
+        let request = self
+            .package
+            .validate_acp_stage_run_request_document(&self.profile, &request_value)?;
+        self.write_message(&request_value)?;
+
+        loop {
+            let (value, line) = self.read_until_actionable("leaven/stage.run", request.id())?;
+            if line == InboundLine::WorkerRequest {
+                self.service_inbound_request(&value, host)?;
+                continue;
+            }
+            if let Some(cancellation) = self.cancellation_snapshot()? {
+                return Err(AcpTransportError::Cancelled {
+                    receipt: cancellation.receipt,
+                    reason: cancellation.reason,
+                });
+            }
+            return self
+                .package
+                .validate_acp_stage_run_response_document(&request, &value)
+                .map_err(AcpTransportError::from);
+        }
+    }
+
+    /// Reads one inbound line and services a worker-initiated extension request.
+    ///
+    /// This is the worker→host leg of the bidirectional seam: the worker is the
+    /// ACP agent and initiates `leaven/lm.complete` (and, later, other effect
+    /// callbacks) back into the engine. The transport validates the inbound Plan
+    /// IR params, dispatches to `host`, validates the host's extension result,
+    /// stamps it with the launched capability fingerprint, and writes it back
+    /// under the worker's request id. Session updates that precede the request
+    /// are applied as lifecycle control without ending the call.
+    pub fn serve_next_inbound_request(
+        &mut self,
+        host: &impl AcpEffectHost,
+    ) -> AcpTransportResult<AcpJsonRpcRequestDocument> {
+        if self.lock_session()?.lifecycle().state() == AcpSessionState::Cancelled {
+            return Err(AcpTransportError::Protocol {
+                message: "ACP stdio session refuses inbound requests after cancellation".to_owned(),
+            });
+        }
+        let (value, line) = self.read_until_actionable("worker_inbound_request", "inbound")?;
+        match line {
+            InboundLine::WorkerRequest => self.service_inbound_request(&value, host),
+            InboundLine::HostResponse => Err(AcpTransportError::Protocol {
+                message: "ACP worker sent a response while the host expected a request".to_owned(),
+            }),
+            InboundLine::SessionUpdate => unreachable!("read_until_actionable filters updates"),
+        }
+    }
+
+    /// Reads inbound lines, applying `session/update` notifications as lifecycle
+    /// control, until one classifies as a worker request or host response.
+    fn read_until_actionable(
+        &mut self,
+        method: &str,
+        id: &str,
+    ) -> AcpTransportResult<(Value, InboundLine)> {
+        loop {
+            let value = self.read_message(method, id)?;
+            match self.classify_inbound(&value)? {
+                InboundLine::SessionUpdate => {}
+                actionable => return Ok((value, actionable)),
+            }
+        }
+    }
+
+    fn classify_inbound(&self, value: &Value) -> AcpTransportResult<InboundLine> {
+        if self.handle_session_update(value)?.is_some() {
+            return Ok(InboundLine::SessionUpdate);
+        }
+        let object = value
+            .as_object()
+            .ok_or_else(|| AcpTransportError::Protocol {
+                message: "ACP stdio message must be an object".to_owned(),
+            })?;
+        // A worker-initiated request carries a method and no result/error; a
+        // host→worker response carries a result/error and no method.
+        if object.contains_key("method")
+            && !object.contains_key("result")
+            && !object.contains_key("error")
+        {
+            return Ok(InboundLine::WorkerRequest);
+        }
+        Ok(InboundLine::HostResponse)
+    }
+
+    fn service_inbound_request(
+        &self,
+        value: &Value,
+        host: &impl AcpEffectHost,
+    ) -> AcpTransportResult<AcpJsonRpcRequestDocument> {
+        // Validate the worker-initiated request as locked Plan IR and gate the
+        // method through the profile, rejecting private/MCP inbound exactly as
+        // the host→worker direction does.
+        let request = self
+            .package
+            .validate_acp_jsonrpc_request_document(&self.profile, value)?;
+        let params = value
+            .get("params")
+            .expect("validated inbound request carries Plan IR params");
+        let result = host.service(request.method(), params)?;
+        let result = self.stamp_session_fingerprint(request.method(), result)?;
+        // Validate the host's extension result before it crosses the boundary.
+        self.package
+            .validate_acp_extension_result_document(&result)?;
+        let response = json!({
+            "jsonrpc": "2.0",
+            "id": request.id(),
+            "result": result
+        });
+        self.write_message(&response)?;
+        Ok(request)
+    }
+
+    /// Binds the host effect result to the launched session by enforcing its
+    /// capability fingerprint. The host stamps a fingerprint only if it left the
+    /// field absent; a divergent fingerprint is rejected so a host lowering can
+    /// never answer on behalf of a different session.
+    fn stamp_session_fingerprint(
+        &self,
+        method: &str,
+        mut result: Value,
+    ) -> AcpTransportResult<Value> {
+        let object = result
+            .as_object_mut()
+            .ok_or_else(|| AcpTransportError::Protocol {
+                message: "ACP effect host result must be an object".to_owned(),
+            })?;
+        match object.get("capability_fingerprint").and_then(Value::as_str) {
+            None => {
+                object.insert(
+                    "capability_fingerprint".to_owned(),
+                    json!(self.capability_fingerprint),
+                );
+                Ok(result)
+            }
+            Some(actual) if actual == self.capability_fingerprint => Ok(result),
+            Some(actual) => Err(AcpTransportError::EffectFingerprintMismatch {
+                method: method.to_owned(),
+                expected: self.capability_fingerprint.clone(),
+                actual: actual.to_owned(),
+            }),
         }
     }
 

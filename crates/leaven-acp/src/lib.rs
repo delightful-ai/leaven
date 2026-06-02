@@ -3,6 +3,7 @@
 mod stdio;
 
 pub use stdio::{
-    AcpProcessCommand, AcpStdioCancellationHandle, AcpStdioProcessSession, AcpTransportError,
-    AcpTransportResult, SESSION_CANCEL_METHOD, SESSION_UPDATE_METHOD,
+    AcpEffectHost, AcpProcessCommand, AcpStdioCancellationHandle, AcpStdioProcessSession,
+    AcpTransportError, AcpTransportResult, RejectAllEffectHost, SESSION_CANCEL_METHOD,
+    SESSION_UPDATE_METHOD,
 };

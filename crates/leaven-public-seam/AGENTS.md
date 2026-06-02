@@ -108,9 +108,18 @@ public seam contracts. They prove locked Leaven ACP profile semantics,
 including the exact V1 extension-method set; authenticate resolution from
 opaque capability tokens through the capability registry; authenticated-session
 binding for programmatic permission decisions against capability grants; typed
-denial envelopes; locked Plan IR/Plan Result schema binding for profile
-methods; JSON-RPC 2.0 request/response envelope binding for Leaven extension
-methods with closed top-level request/response members; and schema-backed,
+denial envelopes; per-method schema binding for profile methods (the 25
+worker->host effect callbacks bind locked Plan IR params plus Plan Result
+results, while the one host->worker `leaven/stage.run` dispatch method binds the
+dedicated `leaven.stage_run.v1` request/result schema); JSON-RPC 2.0
+request/response envelope binding for Leaven extension
+methods with closed top-level request/response members; a parallel JSON-RPC
+envelope binding for the `leaven/stage.run` dispatch
+(`validate_acp_stage_run_request_document` /
+`validate_acp_stage_run_response_document`, exported as
+`AcpStageRunRequestDocument` / `AcpStageRunResponseDocument`) that gates the
+method through the profile, carries the stage-run schema instead of Plan IR, and
+binds the response id to the dispatched request id; and schema-backed,
 hash-bound extension-result envelopes at the wire-contract layer only. Generic
 ACP `extension` primaries are checked against
 the locked schema branch and ACP envelope fields, while concrete PlanResult
@@ -447,6 +456,20 @@ They are not an agent runtime, LM prompt renderer, ACP delivery path, proposal
 application engine, RunContext graph mutation proof, receipt-store persistence
 proof, or proof that every optimizer/runtime producer emits these payloads.
 
+Crate-root exports for `StageRunRequestDocument`, `StageRunResultDocument`, and
+`StageRunKind` are advanced public seam contracts for the host->worker stage
+dispatch leg. They prove active-schema `leaven.stage_run.v1` validation for the
+one generic `leaven/stage.run` method: a dispatch request carries a stage kind
+plus a role-scoped stage payload, and the embedded payload is re-validated
+through the same runner-stage semantic checks so case-target material cannot
+ride a stage-run dispatch past the runner guard; a dispatch result returns the
+stage's typed `OutputRecord` (V1 minimally a runner-stage text output). This is
+intentionally separate from the Plan IR effect callbacks: `leaven/stage.run`
+binds the stage-run schema in both directions and does not bind Plan IR or Plan
+Result. They are not an ACP process implementation, transport dispatch loop,
+stage execution runtime, reward-vector contract, or graph mutation route, and
+V1 dispatches only the target-free runner stage.
+
 Crate-root export `DeferredWatchReplacement` is an advanced public seam
 contract. It proves that the V1 deferred watch marker can route only to a finite
 `consistency.since_revision` event-diff Plan IR document; it is not watch
@@ -586,6 +609,13 @@ backpressure, or runtime watch support.
   covered by the enclosing output record. It does not prove runtime stage
   lowering, ACP transport, provider calls, proposal graph mutation, or
   independent output-identity truth for arbitrary stage JSON.
+- `tests/stage_run.rs` proves the host->worker `leaven/stage.run` dispatch wire:
+  a schema-valid runner dispatch request (stage kind plus role-scoped payload)
+  and a text-output dispatch result validate through `validate_stage_run_*`,
+  while a request carrying `case.target` material or a non-runner payload role,
+  a non-text result output, and a Plan Result envelope smuggled as a stage-run
+  result are all rejected. It does not prove ACP transport dispatch delivery,
+  stage execution, or non-runner stage kinds (deferred to later slices).
 - `tests/acp_profile.rs` proves locked Leaven ACP profile semantics for pinned
   ACP version, stdio-first transport preference, Leaven-only extension methods,
   capability-action mapping, locked Plan IR/Plan Result schema bindings,

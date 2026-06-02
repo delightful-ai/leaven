@@ -9,6 +9,7 @@ mod lifecycle;
 mod methods;
 mod permission;
 mod session;
+mod stage_run_rpc;
 
 pub use extension_result::AcpExtensionResultDocument;
 pub use lifecycle::{
@@ -21,6 +22,7 @@ pub use permission::{
 pub use session::{
     AcpAuthenticateRequest, AcpAuthenticatedSession, AcpStdioWorkerLaunch, AcpWorkerSession,
 };
+pub use stage_run_rpc::{AcpStageRunRequestDocument, AcpStageRunResponseDocument};
 
 /// Schema-valid Leaven ACP profile document with V1 semantic checks.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -418,18 +420,26 @@ fn extension_methods(value: Option<&Value>) -> Result<Vec<AcpExtensionMethod>, P
                 "extension method `{method}` must produce receipts"
             )));
         }
+        let (expected_params, expected_result) =
+            schema_binding_for_method(&method).ok_or_else(|| {
+                invalid_acp(format!(
+                    "extension method `{method}` is not in the locked ACP profile"
+                ))
+            })?;
         let params_schema =
             required_string(entry.get("params_schema"), "params_schema")?.to_owned();
-        if params_schema != "leaven.plan.v1.schema.json" {
+        if params_schema != expected_params.schema_file() {
             return Err(invalid_acp(format!(
-                "extension method `{method}` params_schema must bind the locked Plan IR schema"
+                "extension method `{method}` params_schema must bind `{}`",
+                expected_params.schema_file()
             )));
         }
         let result_schema =
             required_string(entry.get("result_schema"), "result_schema")?.to_owned();
-        if result_schema != "leaven.plan_result.v1.schema.json" {
+        if result_schema != expected_result.schema_file() {
             return Err(invalid_acp(format!(
-                "extension method `{method}` result_schema must bind the locked Plan Result schema"
+                "extension method `{method}` result_schema must bind `{}`",
+                expected_result.schema_file()
             )));
         }
         output.push(AcpExtensionMethod {
@@ -443,12 +453,18 @@ fn extension_methods(value: Option<&Value>) -> Result<Vec<AcpExtensionMethod>, P
     Ok(output)
 }
 
-fn locked_extension_methods() -> [&'static str; 25] {
+fn locked_extension_methods() -> [&'static str; 26] {
     methods::locked_extension_methods()
 }
 
 fn required_action_for_method(method: &str) -> Option<&'static str> {
     methods::required_action_for_method(method)
+}
+
+fn schema_binding_for_method(
+    method: &str,
+) -> Option<(methods::MethodSchema, methods::MethodSchema)> {
+    methods::schema_binding_for_method(method)
 }
 
 fn require_const(
