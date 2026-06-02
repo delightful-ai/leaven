@@ -7,8 +7,38 @@ This directory is a **scaffold instance** of the governing spec at
 typed, IDE-navigable — whose only purpose is to make the spec's surface
 concrete enough to fire taste against before implementation begins.
 
-It is not implementation. Every function and method body is
-`raise NotImplementedError(...)` or `...`. Do not add real behavior here.
+It is mostly scaffold: nearly every function and method body is
+`raise NotImplementedError(...)` or `...`. Do not add real behavior here
+beyond the one wired path described next.
+
+### The one wired path (example 03, prompt/LM/exact-match)
+
+`examples/03_prompt_optimize.py` runs FOR REAL over the locked ACP
+bidirectional seam. The wired surface is exactly the slice-3 path and no
+more: `optimize().run()`, `cx.lm.complete(prompt=...)`, `cases.from_jsonl`,
+and the `Environment`/`Task`/`Rollout.fn`/`Rubric`/`runtime.local` records
+those compose. Everything else stays `NotImplementedError`.
+
+Directionality (the crux, fixed by `docs/specs/leaven_python.md` "the wire"):
+`optimize().run()` SPAWNS `leaven serve --stdio` as a child — the child is the
+ACP client (it owns the tiny real GEPA accept loop, the deterministic host mock
+LM, and INITIATES `leaven/stage.run`). This package is the ACP agent
+(`leaven/_serve.py`): it SERVES `leaven/stage.run` by running the user's
+`@lv.runner`, and INITIATES `leaven/lm.complete` BACK to the child. It is the
+Python generalization of the proven Rust worker
+`crates/leaven-acp-stage-bridge/worker/serve_stage_runner.py`.
+
+Honest scope: the seam, stage dispatch, and GEPA-shaped accept are real; the LM
+is a deterministic mock (no spend, no network). The exact-match reward and the
+reflector run host-side in `leaven serve` and are named declaratively in the
+plan (`_serve.run_optimization`), so the Python `@lv.reward`/reflect bodies are
+not yet executed. The reward vector, agent, sandbox, message-list LM, and
+Python-side reward/reflect are later slices and remain scaffold.
+
+The binary is resolved via `LEAVEN_BIN`, else `target/{debug,release}/leaven`
+under the repo root (`LEAVEN_REPO_ROOT` override). Build it with
+`cargo build -p leaven-cli`. The repo-root walk uses the topology-contract marker
+so the example runs regardless of cwd.
 
 It is not the published `leaven` package. The eventual published package
 will live in its own repository, built against this spec.
@@ -159,6 +189,14 @@ Round 4 vendored (2026-05-24) — high-taste references:
   excluded until codegen emits Ty-legal constrained aliases instead of pydantic
   `constr(...)`/`conint(...)` calls in type positions.
 - `uv run ruff check src/leaven examples` passes linting.
+- `cargo build -p leaven-cli` then `uv run python examples/03_prompt_optimize.py`
+  runs the one wired path FOR REAL over the live ACP seam: it spawns
+  `leaven serve --stdio`, optimizes the seed prompt, and prints `seed score: 0.000`
+  / `best score: 1.000` plus the optimized template. This is the slice-3 product
+  proof. The remaining examples print composed types and canonical sketches only.
 
-No runtime tests against the engine; examples print composed types and canonical
-sketches only.
+`tests/test_stage_surface.py` and `tests/test_product_surface_ring.py` reference
+the pre-cutover `evolve`/`Stages`/`scorer` surface that the
+`optimize(environment)` cutover removed; they are stale and are not part of the
+named verification above. Bring them in line with the current surface in a
+focused change before relying on `uv run pytest`.

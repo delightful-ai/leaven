@@ -42,7 +42,9 @@ async def exact(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> 
 # ----- composition ----------------------------------------------------------
 async def amain() -> None:
     result = await lv.optimize(
-        seed=lv.PromptArtifact(template="Answer: {question}\nA:"),
+        # The seed never surfaces `{question}` to the model, so the rollout has
+        # nothing to compute and every case scores 0 — real headroom to improve.
+        seed=lv.PromptArtifact(template="You are a calculator. Always answer 0."),
         environment=lv.Environment(
             task=lv.Task(cases=lv.cases.from_jsonl(str(FIXTURE), limit=8).cases),
             rollout=lv.Rollout.fn(run),
@@ -52,8 +54,13 @@ async def amain() -> None:
         runtime=lv.runtime.local(budget=lv.budget(usd=20)),
     ).run()
 
-    # `.run()` raises NotImplementedError in the scaffold; once the engine is
-    # wired, `result.best.artifact` is a fully-typed `PromptArtifact`.
+    # `result.best.artifact` is a fully-typed `PromptArtifact`. The optimization
+    # ran for real over the live ACP seam: the seed scored 0, the reflected child
+    # surfaced the question and scored 1.0, and the strict improvement was kept.
+    seed = next(c for c in result.frontier if c.parent_id is None)
+    print(f"seed score:  {seed.summary_score:.3f}")
+    print(f"best score:  {result.best.summary_score:.3f}")
+    print("optimized prompt:")
     print(result.best.artifact.template)
 
 
