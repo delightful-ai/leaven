@@ -1,0 +1,299 @@
+version: 1
+artifact_kind: leaven_goal_handoff
+status: draft_for_alignment
+created: 2026-06-02
+
+goal:
+  slug: public_seam_powers_python_sdk
+  original_intent:
+    user_question: >-
+      Make Codex/agentic Leaven first-class by making the Leaven public seam the
+      real durable API substrate for SDKs and agent runtimes, not a demo bridge,
+      not an ACP-shaped naming accident, and not a single callback proof.
+    user_should_be_able_to:
+      - >-
+        Write and run a Leaven optimization from Python through `lv.optimize(...)`
+        using the public SDK shape in `docs/specs/leaven_python.md`.
+      - >-
+        Have Python-authored stages execute as external-language workers over the
+        Leaven seam while the Rust engine keeps optimizer loop, graph mutation,
+        receipts, budgets, capabilities, and trust enforcement.
+      - >-
+        Configure runtime providers from Python: deterministic/mock providers
+        for no-spend mechanics tests, real LM providers for live acceptance
+        evidence, and Codex agent runtime using `gpt-5.4-mini` for
+        materialized-workspace proposer/reflector stages.
+      - >-
+        Inspect a completed run with lineage, receipts, evidence, and optimizer
+        result intact instead of trusting stdout or a hardcoded demo success.
+
+spec_package:
+  package_name: public_seam_python_sdk_runtime
+  governing_docs:
+    - path: docs/specs/leaven_python.md
+      role: Governing product spec; Python is the product-facing Leaven surface.
+    - path: docs/specs/public-seam-v1/
+      role: >-
+        Locked Leaven public seam: Plan IR, stage dispatch, capabilities,
+        receipts, schemas, and method families.
+    - path: docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
+      role: Leaven-owned worker profile; filename still says acp as a legacy identifier.
+    - path: docs/specs/public-seam-v1/conformance-matrix.yaml
+      role: Row-level proof denominator for seam obligations.
+    - path: docs/specs/leaven_py/
+      role: Current Python SDK prototype package and executable examples.
+    - path: AGENTS.md
+      role: Repo topology, hard-cutover, public-maturity, and verification contract.
+  current_state_notes:
+    - >-
+      `leaven-public-seam` already owns schema validation, method/profile docs,
+      Plan IR execution helpers, typed LM/agent lowering, and stage-run validators.
+    - >-
+      `leaven-seam-runtime` and `leaven-seam-stdio` expose a transport-neutral
+      JSON-RPC stdio shell, but the CLI path currently uses a rejecting service.
+    - >-
+      `leaven serve --stdio --plan --out` is a legacy bidirectional GEPA demo
+      path; it is not the durable public SDK server.
+    - >-
+      A mock prompt-optimization example is useful smoke evidence, but it is not
+      completion evidence for the SDK or Codex agentic runtime.
+
+designed_surface:
+  public_surface:
+    - name: python_sdk_product_surface
+      user_interaction: >-
+        `lv.Task`, `lv.Rollout`, `lv.Rubric`, `lv.optimizers.gepa(...)`,
+        `lv.runtime.local(...)`, and `lv.optimize(...).run()` compose the whole
+        run from Python.
+    - name: leaven_public_seam_server
+      user_interaction: >-
+        A stable `leaven seam serve --stdio` JSON-RPC server executes the locked
+        `leaven/*` request/response families through configured runtime services.
+    - name: stage_worker_callbacks
+      user_interaction: >-
+        Python stage functions run through `leaven/stage.run`; stage code can call
+        `cx.case`, `cx.workspace`, `cx.lm`, `cx.agent`, `cx.sandbox`,
+        `cx.proposals`, `cx.assessments`, and `cx.batch()` through the same seam.
+    - name: codex_agent_runtime
+      user_interaction: >-
+        A proposer/reflector can materialize a workspace, run Codex against it,
+        parse typed output, and submit proposals with receipts and lineage.
+    - name: provider_config
+      user_interaction: >-
+        Python can choose deterministic/mock providers for mechanics tests and
+        configure real LM/Codex providers for live acceptance runs without
+        changing the public stage code.
+  private_machinery_relevant_to_handoff:
+    - Rust keeps optimizer loops, RunContext graph mutation, capability minting, receipt validation, budgets, and provider adapters.
+    - Python authors stage behavior and run composition, not optimizer strategy state or graph mutation internals.
+    - The public seam is Leaven-owned JSON-RPC, not upstream ACP conformance; ACP naming must not become product truth.
+    - Live-provider-backed `lm.complete`, live Codex `agent.run`, workspace materialization, stage dispatch, and proposal/assessment writes are all required to prove the SDK path.
+
+intent_preservation:
+  verdict: preserved_if_acceptance_denominator_holds
+  reason: >-
+    The designed surface preserves the user's actual intent only if the Python
+    SDK drives a real optimization through the Leaven seam with externally
+    executed Python stages and provider-backed effects. A single method, schema
+    validator, hardcoded Rust proposer, or mock-only prompt toy is progress, not
+    the thing the user asked to make true.
+  what_the_user_would_bristle_at:
+    - "`leaven/lm.complete` returns over stdio, therefore the SDK works."
+    - "`leaven seam serve --stdio` accepts JSON-RPC but rejects real providers."
+    - "The Rust harness improves a prompt, so Python/Codex agentic Leaven is real."
+    - "ACP naming or legacy bridge mechanics become the explanation instead of Leaven's own seam."
+    - "Examples compile while real SDK users still cannot configure runtime, stages, agents, and inspection from Python."
+
+misleading_proxy_proofs:
+  - proxy: "A single `leaven/lm.complete` JSON-RPC request succeeds."
+    why_insufficient: It proves one callback path, not stage dispatch, optimizer execution, proposal writes, receipts, or SDK composition.
+    forbidden_as_completion_evidence: true
+  - proxy: "`leaven seam serve --stdio` validates method envelopes but returns method-unavailable for real work."
+    why_insufficient: Validation-only stdio is scaffolding; the public server must execute configured services.
+    forbidden_as_completion_evidence: true
+  - proxy: "Legacy `leaven serve --stdio --plan --out` optimizes a prompt."
+    why_insufficient: It is the old bridge demo, not the durable public seam server that SDKs spawn.
+    forbidden_as_completion_evidence: true
+  - proxy: "Rust hardcodes the reflector/proposer or prompt rewrite."
+    why_insufficient: The Codex/agentic value is Python-configured stage behavior and Codex operating in materialized workspaces.
+    forbidden_as_completion_evidence: true
+  - proxy: "Mock-only example 03 reaches best score 1.0."
+    why_insufficient: Useful smoke; does not prove real provider wiring, Codex agent runtime, reward vectors, or inspection.
+    forbidden_as_completion_evidence: true
+  - proxy: "All request/response types and validators are public."
+    why_insufficient: Schema exposure matters, but SDK users need an executable seam server and runtime configuration.
+    forbidden_as_completion_evidence: true
+  - proxy: "Broad `just check` passes."
+    why_insufficient: Repo hygiene does not prove the product-facing SDK path works.
+    forbidden_as_completion_evidence: true
+
+spec_revisions_before_goal:
+  - update: >-
+      Clean current docs and AGENTS references so ACP is described only as legacy
+      naming or an optional future agent-runtime interop boundary; the product
+      seam is Leaven's own JSON-RPC public seam.
+    rationale: Avoid future agents treating ACP as the thing powering the SDK.
+    status: pending
+  - update: >-
+      Clarify `leaven seam serve --stdio` as the durable public server route and
+      classify legacy `leaven serve --stdio --plan --out` as bridge-demo/provenance.
+    rationale: Prevent completion claims from using the old demo path.
+    status: pending
+  - update: >-
+      Record which `leaven/*` methods are executable, configured-provider-backed,
+      mock-only, or intentionally unsupported in V1.
+    rationale: Make partial seam execution honest without undercutting the API.
+    status: pending
+
+acceptance:
+  - id: docs_and_route_truth
+    claim: Docs and ownership files say the public seam is Leaven's SDK substrate, with ACP named only as legacy/provenance or future agent interop.
+    status: pending
+    proof_required:
+      kind: docs_review
+      must_exercise:
+        - docs/specs/leaven_python.md
+        - docs/specs/public-seam-v1/README.md
+        - docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
+        - AGENTS.md and nearest crate AGENTS files touched by the route
+    evidence: []
+    closeout_check: No closeout may explain the SDK as "ACP" rather than the Leaven public seam.
+
+  - id: public_seam_server_executes
+    claim: >-
+      `leaven seam serve --stdio` executes configured Leaven method families
+      instead of rejecting them by default.
+    status: pending
+    proof_required:
+      kind: focused_stdio_jsonrpc_tests
+      must_exercise:
+        - request envelope validation
+        - Plan IR execution through `PublicSeamPackage::execute_plan_document*`
+        - typed runtime config loaded by the CLI
+        - honest unsupported-provider errors for unconfigured methods
+        - no use of legacy `leaven serve --stdio --plan --out`
+    evidence: []
+    closeout_check: Validation-only or rejecting-service paths remain scaffolding, not completion.
+
+  - id: python_sdk_drives_public_server
+    claim: >-
+      Python `lv.optimize(...).run()` spawns/configures the durable public seam
+      server and drives a real optimization through it.
+    status: pending
+    proof_required:
+      kind: python_example_or_integration_test
+      must_exercise:
+        - docs/specs/leaven_py package surface
+        - runtime config from Python into the spawned server
+        - stage dispatch over `leaven/stage.run`
+        - stage callbacks over `leaven/*` effect methods
+        - run result object with evidence/receipt surface, not stdout-only success
+    evidence: []
+    closeout_check: Rust-only harnesses and hardcoded demo plans are rejected.
+
+  - id: reward_vector
+    claim: >-
+      Python scoring/rubric can return and inspect multi-axis reward results,
+      not just one scalar exact-match score.
+    status: pending
+    proof_required:
+      kind: sdk_and_seam_contract_tests
+      must_exercise:
+        - Python reward vector API
+        - Plan Result or assessment projection with per-axis values
+        - optimizer admission/report semantics for vector rewards
+        - backwards-free hard cutover of the previous scalar-only scaffold
+    evidence: []
+    closeout_check: Scalar-only prompt optimization cannot close SDK maturity.
+
+  - id: codex_materialized_workspace_proposer
+    claim: >-
+      A Python-configured GEPA proposer/reflector can run Codex with
+      `gpt-5.4-mini` in a materialized workspace and submit typed proposals
+      through the seam.
+    status: pending
+    proof_required:
+      kind: live_codex_agentic_e2e
+      must_exercise:
+        - workspace materialization
+        - Codex agent runtime adapter configured with `gpt-5.4-mini`
+        - "`leaven/agent.run`"
+        - typed proposal submission
+        - lineage/receipt capture
+        - real Codex process/session evidence, not a fake agent transcript
+      companion_no_spend_proof:
+        kind: deterministic_agent_runtime_mechanics
+        purpose: >-
+          Fast local proof for workspace/proposal/receipt mechanics only. This
+          proof may keep CI cheap, but it must stay labeled mechanics evidence
+          and must not close the live Codex acceptance item.
+    evidence: []
+    closeout_check: A Rust-side hardcoded child prompt, fixed diff, or deterministic fake-agent transcript is not enough.
+
+  - id: real_lm_provider_wiring
+    claim: >-
+      The same Python stage code can use deterministic/mock LM for mechanics
+      tests and a real LM provider for live acceptance evidence through
+      `cx.lm.complete`.
+    status: pending
+    proof_required:
+      kind: live_lm_provider_e2e
+      must_exercise:
+        - leaven-lm provider-neutral request
+        - configured real provider construction path
+        - real provider call evidence
+        - cost/fingerprint/receipt propagation
+      companion_no_spend_proof:
+        kind: deterministic_lm_runtime_mechanics
+        purpose: >-
+          Fast local proof for request lowering, cost/receipt shape, and Python
+          runtime configuration only. This proof must stay labeled mechanics
+          evidence and must not close the live LM acceptance item.
+    evidence: []
+    closeout_check: Mock-only LM is acceptable for default CI, but is not live provider proof.
+
+  - id: inspection_and_closeout_truth
+    claim: >-
+      Completed runs can be inspected from Python with lineage, receipts,
+      evidence, cost, and unsupported-provider gaps visible.
+    status: pending
+    proof_required:
+      kind: sdk_inspection_test
+      must_exercise:
+        - "`lv.runs.open(...)` or equivalent inspection surface"
+        - best artifact and score/reward report
+        - proposal lineage
+        - call/write receipts
+        - explicit unsupported/missing-provider statuses
+    evidence: []
+    closeout_check: Stdout transcript alone is not run inspection.
+
+proof_denominator:
+  focused_first:
+    - focused Rust tests for seam runtime/stdio/service crates touched by the implementation
+    - focused Python tests/examples under docs/specs/leaven_py for the SDK path
+    - one JSON-RPC stdio proof that sends real requests through `leaven seam serve --stdio`
+    - one Python E2E proof that invokes `lv.optimize(...).run()` through the durable server path
+  final_repo_gate:
+    - >-
+      Run broad repo checks only after the real surface exists or when the repo
+      contract requires final completion evidence; do not substitute broad gates
+      for focused product proof.
+
+explicit_non_goals:
+  - Upstream Agent Client Protocol conformance as a V1 requirement.
+  - MCP-over-seam in V1.
+  - Python-authored optimizer strategy loops.
+  - Provider credentials or paid live calls in default tests.
+  - Windows wheel support in this goal.
+  - Paper-close EvoSkill reproduction in this goal; this goal builds the SDK/seam path it will need.
+  - Claiming every `leaven/*` method is production-ready if some providers remain explicitly unsupported.
+
+decision:
+  status: review_before_set_goal
+  reason: >-
+    This handoff intentionally rejects the reward-hack completion path. The
+    goal should be set only if the user agrees that completion means the Python
+    SDK product surface drives a real optimization through the durable Leaven
+    public seam, with reward vectors, Codex materialized-workspace agent work,
+    live-provider-backed LM wiring, and honest inspection evidence.
