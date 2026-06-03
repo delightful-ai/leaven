@@ -288,7 +288,7 @@ acceptance:
     claim: >-
       Python `lv.optimize(...).run()` spawns/configures the durable public seam
       server and drives a real optimization through it.
-    status: pending
+    status: done
     proof_required:
       kind: python_example_or_integration_test
       must_exercise:
@@ -362,6 +362,18 @@ acceptance:
         nested `leaven/agent.run` -> materialized workspace. It still does not
         prove cost accounting, reward vectors, GEPA search, blob readback, or
         inspection.
+      - >-
+        Acceptance proof for this row:
+        `sdk/python/tests/test_optimize_public_seam_e2e.py` wraps `LEAVEN_BIN`
+        around the real CLI binary and proves `lv.optimize(...).run()` spawns
+        `leaven seam serve --stdio --root ... --config ...`. The same scenario
+        runs a registered Python `@lv.runner` over `leaven/stage.run`, performs
+        a nested `cx.lm.complete` callback over `leaven/lm.complete`, and
+        asserts the returned `Optimized` plus `lv.runs.inspect(...)` expose the
+        callback receipt, public evidence payload, lineage, LM-token usage, and
+        unsupported inspection truth. This closes the SDK/server substrate row
+        without claiming live provider, GEPA search/admission, or full run
+        inspection completion.
     closeout_check: Rust-only harnesses and hardcoded demo plans are rejected.
 
   - id: reward_vector
