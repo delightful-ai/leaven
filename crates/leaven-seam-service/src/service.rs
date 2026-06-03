@@ -12,7 +12,8 @@ use leaven_public_seam::{
     PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
     PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSubmitProposalBatchOutcome,
     PlanSubmitProposalBatchRequest, PlanWorkspaceMaterializeOutcome,
-    PlanWorkspaceMaterializeRequest, PublicSeamError, PublicSeamPackage,
+    PlanWorkspaceMaterializeRequest, PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
+    PublicSeamError, PublicSeamPackage,
 };
 use leaven_seam_runtime::{SeamPlanRequest, SeamService, SeamServiceError, SeamStageRunRequest};
 use leaven_workspace::{Workspace, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
@@ -84,19 +85,18 @@ impl SeamService for ConfiguredSeamService {
 impl ConfiguredSeamService {
     fn execute_plan_method(&self, method: &str, params: &Value) -> Result<Value, PublicSeamError> {
         let context = self.config.context.to_execution_context();
-        let mut host = ConfiguredPlanHost {
-            lm: self
-                .config
-                .lm
-                .to_lm_runtime()
-                .map_err(|error| PublicSeamError::InvalidPlan {
-                    message: format!("configured LM provider failed: {error}"),
+        let mut host =
+            ConfiguredPlanHost {
+                lm: self.config.lm.to_lm_runtime().map_err(|error| {
+                    PublicSeamError::InvalidPlan {
+                        message: format!("configured LM provider failed: {error}"),
+                    }
                 })?,
-            workspace_config: self.config.workspace.clone(),
-            workspace_factory: self.config.workspace.to_factory(),
-            agent: self.config.agent.to_codex_runtime(),
-            workspaces: BTreeMap::new(),
-        };
+                workspace_config: self.config.workspace.clone(),
+                workspace_factory: self.config.workspace.to_factory(),
+                agent: self.config.agent.to_codex_runtime(),
+                workspaces: BTreeMap::new(),
+            };
         let report = match &self.capability {
             Some(capability) => self
                 .package
@@ -366,7 +366,7 @@ impl PlanExecutionHost for ConfiguredPlanHost {
         let mut workspace = block_on_configured_provider(
             self.workspace_factory.allocate(WorkspaceConfig::default()),
         )
-            .map_err(|error| PublicSeamError::InvalidPlan {
+        .map_err(|error| PublicSeamError::InvalidPlan {
             message: format!("local workspace allocation failed: {error}"),
         })?;
         {
@@ -386,6 +386,35 @@ impl PlanExecutionHost for ConfiguredPlanHost {
         Ok(PlanWorkspaceMaterializeOutcome::new(
             workspace_id,
             request.lifetime()?,
+            "fp_runtime_sha256_leaven_local_workspace",
+        ))
+    }
+
+    fn workspace_release(
+        &mut self,
+        request: PlanWorkspaceReleaseRequest<'_>,
+    ) -> Result<PlanWorkspaceReleaseOutcome, PublicSeamError> {
+        let workspace_id = request.live_workspace()?.to_owned();
+        let lifetime = request
+            .deps()
+            .values()
+            .find(|value| {
+                value.get("workspace").and_then(Value::as_str) == Some(workspace_id.as_str())
+            })
+            .and_then(|value| value.get("lifetime"))
+            .and_then(Value::as_str)
+            .ok_or_else(|| PublicSeamError::InvalidPlan {
+                message: format!("workspace `{workspace_id}` missing live lifetime"),
+            })?
+            .to_owned();
+        self.workspaces
+            .remove(&workspace_id)
+            .ok_or_else(|| PublicSeamError::InvalidPlan {
+                message: format!("workspace `{workspace_id}` is not materialized"),
+            })?;
+        Ok(PlanWorkspaceReleaseOutcome::new(
+            workspace_id,
+            lifetime,
             "fp_runtime_sha256_leaven_local_workspace",
         ))
     }
@@ -702,6 +731,46 @@ mod tests {
     }
 
     #[test]
+    fn seam_runtime_executes_workspace_release_through_configured_service() {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
+        let service = ConfiguredSeamService::from_package(
+            package.clone(),
+            SeamServiceConfig {
+                context: planexec_context(),
+                capability: Some(effect_capability()),
+                ..SeamServiceConfig::default()
+            },
+        )
+        .unwrap();
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        let response = runtime.handle_value(&workspace_release_request());
+
+        assert!(
+            !response.is_error(),
+            "unexpected error: {:?}",
+            response.value()
+        );
+        assert_eq!(
+            response.value()["result"]["primary"]["kind"],
+            "workspace_handle"
+        );
+        assert_eq!(response.value()["result"]["primary"]["released"], true);
+        assert_eq!(
+            response.value()["result"]["primary"]["workspace"],
+            "ws_planexec_materialized"
+        );
+        assert_eq!(
+            response.value()["result"]["receipts"][0]["call_kind"],
+            "workspace_materialize"
+        );
+        assert_eq!(
+            response.value()["result"]["receipts"][1]["call_kind"],
+            "workspace_release"
+        );
+    }
+
+    #[test]
     fn seam_runtime_executes_configured_runner_stage_dispatch() {
         let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
         let service = ConfiguredSeamService::from_package(
@@ -991,7 +1060,9 @@ mod tests {
                 let read = stream.read(&mut buffer).unwrap();
                 let raw = String::from_utf8_lossy(&buffer[..read]);
                 let body = raw.split("\r\n\r\n").nth(1).unwrap_or_default();
-                request_tx.send(serde_json::from_str(body).unwrap()).unwrap();
+                request_tx
+                    .send(serde_json::from_str(body).unwrap())
+                    .unwrap();
                 let response = format!(
                     "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{}",
                     response_body.len(),
@@ -1092,6 +1163,58 @@ mod tests {
                     "kind": "graph_writes_atomic",
                     "on_stale": "reject"
                 }
+            }
+        })
+    }
+
+    fn workspace_release_request() -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "id": "workspace-release-1",
+            "method": "leaven/workspace.release",
+            "params": workspace_release_plan()
+        })
+    }
+
+    fn workspace_release_plan() -> Value {
+        json!({
+            "schema_version": "leaven.plan.v1",
+            "plan_id": "planworkspacereleaseservice001",
+            "consistency": {
+                "kind": "latest_at_start"
+            },
+            "mode": {
+                "kind": "execute"
+            },
+            "ops": [
+                {
+                    "kind": "call",
+                    "name": "workspace",
+                    "idempotency_key": "workspace-release-service-0001",
+                    "call": {
+                        "kind": "workspace_materialize",
+                        "candidate": "cand_planexec",
+                        "surface": "program",
+                        "mode": "copy_on_write",
+                        "lifetime": "manual_release"
+                    }
+                },
+                {
+                    "kind": "call",
+                    "name": "release",
+                    "deps": ["workspace"],
+                    "idempotency_key": "workspace-release-service-0002",
+                    "call": {
+                        "kind": "workspace_release",
+                        "workspace": "ws_planexec_materialized",
+                        "force": false
+                    }
+                }
+            ],
+            "return": ["release"],
+            "commit": {
+                "kind": "graph_writes_atomic",
+                "on_stale": "reject"
             }
         })
     }
@@ -1396,6 +1519,15 @@ mod tests {
                     },
                     "constraints": {
                         "workspace_ops": ["materialize"]
+                    }
+                },
+                {
+                    "action": "workspace.release",
+                    "resource": {
+                        "workspace_ids": ["ws_planexec_materialized"]
+                    },
+                    "constraints": {
+                        "workspace_ops": ["release"]
                     }
                 },
                 {

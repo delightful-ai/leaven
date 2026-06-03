@@ -50,6 +50,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         let mut stdin = child.stdin.take().expect("child stdin is piped");
         write_json_line(&mut stdin, &invalid_envelope());
         write_json_line(&mut stdin, &removed_human_review_request());
+        write_json_line(&mut stdin, &workspace_release_request());
         write_json_line(&mut stdin, &lm_complete_request());
         write_json_line(&mut stdin, &stage_run_request());
     }
@@ -70,7 +71,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
     );
 
     let responses = response_lines(&output.stdout);
-    assert_eq!(responses.len(), 4, "one response per request line");
+    assert_eq!(responses.len(), 5, "one response per request line");
 
     assert_eq!(responses[0]["id"], json!("bad-envelope"));
     assert_eq!(responses[0]["error"]["code"], json!(-32600));
@@ -90,13 +91,24 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
             .contains("is not in the locked Leaven worker profile")
     );
 
-    assert_eq!(responses[2]["id"], json!("lm-cli"));
+    assert_eq!(responses[2]["id"], json!("workspace-release-cli"));
     assert_eq!(
-        responses[2]["result"]["primary"]["message"]["content"][0]["text"],
+        responses[2]["result"]["primary"]["kind"],
+        "workspace_handle"
+    );
+    assert_eq!(responses[2]["result"]["primary"]["released"], true);
+    assert_eq!(
+        responses[2]["result"]["receipts"][1]["call_kind"],
+        "workspace_release"
+    );
+
+    assert_eq!(responses[3]["id"], json!("lm-cli"));
+    assert_eq!(
+        responses[3]["result"]["primary"]["message"]["content"][0]["text"],
         "cli seam configured lm ok"
     );
     assert_eq!(
-        responses[2]["result"]["primary"]["cost"],
+        responses[3]["result"]["primary"]["cost"],
         json!({
             "input_tokens": 13,
             "output_tokens": 5,
@@ -104,14 +116,14 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         })
     );
     assert_eq!(
-        responses[2]["result"]["receipts"][0]["call_kind"],
+        responses[3]["result"]["receipts"][0]["call_kind"],
         "lm_complete"
     );
 
-    assert_eq!(responses[3]["id"], json!("stage-unwired"));
-    assert_eq!(responses[3]["error"]["code"], json!(-32006));
+    assert_eq!(responses[4]["id"], json!("stage-unwired"));
+    assert_eq!(responses[4]["error"]["code"], json!(-32006));
     assert!(
-        responses[3]["error"]["message"]
+        responses[4]["error"]["message"]
             .as_str()
             .unwrap()
             .contains("does not provide a stage runner")
@@ -164,6 +176,54 @@ fn removed_human_review_request() -> Value {
             "return": [],
             "commit": {
                 "kind": "no_graph_writes"
+            }
+        }
+    })
+}
+
+fn workspace_release_request() -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": "workspace-release-cli",
+        "method": "leaven/workspace.release",
+        "params": {
+            "schema_version": "leaven.plan.v1",
+            "plan_id": "workspacecli001",
+            "consistency": {
+                "kind": "latest_at_start"
+            },
+            "mode": {
+                "kind": "execute"
+            },
+            "ops": [
+                {
+                    "kind": "call",
+                    "name": "workspace",
+                    "idempotency_key": "workspace-cli-0001",
+                    "call": {
+                        "kind": "workspace_materialize",
+                        "candidate": "cand_cli",
+                        "surface": "program",
+                        "mode": "copy_on_write",
+                        "lifetime": "manual_release"
+                    }
+                },
+                {
+                    "kind": "call",
+                    "name": "release",
+                    "deps": ["workspace"],
+                    "idempotency_key": "workspace-cli-0002",
+                    "call": {
+                        "kind": "workspace_release",
+                        "workspace": "ws_cli_materialized",
+                        "force": false
+                    }
+                }
+            ],
+            "return": ["release"],
+            "commit": {
+                "kind": "graph_writes_atomic",
+                "on_stale": "reject"
             }
         }
     })

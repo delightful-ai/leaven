@@ -60,13 +60,15 @@ impl SeamLmConfig {
     pub(crate) fn to_lm_runtime(&self) -> Result<ConfiguredLmRuntime, LmError> {
         match self {
             Self::Mock { responses } => {
-                let script = responses.iter().fold(MockLmScript::new(), |script, response| {
-                    script.then_text(
-                        response.text.clone(),
-                        response.input_tokens,
-                        response.output_tokens,
-                    )
-                });
+                let script = responses
+                    .iter()
+                    .fold(MockLmScript::new(), |script, response| {
+                        script.then_text(
+                            response.text.clone(),
+                            response.input_tokens,
+                            response.output_tokens,
+                        )
+                    });
                 Ok(ConfiguredLmRuntime::Mock(MockLm::new(script)))
             }
             Self::OpenAi {
@@ -75,9 +77,8 @@ impl SeamLmConfig {
                 timeout_s,
                 max_retries,
             } => {
-                let api_key = std::env::var(api_key_env).map_err(|_| {
-                    LmError::invalid_request(format!("{api_key_env} is not set"))
-                })?;
+                let api_key = std::env::var(api_key_env)
+                    .map_err(|_| LmError::invalid_request(format!("{api_key_env} is not set")))?;
                 let mut config = OpenAiConfig::new(api_key);
                 if let Some(base_url) = base_url {
                     config = config.with_base_url(base_url.clone());

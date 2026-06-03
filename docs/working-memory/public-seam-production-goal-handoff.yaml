@@ -235,7 +235,15 @@ acceptance:
         - configured service execution for every retained method
         - explicit profile/spec/docs update for every removed method
         - negative proof that removed methods do not advertise as V1
-    evidence: []
+    evidence:
+      - kind: partial_method_matrix_reduction
+        methods:
+          - "`leaven/workspace.release`"
+        paths:
+          - crates/leaven-seam-service/src/service.rs
+          - crates/leaven-cli/tests/seam_stdio_server.rs
+          - docs/specs/public-seam-v1/executable-method-status.md
+        note: Workspace release moved from validated-only to configured local execution through service and stdio; remaining validated-only rows still block closeout.
     closeout_check: No row may remain "validated-only" or "unsupported in service" for locked V1.
 
   - id: graph_and_case_reads_execute
@@ -263,7 +271,15 @@ acceptance:
         - git_log, git_diff, git_status
         - capture_artifacts with blob byte availability
         - release and post-release denial
-    evidence: []
+    evidence:
+      - kind: partial_release_execution
+        methods:
+          - "`leaven/workspace.release`"
+        commands:
+          - cargo test -p leaven-seam-service
+          - cargo test -p leaven-cli --test seam_stdio_server
+          - cargo test -p leaven-public-seam --test public_seam_contract
+        note: Release now removes a workspace materialized earlier in the same Plan document and returns a validated released workspace handle through `leaven seam serve --stdio`.
     closeout_check: Materialize-only workspace support cannot close this row.
 
   - id: effects_and_graph_writes_execute

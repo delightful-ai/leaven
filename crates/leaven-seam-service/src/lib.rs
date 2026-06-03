@@ -6,7 +6,7 @@ mod stage;
 
 pub use lm::{MockLmResponseConfig, SeamLmConfig};
 pub use service::{
-    ConfiguredSeamService, ConfiguredSeamServiceError, SeamAgentConfig,
-    SeamExecutionContextConfig, SeamServiceConfig, SeamWorkspaceConfig,
+    ConfiguredSeamService, ConfiguredSeamServiceError, SeamAgentConfig, SeamExecutionContextConfig,
+    SeamServiceConfig, SeamWorkspaceConfig,
 };
 pub use stage::SeamStageConfig;
