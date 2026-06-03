@@ -94,6 +94,8 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         for request in &graph_case_queries {
             write_json_line(&mut stdin, request);
         }
+        write_json_line(&mut stdin, &proposal_apply_request());
+        write_json_line(&mut stdin, &assessment_submit_request());
         write_json_line(&mut stdin, &event_emit_request());
         write_json_line(&mut stdin, &sandbox_exec_request());
         write_json_line(&mut stdin, &lm_complete_request());
@@ -118,7 +120,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
     let responses = response_lines(&output.stdout);
     assert_eq!(
         responses.len(),
-        7 + workspace_queries.len() + graph_case_queries.len(),
+        9 + workspace_queries.len() + graph_case_queries.len(),
         "one response per request line"
     );
 
@@ -215,7 +217,45 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         }
     }
 
-    let event_index = graph_case_start + graph_case_queries.len();
+    let proposal_apply_index = graph_case_start + graph_case_queries.len();
+    assert_eq!(
+        responses[proposal_apply_index]["id"],
+        json!("proposal-apply-cli")
+    );
+    assert!(
+        responses[proposal_apply_index].get("error").is_none(),
+        "unexpected proposal apply response: {:?}",
+        responses[proposal_apply_index]
+    );
+    assert_eq!(
+        responses[proposal_apply_index]["result"]["primary"]["kind"],
+        "apply_receipt"
+    );
+    assert_eq!(
+        responses[proposal_apply_index]["result"]["receipts"][0]["write_kind"],
+        "apply_proposal_batch"
+    );
+
+    let assessment_submit_index = proposal_apply_index + 1;
+    assert_eq!(
+        responses[assessment_submit_index]["id"],
+        json!("assessment-submit-cli")
+    );
+    assert!(
+        responses[assessment_submit_index].get("error").is_none(),
+        "unexpected assessment submit response: {:?}",
+        responses[assessment_submit_index]
+    );
+    assert_eq!(
+        responses[assessment_submit_index]["result"]["primary"]["kind"],
+        "assessment_batch_receipt"
+    );
+    assert_eq!(
+        responses[assessment_submit_index]["result"]["receipts"][0]["write_kind"],
+        "submit_assessments"
+    );
+
+    let event_index = assessment_submit_index + 1;
     assert_eq!(responses[event_index]["id"], json!("event-emit-cli"));
     assert!(
         responses[event_index].get("error").is_none(),
@@ -596,6 +636,112 @@ fn case_query_request(method: &str, id: &str, name: &str, include: &[&str]) -> V
     })
 }
 
+fn proposal_apply_request() -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": "proposal-apply-cli",
+        "method": "leaven/proposal.apply",
+        "params": {
+            "schema_version": "leaven.plan.v1",
+            "plan_id": "proposalapplycli001",
+            "consistency": {
+                "kind": "latest_at_start"
+            },
+            "mode": {
+                "kind": "execute"
+            },
+            "ops": [{
+                "kind": "write",
+                "name": "applied",
+                "idempotency_key": "proposal-apply-cli-0001",
+                "write": {
+                    "kind": "apply_proposal_batch",
+                    "proposal_batch": "pb_cli_apply",
+                    "policy": "apply_first_valid"
+                }
+            }],
+            "return": ["applied"],
+            "commit": {
+                "kind": "graph_writes_atomic",
+                "on_stale": "reject"
+            }
+        }
+    })
+}
+
+fn assessment_submit_request() -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": "assessment-submit-cli",
+        "method": "leaven/assessment.submit",
+        "params": {
+            "schema_version": "leaven.plan.v1",
+            "plan_id": "assessmentsubmitcli001",
+            "consistency": {
+                "kind": "latest_at_start"
+            },
+            "mode": {
+                "kind": "execute"
+            },
+            "ops": [{
+                "kind": "write",
+                "name": "assessments",
+                "idempotency_key": "assessment-submit-cli-0001",
+                "write": {
+                    "kind": "submit_assessments",
+                    "evaluation_request_id": "evalreq_cli",
+                    "assessments": [{
+                        "kind": "independent",
+                        "candidate": "cand_cli",
+                        "target": {
+                            "case": "case_1"
+                        },
+                        "score": {
+                            "value": 1.0,
+                            "output": {
+                                "kind": "structured",
+                                "summary": "cli candidate answered correctly",
+                                "value": {
+                                    "candidate": "cand_cli",
+                                    "output": "cli candidate answered correctly"
+                                },
+                                "visibility": "public",
+                                "data_classes": ["candidate.output"]
+                            }
+                        },
+                        "evidence": {
+                            "schema_version": "leaven.evidence_envelope.v1",
+                            "target_derived": false,
+                            "public": {
+                                "summary": "cli candidate answered correctly",
+                                "data_classes": ["public"]
+                            },
+                            "redaction_policy": {
+                                "optimizer": "score_only",
+                                "reflector": "score_only",
+                                "operator": "score_only"
+                            },
+                            "producer": {
+                                "stage_call_id": "sc_assessment_cli"
+                            },
+                            "source_receipts": {
+                                "read": ["qrec_assessment_cli_source"],
+                                "effect": []
+                            }
+                        },
+                        "replayability": "pure_read"
+                    }]
+                }
+            }],
+            "return": ["assessments"],
+            "commit": {
+                "kind": "graph_writes_atomic",
+                "on_stale": "reject"
+            }
+        }
+    })
+}
+
 fn event_emit_request() -> Value {
     json!({
         "jsonrpc": "2.0",
@@ -788,6 +934,23 @@ fn seam_capability() -> Value {
                     "case_fields": ["input", "target", "metadata"],
                     "partitions": ["validation"],
                     "allowed_input_classes": ["case.input", "case.target", "case.metadata"]
+                }
+            },
+            {
+                "action": "proposal.apply_batch",
+                "resource": {},
+                "constraints": {
+                    "may_apply": true
+                }
+            },
+            {
+                "action": "assessment.submit",
+                "resource": {
+                    "evaluation_request_id": "evalreq_cli"
+                },
+                "constraints": {},
+                "limits": {
+                    "max_rows": 1
                 }
             },
             {

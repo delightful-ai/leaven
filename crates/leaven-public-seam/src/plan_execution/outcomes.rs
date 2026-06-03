@@ -3,10 +3,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{Map, Value, json};
 
 use super::{
-    ExecutionState, LiveWorkspaceHandle, PlanAgentRunOutcome, PlanEmitRunEventRequest,
-    PlanExecutionContext, PlanExecutionHost, PlanLmCompleteOutcome, PlanSandboxExecOutcome,
-    PlanSubmitProposalBatchRequest, PlanWorkspaceMaterializeOutcome, PlanWorkspaceReleaseOutcome,
-    effects, invalid_plan, nested_kind, prefixed_jcs_hash,
+    ExecutionState, LiveWorkspaceHandle, PlanAgentRunOutcome, PlanApplyProposalBatchRequest,
+    PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost, PlanLmCompleteOutcome,
+    PlanSandboxExecOutcome, PlanSubmitAssessmentsRequest, PlanSubmitProposalBatchRequest,
+    PlanWorkspaceMaterializeOutcome, PlanWorkspaceReleaseOutcome, effects, invalid_plan,
+    nested_kind, prefixed_jcs_hash,
 };
 use crate::PublicSeamError;
 
@@ -390,6 +391,20 @@ pub(super) fn execute_write<H: PlanExecutionHost>(
             state,
         );
     }
+    if write_kind == "apply_proposal_batch" {
+        return execute_apply_proposal_batch_write(
+            name,
+            write,
+            dep_values,
+            dependency_data_classes,
+            context,
+            host,
+            state,
+        );
+    }
+    if write_kind == "submit_assessments" {
+        return execute_submit_assessments_write(name, write, context, host, state);
+    }
     if write_kind != "emit_run_event" {
         return Err(invalid_plan(format!(
             "representative Plan IR harness does not execute `{write_kind}` writes"
@@ -509,6 +524,141 @@ fn execute_submit_proposal_batch_write<H: PlanExecutionHost>(
         "status": "succeeded",
         "proposal_batch_id": value["batch_id"],
         "proposal_ids": value["proposal_ids"]
+    }));
+    state.final_revision = outcome.committed_revision().to_owned();
+    state.values.insert(name.clone(), value.clone());
+    state.bindings.insert(name, value);
+    Ok(())
+}
+
+fn execute_apply_proposal_batch_write<H: PlanExecutionHost>(
+    name: String,
+    write: &Value,
+    dep_values: &BTreeMap<String, Value>,
+    dependency_data_classes: &BTreeSet<String>,
+    context: &PlanExecutionContext,
+    host: &mut H,
+    state: &mut ExecutionState,
+) -> Result<(), PublicSeamError> {
+    let write_kind = "apply_proposal_batch";
+    let outcome = host.apply_proposal_batch(PlanApplyProposalBatchRequest::new(
+        &name,
+        write,
+        &context.base_revision,
+    ))?;
+    let receipt_id = format!("wrec_{name}");
+    let request_hash = prefixed_jcs_hash(
+        "fp_request_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_write_request.v1",
+            "name": name,
+            "kind": write_kind,
+            "write": write,
+            "deps": dep_values,
+            "dependency_data_classes": dependency_data_classes,
+            "base_revision": context.base_revision
+        }),
+    )?;
+    let value = json!({
+        "kind": "apply_receipt",
+        "created_candidates": outcome.created_candidates(),
+        "status": "committed",
+        "graph_revision": outcome.committed_revision(),
+        "data_classes": outcome.data_classes(),
+        "replayability": outcome.replayability(),
+        "receipt": receipt_id
+    });
+    let result_hash = prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_write_result.v1",
+            "name": name,
+            "value": value
+        }),
+    )?;
+    state.receipts.push(json!({
+        "kind": "write",
+        "receipt": receipt_id,
+        "op_var": name,
+        "started_at": context.started_at,
+        "completed_at": context.completed_at,
+        "write_kind": write_kind,
+        "request_hash": request_hash,
+        "result_hash": result_hash,
+        "base_revision": context.base_revision,
+        "committed_revision": value["graph_revision"],
+        "status": "succeeded",
+        "created_candidates": value["created_candidates"]
+    }));
+    state.final_revision = outcome.committed_revision().to_owned();
+    state.values.insert(name.clone(), value.clone());
+    state.bindings.insert(name, value);
+    Ok(())
+}
+
+fn execute_submit_assessments_write<H: PlanExecutionHost>(
+    name: String,
+    write: &Value,
+    context: &PlanExecutionContext,
+    host: &mut H,
+    state: &mut ExecutionState,
+) -> Result<(), PublicSeamError> {
+    let write_kind = "submit_assessments";
+    let request = PlanSubmitAssessmentsRequest::new(&name, write, &context.base_revision);
+    let evaluation_request_id = request.evaluation_request_id()?.to_owned();
+    let outcome = host.submit_assessments(request)?;
+    let receipt_id = format!("wrec_{name}");
+    let request_hash = prefixed_jcs_hash(
+        "fp_request_sha256_",
+        &json!({
+            "schema_version": "leaven.submit_assessments_request.v1",
+            "evaluation_request_id": evaluation_request_id,
+            "assessment_ids": outcome.assessment_ids()
+        }),
+    )?;
+    let per_assessment = outcome
+        .assessment_ids()
+        .iter()
+        .map(|assessment| {
+            json!({
+                "assessment": assessment,
+                "replayability": outcome.replayability()
+            })
+        })
+        .collect::<Vec<_>>();
+    let value = json!({
+        "kind": "assessment_batch_receipt",
+        "assessment_ids": outcome.assessment_ids(),
+        "evaluation_request_id": evaluation_request_id,
+        "per_assessment": per_assessment,
+        "status": "committed",
+        "graph_revision": outcome.committed_revision(),
+        "data_classes": outcome.data_classes(),
+        "replayability": outcome.replayability(),
+        "receipt": receipt_id
+    });
+    let result_hash = prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_write_result.v1",
+            "name": name,
+            "value": value
+        }),
+    )?;
+    state.receipts.push(json!({
+        "kind": "write",
+        "receipt": receipt_id,
+        "op_var": name,
+        "started_at": context.started_at,
+        "completed_at": context.completed_at,
+        "write_kind": write_kind,
+        "request_hash": request_hash,
+        "result_hash": result_hash,
+        "base_revision": context.base_revision,
+        "committed_revision": value["graph_revision"],
+        "status": "succeeded",
+        "evaluation_request_id": value["evaluation_request_id"],
+        "assessment_ids": value["assessment_ids"]
     }));
     state.final_revision = outcome.committed_revision().to_owned();
     state.values.insert(name.clone(), value.clone());

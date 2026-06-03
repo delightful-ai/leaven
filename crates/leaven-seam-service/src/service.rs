@@ -12,13 +12,14 @@ use leaven_agent_codex_cli::{CodexCliApproval, CodexCliConfig, CodexCliRuntime, 
 use leaven_kernel::{AgentSessionId, BudgetSnapshot, Cost, FingerprintBuilder, Metered};
 use leaven_public_seam::{
     AgentCommandOutputRefs, CapabilityDocument, PlanAgentRunOutcome, PlanAgentRunRequest,
-    PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest,
-    PlanExecutionContext, PlanExecutionHost, PlanGraphQueryOutcome, PlanGraphQueryRequest,
-    PlanGraphReadScope, PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome,
-    PlanSandboxExecRequest, PlanSubmitProposalBatchOutcome, PlanSubmitProposalBatchRequest,
-    PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome,
-    PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
-    PublicSeamError, PublicSeamPackage,
+    PlanApplyProposalBatchOutcome, PlanApplyProposalBatchRequest, PlanCaseQueryOutcome,
+    PlanCaseQueryRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext,
+    PlanExecutionHost, PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope,
+    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome, PlanSandboxExecRequest,
+    PlanSubmitAssessmentsOutcome, PlanSubmitAssessmentsRequest, PlanSubmitProposalBatchOutcome,
+    PlanSubmitProposalBatchRequest, PlanWorkspaceMaterializeOutcome,
+    PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest,
+    PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest, PublicSeamError, PublicSeamPackage,
 };
 use leaven_seam_runtime::{SeamPlanRequest, SeamService, SeamServiceError, SeamStageRunRequest};
 use leaven_workspace::{Workspace, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
@@ -201,6 +202,8 @@ fn method_primary_kind(method: &str) -> &'static str {
         "leaven/lm.complete" => "lm_response",
         "leaven/agent.run" => "agent_session",
         "leaven/proposal.submit_batch" => "proposal_batch_receipt",
+        "leaven/proposal.apply" => "apply_receipt",
+        "leaven/assessment.submit" => "assessment_batch_receipt",
         "leaven/graph.query" => "graph_set",
         "leaven/case.load"
         | "leaven/case.input"
@@ -576,6 +579,36 @@ impl PlanExecutionHost for ConfiguredPlanHost {
         ))
     }
 
+    fn apply_proposal_batch(
+        &mut self,
+        request: PlanApplyProposalBatchRequest<'_>,
+    ) -> Result<PlanApplyProposalBatchOutcome, PublicSeamError> {
+        let batch = request
+            .write()
+            .get("proposal_batch")
+            .and_then(Value::as_str)
+            .ok_or_else(|| PublicSeamError::InvalidPlan {
+                message: "apply_proposal_batch must carry proposal_batch".to_owned(),
+            })?;
+        Ok(PlanApplyProposalBatchOutcome::new(
+            vec![format!("cand_{}_applied", sanitize_id_fragment(batch))],
+            format!("{}_proposal_apply", request.base_revision()),
+        ))
+    }
+
+    fn submit_assessments(
+        &mut self,
+        request: PlanSubmitAssessmentsRequest<'_>,
+    ) -> Result<PlanSubmitAssessmentsOutcome, PublicSeamError> {
+        let assessment_ids = (0..request.assessment_count()?)
+            .map(|index| format!("assess_{}_{}", request.name(), index))
+            .collect();
+        Ok(PlanSubmitAssessmentsOutcome::new(
+            assessment_ids,
+            format!("{}_assessment_submit", request.base_revision()),
+        ))
+    }
+
     fn workspace_materialize(
         &mut self,
         request: PlanWorkspaceMaterializeRequest<'_>,
@@ -814,20 +847,11 @@ impl PlanExecutionHost for ConfiguredPlanHost {
 
 fn materialized_workspace_id(candidate: &str) -> String {
     let stem = candidate.strip_prefix("cand_").unwrap_or(candidate);
-    let sanitized = stem
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() || ch == '_' {
-                ch
-            } else {
-                '_'
-            }
-        })
-        .collect::<String>();
+    let sanitized = sanitize_id_fragment(stem);
     format!("ws_{sanitized}_materialized")
 }
 
-fn sanitize_blob_id(value: &str) -> String {
+fn sanitize_id_fragment(value: &str) -> String {
     value
         .chars()
         .map(|ch| {
@@ -838,6 +862,10 @@ fn sanitize_blob_id(value: &str) -> String {
             }
         })
         .collect()
+}
+
+fn sanitize_blob_id(value: &str) -> String {
+    sanitize_id_fragment(value)
 }
 
 fn configured_sandbox_fingerprint() -> leaven_kernel::Fingerprint {
@@ -1072,6 +1100,76 @@ mod tests {
         assert_eq!(
             response.value()["result"]["receipts"][0]["write_kind"],
             "submit_proposal_batch"
+        );
+    }
+
+    #[test]
+    fn seam_runtime_executes_proposal_apply_through_configured_service() {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
+        let service = ConfiguredSeamService::from_package(
+            package.clone(),
+            SeamServiceConfig {
+                context: proposal_context(),
+                capability: Some(proposal_apply_capability()),
+                ..SeamServiceConfig::default()
+            },
+        )
+        .unwrap();
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        let response = runtime.handle_value(&proposal_apply_request());
+
+        assert!(
+            !response.is_error(),
+            "unexpected proposal apply error: {:?}",
+            response.value()
+        );
+        assert_eq!(
+            response.value()["result"]["primary"]["kind"],
+            "apply_receipt"
+        );
+        assert_eq!(
+            response.value()["result"]["receipts"][0]["write_kind"],
+            "apply_proposal_batch"
+        );
+        assert_eq!(
+            response.value()["result"]["primary"]["created_candidates"][0],
+            "cand_pb_service_apply_applied"
+        );
+    }
+
+    #[test]
+    fn seam_runtime_executes_assessment_submit_through_configured_service() {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
+        let service = ConfiguredSeamService::from_package(
+            package.clone(),
+            SeamServiceConfig {
+                context: planexec_context(),
+                capability: Some(assessment_submit_capability()),
+                ..SeamServiceConfig::default()
+            },
+        )
+        .unwrap();
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        let response = runtime.handle_value(&assessment_submit_request());
+
+        assert!(
+            !response.is_error(),
+            "unexpected assessment submit error: {:?}",
+            response.value()
+        );
+        assert_eq!(
+            response.value()["result"]["primary"]["kind"],
+            "assessment_batch_receipt"
+        );
+        assert_eq!(
+            response.value()["result"]["primary"]["evaluation_request_id"],
+            "evalreq_service"
+        );
+        assert_eq!(
+            response.value()["result"]["receipts"][0]["write_kind"],
+            "submit_assessments"
         );
     }
 
@@ -2207,6 +2305,112 @@ mod tests {
         })
     }
 
+    fn proposal_apply_request() -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "id": "proposal-apply-1",
+            "method": "leaven/proposal.apply",
+            "params": {
+                "schema_version": "leaven.plan.v1",
+                "plan_id": "planproposalapplyservice001",
+                "consistency": {
+                    "kind": "latest_at_start"
+                },
+                "mode": {
+                    "kind": "execute"
+                },
+                "ops": [{
+                    "kind": "write",
+                    "name": "applied",
+                    "idempotency_key": "proposal-apply-service-0001",
+                    "write": {
+                        "kind": "apply_proposal_batch",
+                        "proposal_batch": "pb_service_apply",
+                        "policy": "apply_first_valid"
+                    }
+                }],
+                "return": ["applied"],
+                "commit": {
+                    "kind": "graph_writes_atomic",
+                    "on_stale": "reject"
+                }
+            }
+        })
+    }
+
+    fn assessment_submit_request() -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "id": "assessment-submit-1",
+            "method": "leaven/assessment.submit",
+            "params": {
+                "schema_version": "leaven.plan.v1",
+                "plan_id": "planassessmentsubmitservice001",
+                "consistency": {
+                    "kind": "latest_at_start"
+                },
+                "mode": {
+                    "kind": "execute"
+                },
+                "ops": [{
+                    "kind": "write",
+                    "name": "assessments",
+                    "idempotency_key": "assessment-submit-service-0001",
+                    "write": {
+                        "kind": "submit_assessments",
+                        "evaluation_request_id": "evalreq_service",
+                        "assessments": [{
+                            "kind": "independent",
+                            "candidate": "cand_a",
+                            "target": {
+                                "case": "case_1"
+                            },
+                            "score": {
+                                "value": 1.0,
+                                "output": {
+                                    "kind": "structured",
+                                    "summary": "candidate answered correctly",
+                                    "value": {
+                                        "candidate": "cand_a",
+                                        "output": "candidate answered correctly"
+                                    },
+                                    "visibility": "public",
+                                    "data_classes": ["candidate.output"]
+                                }
+                            },
+                            "evidence": {
+                                "schema_version": "leaven.evidence_envelope.v1",
+                                "target_derived": false,
+                                "public": {
+                                    "summary": "candidate answered correctly",
+                                    "data_classes": ["public"]
+                                },
+                                "redaction_policy": {
+                                    "optimizer": "score_only",
+                                    "reflector": "score_only",
+                                    "operator": "score_only"
+                                },
+                                "producer": {
+                                    "stage_call_id": "sc_assessment_service"
+                                },
+                                "source_receipts": {
+                                    "read": ["qrec_assessment_source"],
+                                    "effect": []
+                                }
+                            },
+                            "replayability": "pure_read"
+                        }]
+                    }
+                }],
+                "return": ["assessments"],
+                "commit": {
+                    "kind": "graph_writes_atomic",
+                    "on_stale": "reject"
+                }
+            }
+        })
+    }
+
     fn lm_plan() -> Value {
         json!({
             "schema_version": "leaven.plan.v1",
@@ -2523,6 +2727,83 @@ mod tests {
                     }
                 }
             ],
+            "budgets": {},
+            "execution_policy": {
+                "profile": "managed_sandbox",
+                "network": "leaven_endpoint_only",
+                "subprocess": "deny_except_sandbox_exec",
+                "filesystem": "workspace_handles_only",
+                "byo_effects": "forbidden"
+            },
+            "delegation": {
+                "may_delegate": false,
+                "max_depth": 0,
+                "must_attenuate": true,
+                "allowed_actions": []
+            }
+        })
+    }
+
+    fn proposal_apply_capability() -> Value {
+        let mut value = proposal_capability();
+        value["jti"] = json!("jti_proposal_apply_authority");
+        value["subject"]["stage_call_id"] = json!("sc_proposal_apply");
+        value["token_binding"]["token_id"] = json!("ltok_proposal_apply");
+        value["grants"] = json!([{
+            "action": "proposal.apply_batch",
+            "resource": {},
+            "constraints": {
+                "may_apply": true
+            }
+        }]);
+        value
+    }
+
+    fn assessment_submit_capability() -> Value {
+        json!({
+            "schema_version": "leaven.capability.v1",
+            "jti": "jti_assessment_submit_authority",
+            "capability_fingerprint": "fp_cap_sha256_planexec",
+            "policy_fingerprint": "fp_policy_sha256_planexec",
+            "subject_fingerprint": "fp_subject_sha256_planexec",
+            "issuer": {
+                "kind": "run_engine",
+                "id": "engine_local"
+            },
+            "subject": {
+                "kind": "stage_call",
+                "run": "run_demo",
+                "stage_call_id": "sc_assessment_submit",
+                "role": "scorer"
+            },
+            "audience": ["leaven.acp.worker"],
+            "issued_at": "2026-05-23T00:00:00Z",
+            "expires_at": "2026-05-23T00:20:00Z",
+            "expiry_behavior": "drain_inflight_no_new_ops",
+            "token_binding": {
+                "kind": "opaque_lookup",
+                "token_id": "ltok_assessment_submit"
+            },
+            "revocation": {
+                "mode": "issuer_epoch",
+                "revocation_epoch": 7,
+                "check": "on_every_request"
+            },
+            "renewal": {
+                "mode": "renew_before_expiry",
+                "max_extensions": 0,
+                "max_total_lifetime_s": 1200
+            },
+            "grants": [{
+                "action": "assessment.submit",
+                "resource": {
+                    "evaluation_request_id": "evalreq_service"
+                },
+                "constraints": {},
+                "limits": {
+                    "max_rows": 1
+                }
+            }],
             "budgets": {},
             "execution_policy": {
                 "profile": "managed_sandbox",

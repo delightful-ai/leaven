@@ -14,9 +14,11 @@ mod result_value;
 
 use effects::LiveWorkspaceHandle;
 pub use effects::{
-    AgentCommandOutputRefs, PlanAgentRunOutcome, PlanAgentRunRequest, PlanEmitRunEventOutcome,
+    AgentCommandOutputRefs, PlanAgentRunOutcome, PlanAgentRunRequest,
+    PlanApplyProposalBatchOutcome, PlanApplyProposalBatchRequest, PlanEmitRunEventOutcome,
     PlanEmitRunEventRequest, PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome,
-    PlanSandboxExecRequest, PlanSubmitProposalBatchOutcome, PlanSubmitProposalBatchRequest,
+    PlanSandboxExecRequest, PlanSubmitAssessmentsOutcome, PlanSubmitAssessmentsRequest,
+    PlanSubmitProposalBatchOutcome, PlanSubmitProposalBatchRequest,
     PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceReleaseOutcome,
     PlanWorkspaceReleaseRequest,
 };
@@ -231,6 +233,28 @@ pub trait PlanExecutionHost {
         let _ = request;
         Err(invalid_plan(
             "Plan execution host does not provide submit_proposal_batch writes",
+        ))
+    }
+
+    /// Executes a typed `apply_proposal_batch` write.
+    fn apply_proposal_batch(
+        &mut self,
+        request: PlanApplyProposalBatchRequest<'_>,
+    ) -> Result<PlanApplyProposalBatchOutcome, PublicSeamError> {
+        let _ = request;
+        Err(invalid_plan(
+            "Plan execution host does not provide apply_proposal_batch writes",
+        ))
+    }
+
+    /// Executes a typed `submit_assessments` write.
+    fn submit_assessments(
+        &mut self,
+        request: PlanSubmitAssessmentsRequest<'_>,
+    ) -> Result<PlanSubmitAssessmentsOutcome, PublicSeamError> {
+        let _ = request;
+        Err(invalid_plan(
+            "Plan execution host does not provide submit_assessments writes",
         ))
     }
 

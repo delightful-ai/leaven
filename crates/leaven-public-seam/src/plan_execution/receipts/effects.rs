@@ -51,6 +51,21 @@ pub fn validate_agent_session_value(
     Ok(())
 }
 
+fn string_array<'a>(
+    value: Option<&'a Value>,
+    field: &str,
+) -> Result<Vec<&'a str>, PublicSeamError> {
+    value
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_plan(format!("{field} must be an array")))?
+        .iter()
+        .map(|item| {
+            item.as_str()
+                .ok_or_else(|| invalid_plan(format!("{field} entries must be strings")))
+        })
+        .collect()
+}
+
 fn validate_agent_command_policy(
     call: Option<&Value>,
     command: &Map<String, Value>,
@@ -315,10 +330,20 @@ pub(super) fn validate_write_receipt(
     require_receipt_field(receipt, "base_revision", &context.base_revision)?;
     let deps = dependency_values(op_object, &state.bindings)?;
     let dependency_data_classes = dependency_data_classes(op_object, &state.binding_data_classes)?;
-    require_receipt_field(
-        receipt,
-        "request_hash",
-        &prefixed_jcs_hash(
+    let request_hash = if write_kind == "submit_assessments" {
+        prefixed_jcs_hash(
+            "fp_request_sha256_",
+            &json!({
+                "schema_version": "leaven.submit_assessments_request.v1",
+                "evaluation_request_id": required_string(
+                    receipt.get("evaluation_request_id"),
+                    "receipt.evaluation_request_id"
+                )?,
+                "assessment_ids": string_array(receipt.get("assessment_ids"), "receipt.assessment_ids")?
+            }),
+        )?
+    } else {
+        prefixed_jcs_hash(
             "fp_request_sha256_",
             &json!({
                 "schema_version": "leaven.plan_write_request.v1",
@@ -329,8 +354,9 @@ pub(super) fn validate_write_receipt(
                 "dependency_data_classes": dependency_data_classes,
                 "base_revision": context.base_revision
             }),
-        )?,
-    )?;
+        )?
+    };
+    require_receipt_field(receipt, "request_hash", &request_hash)?;
     if write_kind == "emit_run_event" {
         let value = json!({
             "kind": "emit_run_event",

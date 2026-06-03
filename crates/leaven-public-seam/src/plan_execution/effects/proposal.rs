@@ -4,15 +4,15 @@ use crate::PublicSeamError;
 
 use super::super::invalid_plan;
 
-/// Lowered `submit_proposal_batch` write passed to a plan execution host.
+/// Lowered `submit_proposal_batch` or `apply_proposal_batch` write passed to a plan execution host.
 #[derive(Clone, Debug)]
-pub struct PlanSubmitProposalBatchRequest<'a> {
+pub struct PlanProposalWriteRequest<'a> {
     pub(super) name: &'a str,
     pub(super) write: &'a Value,
     pub(super) base_revision: &'a str,
 }
 
-impl<'a> PlanSubmitProposalBatchRequest<'a> {
+impl<'a> PlanProposalWriteRequest<'a> {
     pub(crate) const fn new(name: &'a str, write: &'a Value, base_revision: &'a str) -> Self {
         Self {
             name,
@@ -31,6 +31,11 @@ impl<'a> PlanSubmitProposalBatchRequest<'a> {
         self.base_revision
     }
 
+    /// Typed write body.
+    pub const fn write(&self) -> &Value {
+        self.write
+    }
+
     /// Number of proposals submitted by this batch.
     pub fn proposal_count(&self) -> Result<usize, PublicSeamError> {
         self.write
@@ -40,6 +45,12 @@ impl<'a> PlanSubmitProposalBatchRequest<'a> {
             .ok_or_else(|| invalid_plan("submit_proposal_batch must carry proposals"))
     }
 }
+
+/// Lowered `submit_proposal_batch` write passed to a plan execution host.
+pub type PlanSubmitProposalBatchRequest<'a> = PlanProposalWriteRequest<'a>;
+
+/// Lowered `apply_proposal_batch` write passed to a plan execution host.
+pub type PlanApplyProposalBatchRequest<'a> = PlanProposalWriteRequest<'a>;
 
 /// Host outcome for a typed `submit_proposal_batch` write.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -73,6 +84,43 @@ impl PlanSubmitProposalBatchOutcome {
 
     pub(crate) fn proposal_ids(&self) -> &[String] {
         &self.proposal_ids
+    }
+
+    pub(crate) fn committed_revision(&self) -> &str {
+        &self.committed_revision
+    }
+
+    pub(crate) fn data_classes(&self) -> &[String] {
+        &self.data_classes
+    }
+
+    pub(crate) fn replayability(&self) -> &str {
+        &self.replayability
+    }
+}
+
+/// Host outcome for a typed `apply_proposal_batch` write.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanApplyProposalBatchOutcome {
+    pub(super) created_candidates: Vec<String>,
+    pub(super) committed_revision: String,
+    pub(super) data_classes: Vec<String>,
+    pub(super) replayability: String,
+}
+
+impl PlanApplyProposalBatchOutcome {
+    /// Creates an apply receipt outcome.
+    pub fn new(created_candidates: Vec<String>, committed_revision: impl Into<String>) -> Self {
+        Self {
+            created_candidates,
+            committed_revision: committed_revision.into(),
+            data_classes: vec!["public".to_owned()],
+            replayability: "fully_managed".to_owned(),
+        }
+    }
+
+    pub(crate) fn created_candidates(&self) -> &[String] {
+        &self.created_candidates
     }
 
     pub(crate) fn committed_revision(&self) -> &str {

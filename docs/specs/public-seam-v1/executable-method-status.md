@@ -41,6 +41,8 @@ Codex/agentic public-seam readiness.
 | `leaven/agent.run` | Live-provider configured when paired with materialized workspace | `leaven-seam-service::service` plus `leaven-agent-codex-cli` | Uses configured Codex CLI runtime against a materialized local workspace and projects transcript/command output blob refs into the public seam result. Without `SeamAgentConfig::CodexCli`, the service returns an explicit unsupported-provider error. |
 | `leaven/sandbox.exec` | Configured local | `leaven-seam-service::service` plus `leaven-workspace-local` | Executes the lowered workspace command inside a materialized local workspace, captures stdout/stderr and declared output files, and returns byte-bound blob refs plus a sandbox call receipt through `leaven seam serve --stdio`. |
 | `leaven/proposal.submit_batch` | Configured local write receipt | `leaven-seam-service::service` | Produces a validated proposal-batch receipt for submitted proposal payloads. This proves public-seam write plumbing, not Rust optimizer admission or proposal application. |
+| `leaven/proposal.apply` | Configured local write receipt | `leaven-seam-service::service` | Executes Plan IR `apply_proposal_batch` through the configured service and returns a receipt-bound `apply_receipt` with created-candidate ids. This proves public-seam apply receipt plumbing, not Rust optimizer frontier admission. |
+| `leaven/assessment.submit` | Configured local write receipt | `leaven-seam-service::service` | Executes Plan IR `submit_assessments` through the configured service, enforces `assessment.submit` capability scope, emits a receipt with the assessment-scope request hash, and returns a validated `assessment_batch_receipt`. This proves public-seam assessment write plumbing, not durable RunContext assessment persistence. |
 | `leaven/event.emit` | Configured local write receipt | `leaven-seam-service::service` | Emits a typed local run-event receipt through Plan execution and returns a receipt-bound `emit_run_event` value. This is configured local receipt behavior, not yet durable RunGraph event persistence. |
 
 ## Validated But Not Executed By The Current Service
@@ -49,8 +51,7 @@ The runtime dispatcher exposes every locked worker-profile method and validates
 request/response envelopes before and after service calls. The configured
 service does not yet provide runtime behavior for these V1 families:
 
-- remaining effects and graph writes: `leaven/proposal.apply`,
-  `leaven/assessment.submit`, `leaven/evaluation.request`
+- remaining effect write: `leaven/evaluation.request`
 - watch behavior remains deferred to a future V1.x slice
 
 Some of these families have public-seam contract validators, Plan IR lowering

@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 use crate::PublicSeamError;
 
 mod agent;
+mod assessment;
 mod blob_ref;
 mod lm;
 mod outcomes;
@@ -13,12 +14,16 @@ mod proposal;
 mod sandbox;
 
 pub use agent::{AgentCommandOutputRefs, PlanAgentRunOutcome, PlanAgentRunRequest};
+pub use assessment::{PlanSubmitAssessmentsOutcome, PlanSubmitAssessmentsRequest};
 pub use lm::{PlanLmCompleteOutcome, PlanLmCompleteRequest};
 pub use outcomes::{
     PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanWorkspaceMaterializeOutcome,
     PlanWorkspaceReleaseOutcome,
 };
-pub use proposal::{PlanSubmitProposalBatchOutcome, PlanSubmitProposalBatchRequest};
+pub use proposal::{
+    PlanApplyProposalBatchOutcome, PlanApplyProposalBatchRequest, PlanSubmitProposalBatchOutcome,
+    PlanSubmitProposalBatchRequest,
+};
 pub use sandbox::{PlanSandboxExecOutcome, PlanSandboxExecRequest};
 
 /// Lowered `workspace_materialize` request passed to a plan execution host.

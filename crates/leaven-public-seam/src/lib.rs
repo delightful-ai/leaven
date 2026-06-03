@@ -54,11 +54,13 @@ pub use package::{
 };
 pub use plan::{PlanDocument, PlanOperationKind};
 pub use plan_execution::{
-    AgentCommandOutputRefs, PlanAgentRunOutcome, PlanAgentRunRequest, PlanCaseQueryOutcome,
+    AgentCommandOutputRefs, PlanAgentRunOutcome, PlanAgentRunRequest,
+    PlanApplyProposalBatchOutcome, PlanApplyProposalBatchRequest, PlanCaseQueryOutcome,
     PlanCaseQueryRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext,
     PlanExecutionHost, PlanExecutionReport, PlanGraphQueryOutcome, PlanGraphQueryRequest,
     PlanGraphReadScope, PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome,
-    PlanSandboxExecRequest, PlanSubmitProposalBatchOutcome, PlanSubmitProposalBatchRequest,
+    PlanSandboxExecRequest, PlanSubmitAssessmentsOutcome, PlanSubmitAssessmentsRequest,
+    PlanSubmitProposalBatchOutcome, PlanSubmitProposalBatchRequest,
     PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome,
     PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
 };
