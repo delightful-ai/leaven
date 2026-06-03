@@ -442,6 +442,18 @@ acceptance:
         assessment score, reward rows, held-out split filtering, and seed
         lineage. This still does not prove `lv.runs.open(...)`, durable blob
         readback, persisted receipts/evidence, or cost accounting.
+      - >-
+        Partial persisted-inspection evidence, not acceptance completion:
+        current `lv.optimize(...).run()` writes an inspectable
+        `.leaven/runs/<run_id>/optimized.json` projection, and
+        `lv.runs.open(path)` round-trips the completed `Optimized` result with
+        best `PromptArtifact`, seed lineage, assessment score, per-reward rows,
+        cost status, and unsupported-provider facts. `uv run pytest
+        tests/test_run_inspection.py -q` covers the public path
+        `lv.optimize(...)` -> persisted result -> `lv.runs.open(...)` plus
+        `lv.runs.list_local()`. This still does not prove Rust checkpoint
+        readback, durable blob/transcript fetch, provider-authored receipt
+        validation, or complete cost accounting.
     closeout_check: Stdout transcript alone is not run inspection.
 
 proof_denominator:

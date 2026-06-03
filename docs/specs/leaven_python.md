@@ -440,6 +440,7 @@ The result is typed `Optimized[Artifact]`:
 result.best                    # Candidate[Artifact]
 result.frontier                # list[Candidate[Artifact]]
 result.summary                 # RunSummary with cost, replayability, etc.
+result.summary.run_dir          # Local run directory when persisted
 result.test_assessments()      # Iterable[Assessment]
 result.assessment(case_id)     # Assessment
 await result.replay(case_id)   # ReplayResult, deterministic
@@ -448,7 +449,7 @@ await result.replay(case_id)   # ReplayResult, deterministic
 Inspection of completed runs is the same surface, opened externally:
 
 ```python
-run = lv.runs.open(".leaven/runs/2026-05-24-evoskill-officeqa")
+run = lv.runs.open(result.summary.run_dir)
 print(run.best.artifact.summary())
 for assessment in run.test_assessments():
     print(assessment.score.value, assessment.case.id)

@@ -48,6 +48,7 @@ class RunSummary(BaseModel):
     total_lm_tokens: int | None
     usage_status: RunUsageStatus = "known"
     unsupported: tuple[UnsupportedRunFact, ...] = ()
+    run_dir: str | None = None
     replayability: Replayability
     """Roll-up across assessments; `non_replayable` if any one assessment is."""
 

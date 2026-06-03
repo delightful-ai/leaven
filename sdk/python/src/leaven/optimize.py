@@ -19,6 +19,7 @@ import datetime
 from typing import Any, cast
 
 from ._receipts import WriteReceipt
+from ._runs import persist_optimized
 from ._seam_optimize import SeamOptimizeReport, run_prompt_mechanics
 from .artifacts.prompt import PromptArtifact
 from .assessment import Assessment
@@ -177,13 +178,14 @@ def _to_optimized(
         unsupported=report.unsupported,
         replayability="fully_managed",
     )
-    return Optimized(
+    result = Optimized(
         run_id=run_id,
         best=best,
         frontier=[best],
         summary=summary,
         assessment_rows=assessment_rows,
     )
+    return persist_optimized(result)
 
 
 def _assessment_rows(report: SeamOptimizeReport, case_count: int) -> list[Assessment]:

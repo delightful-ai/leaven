@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ._runs import list_run_dirs, open_optimized
 from .result import Optimized
 
 
@@ -20,12 +21,12 @@ def open(path: str | Path) -> Optimized[Any]:
     determined at write time; callers can cast if they know the type.
     A future API revision may make this generic over a passed artifact type.
     """
-    raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+    return open_optimized(path)
 
 
 def list_local(root: str | Path = ".leaven/runs") -> list[str]:
     """List run directory names under the local leaven root."""
-    raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+    return list_run_dirs(root)
 
 
 __all__ = ["list_local", "open"]

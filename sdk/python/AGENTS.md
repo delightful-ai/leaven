@@ -17,19 +17,22 @@ foundation slices that are backed by the governing spec and a current proof.
 
 `examples/03_prompt_optimize.py` now runs `lv.optimize(...).run()` through the
 durable `leaven seam serve --stdio --config` server route. The wired surface is
-the current mechanics path: `optimize().run()`, `cases.from_jsonl`,
-`StageRunRequest`, `MockRunnerStageConfig`, and the
-`Environment`/`Task`/`Rollout.fn`/`Rubric`/`runtime.local` records those
-compose. The private owner is `leaven._seam_optimize`, not legacy
+the current mechanics path: `optimize().run()`, `cases.from_jsonl`, registered
+`@lv.runner` dispatch through the checked-in command worker, `cx.lm.complete`
+and `cx.agent.run` callbacks while a worker stage is active, Python
+`@lv.reward` vector execution, persisted in-process inspection via
+`lv.runs.open(...)`, and the `Environment`/`Task`/`Rollout.fn`/`Rubric`/
+`runtime.local` records those compose. The private owners are
+`leaven._seam_optimize`, `leaven._seam_worker`, and `leaven._runs`, not legacy
 `leaven._serve`.
 
 Honest scope: the Python SDK now configures and calls the durable public seam
-server for runner `leaven/stage.run` mechanics, and returns a typed
-`Optimized[PromptArtifact]`. The configured runner is deterministic and
-service-side; it does not execute the user's Python `@lv.runner`, does not run
-GEPA search, does not call `cx.lm.complete`, and does not execute Python
-`@lv.reward` bodies. Reward vectors, agent, sandbox, message-list LM,
-Python-authored worker stage dispatch, and optimizer search remain later slices.
+server for runner `leaven/stage.run` mechanics, executes the user's Python
+`@lv.runner`, services configured `leaven/*` callbacks, runs Python reward
+vectors, returns a typed `Optimized[PromptArtifact]`, and writes an
+`optimized.json` projection under `.leaven/runs/<run_id>/`. It still does not
+run real GEPA proposal search, persist Rust graph checkpoints, provide durable
+blob readback, or close live provider acceptance by itself.
 
 #### 2. Example 10, live Codex agent.run over the public seam
 
@@ -44,9 +47,8 @@ agent receipts plus a transcript blob ref.
 Honest scope: this uses `AgentBuilder.run` through the private `leaven._seam`
 process-client package, not an engine-supplied `cx.agent` inside
 `lv.optimize(...).run()`. It proves that Python can drive the real Leaven-owned
-stdio seam and Codex provider substrate; reward vector execution, persisted
-blob inspection, and full `optimize(...).run()` live-agent workflow remain later
-slices and stay scaffold.
+stdio seam and Codex provider substrate; persisted blob inspection and typed
+proposal submission remain later slices and stay scaffold.
 
 #### 3. Private effect builders over the public seam
 
