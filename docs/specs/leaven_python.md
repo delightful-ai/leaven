@@ -470,18 +470,20 @@ audit = lv.runs.inspect(result.summary.run_dir)
 print(run.best.artifact.summary())
 for assessment in run.test_assessments():
     print(assessment.score.value, assessment.case.id)
+    print([(r.id, r.value, r.weight) for r in assessment.rewards])
 for ancestor in run.lineage(run.best.id):
     print(ancestor.id, ancestor.proposal.summary())
 print(audit.receipt_ids(kind="call"))
+print([(r.id, r.value, r.weight) for r in audit.evidence[0].rewards])
 print(audit.cost_status, audit.unsupported)
 ```
 
 `lv.runs.inspect(...)` is a flattened read-only projection over the persisted
 `Optimized` result. It names the best lineage, visible receipts, public
-assessment evidence, cost/usage status, and unsupported dependency facts in one
-typed `RunInspection`. It does not claim Rust graph checkpoint readback or blob
-store transcript fetch until those owning layers persist and expose those
-artifacts.
+assessment evidence, per-assessment reward-vector dimensions, cost/usage
+status, and unsupported dependency facts in one typed `RunInspection`. It does
+not claim Rust graph checkpoint readback or blob store transcript fetch until
+those owning layers persist and expose those artifacts.
 
 The same package serves three purposes: compose + configure + run; author
 a stage; inspect after the fact. One install, one mental model.

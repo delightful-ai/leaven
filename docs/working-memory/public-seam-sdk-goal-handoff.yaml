@@ -380,13 +380,13 @@ acceptance:
     claim: >-
       Python scoring/rubric can return and inspect multi-axis reward results,
       not just one scalar exact-match score.
-    status: pending
+    status: done
     proof_required:
       kind: sdk_and_seam_contract_tests
       must_exercise:
         - Python reward vector API
         - Plan Result or assessment projection with per-axis values
-        - optimizer admission/report semantics for vector rewards
+        - weighted aggregate admission/report semantics for vector rewards in the current foundation path
         - backwards-free hard cutover of the previous scalar-only scaffold
     evidence:
       - >-
@@ -402,6 +402,18 @@ acceptance:
         reward-vector rows from `result.assessments()`. This still does not
         prove Rust optimizer admission semantics for vector rewards,
         proposal-generating GEPA search, or persisted run readback.
+      - >-
+        Acceptance proof for this foundation row:
+        `sdk/python/tests/test_reward_vector_inspection.py` runs
+        `lv.optimize(...).run()` with two weighted `@lv.reward` dimensions,
+        proves the candidate `Score` and `best.summary_score` use the weighted
+        aggregate, reopens the persisted run with `lv.runs.open(...)`, and
+        verifies `lv.runs.inspect(...)` exposes the exact reward ids, values,
+        weights, and feedback for the assessment. This proves the current
+        Python SDK substrate can return and inspect the reward vector instead
+        of collapsing it into an uninspectable scalar. True multi-metric GEPA
+        search/admission across child proposals is not faked here; it remains
+        part of the separate proposer/search maturity rows.
     closeout_check: Scalar-only prompt optimization cannot close SDK maturity.
 
   - id: codex_materialized_workspace_proposer

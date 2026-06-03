@@ -34,6 +34,18 @@ class EvidenceSummary(BaseModel):
     data_classes: list[str] = Field(default_factory=list)
     payload: dict[str, Any] = Field(default_factory=dict)
     target_derived: bool
+    rewards: list[RewardDimensionSummary] = Field(default_factory=list)
+
+
+class RewardDimensionSummary(BaseModel):
+    """One inspected reward-vector dimension for an assessment."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str
+    value: float
+    weight: float
+    feedback: str = ""
 
 
 class RunInspection(BaseModel):
@@ -111,6 +123,15 @@ def _evidence_summary(assessment: Assessment) -> EvidenceSummary:
         data_classes=list(public.data_classes) if public is not None else [],
         payload=dict(public.payload) if public is not None else {},
         target_derived=assessment.evidence.target_derived,
+        rewards=[
+            RewardDimensionSummary(
+                id=reward.id,
+                value=reward.value,
+                weight=reward.weight,
+                feedback=reward.feedback,
+            )
+            for reward in assessment.rewards
+        ],
     )
 
 
@@ -118,6 +139,7 @@ __all__ = [
     "EvidenceSummary",
     "ReceiptKind",
     "ReceiptSummary",
+    "RewardDimensionSummary",
     "RunInspection",
     "inspect_optimized",
 ]
