@@ -838,6 +838,38 @@ mod tests {
     }
 
     #[test]
+    fn seam_runtime_services_proposal_submit_callback_from_command_worker() {
+        let fake_worker = fake_stage_worker_with_proposal_callback_bin();
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
+        let service = ConfiguredSeamService::from_package(
+            package.clone(),
+            SeamServiceConfig {
+                context: proposal_context(),
+                capability: Some(proposal_capability()),
+                stage: SeamStageConfig::CommandRunner {
+                    argv: vec![fake_worker.display().to_string()],
+                },
+                ..SeamServiceConfig::default()
+            },
+        )
+        .unwrap();
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        let response = runtime.handle_value(&proposer_stage_run_request());
+
+        assert!(
+            !response.is_error(),
+            "unexpected error: {:?}",
+            response.value()
+        );
+        assert_eq!(response.value()["result"]["stage"], "proposer");
+        assert_eq!(
+            response.value()["result"]["output"]["value"],
+            "proposer callback saw wrec_proposal_batch"
+        );
+    }
+
+    #[test]
     fn seam_runtime_reports_unconfigured_runner_as_execution_failure() {
         let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
         let service =
@@ -1026,6 +1058,52 @@ mod tests {
                     "case": "case_stage_service",
                     "case_input": {"question": "2 + 2"},
                     "target_forbidden": true
+                }
+            }
+        })
+    }
+
+    fn proposer_stage_run_request() -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "id": "stage-proposer-1",
+            "method": "leaven/stage.run",
+            "params": {
+                "schema_version": "leaven.stage_run.v1",
+                "message": "stage_run_request",
+                "stage": "proposer",
+                "payload": {
+                    "schema_version": "leaven.stage_payloads.v1",
+                    "role": "proposer",
+                    "run": "run_proposal",
+                    "stage_call_id": "sc_proposer_service",
+                    "base_revision": "rev_proposal_base",
+                    "parent": "cand_proposal_parent",
+                    "surface_fingerprint": "fp_surface_sha256_program",
+                    "reflection_result": {
+                        "schema_version": "leaven.stage_payloads.v1",
+                        "role": "reflection_result",
+                        "summary": "empty inputs fail",
+                        "failure_modes": [
+                            {
+                                "label": "missing_empty_input_guard",
+                                "description": "empty inputs fail",
+                                "source_refs": ["cand_proposal_parent"]
+                            }
+                        ],
+                        "surface_suggestions": [],
+                        "negative_constraints": [],
+                        "positive_constraints": [],
+                        "source_refs": ["cand_proposal_parent"],
+                        "read_receipts": ["qrec_reflection"],
+                        "data_classes": ["optimizer.visible"],
+                        "confidence": 0.8
+                    },
+                    "allowed_effects": ["change_from_agent_session"],
+                    "allowed_change_schemas": ["fp_schema_sha256_skill_patch"],
+                    "source_refs": ["cand_proposal_parent"],
+                    "query_policy_fingerprint": "fp_policy_sha256_proposal",
+                    "capability_fingerprint": "fp_cap_sha256_proposal"
                 }
             }
         })
@@ -1480,6 +1558,81 @@ result = {
         "value": f"runner agent callback saw {receipt}",
         "visibility": "optimizer_visible",
         "data_classes": ["candidate.output"]
+    }
+}
+print(json.dumps({"jsonrpc": "2.0", "id": stage.get("id"), "result": result}), flush=True)
+"#,
+        )
+        .unwrap();
+        make_executable(&path);
+        path
+    }
+
+    fn fake_stage_worker_with_proposal_callback_bin() -> std::path::PathBuf {
+        let dir = tempfile::tempdir().unwrap().keep();
+        let path = dir.join("fake-stage-worker-proposal");
+        std::fs::write(
+            &path,
+            r#"#!/usr/bin/env python3
+import json
+import select
+import sys
+
+stage = json.loads(sys.stdin.readline())
+if stage.get("method") != "leaven/stage.run":
+    raise SystemExit(f"unexpected stage request: {stage!r}")
+callback = {
+    "jsonrpc": "2.0",
+    "id": "worker-proposal-1",
+    "method": "leaven/proposal.submit_batch",
+    "params": {
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "plan_worker_proposal_callback",
+        "consistency": {"kind": "latest_at_start"},
+        "mode": {"kind": "execute"},
+        "ops": [{
+            "kind": "write",
+            "name": "proposal_batch",
+            "idempotency_key": "worker-proposal-submit",
+            "write": {
+                "kind": "submit_proposal_batch",
+                "semantics": "sequence",
+                "proposals": [{
+                    "effect": {
+                        "kind": "change_from_agent_session",
+                        "target": "cand_proposal_parent",
+                        "agent_receipt": "agentrec_codex",
+                        "parser": "leaven.agent_session.skill_patch.v1",
+                        "surface_fingerprint": "fp_surface_sha256_program",
+                        "change_schema": "fp_schema_sha256_skill_patch"
+                    },
+                    "causal": {"inputs": ["cand_proposal_parent"]},
+                    "informed_by": {"kind": "literal", "value": ["qrec_reflection", "agentrec_codex"]},
+                    "read_receipts": ["qrec_reflection", "agentrec_codex"]
+                }]
+            }
+        }],
+        "return": ["proposal_batch"],
+        "commit": {"kind": "graph_writes_atomic", "on_stale": "reject"}
+    }
+}
+print(json.dumps(callback), flush=True)
+ready, _, _ = select.select([sys.stdin], [], [], 5)
+if not ready:
+    raise SystemExit("timed out waiting for proposal.submit_batch callback response")
+proposal_response = json.loads(sys.stdin.readline())
+receipt = proposal_response["result"]["primary"]["receipt"]
+result = {
+    "schema_version": "leaven.stage_run.v1",
+    "message": "stage_run_result",
+    "stage": "proposer",
+    "stage_call_id": stage["params"]["payload"]["stage_call_id"],
+    "output": {
+        "kind": "text",
+        "summary": "command worker proposal callback output",
+        "value": f"proposer callback saw {receipt}",
+        "visibility": "optimizer_visible",
+        "data_classes": ["public"]
     }
 }
 print(json.dumps({"jsonrpc": "2.0", "id": stage.get("id"), "result": result}), flush=True)

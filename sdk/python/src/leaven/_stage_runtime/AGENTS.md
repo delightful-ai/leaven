@@ -5,14 +5,15 @@ already-authorized stage dispatch plus a callback client into concrete
 `RolloutContext` / builder objects.
 
 It is private SDK runtime machinery, not public API. Public users should see
-only `cx.lm`, `cx.agent`, and role-specific context types supplied by Leaven.
+only `cx.lm`, `cx.agent`, `cx.proposals`, and role-specific context types
+supplied by Leaven.
 
 ## Public Dependencies
 
 - Public context and builder types from `leaven.contexts` and
   `leaven.builders.*`.
-- The locked `leaven/lm.complete` and `leaven/agent.run` callback semantics
-  from the public seam.
+- The locked `leaven/lm.complete`, `leaven/agent.run`, and
+  `leaven/proposal.submit_batch` callback semantics from the public seam.
 
 ## Private Dependencies
 

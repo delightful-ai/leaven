@@ -5,9 +5,10 @@ from __future__ import annotations
 from .._handles import WorkspaceHandle
 from .._receipts import CallReceipt
 from ..builders.agent import AgentBuilder
-from ..contexts import RolloutContext
+from ..builders.proposals import ProposalsBuilder
+from ..contexts import ProposeContext, RolloutContext
 from .lm import CallbackLmBuilder
-from .protocols import AgentRunCallback, LmCompleteCallback
+from .protocols import AgentRunCallback, LmCompleteCallback, ProposalSubmitCallback
 
 
 class CallbackRolloutContext(RolloutContext):
@@ -58,7 +59,51 @@ class CallbackRolloutContext(RolloutContext):
         )
 
 
-__all__ = ["CallbackRolloutContext"]
+class CallbackProposeContext(ProposeContext):
+    """A live `ProposeContext` bound to stage-driver effect callbacks."""
+
+    def __init__(
+        self,
+        callback: LmCompleteCallback,
+        *,
+        parent_candidate_id: str,
+        stage_call_id: str,
+        agent_callback: AgentRunCallback | None = None,
+        proposal_callback: ProposalSubmitCallback | None = None,
+    ) -> None:
+        self.lm = CallbackLmBuilder(callback, stage_call_id)
+        self.agent = (
+            AgentBuilder._for_seam(
+                agent_callback,
+                candidate_id=parent_candidate_id,
+                idempotency_prefix=f"{stage_call_id}-agent",
+                plan_id=f"plan_{_id_fragment(stage_call_id)}_agent",
+            )
+            if agent_callback is not None
+            else AgentBuilder()
+        )
+        self.proposals = (
+            ProposalsBuilder._for_seam(
+                proposal_callback,
+                idempotency_prefix=f"{stage_call_id}-proposal",
+                plan_id=f"plan_{_id_fragment(stage_call_id)}_proposal",
+            )
+            if proposal_callback is not None
+            else ProposalsBuilder()
+        )
+        self._parent_candidate_id = parent_candidate_id
+        self._stage_call_id = stage_call_id
+
+    @property
+    def parent_candidate_id(self) -> str:
+        return self._parent_candidate_id
+
+    @property
+    def stage_id(self) -> str:
+        return self._stage_call_id
+
+
+__all__ = ["CallbackProposeContext", "CallbackRolloutContext"]
 
 
 def _materialized_workspace_id(candidate_id: str) -> str:

@@ -4,19 +4,22 @@ use crate::{OutputRecordDocument, PublicSeamError, StagePayloadDocument, StagePa
 
 /// Stage kind dispatched by one generic `leaven/stage.run` call.
 ///
-/// V1 dispatches the target-free runner stage only; reflector/proposer/scorer/
-/// judge dispatch lands behind this same generic method as later slices wire
-/// their stage payloads and outputs.
+/// V1 dispatches target-free runner stages and proposer stages. Reflector,
+/// scorer, and judge dispatch lands behind this same generic method as later
+/// slices wire their stage payloads and outputs.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StageRunKind {
     /// Runner stage: produce a candidate output for a target-free case input.
     Runner,
+    /// Proposer stage: submit a typed proposal batch through nested callbacks.
+    Proposer,
 }
 
 impl StageRunKind {
     fn parse(value: &str) -> Result<Self, PublicSeamError> {
         match value {
             "runner" => Ok(Self::Runner),
+            "proposer" => Ok(Self::Proposer),
             other => Err(invalid_stage_run(format!(
                 "unknown stage run kind `{other}`"
             ))),
@@ -27,6 +30,7 @@ impl StageRunKind {
     const fn payload_role(self) -> StagePayloadRole {
         match self {
             Self::Runner => StagePayloadRole::Runner,
+            Self::Proposer => StagePayloadRole::Proposer,
         }
     }
 
@@ -34,6 +38,7 @@ impl StageRunKind {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Runner => "runner",
+            Self::Proposer => "proposer",
         }
     }
 }
@@ -85,8 +90,8 @@ impl StageRunRequestDocument {
 
 /// Schema-valid `leaven/stage.run` result: the dispatched stage's typed output.
 ///
-/// V1 returns a runner-stage `OutputRecord` of kind `text`. The output reuses
-/// the locked `OutputRecord` semantics, so a stage-run result cannot return a
+/// V1 returns a stage `OutputRecord` of kind `text`. The output reuses the
+/// locked `OutputRecord` semantics, so a stage-run result cannot return a
 /// shapeless blob in place of a reportable output.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StageRunResultDocument {
@@ -110,7 +115,7 @@ impl StageRunResultDocument {
             .map_err(rewrap_output_error)?;
         if output.kind() != "text" {
             return Err(invalid_stage_run(
-                "V1 runner stage run result output must be kind `text`",
+                "V1 stage run result output must be kind `text`",
             ));
         }
         Ok(Self {
@@ -154,7 +159,7 @@ fn required_str<'a>(value: Option<&'a Value>, field: &str) -> Result<&'a str, Pu
 fn rewrap_payload_error(error: PublicSeamError) -> PublicSeamError {
     match error {
         PublicSeamError::InvalidStagePayload { message } => invalid_stage_run(format!(
-            "stage run payload is not a valid runner stage payload: {message}"
+            "stage run payload is not valid for the requested stage: {message}"
         )),
         other => other,
     }

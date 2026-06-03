@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.leaven.dev/v1/v0.3/leaven.stage_run.v1.schema.json",
   "title": "Leaven Stage Run v1 v0.3",
-  "description": "Host->worker stage dispatch. One generic leaven/stage.run method carries a stage kind plus a role-scoped stage payload as its request and returns the stage's typed output. V1 minimally dispatches a target-free runner stage and returns a text OutputRecord.",
+  "description": "Host->worker stage dispatch. One generic leaven/stage.run method carries a stage kind plus a role-scoped stage payload as its request and returns the stage's typed output. V1 dispatches target-free runner stages and proposer stages that submit proposals through nested leaven/proposal.submit_batch callbacks.",
   "oneOf": [
     {
       "$ref": "#/$defs/StageRunRequest"
@@ -23,11 +23,19 @@
         },
         "stage": {
           "enum": [
-            "runner"
+            "runner",
+            "proposer"
           ]
         },
         "payload": {
-          "$ref": "leaven.stage_payloads.v1.schema.json#/$defs/RunnerRequest"
+          "oneOf": [
+            {
+              "$ref": "leaven.stage_payloads.v1.schema.json#/$defs/RunnerRequest"
+            },
+            {
+              "$ref": "leaven.stage_payloads.v1.schema.json#/$defs/ProposeRequest"
+            }
+          ]
         }
       },
       "required": [
@@ -49,7 +57,8 @@
         },
         "stage": {
           "enum": [
-            "runner"
+            "runner",
+            "proposer"
           ]
         },
         "stage_call_id": {

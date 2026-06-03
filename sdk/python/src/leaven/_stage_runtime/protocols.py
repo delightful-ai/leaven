@@ -13,6 +13,14 @@ class AgentRunCallback(Protocol):
         ...
 
 
+class ProposalSubmitCallback(Protocol):
+    """Driver capability required by callback-backed `cx.proposals.submit`."""
+
+    def request(self, request: dict) -> dict:
+        """Send one JSON-RPC request through the active stage seam."""
+        ...
+
+
 class LmCompleteCallback(Protocol):
     """Driver capability required by callback-backed `cx.lm.complete`."""
 
@@ -21,4 +29,4 @@ class LmCompleteCallback(Protocol):
         ...
 
 
-__all__ = ["AgentRunCallback", "LmCompleteCallback"]
+__all__ = ["AgentRunCallback", "LmCompleteCallback", "ProposalSubmitCallback"]

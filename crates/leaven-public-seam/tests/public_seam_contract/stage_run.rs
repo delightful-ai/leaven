@@ -23,6 +23,26 @@ fn stage_run_validates_generic_runner_dispatch_request_and_text_result() {
 }
 
 #[test]
+fn stage_run_validates_generic_proposer_dispatch_request_and_text_result() {
+    let package = package();
+
+    let request = package
+        .validate_stage_run_request_document(&proposer_stage_run_request())
+        .unwrap();
+    assert_eq!(request.stage(), StageRunKind::Proposer);
+    assert_eq!(request.stage().as_str(), "proposer");
+    assert_eq!(request.payload().role(), StagePayloadRole::Proposer);
+
+    let result = package
+        .validate_stage_run_result_document(&proposer_stage_run_result())
+        .unwrap();
+    assert_eq!(result.stage(), StageRunKind::Proposer);
+    assert_eq!(result.stage_call_id(), "sc_proposer_stagerun");
+    assert_eq!(result.output().kind(), "text");
+    assert_eq!(result.output().visibility(), "optimizer_visible");
+}
+
+#[test]
 fn stage_run_request_rejects_target_material_and_wrong_payload_role() {
     let package = package();
 
@@ -42,6 +62,15 @@ fn stage_run_request_rejects_target_material_and_wrong_payload_role() {
     assert!(matches!(
         package
             .validate_stage_run_request_document(&wrong_role)
+            .unwrap_err(),
+        PublicSeamError::InvalidStageRun { .. } | PublicSeamError::ExampleValidation { .. }
+    ));
+
+    let mut proposer_wrong_role = proposer_stage_run_request();
+    proposer_wrong_role["payload"] = runner_payload();
+    assert!(matches!(
+        package
+            .validate_stage_run_request_document(&proposer_wrong_role)
             .unwrap_err(),
         PublicSeamError::InvalidStageRun { .. } | PublicSeamError::ExampleValidation { .. }
     ));
@@ -109,6 +138,31 @@ fn stage_run_result() -> Value {
     })
 }
 
+fn proposer_stage_run_request() -> Value {
+    json!({
+        "schema_version": "leaven.stage_run.v1",
+        "message": "stage_run_request",
+        "stage": "proposer",
+        "payload": proposer_payload()
+    })
+}
+
+fn proposer_stage_run_result() -> Value {
+    json!({
+        "schema_version": "leaven.stage_run.v1",
+        "message": "stage_run_result",
+        "stage": "proposer",
+        "stage_call_id": "sc_proposer_stagerun",
+        "output": {
+            "kind": "text",
+            "summary": "submitted 1 proposal",
+            "value": "wrec_proposal_submit",
+            "visibility": "optimizer_visible",
+            "data_classes": ["public"]
+        }
+    })
+}
+
 fn runner_payload() -> Value {
     json!({
         "schema_version": "leaven.stage_payloads.v1",
@@ -119,6 +173,42 @@ fn runner_payload() -> Value {
         "case": "case_stagerun",
         "case_input": {"question": "5 + 7"},
         "target_forbidden": true
+    })
+}
+
+fn proposer_payload() -> Value {
+    json!({
+        "schema_version": "leaven.stage_payloads.v1",
+        "role": "proposer",
+        "run": "run_stagerun",
+        "stage_call_id": "sc_proposer_stagerun",
+        "base_revision": "rev_stagerun_base",
+        "parent": "cand_stagerun_parent",
+        "surface_fingerprint": "fp_surface_sha256_stagerun",
+        "reflection_result": {
+            "schema_version": "leaven.stage_payloads.v1",
+            "role": "reflection_result",
+            "summary": "empty inputs fail",
+            "failure_modes": [
+                {
+                    "label": "missing_empty_input_guard",
+                    "description": "empty inputs fail",
+                    "source_refs": ["cand_stagerun_parent"]
+                }
+            ],
+            "surface_suggestions": [],
+            "negative_constraints": [],
+            "positive_constraints": [],
+            "source_refs": ["cand_stagerun_parent"],
+            "read_receipts": ["qrec_stagerun_reflection"],
+            "data_classes": ["optimizer.visible"],
+            "confidence": 0.8
+        },
+        "allowed_effects": ["change_from_agent_session"],
+        "allowed_change_schemas": ["fp_schema_sha256_stagerun_patch"],
+        "source_refs": ["cand_stagerun_parent"],
+        "query_policy_fingerprint": "fp_policy_sha256_stagerun",
+        "capability_fingerprint": "fp_cap_sha256_stagerun"
     })
 }
 

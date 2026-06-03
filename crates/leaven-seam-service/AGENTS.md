@@ -19,9 +19,10 @@ service while the stage is active. Their public wire remains the locked
 
 - `service.rs`: configured Plan IR service composition for LM, workspace, and
   agent effects.
-- `stage.rs`: runner-stage service configuration, dispatch, and callback loop.
-  Public dependencies are `leaven-public-seam` stage/effect semantics and the
-  standard library subprocess boundary; private helpers stay in this module.
+- `stage.rs`: runner/proposer stage service configuration, dispatch, and
+  callback loop. Public dependencies are `leaven-public-seam` stage/effect
+  semantics and the standard library subprocess boundary; private helpers stay
+  in this module.
 
 ## Verification
 

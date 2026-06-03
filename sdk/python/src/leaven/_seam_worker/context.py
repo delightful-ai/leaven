@@ -6,7 +6,7 @@ import json
 import sys
 
 from .._seam import LmCompleteRequest
-from .._stage_runtime import CallbackRolloutContext
+from .._stage_runtime import CallbackProposeContext, CallbackRolloutContext
 
 
 class JsonRpcCallbackClient:
@@ -57,6 +57,22 @@ def rollout_context(
     )
 
 
+def propose_context(
+    *,
+    parent_candidate_id: str,
+    stage_call_id: str,
+) -> CallbackProposeContext:
+    """Build the context passed to a registered proposer stage."""
+    callback = JsonRpcCallbackClient()
+    return CallbackProposeContext(
+        callback,
+        parent_candidate_id=parent_candidate_id,
+        stage_call_id=stage_call_id,
+        agent_callback=callback,
+        proposal_callback=callback,
+    )
+
+
 def _plan_id(request_id: str) -> str:
     return "plan_" + _id_fragment(request_id)
 
@@ -69,4 +85,4 @@ def _id_fragment(value: str) -> str:
     return "".join(ch if ch.isalnum() else "_" for ch in value)
 
 
-__all__ = ["JsonRpcCallbackClient", "rollout_context"]
+__all__ = ["JsonRpcCallbackClient", "propose_context", "rollout_context"]

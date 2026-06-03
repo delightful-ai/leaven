@@ -5,8 +5,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 from pathlib import Path
+from typing import Any
 
+from ..decorators import RegisteredStage
 from .loader import load_stage_from_file
+from .proposer import run_proposer_stage
 from .protocol import read_request, write_error, write_result
 from .runner import run_runner_stage
 
@@ -23,7 +26,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         request = read_request()
         request_id = request.get("id")
-        result = asyncio.run(run_runner_stage(stage, request["params"]))
+        result = asyncio.run(run_stage(stage, request["params"]))
         write_result(request, result)
         return 0
     except Exception as error:
@@ -39,4 +42,13 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-__all__ = ["main"]
+async def run_stage(stage: RegisteredStage[Any, Any], params: dict[str, Any]) -> dict[str, Any]:
+    """Dispatch one registered stage by role."""
+    if stage.role == "runner":
+        return await run_runner_stage(stage, params)
+    if stage.role == "proposer":
+        return await run_proposer_stage(stage, params)
+    raise ValueError(f"unsupported worker stage role: {stage.role!r}")
+
+
+__all__ = ["main", "run_stage"]
