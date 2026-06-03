@@ -181,8 +181,19 @@ impl EvaluationJobDocument {
         self.kind
     }
 
-    fn kind_name(&self) -> &'static str {
+    /// Stable string name for the job request shape.
+    pub const fn kind_name(&self) -> &'static str {
         self.kind.as_str()
+    }
+
+    /// Hash of the request identity, including candidate and case-set bindings.
+    pub fn request_hash(&self) -> Result<String, PublicSeamError> {
+        evaluation_request_hash(self)
+    }
+
+    /// Hash of the recorded request result.
+    pub fn result_hash(&self) -> Result<String, PublicSeamError> {
+        evaluation_request_result_hash(self)
     }
 }
 

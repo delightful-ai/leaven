@@ -3676,6 +3676,7 @@ name = "leaven-seam-service"
 version = "0.0.0"
 dependencies = [
  "futures",
+ "jcs-canonicalize",
  "leaven-agent",
  "leaven-agent-codex-cli",
  "leaven-kernel",

@@ -43,21 +43,22 @@ Codex/agentic public-seam readiness.
 | `leaven/proposal.submit_batch` | Configured local write receipt | `leaven-seam-service::service` | Produces a validated proposal-batch receipt for submitted proposal payloads. This proves public-seam write plumbing, not Rust optimizer admission or proposal application. |
 | `leaven/proposal.apply` | Configured local write receipt | `leaven-seam-service::service` | Executes Plan IR `apply_proposal_batch` through the configured service and returns a receipt-bound `apply_receipt` with created-candidate ids. This proves public-seam apply receipt plumbing, not Rust optimizer frontier admission. |
 | `leaven/assessment.submit` | Configured local write receipt | `leaven-seam-service::service` | Executes Plan IR `submit_assessments` through the configured service, enforces `assessment.submit` capability scope, emits a receipt with the assessment-scope request hash, and returns a validated `assessment_batch_receipt`. This proves public-seam assessment write plumbing, not durable RunContext assessment persistence. |
+| `leaven/evaluation.request` | Configured local write receipt | `leaven-seam-service::service` | Executes Plan IR `request_evaluation` through the configured service, enforces `evaluation.request` capability scope, constructs and validates an `EvaluationJobDocument`, validates the context-bound request-evaluation receipt, and returns an ACP-facing `evaluation_request_receipt` through `leaven seam serve --stdio`. This proves public-seam evaluation request plumbing, not durable RunContext evaluation-job persistence. |
 | `leaven/event.emit` | Configured local write receipt | `leaven-seam-service::service` | Emits a typed local run-event receipt through Plan execution and returns a receipt-bound `emit_run_event` value. This is configured local receipt behavior, not yet durable RunGraph event persistence. |
 
 ## Validated But Not Executed By The Current Service
 
 The runtime dispatcher exposes every locked worker-profile method and validates
-request/response envelopes before and after service calls. The configured
-service does not yet provide runtime behavior for these V1 families:
+request/response envelopes before and after service calls. No locked V1
+`leaven/*` worker-profile method remains validated-only in the configured
+service.
 
-- remaining effect write: `leaven/evaluation.request`
 - watch behavior remains deferred to a future V1.x slice
 
-Some of these families have public-seam contract validators, Plan IR lowering
-helpers, or representative harness evidence in `leaven-public-seam`; that is
-not the same as configured service execution through `leaven seam serve
---stdio`.
+Public-seam contract validators, Plan IR lowering helpers, and representative
+harness evidence in `leaven-public-seam` are still not enough on their own; a
+locked V1 method must execute through `leaven seam serve --stdio` or leave the
+locked profile.
 
 ## Proof Anchors
 

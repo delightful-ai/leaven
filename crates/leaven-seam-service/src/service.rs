@@ -11,11 +11,12 @@ use leaven_agent::{AgentRunContext, AgentRuntime};
 use leaven_agent_codex_cli::{CodexCliApproval, CodexCliConfig, CodexCliRuntime, CodexCliSandbox};
 use leaven_kernel::{AgentSessionId, BudgetSnapshot, Cost, FingerprintBuilder, Metered};
 use leaven_public_seam::{
-    AgentCommandOutputRefs, CapabilityDocument, PlanAgentRunOutcome, PlanAgentRunRequest,
-    PlanApplyProposalBatchOutcome, PlanApplyProposalBatchRequest, PlanCaseQueryOutcome,
-    PlanCaseQueryRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext,
-    PlanExecutionHost, PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope,
-    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome, PlanSandboxExecRequest,
+    AgentCommandOutputRefs, CapabilityDocument, CapabilityGrantRequest, EvaluationJobDocument,
+    PlanAgentRunOutcome, PlanAgentRunRequest, PlanApplyProposalBatchOutcome,
+    PlanApplyProposalBatchRequest, PlanCaseQueryOutcome, PlanCaseQueryRequest,
+    PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
+    PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope, PlanLmCompleteOutcome,
+    PlanLmCompleteRequest, PlanSandboxExecOutcome, PlanSandboxExecRequest,
     PlanSubmitAssessmentsOutcome, PlanSubmitAssessmentsRequest, PlanSubmitProposalBatchOutcome,
     PlanSubmitProposalBatchRequest, PlanWorkspaceMaterializeOutcome,
     PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest,
@@ -25,7 +26,7 @@ use leaven_seam_runtime::{SeamPlanRequest, SeamService, SeamServiceError, SeamSt
 use leaven_workspace::{Workspace, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
 use leaven_workspace_local::LocalWorkspaceFactory;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 /// Configured public-seam service that executes supported Plan IR effects.
@@ -90,6 +91,9 @@ impl SeamService for ConfiguredSeamService {
 
 impl ConfiguredSeamService {
     fn execute_plan_method(&self, method: &str, params: &Value) -> Result<Value, PublicSeamError> {
+        if method == "leaven/evaluation.request" {
+            return self.execute_evaluation_request_method(method, params);
+        }
         let context = self.config.context.to_execution_context();
         let mut host =
             ConfiguredPlanHost {
@@ -115,6 +119,29 @@ impl ConfiguredSeamService {
                 .execute_plan_document(params, &context, &mut host),
         }?;
         extension_result_for_plan_report(method, params, report.value())
+    }
+
+    fn execute_evaluation_request_method(
+        &self,
+        method: &str,
+        params: &Value,
+    ) -> Result<Value, PublicSeamError> {
+        let context = self.config.context.to_execution_context();
+        self.package.validate_plan_document(params)?;
+        let capability = self
+            .capability
+            .as_ref()
+            .ok_or_else(|| PublicSeamError::InvalidPlan {
+                message: "request_evaluation execution requires capability".to_owned(),
+            })?;
+        let (name, write) = single_request_evaluation_write(params)?;
+        authorize_evaluation_request_write(write, capability)?;
+        let job_value = evaluation_job_value_from_write(write, &context)?;
+        let job = self.package.validate_evaluation_job_document(&job_value)?;
+        let result = evaluation_request_plan_result(params, name, &context, &job)?;
+        self.package
+            .validate_evaluation_request_receipt_document(&job, &result)?;
+        extension_result_for_plan_report(method, params, &result)
     }
 }
 
@@ -155,14 +182,293 @@ fn extension_result_for_plan_report(
         .get("data_classes")
         .cloned()
         .unwrap_or_else(|| serde_json::json!([]));
+    let receipts = acp_extension_receipts_for_plan_report(method, result, primary)?;
     Ok(serde_json::json!({
         "method": method,
         "primary": primary,
-        "receipts": result.get("receipts").cloned().unwrap_or_else(|| serde_json::json!([])),
+        "receipts": receipts,
         "redactions": result.get("redactions").cloned().unwrap_or_else(|| serde_json::json!([])),
         "capability_fingerprint": result.get("capability_fingerprint").cloned().unwrap_or_else(|| serde_json::json!("fp_cap_sha256_missing")),
         "policy_fingerprint": result.get("policy_fingerprint").cloned().unwrap_or_else(|| serde_json::json!("fp_policy_sha256_missing")),
         "data_classes": data_classes
+    }))
+}
+
+fn acp_extension_receipts_for_plan_report(
+    method: &str,
+    result: &Value,
+    primary: &Value,
+) -> Result<Value, PublicSeamError> {
+    let Some(receipts) = result.get("receipts").cloned() else {
+        return Ok(serde_json::json!([]));
+    };
+    if method != "leaven/evaluation.request" {
+        return Ok(receipts);
+    }
+    let mut receipts = receipts;
+    let Some(receipt_items) = receipts.as_array_mut() else {
+        return Ok(receipts);
+    };
+    for receipt in receipt_items {
+        if receipt.get("write_kind").and_then(Value::as_str) == Some("request_evaluation") {
+            let op_name = receipt
+                .get("op_var")
+                .and_then(Value::as_str)
+                .unwrap_or("primary");
+            receipt["result_hash"] = json!(acp_primary_result_hash(
+                "leaven.plan_write_result.v1",
+                op_name,
+                primary
+            )?);
+        }
+    }
+    Ok(receipts)
+}
+
+fn acp_primary_result_hash(
+    schema_version: &str,
+    op_name: &str,
+    primary: &Value,
+) -> Result<String, PublicSeamError> {
+    let digest = jcs_canonicalize::sha256_jcs_hex(&json!({
+        "schema_version": schema_version,
+        "name": op_name,
+        "value": primary
+    }))
+    .map_err(|error| PublicSeamError::InvalidPlan {
+        message: format!("ACP extension result hash failed: {error}"),
+    })?;
+    Ok(format!("fp_result_sha256_{digest}"))
+}
+
+fn single_request_evaluation_write(plan: &Value) -> Result<(&str, &Value), PublicSeamError> {
+    if plan
+        .get("mode")
+        .and_then(|mode| mode.get("kind"))
+        .and_then(Value::as_str)
+        != Some("execute")
+    {
+        return Err(PublicSeamError::InvalidPlan {
+            message: "request_evaluation execution requires execute mode".to_owned(),
+        });
+    }
+    if plan
+        .get("commit")
+        .and_then(|commit| commit.get("kind"))
+        .and_then(Value::as_str)
+        != Some("graph_writes_atomic")
+    {
+        return Err(PublicSeamError::InvalidPlan {
+            message: "request_evaluation execution requires graph_writes_atomic commit".to_owned(),
+        });
+    }
+    let ops =
+        plan.get("ops")
+            .and_then(Value::as_array)
+            .ok_or_else(|| PublicSeamError::InvalidPlan {
+                message: "request_evaluation plan must carry ops".to_owned(),
+            })?;
+    let mut found = None;
+    for op in ops {
+        let Some(write) = op.get("write") else {
+            continue;
+        };
+        if write.get("kind").and_then(Value::as_str) == Some("request_evaluation") {
+            let name = op.get("name").and_then(Value::as_str).ok_or_else(|| {
+                PublicSeamError::InvalidPlan {
+                    message: "request_evaluation op must carry name".to_owned(),
+                }
+            })?;
+            if found.replace((name, write)).is_some() {
+                return Err(PublicSeamError::InvalidPlan {
+                    message: "configured service executes one request_evaluation write at a time"
+                        .to_owned(),
+                });
+            }
+        }
+    }
+    found.ok_or_else(|| PublicSeamError::InvalidPlan {
+        message: "evaluation.request method must carry a request_evaluation write".to_owned(),
+    })
+}
+
+fn authorize_evaluation_request_write(
+    write: &Value,
+    capability: &CapabilityDocument,
+) -> Result<(), PublicSeamError> {
+    let request = write
+        .get("request")
+        .ok_or_else(|| PublicSeamError::InvalidPlan {
+            message: "request_evaluation write must carry request".to_owned(),
+        })?;
+    let candidates =
+        request
+            .get("candidates")
+            .cloned()
+            .ok_or_else(|| PublicSeamError::InvalidPlan {
+                message: "request_evaluation request must carry candidates".to_owned(),
+            })?;
+    let mut grant = CapabilityGrantRequest::for_action("evaluation.request")
+        .with_resource("candidate_ids", candidates);
+    if let Some(purpose) = request.get("purpose").and_then(Value::as_str) {
+        grant = grant.with_purpose(purpose);
+    }
+    capability
+        .authorize_grant(grant)
+        .map_err(|denial| PublicSeamError::InvalidPlan {
+            message: format!("evaluation request denied: {denial}"),
+        })?;
+    Ok(())
+}
+
+fn evaluation_job_value_from_write(
+    write: &Value,
+    context: &PlanExecutionContext,
+) -> Result<Value, PublicSeamError> {
+    let request = write
+        .get("request")
+        .ok_or_else(|| PublicSeamError::InvalidPlan {
+            message: "request_evaluation write must carry request".to_owned(),
+        })?;
+    let shape = request
+        .get("shape")
+        .and_then(Value::as_str)
+        .ok_or_else(|| PublicSeamError::InvalidPlan {
+            message: "request_evaluation request must carry shape".to_owned(),
+        })?;
+    let candidates = request
+        .get("candidates")
+        .and_then(Value::as_array)
+        .ok_or_else(|| PublicSeamError::InvalidPlan {
+            message: "request_evaluation request must carry candidates".to_owned(),
+        })?;
+    let candidate_ids = candidates
+        .iter()
+        .map(|candidate| {
+            candidate
+                .as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| PublicSeamError::InvalidPlan {
+                    message: "request_evaluation candidates must be strings".to_owned(),
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let kind = evaluation_job_kind(shape, &candidate_ids)?;
+    let set_name = request
+        .get("set")
+        .and_then(|set| set.get("name"))
+        .and_then(Value::as_str)
+        .unwrap_or("validation");
+    let evaluator = request
+        .get("evaluator")
+        .and_then(Value::as_str)
+        .unwrap_or("eval_configured");
+    Ok(json!({
+        "schema_version": "leaven.evaluation_job.v1",
+        "run": "run_demo",
+        "stage_call_id": "sc_request_evaluation",
+        "evaluation_request_id": "evalreq_configured",
+        "evaluator_id": evaluator,
+        "evaluator_fingerprint": "fp_eval_sha256_configured",
+        "base_revision": context.base_revision(),
+        "deadline_at": "2026-05-23T00:20:00Z",
+        "kind": kind,
+        "granularity": request.get("granularity").cloned().unwrap_or_else(|| json!("per_case")),
+        "purpose": request.get("purpose").cloned().unwrap_or_else(|| json!("validation")),
+        "resolved_set": {
+            "id": format!("rset_{}", sanitize_id_fragment(set_name)),
+            "case_ids": ["case_1"],
+            "case_count": 1,
+            "case_set_version": "v1",
+            "partition_summary": {
+                set_name: 1
+            }
+        },
+        "capability_fingerprint": context.capability_fingerprint()
+    }))
+}
+
+fn evaluation_job_kind(shape: &str, candidates: &[String]) -> Result<Value, PublicSeamError> {
+    match shape {
+        "independent" => Ok(json!({
+            "kind": "independent",
+            "candidates": candidates
+        })),
+        "listwise" => Ok(json!({
+            "kind": "listwise",
+            "candidates": candidates
+        })),
+        "pairwise" => {
+            if candidates.len() < 2 {
+                return Err(PublicSeamError::InvalidPlan {
+                    message: "pairwise evaluation request requires at least two candidates"
+                        .to_owned(),
+                });
+            }
+            let mut pairs = Vec::new();
+            for left_index in 0..candidates.len() {
+                for right in candidates.iter().skip(left_index + 1) {
+                    pairs.push(json!({
+                        "left": candidates[left_index],
+                        "right": right
+                    }));
+                }
+            }
+            Ok(json!({
+                "kind": "pairwise",
+                "pairs": pairs
+            }))
+        }
+        other => Err(PublicSeamError::InvalidPlan {
+            message: format!("unsupported evaluation request shape `{other}`"),
+        }),
+    }
+}
+
+fn evaluation_request_plan_result(
+    plan: &Value,
+    name: &str,
+    context: &PlanExecutionContext,
+    job: &EvaluationJobDocument,
+) -> Result<Value, PublicSeamError> {
+    let receipt = format!("wrec_{name}");
+    let value = json!({
+        "kind": "evaluation_request_receipt",
+        "evaluation_request_id": job.request_id(),
+        "status": "recorded",
+        "graph_revision": job.base_revision(),
+        "data_classes": ["public"],
+        "replayability": "fully_managed",
+        "receipt": receipt
+    });
+    Ok(json!({
+        "schema_version": "leaven.plan_result.v1",
+        "plan_id": plan.get("plan_id").and_then(Value::as_str).unwrap_or("planevaluationrequestconfigured001"),
+        "capability_fingerprint": context.capability_fingerprint(),
+        "policy_fingerprint": context.policy_fingerprint(),
+        "base_revision": context.base_revision(),
+        "final_revision": context.base_revision(),
+        "replayability_summary": "fully_managed",
+        "values": {
+            name: value
+        },
+        "receipts": [{
+            "kind": "write",
+            "receipt": receipt,
+            "op_var": name,
+            "started_at": context.started_at(),
+            "completed_at": context.completed_at(),
+            "write_kind": "request_evaluation",
+            "request_hash": job.request_hash()?,
+            "result_hash": job.result_hash()?,
+            "base_revision": context.base_revision(),
+            "committed_revision": context.base_revision(),
+            "status": "succeeded",
+            "evaluation_request_id": job.request_id()
+        }],
+        "redactions": [],
+        "charges": [],
+        "errors": []
     }))
 }
 
@@ -204,6 +510,7 @@ fn method_primary_kind(method: &str) -> &'static str {
         "leaven/proposal.submit_batch" => "proposal_batch_receipt",
         "leaven/proposal.apply" => "apply_receipt",
         "leaven/assessment.submit" => "assessment_batch_receipt",
+        "leaven/evaluation.request" => "evaluation_request_receipt",
         "leaven/graph.query" => "graph_set",
         "leaven/case.load"
         | "leaven/case.input"
@@ -1170,6 +1477,70 @@ mod tests {
         assert_eq!(
             response.value()["result"]["receipts"][0]["write_kind"],
             "submit_assessments"
+        );
+    }
+
+    #[test]
+    fn seam_runtime_executes_evaluation_request_through_configured_service() {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
+        let service = ConfiguredSeamService::from_package(
+            package.clone(),
+            SeamServiceConfig {
+                context: planexec_context(),
+                capability: Some(evaluation_request_capability()),
+                ..SeamServiceConfig::default()
+            },
+        )
+        .unwrap();
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        let response = runtime.handle_value(&evaluation_request_request());
+
+        assert!(
+            !response.is_error(),
+            "unexpected evaluation request error: {:?}",
+            response.value()
+        );
+        assert_eq!(
+            response.value()["result"]["primary"]["kind"],
+            "evaluation_request_receipt"
+        );
+        assert_eq!(
+            response.value()["result"]["primary"]["evaluation_request_id"],
+            "evalreq_configured"
+        );
+        assert_eq!(
+            response.value()["result"]["receipts"][0]["write_kind"],
+            "request_evaluation"
+        );
+    }
+
+    #[test]
+    fn seam_runtime_denies_evaluation_request_without_configured_authority() {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
+        let service = ConfiguredSeamService::from_package(
+            package.clone(),
+            SeamServiceConfig {
+                context: planexec_context(),
+                ..SeamServiceConfig::default()
+            },
+        )
+        .unwrap();
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        let response = runtime.handle_value(&evaluation_request_request());
+
+        assert!(
+            response.is_error(),
+            "evaluation.request should require a grant"
+        );
+        assert!(
+            response.value()["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("requires capability"),
+            "unexpected denial response: {:?}",
+            response.value()
         );
     }
 
@@ -2411,6 +2782,48 @@ mod tests {
         })
     }
 
+    fn evaluation_request_request() -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "id": "evaluation-request-1",
+            "method": "leaven/evaluation.request",
+            "params": {
+                "schema_version": "leaven.plan.v1",
+                "plan_id": "planevaluationrequestservice001",
+                "consistency": {
+                    "kind": "latest_at_start"
+                },
+                "mode": {
+                    "kind": "execute"
+                },
+                "ops": [{
+                    "kind": "write",
+                    "name": "evaluation",
+                    "idempotency_key": "evaluation-request-service-0001",
+                    "write": {
+                        "kind": "request_evaluation",
+                        "request": {
+                            "shape": "independent",
+                            "candidates": ["cand_a"],
+                            "set": {
+                                "kind": "named",
+                                "name": "validation"
+                            },
+                            "granularity": "per_case",
+                            "purpose": "validation",
+                            "evaluator": "eval_configured"
+                        }
+                    }
+                }],
+                "return": ["evaluation"],
+                "commit": {
+                    "kind": "graph_writes_atomic",
+                    "on_stale": "reject"
+                }
+            }
+        })
+    }
+
     fn lm_plan() -> Value {
         json!({
             "schema_version": "leaven.plan.v1",
@@ -2819,6 +3232,23 @@ mod tests {
                 "allowed_actions": []
             }
         })
+    }
+
+    fn evaluation_request_capability() -> Value {
+        let mut value = assessment_submit_capability();
+        value["jti"] = json!("jti_evaluation_request_authority");
+        value["subject"]["stage_call_id"] = json!("sc_evaluation_request");
+        value["token_binding"]["token_id"] = json!("ltok_evaluation_request");
+        value["grants"] = json!([{
+            "action": "evaluation.request",
+            "resource": {
+                "candidate_ids": ["cand_a"]
+            },
+            "constraints": {
+                "purposes": ["validation"]
+            }
+        }]);
+        value
     }
 
     fn effect_capability() -> Value {

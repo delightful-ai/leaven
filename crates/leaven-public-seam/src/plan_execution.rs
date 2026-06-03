@@ -79,6 +79,31 @@ impl PlanExecutionContext {
         }
     }
 
+    /// Capability fingerprint bound into operation receipts.
+    pub fn capability_fingerprint(&self) -> &str {
+        &self.capability_fingerprint
+    }
+
+    /// Policy fingerprint bound into operation receipts.
+    pub fn policy_fingerprint(&self) -> &str {
+        &self.policy_fingerprint
+    }
+
+    /// Base graph revision used by this execution.
+    pub fn base_revision(&self) -> &str {
+        &self.base_revision
+    }
+
+    /// Execution start timestamp used for operation receipts.
+    pub fn started_at(&self) -> &str {
+        &self.started_at
+    }
+
+    /// Execution completion timestamp used for operation receipts.
+    pub fn completed_at(&self) -> &str {
+        &self.completed_at
+    }
+
     /// Adds evaluator request identity used for capability-authorized `case_query.load` reads.
     #[must_use]
     pub fn with_evaluation_request(

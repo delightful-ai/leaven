@@ -96,6 +96,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         }
         write_json_line(&mut stdin, &proposal_apply_request());
         write_json_line(&mut stdin, &assessment_submit_request());
+        write_json_line(&mut stdin, &evaluation_request_request());
         write_json_line(&mut stdin, &event_emit_request());
         write_json_line(&mut stdin, &sandbox_exec_request());
         write_json_line(&mut stdin, &lm_complete_request());
@@ -120,7 +121,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
     let responses = response_lines(&output.stdout);
     assert_eq!(
         responses.len(),
-        9 + workspace_queries.len() + graph_case_queries.len(),
+        10 + workspace_queries.len() + graph_case_queries.len(),
         "one response per request line"
     );
 
@@ -255,7 +256,26 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         "submit_assessments"
     );
 
-    let event_index = assessment_submit_index + 1;
+    let evaluation_request_index = assessment_submit_index + 1;
+    assert_eq!(
+        responses[evaluation_request_index]["id"],
+        json!("evaluation-request-cli")
+    );
+    assert!(
+        responses[evaluation_request_index].get("error").is_none(),
+        "unexpected evaluation request response: {:?}",
+        responses[evaluation_request_index]
+    );
+    assert_eq!(
+        responses[evaluation_request_index]["result"]["primary"]["kind"],
+        "evaluation_request_receipt"
+    );
+    assert_eq!(
+        responses[evaluation_request_index]["result"]["receipts"][0]["write_kind"],
+        "request_evaluation"
+    );
+
+    let event_index = evaluation_request_index + 1;
     assert_eq!(responses[event_index]["id"], json!("event-emit-cli"));
     assert!(
         responses[event_index].get("error").is_none(),
@@ -742,6 +762,48 @@ fn assessment_submit_request() -> Value {
     })
 }
 
+fn evaluation_request_request() -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": "evaluation-request-cli",
+        "method": "leaven/evaluation.request",
+        "params": {
+            "schema_version": "leaven.plan.v1",
+            "plan_id": "evaluationrequestcli001",
+            "consistency": {
+                "kind": "latest_at_start"
+            },
+            "mode": {
+                "kind": "execute"
+            },
+            "ops": [{
+                "kind": "write",
+                "name": "evaluation",
+                "idempotency_key": "evaluation-request-cli-0001",
+                "write": {
+                    "kind": "request_evaluation",
+                    "request": {
+                        "shape": "independent",
+                        "candidates": ["cand_cli"],
+                        "set": {
+                            "kind": "named",
+                            "name": "validation"
+                        },
+                        "granularity": "per_case",
+                        "purpose": "validation",
+                        "evaluator": "eval_cli"
+                    }
+                }
+            }],
+            "return": ["evaluation"],
+            "commit": {
+                "kind": "graph_writes_atomic",
+                "on_stale": "reject"
+            }
+        }
+    })
+}
+
 fn event_emit_request() -> Value {
     json!({
         "jsonrpc": "2.0",
@@ -951,6 +1013,15 @@ fn seam_capability() -> Value {
                 "constraints": {},
                 "limits": {
                     "max_rows": 1
+                }
+            },
+            {
+                "action": "evaluation.request",
+                "resource": {
+                    "candidate_ids": ["cand_cli"]
+                },
+                "constraints": {
+                    "purposes": ["validation"]
                 }
             },
             {

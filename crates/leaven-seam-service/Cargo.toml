@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 futures = { workspace = true }
+jcs-canonicalize = { workspace = true }
 leaven-agent = { workspace = true }
 leaven-agent-codex-cli = { workspace = true }
 leaven-kernel = { workspace = true }
