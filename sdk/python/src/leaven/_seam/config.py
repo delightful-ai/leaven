@@ -88,6 +88,20 @@ class MockRunnerStageConfig:
 
 
 @dataclass(frozen=True)
+class CommandRunnerStageConfig:
+    """External JSON-RPC stage worker process config."""
+
+    argv: tuple[str, ...]
+
+    def to_json(self) -> dict[str, Any]:
+        """Return the service config JSON shape."""
+        return {
+            "kind": "command_runner",
+            "argv": list(self.argv),
+        }
+
+
+@dataclass(frozen=True)
 class LocalWorkspaceConfig:
     """Configured local workspace substrate for public-seam calls."""
 
@@ -111,7 +125,7 @@ class SeamServiceConfig:
     agent: CodexCliRuntimeConfig | None = None
     workspace: LocalWorkspaceConfig = field(default_factory=LocalWorkspaceConfig)
     lm: MockLmRuntimeConfig = field(default_factory=MockLmRuntimeConfig)
-    stage: MockRunnerStageConfig | None = None
+    stage: MockRunnerStageConfig | CommandRunnerStageConfig | None = None
 
     def to_json(self) -> dict[str, Any]:
         """Return the Rust service config JSON shape."""
@@ -127,6 +141,7 @@ class SeamServiceConfig:
 
 __all__ = [
     "CodexCliRuntimeConfig",
+    "CommandRunnerStageConfig",
     "LocalWorkspaceConfig",
     "MockLmRuntimeConfig",
     "MockRunnerStageConfig",

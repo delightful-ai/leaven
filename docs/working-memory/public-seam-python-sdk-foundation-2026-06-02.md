@@ -34,6 +34,11 @@ Status: active foundation slice, not the full Python SDK acceptance gate.
   legacy `_serve.run_optimization`; it delegates to `leaven._seam_optimize`,
   which drives the durable `leaven seam serve --stdio` route with
   `StageRunRequest` and returns a typed `Optimized[PromptArtifact]`.
+- Current command-runner stage slice: `leaven-seam-service` stage execution now
+  lives in `stage.rs` and can dispatch runner `leaven/stage.run` requests to an
+  explicitly configured subprocess worker. Python `_seam` can serialize
+  `CommandRunnerStageConfig`, and a process-level proof dispatched a stage call
+  into a separate Python worker through the durable seam server.
 
 ## Verification Run
 
@@ -79,6 +84,13 @@ Python SDK project:
   `seed score: 0.000`, `best score: 0.000`, and the seed prompt as the best
   artifact. This is the expected deterministic mechanics result, not an
   optimizer improvement.
+- `cargo test -p leaven-seam-service` covers the command-runner stage path: the
+  service sends a locked `leaven/stage.run` JSON-RPC request to a child process
+  and returns the child `stage_run_result` through runtime validation.
+- A one-off Python proof configured `CommandRunnerStageConfig(argv=("python",
+  worker.py))`, spawned `leaven seam serve --stdio --config`, and returned
+  `{"stage_call_id": "sc_python_worker_proof", "value": "python worker saw 2 +
+  2"}` from a separate Python process.
 
 ## Still Unproven
 
@@ -88,9 +100,10 @@ Python SDK project:
 - Engine-supplied `cx.lm.complete` inside `lv.optimize(...).run()` is still
   scaffold. The LmBuilder slice binds privately for tests and local proof, not
   from a real running stage context.
-- Python-authored stages over the durable `leaven seam serve --stdio` route are
-  still unproven. The configured-stage slice is deterministic service
-  mechanics, not worker process dispatch.
+- Registered SDK stage functions over the durable `leaven seam serve --stdio`
+  route are still unproven. The command-runner slice proves external Python
+  worker dispatch, but not `@lv.runner` registration, role-scoped `cx`, or stage
+  callbacks from inside that worker.
 - Optimizer search over the durable server is still unproven. The current
   `lv.optimize(...).run()` result is a typed mechanics facade over configured
   runner stage calls, not GEPA proposal/admission.
@@ -114,12 +127,15 @@ Python SDK project:
 
 ## Next Slices
 
-1. Wire an engine-supplied `cx.agent` inside a Python stage context so
+1. Replace the one-off command worker proof with a checked-in Python stage
+   worker module that dispatches registered `@lv.runner` functions and binds
+   role-scoped `cx`.
+2. Wire an engine-supplied `cx.agent` inside a Python stage context so
    `lv.optimize(...).run()` can use the same `AgentBuilder.run` substrate.
-2. Add blob persistence/readback to `leaven-seam-service` or record an explicit
+3. Add blob persistence/readback to `leaven-seam-service` or record an explicit
    unsupported-provider error if blob fetch is requested before storage exists.
-3. Decide the cost bridge for Codex CLI: either parse provider usage from Codex
+4. Decide the cost bridge for Codex CLI: either parse provider usage from Codex
    JSONL when available or return a typed unsupported-cost marker instead of
    `{}`.
-4. Move from direct `agent.run` proof to a tiny Python `optimize(...).run()`
+5. Move from direct `agent.run` proof to a tiny Python `optimize(...).run()`
    proof that uses a live agent stage and at least one Python-authored reward.

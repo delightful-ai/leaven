@@ -3,7 +3,7 @@ from __future__ import annotations
 import leaven as lv
 from leaven._handles import WorkspaceHandle
 from leaven._receipts import CallReceipt
-from leaven._seam import MockRunnerStageConfig, StageRunRequest
+from leaven._seam import CommandRunnerStageConfig, MockRunnerStageConfig, StageRunRequest
 from leaven.builders.agent import AgentBuilder
 from leaven.builders.lm import LmBuilder
 
@@ -174,6 +174,10 @@ def test_stage_run_request_names_locked_runner_dispatch_shape() -> None:
         "kind": "mock_runner",
         "text": "ok",
         "summary": "runner",
+    }
+    assert CommandRunnerStageConfig(argv=("python", "-m", "worker")).to_json() == {
+        "kind": "command_runner",
+        "argv": ["python", "-m", "worker"],
     }
 
 

@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use crate::stage::SeamStageConfig;
 use futures::executor::block_on;
 use leaven_agent::{AgentRunContext, AgentRuntime};
 use leaven_agent_codex_cli::{CodexCliApproval, CodexCliConfig, CodexCliRuntime, CodexCliSandbox};
@@ -352,40 +353,6 @@ impl Default for SeamLmConfig {
     }
 }
 
-/// Configured Python-stage execution substitute for public-seam service proofs.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-pub enum SeamStageConfig {
-    /// No stage runner is wired.
-    None,
-    /// Deterministic runner output. This is mechanics evidence, not Python worker proof.
-    MockRunner {
-        /// Text returned as the runner output value.
-        text: String,
-        /// Short output summary.
-        summary: String,
-    },
-}
-
-impl SeamStageConfig {
-    fn runner_result(&self, params: &Value) -> Result<Value, PublicSeamError> {
-        match self {
-            Self::None => Err(PublicSeamError::InvalidPlan {
-                message: "configured seam service does not provide a stage runner".to_owned(),
-            }),
-            Self::MockRunner { text, summary } => {
-                Ok(stage_run_text_result(stage_call_id(params)?, text, summary))
-            }
-        }
-    }
-}
-
-impl Default for SeamStageConfig {
-    fn default() -> Self {
-        Self::None
-    }
-}
-
 /// One deterministic mock LM response.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -560,32 +527,6 @@ fn materialized_workspace_id(candidate: &str) -> String {
     format!("ws_{sanitized}_materialized")
 }
 
-fn stage_call_id(params: &Value) -> Result<&str, PublicSeamError> {
-    params
-        .get("payload")
-        .and_then(|payload| payload.get("stage_call_id"))
-        .and_then(Value::as_str)
-        .ok_or_else(|| PublicSeamError::InvalidStageRun {
-            message: "stage.run payload missing stage_call_id".to_owned(),
-        })
-}
-
-fn stage_run_text_result(stage_call_id: &str, text: &str, summary: &str) -> Value {
-    serde_json::json!({
-        "schema_version": "leaven.stage_run.v1",
-        "message": "stage_run_result",
-        "stage": "runner",
-        "stage_call_id": stage_call_id,
-        "output": {
-            "kind": "text",
-            "summary": summary,
-            "value": text,
-            "visibility": "optimizer_visible",
-            "data_classes": ["candidate.output"]
-        }
-    })
-}
-
 fn blob_ref_for_bytes(id: &str, bytes: &[u8], data_classes: &[&str]) -> Value {
     serde_json::json!({
         "kind": "blob_ref",
@@ -722,6 +663,44 @@ mod tests {
         assert_eq!(
             response.value()["result"]["output"]["data_classes"],
             json!(["candidate.output"])
+        );
+    }
+
+    #[test]
+    fn seam_runtime_executes_runner_stage_through_command_worker() {
+        let fake_worker = fake_stage_worker_bin();
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
+        let service = ConfiguredSeamService::from_package(
+            package.clone(),
+            SeamServiceConfig {
+                stage: SeamStageConfig::CommandRunner {
+                    argv: vec![fake_worker.display().to_string()],
+                },
+                ..SeamServiceConfig::default()
+            },
+        )
+        .unwrap();
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        let response = runtime.handle_value(&stage_run_request());
+
+        assert!(
+            !response.is_error(),
+            "unexpected error: {:?}",
+            response.value()
+        );
+        assert_eq!(response.value()["result"]["message"], "stage_run_result");
+        assert_eq!(
+            response.value()["result"]["stage_call_id"],
+            "sc_runner_service"
+        );
+        assert_eq!(
+            response.value()["result"]["output"]["value"],
+            "runner command worker ok"
+        );
+        assert_eq!(
+            response.value()["result"]["output"]["summary"],
+            "command worker output"
         );
     }
 
@@ -1073,6 +1052,25 @@ done
 mkdir -p "$(dirname "$last")"
 printf 'fake codex final\n' > "$last"
 printf '{"type":"message","content":"ok"}\n'
+"#,
+        )
+        .unwrap();
+        make_executable(&path);
+        path
+    }
+
+    fn fake_stage_worker_bin() -> std::path::PathBuf {
+        let dir = tempfile::tempdir().unwrap().keep();
+        let path = dir.join("fake-stage-worker");
+        std::fs::write(
+            &path,
+            r#"#!/bin/sh
+read line
+case "$line" in
+  *'"method":"leaven/stage.run"'*) ;;
+  *) printf 'unexpected request: %s\n' "$line" >&2; exit 17 ;;
+esac
+printf '%s\n' '{"jsonrpc":"2.0","id":"stage-worker-1","result":{"schema_version":"leaven.stage_run.v1","message":"stage_run_result","stage":"runner","stage_call_id":"sc_runner_service","output":{"kind":"text","summary":"command worker output","value":"runner command worker ok","visibility":"optimizer_visible","data_classes":["candidate.output"]}}}'
 "#,
         )
         .unwrap();

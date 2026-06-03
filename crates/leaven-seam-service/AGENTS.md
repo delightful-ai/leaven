@@ -2,14 +2,24 @@
 
 `leaven-seam-service` owns configured executable service implementations behind
 the public seam runtime. It may compose the locked `leaven-public-seam` Plan IR
-executor, provider-neutral effect traits, and concrete local/mock provider crates
-that are explicitly configured for a serve process.
+executor, provider-neutral effect traits, configured local subprocess stage
+workers, and concrete local/mock provider crates that are explicitly configured
+for a serve process.
 
 It must not own stdio framing, CLI argument parsing, graph internals, schema
 validation policy, or provider protocol details. Transport stays in
 `leaven-seam-stdio`, dispatch and response validation stay in
 `leaven-seam-runtime`, and concrete provider adapters stay in their provider
-crates.
+crates. Subprocess stage workers are a configured service implementation here,
+but their public wire remains the locked `leaven/stage.run` JSON-RPC method.
+
+## Map
+
+- `service.rs`: configured Plan IR service composition for LM, workspace, and
+  agent effects.
+- `stage.rs`: runner-stage service configuration and dispatch. Public
+  dependencies are `leaven-public-seam` stage-run semantics and the standard
+  library subprocess boundary; private helpers stay in this module.
 
 ## Verification
 
