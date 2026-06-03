@@ -164,6 +164,16 @@ The skill descriptions own trigger routing. Do not duplicate their full routing 
 - `just coverage`: explicit line/branch coverage gate. It is intentionally separate from ordinary local checks because coverage uses instrumented Cargo artifacts and can be much slower than the default dev loop.
 - `just release-check`: full workspace/release gate; runs `just check` plus `just coverage`. It is intentionally expensive and should not be the default closeout for a narrow crate, docs, or topology slice.
 - Default closeout proof is the strongest focused command set for the touched ownership surface: exact integration tests, owning crate tests, targeted clippy/fmt when Rust changed, touched scripts, and `cargo test -p leaven --test topology_contract` when membership, dependencies, facades, or crate boundaries changed.
+- Live product proof is allowed when the claim requires it. Agents may run Codex
+  themselves with `gpt-5.4-mini` through the repo's Codex CLI paths, using
+  `LEAVEN_CODEX_LIVE=1` and `LEAVEN_CODEX_BIN` when needed, to prove real Codex
+  execution, skill/system-prompt consumption, agentic proposal behavior, or SDK
+  examples. Agents may also spin up Firkin product pods, including the signed
+  Apple/VZ live path, when Firkin-backed workspace execution or readback is the
+  claim. Treat these as intentional verification tools, not forbidden external
+  actions; record the exact command, environment switches, and artifact/log
+  evidence. Do not put live spend, VM boot, or credential-dependent paths in
+  default tests.
 - Escalate to `just check` when the change touches shared engine/run/core behavior with broad blast radius, workspace test tooling, default features/preludes/facades, or when the user asks for the default gate. Escalate to `just release-check` for coverage tooling/floors, release/PR readiness, or when the user asks for the full release gate.
 - When you do not run `just check` or `just release-check`, say so explicitly in the closeout and list the focused commands that were run.
 - Child `AGENTS.md` files should add verification deltas tied to local change types, not repeat root commands.
