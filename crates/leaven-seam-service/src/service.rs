@@ -466,6 +466,11 @@ impl PlanExecutionHost for ConfiguredPlanHost {
         .map_err(|error| PublicSeamError::InvalidPlan {
             message: format!("agent runtime failed: {error}"),
         })?;
+        let transcript_bytes = serde_json::to_vec(&session.value.transcript).map_err(|error| {
+            PublicSeamError::InvalidPlan {
+                message: format!("agent transcript serialization failed: {error}"),
+            }
+        })?;
         let command_refs = session
             .value
             .commands
@@ -491,7 +496,7 @@ impl PlanExecutionHost for ConfiguredPlanHost {
             agent.fingerprint(),
             blob_ref_for_bytes(
                 &format!("blob_{name}_transcript"),
-                format!("{name} transcript").as_bytes(),
+                &transcript_bytes,
                 &["transcript.raw"],
             ),
             format!("agentrec_{name}"),
@@ -666,6 +671,12 @@ mod tests {
         assert_eq!(
             response.value()["result"]["primary"]["commands"][1]["status"],
             "completed"
+        );
+        assert!(
+            response.value()["result"]["primary"]["transcript_ref"]["bytes"]
+                .as_u64()
+                .unwrap()
+                > 100
         );
     }
 
