@@ -453,7 +453,7 @@ fn extension_methods(value: Option<&Value>) -> Result<Vec<AcpExtensionMethod>, P
     Ok(output)
 }
 
-fn locked_extension_methods() -> [&'static str; 26] {
+fn locked_extension_methods() -> [&'static str; 25] {
     methods::locked_extension_methods()
 }
 

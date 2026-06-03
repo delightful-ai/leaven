@@ -3054,7 +3054,7 @@ fn plan_ir_family_execution_rejects_known_variants_outside_representative_harnes
         "on_stale": "reject"
     });
     plan["ops"][1]["call"] = json!({
-        "kind": "human_review",
+        "kind": "operator_review",
         "queue": "qa",
         "prompt": "Review Say ok",
         "input_classes": ["public"]
@@ -3065,7 +3065,7 @@ fn plan_ir_family_execution_rejects_known_variants_outside_representative_harnes
         .execute_plan_document(&plan, &plan_execution_context(), &mut host)
         .unwrap_err();
     assert!(
-        matches!(error, PublicSeamError::InvalidPlan { .. }),
+        matches!(error, PublicSeamError::ExampleValidation { .. }),
         "unexpected error: {error:?}"
     );
     assert!(host.calls.is_empty());

@@ -2,8 +2,9 @@
 //!
 //! This test is process-level proof for the CLI boundary: the binary loads a
 //! typed service config, reserves stdout for line-delimited JSON-RPC responses,
-//! validates request envelopes, executes a configured public-seam Plan method,
-//! and reports an unwired provider honestly.
+//! validates request envelopes, rejects removed methods before service execution,
+//! executes a configured public-seam Plan method, and reports an unwired provider
+//! honestly.
 
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -48,6 +49,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
     {
         let mut stdin = child.stdin.take().expect("child stdin is piped");
         write_json_line(&mut stdin, &invalid_envelope());
+        write_json_line(&mut stdin, &removed_human_review_request());
         write_json_line(&mut stdin, &lm_complete_request());
         write_json_line(&mut stdin, &stage_run_request());
     }
@@ -68,7 +70,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
     );
 
     let responses = response_lines(&output.stdout);
-    assert_eq!(responses.len(), 3, "one response per request line");
+    assert_eq!(responses.len(), 4, "one response per request line");
 
     assert_eq!(responses[0]["id"], json!("bad-envelope"));
     assert_eq!(responses[0]["error"]["code"], json!(-32600));
@@ -79,13 +81,22 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
             .contains("must carry method")
     );
 
-    assert_eq!(responses[1]["id"], json!("lm-cli"));
+    assert_eq!(responses[1]["id"], json!("removed-human-review"));
+    assert_eq!(responses[1]["error"]["code"], json!(-32601));
+    assert!(
+        responses[1]["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("is not in the locked Leaven worker profile")
+    );
+
+    assert_eq!(responses[2]["id"], json!("lm-cli"));
     assert_eq!(
-        responses[1]["result"]["primary"]["message"]["content"][0]["text"],
+        responses[2]["result"]["primary"]["message"]["content"][0]["text"],
         "cli seam configured lm ok"
     );
     assert_eq!(
-        responses[1]["result"]["primary"]["cost"],
+        responses[2]["result"]["primary"]["cost"],
         json!({
             "input_tokens": 13,
             "output_tokens": 5,
@@ -93,14 +104,14 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         })
     );
     assert_eq!(
-        responses[1]["result"]["receipts"][0]["call_kind"],
+        responses[2]["result"]["receipts"][0]["call_kind"],
         "lm_complete"
     );
 
-    assert_eq!(responses[2]["id"], json!("stage-unwired"));
-    assert_eq!(responses[2]["error"]["code"], json!(-32006));
+    assert_eq!(responses[3]["id"], json!("stage-unwired"));
+    assert_eq!(responses[3]["error"]["code"], json!(-32006));
     assert!(
-        responses[2]["error"]["message"]
+        responses[3]["error"]["message"]
             .as_str()
             .unwrap()
             .contains("does not provide a stage runner")
@@ -132,6 +143,29 @@ fn invalid_envelope() -> Value {
         "jsonrpc": "2.0",
         "id": "bad-envelope",
         "params": {}
+    })
+}
+
+fn removed_human_review_request() -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": "removed-human-review",
+        "method": "leaven/human.review",
+        "params": {
+            "schema_version": "leaven.plan.v1",
+            "plan_id": "removedhumanreview001",
+            "consistency": {
+                "kind": "latest_at_start"
+            },
+            "mode": {
+                "kind": "execute"
+            },
+            "ops": [],
+            "return": [],
+            "commit": {
+                "kind": "no_graph_writes"
+            }
+        }
     })
 }
 

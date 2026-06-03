@@ -311,7 +311,6 @@ EXPECTED_METHODS = [
     "leaven/case.input",
     "leaven/case.target",
     "leaven/case.metadata",
-    "leaven/human.review",
     "leaven/event.emit",
     "leaven/workspace.materialize",
     "leaven/workspace.release",
@@ -339,7 +338,6 @@ GENERIC_EXTENSION_OPS = {
     "leaven/case.input": ("case.input", "qrec_case_input", "query", ["public"]),
     "leaven/case.target": ("case.target", "qrec_case_target", "query", ["public"]),
     "leaven/case.metadata": ("case.metadata", "qrec_case_metadata", "query", ["public"]),
-    "leaven/human.review": ("human.review", "humanrec_acp", "call", ["public"]),
     "leaven/event.emit": ("event.emit", "wrec_event_emit", "write", ["public"]),
 }
 
@@ -602,8 +600,6 @@ def make_result(method):
         primary = extension_primary(op)
         if receipt_kind == "query":
             receipt = query_receipt(receipt_id)
-        elif receipt_kind == "call":
-            receipt = call_receipt("human_review", receipt_id)
         else:
             receipt = write_receipt("emit_run_event", receipt_id)
     elif method in WORKSPACE_METHODS:
@@ -1610,12 +1606,9 @@ fn extension_result_query_cases() -> Vec<ExtensionCase> {
             "case.metadata",
             "qrec_case_metadata",
         ),
-        ("leaven/human.review", "human.review", "humanrec_acp"),
         ("leaven/event.emit", "event.emit", "wrec_event_emit"),
     ] {
-        let receipt = if method == "leaven/human.review" {
-            call_receipt("human_review", receipt)
-        } else if method == "leaven/event.emit" {
+        let receipt = if method == "leaven/event.emit" {
             write_receipt("emit_run_event", receipt)
         } else {
             query_receipt(receipt)
@@ -1879,7 +1872,6 @@ fn locked_profile_methods() -> Vec<Value> {
         extension_method("leaven/lm.complete", "lm.complete"),
         extension_method("leaven/agent.run", "agent.run"),
         extension_method("leaven/sandbox.exec", "sandbox.exec"),
-        extension_method("leaven/human.review", "human.review"),
         extension_method("leaven/proposal.submit_batch", "proposal.submit_batch"),
         extension_method("leaven/proposal.apply", "proposal.apply_batch"),
         extension_method("leaven/assessment.submit", "assessment.submit"),

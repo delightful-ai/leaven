@@ -435,7 +435,6 @@ fn is_known_data_class(label: &str) -> bool {
             | "prompt.raw"
             | "completion.raw"
             | "transcript.raw"
-            | "human.review"
             | "external.secret"
     )
 }

@@ -90,7 +90,6 @@ pub struct CallAuthorityReport {
     lm_calls: usize,
     agent_calls: usize,
     sandbox_calls: usize,
-    human_review_calls: usize,
     checked_input_classes: BTreeSet<String>,
 }
 
@@ -108,11 +107,6 @@ impl CallAuthorityReport {
     /// Number of `sandbox_exec` calls checked.
     pub const fn sandbox_calls(&self) -> usize {
         self.sandbox_calls
-    }
-
-    /// Number of `human_review` calls checked.
-    pub const fn human_review_calls(&self) -> usize {
-        self.human_review_calls
     }
 
     /// Union of input data classes checked across calls.
@@ -169,7 +163,6 @@ pub fn validate(
             "lm_complete" => report.lm_calls += 1,
             "agent_run" => report.agent_calls += 1,
             "sandbox_exec" => report.sandbox_calls += 1,
-            "human_review" => report.human_review_calls += 1,
             _ => {}
         }
     }
@@ -496,7 +489,6 @@ fn action_for_call(call_kind: &str) -> Result<&'static str, PublicSeamError> {
         "sandbox_exec" => Ok("sandbox.exec"),
         "workspace_materialize" => Ok("workspace.materialize"),
         "workspace_release" => Ok("workspace.release"),
-        "human_review" => Ok("human.review"),
         other => Err(invalid_authority(format!(
             "call kind `{other}` has no V1 capability action mapping"
         ))),

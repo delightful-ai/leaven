@@ -208,7 +208,6 @@
             "prompt.raw",
             "completion.raw",
             "transcript.raw",
-            "human.review",
             "external.secret"
           ]
         },
@@ -685,9 +684,6 @@
         "metric_calls": {
           "type": "integer",
           "minimum": 0
-        },
-        "human_review_usd_micro": {
-          "$ref": "common.schema.json#/$defs/UsdMicro"
         },
         "wall_ms": {
           "type": "integer",

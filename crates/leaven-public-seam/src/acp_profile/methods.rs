@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 /// `required_action` capability path, and `produces_receipt`, exactly as the
 /// profile validator demands. This is the single source the canonical locked
 /// profile document is assembled from, so the engine client, the bridge, and the
-/// conformance tests stop re-encoding the 26-method table by hand.
+/// conformance tests stop re-encoding the 25-method table by hand.
 pub(super) fn locked_extension_method_rows() -> Vec<Value> {
     locked_extension_methods()
         .into_iter()
@@ -50,7 +50,7 @@ impl MethodSchema {
     }
 }
 
-pub(super) fn locked_extension_methods() -> [&'static str; 26] {
+pub(super) fn locked_extension_methods() -> [&'static str; 25] {
     [
         "leaven/stage.run",
         "leaven/graph.query",
@@ -72,7 +72,6 @@ pub(super) fn locked_extension_methods() -> [&'static str; 26] {
         "leaven/lm.complete",
         "leaven/agent.run",
         "leaven/sandbox.exec",
-        "leaven/human.review",
         "leaven/proposal.submit_batch",
         "leaven/proposal.apply",
         "leaven/assessment.submit",
@@ -103,7 +102,6 @@ pub(super) fn required_action_for_method(method: &str) -> Option<&'static str> {
         "leaven/lm.complete" => Some("lm.complete"),
         "leaven/agent.run" => Some("agent.run"),
         "leaven/sandbox.exec" => Some("sandbox.exec"),
-        "leaven/human.review" => Some("human.review"),
         "leaven/proposal.submit_batch" => Some("proposal.submit_batch"),
         "leaven/proposal.apply" => Some("proposal.apply_batch"),
         "leaven/assessment.submit" => Some("assessment.submit"),

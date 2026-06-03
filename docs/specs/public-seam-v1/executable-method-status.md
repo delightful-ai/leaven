@@ -52,9 +52,8 @@ service does not yet provide runtime behavior for these V1 families:
   `leaven/workspace.git_diff`, `leaven/workspace.git_status`,
   `leaven/workspace.capture_artifacts`, `leaven/workspace.release`
 - remaining effects and graph writes: `leaven/sandbox.exec`,
-  `leaven/human.review`, `leaven/proposal.apply`,
-  `leaven/assessment.submit`, `leaven/evaluation.request`,
-  `leaven/event.emit`
+  `leaven/proposal.apply`, `leaven/assessment.submit`,
+  `leaven/evaluation.request`, `leaven/event.emit`
 - watch behavior remains deferred to a future V1.x slice
 
 Some of these families have public-seam contract validators, Plan IR lowering

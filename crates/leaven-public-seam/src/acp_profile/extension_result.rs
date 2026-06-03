@@ -216,10 +216,6 @@ fn extension_result_contract(method: &str) -> Result<ExtensionResultContract, Pu
             primary_kinds: &["sandbox_exec"],
             receipt: ReceiptExpectation::Call("sandbox_exec"),
         }),
-        "leaven/human.review" => Ok(ExtensionResultContract {
-            primary_kinds: EXTENSION,
-            receipt: ReceiptExpectation::Call("human_review"),
-        }),
         "leaven/proposal.submit_batch" => Ok(ExtensionResultContract {
             primary_kinds: &["proposal_batch_receipt"],
             receipt: ReceiptExpectation::Write("submit_proposal_batch"),
@@ -357,7 +353,6 @@ fn validate_extension_primary_op(
         "leaven/case.input" => "case.input",
         "leaven/case.target" => "case.target",
         "leaven/case.metadata" => "case.metadata",
-        "leaven/human.review" => "human.review",
         "leaven/event.emit" => "event.emit",
         _ => return Ok(()),
     };

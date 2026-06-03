@@ -217,7 +217,6 @@ fn locked_profile_methods() -> Vec<Value> {
         ("leaven/lm.complete", "lm.complete"),
         ("leaven/agent.run", "agent.run"),
         ("leaven/sandbox.exec", "sandbox.exec"),
-        ("leaven/human.review", "human.review"),
         ("leaven/proposal.submit_batch", "proposal.submit_batch"),
         ("leaven/proposal.apply", "proposal.apply_batch"),
         ("leaven/assessment.submit", "assessment.submit"),

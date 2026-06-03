@@ -176,7 +176,7 @@ fn budget_ledger_rejects_mixed_runtime_roles_and_delegated_work_beyond_aggregate
 
     let aggregate = ledger
         .charge(
-            StageId::custom("human.review"),
+            StageId::custom("operator.review"),
             usd_micro(31_000.0).combine(&role_usd_micro("human", 31_000.0)),
         )
         .unwrap_err();

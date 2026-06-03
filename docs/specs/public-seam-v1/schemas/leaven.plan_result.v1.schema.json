@@ -1227,7 +1227,6 @@
             "sandbox_exec",
             "workspace_materialize",
             "workspace_release",
-            "human_review",
             "extension"
           ]
         },

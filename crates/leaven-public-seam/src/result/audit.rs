@@ -479,11 +479,7 @@ fn expected_receipt_kind(value_kind: &str) -> Option<&'static str> {
         "graph_set" | "case_record" | "workspace_file" | "workspace_diff" | "workspace_listing" => {
             Some("query")
         }
-        "workspace_handle"
-        | "lm_response"
-        | "agent_session"
-        | "sandbox_exec"
-        | "human_review_result" => Some("call"),
+        "workspace_handle" | "lm_response" | "agent_session" | "sandbox_exec" => Some("call"),
         "proposal_batch_receipt"
         | "assessment_batch_receipt"
         | "evaluation_request_receipt"

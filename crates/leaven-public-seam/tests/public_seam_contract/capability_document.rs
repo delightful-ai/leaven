@@ -293,14 +293,6 @@ fn grant_enforcement_rejects_under_specified_requests() {
         ),
         CapabilityDenialKind::Surface,
     );
-
-    assert_denied(
-        document.authorize_grant(
-            CapabilityGrantRequest::for_action("human.review")
-                .with_resource("run", json!("run_demo")),
-        ),
-        CapabilityDenialKind::Limit,
-    );
 }
 
 #[test]
@@ -413,7 +405,7 @@ fn grant_enforcement_rejects_timeout_and_row_limit_overruns() {
     ] {
         assert_denied(
             document.authorize_grant(
-                CapabilityGrantRequest::for_action("human.review")
+                CapabilityGrantRequest::for_action("event.emit")
                     .with_resource("run", json!("run_demo"))
                     .with_limits(limits),
             ),
@@ -862,17 +854,7 @@ fn enforcement_capability(package: &PublicSeamPackage) -> Value {
     let mut value = example_capability(package);
     value["grants"][0]["constraints"]["forbidden_case_fields"] = json!(["target"]);
     value["grants"].as_array_mut().unwrap().push(json!({
-        "action": "proposal.submit_batch",
-        "resource": {
-            "run": "run_demo"
-        },
-        "constraints": {
-            "allowed_surfaces": ["fp_surface_sha256_allowed"],
-            "change_schemas": ["fp_schema_sha256_allowed"]
-        }
-    }));
-    value["grants"].as_array_mut().unwrap().push(json!({
-        "action": "human.review",
+        "action": "event.emit",
         "resource": {
             "run": "run_demo"
         },
@@ -880,6 +862,16 @@ fn enforcement_capability(package: &PublicSeamPackage) -> Value {
         "limits": {
             "timeout_s": 30,
             "max_rows": 10
+        }
+    }));
+    value["grants"].as_array_mut().unwrap().push(json!({
+        "action": "proposal.submit_batch",
+        "resource": {
+            "run": "run_demo"
+        },
+        "constraints": {
+            "allowed_surfaces": ["fp_surface_sha256_allowed"],
+            "change_schemas": ["fp_schema_sha256_allowed"]
         }
     }));
     value
@@ -908,8 +900,7 @@ fn fully_delegable_parent_capability(package: &PublicSeamPackage) -> Value {
             "case.read",
             "lm.complete",
             "assessment.submit",
-            "proposal.submit_batch",
-            "human.review"
+            "proposal.submit_batch"
         ]
     });
     value

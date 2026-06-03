@@ -186,9 +186,6 @@ fn pinned_dialects_do_not_inspect_arbitrary_json_data_slots() {
         .validate_plan_document(&metadata_with_prose_field_plan())
         .unwrap();
     package
-        .validate_plan_document(&human_review_rubric_with_prose_field_plan())
-        .unwrap();
-    package
         .validate_plan_document(&proposal_causal_with_prose_field_plan())
         .unwrap();
     package
@@ -535,39 +532,6 @@ fn literal_value_with_prose_field_plan() -> Value {
             }
         ],
         "return": ["literal_value"],
-        "commit": {
-            "kind": "no_graph_writes"
-        }
-    })
-}
-
-fn human_review_rubric_with_prose_field_plan() -> Value {
-    json!({
-        "schema_version": "leaven.plan.v1",
-        "plan_id": "humanrubric001",
-        "consistency": {
-            "kind": "latest_at_start"
-        },
-        "mode": {
-            "kind": "dry_run"
-        },
-        "ops": [
-            {
-                "kind": "call",
-                "name": "review",
-                "idempotency_key": "human-rubric-0001",
-                "call": {
-                    "kind": "human_review",
-                    "queue": "operators",
-                    "prompt": "Review the answer",
-                    "rubric": {
-                        "field": "rubric prose, not a JsonPointer"
-                    },
-                    "input_classes": ["public"]
-                }
-            }
-        ],
-        "return": ["review"],
         "commit": {
             "kind": "no_graph_writes"
         }

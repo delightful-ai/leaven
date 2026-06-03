@@ -2086,9 +2086,6 @@
           "$ref": "#/$defs/WorkspaceReleaseCall"
         },
         {
-          "$ref": "#/$defs/HumanReviewCall"
-        },
-        {
           "$ref": "common.schema.json#/$defs/ExtensionObject"
         }
       ]
@@ -2378,34 +2375,6 @@
       "required": [
         "kind",
         "workspace"
-      ],
-      "additionalProperties": false
-    },
-    "HumanReviewCall": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "const": "human_review"
-        },
-        "queue": {
-          "type": "string"
-        },
-        "prompt": {
-          "type": "string"
-        },
-        "rubric": {},
-        "input_classes": {
-          "$ref": "common.schema.json#/$defs/DataClassSet"
-        },
-        "max_usd_micro": {
-          "$ref": "common.schema.json#/$defs/UsdMicro"
-        }
-      },
-      "required": [
-        "kind",
-        "queue",
-        "prompt",
-        "input_classes"
       ],
       "additionalProperties": false
     },

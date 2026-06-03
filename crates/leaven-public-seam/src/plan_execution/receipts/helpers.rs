@@ -62,7 +62,6 @@ pub(super) fn expected_call_result_value_kind(call_kind: &str) -> Option<&'stati
         "agent_run" => Some("agent_session"),
         "sandbox_exec" => Some("sandbox_exec"),
         "workspace_materialize" | "workspace_release" => Some("workspace_handle"),
-        "human_review" => Some("human_review_result"),
         _ => None,
     }
 }

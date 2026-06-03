@@ -408,7 +408,6 @@ fn cost_value(cost: &leaven_kernel::Cost) -> Value {
     insert_count_cost_axis(&mut object, cost, "agent_calls");
     insert_count_cost_axis(&mut object, cost, "sandbox_calls");
     insert_count_cost_axis(&mut object, cost, "usd_micro");
-    insert_count_cost_axis(&mut object, cost, "human_review_usd_micro");
     insert_count_cost_axis(&mut object, cost, "wall_ms");
     Value::Object(object)
 }

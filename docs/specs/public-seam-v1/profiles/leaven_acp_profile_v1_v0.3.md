@@ -62,7 +62,7 @@ Graph operations: `leaven/graph.query`, `leaven/case.load`, `leaven/case.input`,
 
 Workspace operations: `leaven/workspace.materialize`, `leaven/workspace.snapshot`, `leaven/workspace.list`, `leaven/workspace.read_file`, `leaven/workspace.stat`, `leaven/workspace.digest`, `leaven/workspace.git_log`, `leaven/workspace.git_diff`, `leaven/workspace.git_status`, `leaven/workspace.capture_artifacts`, `leaven/workspace.release`.
 
-Costful effects: `leaven/lm.complete`, `leaven/agent.run`, `leaven/sandbox.exec`, `leaven/human.review`.
+Costful effects: `leaven/lm.complete`, `leaven/agent.run`, `leaven/sandbox.exec`.
 
 Graph mutations: `leaven/proposal.submit_batch`, `leaven/proposal.apply`, `leaven/assessment.submit`, `leaven/evaluation.request`, `leaven/event.emit`.
 

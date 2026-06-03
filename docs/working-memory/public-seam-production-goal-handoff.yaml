@@ -178,7 +178,7 @@ spec_revisions_before_goal:
 acceptance:
   - id: human_review_removed_from_v1
     claim: "`leaven/human.review` is removed from the active codebase and is no longer advertised or accepted as a locked V1 method."
-    status: pending
+    status: done
     proof_required:
       kind: profile_schema_docs_tests
       must_exercise:
@@ -190,7 +190,33 @@ acceptance:
         - capability examples and tests
         - method-status docs
         - negative request proof through `leaven seam serve --stdio`
-    evidence: []
+    evidence:
+      - kind: code_schema_docs
+        paths:
+          - crates/leaven-public-seam/src/acp_profile/methods.rs
+          - crates/leaven-public-seam/src/acp_profile/extension_result.rs
+          - crates/leaven-public-seam/src/call_authority.rs
+          - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
+          - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
+          - docs/specs/public-seam-v1/schemas/common.schema.json
+          - docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
+          - docs/specs/public-seam-v1/executable-method-status.md
+        note: Locked V1 method/profile rows, Plan IR call shape, result receipt kind, data class, cost axis, and active docs no longer advertise or accept human review.
+      - kind: negative_stdio_request
+        command: cargo test -p leaven-cli --test seam_stdio_server
+        note: Process-level `leaven seam serve --stdio` proof sends `leaven/human.review` and receives JSON-RPC method-not-found before service execution.
+      - kind: active_inventory
+        command: rg -n 'human_review_usd_micro|human_review_result|human_review_calls|human_review"|human\.review|HumanReviewCall' --glob '!target/**' --glob '!sdk/python/.venv/**' --glob '!docs/working-memory/public-seam-production-goal-handoff.yaml'
+        note: Only remaining active-tree match is the intentional negative stdio request in `crates/leaven-cli/tests/seam_stdio_server.rs`.
+      - kind: verification
+        commands:
+          - cargo fmt --check
+          - cargo test -p leaven-public-seam --test public_seam_contract
+          - cargo test -p leaven-cli --test seam_stdio_server
+          - cargo test -p leaven-acp --test stdio_session_contract
+          - cargo test -p leaven-acp-stage-bridge --test dispatch_contract
+          - cargo test -p leaven-acp-stage-bridge --test example_03_prompt_optimize
+          - cargo test -p leaven --test topology_contract
     closeout_check: >-
       No active production code, schema enum, V1 method table, docs, generated
       fixture, or test may still treat `human.review` as supported. Any

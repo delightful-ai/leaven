@@ -259,7 +259,6 @@ fn locked_profile_methods() -> Vec<Value> {
         extension_method("leaven/lm.complete", "lm.complete"),
         extension_method("leaven/agent.run", "agent.run"),
         extension_method("leaven/sandbox.exec", "sandbox.exec"),
-        extension_method("leaven/human.review", "human.review"),
         extension_method("leaven/proposal.submit_batch", "proposal.submit_batch"),
         extension_method("leaven/proposal.apply", "proposal.apply_batch"),
         extension_method("leaven/assessment.submit", "assessment.submit"),
