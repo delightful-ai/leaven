@@ -7,7 +7,7 @@ use std::process::Command;
 
 use futures::executor::block_on;
 use leaven_acp::{AcpProcessCommand, AcpStdioProcessSession};
-use leaven_acp_stage_bridge::RunContextGraphEffectHost;
+use leaven_acp_stage_bridge::{ExternalEvaluationRequest, RunContextGraphEffectHost};
 use leaven_core::{
     Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget,
     EvaluationPurpose, EvaluationRequest, EvaluationSet, Evidence, OptimizationProblem,
@@ -196,6 +196,131 @@ print(json.dumps({{
     });
 }
 
+#[test]
+fn dispatch_stage_run_services_worker_initiated_evaluation_request_through_runcontext() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let profile = acp_profile(&package);
+    let mut graph = RunGraph::<BridgeProblem>::new(RunId::new());
+    let mut budget = BudgetLedger::new(Budget::unlimited());
+    let case_set = CaseSet::new(vec![()]);
+    let candidate = {
+        let mut context = RunContext::<BridgeProblem>::new(&mut graph, &mut budget);
+        context.insert_seed(BridgeArtifact(9), 0).unwrap()
+    };
+    let public_candidate = format!("cand_{}", candidate.as_uuid());
+    let script = python_worker(&format!(
+        r#"
+import json
+import sys
+
+request = json.loads(sys.stdin.readline())
+payload = request["params"]["payload"]
+
+print(json.dumps({{
+    "jsonrpc": "2.0",
+    "id": "%s::evaluation" % payload["stage_call_id"],
+    "method": "leaven/evaluation.request",
+    "params": {{
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "plan_runner_evaluation_request",
+        "consistency": {{"kind": "latest_at_start"}},
+        "mode": {{"kind": "execute"}},
+        "ops": [{{
+            "kind": "write",
+            "name": "evaluation_request",
+            "idempotency_key": "evaluation-request-stage-bridge-0001",
+            "write": {{
+                "kind": "request_evaluation",
+                "request": {{
+                    "shape": "independent",
+                    "candidates": ["{public_candidate}"],
+                    "set": {{"kind": "named", "name": "validation"}},
+                    "granularity": "per_case",
+                    "purpose": "validation",
+                    "evaluator": "bridge_eval_v1"
+                }}
+            }},
+        }}],
+        "return": ["evaluation_request"],
+        "commit": {{"kind": "graph_writes_atomic", "on_stale": "reject"}},
+    }},
+}}), flush=True)
+
+reply = json.loads(sys.stdin.readline())
+
+print(json.dumps({{
+    "jsonrpc": "2.0",
+    "id": request["id"],
+    "result": {{
+        "schema_version": "leaven.stage_run.v1",
+        "message": "stage_run_result",
+        "stage": "runner",
+        "stage_call_id": payload["stage_call_id"],
+        "output": {{
+            "kind": "text",
+            "summary": "evaluation requested",
+            "value": json.dumps(reply),
+            "visibility": "optimizer_visible",
+            "data_classes": ["candidate.output"],
+        }},
+    }},
+}}), flush=True)
+"#
+    ));
+    let mut session = spawn(&script, package, profile);
+    let mut context =
+        RunContext::<BridgeProblem>::new(&mut graph, &mut budget).with_case_set(&case_set);
+    let host = RunContextGraphEffectHost::new(
+        &mut context,
+        [],
+        "fp_cap_sha256_stage_bridge",
+        "fp_policy_sha256_stage_bridge",
+        "rev_stage_bridge_base",
+        "rev_stage_bridge_final",
+    )
+    .with_evaluation_requester(move |params| lower_bridge_evaluation_request(params, candidate));
+
+    let response = session
+        .dispatch_stage_run(&runner_request("evaluation request"), &host)
+        .unwrap();
+
+    let callback_reply: Value = serde_json::from_str(
+        response.result().output().as_value()["value"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        callback_reply["result"]["method"], "leaven/evaluation.request",
+        "{callback_reply}"
+    );
+    assert_eq!(
+        callback_reply["result"]["primary"]["kind"], "evaluation_request_receipt",
+        "{callback_reply}"
+    );
+    assert_eq!(
+        callback_reply["result"]["receipts"][0]["write_kind"], "request_evaluation",
+        "{callback_reply}"
+    );
+    drop(host);
+    assert_eq!(context.graph().evaluation_request_count(), 1);
+    let request_id = context
+        .graph()
+        .events()
+        .find_map(|event| match event {
+            RunEvent::EvaluationRequested { request_id, .. } => Some(*request_id),
+            _ => None,
+        })
+        .expect("worker callback records an evaluation request event");
+    let request = context
+        .graph()
+        .evaluation_request(request_id)
+        .expect("worker callback records evaluation request in graph");
+    assert_eq!(request.evaluator(), &EvaluatorId::from("bridge_eval_v1"));
+    assert_eq!(request.resolved_set().case_ids.len(), 1);
+    forget(script);
+}
+
 fn lower_bridge_assessment(
     params: &Value,
     expected_candidate: CandidateId,
@@ -229,6 +354,41 @@ fn lower_bridge_assessment(
         }],
         Cost::metric_calls(1),
     ))
+}
+
+fn lower_bridge_evaluation_request(
+    params: &Value,
+    expected_candidate: CandidateId,
+) -> Result<ExternalEvaluationRequest, String> {
+    let request = params["ops"]
+        .as_array()
+        .and_then(|ops| ops.iter().find_map(|op| op.get("write")))
+        .and_then(|write| write.get("request"))
+        .ok_or_else(|| "missing request_evaluation.request".to_owned())?;
+    let candidate = request["candidates"]
+        .as_array()
+        .and_then(|candidates| candidates.first())
+        .and_then(Value::as_str)
+        .ok_or_else(|| "missing request candidate".to_owned())
+        .and_then(parse_candidate_ref)?;
+    if candidate != expected_candidate {
+        return Err("evaluation request candidate did not match host candidate".to_owned());
+    }
+    Ok(ExternalEvaluationRequest {
+        evaluator: EvaluatorId::from(
+            request["evaluator"]
+                .as_str()
+                .ok_or_else(|| "missing evaluator".to_owned())?
+                .to_owned(),
+        ),
+        evaluator_fingerprint: Fingerprint::from_bytes([37; 32]),
+        request: EvaluationRequest::Independent {
+            candidates: vec![candidate],
+            set: EvaluationSet::All,
+            granularity: AssessmentGranularity::PerCase,
+            purpose: EvaluationPurpose::Validation,
+        },
+    })
 }
 
 fn parse_candidate_ref(value: &str) -> Result<CandidateId, String> {

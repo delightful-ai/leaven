@@ -493,7 +493,20 @@ acceptance:
           - crates/leaven-run/tests/scoring_evaluator.rs
           - crates/leaven-run/AGENTS.md
           - docs/specs/public-seam-v1/conformance-matrix.yaml
-        note: leaven-run projects real RunContext evaluation requests into locked EvaluationJobDocument values and matching request_evaluation Plan Result receipts for independent, pairwise, and listwise requests, while rejecting unsupported runtime granularity. This proves engine-recorded evaluation-request projection; the row remains pending until stdio service execution consumes that route instead of configured-only receipt plumbing.
+        note: leaven-run projects real RunContext evaluation requests into locked EvaluationJobDocument values and matching request_evaluation Plan Result receipts for independent, pairwise, and listwise requests, while rejecting unsupported runtime granularity. This proves engine-recorded evaluation-request projection; bridge evidence below separately proves worker-initiated RunContext request mutation.
+      - kind: stdio_runcontext_evaluation_request_callback
+        methods:
+          - "`leaven/evaluation.request`"
+        commands:
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-acp-stage-bridge dispatch_stage_run_services_worker_initiated_evaluation_request_through_runcontext
+          - cargo test -p leaven-engine request_evaluation
+          - cargo test -p leaven --test topology_contract
+        paths:
+          - crates/leaven-engine/src/context/run_context/evaluation.rs
+          - crates/leaven-acp-stage-bridge/src/graph_host.rs
+          - crates/leaven-acp-stage-bridge/tests/graph_effect_contract.rs
+          - docs/specs/public-seam-v1/executable-method-status.md
+        note: The engine exposes `RunContext::request_evaluation` for externally supplied typed evaluation requests; it trust-checks, resolves, records evaluator identity, emits `EvaluationRequested`, and refuses hidden optimizer partitions without mutation. The bidirectional stdio stage bridge now services a worker-initiated `leaven/evaluation.request` callback by parsing locked Plan IR, using a host-owned typed lowerer for `EvaluationRequest`, calling `RunContext::request_evaluation`, returning a receipt-bound extension result, and proving graph persistence. The durable `leaven seam serve --stdio` SDK service still uses configured receipt plumbing.
       - kind: partial_configured_evaluation_request_execution
         methods:
           - "`leaven/evaluation.request`"

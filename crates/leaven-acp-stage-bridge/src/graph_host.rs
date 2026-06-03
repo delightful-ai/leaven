@@ -9,11 +9,12 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 use leaven_acp::{AcpEffectHost, AcpTransportError, AcpTransportResult};
-use leaven_core::{Assessment, OptimizationProblem};
+use leaven_core::{Assessment, EvaluationRequest, OptimizationProblem};
 use leaven_engine::{ProposalBatchReport, RunContext, RunEvent};
-use leaven_kernel::{EvaluationRequestId, Metered, ProposalBatchId};
+use leaven_kernel::{EvaluationRequestId, EvaluatorId, Fingerprint, Metered, ProposalBatchId};
 use leaven_run::{
     PublicAssessmentWriteReceiptContext, PublicAssessmentWriteReceiptProjectionError,
+    PublicEvaluationJobContext, PublicEvaluationJobProjectionError,
     PublicProposalWriteReceiptContext, PublicProposalWriteReceiptProjectionError,
 };
 use serde_json::{Value, json};
@@ -25,6 +26,7 @@ pub struct RunContextGraphEffectHost<'context, 'run, P: OptimizationProblem> {
     context: RefCell<&'context mut RunContext<'run, P>>,
     batches: BTreeMap<ProposalBatchId, ProposalBatchReport>,
     assessment_submitter: Option<Box<AssessmentSubmitter<'context, P>>>,
+    evaluation_requester: Option<Box<EvaluationRequester<'context>>>,
     capability_fingerprint: String,
     policy_fingerprint: String,
     base_revision: String,
@@ -35,6 +37,18 @@ pub struct RunContextGraphEffectHost<'context, 'run, P: OptimizationProblem> {
 
 type AssessmentSubmitter<'context, P> =
     dyn Fn(&Value) -> Result<Metered<Vec<Assessment<P>>>, String> + 'context;
+type EvaluationRequester<'context> =
+    dyn Fn(&Value) -> Result<ExternalEvaluationRequest, String> + 'context;
+
+/// Typed evaluation request produced by a host-owned public payload lowerer.
+pub struct ExternalEvaluationRequest {
+    /// Evaluator identity that will own the later assessments.
+    pub evaluator: EvaluatorId,
+    /// Runtime fingerprint for the evaluator/job identity.
+    pub evaluator_fingerprint: Fingerprint,
+    /// Typed engine evaluation request.
+    pub request: EvaluationRequest,
+}
 
 impl<'context, 'run, P: OptimizationProblem> RunContextGraphEffectHost<'context, 'run, P> {
     /// Binds a mutable RunContext and the proposal batches workers may apply.
@@ -53,6 +67,7 @@ impl<'context, 'run, P: OptimizationProblem> RunContextGraphEffectHost<'context,
                 .map(|batch| (batch.batch_id, batch))
                 .collect(),
             assessment_submitter: None,
+            evaluation_requester: None,
             capability_fingerprint: capability_fingerprint.into(),
             policy_fingerprint: policy_fingerprint.into(),
             base_revision: base_revision.into(),
@@ -73,6 +88,19 @@ impl<'context, 'run, P: OptimizationProblem> RunContextGraphEffectHost<'context,
         submitter: impl Fn(&Value) -> Result<Metered<Vec<Assessment<P>>>, String> + 'context,
     ) -> Self {
         self.assessment_submitter = Some(Box::new(submitter));
+        self
+    }
+
+    /// Installs host-side lowering for public evaluation request payloads.
+    ///
+    /// The closure returns typed engine request identity. The bridge records it
+    /// through `RunContext`; it does not treat public JSON ids as graph state.
+    #[must_use]
+    pub fn with_evaluation_requester(
+        mut self,
+        requester: impl Fn(&Value) -> Result<ExternalEvaluationRequest, String> + 'context,
+    ) -> Self {
+        self.evaluation_requester = Some(Box::new(requester));
         self
     }
 
@@ -153,6 +181,37 @@ impl<'context, 'run, P: OptimizationProblem> RunContextGraphEffectHost<'context,
         .submit_assessments_plan_result(&graph, &report)?;
         assessment_submit_extension_result(&plan_result)
     }
+
+    fn evaluation_request(&self, params: &Value) -> Result<Value, RunContextGraphEffectHostError> {
+        let requester = self
+            .evaluation_requester
+            .as_ref()
+            .ok_or(RunContextGraphEffectHostError::MissingEvaluationRequester)?;
+        request_evaluation_write(params)?;
+        let external =
+            requester(params).map_err(RunContextGraphEffectHostError::EvaluationRequest)?;
+        let mut context = self.context.borrow_mut();
+        let request_id = context.request_evaluation(
+            external.evaluator,
+            external.evaluator_fingerprint,
+            external.request,
+        )?;
+        let graph = context.graph();
+        let request = graph
+            .evaluation_request(request_id)
+            .ok_or(RunContextGraphEffectHostError::RecordedRequestMissing)?;
+        let job_context = PublicEvaluationJobContext::new(
+            "sc_stage_bridge_evaluation_request",
+            &self.base_revision,
+            &self.capability_fingerprint,
+            &self.policy_fingerprint,
+            "2026-06-03T00:10:00Z",
+        )
+        .with_evaluation_request_receipt_timing(&self.started_at, &self.completed_at);
+        let job = job_context.evaluation_job_document(&graph, &request)?;
+        let plan_result = job_context.evaluation_request_receipt_plan_result(&job)?;
+        evaluation_request_extension_result(&plan_result)
+    }
 }
 
 impl<P: OptimizationProblem> AcpEffectHost for RunContextGraphEffectHost<'_, '_, P> {
@@ -166,6 +225,7 @@ impl<P: OptimizationProblem> AcpEffectHost for RunContextGraphEffectHost<'_, '_,
         match method {
             "leaven/proposal.apply" => self.proposal_apply(params).map_err(protocol),
             "leaven/assessment.submit" => self.assessment_submit(params).map_err(protocol),
+            "leaven/evaluation.request" => self.evaluation_request(params).map_err(protocol),
             "leaven/event.emit" => self.event_emit(params).map_err(protocol),
             "leaven/lm.complete" => self.lm_complete(params),
             other => Err(AcpTransportError::EffectUnimplemented {
@@ -193,12 +253,24 @@ pub enum RunContextGraphEffectHostError {
     /// The callback did not carry an assessment write.
     #[error("leaven/assessment.submit callback must carry a submit_assessments write")]
     MissingAssessmentWrite,
+    /// The callback did not carry an evaluation request write.
+    #[error("leaven/evaluation.request callback must carry a request_evaluation write")]
+    MissingEvaluationRequestWrite,
     /// The host has no typed assessment lowerer installed.
     #[error("leaven/assessment.submit callback requires a typed host assessment lowerer")]
     MissingAssessmentSubmitter,
+    /// The host has no typed evaluation request lowerer installed.
+    #[error("leaven/evaluation.request callback requires a typed host evaluation request lowerer")]
+    MissingEvaluationRequester,
     /// Host-side typed assessment lowering refused the payload.
     #[error("assessment submit payload refused by host lowerer: {0}")]
     AssessmentSubmit(String),
+    /// Host-side typed evaluation request lowering refused the payload.
+    #[error("evaluation request payload refused by host lowerer: {0}")]
+    EvaluationRequest(String),
+    /// A request was recorded but could not be read back from the graph.
+    #[error("recorded evaluation request was not visible after RunContext mutation")]
+    RecordedRequestMissing,
     /// The public evaluation request ref is malformed.
     #[error("evaluation_request_id must be an evalreq_<uuid> ref")]
     InvalidEvaluationRequestRef,
@@ -223,9 +295,28 @@ pub enum RunContextGraphEffectHostError {
     /// The graph-backed assessment report failed public-seam projection.
     #[error(transparent)]
     AssessmentProjection(#[from] PublicAssessmentWriteReceiptProjectionError),
+    /// The graph-backed evaluation request failed public-seam projection.
+    #[error(transparent)]
+    EvaluationProjection(#[from] PublicEvaluationJobProjectionError),
     /// Canonical JSON hashing failed.
     #[error("failed to hash public seam receipt preimage: {0}")]
     Hash(String),
+}
+
+fn request_evaluation_write(params: &Value) -> Result<(), RunContextGraphEffectHostError> {
+    let ops = params
+        .get("ops")
+        .and_then(Value::as_array)
+        .ok_or(RunContextGraphEffectHostError::MissingEvaluationRequestWrite)?;
+    for op in ops {
+        let Some(write) = op.get("write") else {
+            continue;
+        };
+        if write.get("kind").and_then(Value::as_str) == Some("request_evaluation") {
+            return Ok(());
+        }
+    }
+    Err(RunContextGraphEffectHostError::MissingEvaluationRequestWrite)
 }
 
 fn evaluation_request_id(
@@ -325,6 +416,50 @@ fn assessment_submit_extension_result(
         .collect::<Vec<_>>();
     Ok(json!({
         "method": "leaven/assessment.submit",
+        "primary": primary,
+        "receipts": receipts,
+        "redactions": plan_result.get("redactions").cloned().unwrap_or_else(|| json!([])),
+        "capability_fingerprint": plan_result.get("capability_fingerprint").cloned().unwrap_or_else(|| json!("fp_cap_sha256_stage_bridge")),
+        "policy_fingerprint": plan_result.get("policy_fingerprint").cloned().unwrap_or_else(|| json!("fp_policy_sha256_stage_bridge")),
+        "data_classes": ["public"]
+    }))
+}
+
+fn evaluation_request_extension_result(
+    plan_result: &Value,
+) -> Result<Value, RunContextGraphEffectHostError> {
+    let primary = plan_result
+        .pointer("/values/evaluation_request")
+        .cloned()
+        .ok_or(RunContextGraphEffectHostError::MissingEvaluationRequestWrite)?;
+    let mut receipts = plan_result
+        .get("receipts")
+        .and_then(Value::as_array)
+        .ok_or(RunContextGraphEffectHostError::MissingEvaluationRequestWrite)?
+        .iter()
+        .filter(|receipt| {
+            receipt.get("write_kind").and_then(Value::as_str) == Some("request_evaluation")
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    for receipt in &mut receipts {
+        if receipt.get("write_kind").and_then(Value::as_str) == Some("request_evaluation") {
+            let op_name = receipt
+                .get("op_var")
+                .and_then(Value::as_str)
+                .unwrap_or("primary");
+            receipt["result_hash"] = json!(prefixed_jcs_hash(
+                "fp_result_sha256_",
+                &json!({
+                    "schema_version": "leaven.plan_write_result.v1",
+                    "name": op_name,
+                    "value": primary
+                }),
+            )?);
+        }
+    }
+    Ok(json!({
+        "method": "leaven/evaluation.request",
         "primary": primary,
         "receipts": receipts,
         "redactions": plan_result.get("redactions").cloned().unwrap_or_else(|| json!([])),
