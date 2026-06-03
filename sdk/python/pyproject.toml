@@ -42,6 +42,29 @@ dev = [
     "ty>=0.0.1a1",
 ]
 
+[tool.leaven.dependency-boundaries]
+public_runtime = [
+    "pydantic",
+    "typing-extensions",
+]
+public_optional = [
+    "dspy-ai",
+]
+private_dev = [
+    "datamodel-code-generator",
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+    "ty",
+]
+private_runtime = []
+notes = [
+    "Public runtime dependencies are import-time requirements for the leaven package.",
+    "Public optional dependencies are user-selected integration extras.",
+    "Private dev dependencies support tests, codegen, linting, and typing only.",
+    "Live provider examples use the Rust seam service process; they add no Python runtime package dependency.",
+]
+
 [build-system]
 requires = ["uv_build>=0.9.21,<0.10.0"]
 build-backend = "uv_build"
