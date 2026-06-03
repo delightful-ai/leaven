@@ -258,7 +258,7 @@ no `null` literals, JS-safe integers, opaque cursors) — not by hoping the
 Python implementation generalizes.
 
 The CLI consumes this wire too. The same `leaven` binary that the Python
-SDK spawns as a child process via `leaven serve --stdio` also offers
+SDK spawns as a child process via `leaven seam serve --stdio` also offers
 `leaven query lineage`, `leaven runs list`, `leaven artifact show` as
 human-facing subcommands. An agent working inside its own workspace can
 introspect the run state by shelling out to `leaven query lineage`
@@ -271,10 +271,15 @@ live-gated Python proof that drives this Leaven-owned stdio wire through the
 private `leaven._seam` client package. It spawns
 `leaven seam serve --stdio --config`, sends a locked `leaven/agent.run` Plan IR
 request, and verifies workspace materialization, Codex CLI execution, receipts,
-and transcript refs. That proves the public seam can be the Python/Codex
-substrate. It is not the ergonomic `cx.agent.run` implementation,
-reward-vector execution, persisted blob inspection, or the full
-`optimize(...).run()` live-agent workflow named by the acceptance gate.
+and transcript refs. `sdk/python/examples/12_live_optimize_codex_proposer.py`
+now proves the same durable seam from the product path:
+`lv.optimize(...).run()` dispatches a configured `@lv.proposer`, the proposer
+calls `cx.agent.run` against `cx.parent_workspace`, and the resulting Codex
+`gpt-5.4-mini` agent receipt is cited in a typed proposal submitted through
+`leaven/proposal.submit_batch`. These prove the public seam can be the
+Python/Codex substrate. They are not proposal application/admission, persisted
+blob inspection, live LM-provider acceptance, or the full GEPA search loop named
+by the acceptance gate.
 
 ## What is preserved
 

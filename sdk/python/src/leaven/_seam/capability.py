@@ -79,16 +79,46 @@ def effect_capability(
     }
 
 
-def proposal_submit_capability(
+def proposer_stage_capability(
     *,
     capability_fingerprint: str,
     policy_fingerprint: str,
     surface_fingerprint: str,
     change_schema: str,
+    candidate: str,
+    workspace: str,
     jti: str,
     stage_call_id: str,
+    allow_agent: bool,
 ) -> dict[str, Any]:
-    """Build a proposer-stage capability document for proposal submission only."""
+    """Build a proposer-stage capability document for proposal submission."""
+    grants: list[dict[str, Any]] = [
+        {
+            "action": "proposal.submit_batch",
+            "resource": {},
+            "constraints": {
+                "effects": ["change", "change_from_agent_session"],
+                "allowed_surfaces": [surface_fingerprint],
+                "change_schemas": [change_schema],
+            },
+        }
+    ]
+    if allow_agent:
+        grants.extend(
+            [
+                {
+                    "action": "workspace.materialize",
+                    "resource": {"candidate_ids": [candidate]},
+                    "constraints": {"workspace_ops": ["materialize"]},
+                },
+                {
+                    "action": "agent.run",
+                    "resource": {"workspace_ids": [workspace]},
+                    "constraints": {"allowed_input_classes": ["public"]},
+                    "limits": {"timeout_s": 180, "max_usd_micro": 5_000_000},
+                },
+            ]
+        )
     return {
         "schema_version": "leaven.capability.v1",
         "jti": jti,
@@ -113,17 +143,7 @@ def proposal_submit_capability(
             "max_extensions": 0,
             "max_total_lifetime_s": 1200,
         },
-        "grants": [
-            {
-                "action": "proposal.submit_batch",
-                "resource": {},
-                "constraints": {
-                    "effects": ["change"],
-                    "allowed_surfaces": [surface_fingerprint],
-                    "change_schemas": [change_schema],
-                },
-            }
-        ],
+        "grants": grants,
         "budgets": {},
         "execution_policy": {
             "profile": "managed_sandbox",
@@ -141,4 +161,4 @@ def proposal_submit_capability(
     }
 
 
-__all__ = ["effect_capability", "proposal_submit_capability"]
+__all__ = ["effect_capability", "proposer_stage_capability"]

@@ -102,6 +102,15 @@ class CallbackProposeContext(ProposeContext):
     def stage_id(self) -> str:
         return self._stage_call_id
 
+    @property
+    def parent_workspace(self) -> WorkspaceHandle:
+        return WorkspaceHandle(
+            workspace_id=_materialized_workspace_id(self._parent_candidate_id),
+            candidate_id=self._parent_candidate_id,
+            lifetime="stage_call",
+            receipt=CallReceipt(receipt_id=f"wrec_{_id_fragment(self._stage_call_id)}"),
+        )
+
 
 __all__ = ["CallbackProposeContext", "CallbackRolloutContext"]
 

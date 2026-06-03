@@ -386,6 +386,22 @@ acceptance:
         `sdk/python/examples/10_live_codex_seam.py` reaches Codex
         `gpt-5.4-mini` through Leaven and returns typed `AgentSession`. Typed
         proposal submission remains unproven.
+      - >-
+        Live Codex proposer evidence, still not full-goal completion:
+        `sdk/python/examples/12_live_optimize_codex_proposer.py` is a
+        live-gated Python SDK proof. With `LEAVEN_LIVE_CODEX=1` and
+        `LEAVEN_BIN=/Users/darin/src/personal/leaven/target/debug/leaven`,
+        `uv run python examples/12_live_optimize_codex_proposer.py` completed
+        through `lv.optimize(...).run()` with `run id: live_codex_proposer`,
+        `best score: 1.000`, and `iterations: 1`. The configured
+        `@lv.proposer` used `cx.parent_workspace`, called `cx.agent.run`
+        through nested `leaven/agent.run` with Codex `gpt-5.4-mini`, cited the
+        returned agent receipt in `ProposalEffect.change_from_agent_session`,
+        and submitted the proposal through `leaven/proposal.submit_batch`.
+        This proves the materialized-workspace Codex proposer substrate through
+        the Python SDK and durable public seam. It still does not prove proposal
+        apply/admission, full GEPA search, provider cost accounting, or durable
+        blob/transcript readback.
     closeout_check: A Rust-side hardcoded child prompt, fixed diff, or deterministic fake-agent transcript is not enough.
 
   - id: real_lm_provider_wiring

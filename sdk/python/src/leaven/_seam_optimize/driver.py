@@ -16,7 +16,7 @@ from .._seam import (
     StageRunProposeRequest,
     StageRunRequest,
     effect_capability,
-    proposal_submit_capability,
+    proposer_stage_capability,
     resolve_codex_binary,
 )
 from .._seam_worker import worker_argv_for_stage
@@ -152,6 +152,9 @@ async def _run_configured_proposer(
     stage_call_id = f"sc_{run_id}_proposer_0"
     capability_fingerprint = "fp_cap_sha256_python_proposer"
     policy_fingerprint = "fp_policy_sha256_python_proposer"
+    parent_candidate = "cand_seed"
+    parent_workspace = _materialized_workspace_id(parent_candidate)
+    agent_config = _agent_config(runtime)
     client = SeamClient(
         config=SeamServiceConfig(
             context=SeamExecutionContext(
@@ -159,15 +162,18 @@ async def _run_configured_proposer(
                 policy_fingerprint=policy_fingerprint,
                 base_revision=f"rev_{run_id}",
             ),
-            capability=proposal_submit_capability(
+            capability=proposer_stage_capability(
                 capability_fingerprint=capability_fingerprint,
                 policy_fingerprint=policy_fingerprint,
                 surface_fingerprint=PROMPT_SURFACE_FINGERPRINT,
                 change_schema=PROMPT_CHANGE_SCHEMA,
+                candidate=parent_candidate,
+                workspace=parent_workspace,
                 jti=f"jti_{run_id}_python_proposer",
                 stage_call_id=stage_call_id,
+                allow_agent=agent_config is not None,
             ),
-            agent=_agent_config(runtime),
+            agent=agent_config,
             lm=MockLmRuntimeConfig(text=_runner_text(runtime)),
             stage=CommandRunnerStageConfig(argv=worker_argv_for_stage(propose.stage)),
         )
@@ -179,7 +185,7 @@ async def _run_configured_proposer(
             run_id=f"run_{run_id}",
             stage_call_id=stage_call_id,
             base_revision=f"rev_{run_id}",
-            parent="cand_seed",
+            parent=parent_candidate,
             surface_fingerprint=PROMPT_SURFACE_FINGERPRINT,
             change_schema=PROMPT_CHANGE_SCHEMA,
             capability_fingerprint=capability_fingerprint,
@@ -200,6 +206,12 @@ def _reflection_summary(assessments: list[SeamStageAssessment]) -> str:
             if reward.feedback:
                 fragments.append(f"{reward.id}: {reward.feedback}")
     return "; ".join(fragments) or "seed assessment completed"
+
+
+def _materialized_workspace_id(candidate_id: str) -> str:
+    stem = candidate_id.removeprefix("cand_")
+    sanitized = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in stem)
+    return f"ws_{sanitized}_materialized"
 
 
 def _case_input(seed: PromptArtifact, case: dict[str, Any]) -> dict[str, Any]:

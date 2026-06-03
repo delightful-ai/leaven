@@ -91,6 +91,11 @@ class ProposeContext(_Effects):
         """Parent candidate id this proposal changes; None for fresh authoring."""
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
+    @property
+    def parent_workspace(self) -> WorkspaceHandle:
+        """Engine-prepared workspace for the parent candidate."""
+        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+
 
 class JudgeContext(_Effects):
     """Judge. Pairwise/listwise preference between candidates.

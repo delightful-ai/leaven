@@ -20,7 +20,8 @@ or other documented builders.
 - Provider executables passed as configuration, currently Codex CLI and
   command-runner stage worker processes.
 - Capability actions enforced by `leaven-public-seam`, currently
-  `lm.complete`, `workspace.materialize`, and `agent.run` for these helpers.
+  `lm.complete`, `workspace.materialize`, `agent.run`, and
+  `proposal.submit_batch` for these helpers.
 
 ## Private Dependencies
 
@@ -35,9 +36,11 @@ or other documented builders.
 
 - `resolve.py`: repo, Leaven CLI, and Codex CLI discovery.
 - `config.py`: private service config records serialized for Rust.
-- `capability.py`: current effect capability helper for mechanics/live proofs.
+- `capability.py`: current effect/proposer capability helpers for
+  mechanics/live proofs.
 - `plans.py`: Plan IR / JSON-RPC request construction for `agent.run`,
-  `lm.complete`, `proposal.submit_batch`, and runner `stage.run`.
+  `lm.complete`, `proposal.submit_batch`, runner `stage.run`, and proposer
+  `stage.run`.
 - `client.py`: one-shot process execution and JSON-RPC result/error handling.
 - `__init__.py`: map-only re-exports.
 

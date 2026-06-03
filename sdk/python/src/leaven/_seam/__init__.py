@@ -7,7 +7,7 @@ package only.
 
 from __future__ import annotations
 
-from .capability import effect_capability, proposal_submit_capability
+from .capability import effect_capability, proposer_stage_capability
 from .client import SeamClient
 from .config import (
     CodexCliRuntimeConfig,
@@ -44,7 +44,7 @@ __all__ = [
     "StageRunProposeRequest",
     "StageRunRequest",
     "effect_capability",
-    "proposal_submit_capability",
+    "proposer_stage_capability",
     "resolve_codex_binary",
     "resolve_leaven_binary",
     "resolve_repo_root",

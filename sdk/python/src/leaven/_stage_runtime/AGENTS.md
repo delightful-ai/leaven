@@ -2,11 +2,12 @@
 
 `leaven._stage_runtime` owns private Python stage-context bindings. It turns an
 already-authorized stage dispatch plus a callback client into concrete
-`RolloutContext` / builder objects.
+`RolloutContext` / `ProposeContext` / builder objects.
 
 It is private SDK runtime machinery, not public API. Public users should see
-only `cx.lm`, `cx.agent`, `cx.proposals`, and role-specific context types
-supplied by Leaven.
+only `cx.lm`, `cx.agent`, `cx.proposals`, role-scoped workspace handles such
+as `cx.rollout_workspace` / `cx.parent_workspace`, and role-specific context
+types supplied by Leaven.
 
 ## Public Dependencies
 
