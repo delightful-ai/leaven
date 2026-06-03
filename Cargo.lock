@@ -3178,6 +3178,7 @@ dependencies = [
 name = "leaven-acp-stage-bridge"
 version = "0.0.0"
 dependencies = [
+ "futures",
  "jcs-canonicalize",
  "leaven-acp",
  "leaven-core",
@@ -3185,6 +3186,7 @@ dependencies = [
  "leaven-kernel",
  "leaven-public-seam",
  "leaven-run",
+ "leaven-store-inline",
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",

@@ -2,7 +2,9 @@ use leaven_core::{
     Artifact, Assessment, CacheIdentity, EvaluationRequest, OptimizationProblem,
     ResolvedEvaluationRequest, ResolvedRequestKind,
 };
-use leaven_kernel::{AssessmentId, BudgetExceeded, CandidateId, EvaluatorId, ProposalBatchId};
+use leaven_kernel::{
+    AssessmentId, BudgetExceeded, CandidateId, EvaluationRequestId, EvaluatorId, ProposalBatchId,
+};
 use leaven_store::StoreError;
 use thiserror::Error;
 
@@ -27,6 +29,9 @@ pub enum RunContextError {
     /// The requested evaluator is not registered in the engine.
     #[error("unknown evaluator: {0}")]
     UnknownEvaluator(EvaluatorId),
+    /// The requested evaluation request is not visible or not present in the graph.
+    #[error("unknown evaluation request: {0}")]
+    UnknownEvaluationRequest(EvaluationRequestId),
     /// The requested assessment is not visible or not present in the graph.
     #[error("unknown assessment: {0}")]
     UnknownAssessment(AssessmentId),

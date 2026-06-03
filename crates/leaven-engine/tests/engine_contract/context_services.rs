@@ -835,6 +835,115 @@ fn deterministic_evaluation_ignores_cache_entries_with_missing_graph_assessments
 }
 
 #[test]
+fn submit_assessments_records_external_worker_output_through_runcontext() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let case_set = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let candidate = {
+            let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            seed_ctx.insert_seed(text_artifact("abc"), 0).unwrap()
+        };
+        let request_id = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_evidence_store(&store);
+            let error = ctx
+                .evaluate_with(&FailingEvaluator, independent_request(candidate))
+                .await
+                .unwrap_err();
+            assert!(matches!(
+                error,
+                leaven_engine::RunContextError::Evaluation(_)
+            ));
+            ctx.graph()
+                .events()
+                .find_map(|event| match event {
+                    RunEvent::EvaluationRequested { request_id, .. } => Some(*request_id),
+                    _ => None,
+                })
+                .expect("failing evaluator still records the external evaluation request")
+        };
+
+        let report = {
+            let mut ctx =
+                RunContext::<TestProblem>::new(&mut graph, &mut budget).with_evidence_store(&store);
+            ctx.submit_assessments(
+                request_id,
+                Metered::new(
+                    vec![Assessment::Independent {
+                        candidate,
+                        target: AssessmentTarget::Unscoped,
+                        evidence: TestEvidence { score: 7.0 },
+                        cost: Cost::zero(),
+                        metadata: MetadataBag::new(),
+                    }],
+                    Cost::metric_calls(2),
+                ),
+            )
+            .unwrap()
+        };
+
+        assert_eq!(report.request_id, request_id);
+        assert_eq!(report.assessment_ids.len(), 1);
+        assert_eq!(report.cost, Cost::metric_calls(2));
+        assert!(matches!(
+            report.cache,
+            CacheStatus::Bypassed(CacheBypassReason::DisabledByPolicy)
+        ));
+        let ctx =
+            RunContext::<TestProblem>::new(&mut graph, &mut budget).with_evidence_store(&store);
+        let assessment = ctx
+            .graph()
+            .assessment(report.assessment_ids[0])
+            .expect("submitted assessment is graph-visible");
+        assert_eq!(assessment.request_id(), request_id);
+        assert_eq!(assessment.independent_candidate(), Some(candidate));
+        assert_score(
+            ctx.assessment_evidence(report.assessment_ids[0])
+                .unwrap()
+                .score,
+            7.0,
+        );
+        assert!(ctx.graph().events().any(|event| matches!(
+            event,
+            RunEvent::EvaluationCompleted {
+                request_id: event_request_id,
+                assessment_ids,
+                cost,
+                cache: CacheStatus::Bypassed(CacheBypassReason::DisabledByPolicy),
+                ..
+            } if *event_request_id == request_id
+                && assessment_ids == &report.assessment_ids
+                && *cost == Cost::metric_calls(2)
+        )));
+    });
+}
+
+#[test]
+fn submit_assessments_refuses_unknown_evaluation_request_without_mutation() {
+    let (mut graph, mut budget) = graph_and_budget();
+    let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+    let before_events = {
+        let ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+        ctx.graph().event_count()
+    };
+    let mut ctx =
+        RunContext::<TestProblem>::new(&mut graph, &mut budget).with_evidence_store(&store);
+    let result = ctx.submit_assessments(
+        leaven_kernel::EvaluationRequestId::new(),
+        Metered::new(Vec::new(), Cost::zero()),
+    );
+
+    assert!(matches!(
+        result,
+        Err(leaven_engine::RunContextError::UnknownEvaluationRequest(_))
+    ));
+    assert_eq!(ctx.graph().assessment_count(), 0);
+    assert_eq!(ctx.graph().event_count(), before_events);
+}
+
+#[test]
 fn deterministic_evaluation_without_cache_store_reports_unavailable_bypass() {
     block_on(async {
         let (mut graph, mut budget) = graph_and_budget();

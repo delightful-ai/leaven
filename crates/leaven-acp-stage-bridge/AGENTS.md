@@ -42,7 +42,9 @@ it waits, the worker initiates `leaven/lm.complete` (worker->host) and
 `StageRunEffectHost` answers from the host `HostLm`.
 `RunContextGraphEffectHost` is the narrow graph-write callback path: it services
 `leaven/proposal.apply` by calling `RunContext::apply_batch`, and services
-`leaven/event.emit` by lowering the public write body into
+`leaven/assessment.submit` by calling `RunContext::submit_assessments` after a
+host-owned typed lowerer has converted the public payload into `Assessment<P>`.
+It services `leaven/event.emit` by lowering the public write body into
 `RunContext::emit(RunEvent::ExternalEventEmitted { ... })`. It exists to prove
 the bidirectional stdio callback can cross from a worker request into
 RunContext-owned mutation without teaching `leaven-acp` or `leaven-seam-service`
@@ -79,6 +81,11 @@ ordinary app-facing API.
   `leaven/event.emit` and prove the host recorded RunContext-backed graph
   mutations, plus negatives for a non-text stage output and target material
   smuggled into the runner request.
+- `tests/graph_effect_contract.rs` isolates graph-effect callbacks that need
+  additional typed host lowering. Its `leaven/assessment.submit` proof keeps
+  public JSON parsing at the bridge boundary, lowers into concrete
+  `Assessment<P>` evidence, calls `RunContext::submit_assessments`, and asserts
+  the graph/evidence store, not just the receipt shape.
 - `worker/serve_stage_runner.py` is the runnable `serve_stage` runner worker the
   example spawns. The Python SDK project under `sdk/python`
   stays `NotImplementedError` by its own AGENTS; this runnable worker lives here,

@@ -268,6 +268,38 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
         Ok(report)
     }
 
+    /// Submit typed assessment output produced outside the in-process evaluator call.
+    ///
+    /// External worker seams use this when the evaluation request already
+    /// exists in the graph and the worker returns typed problem evidence through
+    /// a trusted host-side lowering layer. Evidence is still stored through the
+    /// configured evidence store and graph mutation still goes through
+    /// `RunContext`.
+    pub fn submit_assessments(
+        &mut self,
+        request_id: EvaluationRequestId,
+        metered: leaven_kernel::Metered<Vec<Assessment<P>>>,
+    ) -> Result<EvaluationReport, RunContextError> {
+        let request = self
+            .graph()
+            .evaluation_request(request_id)
+            .ok_or(RunContextError::UnknownEvaluationRequest(request_id))?;
+        let evaluator_id = request.evaluator().clone();
+        let resolved_set = request.resolved_set().id;
+        let stage = StageId::from_evaluator(evaluator_id.clone());
+        self.charge(stage, metered.cost.clone())?;
+        let assessment_ids = self.record_assessments(request_id, &evaluator_id, metered.value)?;
+        let report = EvaluationReport {
+            request_id,
+            resolved_set,
+            assessment_ids,
+            cost: metered.cost,
+            cache: CacheStatus::Bypassed(CacheBypassReason::DisabledByPolicy),
+        };
+        self.emit_evaluation_completed(&evaluator_id, &report);
+        Ok(report)
+    }
+
     fn cached_evaluation_report(
         &mut self,
         evaluator: &EvaluatorId,
