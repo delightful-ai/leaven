@@ -241,7 +241,7 @@ acceptance:
     claim: >-
       `leaven seam serve --stdio` executes configured Leaven method families
       instead of rejecting them by default.
-    status: pending
+    status: done
     proof_required:
       kind: focused_stdio_jsonrpc_tests
       must_exercise:
@@ -272,6 +272,16 @@ acceptance:
         worker process for `sc_python_worker_proof`. This still does not prove
         registered SDK stages, role-scoped `cx`, callbacks from inside the
         worker, GEPA search, or inspection.
+      - >-
+        Acceptance proof for this row: `crates/leaven-cli/tests/seam_stdio_server.rs`
+        spawns the real `leaven seam serve --stdio --root ... --config ...`
+        binary route, writes line-delimited JSON-RPC requests over stdin, and
+        proves one response per request on stdout. The scenario covers invalid
+        request-envelope validation, configured mock LM Plan IR execution
+        through the loaded public-seam package, config-file loading by the CLI
+        using unique token counts/text, and an honest unconfigured stage-runner
+        execution error. It does not invoke or depend on legacy
+        `leaven serve --stdio --plan --out`.
     closeout_check: Validation-only or rejecting-service paths remain scaffolding, not completion.
 
   - id: python_sdk_drives_public_server
