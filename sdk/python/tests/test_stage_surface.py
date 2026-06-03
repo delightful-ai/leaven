@@ -8,6 +8,7 @@ import leaven as lv
 from leaven._handles import WorkspaceHandle
 from leaven._receipts import CallReceipt
 from leaven._seam import CommandRunnerStageConfig, MockRunnerStageConfig, StageRunRequest
+from leaven._seam_optimize.driver import _agent_config
 from leaven.builders.agent import AgentBuilder
 from leaven.builders.lm import LmBuilder
 
@@ -357,6 +358,35 @@ async def run(prompt, case, cx):
     assert process.returncode == 0, stderr
     assert response["result"]["stage_call_id"] == "sc_stage_worker_agent"
     assert response["result"]["output"]["value"] == "agentrec_worker_test"
+
+
+def test_optimize_runtime_codex_agent_config_lowers_to_seam(monkeypatch) -> None:
+    """Example: Python runtime agent config becomes service Codex CLI config."""
+
+    monkeypatch.setenv("LEAVEN_TEST_CODEX_BIN", "/tmp/leaven-test-codex")
+    runtime = lv.runtime(
+        workspace=lv.workspace.local(),
+        lm=lv.lm.mock(responses=["unused"]),
+        agent=lv.agent.codex(
+            model="gpt-5.4-mini",
+            transport="cli",
+            approval_mode="interactive",
+            bin_path_env="LEAVEN_TEST_CODEX_BIN",
+            timeout_s=17,
+        ),
+    )
+
+    config = _agent_config(runtime)
+
+    assert config is not None
+    assert config.to_json() == {
+        "kind": "codex_cli",
+        "codex_bin": "/tmp/leaven-test-codex",
+        "model": "gpt-5.4-mini",
+        "timeout_s": 17,
+        "codex_home": None,
+        "bypass_approvals_and_sandbox": False,
+    }
 
 
 class FakeSeamClient:

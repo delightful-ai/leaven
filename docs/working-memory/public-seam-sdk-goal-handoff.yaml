@@ -298,6 +298,20 @@ acceptance:
         workspace materialization and the fake Codex CLI adapter. This still
         does not prove live `gpt-5.4-mini` inside `lv.optimize(...).run()`,
         cost accounting, reward vectors, GEPA search, or inspection.
+      - >-
+        Live Codex optimize evidence, not full acceptance completion:
+        `sdk/python/examples/11_live_optimize_codex_stage.py` is a live-gated
+        Python SDK proof. With `LEAVEN_LIVE_CODEX=1`,
+        `LEAVEN_BIN=target/debug/leaven`, and
+        `LEAVEN_CODEX_BIN=/Users/darin/.codex/packages/standalone/current/codex`,
+        `uv run python examples/11_live_optimize_codex_stage.py` completed
+        through `lv.optimize(...).run()` with `run id:
+        live_codex_optimize`, `best score: 1.000`, and `agent receipt:
+        agentrec_completion`. This proves live `gpt-5.4-mini` Codex execution
+        through Python SDK -> durable public seam -> Python stage worker ->
+        nested `leaven/agent.run` -> materialized workspace. It still does not
+        prove cost accounting, reward vectors, GEPA search, blob readback, or
+        inspection.
     closeout_check: Rust-only harnesses and hardcoded demo plans are rejected.
 
   - id: reward_vector

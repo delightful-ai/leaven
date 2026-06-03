@@ -54,6 +54,11 @@ Status: active foundation slice, not the full Python SDK acceptance gate.
   `leaven/agent.run` over the active worker pipe. `leaven-seam-service` services
   that callback through configured workspace materialization plus the configured
   Codex CLI adapter.
+- Current live-Codex optimize slice: `sdk/python/examples/11_live_optimize_codex_stage.py`
+  is a live-gated proof that `lv.optimize(...).run()` can run a registered
+  Python runner stage, call `cx.agent.run` from inside that stage, route the
+  nested `leaven/agent.run` through `leaven seam serve --stdio`, and execute the
+  configured Codex CLI adapter with `gpt-5.4-mini`.
 
 ## Verification Run
 
@@ -130,12 +135,17 @@ Python SDK project:
   `seam_runtime_services_agent_callback_from_command_worker`, proving
   worker-initiated `leaven/agent.run` is serviced through configured workspace
   materialization and the fake Codex CLI adapter.
+- `LEAVEN_LIVE_CODEX=1 LEAVEN_BIN=target/debug/leaven
+  LEAVEN_CODEX_BIN=/Users/darin/.codex/packages/standalone/current/codex
+  uv run python examples/11_live_optimize_codex_stage.py` completed through
+  `lv.optimize(...).run()` with `run id: live_codex_optimize`,
+  `best score: 1.000`, and `agent receipt: agentrec_completion`.
 
 ## Still Unproven
 
 - Engine-supplied `cx.agent.run` inside runner stages is now wired for the
-  prompt mechanics path and proven with the fake Codex adapter. Live Codex
-  `gpt-5.4-mini` inside `lv.optimize(...).run()` remains unproven.
+  prompt mechanics path, proven with the fake Codex adapter, and live-proven
+  with `gpt-5.4-mini` through `lv.optimize(...).run()`.
 - Engine-supplied `cx.lm.complete` inside `lv.optimize(...).run()` is now a
   nested `leaven/lm.complete` callback for the prompt mechanics path. Rich
   message lists, model role selection, token/cost projection into the Python
@@ -156,7 +166,8 @@ Python SDK project:
   blob contents yet. Inspection can see refs, not fetch the transcript/stdout
   bytes through a public API.
 - Codex CLI cost remains `{}` because the provider adapter records zero cost.
-  Live spend happened, but the result is not yet cost-accounted.
+  Live spend happened through both direct agent proof and in-stage optimize
+  proof, but the result is not yet cost-accounted.
 - Workspace release/cleanup is not exposed through the service path; current
   materialized workspaces live for the service host lifetime.
 - `lv.runs.open(...)`, lineage inspection, evidence query, and optimized run
@@ -167,12 +178,10 @@ Python SDK project:
 
 ## Next Slices
 
-1. Run a live `gpt-5.4-mini` Codex proof from inside `lv.optimize(...).run()`
-   using the `cx.agent.run` callback substrate.
-2. Add blob persistence/readback to `leaven-seam-service` or record an explicit
+1. Add blob persistence/readback to `leaven-seam-service` or record an explicit
    unsupported-provider error if blob fetch is requested before storage exists.
-3. Decide the cost bridge for Codex CLI: either parse provider usage from Codex
+2. Decide the cost bridge for Codex CLI: either parse provider usage from Codex
    JSONL when available or return a typed unsupported-cost marker instead of
    `{}`.
-4. Move from direct `agent.run` proof to a tiny Python `optimize(...).run()`
-   proof that uses a live agent stage and at least one Python-authored reward.
+3. Move from mechanics scoring to a Python-authored reward-vector proof that
+   records typed reward outputs through the public seam.
