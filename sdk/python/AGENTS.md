@@ -13,30 +13,23 @@ foundation slices that are backed by the governing spec and a current proof.
 
 ### The wired paths
 
-#### 1. Example 03, prompt/LM/exact-match
+#### 1. Example 03, durable seam optimize mechanics
 
-`examples/03_prompt_optimize.py` runs for real over the locked Leaven worker
-bidirectional seam. The wired surface is exactly the slice-3 path and no
-more: `optimize().run()`, `cx.lm.complete(prompt=...)`, `cases.from_jsonl`,
-and the `Environment`/`Task`/`Rollout.fn`/`Rubric`/`runtime.local` records
-those compose. Everything else stays `NotImplementedError`.
+`examples/03_prompt_optimize.py` now runs `lv.optimize(...).run()` through the
+durable `leaven seam serve --stdio --config` server route. The wired surface is
+the current mechanics path: `optimize().run()`, `cases.from_jsonl`,
+`StageRunRequest`, `MockRunnerStageConfig`, and the
+`Environment`/`Task`/`Rollout.fn`/`Rubric`/`runtime.local` records those
+compose. The private owner is `leaven._seam_optimize`, not legacy
+`leaven._serve`.
 
-Directionality (the crux, fixed by `docs/specs/leaven_python.md` "the wire"):
-`optimize().run()` SPAWNS `leaven serve --stdio` as a child. The Rust child
-owns the tiny real GEPA accept loop, the deterministic host mock LM, and
-INITIATES `leaven/stage.run`. This Python package (`leaven/_serve.py`) serves
-`leaven/stage.run` by running the user's `@lv.runner`, and INITIATES
-`leaven/lm.complete` BACK to the child. That is a Leaven-owned JSON-RPC worker
-seam, not upstream Agent Client Protocol. It is the Python generalization of
-the proven Rust worker
-`crates/leaven-acp-stage-bridge/worker/serve_stage_runner.py`.
-
-Honest scope: the seam, stage dispatch, and GEPA-shaped accept are real; the LM
-is a deterministic mock (no spend, no network). The exact-match reward and the
-reflector run host-side in `leaven serve` and are named declaratively in the
-plan (`_serve.run_optimization`), so the Python `@lv.reward`/reflect bodies are
-not yet executed. The reward vector, agent, sandbox, message-list LM, and
-Python-side reward/reflect are later slices and remain scaffold.
+Honest scope: the Python SDK now configures and calls the durable public seam
+server for runner `leaven/stage.run` mechanics, and returns a typed
+`Optimized[PromptArtifact]`. The configured runner is deterministic and
+service-side; it does not execute the user's Python `@lv.runner`, does not run
+GEPA search, does not call `cx.lm.complete`, and does not execute Python
+`@lv.reward` bodies. Reward vectors, agent, sandbox, message-list LM,
+Python-authored worker stage dispatch, and optimizer search remain later slices.
 
 #### 2. Example 10, live Codex agent.run over the public seam
 
@@ -226,13 +219,10 @@ Round 4 vendored (2026-05-24) — high-taste references:
 - No checked-in Python file exceeds 650 lines. Generated schema modules are not
   checked in until the codegen output has a deliberate split policy.
 - `cargo build -p leaven-cli` then `uv run python examples/03_prompt_optimize.py`
-  runs the one wired path FOR REAL over the live Leaven worker seam: it spawns
-  `leaven serve --stdio`, optimizes the seed prompt, and prints `seed score: 0.000`
-  / `best score: 1.000` plus the optimized template. This is the slice-3 product
-  proof. The remaining examples print composed types and canonical sketches only.
-
-`tests/test_stage_surface.py` and `tests/test_product_surface_ring.py` reference
-the pre-cutover `evolve`/`Stages`/`scorer` surface that the
-`optimize(environment)` cutover removed; they are stale and are not part of the
-named verification above. Bring them in line with the current surface in a
-focused change before relying on `uv run pytest`.
+  runs the current wired mechanics path over the durable public seam server:
+  it spawns `leaven seam serve --stdio --config`, sends runner
+  `leaven/stage.run` requests, and returns a typed `Optimized[PromptArtifact]`.
+  Expected current output is `seed score: 0.000` / `best score: 0.000` plus the
+  seed prompt. This is deterministic mechanics evidence, not optimizer-search
+  product proof. The remaining examples print composed types and canonical
+  sketches only unless their own comments name a live-gated proof.

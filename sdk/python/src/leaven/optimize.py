@@ -5,12 +5,11 @@ optimizer config, and a runtime into a runnable optimization. The builder is
 typed by the artifact type so `result.best.artifact` is fully typed. Train /
 validation / test splits come from `Case.split` tags on the environment's task.
 
-`.run()` for the prompt/LM/exact-match path spawns `leaven serve --stdio` as a
-child (the ACP client that owns the GEPA accept loop and the deterministic host
-mock LM) and drives it as the ACP agent: it serves the runner stage by running
-the user's `@lv.runner` and calls `leaven/lm.complete` back to the child. The
-result is a real `Optimized[PromptArtifact]`. The bidirectional seam, stage
-dispatch, and GEPA-shaped accept are real; the LM is a deterministic mock.
+`.run()` for the current prompt mechanics path uses the durable
+`leaven seam serve --stdio` server route and sends locked runner
+`leaven/stage.run` requests through private `_seam` client machinery. This is
+deterministic mechanics evidence for the public seam route; Python-authored
+worker execution and real optimizer search are later slices.
 """
 
 from __future__ import annotations
@@ -18,19 +17,13 @@ from __future__ import annotations
 import datetime
 from typing import Any, cast
 
+from ._seam_optimize import SeamOptimizeReport, run_prompt_mechanics
 from .artifacts.prompt import PromptArtifact
 from .environment import Environment
 from .optimizers.config import OptimizerConfig
 from .optimizers.gepa import Gepa
 from .result import Candidate, Optimized, RunSummary
 from .runtime import Runtime
-
-# Slice-3 host-side reward/reflector names the `leaven serve` child runs by name.
-# Scoring (exact match) and the reflector are host-side for the prompt/LM path;
-# the reward vector and a Python-side reflector are later slices.
-_EXACT_MATCH_REWARD = "exact_match"
-_SURFACE_QUESTION_REFLECT = "surface_question"
-_DEFAULT_MAX_ITERATIONS = 2
 
 
 class OptimizeBuilder[A]:
@@ -48,29 +41,20 @@ class OptimizeBuilder[A]:
         stopping criteria, budget exhausted, max iterations reached, user
         cancellation.
         """
-        from ._serve import run_optimization
-
         seed = self._prompt_seed()
-        runner = self._runner_stage()
-        gepa = self._gepa_config()
+        self._runner_stage()
+        self._gepa_config()
         cases = self._plan_cases()
         run_id = self._run_id()
 
-        minibatch = max(1, min(gepa.minibatch_size, len(cases)))
-        max_iterations = gepa.max_iterations or _DEFAULT_MAX_ITERATIONS
-
         started_at = _utcnow()
-        result = await run_optimization(
+        report = await run_prompt_mechanics(
             seed=seed,
             cases=cases,
-            runner=runner,
             run_id=run_id,
-            minibatch=minibatch,
-            max_iterations=max_iterations,
-            reward_name=_EXACT_MATCH_REWARD,
-            reflect_name=_SURFACE_QUESTION_REFLECT,
+            runtime=self.runtime,
         )
-        return cast("Optimized[A]", _to_optimized(result, run_id, started_at, len(cases)))
+        return cast("Optimized[A]", _to_optimized(seed, report, run_id, started_at, len(cases)))
 
     def dry_run(self) -> OptimizeBuilder[A]:
         """Mark the run as dry-run: validates configuration without executing.
@@ -150,37 +134,31 @@ def optimize[A](
 
 
 def _to_optimized(
-    result: dict[str, Any],
+    seed: PromptArtifact,
+    report: SeamOptimizeReport,
     run_id: str,
     started_at: str,
     case_count: int,
 ) -> Optimized[PromptArtifact]:
-    """Project the `leaven serve` result JSON into a typed `Optimized`."""
-    frontier = [_to_candidate(row) for row in result["frontier"]]
-    best = _to_candidate(result["best"])
-    iterations = int(result["iterations"])
+    """Project the durable-seam mechanics report into a typed `Optimized`."""
+    best = Candidate(
+        id="cand_seed",
+        artifact=PromptArtifact(template=seed.template, candidate_id="cand_seed"),
+        parent_id=None,
+        summary_score=report.best_score,
+    )
     summary = RunSummary(
         run_id=run_id,
         started_at=started_at,
         completed_at=_utcnow(),
-        iterations=iterations,
-        candidates_evaluated=len(frontier),
+        iterations=0,
+        candidates_evaluated=1,
         total_cost_usd=0.0,
-        total_calls=iterations * case_count,
+        total_calls=case_count,
         total_lm_tokens=0,
         replayability="fully_managed",
     )
-    return Optimized(run_id=run_id, best=best, frontier=frontier, summary=summary)
-
-
-def _to_candidate(row: dict[str, Any]) -> Candidate[PromptArtifact]:
-    """Project one `leaven serve` candidate row into a typed `Candidate`."""
-    return Candidate(
-        id=row["id"],
-        artifact=PromptArtifact(template=row["template"], candidate_id=row["id"]),
-        parent_id=row.get("parent_id"),
-        summary_score=row.get("score"),
-    )
+    return Optimized(run_id=run_id, best=best, frontier=[best], summary=summary)
 
 
 def _wire_case_id(case_id: str) -> str:

@@ -30,6 +30,10 @@ Status: active foundation slice, not the full Python SDK acceptance gate.
   configured deterministic runner `leaven/stage.run` through
   `leaven seam serve --stdio`, and Python `_seam` can serialize both
   `MockRunnerStageConfig` and `StageRunRequest`.
+- Current optimize hard-cut slice: `OptimizeBuilder.run` no longer imports
+  legacy `_serve.run_optimization`; it delegates to `leaven._seam_optimize`,
+  which drives the durable `leaven seam serve --stdio` route with
+  `StageRunRequest` and returns a typed `Optimized[PromptArtifact]`.
 
 ## Verification Run
 
@@ -70,6 +74,11 @@ Python SDK project:
 - A one-off Python proof sent `StageRunRequest` through `SeamClient`, spawned
   `leaven seam serve --stdio --config`, and returned `stage_run_result`,
   `sc_stage_proof`, and `runner durable seam ok`.
+- `uv run python examples/03_prompt_optimize.py` now invokes
+  `lv.optimize(...).run()` through the durable seam server and returns
+  `seed score: 0.000`, `best score: 0.000`, and the seed prompt as the best
+  artifact. This is the expected deterministic mechanics result, not an
+  optimizer improvement.
 
 ## Still Unproven
 
@@ -82,6 +91,9 @@ Python SDK project:
 - Python-authored stages over the durable `leaven seam serve --stdio` route are
   still unproven. The configured-stage slice is deterministic service
   mechanics, not worker process dispatch.
+- Optimizer search over the durable server is still unproven. The current
+  `lv.optimize(...).run()` result is a typed mechanics facade over configured
+  runner stage calls, not GEPA proposal/admission.
 - Live LM provider configuration from Python remains unproven; the new
   LmBuilder proof uses the configured deterministic mock LM.
 - Reward-vector execution from Python remains scaffold. `@lv.reward` bodies are

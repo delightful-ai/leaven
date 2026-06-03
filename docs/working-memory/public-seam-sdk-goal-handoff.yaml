@@ -238,6 +238,16 @@ acceptance:
         envelope. This proves Python can configure and call the durable server
         for deterministic stage-run mechanics, not that `lv.optimize(...).run()`
         has hard-cut from legacy `_serve`.
+      - >-
+        Partial mechanics evidence, not acceptance completion: current optimize
+        hard-cut slice routes `OptimizeBuilder.run` through
+        `leaven._seam_optimize`, which uses `SeamClient` and
+        `StageRunRequest` against `leaven seam serve --stdio --config`.
+        `uv run python examples/03_prompt_optimize.py` now invokes
+        `lv.optimize(...).run()` through that durable route and returns a typed
+        `Optimized[PromptArtifact]` with deterministic configured-runner scores.
+        This does not prove Python-authored worker stages, GEPA search,
+        reward-vector execution, or inspectable lineage/evidence.
     closeout_check: Rust-only harnesses and hardcoded demo plans are rejected.
 
   - id: reward_vector

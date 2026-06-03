@@ -107,7 +107,7 @@ class SeamServiceConfig:
     """Full private config document passed to `leaven seam serve --stdio`."""
 
     context: SeamExecutionContext
-    capability: dict[str, Any]
+    capability: dict[str, Any] | None = None
     agent: CodexCliRuntimeConfig | None = None
     workspace: LocalWorkspaceConfig = field(default_factory=LocalWorkspaceConfig)
     lm: MockLmRuntimeConfig = field(default_factory=MockLmRuntimeConfig)

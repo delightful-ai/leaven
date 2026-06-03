@@ -1,7 +1,7 @@
 """Example 03 — the canonical minimal sketch.
 
-The smallest meaningful Leaven program: optimize a prompt for an arithmetic
-QA task with GEPA, exact-match scored, against a local runtime with a mock LM.
+The smallest meaningful Leaven program shape: compose a prompt optimization
+for an arithmetic QA task with GEPA, exact-match scoring, and a local runtime.
 
 The whole program is `seed x Environment(task, rollout, rubric) x optimizer x
 runtime`. The rollout is target-FREE (`InputCaseView` has no `.target`); the
@@ -54,9 +54,10 @@ async def amain() -> None:
         runtime=lv.runtime.local(budget=lv.budget(usd=20)),
     ).run()
 
-    # `result.best.artifact` is a fully-typed `PromptArtifact`. The optimization
-    # ran for real over the live ACP seam: the seed scored 0, the reflected child
-    # surfaced the question and scored 1.0, and the strict improvement was kept.
+    # `result.best.artifact` is a fully-typed `PromptArtifact`. The current
+    # mechanics path runs over the durable `leaven seam serve --stdio` route
+    # with a deterministic configured runner; optimizer search and Python
+    # worker execution remain later slices.
     seed = next(c for c in result.frontier if c.parent_id is None)
     print(f"seed score:  {seed.summary_score:.3f}")
     print(f"best score:  {result.best.summary_score:.3f}")
