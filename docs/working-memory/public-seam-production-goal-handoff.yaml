@@ -430,6 +430,32 @@ acceptance:
           - cargo test -p leaven-cli --test seam_stdio_server
           - cargo test -p leaven-public-seam --test public_seam_contract
         note: Public-seam Plan execution now has typed host hooks for apply_proposal_batch and submit_assessments; configured service and stdio return typed apply_receipt and assessment_batch_receipt values with receipt binding. This is still configured receipt plumbing, not durable RunContext mutation.
+      - kind: runcontext_graph_backed_write_projection
+        methods:
+          - "`leaven/proposal.apply`"
+          - "`leaven/assessment.submit`"
+        commands:
+          - cargo test -p leaven-run --test public_seam
+          - cargo test -p leaven --test topology_contract
+        paths:
+          - crates/leaven-run/src/public_seam/proposal_write.rs
+          - crates/leaven-run/src/public_seam/assessment_write.rs
+          - crates/leaven-run/tests/public_seam.rs
+          - crates/leaven-run/AGENTS.md
+          - docs/specs/public-seam-v1/conformance-matrix.yaml
+        note: leaven-run already projects RunContext-recorded proposal submission/application and assessment reports into locked public-seam Plan Results, and rejects forged proposal batches, forged apply outcomes, global-bucket assessment ids, mismatched request ids, missing evidence, and synthetic source receipts. This proves the graph-backed producer/projection route; the row remains pending until stdio service execution consumes that route instead of configured-only receipt plumbing.
+      - kind: runcontext_graph_backed_evaluation_request_projection
+        methods:
+          - "`leaven/evaluation.request`"
+        commands:
+          - cargo test -p leaven-run --test scoring_evaluator public_seam_job
+          - cargo test -p leaven --test topology_contract
+        paths:
+          - crates/leaven-run/src/public_seam/evaluation_job.rs
+          - crates/leaven-run/tests/scoring_evaluator.rs
+          - crates/leaven-run/AGENTS.md
+          - docs/specs/public-seam-v1/conformance-matrix.yaml
+        note: leaven-run projects real RunContext evaluation requests into locked EvaluationJobDocument values and matching request_evaluation Plan Result receipts for independent, pairwise, and listwise requests, while rejecting unsupported runtime granularity. This proves engine-recorded evaluation-request projection; the row remains pending until stdio service execution consumes that route instead of configured-only receipt plumbing.
       - kind: partial_configured_evaluation_request_execution
         methods:
           - "`leaven/evaluation.request`"
