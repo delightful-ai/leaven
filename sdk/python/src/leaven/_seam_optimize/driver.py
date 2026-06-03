@@ -33,6 +33,7 @@ from ..runtime import Runtime
 from .receipts import (
     effect_cost_totals_from_stage_result,
     effect_receipts_from_stage_result,
+    proposal_receipts_from_stage_result,
     sum_effect_cost_totals,
 )
 from .rewards import evaluate_reward_vector
@@ -210,11 +211,7 @@ async def _run_configured_proposer(
             reflection_summary=_reflection_summary(assessments),
         ).to_json_rpc(),
     )
-    proposal_receipts = [
-        receipt["receipt"]
-        for receipt in result.get("proposal_receipts", [])
-        if isinstance(receipt, dict) and isinstance(receipt.get("receipt"), str)
-    ]
+    proposal_receipts = proposal_receipts_from_stage_result(result)
     if not proposal_receipts:
         raise RuntimeError("proposer stage result missing proposal_receipts")
     return ProposerStageReport(

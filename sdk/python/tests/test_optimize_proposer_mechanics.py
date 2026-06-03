@@ -84,17 +84,22 @@ async def test_optimize_runs_configured_proposer_as_submit_only_slice(
 
     assert result.summary.iterations == 1
     assert [receipt.receipt_id for receipt in result.proposal_receipts] == ["wrec_proposal_batch"]
+    assert result.proposal_receipts[0].proposal_ids == ["prop_proposal_batch_0"]
     assert result.best.id == "cand_seed"
     assert result.frontier == [result.best]
     assert result.assessment("case_submit_001").score.value == 1.0
 
     reopened = lv.runs.open(result.summary.run_dir or "")
     assert [receipt.receipt_id for receipt in reopened.proposal_receipts] == ["wrec_proposal_batch"]
+    assert reopened.proposal_receipts[0].proposal_ids == ["prop_proposal_batch_0"]
 
     inspection = lv.runs.inspect(result.summary.run_dir or "")
-    assert ("write", "wrec_proposal_batch", "proposal_batch") in [
-        (receipt.kind, receipt.receipt_id, receipt.source) for receipt in inspection.receipts
-    ]
+    proposal_receipt = next(
+        receipt for receipt in inspection.receipts if receipt.receipt_id == "wrec_proposal_batch"
+    )
+    assert proposal_receipt.kind == "write"
+    assert proposal_receipt.source == "proposal_batch"
+    assert proposal_receipt.proposal_ids == ["prop_proposal_batch_0"]
 
 
 async def test_optimize_proposer_can_run_agent_then_submit_agent_session_change(

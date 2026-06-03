@@ -573,7 +573,7 @@ acceptance:
     claim: >-
       Completed runs can be inspected from Python with lineage, receipts,
       evidence, cost, and unsupported-provider gaps visible.
-    status: pending
+    status: done
     proof_required:
       kind: sdk_inspection_test
       must_exercise:
@@ -624,10 +624,11 @@ acceptance:
         `proposal_receipts` field, the SDK optimize driver requires that
         structured field, and `lv.runs.inspect(...)` exposes the persisted
         proposal batch receipt as a write receipt with `source:
-        proposal_batch`. `uv run pytest
+        proposal_batch` and the corresponding `proposal_ids`. `uv run pytest
         tests/test_proposer_worker.py tests/test_optimize_proposer_mechanics.py
         -q` proves worker callback capture, optimize receipt propagation, and
-        flattened inspection of `wrec_proposal_batch`. This still does not
+        flattened inspection of `wrec_proposal_batch` /
+        `prop_proposal_batch_0`. This still does not
         prove Rust graph checkpoint readback, durable blob/transcript fetch,
         provider-authored receipt validation, or complete cost accounting.
       - >-
@@ -642,6 +643,24 @@ acceptance:
         because blob ref metadata is now persisted. This still does not prove
         Rust graph checkpoint readback, provider-authored receipt validation,
         complete cost accounting, or actual blob byte retrieval from a store.
+      - >-
+        Acceptance proof for this foundation row: the current SDK inspection
+        surface covers the row's required facts without relying on stdout.
+        `uv run pytest tests/test_run_inspection.py
+        tests/test_run_receipt_inspection.py tests/test_optimize_proposer_mechanics.py
+        -q` proves `lv.optimize(...).run()` writes a persisted run that
+        `lv.runs.open(...)` and `lv.runs.inspect(...)` can read back with best
+        artifact, best score, reward-vector rows, assessment evidence payloads,
+        assessment write receipts, nested LM call receipts, proposer-stage
+        agent call receipts with transcript blob refs, proposal batch write
+        receipt plus `proposal_ids`, and explicit unsupported facts. The live
+        Codex proposer run `.leaven/runs/live_codex_proposer` additionally
+        proved inspection of Codex CLI unsupported cost/usage truth after a
+        real `gpt-5.4-mini` proposer call. This closes the Python SDK
+        foundation inspection claim. It does not claim Rust graph checkpoint
+        readback, provider-authored receipt validation beyond the public seam
+        result contract, complete provider cost accounting, or blob byte
+        retrieval from a store.
     closeout_check: Stdout transcript alone is not run inspection.
 
 proof_denominator:

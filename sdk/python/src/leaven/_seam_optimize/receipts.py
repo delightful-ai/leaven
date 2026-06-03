@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .._receipts import CallReceipt
+from .._receipts import CallReceipt, WriteReceipt
 from ..blob_ref import BlobRef
 
 
@@ -50,6 +50,31 @@ def effect_cost_totals_from_stage_result(result: dict[str, Any]) -> EffectCostTo
     return EffectCostTotals(cost_usd=usd_micro / 1_000_000, lm_tokens=lm_tokens)
 
 
+def proposal_receipts_from_stage_result(result: dict[str, Any]) -> list[WriteReceipt]:
+    """Extract proposal write receipts from private worker stage metadata."""
+    receipts = []
+    for value in result.get("proposal_receipts", []):
+        if not isinstance(value, dict):
+            continue
+        receipt = value.get("receipt")
+        if not isinstance(receipt, str) or not receipt:
+            continue
+        proposal_ids = value.get("proposal_ids")
+        receipts.append(
+            WriteReceipt(
+                receipt_id=receipt,
+                proposal_ids=[
+                    proposal_id
+                    for proposal_id in proposal_ids
+                    if isinstance(proposal_id, str)
+                ]
+                if isinstance(proposal_ids, list)
+                else [],
+            )
+        )
+    return receipts
+
+
 def sum_effect_cost_totals(values: list[EffectCostTotals]) -> EffectCostTotals:
     """Sum per-stage cost totals."""
     return EffectCostTotals(
@@ -92,5 +117,6 @@ __all__ = [
     "EffectCostTotals",
     "effect_cost_totals_from_stage_result",
     "effect_receipts_from_stage_result",
+    "proposal_receipts_from_stage_result",
     "sum_effect_cost_totals",
 ]

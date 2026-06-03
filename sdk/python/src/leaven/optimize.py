@@ -186,9 +186,7 @@ def _to_optimized(
         frontier=[best],
         summary=summary,
         assessment_rows=assessment_rows,
-        proposal_receipts=[
-            WriteReceipt(receipt_id=receipt_id) for receipt_id in report.proposal_receipts
-        ],
+        proposal_receipts=report.proposal_receipts,
         effect_receipts=report.effect_receipts,
     )
     return persist_optimized(result)

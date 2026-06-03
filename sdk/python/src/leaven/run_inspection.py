@@ -25,6 +25,8 @@ class ReceiptSummary(BaseModel):
     """Stable source label such as `assessment:<case>` or `proposal_batch`."""
     blob_refs: list[BlobRef] = Field(default_factory=list)
     """Blob references associated with this receipt, such as agent transcripts."""
+    proposal_ids: list[str] = Field(default_factory=list)
+    """Proposal ids associated with a proposal-batch write receipt."""
 
 
 class EvidenceSummary(BaseModel):
@@ -126,6 +128,7 @@ def _receipts(result: Optimized[Any]) -> list[ReceiptSummary]:
             kind="write",
             receipt_id=receipt.receipt_id,
             source="proposal_batch",
+            proposal_ids=receipt.proposal_ids,
         )
         for receipt in result.proposal_receipts
     )

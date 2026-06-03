@@ -39,5 +39,8 @@ class CallReceipt(_ReceiptBase):
 class WriteReceipt(_ReceiptBase):
     """Receipt for a graph mutation (proposal apply, assessment submit)."""
 
+    proposal_ids: list[str] = Field(default_factory=list)
+    """Proposal ids associated with a proposal-batch write receipt."""
+
 
 __all__ = ["CallReceipt", "QueryReceipt", "WriteReceipt"]
