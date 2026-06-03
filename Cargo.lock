@@ -3679,7 +3679,9 @@ dependencies = [
  "leaven-agent",
  "leaven-agent-codex-cli",
  "leaven-kernel",
+ "leaven-lm",
  "leaven-lm-mock",
+ "leaven-lm-openai",
  "leaven-public-seam",
  "leaven-seam-runtime",
  "leaven-workspace",
@@ -3689,6 +3691,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
 ]
 
 [[package]]

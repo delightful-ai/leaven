@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Sequence
 
 from .._seam import LmCompleteRequest
 from .._stage_runtime import CallbackProposeContext, CallbackRolloutContext
@@ -11,6 +12,9 @@ from .._stage_runtime import CallbackProposeContext, CallbackRolloutContext
 
 class JsonRpcCallbackClient:
     """Callback-backed effect client over the active command-runner pipe."""
+
+    def __init__(self, *, lm_model: str) -> None:
+        self._lm_model = lm_model
 
     def request(self, request: dict) -> dict:
         """Send one callback request and return the public-seam result object."""
@@ -23,7 +27,18 @@ class JsonRpcCallbackClient:
             raise RuntimeError(f"stage callback failed: {response['error']}")
         return response["result"]
 
-    async def lm_complete(self, prompt: str, *, request_id: str) -> str:
+    async def lm_complete(
+        self,
+        prompt: str,
+        *,
+        request_id: str,
+        model: str,
+        model_role: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        stop: Sequence[str] | None = None,
+        input_classes: Sequence[str] | None = None,
+    ) -> dict:
         """Send one `leaven/lm.complete` callback request and read the response."""
         request = LmCompleteRequest(
             request_id=request_id,
@@ -35,24 +50,29 @@ class JsonRpcCallbackClient:
                     "content": [{"kind": "text", "text": prompt}],
                 }
             ],
-            model="mock",
-            input_classes=["public"],
+            model=model,
+            model_role=model_role,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stop=stop,
+            input_classes=input_classes or ["public"],
         ).to_json_rpc()
-        content = self.request(request)["primary"]["message"]["content"]
-        return "".join(part["text"] for part in content if part.get("kind") == "text")
+        return self.request(request)
 
 
 def rollout_context(
     *,
     candidate_id: str,
     stage_call_id: str,
+    lm_model: str,
 ) -> CallbackRolloutContext:
     """Build the context passed to a registered runner stage."""
-    callback = JsonRpcCallbackClient()
+    callback = JsonRpcCallbackClient(lm_model=lm_model)
     return CallbackRolloutContext(
         callback,
         candidate_id=candidate_id,
         stage_call_id=stage_call_id,
+        lm_model=lm_model,
         agent_callback=callback,
     )
 
@@ -61,13 +81,15 @@ def propose_context(
     *,
     parent_candidate_id: str,
     stage_call_id: str,
+    lm_model: str,
 ) -> CallbackProposeContext:
     """Build the context passed to a registered proposer stage."""
-    callback = JsonRpcCallbackClient()
+    callback = JsonRpcCallbackClient(lm_model=lm_model)
     return CallbackProposeContext(
         callback,
         parent_candidate_id=parent_candidate_id,
         stage_call_id=stage_call_id,
+        lm_model=lm_model,
         agent_callback=callback,
         proposal_callback=callback,
     )

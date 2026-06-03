@@ -1,12 +1,12 @@
 use std::collections::BTreeMap;
+use std::future::Future;
 use std::path::{Path, PathBuf};
 
+use crate::lm::{ConfiguredLmError, ConfiguredLmRuntime, SeamLmConfig};
 use crate::stage::SeamStageConfig;
-use futures::executor::block_on;
 use leaven_agent::{AgentRunContext, AgentRuntime};
 use leaven_agent_codex_cli::{CodexCliApproval, CodexCliConfig, CodexCliRuntime, CodexCliSandbox};
 use leaven_kernel::{AgentSessionId, BudgetSnapshot};
-use leaven_lm_mock::{MockLm, MockLmScript};
 use leaven_public_seam::{
     AgentCommandOutputRefs, CapabilityDocument, PlanAgentRunOutcome, PlanAgentRunRequest,
     PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
@@ -85,7 +85,13 @@ impl ConfiguredSeamService {
     fn execute_plan_method(&self, method: &str, params: &Value) -> Result<Value, PublicSeamError> {
         let context = self.config.context.to_execution_context();
         let mut host = ConfiguredPlanHost {
-            lm: self.config.lm.to_mock_lm(),
+            lm: self
+                .config
+                .lm
+                .to_lm_runtime()
+                .map_err(|error| PublicSeamError::InvalidPlan {
+                    message: format!("configured LM provider failed: {error}"),
+                })?,
             workspace_config: self.config.workspace.clone(),
             workspace_factory: self.config.workspace.to_factory(),
             agent: self.config.agent.to_codex_runtime(),
@@ -310,78 +316,8 @@ impl Default for SeamAgentConfig {
     }
 }
 
-/// Configured LM provider for public-seam execution.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-pub enum SeamLmConfig {
-    /// Deterministic local LM script. This is mechanics evidence, not live
-    /// provider proof.
-    Mock {
-        /// Responses consumed in order by executed `lm_complete` calls.
-        responses: Vec<MockLmResponseConfig>,
-    },
-}
-
-impl SeamLmConfig {
-    fn validate(&self) -> Result<(), ConfiguredSeamServiceError> {
-        match self {
-            Self::Mock { responses } if responses.is_empty() => {
-                Err(ConfiguredSeamServiceError::EmptyMockLmScript)
-            }
-            Self::Mock { .. } => Ok(()),
-        }
-    }
-
-    fn to_mock_lm(&self) -> MockLm {
-        match self {
-            Self::Mock { responses } => {
-                let script = responses
-                    .iter()
-                    .fold(MockLmScript::new(), |script, response| {
-                        script.then_text(
-                            response.text.clone(),
-                            response.input_tokens,
-                            response.output_tokens,
-                        )
-                    });
-                MockLm::new(script)
-            }
-        }
-    }
-}
-
-impl Default for SeamLmConfig {
-    fn default() -> Self {
-        Self::Mock {
-            responses: vec![MockLmResponseConfig::default()],
-        }
-    }
-}
-
-/// One deterministic mock LM response.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct MockLmResponseConfig {
-    /// Assistant text returned by the mock LM.
-    pub text: String,
-    /// Input-token count charged by the response.
-    pub input_tokens: u64,
-    /// Output-token count charged by the response.
-    pub output_tokens: u64,
-}
-
-impl Default for MockLmResponseConfig {
-    fn default() -> Self {
-        Self {
-            text: "ok".to_owned(),
-            input_tokens: 1,
-            output_tokens: 1,
-        }
-    }
-}
-
 struct ConfiguredPlanHost {
-    lm: MockLm,
+    lm: ConfiguredLmRuntime,
     workspace_config: SeamWorkspaceConfig,
     workspace_factory: LocalWorkspaceFactory,
     agent: Option<CodexCliRuntime>,
@@ -393,7 +329,7 @@ impl PlanExecutionHost for ConfiguredPlanHost {
         &mut self,
         request: PlanLmCompleteRequest<'_>,
     ) -> Result<PlanLmCompleteOutcome, PublicSeamError> {
-        block_on(request.execute_with_lm(&self.lm))
+        block_on_configured_provider(request.execute_with_lm(&self.lm))
     }
 
     fn emit_run_event(
@@ -427,7 +363,9 @@ impl PlanExecutionHost for ConfiguredPlanHost {
         request: PlanWorkspaceMaterializeRequest<'_>,
     ) -> Result<PlanWorkspaceMaterializeOutcome, PublicSeamError> {
         let workspace_id = materialized_workspace_id(request.candidate()?);
-        let mut workspace = block_on(self.workspace_factory.allocate(WorkspaceConfig::default()))
+        let mut workspace = block_on_configured_provider(
+            self.workspace_factory.allocate(WorkspaceConfig::default()),
+        )
             .map_err(|error| PublicSeamError::InvalidPlan {
             message: format!("local workspace allocation failed: {error}"),
         })?;
@@ -484,7 +422,7 @@ impl PlanExecutionHost for ConfiguredPlanHost {
         let agent_request = request.into_agent_run_request();
         let budget = BudgetSnapshot::default();
         let mut view = workspace.view();
-        let session = block_on(agent.run_session(
+        let session = block_on_configured_provider(agent.run_session(
             &mut view,
             agent_request,
             AgentRunContext::new(AgentSessionId::new(), &budget),
@@ -556,6 +494,17 @@ fn blob_ref_for_bytes(id: &str, bytes: &[u8], data_classes: &[&str]) -> Value {
     })
 }
 
+fn block_on_configured_provider<F>(future: F) -> F::Output
+where
+    F: Future,
+{
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("configured seam provider runtime builds")
+        .block_on(future)
+}
+
 /// Error while constructing a configured public-seam service.
 #[derive(Debug, thiserror::Error)]
 pub enum ConfiguredSeamServiceError {
@@ -565,20 +514,25 @@ pub enum ConfiguredSeamServiceError {
     /// Capability document parsing failed.
     #[error(transparent)]
     Capability(#[from] leaven_public_seam::CapabilityError),
-    /// A mock LM must include at least one response.
-    #[error("mock LM config must include at least one response")]
-    EmptyMockLmScript,
+    /// LM provider configuration failed validation.
+    #[error(transparent)]
+    LmConfig(#[from] ConfiguredLmError),
 }
 
 #[cfg(test)]
 mod tests {
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::mpsc;
+
     use leaven_seam_runtime::{JsonRpcErrorCode, SeamRuntime};
     use serde_json::{Value, json};
 
     use super::{
-        ConfiguredSeamService, MockLmResponseConfig, SeamAgentConfig, SeamExecutionContextConfig,
-        SeamLmConfig, SeamServiceConfig, SeamStageConfig,
+        ConfiguredSeamService, SeamAgentConfig, SeamExecutionContextConfig, SeamServiceConfig,
+        SeamStageConfig,
     };
+    use crate::lm::{MockLmResponseConfig, SeamLmConfig};
 
     #[test]
     fn seam_runtime_executes_lm_complete_through_configured_service() {
@@ -622,6 +576,67 @@ mod tests {
             response.value()["result"]["receipts"][0]["call_kind"],
             "lm_complete"
         );
+    }
+
+    #[test]
+    fn seam_runtime_executes_lm_complete_through_openai_provider_config() {
+        let server = FakeOpenAiServer::start(
+            json!({
+                "id": "resp_seam_service",
+                "output": [{
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "live provider seam ok"}]
+                }],
+                "usage": {
+                    "input_tokens": 11,
+                    "output_tokens": 4
+                }
+            })
+            .to_string(),
+        );
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
+        let service = ConfiguredSeamService::from_package(
+            package.clone(),
+            SeamServiceConfig {
+                lm: SeamLmConfig::OpenAi {
+                    api_key_env: "PATH".to_owned(),
+                    base_url: Some(server.url()),
+                    timeout_s: Some(5),
+                    max_retries: Some(0),
+                },
+                ..SeamServiceConfig::default()
+            },
+        )
+        .unwrap();
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        let response = runtime.handle_value(&lm_complete_request());
+
+        assert!(
+            !response.is_error(),
+            "unexpected error: {:?}",
+            response.value()
+        );
+        assert_eq!(
+            response.value()["result"]["primary"]["message"]["content"][0]["text"],
+            "live provider seam ok"
+        );
+        assert_eq!(
+            response.value()["result"]["primary"]["cost"],
+            json!({
+                "input_tokens": 11,
+                "output_tokens": 4,
+                "lm_calls": 1
+            })
+        );
+        assert_eq!(
+            response.value()["result"]["receipts"][0]["call_kind"],
+            "lm_complete"
+        );
+        let request_body = server.request_body();
+        assert_eq!(request_body["model"], "gpt-4.1-mini");
+        assert_eq!(request_body["input"][0]["content"], "solve");
     }
 
     #[test]
@@ -958,6 +973,47 @@ mod tests {
             "method": "leaven/lm.complete",
             "params": lm_plan()
         })
+    }
+
+    struct FakeOpenAiServer {
+        url: String,
+        request_rx: mpsc::Receiver<Value>,
+    }
+
+    impl FakeOpenAiServer {
+        fn start(response_body: String) -> Self {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let addr = listener.local_addr().unwrap();
+            let (request_tx, request_rx) = mpsc::channel();
+            std::thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut buffer = [0_u8; 16 * 1024];
+                let read = stream.read(&mut buffer).unwrap();
+                let raw = String::from_utf8_lossy(&buffer[..read]);
+                let body = raw.split("\r\n\r\n").nth(1).unwrap_or_default();
+                request_tx.send(serde_json::from_str(body).unwrap()).unwrap();
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{}",
+                    response_body.len(),
+                    response_body
+                );
+                stream.write_all(response.as_bytes()).unwrap();
+            });
+            Self {
+                url: format!("http://{addr}/v1/responses"),
+                request_rx,
+            }
+        }
+
+        fn url(&self) -> String {
+            self.url.clone()
+        }
+
+        fn request_body(self) -> Value {
+            self.request_rx
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .unwrap()
+        }
     }
 
     fn two_call_request_with_one_mock_response() -> Value {

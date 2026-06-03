@@ -31,7 +31,8 @@ only the Python worker process implementation.
 - `target.py`: serializable command target for a registered stage.
 - `loader.py`: import a stage module/file and resolve a `RegisteredStage`.
 - `protocol.py`: one-request JSON-RPC read/write and error envelopes.
-- `context.py`: JSON-RPC callback context for the current worker slice.
+- `context.py`: JSON-RPC callback context for the current worker slice,
+  including default LM model projection into nested `leaven/lm.complete`.
 - `runner.py`: runner-stage payload projection and result construction.
 - `proposer.py`: proposer-stage payload projection, user stage execution, and
   proposal-submit callback result construction.

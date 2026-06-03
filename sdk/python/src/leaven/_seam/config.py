@@ -72,6 +72,26 @@ class MockLmRuntimeConfig:
 
 
 @dataclass(frozen=True)
+class OpenAiLmRuntimeConfig:
+    """Live OpenAI Responses API provider config for `leaven/lm.complete`."""
+
+    api_key_env: str = "OPENAI_API_KEY"
+    base_url: str | None = None
+    timeout_s: int | None = None
+    max_retries: int | None = None
+
+    def to_json(self) -> dict[str, Any]:
+        """Return the service config JSON shape."""
+        return {
+            "kind": "open_ai",
+            "api_key_env": self.api_key_env,
+            "base_url": self.base_url,
+            "timeout_s": self.timeout_s,
+            "max_retries": self.max_retries,
+        }
+
+
+@dataclass(frozen=True)
 class MockRunnerStageConfig:
     """Deterministic stage runner config used for durable seam mechanics proofs."""
 
@@ -124,7 +144,7 @@ class SeamServiceConfig:
     capability: dict[str, Any] | None = None
     agent: CodexCliRuntimeConfig | None = None
     workspace: LocalWorkspaceConfig = field(default_factory=LocalWorkspaceConfig)
-    lm: MockLmRuntimeConfig = field(default_factory=MockLmRuntimeConfig)
+    lm: MockLmRuntimeConfig | OpenAiLmRuntimeConfig = field(default_factory=MockLmRuntimeConfig)
     stage: MockRunnerStageConfig | CommandRunnerStageConfig | None = None
 
     def to_json(self) -> dict[str, Any]:
@@ -145,6 +165,7 @@ __all__ = [
     "LocalWorkspaceConfig",
     "MockLmRuntimeConfig",
     "MockRunnerStageConfig",
+    "OpenAiLmRuntimeConfig",
     "SeamExecutionContext",
     "SeamServiceConfig",
 ]

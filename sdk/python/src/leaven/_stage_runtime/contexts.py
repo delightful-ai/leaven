@@ -25,9 +25,10 @@ class CallbackRolloutContext(RolloutContext):
         *,
         candidate_id: str,
         stage_call_id: str,
+        lm_model: str,
         agent_callback: AgentRunCallback | None = None,
     ) -> None:
-        self.lm = CallbackLmBuilder(callback, stage_call_id)
+        self.lm = CallbackLmBuilder(callback, stage_call_id, default_model=lm_model)
         self.agent = (
             AgentBuilder._for_seam(
                 agent_callback,
@@ -68,10 +69,11 @@ class CallbackProposeContext(ProposeContext):
         *,
         parent_candidate_id: str,
         stage_call_id: str,
+        lm_model: str,
         agent_callback: AgentRunCallback | None = None,
         proposal_callback: ProposalSubmitCallback | None = None,
     ) -> None:
-        self.lm = CallbackLmBuilder(callback, stage_call_id)
+        self.lm = CallbackLmBuilder(callback, stage_call_id, default_model=lm_model)
         self.agent = (
             AgentBuilder._for_seam(
                 agent_callback,

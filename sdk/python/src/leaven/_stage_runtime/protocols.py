@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Protocol
 
 
@@ -24,7 +25,18 @@ class ProposalSubmitCallback(Protocol):
 class LmCompleteCallback(Protocol):
     """Driver capability required by callback-backed `cx.lm.complete`."""
 
-    async def lm_complete(self, prompt: str, *, request_id: str) -> str:
+    async def lm_complete(
+        self,
+        prompt: str,
+        *,
+        request_id: str,
+        model: str,
+        model_role: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        stop: Sequence[str] | None = None,
+        input_classes: Sequence[str] | None = None,
+    ) -> dict:
         """Complete one prompt through the stage driver's active seam."""
         ...
 

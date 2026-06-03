@@ -19,6 +19,9 @@ service while the stage is active. Their public wire remains the locked
 
 - `service.rs`: configured Plan IR service composition for LM, workspace, and
   agent effects.
+- `lm.rs`: configured LM provider selection for mock and OpenAI-backed
+  `leaven/lm.complete`. Public dependencies are `leaven-lm` and configured
+  provider crates; provider protocol details stay in the provider crates.
 - `stage.rs`: runner/proposer stage service configuration, dispatch, and
   callback loop. Public dependencies are `leaven-public-seam` stage/effect
   semantics and the standard library subprocess boundary; private helpers stay

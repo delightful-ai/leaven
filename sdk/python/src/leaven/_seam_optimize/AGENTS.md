@@ -31,6 +31,7 @@ capability policy, provider adapters, or worker protocol implementation.
 - `rewards.py`: Python reward-vector execution and aggregate score projection.
 - `scoring.py`: deterministic aggregate helpers for current prompt slice.
 - `driver.py`: durable seam process requests for registered runner-stage
-  mechanics and submit-only proposer mechanics, including agent-backed
-  proposal submission when the Python runtime config supplies an agent.
+  mechanics and submit-only proposer mechanics, including OpenAI-backed
+  `cx.lm.complete` when Python runtime config supplies `lv.lm.openai(...)`
+  and agent-backed proposal submission when it supplies a Codex agent.
 - `__init__.py`: map-only re-export.

@@ -432,6 +432,26 @@ acceptance:
         `SeamClient`, spawns `leaven seam serve --stdio --config`, and returns
         mock LM text, usage, cost, and receipt through `leaven/lm.complete`.
         This does not prove engine-supplied `cx.lm` or live LM provider wiring.
+      - >-
+        Deterministic provider-wiring evidence, not live acceptance completion:
+        `leaven-seam-service` now has a private `lm.rs` module that selects
+        mock or OpenAI-backed `leaven-lm` runtimes from explicit service config.
+        `cargo test -p leaven-seam-service` covers
+        `seam_runtime_executes_lm_complete_through_openai_provider_config`,
+        which executes `leaven/lm.complete` against a local OpenAI-compatible
+        HTTP server through `leaven-lm-openai` and verifies returned text,
+        token cost, call receipt, and request model/body. Python
+        `tests/test_stage_surface.py` covers `lv.lm.openai(...)` lowering into
+        the private seam service config and callback-backed `cx.lm.complete`
+        preserving usage and receipt in `LmResponse`.
+      - >-
+        Live proof scaffold, not executed in this environment:
+        `sdk/python/examples/13_live_optimize_openai_lm.py` is a live-gated
+        `lv.optimize(...).run()` proof that calls `cx.lm.complete` inside the
+        Python runner and returns assistant text, receipt id, usage, cost field,
+        and model through the assessment output. Current shell evidence:
+        `OPENAI_API_KEY` is unset, so the spend-bearing live OpenAI proof
+        remains pending.
     closeout_check: Mock-only LM is acceptable for default CI, but is not live provider proof.
 
   - id: inspection_and_closeout_truth

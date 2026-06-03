@@ -17,8 +17,8 @@ or other documented builders.
   `leaven seam serve --stdio --root <repo> --config <json>`.
 - The locked Leaven public seam JSON-RPC/Plan IR wire in
   `docs/specs/public-seam-v1/`.
-- Provider executables passed as configuration, currently Codex CLI and
-  command-runner stage worker processes.
+- Provider executables and providers passed as configuration, currently Codex
+  CLI, command-runner stage worker processes, mock LM, and OpenAI LM.
 - Capability actions enforced by `leaven-public-seam`, currently
   `lm.complete`, `workspace.materialize`, `agent.run`, and
   `proposal.submit_batch` for these helpers.

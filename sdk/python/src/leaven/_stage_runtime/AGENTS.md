@@ -27,6 +27,7 @@ types supplied by Leaven.
 ## Map
 
 - `protocols.py`: private protocols required from the stage driver.
-- `lm.py`: callback-backed `LmBuilder` implementation and response projection.
+- `lm.py`: callback-backed `LmBuilder` implementation and response projection,
+  preserving nested `leaven/lm.complete` text, usage, cost, model, and receipt.
 - `contexts.py`: role-scoped concrete context objects.
 - `__init__.py`: map-only re-exports.

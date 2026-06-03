@@ -276,10 +276,16 @@ now proves the same durable seam from the product path:
 `lv.optimize(...).run()` dispatches a configured `@lv.proposer`, the proposer
 calls `cx.agent.run` against `cx.parent_workspace`, and the resulting Codex
 `gpt-5.4-mini` agent receipt is cited in a typed proposal submitted through
-`leaven/proposal.submit_batch`. These prove the public seam can be the
-Python/Codex substrate. They are not proposal application/admission, persisted
-blob inspection, live LM-provider acceptance, or the full GEPA search loop named
-by the acceptance gate.
+`leaven/proposal.submit_batch`. `sdk/python/examples/13_live_optimize_openai_lm.py`
+is the corresponding live-gated OpenAI LM proof scaffold for the product path:
+the runner calls `cx.lm.complete`, receives text, usage, model, and receipt back
+through the callback-backed `LmResponse`, and returns those facts in the
+assessment output. It has deterministic provider-wiring coverage through
+`leaven-seam-service` and SDK tests, but the spend-bearing live proof remains
+pending until `OPENAI_API_KEY` is available. These prove the public seam can be
+the Python/Codex substrate. They are not proposal application/admission,
+persisted blob inspection, full live LM-provider acceptance, or the full GEPA
+search loop named by the acceptance gate.
 
 ## What is preserved
 

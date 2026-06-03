@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from .._receipts import CallReceipt
-from ..builders.lm import LmBuilder, LmMessage, LmResponse
+from ..builders.lm import LmBuilder, LmMessage, LmResponse, _lm_response_from_result
 from .protocols import LmCompleteCallback
 
 
@@ -18,9 +18,16 @@ class CallbackLmBuilder(LmBuilder):
     model/role selection, tools, and structured output are later slices.
     """
 
-    def __init__(self, callback: LmCompleteCallback, stage_call_id: str) -> None:
+    def __init__(
+        self,
+        callback: LmCompleteCallback,
+        stage_call_id: str,
+        *,
+        default_model: str,
+    ) -> None:
         self._callback = callback
         self._stage_call_id = stage_call_id
+        self._default_model = default_model
         self._seq = 0
 
     async def complete(  # type: ignore[override]
@@ -42,8 +49,18 @@ class CallbackLmBuilder(LmBuilder):
             raise NotImplementedError("cx.lm.complete requires `prompt=` in this slice")
         request_id = f"{self._stage_call_id}::lm::{self._seq}"
         self._seq += 1
-        text = await self._callback.lm_complete(prompt, request_id=request_id)
-        return lm_response(text)
+        selected_model = model or self._default_model
+        result = await self._callback.lm_complete(
+            prompt,
+            request_id=request_id,
+            model=selected_model,
+            model_role=model_role,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stop=stop,
+            input_classes=input_classes,
+        )
+        return _lm_response_from_result(result, model=selected_model)
 
 
 def lm_response(text: str) -> LmResponse:

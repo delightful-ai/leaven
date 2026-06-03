@@ -15,6 +15,8 @@ from .context import propose_context
 async def run_proposer_stage(
     stage: RegisteredStage[Any, Any],
     params: Mapping[str, Any],
+    *,
+    lm_model: str,
 ) -> dict[str, Any]:
     """Execute one proposer request and return a text stage_run_result summary."""
     payload = params["payload"]
@@ -27,6 +29,7 @@ async def run_proposer_stage(
     cx = propose_context(
         parent_candidate_id=request.parent_candidate_id,
         stage_call_id=payload["stage_call_id"],
+        lm_model=lm_model,
     )
     batch = await stage.func(request, cx)
     if not isinstance(batch, ProposalBatch):

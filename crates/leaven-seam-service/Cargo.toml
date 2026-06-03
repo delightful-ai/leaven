@@ -12,7 +12,9 @@ futures = { workspace = true }
 leaven-agent = { workspace = true }
 leaven-agent-codex-cli = { workspace = true }
 leaven-kernel = { workspace = true }
+leaven-lm = { workspace = true }
 leaven-lm-mock = { workspace = true }
+leaven-lm-openai = { workspace = true }
 leaven-public-seam = { workspace = true }
 leaven-seam-runtime = { workspace = true }
 leaven-workspace = { workspace = true }
@@ -21,6 +23,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

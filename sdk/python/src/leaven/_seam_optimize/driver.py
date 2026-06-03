@@ -10,6 +10,7 @@ from .._seam import (
     CodexCliRuntimeConfig,
     CommandRunnerStageConfig,
     MockLmRuntimeConfig,
+    OpenAiLmRuntimeConfig,
     SeamClient,
     SeamExecutionContext,
     SeamServiceConfig,
@@ -25,6 +26,7 @@ from ..artifacts.prompt import PromptArtifact
 from ..decorators import RegisteredStage
 from ..lm.config import LmConfig
 from ..lm.mock import MockLm
+from ..lm.openai import OpenAiLm
 from ..optimizers.gepa import Gepa
 from ..rubric import Rubric
 from ..runtime import Runtime
@@ -78,8 +80,10 @@ async def run_prompt_mechanics(
                 else None
             ),
             agent=agent_config,
-            lm=MockLmRuntimeConfig(text=runner_text),
-            stage=CommandRunnerStageConfig(argv=worker_argv_for_stage(runner)),
+            lm=_lm_config(runtime, fallback_text=runner_text),
+            stage=CommandRunnerStageConfig(
+                argv=worker_argv_for_stage(runner, lm_model=_lm_model(runtime))
+            ),
         )
     )
     assessments = []
@@ -174,8 +178,10 @@ async def _run_configured_proposer(
                 allow_agent=agent_config is not None,
             ),
             agent=agent_config,
-            lm=MockLmRuntimeConfig(text=_runner_text(runtime)),
-            stage=CommandRunnerStageConfig(argv=worker_argv_for_stage(propose.stage)),
+            lm=_lm_config(runtime, fallback_text=_runner_text(runtime)),
+            stage=CommandRunnerStageConfig(
+                argv=worker_argv_for_stage(propose.stage, lm_model=_lm_model(runtime))
+            ),
         )
     )
     result = await asyncio.to_thread(
@@ -228,6 +234,28 @@ def _runner_text(runtime: Runtime) -> str:
     if isinstance(lm, MockLm) and lm.responses:
         return lm.responses[0]
     return "[mock]"
+
+
+def _lm_config(
+    runtime: Runtime, *, fallback_text: str
+) -> MockLmRuntimeConfig | OpenAiLmRuntimeConfig:
+    lm = _first_lm(runtime.lm)
+    if isinstance(lm, MockLm):
+        return MockLmRuntimeConfig(text=fallback_text)
+    if isinstance(lm, OpenAiLm):
+        return OpenAiLmRuntimeConfig(
+            api_key_env=lm.api_key_env,
+            base_url=lm.base_url,
+            timeout_s=int(lm.timeout_s) if lm.timeout_s is not None else None,
+            max_retries=lm.max_retries,
+        )
+    raise NotImplementedError(
+        f"this slice supports mock and OpenAI LM runtime; got {type(lm).__name__}"
+    )
+
+
+def _lm_model(runtime: Runtime) -> str:
+    return _first_lm(runtime.lm).model
 
 
 def _agent_config(runtime: Runtime) -> CodexCliRuntimeConfig | None:

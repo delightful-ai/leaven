@@ -45,6 +45,8 @@ async def propose(req, cx):
             "proposer_stage.propose",
             "--stage-name",
             "propose",
+            "--lm-model",
+            "mock",
         ],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,

@@ -15,6 +15,7 @@ from .config import (
     LocalWorkspaceConfig,
     MockLmRuntimeConfig,
     MockRunnerStageConfig,
+    OpenAiLmRuntimeConfig,
     SeamExecutionContext,
     SeamServiceConfig,
 )
@@ -36,6 +37,7 @@ __all__ = [
     "LocalWorkspaceConfig",
     "MockLmRuntimeConfig",
     "MockRunnerStageConfig",
+    "OpenAiLmRuntimeConfig",
     "ProposalSubmitRequest",
     "SeamClient",
     "SeamClientError",

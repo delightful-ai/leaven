@@ -7,8 +7,13 @@ import sys
 import leaven as lv
 from leaven._handles import WorkspaceHandle
 from leaven._receipts import CallReceipt
-from leaven._seam import CommandRunnerStageConfig, MockRunnerStageConfig, StageRunRequest
-from leaven._seam_optimize.driver import _agent_config
+from leaven._seam import (
+    CommandRunnerStageConfig,
+    MockRunnerStageConfig,
+    OpenAiLmRuntimeConfig,
+    StageRunRequest,
+)
+from leaven._seam_optimize.driver import _agent_config, _lm_config, _lm_model
 from leaven._seam_optimize.rewards import evaluate_reward_vector
 from leaven._seam_optimize.status import unsupported_facts_for_runtime
 from leaven._seam_optimize.types import SeamOptimizeReport, SeamStageAssessment
@@ -193,6 +198,33 @@ def test_stage_run_request_names_locked_runner_dispatch_shape() -> None:
     }
 
 
+def test_openai_runtime_lowers_to_private_seam_service_config() -> None:
+    """Scenario: runtime OpenAI config reaches the Rust service as provider config."""
+
+    runtime = lv.runtime(
+        workspace=lv.workspace.local(),
+        lm=lv.lm.openai(
+            model="gpt-4.1-mini",
+            api_key_env="LEAVEN_TEST_OPENAI_KEY",
+            base_url="http://127.0.0.1:12345/v1/responses",
+            timeout_s=7,
+            max_retries=0,
+        ),
+    )
+
+    lm_config = _lm_config(runtime, fallback_text="unused")
+
+    assert _lm_model(runtime) == "gpt-4.1-mini"
+    assert isinstance(lm_config, OpenAiLmRuntimeConfig)
+    assert lm_config.to_json() == {
+        "kind": "open_ai",
+        "api_key_env": "LEAVEN_TEST_OPENAI_KEY",
+        "base_url": "http://127.0.0.1:12345/v1/responses",
+        "timeout_s": 7,
+        "max_retries": 0,
+    }
+
+
 def test_checked_in_stage_worker_dispatches_registered_runner(tmp_path) -> None:
     """Scenario: command worker imports a registered runner and returns stage result."""
 
@@ -203,8 +235,8 @@ import leaven as lv
 
 @lv.runner
 async def run(prompt, case, cx):
-    reply = await cx.lm.complete(prompt=prompt.template)
-    return f"{case.input['question']} => {reply.text}"
+    reply = await cx.lm.complete(prompt=prompt.template, max_tokens=12)
+    return f"{case.input['question']} => {reply.text} / {reply.usage['total_tokens']}"
 """.lstrip(),
         encoding="utf-8",
     )
@@ -228,6 +260,8 @@ async def run(prompt, case, cx):
             "worker_stage.run",
             "--stage-name",
             "run",
+            "--lm-model",
+            "gpt-test",
         ],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -241,6 +275,8 @@ async def run(prompt, case, cx):
 
     callback = json.loads(process.stdout.readline())
     assert callback["method"] == "leaven/lm.complete"
+    assert callback["params"]["ops"][0]["call"]["model"] == "gpt-test"
+    assert callback["params"]["ops"][0]["call"]["sampling"]["max_output_tokens"] == 12
     assert callback["params"]["ops"][0]["call"]["messages"][0]["content"][0]["text"] == (
         "Answer the question."
     )
@@ -257,6 +293,7 @@ async def run(prompt, case, cx):
                             "role": "assistant",
                             "content": [{"kind": "text", "text": "4"}],
                         },
+                        "cost": {"input_tokens": 3, "output_tokens": 2, "lm_calls": 1},
                         "receipt": "lmrec_worker_test",
                     },
                 },
@@ -271,7 +308,7 @@ async def run(prompt, case, cx):
     assert stdout == ""
     assert process.returncode == 0, stderr
     assert response["result"]["stage_call_id"] == "sc_stage_worker"
-    assert response["result"]["output"]["value"] == "2 + 2 => 4"
+    assert response["result"]["output"]["value"] == "2 + 2 => 4 / 5"
 
 
 def test_checked_in_stage_worker_can_callback_agent_run(tmp_path) -> None:
@@ -313,6 +350,8 @@ async def run(prompt, case, cx):
             "agent_stage.run",
             "--stage-name",
             "run",
+            "--lm-model",
+            "mock",
         ],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,

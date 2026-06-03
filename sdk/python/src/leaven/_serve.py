@@ -271,13 +271,21 @@ class _ParentAgent:
             self,
             candidate_id=payload["candidate"],
             stage_call_id=stage_call_id,
+            lm_model="mock",
         )
 
         result = await self._runner.func(prompt, case, cx)
         output = result if isinstance(result, str) else str(result)
         return output.strip()
 
-    async def lm_complete(self, prompt: str, *, request_id: str) -> str:
+    async def lm_complete(
+        self,
+        prompt: str,
+        *,
+        request_id: str,
+        model: str,
+        **_: Any,
+    ) -> dict[str, Any]:
         """Worker-initiated `leaven/lm.complete`: bind the prompt, read the reply.
 
         This is the bidirectional bit. We send the rendered prompt to the child as
@@ -323,8 +331,7 @@ class _ParentAgent:
                 "leaven/lm.complete reply carries a foreign capability fingerprint: "
                 f"{result.get('capability_fingerprint')!r}"
             )
-        content = result["primary"]["message"]["content"]
-        return "".join(part["text"] for part in content if part.get("kind") == "text")
+        return result
 
     async def _read_message(self) -> dict[str, Any] | None:
         line = await self._stdout.readline()
