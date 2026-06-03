@@ -14,12 +14,14 @@
 
 mod artifact;
 mod error;
+mod graph_host;
 mod host;
 mod loop_;
 mod runner;
 
 pub use artifact::PromptArtifact;
 pub use error::StageBridgeError;
+pub use graph_host::{RunContextProposalApplyHost, RunContextProposalApplyHostError};
 pub use host::{HostLm, LmCompletionRequest, MockArithmeticLm, StageRunEffectHost};
 pub use loop_::{
     Candidate, CaseFeedback, OptCase, OptimizeConfig, Optimized, ReflectFn, RewardFn,

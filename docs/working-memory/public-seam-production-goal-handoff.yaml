@@ -444,6 +444,18 @@ acceptance:
           - crates/leaven-run/AGENTS.md
           - docs/specs/public-seam-v1/conformance-matrix.yaml
         note: leaven-run already projects RunContext-recorded proposal submission/application and assessment reports into locked public-seam Plan Results, and rejects forged proposal batches, forged apply outcomes, global-bucket assessment ids, mismatched request ids, missing evidence, and synthetic source receipts. This proves the graph-backed producer/projection route; the row remains pending until stdio service execution consumes that route instead of configured-only receipt plumbing.
+      - kind: stdio_runcontext_proposal_apply_callback
+        methods:
+          - "`leaven/proposal.apply`"
+        commands:
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-acp-stage-bridge
+          - cargo test -p leaven --test topology_contract
+        paths:
+          - crates/leaven-acp-stage-bridge/src/graph_host.rs
+          - crates/leaven-acp-stage-bridge/tests/dispatch_contract.rs
+          - crates/leaven-acp-stage-bridge/AGENTS.md
+          - crates/leaven/tests/topology_contract.rs
+        note: The bidirectional stdio stage bridge now services a worker-initiated `leaven/proposal.apply` callback by calling `RunContext::apply_batch`, projecting the graph-backed report through leaven-run public-seam receipts, returning a validated extension result, and proving the graph gains the child candidate. This closes the stdio callback leg for proposal.apply, but the durable `leaven seam serve --stdio` SDK service still uses configured receipt plumbing.
       - kind: runcontext_graph_backed_evaluation_request_projection
         methods:
           - "`leaven/evaluation.request`"

@@ -9,10 +9,15 @@ repository.workspace = true
 
 [dependencies]
 leaven-acp = { workspace = true }
+leaven-core = { workspace = true }
+leaven-engine = { workspace = true }
+leaven-kernel = { workspace = true }
 leaven-public-seam = { workspace = true }
+leaven-run = { workspace = true }
 jcs-canonicalize = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+uuid = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

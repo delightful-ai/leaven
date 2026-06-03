@@ -39,9 +39,14 @@ It composes three things it does not own:
 This crate uses the legacy-named `leaven-acp` transport in its bridge-demo
 direction. `dispatch_stage_run` (host->worker) carries the runner stage; while
 it waits, the worker initiates `leaven/lm.complete` (worker->host) and
-`StageRunEffectHost` answers from the host `HostLm`. Only `lm_complete` is
-wired for this slice; every other locked method rejects through the default
-`AcpEffectHost::service` dispatch.
+`StageRunEffectHost` answers from the host `HostLm`.
+`RunContextProposalApplyHost` is the narrow graph-write callback path: it
+services `leaven/proposal.apply` by calling `RunContext::apply_batch` and then
+projects the graph-backed report through `leaven-run` public-seam receipt
+helpers. It exists to prove the bidirectional stdio callback can cross from a
+worker request into RunContext-owned mutation without teaching `leaven-acp` or
+`leaven-seam-service` graph internals. Other locked methods still reject unless
+their own explicit host lowering is installed.
 
 The candidate prompt template is host-side optimization state. The host renders
 it against the case and projects the rendered, model-facing prompt into the
@@ -69,8 +74,9 @@ ordinary app-facing API.
   `PromptArtifact`.
 - `tests/dispatch_contract.rs` isolates the transport leg: a worker that
   initiates `leaven/lm.complete` during `stage.run` and asserts the stamped
-  fingerprint, plus negatives for a non-text stage output and target material
-  smuggled into the runner request.
+  fingerprint, a worker that initiates `leaven/proposal.apply` and proves the
+  host applied a RunContext-backed proposal batch, plus negatives for a
+  non-text stage output and target material smuggled into the runner request.
 - `worker/serve_stage_runner.py` is the runnable `serve_stage` runner worker the
   example spawns. The Python SDK project under `sdk/python`
   stays `NotImplementedError` by its own AGENTS; this runnable worker lives here,

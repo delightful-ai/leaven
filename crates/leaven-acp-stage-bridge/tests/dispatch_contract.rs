@@ -6,14 +6,21 @@
 //! result is parsed. The negatives prove the dispatch refuses a non-text stage
 //! output and refuses target material smuggled into the runner request.
 
+use std::convert::Infallible;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use leaven_acp::{AcpProcessCommand, AcpStdioProcessSession, RejectAllEffectHost};
 use leaven_acp_stage_bridge::{
-    MockArithmeticLm, OptimizeConfig, PromptArtifact, RunnerDispatch, StageRunEffectHost,
-    optimize_prompt,
+    MockArithmeticLm, OptimizeConfig, PromptArtifact, RunContextProposalApplyHost, RunnerDispatch,
+    StageRunEffectHost, optimize_prompt,
 };
+use leaven_core::{
+    Artifact, ArtifactIdentity, Evidence, OptimizationProblem, Proposal, ProposalBatch,
+    ProposalBatchSemantics,
+};
+use leaven_engine::{BudgetLedger, RunContext, RunGraph};
+use leaven_kernel::{Budget, Cost, MetadataBag, RunId, StageId};
 use leaven_public_seam::{AcpProfileDocument, PublicSeamPackage};
 use serde_json::{Value, json};
 use tempfile::TempDir;
@@ -93,6 +100,108 @@ print(json.dumps({
         response.result().output().as_value()["value"],
         json!("12"),
         "the worker returned the mock LM's evaluation over the seam"
+    );
+    forget(script);
+}
+
+#[test]
+fn dispatch_stage_run_services_worker_initiated_proposal_apply_through_runcontext() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let profile = acp_profile(&package);
+    let mut graph = RunGraph::<BridgeProblem>::new(RunId::new());
+    let mut budget = BudgetLedger::new(Budget::unlimited());
+    let mut context = RunContext::<BridgeProblem>::new(&mut graph, &mut budget);
+    let seed = context.insert_seed(BridgeArtifact(1), 0).unwrap();
+    let batch = context
+        .record_proposal_batch(
+            StageId::custom("acp-stage-bridge-proposer"),
+            ProposalBatch {
+                proposals: vec![Proposal::mutate(seed, 41).build()],
+                semantics: ProposalBatchSemantics::Alternatives,
+                metadata: MetadataBag::new(),
+            },
+            Cost::zero(),
+        )
+        .unwrap();
+    let public_batch = format!("pb_{}", batch.batch_id.as_uuid());
+    let script = python_worker(&format!(
+        r#"
+import json
+import os
+import sys
+
+request = json.loads(sys.stdin.readline())
+payload = request["params"]["payload"]
+
+print(json.dumps({{
+    "jsonrpc": "2.0",
+    "id": "%s::apply" % payload["stage_call_id"],
+    "method": "leaven/proposal.apply",
+    "params": {{
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "plan_runner_proposal_apply",
+        "consistency": {{"kind": "latest_at_start"}},
+        "mode": {{"kind": "execute"}},
+        "ops": [{{
+            "kind": "write",
+            "name": "apply",
+            "idempotency_key": "proposal-apply-stage-bridge-0001",
+            "write": {{
+                "kind": "apply_proposal_batch",
+                "proposal_batch": "{public_batch}",
+                "policy": "apply_first_valid"
+            }},
+        }}],
+        "return": ["apply"],
+        "commit": {{"kind": "graph_writes_atomic", "on_stale": "reject"}},
+    }},
+}}), flush=True)
+
+reply = json.loads(sys.stdin.readline())
+assert reply["result"]["method"] == "leaven/proposal.apply", reply
+assert reply["result"]["capability_fingerprint"] == os.environ["LEAVEN_CAPABILITY_FINGERPRINT"], reply
+assert reply["result"]["primary"]["kind"] == "apply_receipt", reply
+assert reply["result"]["receipts"][0]["write_kind"] == "apply_proposal_batch", reply
+
+print(json.dumps({{
+    "jsonrpc": "2.0",
+    "id": request["id"],
+    "result": {{
+        "schema_version": "leaven.stage_run.v1",
+        "message": "stage_run_result",
+        "stage": "runner",
+        "stage_call_id": payload["stage_call_id"],
+        "output": {{
+            "kind": "text",
+            "summary": "proposal applied",
+            "value": "applied",
+            "visibility": "optimizer_visible",
+            "data_classes": ["candidate.output"],
+        }},
+    }},
+}}), flush=True)
+"#
+    ));
+    let mut session = spawn(&script, package, profile);
+    let host = RunContextProposalApplyHost::new(
+        &mut context,
+        [batch],
+        "fp_cap_sha256_stage_bridge",
+        "fp_policy_sha256_stage_bridge",
+        "rev_stage_bridge_base",
+        "rev_stage_bridge_final",
+    );
+
+    let response = session
+        .dispatch_stage_run(&runner_request("proposal apply"), &host)
+        .unwrap();
+
+    assert_eq!(response.result().output().as_value()["value"], "applied");
+    drop(host);
+    assert_eq!(
+        context.graph().candidate_count(),
+        2,
+        "worker callback must create the child through RunContext::apply_batch"
     );
     forget(script);
 }
@@ -356,3 +465,32 @@ fn workspace_root() -> PathBuf {
         .unwrap()
         .to_path_buf()
 }
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct BridgeArtifact(i32);
+
+impl Artifact for BridgeArtifact {
+    type Change = i32;
+    type ApplyError = Infallible;
+
+    fn identity(&self) -> ArtifactIdentity {
+        ArtifactIdentity::External(format!("bridge-artifact-{}", self.0))
+    }
+
+    fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
+        Ok(Self(self.0 + change))
+    }
+}
+
+struct BridgeProblem;
+
+impl OptimizationProblem for BridgeProblem {
+    type Artifact = BridgeArtifact;
+    type Case = ();
+    type Evidence = BridgeEvidence;
+    type ProposalAnnotations = ();
+}
+
+struct BridgeEvidence;
+
+impl Evidence for BridgeEvidence {}

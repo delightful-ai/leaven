@@ -3180,10 +3180,15 @@ version = "0.0.0"
 dependencies = [
  "jcs-canonicalize",
  "leaven-acp",
+ "leaven-core",
+ "leaven-engine",
+ "leaven-kernel",
  "leaven-public-seam",
+ "leaven-run",
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
+ "uuid",
 ]
 
 [[package]]

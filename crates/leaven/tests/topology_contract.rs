@@ -176,7 +176,14 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
     ("leaven-acp", &["leaven-public-seam"]),
     (
         "leaven-acp-stage-bridge",
-        &["leaven-acp", "leaven-public-seam"],
+        &[
+            "leaven-acp",
+            "leaven-core",
+            "leaven-engine",
+            "leaven-kernel",
+            "leaven-public-seam",
+            "leaven-run",
+        ],
     ),
     (
         "leaven-agentic",
