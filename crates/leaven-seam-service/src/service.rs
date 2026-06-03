@@ -89,9 +89,12 @@ impl SeamService for ConfiguredSeamService {
 
     fn handle_stage_run(
         &self,
-        _request: SeamStageRunRequest<'_>,
+        request: SeamStageRunRequest<'_>,
     ) -> Result<Value, SeamServiceError> {
-        Err(SeamServiceError::unavailable("leaven/stage.run"))
+        self.config
+            .stage
+            .runner_result(request.params())
+            .map_err(|error| SeamServiceError::execution(error.to_string()))
     }
 }
 
@@ -164,6 +167,8 @@ pub struct SeamServiceConfig {
     pub agent: SeamAgentConfig,
     /// LM provider configuration.
     pub lm: SeamLmConfig,
+    /// Stage runner configuration.
+    pub stage: SeamStageConfig,
 }
 
 impl Default for SeamServiceConfig {
@@ -174,6 +179,7 @@ impl Default for SeamServiceConfig {
             workspace: SeamWorkspaceConfig::default(),
             agent: SeamAgentConfig::default(),
             lm: SeamLmConfig::default(),
+            stage: SeamStageConfig::default(),
         }
     }
 }
@@ -343,6 +349,40 @@ impl Default for SeamLmConfig {
         Self::Mock {
             responses: vec![MockLmResponseConfig::default()],
         }
+    }
+}
+
+/// Configured Python-stage execution substitute for public-seam service proofs.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum SeamStageConfig {
+    /// No stage runner is wired.
+    None,
+    /// Deterministic runner output. This is mechanics evidence, not Python worker proof.
+    MockRunner {
+        /// Text returned as the runner output value.
+        text: String,
+        /// Short output summary.
+        summary: String,
+    },
+}
+
+impl SeamStageConfig {
+    fn runner_result(&self, params: &Value) -> Result<Value, PublicSeamError> {
+        match self {
+            Self::None => Err(PublicSeamError::InvalidPlan {
+                message: "configured seam service does not provide a stage runner".to_owned(),
+            }),
+            Self::MockRunner { text, summary } => {
+                Ok(stage_run_text_result(stage_call_id(params)?, text, summary))
+            }
+        }
+    }
+}
+
+impl Default for SeamStageConfig {
+    fn default() -> Self {
+        Self::None
     }
 }
 
@@ -520,6 +560,32 @@ fn materialized_workspace_id(candidate: &str) -> String {
     format!("ws_{sanitized}_materialized")
 }
 
+fn stage_call_id(params: &Value) -> Result<&str, PublicSeamError> {
+    params
+        .get("payload")
+        .and_then(|payload| payload.get("stage_call_id"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| PublicSeamError::InvalidStageRun {
+            message: "stage.run payload missing stage_call_id".to_owned(),
+        })
+}
+
+fn stage_run_text_result(stage_call_id: &str, text: &str, summary: &str) -> Value {
+    serde_json::json!({
+        "schema_version": "leaven.stage_run.v1",
+        "message": "stage_run_result",
+        "stage": "runner",
+        "stage_call_id": stage_call_id,
+        "output": {
+            "kind": "text",
+            "summary": summary,
+            "value": text,
+            "visibility": "optimizer_visible",
+            "data_classes": ["candidate.output"]
+        }
+    })
+}
+
 fn blob_ref_for_bytes(id: &str, bytes: &[u8], data_classes: &[&str]) -> Value {
     serde_json::json!({
         "kind": "blob_ref",
@@ -551,7 +617,7 @@ mod tests {
 
     use super::{
         ConfiguredSeamService, MockLmResponseConfig, SeamAgentConfig, SeamExecutionContextConfig,
-        SeamLmConfig, SeamServiceConfig,
+        SeamLmConfig, SeamServiceConfig, SeamStageConfig,
     };
 
     #[test]
@@ -618,6 +684,67 @@ mod tests {
                 .as_str()
                 .unwrap()
                 .contains("mock script exhausted")
+        );
+    }
+
+    #[test]
+    fn seam_runtime_executes_configured_runner_stage_dispatch() {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
+        let service = ConfiguredSeamService::from_package(
+            package.clone(),
+            SeamServiceConfig {
+                stage: SeamStageConfig::MockRunner {
+                    text: "runner durable seam ok".to_owned(),
+                    summary: "configured runner output".to_owned(),
+                },
+                ..SeamServiceConfig::default()
+            },
+        )
+        .unwrap();
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        let response = runtime.handle_value(&stage_run_request());
+
+        assert!(
+            !response.is_error(),
+            "unexpected error: {:?}",
+            response.value()
+        );
+        assert_eq!(response.value()["result"]["message"], "stage_run_result");
+        assert_eq!(
+            response.value()["result"]["stage_call_id"],
+            "sc_runner_service"
+        );
+        assert_eq!(
+            response.value()["result"]["output"]["value"],
+            "runner durable seam ok"
+        );
+        assert_eq!(
+            response.value()["result"]["output"]["data_classes"],
+            json!(["candidate.output"])
+        );
+    }
+
+    #[test]
+    fn seam_runtime_reports_unconfigured_runner_as_execution_failure() {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
+        let service =
+            ConfiguredSeamService::from_package(package.clone(), SeamServiceConfig::default())
+                .unwrap();
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        let response = runtime.handle_value(&stage_run_request());
+
+        assert!(response.is_error());
+        assert_eq!(
+            response.value()["error"]["code"],
+            JsonRpcErrorCode::ExecutionFailed.code()
+        );
+        assert!(
+            response.value()["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("does not provide a stage runner")
         );
     }
 
@@ -764,6 +891,29 @@ mod tests {
                 "commit": {
                     "kind": "graph_writes_atomic",
                     "on_stale": "reject"
+                }
+            }
+        })
+    }
+
+    fn stage_run_request() -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "id": "stage-1",
+            "method": "leaven/stage.run",
+            "params": {
+                "schema_version": "leaven.stage_run.v1",
+                "message": "stage_run_request",
+                "stage": "runner",
+                "payload": {
+                    "schema_version": "leaven.stage_payloads.v1",
+                    "role": "runner",
+                    "run": "run_stage_service",
+                    "stage_call_id": "sc_runner_service",
+                    "candidate": "cand_stage_service",
+                    "case": "case_stage_service",
+                    "case_input": {"question": "2 + 2"},
+                    "target_forbidden": true
                 }
             }
         })

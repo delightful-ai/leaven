@@ -3,6 +3,7 @@ from __future__ import annotations
 import leaven as lv
 from leaven._handles import WorkspaceHandle
 from leaven._receipts import CallReceipt
+from leaven._seam import MockRunnerStageConfig, StageRunRequest
 from leaven.builders.agent import AgentBuilder
 from leaven.builders.lm import LmBuilder
 
@@ -140,6 +141,40 @@ async def test_lm_builder_complete_uses_bound_public_seam_client() -> None:
     assert response.cost_usd == 0.000042
     assert response.model == "gpt-4.1-mini"
     assert response.receipt.receipt_id == "lmrec_completion"
+
+
+def test_stage_run_request_names_locked_runner_dispatch_shape() -> None:
+    """Private stage-run request construction stays on the locked durable seam."""
+
+    request = StageRunRequest(
+        request_id="stage-builder-test",
+        run_id="run_stage_builder",
+        stage_call_id="sc_stage_builder",
+        candidate="cand_stage_builder",
+        case="case_stage_builder",
+        case_input={"question": "2 + 2"},
+    ).to_json_rpc()
+
+    assert request["method"] == "leaven/stage.run"
+    params = request["params"]
+    assert params["schema_version"] == "leaven.stage_run.v1"
+    assert params["message"] == "stage_run_request"
+    assert params["stage"] == "runner"
+    assert params["payload"] == {
+        "schema_version": "leaven.stage_payloads.v1",
+        "role": "runner",
+        "run": "run_stage_builder",
+        "stage_call_id": "sc_stage_builder",
+        "candidate": "cand_stage_builder",
+        "case": "case_stage_builder",
+        "case_input": {"question": "2 + 2"},
+        "target_forbidden": True,
+    }
+    assert MockRunnerStageConfig(text="ok", summary="runner").to_json() == {
+        "kind": "mock_runner",
+        "text": "ok",
+        "summary": "runner",
+    }
 
 
 class FakeSeamClient:

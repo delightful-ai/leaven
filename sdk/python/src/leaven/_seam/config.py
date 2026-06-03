@@ -72,6 +72,22 @@ class MockLmRuntimeConfig:
 
 
 @dataclass(frozen=True)
+class MockRunnerStageConfig:
+    """Deterministic stage runner config used for durable seam mechanics proofs."""
+
+    text: str = "ok"
+    summary: str = "mock runner output"
+
+    def to_json(self) -> dict[str, Any]:
+        """Return the service config JSON shape."""
+        return {
+            "kind": "mock_runner",
+            "text": self.text,
+            "summary": self.summary,
+        }
+
+
+@dataclass(frozen=True)
 class LocalWorkspaceConfig:
     """Configured local workspace substrate for public-seam calls."""
 
@@ -95,6 +111,7 @@ class SeamServiceConfig:
     agent: CodexCliRuntimeConfig | None = None
     workspace: LocalWorkspaceConfig = field(default_factory=LocalWorkspaceConfig)
     lm: MockLmRuntimeConfig = field(default_factory=MockLmRuntimeConfig)
+    stage: MockRunnerStageConfig | None = None
 
     def to_json(self) -> dict[str, Any]:
         """Return the Rust service config JSON shape."""
@@ -104,6 +121,7 @@ class SeamServiceConfig:
             "workspace": self.workspace.to_json(),
             "agent": self.agent.to_json() if self.agent is not None else {"kind": "none"},
             "lm": self.lm.to_json(),
+            "stage": self.stage.to_json() if self.stage is not None else {"kind": "none"},
         }
 
 
@@ -111,6 +129,7 @@ __all__ = [
     "CodexCliRuntimeConfig",
     "LocalWorkspaceConfig",
     "MockLmRuntimeConfig",
+    "MockRunnerStageConfig",
     "SeamExecutionContext",
     "SeamServiceConfig",
 ]

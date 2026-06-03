@@ -26,6 +26,10 @@ Status: active foundation slice, not the full Python SDK acceptance gate.
   public-seam result into typed `LmResponse`. A local mock-LM stdio proof uses
   `leaven seam serve --stdio`, not the legacy `leaven serve --stdio --plan`
   path.
+- Current configured-stage slice: `leaven-seam-service` can now execute a
+  configured deterministic runner `leaven/stage.run` through
+  `leaven seam serve --stdio`, and Python `_seam` can serialize both
+  `MockRunnerStageConfig` and `StageRunRequest`.
 
 ## Verification Run
 
@@ -61,6 +65,11 @@ Python SDK project:
   `leaven seam serve --stdio --config`, and returned mock text
   `mock seam ok`, receipt `lmrec_completion`, and usage
   `{prompt_tokens: 3, completion_tokens: 2, total_tokens: 5}`.
+- `cargo test -p leaven-seam-service`
+- `cargo build -p leaven-cli`
+- A one-off Python proof sent `StageRunRequest` through `SeamClient`, spawned
+  `leaven seam serve --stdio --config`, and returned `stage_run_result`,
+  `sc_stage_proof`, and `runner durable seam ok`.
 
 ## Still Unproven
 
@@ -70,6 +79,9 @@ Python SDK project:
 - Engine-supplied `cx.lm.complete` inside `lv.optimize(...).run()` is still
   scaffold. The LmBuilder slice binds privately for tests and local proof, not
   from a real running stage context.
+- Python-authored stages over the durable `leaven seam serve --stdio` route are
+  still unproven. The configured-stage slice is deterministic service
+  mechanics, not worker process dispatch.
 - Live LM provider configuration from Python remains unproven; the new
   LmBuilder proof uses the configured deterministic mock LM.
 - Reward-vector execution from Python remains scaffold. `@lv.reward` bodies are

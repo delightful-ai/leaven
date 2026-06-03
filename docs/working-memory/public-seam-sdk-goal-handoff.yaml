@@ -54,7 +54,10 @@ spec_package:
       Plan IR execution helpers, typed LM/agent lowering, and stage-run validators.
     - >-
       `leaven-seam-runtime` and `leaven-seam-stdio` expose a transport-neutral
-      JSON-RPC stdio shell, but the CLI path currently uses a rejecting service.
+      JSON-RPC stdio shell. The CLI path now executes configured service
+      families for `lm.complete`, `agent.run` with workspace materialization,
+      and deterministic runner `stage.run`; Python-worker stage dispatch is
+      still not wired.
     - >-
       `leaven serve --stdio --plan --out` is a legacy bidirectional GEPA demo
       path; it is not the durable public SDK server.
@@ -202,7 +205,16 @@ acceptance:
         - typed runtime config loaded by the CLI
         - honest unsupported-provider errors for unconfigured methods
         - no use of legacy `leaven serve --stdio --plan --out`
-    evidence: []
+    evidence:
+      - >-
+        Partial mechanics evidence, not acceptance completion: current
+        configured-stage slice makes `leaven-seam-service` execute runner
+        `leaven/stage.run` through a configured deterministic `mock_runner`.
+        `cargo test -p leaven-seam-service` covers valid configured stage-run
+        results and explicit unconfigured-runner failure; a Python one-off proof
+        sent `StageRunRequest` through `SeamClient` to `leaven seam serve
+        --stdio --config` and received `stage_run_result` for `sc_stage_proof`.
+        This does not prove Python-authored worker stage execution.
     closeout_check: Validation-only or rejecting-service paths remain scaffolding, not completion.
 
   - id: python_sdk_drives_public_server
@@ -218,7 +230,14 @@ acceptance:
         - stage dispatch over `leaven/stage.run`
         - stage callbacks over `leaven/*` effect methods
         - run result object with evidence/receipt surface, not stdout-only success
-    evidence: []
+    evidence:
+      - >-
+        Partial mechanics evidence, not acceptance completion: Python private
+        seam config now serializes `MockRunnerStageConfig` and private
+        `StageRunRequest` constructs the locked runner `leaven/stage.run`
+        envelope. This proves Python can configure and call the durable server
+        for deterministic stage-run mechanics, not that `lv.optimize(...).run()`
+        has hard-cut from legacy `_serve`.
     closeout_check: Rust-only harnesses and hardcoded demo plans are rejected.
 
   - id: reward_vector

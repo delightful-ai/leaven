@@ -13,11 +13,12 @@ from .config import (
     CodexCliRuntimeConfig,
     LocalWorkspaceConfig,
     MockLmRuntimeConfig,
+    MockRunnerStageConfig,
     SeamExecutionContext,
     SeamServiceConfig,
 )
 from .errors import SeamClientError
-from .plans import AgentRunRequest, LmCompleteRequest
+from .plans import AgentRunRequest, LmCompleteRequest, StageRunRequest
 from .resolve import resolve_codex_binary, resolve_leaven_binary, resolve_repo_root
 
 __all__ = [
@@ -26,10 +27,12 @@ __all__ = [
     "LmCompleteRequest",
     "LocalWorkspaceConfig",
     "MockLmRuntimeConfig",
+    "MockRunnerStageConfig",
     "SeamClient",
     "SeamClientError",
     "SeamExecutionContext",
     "SeamServiceConfig",
+    "StageRunRequest",
     "effect_capability",
     "resolve_codex_binary",
     "resolve_leaven_binary",

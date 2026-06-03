@@ -143,4 +143,39 @@ class LmCompleteRequest:
         }
 
 
-__all__ = ["AgentRunRequest", "LmCompleteRequest"]
+@dataclass(frozen=True)
+class StageRunRequest:
+    """A single public-seam `leaven/stage.run` runner dispatch request."""
+
+    request_id: str
+    run_id: str
+    stage_call_id: str
+    candidate: str
+    case: str
+    case_input: dict[str, Any]
+
+    def to_json_rpc(self) -> dict[str, Any]:
+        """Return a JSON-RPC request for `leaven/stage.run`."""
+        return {
+            "jsonrpc": "2.0",
+            "id": self.request_id,
+            "method": "leaven/stage.run",
+            "params": {
+                "schema_version": "leaven.stage_run.v1",
+                "message": "stage_run_request",
+                "stage": "runner",
+                "payload": {
+                    "schema_version": "leaven.stage_payloads.v1",
+                    "role": "runner",
+                    "run": self.run_id,
+                    "stage_call_id": self.stage_call_id,
+                    "candidate": self.candidate,
+                    "case": self.case,
+                    "case_input": self.case_input,
+                    "target_forbidden": True,
+                },
+            },
+        }
+
+
+__all__ = ["AgentRunRequest", "LmCompleteRequest", "StageRunRequest"]
