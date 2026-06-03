@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from .assessment import Assessment, Replayability
 from .run_status import RunCostStatus, RunUsageStatus, UnsupportedRunFact
@@ -77,14 +77,28 @@ class Optimized[A](BaseModel):
     best: Candidate[A]
     frontier: list[Candidate[A]]
     summary: RunSummary
+    assessment_rows: list[Assessment] = Field(default_factory=list)
 
     def assessment(self, case_id: str, *, candidate_id: str | None = None) -> Assessment:
         """Look up one assessment by case id (and optionally candidate id)."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+        matches = [
+            assessment
+            for assessment in self.assessment_rows
+            if assessment.case.id == case_id
+            and (candidate_id is None or assessment.candidate_id == candidate_id)
+        ]
+        if not matches:
+            target = f"{case_id!r}"
+            if candidate_id is not None:
+                target = f"{target} for candidate {candidate_id!r}"
+            raise KeyError(f"no assessment for {target}")
+        if len(matches) > 1:
+            raise KeyError(f"multiple assessments for {case_id!r}; pass candidate_id")
+        return matches[0]
 
     def test_assessments(self) -> Iterable[Assessment]:
         """Iterate assessments from the held-out test split."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+        return self.assessments(split="test")
 
     def assessments(
         self,
@@ -93,11 +107,24 @@ class Optimized[A](BaseModel):
         candidate_id: str | None = None,
     ) -> Iterable[Assessment]:
         """Filter assessments by split and/or candidate."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+        return (
+            assessment
+            for assessment in self.assessment_rows
+            if (split is None or assessment.case.split == split)
+            and (candidate_id is None or assessment.candidate_id == candidate_id)
+        )
 
     def lineage(self, candidate_id: str) -> Iterable[Candidate[A]]:
         """Walk ancestor candidates from `candidate_id` back to a seed."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+        by_id = {candidate.id: candidate for candidate in self.frontier}
+        lineage = []
+        current = by_id.get(candidate_id)
+        while current is not None:
+            lineage.append(current)
+            current = by_id.get(current.parent_id) if current.parent_id is not None else None
+        if not lineage:
+            raise KeyError(f"unknown candidate {candidate_id!r}")
+        return lineage
 
     async def replay(
         self,

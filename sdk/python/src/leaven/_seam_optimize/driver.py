@@ -23,8 +23,10 @@ from ..artifacts.prompt import PromptArtifact
 from ..decorators import RegisteredStage
 from ..lm.config import LmConfig
 from ..lm.mock import MockLm
+from ..rubric import Rubric
 from ..runtime import Runtime
-from .scoring import exact_answer_score, mean_score
+from .rewards import evaluate_reward_vector
+from .scoring import mean_score
 from .status import first_agent, unsupported_facts_for_runtime
 from .types import SeamOptimizeReport, SeamStageAssessment
 
@@ -34,6 +36,7 @@ async def run_prompt_mechanics(
     seed: PromptArtifact,
     cases: list[dict[str, Any]],
     runner: RegisteredStage[Any, Any],
+    rubric: Rubric,
     run_id: str,
     runtime: Runtime,
 ) -> SeamOptimizeReport:
@@ -86,14 +89,24 @@ async def run_prompt_mechanics(
             ).to_json_rpc(),
         )
         output = result["output"]["value"]
+        score, rewards = await evaluate_reward_vector(
+            rubric=rubric,
+            output=output,
+            case=case,
+        )
         assessments.append(
             SeamStageAssessment(
                 case_id=case["case_id"],
+                case_input=dict(case["input"]),
+                case_target=dict(case.get("target") or {}),
+                case_metadata=dict(case.get("metadata") or {}),
+                case_split=case.get("split"),
                 output=output,
-                score=exact_answer_score(output, case.get("target")),
+                score=score,
+                rewards=rewards,
             )
         )
-    score = mean_score([assessment.score for assessment in assessments])
+    score = mean_score([assessment.score.value for assessment in assessments])
     return SeamOptimizeReport(
         seed_score=score,
         best_score=score,

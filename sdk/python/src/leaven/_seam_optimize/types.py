@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from ..assessment import RewardAssessment
 from ..run_status import UnsupportedRunFact
+from ..score import Score
 
 
 @dataclass(frozen=True)
@@ -13,8 +15,13 @@ class SeamStageAssessment:
     """One runner-stage result observed through the durable seam."""
 
     case_id: str
+    case_input: dict[str, Any]
+    case_target: dict[str, Any] | None
+    case_metadata: dict[str, Any]
+    case_split: str | None
     output: Any
-    score: float
+    score: Score
+    rewards: list[RewardAssessment]
     receipt: str | None = None
 
 

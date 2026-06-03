@@ -9,9 +9,11 @@ from leaven._handles import WorkspaceHandle
 from leaven._receipts import CallReceipt
 from leaven._seam import CommandRunnerStageConfig, MockRunnerStageConfig, StageRunRequest
 from leaven._seam_optimize.driver import _agent_config
+from leaven._seam_optimize.rewards import evaluate_reward_vector
 from leaven._seam_optimize.status import unsupported_facts_for_runtime
-from leaven._seam_optimize.types import SeamOptimizeReport
+from leaven._seam_optimize.types import SeamOptimizeReport, SeamStageAssessment
 from leaven.artifacts.prompt import PromptArtifact
+from leaven.assessment import RewardAssessment
 from leaven.builders.agent import AgentBuilder
 from leaven.builders.lm import LmBuilder
 from leaven.optimize import _to_optimized
@@ -452,6 +454,86 @@ def test_optimize_summary_names_codex_cost_and_inspection_gaps() -> None:
         ("run.usage", "codex_cli", "provider_usage_not_reported"),
         ("run.inspection", "python_seam_optimize", "blob_readback_not_implemented"),
     }
+
+
+async def test_reward_vector_executes_all_registered_rewards() -> None:
+    """Example: Python rubric rewards produce per-axis rows and aggregate score."""
+
+    @lv.reward(weight=2.0, id="correct")
+    async def correct(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
+        _ = cx
+        return 1.0 if output == (case.target or {})["answer"] else 0.0
+
+    @lv.reward(weight=1.0, id="concise")
+    async def concise(
+        output: str, case: lv.ScoringCaseView, cx: lv.RubricContext
+    ) -> lv.RewardValue:
+        _ = (case, cx)
+        return lv.RewardValue(value=0.5, feedback=f"{len(output)} chars")
+
+    score, rewards = await evaluate_reward_vector(
+        rubric=lv.Rubric([correct, concise]),
+        output="42",
+        case={
+            "case_id": "case_reward_vector",
+            "input": {"question": "6 * 7?"},
+            "target": {"answer": "42"},
+            "metadata": {"source": "unit"},
+        },
+    )
+
+    assert score.value == 0.8333333333333334
+    assert score.feedback == "concise: 2 chars"
+    assert [(reward.id, reward.value, reward.weight) for reward in rewards] == [
+        ("correct", 1.0, 2.0),
+        ("concise", 0.5, 1.0),
+    ]
+
+
+def test_optimized_result_exposes_assessments_rewards_and_lineage() -> None:
+    """Scenario: completed result inspection is not stdout-only."""
+
+    result = _to_optimized(
+        PromptArtifact(template="answer {question}"),
+        SeamOptimizeReport(
+            seed_score=0.75,
+            best_score=0.75,
+            assessments=[
+                SeamStageAssessment(
+                    case_id="case_inspect_001",
+                    case_input={"question": "6 * 7?"},
+                    case_target={"answer": "42"},
+                    case_metadata={"source": "unit"},
+                    case_split="test",
+                    output="42",
+                    score=lv.Score(value=0.75, feedback="weighted"),
+                    rewards=[
+                        RewardAssessment(id="correct", value=1.0, weight=2.0),
+                        RewardAssessment(
+                            id="concise",
+                            value=0.25,
+                            weight=1.0,
+                            feedback="short enough",
+                        ),
+                    ],
+                )
+            ],
+        ),
+        "inspection-test",
+        "2026-06-03T00:00:00+00:00",
+        1,
+    )
+
+    assessment = result.assessment("case_inspect_001")
+
+    assert result.lineage(result.best.id) == [result.best]
+    assert list(result.test_assessments()) == [assessment]
+    assert assessment.case.target == {"answer": "42"}
+    assert assessment.score.value == 0.75
+    assert [(reward.id, reward.value) for reward in assessment.rewards] == [
+        ("correct", 1.0),
+        ("concise", 0.25),
+    ]
 
 
 class FakeSeamClient:

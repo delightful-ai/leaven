@@ -1,7 +1,7 @@
 """Example 03 — the canonical minimal sketch.
 
 The smallest meaningful Leaven program shape: compose a prompt optimization
-for an arithmetic QA task with GEPA, exact-match scoring, and a local runtime.
+for an arithmetic QA task with GEPA, vector scoring, and a local runtime.
 
 The whole program is `seed x Environment(task, rollout, rubric) x optimizer x
 runtime`. The rollout is target-FREE (`InputCaseView` has no `.target`); the
@@ -39,6 +39,12 @@ async def exact(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> 
     return 1.0 if output == (case.target or {})["answer"] else 0.0
 
 
+@lv.reward(weight=0.1)
+async def concise(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> lv.RewardValue:
+    _ = (case, cx)
+    return lv.RewardValue(value=1.0 if len(output) <= 8 else 0.0, feedback=f"{len(output)} chars")
+
+
 # ----- composition ----------------------------------------------------------
 async def amain() -> None:
     result = await lv.optimize(
@@ -48,7 +54,7 @@ async def amain() -> None:
         environment=lv.Environment(
             task=lv.Task(cases=lv.cases.from_jsonl(str(FIXTURE), limit=8).cases),
             rollout=lv.Rollout.fn(run),
-            rubric=lv.Rubric([exact]),
+            rubric=lv.Rubric([exact, concise]),
         ),
         optimizer=lv.optimizers.gepa(population_size=8),
         runtime=lv.runtime.local(budget=lv.budget(usd=20)),
@@ -61,6 +67,10 @@ async def amain() -> None:
     seed = next(c for c in result.frontier if c.parent_id is None)
     print(f"seed score:  {seed.summary_score:.3f}")
     print(f"best score:  {result.best.summary_score:.3f}")
+    first = next(result.assessments())
+    print("reward vector:")
+    for reward in first.rewards:
+        print(f"  {reward.id}: {reward.value:.3f} (weight {reward.weight:g})")
     print("optimized prompt:")
     print(result.best.artifact.template)
 

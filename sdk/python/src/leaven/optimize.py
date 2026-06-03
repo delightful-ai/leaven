@@ -18,9 +18,13 @@ from __future__ import annotations
 import datetime
 from typing import Any, cast
 
+from ._receipts import WriteReceipt
 from ._seam_optimize import SeamOptimizeReport, run_prompt_mechanics
 from .artifacts.prompt import PromptArtifact
+from .assessment import Assessment
+from .case import Case
 from .environment import Environment
+from .evidence import EvidenceEnvelope, EvidencePublic
 from .optimizers.config import OptimizerConfig
 from .optimizers.gepa import Gepa
 from .result import Candidate, Optimized, RunSummary
@@ -54,6 +58,7 @@ class OptimizeBuilder[A]:
             seed=seed,
             cases=cases,
             runner=runner,
+            rubric=self.environment.rubric,
             run_id=run_id,
             runtime=self.runtime,
         )
@@ -104,6 +109,8 @@ class OptimizeBuilder[A]:
                 "case_id": _wire_case_id(case.id),
                 "input": dict(case.input),
                 "target": dict(case.target or {}),
+                "metadata": dict(case.metadata),
+                "split": case.split,
             }
             for case in cases
         ]
@@ -155,6 +162,7 @@ def _to_optimized(
         parent_id=None,
         summary_score=report.best_score,
     )
+    assessment_rows = _assessment_rows(report, case_count)
     summary = RunSummary(
         run_id=run_id,
         started_at=started_at,
@@ -169,7 +177,42 @@ def _to_optimized(
         unsupported=report.unsupported,
         replayability="fully_managed",
     )
-    return Optimized(run_id=run_id, best=best, frontier=[best], summary=summary)
+    return Optimized(
+        run_id=run_id,
+        best=best,
+        frontier=[best],
+        summary=summary,
+        assessment_rows=assessment_rows,
+    )
+
+
+def _assessment_rows(report: SeamOptimizeReport, case_count: int) -> list[Assessment]:
+    return [
+        Assessment(
+            case=Case(
+                id=assessment.case_id,
+                input=dict(assessment.case_input),
+                target=dict(assessment.case_target or {}),
+                metadata=dict(assessment.case_metadata),
+                split=assessment.case_split,
+            ),
+            candidate_id="cand_seed",
+            score=assessment.score,
+            evidence=EvidenceEnvelope(
+                public=EvidencePublic(
+                    data_classes=["public"],
+                    payload={
+                        "output": assessment.output,
+                        "reward_count": len(assessment.rewards),
+                    },
+                )
+            ),
+            receipt=WriteReceipt(receipt_id=f"assessmentrec_{assessment.case_id}_{case_count}"),
+            replayability="fully_managed",
+            rewards=assessment.rewards,
+        )
+        for assessment in report.assessments
+    ]
 
 
 def _wire_case_id(case_id: str) -> str:

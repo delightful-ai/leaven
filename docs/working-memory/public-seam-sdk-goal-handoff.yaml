@@ -195,6 +195,20 @@ acceptance:
         - docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
         - AGENTS.md and nearest crate AGENTS files touched by the route
     evidence: []
+    evidence:
+      - >-
+        Partial SDK evidence, not acceptance completion: Python
+        `lv.optimize(...).run()` now executes every configured `Rubric` reward
+        after durable-seam runner stage dispatch, preserves per-axis
+        `RewardAssessment` rows, and reduces the vector with configured
+        weights into the candidate `Score`. `uv run pytest
+        tests/test_stage_surface.py -q` covers two registered rewards returning
+        both bare floats and `RewardValue` feedback. `LEAVEN_BIN=...
+        uv run python examples/03_prompt_optimize.py` proves the real SDK
+        optimize path through `leaven seam serve --stdio` returns printed
+        reward-vector rows from `result.assessments()`. This still does not
+        prove Rust optimizer admission semantics for vector rewards,
+        proposal-generating GEPA search, or persisted run readback.
     closeout_check: No closeout may explain the SDK as "ACP" rather than the Leaven public seam.
 
   - id: public_seam_server_executes
@@ -326,7 +340,20 @@ acceptance:
         - Plan Result or assessment projection with per-axis values
         - optimizer admission/report semantics for vector rewards
         - backwards-free hard cutover of the previous scalar-only scaffold
-    evidence: []
+    evidence:
+      - >-
+        Partial SDK evidence, not acceptance completion: Python
+        `lv.optimize(...).run()` now executes every configured `Rubric` reward
+        after durable-seam runner stage dispatch, preserves per-axis
+        `RewardAssessment` rows, and reduces the vector with configured
+        weights into the candidate `Score`. `uv run pytest
+        tests/test_stage_surface.py -q` covers two registered rewards returning
+        both bare floats and `RewardValue` feedback. `LEAVEN_BIN=...
+        uv run python examples/03_prompt_optimize.py` proves the real SDK
+        optimize path through `leaven seam serve --stdio` returns printed
+        reward-vector rows from `result.assessments()`. This still does not
+        prove Rust optimizer admission semantics for vector rewards,
+        proposal-generating GEPA search, or persisted run readback.
     closeout_check: Scalar-only prompt optimization cannot close SDK maturity.
 
   - id: codex_materialized_workspace_proposer
@@ -404,7 +431,17 @@ acceptance:
         - proposal lineage
         - call/write receipts
         - explicit unsupported/missing-provider statuses
-    evidence: []
+    evidence:
+      - >-
+        Partial SDK evidence, not acceptance completion: `Optimized` now
+        carries in-memory assessment rows from the seam optimize report.
+        `result.assessment(case_id)`, `result.assessments(...)`,
+        `result.test_assessments()`, and `result.lineage(candidate_id)` no
+        longer raise scaffolding errors for the completed in-process result.
+        `uv run pytest tests/test_stage_surface.py -q` covers best score,
+        assessment score, reward rows, held-out split filtering, and seed
+        lineage. This still does not prove `lv.runs.open(...)`, durable blob
+        readback, persisted receipts/evidence, or cost accounting.
     closeout_check: Stdout transcript alone is not run inspection.
 
 proof_denominator:

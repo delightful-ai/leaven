@@ -28,7 +28,8 @@ worker protocol implementation.
 - `types.py`: private report/assessment records for the mechanics path.
 - `status.py`: private runtime-dependency status facts projected into public
   result summaries.
-- `scoring.py`: deterministic local score projection for current prompt slice.
+- `rewards.py`: Python reward-vector execution and aggregate score projection.
+- `scoring.py`: deterministic aggregate helpers for current prompt slice.
 - `driver.py`: durable seam process requests for registered runner-stage
   mechanics.
 - `__init__.py`: map-only re-export.

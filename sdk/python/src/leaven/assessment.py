@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ._receipts import CallReceipt, QueryReceipt, WriteReceipt
 from .case import Case
 from .evidence import EvidenceEnvelope
+from .output_record import OutputRecord
 from .score import Score
 
 Replayability = Literal[
@@ -93,6 +94,18 @@ class AssessmentWrite(BaseModel):
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
 
+class RewardAssessment(BaseModel):
+    """One reward-vector dimension observed for a candidate/case assessment."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str
+    value: float
+    weight: float
+    feedback: str = ""
+    output: OutputRecord | None = None
+
+
 class Assessment(BaseModel):
     """Result-side view of one assessment (read via `Optimized.test_assessments()`)."""
 
@@ -104,6 +117,7 @@ class Assessment(BaseModel):
     evidence: EvidenceEnvelope
     receipt: WriteReceipt
     replayability: Replayability
+    rewards: list[RewardAssessment] = Field(default_factory=list)
 
 
-__all__ = ["Assessment", "AssessmentWrite", "Replayability"]
+__all__ = ["Assessment", "AssessmentWrite", "Replayability", "RewardAssessment"]
