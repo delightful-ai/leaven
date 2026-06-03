@@ -358,6 +358,8 @@ pub enum RunEventSummary {
     EvaluationRequested,
     /// Evaluation completed.
     EvaluationCompleted,
+    /// An external seam event was recorded.
+    ExternalEventEmitted,
     /// Population state was updated.
     PopulationUpdated,
     /// Iteration ended.
@@ -385,6 +387,7 @@ impl RunEventSummary {
             Self::ApplyFailed => "apply_failed",
             Self::EvaluationRequested => "evaluation_requested",
             Self::EvaluationCompleted => "evaluation_completed",
+            Self::ExternalEventEmitted => "external_event_emitted",
             Self::PopulationUpdated => "population_updated",
             Self::IterationEnded => "iteration_ended",
             Self::OptimizationStopping => "optimization_stopping",

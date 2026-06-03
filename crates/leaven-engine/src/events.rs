@@ -94,6 +94,13 @@ pub enum RunEvent {
         cost: Cost,
         cache: crate::CacheStatus,
     },
+    ExternalEventEmitted {
+        event_id: String,
+        event_kind: String,
+        payload_schema: String,
+        payload: serde_json::Value,
+        visibility: String,
+    },
     PopulationUpdated {
         population_id: PopulationId,
         events: Vec<PopulationEvent>,

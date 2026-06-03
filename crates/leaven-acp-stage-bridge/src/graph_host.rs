@@ -1,25 +1,24 @@
 //! RunContext-backed host effects for worker-initiated graph writes.
 //!
-//! This module is intentionally narrow: it handles `leaven/proposal.apply`
-//! callbacks by applying a previously recorded proposal batch through
-//! `RunContext::apply_batch`, then projects the graph-backed report through
-//! `leaven-run`'s public-seam receipt helper. It does not mutate `RunGraph`
-//! directly and does not make the bridge crate a general engine facade.
+//! This module is intentionally narrow: it handles graph-write callbacks by
+//! routing worker requests through `RunContext`, then returning receipt-bound
+//! public-seam extension results. It does not mutate `RunGraph` directly and
+//! does not make the bridge crate a general engine facade.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 use leaven_acp::{AcpEffectHost, AcpTransportError, AcpTransportResult};
 use leaven_core::OptimizationProblem;
-use leaven_engine::{ProposalBatchReport, RunContext};
+use leaven_engine::{ProposalBatchReport, RunContext, RunEvent};
 use leaven_kernel::ProposalBatchId;
 use leaven_run::{PublicProposalWriteReceiptContext, PublicProposalWriteReceiptProjectionError};
 use serde_json::{Value, json};
 use thiserror::Error;
 use uuid::Uuid;
 
-/// Host-side effect handler for `leaven/proposal.apply` worker callbacks.
-pub struct RunContextProposalApplyHost<'context, 'run, P: OptimizationProblem> {
+/// Host-side effect handler for worker-initiated graph-write callbacks.
+pub struct RunContextGraphEffectHost<'context, 'run, P: OptimizationProblem> {
     context: RefCell<&'context mut RunContext<'run, P>>,
     batches: BTreeMap<ProposalBatchId, ProposalBatchReport>,
     capability_fingerprint: String,
@@ -30,7 +29,7 @@ pub struct RunContextProposalApplyHost<'context, 'run, P: OptimizationProblem> {
     completed_at: String,
 }
 
-impl<'context, 'run, P: OptimizationProblem> RunContextProposalApplyHost<'context, 'run, P> {
+impl<'context, 'run, P: OptimizationProblem> RunContextGraphEffectHost<'context, 'run, P> {
     /// Binds a mutable RunContext and the proposal batches workers may apply.
     pub fn new(
         context: &'context mut RunContext<'run, P>,
@@ -55,13 +54,13 @@ impl<'context, 'run, P: OptimizationProblem> RunContextProposalApplyHost<'contex
         }
     }
 
-    fn proposal_apply(&self, params: &Value) -> Result<Value, RunContextProposalApplyHostError> {
+    fn proposal_apply(&self, params: &Value) -> Result<Value, RunContextGraphEffectHostError> {
         let plan_id = string_field(params, "plan_id")?;
         let batch_id = proposal_batch_id(params)?;
         let batch = self
             .batches
             .get(&batch_id)
-            .ok_or(RunContextProposalApplyHostError::UnknownBatch(batch_id))?
+            .ok_or(RunContextGraphEffectHostError::UnknownBatch(batch_id))?
             .clone();
         let mut context = self.context.borrow_mut();
         let apply = context.apply_batch(batch_id)?;
@@ -78,9 +77,39 @@ impl<'context, 'run, P: OptimizationProblem> RunContextProposalApplyHost<'contex
         .proposal_apply_plan_result(&graph, &batch, &apply)?;
         proposal_apply_extension_result(&plan_result)
     }
+
+    fn event_emit(&self, params: &Value) -> Result<Value, RunContextGraphEffectHostError> {
+        let event = event_emit_write(params)?;
+        let plan_id = string_field(params, "plan_id")?;
+        let event_id = format!("event_{}", event.name);
+        self.context
+            .borrow_mut()
+            .emit(RunEvent::ExternalEventEmitted {
+                event_id: event_id.clone(),
+                event_kind: event.event_kind.to_owned(),
+                payload_schema: event.payload_schema.to_owned(),
+                payload: event.payload.clone(),
+                visibility: event.visibility.to_owned(),
+            });
+        event_emit_extension_result(
+            EventEmitExtensionContext {
+                plan_id,
+                name: event.name,
+                write: event.write,
+                event_id: &event_id,
+                base_revision: &self.base_revision,
+                final_revision: &self.final_revision,
+                capability_fingerprint: &self.capability_fingerprint,
+                policy_fingerprint: &self.policy_fingerprint,
+                started_at: &self.started_at,
+                completed_at: &self.completed_at,
+            },
+            params,
+        )
+    }
 }
 
-impl<P: OptimizationProblem> AcpEffectHost for RunContextProposalApplyHost<'_, '_, P> {
+impl<P: OptimizationProblem> AcpEffectHost for RunContextGraphEffectHost<'_, '_, P> {
     fn lm_complete(&self, _params: &Value) -> AcpTransportResult<Value> {
         Err(AcpTransportError::EffectUnimplemented {
             method: "leaven/lm.complete".to_owned(),
@@ -90,6 +119,7 @@ impl<P: OptimizationProblem> AcpEffectHost for RunContextProposalApplyHost<'_, '
     fn service(&self, method: &str, params: &Value) -> AcpTransportResult<Value> {
         match method {
             "leaven/proposal.apply" => self.proposal_apply(params).map_err(protocol),
+            "leaven/event.emit" => self.event_emit(params).map_err(protocol),
             "leaven/lm.complete" => self.lm_complete(params),
             other => Err(AcpTransportError::EffectUnimplemented {
                 method: other.to_owned(),
@@ -98,9 +128,9 @@ impl<P: OptimizationProblem> AcpEffectHost for RunContextProposalApplyHost<'_, '
     }
 }
 
-/// Errors from RunContext-backed proposal apply callback handling.
+/// Errors from RunContext-backed graph-effect callback handling.
 #[derive(Debug, Error)]
-pub enum RunContextProposalApplyHostError {
+pub enum RunContextGraphEffectHostError {
     /// A required string field is missing.
     #[error("{field} must be a string")]
     MissingString {
@@ -110,6 +140,15 @@ pub enum RunContextProposalApplyHostError {
     /// The callback did not carry an apply proposal write.
     #[error("leaven/proposal.apply callback must carry an apply_proposal_batch write")]
     MissingApplyWrite,
+    /// The callback did not carry an event write.
+    #[error("leaven/event.emit callback must carry an emit_run_event write")]
+    MissingEventWrite,
+    /// A required JSON value is missing.
+    #[error("{field} must be present")]
+    MissingValue {
+        /// Field name.
+        field: &'static str,
+    },
     /// The public batch ref is malformed.
     #[error("proposal_batch must be a pb_<uuid> ref")]
     InvalidProposalBatchRef,
@@ -122,13 +161,16 @@ pub enum RunContextProposalApplyHostError {
     /// The graph-backed report failed public-seam projection.
     #[error(transparent)]
     Projection(#[from] PublicProposalWriteReceiptProjectionError),
+    /// Canonical JSON hashing failed.
+    #[error("failed to hash public seam receipt preimage: {0}")]
+    Hash(String),
 }
 
-fn proposal_batch_id(params: &Value) -> Result<ProposalBatchId, RunContextProposalApplyHostError> {
+fn proposal_batch_id(params: &Value) -> Result<ProposalBatchId, RunContextGraphEffectHostError> {
     let ops = params
         .get("ops")
         .and_then(Value::as_array)
-        .ok_or(RunContextProposalApplyHostError::MissingApplyWrite)?;
+        .ok_or(RunContextGraphEffectHostError::MissingApplyWrite)?;
     for op in ops {
         let Some(write) = op.get("write") else {
             continue;
@@ -137,28 +179,28 @@ fn proposal_batch_id(params: &Value) -> Result<ProposalBatchId, RunContextPropos
             let public_ref = write
                 .get("proposal_batch")
                 .and_then(Value::as_str)
-                .ok_or(RunContextProposalApplyHostError::InvalidProposalBatchRef)?;
+                .ok_or(RunContextGraphEffectHostError::InvalidProposalBatchRef)?;
             let uuid = public_ref
                 .strip_prefix("pb_")
                 .and_then(|value| Uuid::parse_str(value).ok())
-                .ok_or(RunContextProposalApplyHostError::InvalidProposalBatchRef)?;
+                .ok_or(RunContextGraphEffectHostError::InvalidProposalBatchRef)?;
             return Ok(ProposalBatchId::from_uuid(uuid));
         }
     }
-    Err(RunContextProposalApplyHostError::MissingApplyWrite)
+    Err(RunContextGraphEffectHostError::MissingApplyWrite)
 }
 
 fn proposal_apply_extension_result(
     plan_result: &Value,
-) -> Result<Value, RunContextProposalApplyHostError> {
+) -> Result<Value, RunContextGraphEffectHostError> {
     let primary = plan_result
         .pointer("/values/apply")
         .cloned()
-        .ok_or(RunContextProposalApplyHostError::MissingApplyWrite)?;
+        .ok_or(RunContextGraphEffectHostError::MissingApplyWrite)?;
     let receipts = plan_result
         .get("receipts")
         .and_then(Value::as_array)
-        .ok_or(RunContextProposalApplyHostError::MissingApplyWrite)?
+        .ok_or(RunContextGraphEffectHostError::MissingApplyWrite)?
         .iter()
         .filter(|receipt| {
             receipt.get("write_kind").and_then(Value::as_str) == Some("apply_proposal_batch")
@@ -176,17 +218,132 @@ fn proposal_apply_extension_result(
     }))
 }
 
+struct EventEmitWrite<'a> {
+    name: &'a str,
+    write: &'a Value,
+    event_kind: &'a str,
+    payload_schema: &'a str,
+    payload: &'a Value,
+    visibility: &'a str,
+}
+
+struct EventEmitExtensionContext<'a> {
+    plan_id: &'a str,
+    name: &'a str,
+    write: &'a Value,
+    event_id: &'a str,
+    base_revision: &'a str,
+    final_revision: &'a str,
+    capability_fingerprint: &'a str,
+    policy_fingerprint: &'a str,
+    started_at: &'a str,
+    completed_at: &'a str,
+}
+
+fn event_emit_write(params: &Value) -> Result<EventEmitWrite<'_>, RunContextGraphEffectHostError> {
+    let ops = params
+        .get("ops")
+        .and_then(Value::as_array)
+        .ok_or(RunContextGraphEffectHostError::MissingEventWrite)?;
+    for op in ops {
+        let Some(write) = op.get("write") else {
+            continue;
+        };
+        if write.get("kind").and_then(Value::as_str) == Some("emit_run_event") {
+            return Ok(EventEmitWrite {
+                name: string_field(op, "name")?,
+                write,
+                event_kind: string_field(write, "event_kind")?,
+                payload_schema: string_field(write, "payload_schema")?,
+                payload: write
+                    .get("payload")
+                    .ok_or(RunContextGraphEffectHostError::MissingValue { field: "payload" })?,
+                visibility: string_field(write, "visibility")?,
+            });
+        }
+    }
+    Err(RunContextGraphEffectHostError::MissingEventWrite)
+}
+
+fn event_emit_extension_result(
+    context: EventEmitExtensionContext<'_>,
+    params: &Value,
+) -> Result<Value, RunContextGraphEffectHostError> {
+    let receipt_id = format!("wrec_{}", context.name);
+    let request_hash = prefixed_jcs_hash(
+        "fp_request_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_write_request.v1",
+            "name": context.name,
+            "kind": "emit_run_event",
+            "write": context.write,
+            "deps": {},
+            "dependency_data_classes": [],
+            "base_revision": context.base_revision
+        }),
+    )?;
+    let primary = json!({
+        "kind": "emit_run_event",
+        "event_id": context.event_id,
+        "receipt": receipt_id,
+        "data_classes": ["public"],
+        "replayability": "fully_managed"
+    });
+    let result_hash = prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_write_result.v1",
+            "name": context.name,
+            "value": primary
+        }),
+    )?;
+    let receipt = json!({
+        "kind": "write",
+        "receipt": primary["receipt"],
+        "op_var": context.name,
+        "started_at": context.started_at,
+        "completed_at": context.completed_at,
+        "write_kind": "emit_run_event",
+        "request_hash": request_hash,
+        "result_hash": result_hash,
+        "base_revision": context.base_revision,
+        "committed_revision": context.final_revision,
+        "status": "succeeded",
+        "event_id": context.event_id
+    });
+    Ok(json!({
+        "method": "leaven/event.emit",
+        "primary": primary,
+        "receipts": [receipt],
+        "redactions": [],
+        "capability_fingerprint": context.capability_fingerprint,
+        "policy_fingerprint": context.policy_fingerprint,
+        "data_classes": ["public"],
+        "plan_id": context.plan_id,
+        "return": params.get("return").cloned().unwrap_or_else(|| json!([]))
+    }))
+}
+
+fn prefixed_jcs_hash(
+    prefix: &str,
+    value: &Value,
+) -> Result<String, RunContextGraphEffectHostError> {
+    let digest = jcs_canonicalize::sha256_jcs_hex(value)
+        .map_err(|error| RunContextGraphEffectHostError::Hash(error.to_string()))?;
+    Ok(format!("{prefix}{digest}"))
+}
+
 fn string_field<'a>(
     value: &'a Value,
     field: &'static str,
-) -> Result<&'a str, RunContextProposalApplyHostError> {
+) -> Result<&'a str, RunContextGraphEffectHostError> {
     value
         .get(field)
         .and_then(Value::as_str)
-        .ok_or(RunContextProposalApplyHostError::MissingString { field })
+        .ok_or(RunContextGraphEffectHostError::MissingString { field })
 }
 
-fn protocol(error: RunContextProposalApplyHostError) -> AcpTransportError {
+fn protocol(error: RunContextGraphEffectHostError) -> AcpTransportError {
     AcpTransportError::Protocol {
         message: error.to_string(),
     }

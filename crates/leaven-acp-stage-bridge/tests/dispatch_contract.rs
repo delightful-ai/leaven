@@ -12,14 +12,14 @@ use std::path::{Path, PathBuf};
 
 use leaven_acp::{AcpProcessCommand, AcpStdioProcessSession, RejectAllEffectHost};
 use leaven_acp_stage_bridge::{
-    MockArithmeticLm, OptimizeConfig, PromptArtifact, RunContextProposalApplyHost, RunnerDispatch,
+    MockArithmeticLm, OptimizeConfig, PromptArtifact, RunContextGraphEffectHost, RunnerDispatch,
     StageRunEffectHost, optimize_prompt,
 };
 use leaven_core::{
     Artifact, ArtifactIdentity, Evidence, OptimizationProblem, Proposal, ProposalBatch,
     ProposalBatchSemantics,
 };
-use leaven_engine::{BudgetLedger, RunContext, RunGraph};
+use leaven_engine::{BudgetLedger, RunContext, RunEvent, RunGraph};
 use leaven_kernel::{Budget, Cost, MetadataBag, RunId, StageId};
 use leaven_public_seam::{AcpProfileDocument, PublicSeamPackage};
 use serde_json::{Value, json};
@@ -183,7 +183,7 @@ print(json.dumps({{
 "#
     ));
     let mut session = spawn(&script, package, profile);
-    let host = RunContextProposalApplyHost::new(
+    let host = RunContextGraphEffectHost::new(
         &mut context,
         [batch],
         "fp_cap_sha256_stage_bridge",
@@ -203,6 +203,109 @@ print(json.dumps({{
         2,
         "worker callback must create the child through RunContext::apply_batch"
     );
+    forget(script);
+}
+
+#[test]
+fn dispatch_stage_run_services_worker_initiated_event_emit_through_runcontext() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let profile = acp_profile(&package);
+    let mut graph = RunGraph::<BridgeProblem>::new(RunId::new());
+    let mut budget = BudgetLedger::new(Budget::unlimited());
+    let mut context = RunContext::<BridgeProblem>::new(&mut graph, &mut budget);
+    let script = python_worker(
+        r#"
+import json
+import os
+import sys
+
+request = json.loads(sys.stdin.readline())
+payload = request["params"]["payload"]
+
+print(json.dumps({
+    "jsonrpc": "2.0",
+    "id": "%s::event" % payload["stage_call_id"],
+    "method": "leaven/event.emit",
+    "params": {
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "plan_runner_event_emit",
+        "consistency": {"kind": "latest_at_start"},
+        "mode": {"kind": "execute"},
+        "ops": [{
+            "kind": "write",
+            "name": "status",
+            "idempotency_key": "event-emit-stage-bridge-0001",
+            "write": {
+                "kind": "emit_run_event",
+                "event_kind": "stage.bridge.checked",
+                "payload_schema": "fp_schema_sha256_stage_bridge_event",
+                "payload": {"ok": True, "stage_call_id": payload["stage_call_id"]},
+                "visibility": "public"
+            },
+        }],
+        "return": ["status"],
+        "commit": {"kind": "graph_writes_atomic", "on_stale": "reject"},
+    },
+}), flush=True)
+
+reply = json.loads(sys.stdin.readline())
+assert reply["result"]["method"] == "leaven/event.emit", reply
+assert reply["result"]["capability_fingerprint"] == os.environ["LEAVEN_CAPABILITY_FINGERPRINT"], reply
+assert reply["result"]["primary"]["kind"] == "emit_run_event", reply
+assert reply["result"]["receipts"][0]["write_kind"] == "emit_run_event", reply
+
+print(json.dumps({
+    "jsonrpc": "2.0",
+    "id": request["id"],
+    "result": {
+        "schema_version": "leaven.stage_run.v1",
+        "message": "stage_run_result",
+        "stage": "runner",
+        "stage_call_id": payload["stage_call_id"],
+        "output": {
+            "kind": "text",
+            "summary": "event emitted",
+            "value": "emitted",
+            "visibility": "optimizer_visible",
+            "data_classes": ["candidate.output"],
+        },
+    },
+}), flush=True)
+"#,
+    );
+    let mut session = spawn(&script, package, profile);
+    let host = RunContextGraphEffectHost::new(
+        &mut context,
+        [],
+        "fp_cap_sha256_stage_bridge",
+        "fp_policy_sha256_stage_bridge",
+        "rev_stage_bridge_base",
+        "rev_stage_bridge_final",
+    );
+
+    let response = session
+        .dispatch_stage_run(&runner_request("event emit"), &host)
+        .unwrap();
+
+    assert_eq!(response.result().output().as_value()["value"], "emitted");
+    drop(host);
+    let events = context.graph().events().collect::<Vec<_>>();
+    assert_eq!(events.len(), 1);
+    let RunEvent::ExternalEventEmitted {
+        event_id,
+        event_kind,
+        payload_schema,
+        payload,
+        visibility,
+    } = events[0]
+    else {
+        panic!("worker callback must record a RunContext external event");
+    };
+    assert_eq!(event_id, "event_status");
+    assert_eq!(event_kind, "stage.bridge.checked");
+    assert_eq!(payload_schema, "fp_schema_sha256_stage_bridge_event");
+    assert_eq!(payload["ok"], true);
+    assert_eq!(visibility, "public");
     forget(script);
 }
 

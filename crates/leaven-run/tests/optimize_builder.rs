@@ -1153,6 +1153,10 @@ fn run_event_summary_names_cover_public_variants() {
         (RunEventSummary::ApplyFailed, "apply_failed"),
         (RunEventSummary::EvaluationRequested, "evaluation_requested"),
         (RunEventSummary::EvaluationCompleted, "evaluation_completed"),
+        (
+            RunEventSummary::ExternalEventEmitted,
+            "external_event_emitted",
+        ),
         (RunEventSummary::PopulationUpdated, "population_updated"),
         (RunEventSummary::IterationEnded, "iteration_ended"),
         (

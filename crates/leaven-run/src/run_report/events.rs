@@ -21,6 +21,9 @@ pub(super) fn event_summary(event: &leaven_engine::RunEvent) -> RunEventSummary 
         leaven_engine::RunEvent::ApplyFailed { .. } => RunEventSummary::ApplyFailed,
         leaven_engine::RunEvent::EvaluationRequested { .. } => RunEventSummary::EvaluationRequested,
         leaven_engine::RunEvent::EvaluationCompleted { .. } => RunEventSummary::EvaluationCompleted,
+        leaven_engine::RunEvent::ExternalEventEmitted { .. } => {
+            RunEventSummary::ExternalEventEmitted
+        }
         leaven_engine::RunEvent::PopulationUpdated { .. } => RunEventSummary::PopulationUpdated,
         leaven_engine::RunEvent::IterationEnded { .. } => RunEventSummary::IterationEnded,
         leaven_engine::RunEvent::OptimizationStopping { .. } => {

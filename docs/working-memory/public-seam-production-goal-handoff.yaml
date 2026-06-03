@@ -264,7 +264,7 @@ acceptance:
           - crates/leaven-seam-service/src/service.rs
           - crates/leaven-cli/tests/seam_stdio_server.rs
           - docs/specs/public-seam-v1/executable-method-status.md
-        note: Event emit moved from unsupported service behavior to typed configured local write receipt through service and stdio; durable RunGraph event persistence remains open for effects closeout.
+        note: Event emit moved from unsupported service behavior to typed configured local write receipt through service and stdio; later bridge evidence proves worker-initiated RunContext event persistence, while the durable CLI service route remains configured-local receipt behavior.
       - kind: partial_method_matrix_reduction
         methods:
           - "`leaven/workspace.git_log`"
@@ -412,7 +412,7 @@ acceptance:
           - cargo test -p leaven-seam-service seam_runtime_executes_event_emit_through_configured_service
           - cargo test -p leaven-cli --test seam_stdio_server
           - cargo test -p leaven-public-seam --test public_seam_contract acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
-        note: Event emit now returns a typed receipt-bound `emit_run_event` value through configured service and stdio; this is not yet durable RunContext/RunGraph event persistence.
+        note: Event emit now returns a typed receipt-bound `emit_run_event` value through configured service and stdio; bridge evidence below separately proves worker-initiated RunContext/RunGraph event persistence.
       - kind: partial_sandbox_exec_execution
         methods:
           - "`leaven/sandbox.exec`"
@@ -456,6 +456,19 @@ acceptance:
           - crates/leaven-acp-stage-bridge/AGENTS.md
           - crates/leaven/tests/topology_contract.rs
         note: The bidirectional stdio stage bridge now services a worker-initiated `leaven/proposal.apply` callback by calling `RunContext::apply_batch`, projecting the graph-backed report through leaven-run public-seam receipts, returning a validated extension result, and proving the graph gains the child candidate. This closes the stdio callback leg for proposal.apply, but the durable `leaven seam serve --stdio` SDK service still uses configured receipt plumbing.
+      - kind: stdio_runcontext_event_emit_callback
+        methods:
+          - "`leaven/event.emit`"
+        commands:
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-acp-stage-bridge
+          - cargo test -p leaven --test topology_contract
+        paths:
+          - crates/leaven-engine/src/events.rs
+          - crates/leaven-acp-stage-bridge/src/graph_host.rs
+          - crates/leaven-acp-stage-bridge/tests/dispatch_contract.rs
+          - crates/leaven-acp-stage-bridge/AGENTS.md
+          - docs/specs/public-seam-v1/executable-method-status.md
+        note: The bidirectional stdio stage bridge now services a worker-initiated `leaven/event.emit` callback by lowering the locked Plan IR write into `RunContext::emit(RunEvent::ExternalEventEmitted { ... })`, returning a receipt-bound extension result, and proving the event persists in RunGraph history. This closes the stdio callback leg for event.emit, but the durable `leaven seam serve --stdio` SDK service still uses configured receipt plumbing.
       - kind: runcontext_graph_backed_evaluation_request_projection
         methods:
           - "`leaven/evaluation.request`"

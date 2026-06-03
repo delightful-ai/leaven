@@ -21,7 +21,7 @@ mod runner;
 
 pub use artifact::PromptArtifact;
 pub use error::StageBridgeError;
-pub use graph_host::{RunContextProposalApplyHost, RunContextProposalApplyHostError};
+pub use graph_host::{RunContextGraphEffectHost, RunContextGraphEffectHostError};
 pub use host::{HostLm, LmCompletionRequest, MockArithmeticLm, StageRunEffectHost};
 pub use loop_::{
     Candidate, CaseFeedback, OptCase, OptimizeConfig, Optimized, ReflectFn, RewardFn,
