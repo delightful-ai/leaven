@@ -1,0 +1,250 @@
+version: 1
+artifact_kind: leaven_goal_handoff
+status: set_goal
+created: 2026-06-03
+
+goal:
+  slug: public_seam_v1_production_denominator
+  original_intent:
+    user_question: >-
+      Make Leaven's public seam and Python SDK real enough that locked V1
+      backbone protocol methods execute for external-language SDK workers,
+      rather than validating a convincing substrate smoke.
+    user_should_be_able_to:
+      - >-
+        Use every locked backbone `leaven/*` method advertised by the V1 worker
+        profile through `leaven seam serve --stdio`, or see the method explicitly
+        removed from the locked V1 profile before closeout.
+      - >-
+        Inspect completed Python SDK runs from Rust-owned durable run/checkpoint
+        state, not only an SDK-written projection file.
+      - >-
+        Run examples whose README labels match behavior: product examples run
+        end to end, while shape-only scaffolds are clearly not product proofs.
+
+spec_package:
+  package_name: public_seam_v1_production_denominator
+  governing_docs:
+    - path: docs/specs/leaven_python.md
+      role: Python SDK product surface and user-facing authoring contract.
+    - path: docs/specs/public-seam-v1/
+      role: Locked public seam schemas, worker profile, method families, and V1 scope.
+    - path: docs/specs/public-seam-v1/executable-method-status.md
+      role: Current method execution truth; must reach zero validated-only locked V1 methods.
+    - path: docs/working-memory/public-seam-sdk-goal-handoff.yaml
+      role: Historical foundation proof and evidence ledger, not sufficient closeout for this goal.
+    - path: AGENTS.md
+      role: Hard cutover, topology, maturity, and verification contract.
+
+designed_surface:
+  public_surface:
+    - name: locked_v1_method_table
+      user_interaction: >-
+        The methods advertised by the locked worker profile are executable
+        SDK/worker backbone promises, not placeholders and not end-user product
+        features. A method that is not executable must be removed from V1 before
+        completion.
+    - name: leaven_seam_stdio_service
+      user_interaction: >-
+        `leaven seam serve --stdio` executes the locked method table through
+        configured services with real run/workspace/case state, receipts,
+        errors, and capability enforcement.
+    - name: python_sdk_run_inspection
+      user_interaction: >-
+        `lv.runs.open(...)` and `lv.runs.inspect(...)` read durable
+        Rust-owned run/checkpoint state or a documented Rust-owned exported
+        artifact, not a Python-only shadow projection.
+    - name: examples_contract
+      user_interaction: >-
+        Example labels match reality: behavior-bearing examples run, live
+        examples are gated, and any shape-only files are named as scaffolds.
+  private_machinery_relevant_to_handoff:
+    - RunContext remains the graph mutation authority; proposal apply,
+      assessment submit, evaluation request, and event emission must not bypass it.
+    - Case/graph reads must come from the run/case substrate under explicit
+      read scope, not hardcoded worker payloads.
+    - Workspace methods must be owned by workspace backends and scoped handles.
+    - Blob refs without byte retrieval are not sufficient for inspection closeout.
+
+intent_preservation:
+  verdict: preserved
+  reason: >-
+    This successor goal preserves the corrected intent only if the locked V1
+    contract and configured service reality converge. Passing the previous
+    foundation live proofs is useful evidence, but not completion.
+
+misleading_proxy_proofs:
+  - proxy: "The previous public-seam SDK handoff is all `done`."
+    why_insufficient: It closed a foundation denominator that explicitly left method-family and checkpoint gaps.
+    forbidden_as_completion_evidence: true
+  - proxy: "Runtime dispatch validates every locked method envelope."
+    why_insufficient: Validation-only methods still fail at the configured service boundary.
+    forbidden_as_completion_evidence: true
+  - proxy: "`executable-method-status.md` documents unsupported methods honestly."
+    why_insufficient: Honest docs prevent lying but do not make locked V1 production-ready.
+    forbidden_as_completion_evidence: true
+  - proxy: "Python inspection reads `.leaven/runs/<run_id>/optimized.json`."
+    why_insufficient: That is a Python SDK projection, not proven Rust graph/checkpoint readback.
+    forbidden_as_completion_evidence: true
+  - proxy: "Live OpenAI or Codex examples still pass."
+    why_insufficient: They exercise a subset of method families and do not prove the locked V1 denominator.
+    forbidden_as_completion_evidence: true
+
+spec_revisions_before_goal:
+  - update: >-
+      Decide method-by-method whether each locked V1 method is a true
+      external-language worker backbone method. Implement the true backbone
+      methods now and remove non-backbone methods from the locked V1 profile.
+      Do not leave validated-only methods in V1.
+    rationale: The public contract must not advertise non-executable methods.
+    status: pending
+  - update: >-
+      Remove `leaven/human.review` from the locked V1 profile, schemas,
+      capability examples, method-status docs, and tests. It is not part of the
+      intended external-language SDK backbone.
+    rationale: Avoid implementing a mystery method just because it was locked too early.
+    status: pending
+  - update: >-
+      Update example maturity labels so product-proof examples and shape-only
+      scaffolds are not mixed under "runnable examples" language.
+    rationale: Example labels are part of public maturity truth.
+    status: pending
+
+acceptance:
+  - id: human_review_removed_from_v1
+    claim: "`leaven/human.review` is removed from the active codebase and is no longer advertised or accepted as a locked V1 method."
+    status: pending
+    proof_required:
+      kind: profile_schema_docs_tests
+      must_exercise:
+        - active Rust production code
+        - active Rust/Python tests and fixtures
+        - active public seam schemas
+        - locked extension method table
+        - ACP/profile fixture docs
+        - capability examples and tests
+        - method-status docs
+        - negative request proof through `leaven seam serve --stdio`
+    evidence: []
+    closeout_check: >-
+      No active production code, schema enum, V1 method table, docs, generated
+      fixture, or test may still treat `human.review` as supported. Any
+      remaining string match must be archival review/provenance text or the
+      explicit removal note for this goal.
+
+  - id: no_validated_only_locked_v1_methods
+    claim: >-
+      Every method advertised by the locked V1 worker profile executes through
+      `leaven seam serve --stdio`, or is removed from that locked V1 profile.
+    status: pending
+    proof_required:
+      kind: method_matrix_and_stdio_contract
+      must_exercise:
+        - locked profile method table
+        - configured service execution for every retained method
+        - explicit profile/spec/docs update for every removed method
+        - negative proof that removed methods do not advertise as V1
+    evidence: []
+    closeout_check: No row may remain "validated-only" or "unsupported in service" for locked V1.
+
+  - id: graph_and_case_reads_execute
+    claim: Graph and case read methods execute against real run/case state.
+    status: pending
+    proof_required:
+      kind: seam_service_tests_and_sdk_callback_test
+      must_exercise:
+        - "`leaven/graph.query`"
+        - "`leaven/case.load`"
+        - "`leaven/case.input`"
+        - "`leaven/case.target`"
+        - "`leaven/case.metadata`"
+        - read-scope or capability denial for unauthorized target access
+    evidence: []
+    closeout_check: Hardcoded payload echoes are not graph/case read execution.
+
+  - id: workspace_lifecycle_executes
+    claim: Workspace query, file, digest, git, artifact-capture, and release methods execute.
+    status: pending
+    proof_required:
+      kind: workspace_backend_contract_and_stdio_test
+      must_exercise:
+        - materialize, snapshot, list, read_file, stat, digest
+        - git_log, git_diff, git_status
+        - capture_artifacts with blob byte availability
+        - release and post-release denial
+    evidence: []
+    closeout_check: Materialize-only workspace support cannot close this row.
+
+  - id: effects_and_graph_writes_execute
+    claim: Remaining backbone effect/write methods execute with real side effects, receipts, and graph/run integration.
+    status: pending
+    proof_required:
+      kind: engine_integrated_stdio_tests
+      must_exercise:
+        - "`leaven/sandbox.exec` if retained in locked V1"
+        - "`leaven/proposal.apply`"
+        - "`leaven/assessment.submit`"
+        - "`leaven/evaluation.request`"
+        - "`leaven/event.emit` if retained in locked V1"
+        - receipt binding and RunContext-owned mutation where graph state changes
+    evidence: []
+    closeout_check: "`proposal.submit_batch` alone is not proposal application."
+
+  - id: rust_owned_run_readback_powers_python_inspection
+    claim: Python run inspection reads Rust-owned durable run/checkpoint state or a Rust-owned exported artifact.
+    status: pending
+    proof_required:
+      kind: sdk_integration_test
+      must_exercise:
+        - run produced through `lv.optimize(...).run()`
+        - Rust-owned durable run/checkpoint store as the source of readback truth
+        - "`lv.runs.open(...)`"
+        - "`lv.runs.inspect(...)`"
+        - receipts, lineage, evidence, cost/usage, unsupported facts
+        - blob byte retrieval for transcript/artifact refs
+    evidence: []
+    closeout_check: "Reading only `optimized.json` written by Python is a proxy."
+
+  - id: examples_match_product_truth
+    claim: Examples are classified and verified according to what they actually prove.
+    status: pending
+    proof_required:
+      kind: examples_audit_and_run_matrix
+      must_exercise:
+        - examples README maturity table
+        - all no-spend product examples
+        - live-gated OpenAI and Codex examples when credentials are present
+        - shape-only scaffold examples renamed or labeled as non-product proof
+    evidence: []
+    closeout_check: A typechecked tour is not a runnable product example.
+
+  - id: release_gate_for_public_contract
+    claim: The public contract is verified with focused method tests plus the repo's broad gate.
+    status: pending
+    proof_required:
+      kind: repo_gate
+      must_exercise:
+        - "`cargo test -p leaven --test topology_contract`"
+        - public seam runtime/stdio/service tests
+        - Python SDK tests and example matrix
+        - "`just check`"
+        - "`just coverage` or documented explicit user-approved deferral"
+    evidence: []
+    closeout_check: Broad gates cannot replace method-specific proof, and method-specific proof cannot replace public contract hygiene.
+
+explicit_non_goals:
+  - Upstream Agent Client Protocol conformance beyond the Leaven-owned profile.
+  - Watch streaming semantics.
+  - Provider credentials in default tests.
+  - Compatibility shims for the previous foundation-only denominator.
+  - Calling shape-only examples product-ready.
+  - Preserving `human.review` in V1.
+
+decision:
+  status: set_goal
+  reason: >-
+    The prior foundation goal exposed an unacceptable mismatch: locked V1
+    method contracts outpaced configured service execution and Python
+    inspection still used a projection. This successor goal treats locked
+    methods as external-language SDK backbone, removes mystery methods instead
+    of preserving placeholders, and forbids closing on substrate smoke.
