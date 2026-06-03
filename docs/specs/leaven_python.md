@@ -266,6 +266,15 @@ exactly like it would shell out to `git log`. The CLI is not a separate
 tool; it is the same binary, talking to the same engine, exposed through
 a different I/O shell.
 
+Current scaffold status: `docs/specs/leaven_py/examples/10_live_codex_seam.py`
+is a live-gated Python proof that drives this Leaven-owned stdio wire directly:
+it spawns `leaven seam serve --stdio --config`, sends a locked
+`leaven/agent.run` Plan IR request, and verifies workspace materialization,
+Codex CLI execution, receipts, and transcript refs. That proves the public seam
+can be the Python/Codex substrate. It is not the ergonomic `cx.agent.run`
+implementation, reward-vector execution, persisted blob inspection, or the
+full `optimize(...).run()` live-agent workflow named by the acceptance gate.
+
 ## What is preserved
 
 The Python SDK does not relax any seam property. The user writes Python;

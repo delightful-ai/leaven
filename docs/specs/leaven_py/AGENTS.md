@@ -11,7 +11,9 @@ It is mostly scaffold: nearly every function and method body is
 `raise NotImplementedError(...)` or `...`. Do not add real behavior here
 beyond the one wired path described next.
 
-### The one wired path (example 03, prompt/LM/exact-match)
+### The wired paths
+
+#### 1. Example 03, prompt/LM/exact-match
 
 `examples/03_prompt_optimize.py` runs FOR REAL over the locked Leaven worker
 bidirectional seam. The wired surface is exactly the slice-3 path and no
@@ -35,6 +37,22 @@ reflector run host-side in `leaven serve` and are named declaratively in the
 plan (`_serve.run_optimization`), so the Python `@lv.reward`/reflect bodies are
 not yet executed. The reward vector, agent, sandbox, message-list LM, and
 Python-side reward/reflect are later slices and remain scaffold.
+
+#### 2. Example 10, live Codex agent.run over the public seam
+
+`examples/10_live_codex_seam.py` is a live-gated substrate proof for the new
+public seam service path. With `LEAVEN_LIVE_CODEX=1`, it spawns
+`leaven seam serve --stdio --config`, sends one locked `leaven/agent.run` Plan
+IR request, and checks that the Rust child materializes a workspace, runs the
+configured Codex CLI adapter, and returns an `agent_session` with workspace and
+agent receipts plus a transcript blob ref.
+
+Honest scope: this is a direct public-seam JSON-RPC client written in Python,
+not the ergonomic `cx.agent.run` SDK implementation. It proves that Python can
+drive the real Leaven-owned stdio seam and Codex provider substrate; the
+role-scoped `AgentBuilder.run`, reward vector execution, persisted blob
+inspection, and full `optimize(...).run()` live-agent workflow remain later
+slices and stay scaffold.
 
 The binary is resolved via `LEAVEN_BIN`, else `target/{debug,release}/leaven`
 under the repo root (`LEAVEN_REPO_ROOT` override). Build it with

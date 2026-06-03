@@ -1,8 +1,9 @@
 """Run every numbered example script in order.
 
-Each example raises NotImplementedError at the engine boundary; this
-runner catches the exception and reports the example as expected-failed
-so the tour completes end-to-end without crashing.
+Most scaffold examples raise NotImplementedError at the engine boundary; this
+runner catches that and reports the example as expected-failed so the tour
+completes end-to-end without crashing. Live-gated examples are responsible for
+skipping themselves unless their opt-in env vars are set.
 """
 
 from __future__ import annotations
@@ -38,8 +39,11 @@ def main() -> int:
 
                 try:
                     asyncio.run(module.amain())
-                except NotImplementedError as e:
-                    print(f"(expected) {e}")
+                except Exception as e:
+                    if _is_expected_boundary_error(e):
+                        print(f"(expected) {e}")
+                    else:
+                        raise
         except Exception as e:
             failures.append((script.name, f"{type(e).__name__}: {e}"))
             traceback.print_exc(limit=2)
@@ -50,8 +54,17 @@ def main() -> int:
         for name, msg in failures:
             print(f"  {name}: {msg}")
         return 1
-    print(f"all {len(scripts)} examples completed (NotImplementedError at engine boundaries is expected).")
+    print(f"all {len(scripts)} examples completed (scaffold engine boundaries are expected).")
     return 0
+
+
+def _is_expected_boundary_error(error: Exception) -> bool:
+    """Return whether an example hit a known scaffold engine boundary."""
+    if isinstance(error, NotImplementedError):
+        return True
+    return isinstance(error, TypeError) and str(error).startswith(
+        "this slice optimizes a PromptArtifact seed"
+    )
 
 
 if __name__ == "__main__":
