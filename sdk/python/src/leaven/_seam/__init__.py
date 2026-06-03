@@ -19,7 +19,7 @@ from .config import (
     SeamServiceConfig,
 )
 from .errors import SeamClientError
-from .plans import AgentRunRequest, LmCompleteRequest, StageRunRequest
+from .plans import AgentRunRequest, LmCompleteRequest, ProposalSubmitRequest, StageRunRequest
 from .resolve import resolve_codex_binary, resolve_leaven_binary, resolve_repo_root
 
 __all__ = [
@@ -30,6 +30,7 @@ __all__ = [
     "LocalWorkspaceConfig",
     "MockLmRuntimeConfig",
     "MockRunnerStageConfig",
+    "ProposalSubmitRequest",
     "SeamClient",
     "SeamClientError",
     "SeamExecutionContext",

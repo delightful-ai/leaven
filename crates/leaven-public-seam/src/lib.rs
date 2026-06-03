@@ -58,9 +58,9 @@ pub use plan_execution::{
     PlanCaseQueryRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext,
     PlanExecutionHost, PlanExecutionReport, PlanGraphQueryOutcome, PlanGraphQueryRequest,
     PlanGraphReadScope, PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome,
-    PlanSandboxExecRequest, PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest,
-    PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome,
-    PlanWorkspaceReleaseRequest,
+    PlanSandboxExecRequest, PlanSubmitProposalBatchOutcome, PlanSubmitProposalBatchRequest,
+    PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome,
+    PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
 };
 pub use proposal_authority::ProposalAuthorityReport;
 pub use result::{PlanResultDocument, Replayability};

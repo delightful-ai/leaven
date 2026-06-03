@@ -18,7 +18,12 @@ class ProposalEffect(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    kind: Literal["create", "change", "change_from_agent_session"]
+    kind: Literal[
+        "create",
+        "change",
+        "change_from_workspace_diff",
+        "change_from_agent_session",
+    ]
     parent_candidate_id: str | None = None
     """Required for 'change' and 'change_from_agent_session'."""
     surface: str
@@ -27,6 +32,42 @@ class ProposalEffect(BaseModel):
     """Typed change payload (e.g. SkillBankChange JSON)."""
     agent_session_receipt: CallReceipt | None = None
     """Required for 'change_from_agent_session'."""
+
+    @classmethod
+    def change(
+        cls,
+        *,
+        parent_candidate_id: str,
+        surface: str,
+        change_schema: str,
+        change: dict[str, Any],
+    ) -> ProposalEffect:
+        """Build a lineage-bearing change proposal effect."""
+        return cls(
+            kind="change",
+            parent_candidate_id=parent_candidate_id,
+            surface=surface,
+            payload={"change_schema": change_schema, "change": change},
+        )
+
+    @classmethod
+    def change_from_agent_session(
+        cls,
+        *,
+        parent_candidate_id: str,
+        surface: str,
+        change_schema: str,
+        parser: str,
+        agent_session_receipt: CallReceipt,
+    ) -> ProposalEffect:
+        """Build a proposal effect bound to a prior `cx.agent.run` receipt."""
+        return cls(
+            kind="change_from_agent_session",
+            parent_candidate_id=parent_candidate_id,
+            surface=surface,
+            payload={"change_schema": change_schema, "parser": parser},
+            agent_session_receipt=agent_session_receipt,
+        )
 
 
 class ProposalBatch(BaseModel):

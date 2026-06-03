@@ -178,4 +178,48 @@ class StageRunRequest:
         }
 
 
-__all__ = ["AgentRunRequest", "LmCompleteRequest", "StageRunRequest"]
+@dataclass(frozen=True)
+class ProposalSubmitRequest:
+    """A single public-seam `leaven/proposal.submit_batch` Plan request."""
+
+    request_id: str
+    plan_id: str
+    idempotency_key: str
+    proposals: Sequence[dict[str, Any]]
+
+    def to_json_rpc(self) -> dict[str, Any]:
+        """Return a JSON-RPC request for `leaven/proposal.submit_batch`."""
+        return {
+            "jsonrpc": "2.0",
+            "id": self.request_id,
+            "method": "leaven/proposal.submit_batch",
+            "params": {
+                "schema_version": "leaven.plan.v1",
+                "plan_id": self.plan_id,
+                "consistency": {"kind": "latest_at_start"},
+                "mode": {"kind": "execute"},
+                "ops": [self._submit_write()],
+                "return": ["proposal_batch"],
+                "commit": {"kind": "graph_writes_atomic", "on_stale": "reject"},
+            },
+        }
+
+    def _submit_write(self) -> dict[str, Any]:
+        return {
+            "kind": "write",
+            "name": "proposal_batch",
+            "idempotency_key": self.idempotency_key,
+            "write": {
+                "kind": "submit_proposal_batch",
+                "semantics": "sequence",
+                "proposals": list(self.proposals),
+            },
+        }
+
+
+__all__ = [
+    "AgentRunRequest",
+    "LmCompleteRequest",
+    "ProposalSubmitRequest",
+    "StageRunRequest",
+]

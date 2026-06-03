@@ -10,7 +10,8 @@ use leaven_lm_mock::{MockLm, MockLmScript};
 use leaven_public_seam::{
     AgentCommandOutputRefs, CapabilityDocument, PlanAgentRunOutcome, PlanAgentRunRequest,
     PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
-    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanWorkspaceMaterializeOutcome,
+    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSubmitProposalBatchOutcome,
+    PlanSubmitProposalBatchRequest, PlanWorkspaceMaterializeOutcome,
     PlanWorkspaceMaterializeRequest, PublicSeamError, PublicSeamPackage,
 };
 use leaven_seam_runtime::{SeamPlanRequest, SeamService, SeamServiceError, SeamStageRunRequest};
@@ -151,6 +152,7 @@ fn method_primary_kind(method: &str) -> &'static str {
     match method {
         "leaven/lm.complete" => "lm_response",
         "leaven/agent.run" => "agent_session",
+        "leaven/proposal.submit_batch" => "proposal_batch_receipt",
         "leaven/workspace.materialize" | "leaven/workspace.release" => "workspace_handle",
         "leaven/sandbox.exec" => "sandbox_exec",
         _ => "extension",
@@ -406,6 +408,20 @@ impl PlanExecutionHost for ConfiguredPlanHost {
         })
     }
 
+    fn submit_proposal_batch(
+        &mut self,
+        request: PlanSubmitProposalBatchRequest<'_>,
+    ) -> Result<PlanSubmitProposalBatchOutcome, PublicSeamError> {
+        let proposal_ids = (0..request.proposal_count()?)
+            .map(|index| format!("prop_{}_{}", request.name(), index))
+            .collect();
+        Ok(PlanSubmitProposalBatchOutcome::new(
+            format!("pb_{}", request.name()),
+            proposal_ids,
+            format!("{}_proposal_submit", request.base_revision()),
+        ))
+    }
+
     fn workspace_materialize(
         &mut self,
         request: PlanWorkspaceMaterializeRequest<'_>,
@@ -628,6 +644,45 @@ mod tests {
                 .as_str()
                 .unwrap()
                 .contains("mock script exhausted")
+        );
+    }
+
+    #[test]
+    fn seam_runtime_executes_proposal_submit_through_configured_service() {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
+        let service = ConfiguredSeamService::from_package(
+            package.clone(),
+            SeamServiceConfig {
+                context: proposal_context(),
+                capability: Some(proposal_capability()),
+                ..SeamServiceConfig::default()
+            },
+        )
+        .unwrap();
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        let response = runtime.handle_value(&proposal_submit_request());
+
+        assert!(
+            !response.is_error(),
+            "unexpected error: {:?}",
+            response.value()
+        );
+        assert_eq!(
+            response.value()["result"]["primary"]["kind"],
+            "proposal_batch_receipt"
+        );
+        assert_eq!(
+            response.value()["result"]["primary"]["receipt"],
+            "wrec_proposal_batch"
+        );
+        assert_eq!(
+            response.value()["result"]["primary"]["proposal_ids"],
+            json!(["prop_proposal_batch_0"])
+        );
+        assert_eq!(
+            response.value()["result"]["receipts"][0]["write_kind"],
+            "submit_proposal_batch"
         );
     }
 
@@ -976,6 +1031,60 @@ mod tests {
         })
     }
 
+    fn proposal_submit_request() -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "id": "proposal-1",
+            "method": "leaven/proposal.submit_batch",
+            "params": {
+                "schema_version": "leaven.plan.v1",
+                "plan_id": "planproposalservice001",
+                "consistency": {
+                    "kind": "latest_at_start"
+                },
+                "mode": {
+                    "kind": "execute"
+                },
+                "ops": [
+                    {
+                        "kind": "write",
+                        "name": "proposal_batch",
+                        "idempotency_key": "proposal-service-0001",
+                        "write": {
+                            "kind": "submit_proposal_batch",
+                            "semantics": "sequence",
+                            "proposals": [
+                                {
+                                    "effect": {
+                                        "kind": "change_from_agent_session",
+                                        "target": "cand_parent",
+                                        "agent_receipt": "agentrec_codex",
+                                        "parser": "leaven.agent_session.skill_patch.v1",
+                                        "surface_fingerprint": "fp_surface_sha256_program",
+                                        "change_schema": "fp_schema_sha256_skill_patch"
+                                    },
+                                    "causal": {
+                                        "inputs": ["cand_parent"]
+                                    },
+                                    "informed_by": {
+                                        "kind": "literal",
+                                        "value": ["qrec_reflection", "agentrec_codex"]
+                                    },
+                                    "read_receipts": ["qrec_reflection", "agentrec_codex"]
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "return": ["proposal_batch"],
+                "commit": {
+                    "kind": "graph_writes_atomic",
+                    "on_stale": "reject"
+                }
+            }
+        })
+    }
+
     fn lm_plan() -> Value {
         json!({
             "schema_version": "leaven.plan.v1",
@@ -1035,6 +1144,79 @@ mod tests {
             started_at: "2026-05-23T00:00:00Z".to_owned(),
             completed_at: "2026-05-23T00:00:01Z".to_owned(),
         }
+    }
+
+    fn proposal_context() -> SeamExecutionContextConfig {
+        SeamExecutionContextConfig {
+            capability_fingerprint: "fp_cap_sha256_proposal".to_owned(),
+            policy_fingerprint: "fp_policy_sha256_proposal".to_owned(),
+            base_revision: "rev_proposal_base".to_owned(),
+            started_at: "2026-06-03T00:00:00Z".to_owned(),
+            completed_at: "2026-06-03T00:00:01Z".to_owned(),
+        }
+    }
+
+    fn proposal_capability() -> Value {
+        json!({
+            "schema_version": "leaven.capability.v1",
+            "jti": "jti_proposal_submit_authority",
+            "capability_fingerprint": "fp_cap_sha256_proposal",
+            "policy_fingerprint": "fp_policy_sha256_proposal",
+            "subject_fingerprint": "fp_subject_sha256_proposal",
+            "issuer": {
+                "kind": "run_engine",
+                "id": "engine_local"
+            },
+            "subject": {
+                "kind": "stage_call",
+                "run": "run_proposal",
+                "stage_call_id": "sc_proposal_submit",
+                "role": "proposer"
+            },
+            "audience": ["leaven.acp.worker"],
+            "issued_at": "2026-06-03T00:00:00Z",
+            "expires_at": "2026-06-03T00:20:00Z",
+            "expiry_behavior": "drain_inflight_no_new_ops",
+            "token_binding": {
+                "kind": "opaque_lookup",
+                "token_id": "ltok_proposal_submit"
+            },
+            "revocation": {
+                "mode": "issuer_epoch",
+                "revocation_epoch": 7,
+                "check": "on_every_request"
+            },
+            "renewal": {
+                "mode": "renew_before_expiry",
+                "max_extensions": 0,
+                "max_total_lifetime_s": 1200
+            },
+            "grants": [
+                {
+                    "action": "proposal.submit_batch",
+                    "resource": {},
+                    "constraints": {
+                        "effects": ["change_from_agent_session"],
+                        "allowed_surfaces": ["fp_surface_sha256_program"],
+                        "change_schemas": ["fp_schema_sha256_skill_patch"]
+                    }
+                }
+            ],
+            "budgets": {},
+            "execution_policy": {
+                "profile": "managed_sandbox",
+                "network": "leaven_endpoint_only",
+                "subprocess": "deny_except_sandbox_exec",
+                "filesystem": "workspace_handles_only",
+                "byo_effects": "forbidden"
+            },
+            "delegation": {
+                "may_delegate": false,
+                "max_depth": 0,
+                "must_attenuate": true,
+                "allowed_actions": []
+            }
+        })
     }
 
     fn effect_capability() -> Value {

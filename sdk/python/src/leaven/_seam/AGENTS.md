@@ -37,7 +37,7 @@ or other documented builders.
 - `config.py`: private service config records serialized for Rust.
 - `capability.py`: current effect capability helper for mechanics/live proofs.
 - `plans.py`: Plan IR / JSON-RPC request construction for `agent.run`,
-  `lm.complete`, and runner `stage.run`.
+  `lm.complete`, `proposal.submit_batch`, and runner `stage.run`.
 - `client.py`: one-shot process execution and JSON-RPC result/error handling.
 - `__init__.py`: map-only re-exports.
 

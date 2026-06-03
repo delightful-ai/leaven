@@ -9,6 +9,7 @@ mod agent;
 mod blob_ref;
 mod lm;
 mod outcomes;
+mod proposal;
 mod sandbox;
 
 pub use agent::{AgentCommandOutputRefs, PlanAgentRunOutcome, PlanAgentRunRequest};
@@ -17,6 +18,7 @@ pub use outcomes::{
     PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanWorkspaceMaterializeOutcome,
     PlanWorkspaceReleaseOutcome,
 };
+pub use proposal::{PlanSubmitProposalBatchOutcome, PlanSubmitProposalBatchRequest};
 pub use sandbox::{PlanSandboxExecOutcome, PlanSandboxExecRequest};
 
 /// Lowered `workspace_materialize` request passed to a plan execution host.

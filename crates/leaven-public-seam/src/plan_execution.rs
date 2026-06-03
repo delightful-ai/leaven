@@ -16,8 +16,9 @@ use effects::LiveWorkspaceHandle;
 pub use effects::{
     AgentCommandOutputRefs, PlanAgentRunOutcome, PlanAgentRunRequest, PlanEmitRunEventOutcome,
     PlanEmitRunEventRequest, PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome,
-    PlanSandboxExecRequest, PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest,
-    PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
+    PlanSandboxExecRequest, PlanSubmitProposalBatchOutcome, PlanSubmitProposalBatchRequest,
+    PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceReleaseOutcome,
+    PlanWorkspaceReleaseRequest,
 };
 use effects_tail::{
     dependency_values, execute_agent_run_call, execute_case_query_expr, execute_graph_query_expr,
@@ -221,6 +222,17 @@ pub trait PlanExecutionHost {
         &mut self,
         request: PlanEmitRunEventRequest<'_>,
     ) -> Result<PlanEmitRunEventOutcome, PublicSeamError>;
+
+    /// Executes a typed `submit_proposal_batch` write.
+    fn submit_proposal_batch(
+        &mut self,
+        request: PlanSubmitProposalBatchRequest<'_>,
+    ) -> Result<PlanSubmitProposalBatchOutcome, PublicSeamError> {
+        let _ = request;
+        Err(invalid_plan(
+            "Plan execution host does not provide submit_proposal_batch writes",
+        ))
+    }
 
     /// Loads a prior operation receipt for replay mode.
     fn replay_receipt(&mut self, receipt: &str) -> Result<Value, PublicSeamError> {
