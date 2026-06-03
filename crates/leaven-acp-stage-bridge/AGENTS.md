@@ -36,11 +36,12 @@ It composes three things it does not own:
 
 ## Bidirectional Seam
 
-The worker is the ACP agent; the host is the ACP client. `dispatch_stage_run`
-(host->worker) carries the runner stage; while it waits, the worker initiates
-`leaven/lm.complete` (worker->host) and `StageRunEffectHost` answers from the
-host `HostLm`. Only `lm_complete` is wired for this slice; every other locked
-method rejects through the default `AcpEffectHost::service` dispatch.
+This crate uses the legacy-named `leaven-acp` transport in its bridge-demo
+direction. `dispatch_stage_run` (host->worker) carries the runner stage; while
+it waits, the worker initiates `leaven/lm.complete` (worker->host) and
+`StageRunEffectHost` answers from the host `HostLm`. Only `lm_complete` is
+wired for this slice; every other locked method rejects through the default
+`AcpEffectHost::service` dispatch.
 
 The candidate prompt template is host-side optimization state. The host renders
 it against the case and projects the rendered, model-facing prompt into the
@@ -50,12 +51,13 @@ agent, and sandbox are later slices.
 
 ## Public Maturity
 
-This crate is the first product-proof of the SDK bidirectional seam, but only of
-the prompt/LM/exact-match path. The LM is a deterministic mock (no spend, no
-network); the seam, stage dispatch, and GEPA-shaped accept are real. It is not a
-proof of the reward vector, agent rollout, sandbox, live LM, or
-`objective != instance`. It is not re-exported by `leaven`, `leaven::prelude`, or
-default features as ordinary app-facing API.
+This crate is a bridge-demo/provenance proof of the bidirectional seam, but
+only of the prompt/LM/exact-match path. The LM is a deterministic mock (no
+spend, no network); the seam, stage dispatch, and GEPA-shaped accept are real.
+It is not proof of the durable `leaven seam serve --stdio` SDK server route,
+the reward vector, agent rollout, sandbox, live LM, or `objective != instance`.
+It is not re-exported by `leaven`, `leaven::prelude`, or default features as
+ordinary app-facing API.
 
 ## Proof Anchors
 

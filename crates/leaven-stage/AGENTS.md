@@ -29,10 +29,10 @@ It is not the candidate-evaluation workload crate. `AgentCase`,
 ## Local Bait
 
 - `docs/specs/public-seam-v1/` is the locked public seam contract for
-  external-language workers (plan IR, capability tokens, stage payloads, ACP
-  profile). It supersedes `worker_protocol.v1` and is the durable target this
-  crate's stage surface lowers toward. The lowering is not yet done; do not
-  claim alignment until the bridge lands.
+  external-language workers (plan IR, capability tokens, stage payloads, and
+  the legacy-named Leaven worker profile). It supersedes `worker_protocol.v1`
+  and is the durable target this crate's stage surface lowers toward. The
+  lowering is not yet done; do not claim alignment until the bridge lands.
 
 ## Verification
 

@@ -215,10 +215,10 @@ persistence beyond the projected public-seam document.
   Do not add a hidden `.environment(...)` abstraction here that absorbs Python,
   CUDA, LM, or agent execution details.
 - `docs/specs/public-seam-v1/` locks the external-worker-facing public seam:
-  plan IR shape, plan-result envelopes, capability tokens, and the ACP profile
-  that wraps `optimize(seed)` ergonomics for non-Rust callers. Treat it as the
-  durable contract this crate's builder lowers toward; the lowering work itself
-  is not yet implemented.
+  plan IR shape, plan-result envelopes, capability tokens, and the
+  legacy-named Leaven worker profile that wraps `optimize(seed)` ergonomics for
+  non-Rust callers. Treat it as the durable contract this crate's builder
+  lowers toward; the lowering work itself is not yet implemented.
 
 ## Decision Cards
 - when: extending `optimize(seed)` user ergonomics

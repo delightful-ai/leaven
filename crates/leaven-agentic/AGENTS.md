@@ -102,13 +102,13 @@ provider runtime behavior.
 ## Local Bait
 - `docs/specs/public-seam-v1/` locks the public seam for external-worker
   reflection/proposal/assessment flow: stage payloads, evidence envelopes, and
-  the ACP profile that delivers Leaven extension methods to workers. The
-  structural split between reflection (diagnosis) and proposal (graph mutation
-  intent) is governing judgment; preserve it when shaping adapter parsers. This
-  crate now owns generic producer-side stage-payload lowering helpers for
-  reflect/propose plus runner, scorer, judge, callback, artifact adapter, and
-  dataset adapter payload roles, but that is not ACP transport, provider
-  execution, or graph mutation authority.
+  the Leaven worker profile that delivers Leaven extension methods to workers.
+  The structural split between reflection (diagnosis) and proposal (graph
+  mutation intent) is governing judgment; preserve it when shaping adapter
+  parsers. This crate now owns generic producer-side stage-payload lowering
+  helpers for reflect/propose plus runner, scorer, judge, callback, artifact
+  adapter, and dataset adapter payload roles, but that is not worker transport,
+  provider execution, or graph mutation authority.
 - Agent workspace mutation is not graph mutation. Only parser-produced
   proposals or assessments enter the graph through `RunContext`.
 - Agentic evaluators are nondeterministic by default. Do not make evaluation

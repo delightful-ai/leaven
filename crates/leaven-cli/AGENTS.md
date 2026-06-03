@@ -34,17 +34,17 @@ strategy state, provider protocols, or a public API facade.
   a pure JSON-RPC seam.
 
 ## Legacy Serve Direction
-`leaven serve --stdio` is the ACP **client**, not the agent: it runs the GEPA
-accept loop, INITIATES `leaven/stage.run` dispatches to its parent, and SERVICES
-the parent's `leaven/lm.complete` callbacks via the host LM. The parent (the
-Python SDK or a stand-in test agent) is the ACP **agent**: it serves the runner
-stage and calls `leaven/lm.complete` back. The only difference from the bridge
-example is the spawn direction — the parent spawns this process, so the session
-runs the client loop over inherited stdio with no child spawn. The LM is a
-deterministic mock (no spend, no network, no agent, no sandbox); the seam,
-dispatch, and accept loop are real. This is the first SDK-shaped product-proof of
-the bidirectional seam, not proof of the reward vector, agent rollout, sandbox, or
-a live LM.
+`leaven serve --stdio` is the legacy bridge-demo client loop, not the durable
+SDK server route. It runs the GEPA accept loop, INITIATES `leaven/stage.run`
+dispatches to its parent, and SERVICES the parent's `leaven/lm.complete`
+callbacks via the host LM. The parent process serves the runner stage and calls
+`leaven/lm.complete` back. The only difference from the bridge example is the
+spawn direction — the parent spawns this process, so the session runs the
+client loop over inherited stdio with no child spawn. The LM is a deterministic
+mock (no spend, no network, no agent, no sandbox); the seam, dispatch, and
+accept loop are real. This is bridge-demo/provenance, not completion evidence
+for the Python SDK public server path, reward vector, agent rollout, sandbox,
+or a live LM.
 
 ## Decision Cards
 - when: adding a doctor check

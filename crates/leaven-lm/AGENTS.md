@@ -55,10 +55,10 @@ graph state, or GEPA rhythm.
 
 ## Local Bait
 - `docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md` defines
-  the `lm.complete` Leaven ACP extension method that external-language workers
-  call. This crate's `Lm` trait and request/response vocabulary are the durable
-  source those payloads lower from; the worker-facing wire bridge itself is not
-  implemented yet.
+  the legacy-named Leaven worker-profile `lm.complete` extension method that
+  external-language workers call. This crate's `Lm` trait and request/response
+  vocabulary are the durable source those payloads lower from; the
+  worker-facing wire bridge itself is not implemented here.
 - `ProviderHints` is not permission to add provider-specific wire structs here.
   Add typed neutral hints only when multiple providers can ignore or translate
   them without importing provider APIs.
