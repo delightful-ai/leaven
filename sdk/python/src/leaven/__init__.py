@@ -110,6 +110,7 @@ for _leaky in (
     "evidence",
     "output_record",
     "proposal",
+    "run_inspection",
     "result",
     "rubric",
     "score",

@@ -12,6 +12,7 @@ from typing import Any
 
 from ._runs import list_run_dirs, open_optimized
 from .result import Optimized
+from .run_inspection import RunInspection, inspect_optimized
 
 
 def open(path: str | Path) -> Optimized[Any]:
@@ -29,4 +30,9 @@ def list_local(root: str | Path = ".leaven/runs") -> list[str]:
     return list_run_dirs(root)
 
 
-__all__ = ["list_local", "open"]
+def inspect(path: str | Path) -> RunInspection:
+    """Open a completed run and return a flattened inspection summary."""
+    return inspect_optimized(open_optimized(path))
+
+
+__all__ = ["RunInspection", "inspect", "list_local", "open"]

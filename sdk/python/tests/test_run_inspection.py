@@ -64,3 +64,18 @@ async def test_optimize_persists_openable_inspection_result(tmp_path, monkeypatc
     ]
     assert reopened.summary.cost_status == "known"
     assert reopened.summary.unsupported
+    inspection = lv.runs.inspect(result.summary.run_dir or "")
+    assert inspection.run_id == result.run_id
+    assert inspection.run_dir == result.summary.run_dir
+    assert inspection.best_candidate_id == "cand_seed"
+    assert inspection.best_lineage == ["cand_seed"]
+    assert inspection.total_cost_usd == 0.0
+    assert inspection.cost_status == "known"
+    assert inspection.total_lm_tokens == 0
+    assert inspection.usage_status == "known"
+    assert [fact.surface for fact in inspection.unsupported] == ["run.inspection"]
+    assert inspection.receipt_ids(kind="write") == ["assessmentrec_case_persist_001_1"]
+    assert inspection.evidence[0].case_id == "case_persist_001"
+    assert inspection.evidence[0].candidate_id == "cand_seed"
+    assert inspection.evidence[0].data_classes == ["public"]
+    assert inspection.evidence[0].payload == {"output": "42", "reward_count": 2}

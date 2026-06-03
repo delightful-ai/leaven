@@ -456,6 +456,7 @@ result.summary                 # RunSummary with cost, replayability, etc.
 result.summary.run_dir          # Local run directory when persisted
 result.test_assessments()      # Iterable[Assessment]
 result.assessment(case_id)     # Assessment
+lv.runs.inspect(result.summary.run_dir)  # RunInspection audit projection
 await result.replay(case_id)   # ReplayResult, deterministic
 ```
 
@@ -463,12 +464,22 @@ Inspection of completed runs is the same surface, opened externally:
 
 ```python
 run = lv.runs.open(result.summary.run_dir)
+audit = lv.runs.inspect(result.summary.run_dir)
 print(run.best.artifact.summary())
 for assessment in run.test_assessments():
     print(assessment.score.value, assessment.case.id)
 for ancestor in run.lineage(run.best.id):
     print(ancestor.id, ancestor.proposal.summary())
+print(audit.receipt_ids(kind="call"))
+print(audit.cost_status, audit.unsupported)
 ```
+
+`lv.runs.inspect(...)` is a flattened read-only projection over the persisted
+`Optimized` result. It names the best lineage, visible receipts, public
+assessment evidence, cost/usage status, and unsupported dependency facts in one
+typed `RunInspection`. It does not claim Rust graph checkpoint readback or blob
+store transcript fetch until those owning layers persist and expose those
+artifacts.
 
 The same package serves three purposes: compose + configure + run; author
 a stage; inspect after the fact. One install, one mental model.

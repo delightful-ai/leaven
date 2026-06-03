@@ -54,3 +54,7 @@ async def test_run_inspection_preserves_callback_effect_receipts(tmp_path, monke
     assessment = reopened.assessment("case_receipt_001")
     assert [receipt.receipt_id for receipt in assessment.effect_receipts] == ["lmrec_completion"]
     assert reopened.summary.total_lm_tokens == 2
+    inspection = lv.runs.inspect(result.summary.run_dir or "")
+    assert inspection.receipt_ids(kind="call") == ["lmrec_completion"]
+    assert "lmrec_completion" in inspection.receipt_ids()
+    assert inspection.total_lm_tokens == 2

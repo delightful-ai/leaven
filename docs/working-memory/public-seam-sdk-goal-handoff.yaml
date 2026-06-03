@@ -499,6 +499,18 @@ acceptance:
         `lv.runs.list_local()`. This still does not prove Rust checkpoint
         readback, durable blob/transcript fetch, provider-authored receipt
         validation, or complete cost accounting.
+      - >-
+        Flattened inspection evidence, not acceptance completion:
+        `lv.runs.inspect(path)` now opens the persisted `Optimized` result and
+        returns a typed `RunInspection` with best lineage, visible query/call/write
+        receipt ids, public assessment evidence payloads, cost/usage status, and
+        unsupported dependency facts. `uv run pytest -q
+        tests/test_run_inspection.py tests/test_run_receipt_inspection.py`
+        proves persisted readback of assessment write receipts, nested LM call
+        receipts, evidence payloads, token totals, and the explicit
+        `run.inspection` unsupported fact. This still does not prove Rust graph
+        checkpoint readback, blob/transcript fetch, provider-authored receipt
+        validation, or complete cost accounting.
     closeout_check: Stdout transcript alone is not run inspection.
 
 proof_denominator:
