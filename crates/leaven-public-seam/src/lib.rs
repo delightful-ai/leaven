@@ -68,5 +68,7 @@ pub use stage_payload::{
     ReflectProposeHandoffDocument, ReflectProposeSubmissionDocument, StagePayloadDocument,
     StagePayloadRole, StageProposalEffect,
 };
-pub use stage_run::{StageRunKind, StageRunRequestDocument, StageRunResultDocument};
+pub use stage_run::{
+    StageEffectReceipt, StageRunKind, StageRunRequestDocument, StageRunResultDocument,
+};
 pub use watch::DeferredWatchReplacement;

@@ -33,6 +33,8 @@ only the Python worker process implementation.
 - `protocol.py`: one-request JSON-RPC read/write and error envelopes.
 - `context.py`: JSON-RPC callback context for the current worker slice,
   including default LM model projection into nested `leaven/lm.complete`.
+- `callbacks.py`: private capture of opaque receipts returned by nested
+  effect callbacks while one stage invocation is active.
 - `runner.py`: runner-stage payload projection and result construction.
 - `proposer.py`: proposer-stage payload projection, user stage execution, and
   proposal-submit callback result construction.

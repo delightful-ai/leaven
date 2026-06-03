@@ -8,7 +8,7 @@ from typing import Any
 from ..artifacts.prompt import PromptArtifact
 from ..case import InputCaseView
 from ..decorators import RegisteredStage
-from .context import rollout_context
+from .context import JsonRpcCallbackClient, rollout_context
 
 
 async def run_runner_stage(
@@ -31,10 +31,12 @@ async def run_runner_stage(
     prompt = PromptArtifact(template=rendered_prompt, candidate_id=payload["candidate"])
     view_input = {key: value for key, value in case_input.items() if key != "prompt"}
     case = InputCaseView(id=payload["case"], input=view_input)
+    callback = JsonRpcCallbackClient(lm_model=lm_model)
     cx = rollout_context(
         candidate_id=payload["candidate"],
         stage_call_id=payload["stage_call_id"],
         lm_model=lm_model,
+        callback=callback,
     )
     raw_output = await stage.func(prompt, case, cx)
     output = raw_output if isinstance(raw_output, str) else str(raw_output)
@@ -50,6 +52,7 @@ async def run_runner_stage(
             "visibility": "optimizer_visible",
             "data_classes": ["candidate.output"],
         },
+        "effect_receipts": callback.effect_receipts_json(),
     }
 
 

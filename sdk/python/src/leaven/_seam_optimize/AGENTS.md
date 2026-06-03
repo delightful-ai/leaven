@@ -29,6 +29,8 @@ capability policy, provider adapters, or worker protocol implementation.
 - `status.py`: private runtime-dependency status facts projected into public
   result summaries.
 - `rewards.py`: Python reward-vector execution and aggregate score projection.
+- `receipts.py`: private projection of worker callback receipt metadata into
+  typed result-side assessment receipts.
 - `scoring.py`: deterministic aggregate helpers for current prompt slice.
 - `driver.py`: durable seam process requests for registered runner-stage
   mechanics and submit-only proposer mechanics, including OpenAI-backed

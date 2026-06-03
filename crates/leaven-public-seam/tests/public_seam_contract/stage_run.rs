@@ -20,6 +20,30 @@ fn stage_run_validates_generic_runner_dispatch_request_and_text_result() {
     assert_eq!(result.stage_call_id(), "sc_runner_stagerun");
     assert_eq!(result.output().kind(), "text");
     assert_eq!(result.output().visibility(), "optimizer_visible");
+    assert!(result.effect_receipts().is_empty());
+}
+
+#[test]
+fn stage_run_result_preserves_worker_effect_receipts() {
+    let package = package();
+    let mut result_value = stage_run_result();
+    result_value["effect_receipts"] = json!([
+        {
+            "method": "leaven/lm.complete",
+            "receipt": "lmrec_completion",
+            "call_kind": "lm_complete"
+        }
+    ]);
+
+    let result = package
+        .validate_stage_run_result_document(&result_value)
+        .unwrap();
+
+    let receipts = result.effect_receipts();
+    assert_eq!(receipts.len(), 1);
+    assert_eq!(receipts[0].method(), "leaven/lm.complete");
+    assert_eq!(receipts[0].receipt(), "lmrec_completion");
+    assert_eq!(receipts[0].call_kind(), Some("lm_complete"));
 }
 
 #[test]
@@ -110,6 +134,21 @@ fn stage_run_result_rejects_non_text_output_and_plan_result_smuggling() {
             .validate_stage_run_result_document(&plan_result)
             .unwrap_err(),
         PublicSeamError::ExampleValidation { .. }
+    ));
+
+    let mut wrong_receipt_family = stage_run_result();
+    wrong_receipt_family["effect_receipts"] = json!([
+        {
+            "method": "leaven/lm.complete",
+            "receipt": "agentrec_completion",
+            "call_kind": "lm_complete"
+        }
+    ]);
+    assert!(matches!(
+        package
+            .validate_stage_run_result_document(&wrong_receipt_family)
+            .unwrap_err(),
+        PublicSeamError::InvalidStageRun { .. }
     ));
 }
 

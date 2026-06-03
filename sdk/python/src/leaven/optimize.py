@@ -19,7 +19,7 @@ from __future__ import annotations
 import datetime
 from typing import Any, cast
 
-from ._receipts import WriteReceipt
+from ._receipts import CallReceipt, WriteReceipt
 from ._runs import persist_optimized
 from ._seam_optimize import SeamOptimizeReport, run_prompt_mechanics
 from .artifacts.prompt import PromptArtifact
@@ -212,6 +212,9 @@ def _assessment_rows(report: SeamOptimizeReport, case_count: int) -> list[Assess
                 )
             ),
             receipt=WriteReceipt(receipt_id=f"assessmentrec_{assessment.case_id}_{case_count}"),
+            effect_receipts=[
+                CallReceipt(receipt_id=receipt_id) for receipt_id in assessment.effect_receipts
+            ],
             replayability="fully_managed",
             rewards=assessment.rewards,
         )

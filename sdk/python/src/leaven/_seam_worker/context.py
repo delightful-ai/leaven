@@ -8,6 +8,7 @@ from collections.abc import Sequence
 
 from .._seam import LmCompleteRequest
 from .._stage_runtime import CallbackProposeContext, CallbackRolloutContext
+from .callbacks import CallbackReceiptLog
 
 
 class JsonRpcCallbackClient:
@@ -15,6 +16,7 @@ class JsonRpcCallbackClient:
 
     def __init__(self, *, lm_model: str) -> None:
         self._lm_model = lm_model
+        self._receipts = CallbackReceiptLog()
 
     def request(self, request: dict) -> dict:
         """Send one callback request and return the public-seam result object."""
@@ -25,7 +27,15 @@ class JsonRpcCallbackClient:
         response = json.loads(line)
         if "error" in response:
             raise RuntimeError(f"stage callback failed: {response['error']}")
-        return response["result"]
+        result = response["result"]
+        method = request.get("method")
+        if isinstance(method, str) and isinstance(result, dict):
+            self._receipts.record_result(method=method, result=result)
+        return result
+
+    def effect_receipts_json(self) -> list[dict[str, str]]:
+        """Return effect receipts observed while running the current stage."""
+        return self._receipts.effect_receipts_json()
 
     async def lm_complete(
         self,
@@ -65,9 +75,10 @@ def rollout_context(
     candidate_id: str,
     stage_call_id: str,
     lm_model: str,
+    callback: JsonRpcCallbackClient | None = None,
 ) -> CallbackRolloutContext:
     """Build the context passed to a registered runner stage."""
-    callback = JsonRpcCallbackClient(lm_model=lm_model)
+    callback = callback or JsonRpcCallbackClient(lm_model=lm_model)
     return CallbackRolloutContext(
         callback,
         candidate_id=candidate_id,

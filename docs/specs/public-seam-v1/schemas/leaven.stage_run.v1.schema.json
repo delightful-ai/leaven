@@ -66,6 +66,13 @@
         },
         "output": {
           "$ref": "common.schema.json#/$defs/OutputRecord"
+        },
+        "effect_receipts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StageEffectReceipt"
+          },
+          "default": []
         }
       },
       "required": [
@@ -74,6 +81,32 @@
         "stage",
         "stage_call_id",
         "output"
+      ],
+      "additionalProperties": false
+    },
+    "StageEffectReceipt": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "enum": [
+            "leaven/lm.complete",
+            "leaven/agent.run"
+          ]
+        },
+        "receipt": {
+          "type": "string",
+          "pattern": "^(lmrec|agentrec)_[A-Za-z0-9_.:-]+$"
+        },
+        "call_kind": {
+          "enum": [
+            "lm_complete",
+            "agent_run"
+          ]
+        }
+      },
+      "required": [
+        "method",
+        "receipt"
       ],
       "additionalProperties": false
     }

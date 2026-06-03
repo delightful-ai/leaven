@@ -30,6 +30,7 @@ from ..lm.openai import OpenAiLm
 from ..optimizers.gepa import Gepa
 from ..rubric import Rubric
 from ..runtime import Runtime
+from .receipts import effect_receipt_ids_from_stage_result
 from .rewards import evaluate_reward_vector
 from .scoring import mean_score
 from .status import first_agent, unsupported_facts_for_runtime
@@ -115,6 +116,7 @@ async def run_prompt_mechanics(
                 output=output,
                 score=score,
                 rewards=rewards,
+                effect_receipts=effect_receipt_ids_from_stage_result(result),
             )
         )
     proposal_receipts = await _run_configured_proposer(

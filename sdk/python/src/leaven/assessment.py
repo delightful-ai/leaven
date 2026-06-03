@@ -116,6 +116,8 @@ class Assessment(BaseModel):
     score: Score
     evidence: EvidenceEnvelope
     receipt: WriteReceipt
+    read_receipts: list[QueryReceipt] = Field(default_factory=list)
+    effect_receipts: list[CallReceipt] = Field(default_factory=list)
     replayability: Replayability
     rewards: list[RewardAssessment] = Field(default_factory=list)
 
