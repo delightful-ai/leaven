@@ -92,7 +92,7 @@ class SeamServiceConfig:
 
     context: SeamExecutionContext
     capability: dict[str, Any]
-    agent: CodexCliRuntimeConfig
+    agent: CodexCliRuntimeConfig | None = None
     workspace: LocalWorkspaceConfig = field(default_factory=LocalWorkspaceConfig)
     lm: MockLmRuntimeConfig = field(default_factory=MockLmRuntimeConfig)
 
@@ -102,7 +102,7 @@ class SeamServiceConfig:
             "context": self.context.to_json(),
             "capability": self.capability,
             "workspace": self.workspace.to_json(),
-            "agent": self.agent.to_json(),
+            "agent": self.agent.to_json() if self.agent is not None else {"kind": "none"},
             "lm": self.lm.to_json(),
         }
 

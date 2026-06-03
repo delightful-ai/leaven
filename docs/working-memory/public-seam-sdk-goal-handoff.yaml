@@ -287,7 +287,15 @@ acceptance:
           Fast local proof for request lowering, cost/receipt shape, and Python
           runtime configuration only. This proof must stay labeled mechanics
           evidence and must not close the live LM acceptance item.
-    evidence: []
+    evidence:
+      - >-
+        Partial mechanics evidence, not acceptance completion: current
+        LmBuilder slice adds `sdk/python` test
+        `test_lm_builder_complete_uses_bound_public_seam_client` and a one-off
+        local stdio proof where Python `LmBuilder.complete` binds to
+        `SeamClient`, spawns `leaven seam serve --stdio --config`, and returns
+        mock LM text, usage, cost, and receipt through `leaven/lm.complete`.
+        This does not prove engine-supplied `cx.lm` or live LM provider wiring.
     closeout_check: Mock-only LM is acceptable for default CI, but is not live provider proof.
 
   - id: inspection_and_closeout_truth

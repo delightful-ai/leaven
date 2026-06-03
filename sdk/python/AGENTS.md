@@ -55,6 +55,19 @@ stdio seam and Codex provider substrate; reward vector execution, persisted
 blob inspection, and full `optimize(...).run()` live-agent workflow remain later
 slices and stay scaffold.
 
+#### 3. Private effect builders over the public seam
+
+`AgentBuilder.run` and `LmBuilder.complete` can be privately bound to
+`leaven._seam` request clients for focused substrate proofs. Their public
+dependency is the locked `leaven/agent.run` and `leaven/lm.complete` Plan IR
+wire. Their private dependency is the `_SeamRequester` protocol and
+`leaven._seam` request/config helpers.
+
+Honest scope: these builders are real process-seam clients when bound by tests
+or examples, but they are not yet engine-supplied `cx.agent` / `cx.lm` values
+inside `lv.optimize(...).run()`. Do not claim this as full Python stage-context
+execution until the engine creates those bound contexts during stage dispatch.
+
 The binary is resolved via `LEAVEN_BIN`, else `target/{debug,release}/leaven`
 under the repo root (`LEAVEN_REPO_ROOT` override). Build it with
 `cargo build -p leaven-cli`. The repo-root walk uses the topology-contract marker

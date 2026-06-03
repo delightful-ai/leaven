@@ -82,4 +82,65 @@ class AgentRunRequest:
         }
 
 
-__all__ = ["AgentRunRequest"]
+@dataclass(frozen=True)
+class LmCompleteRequest:
+    """A single public-seam `leaven/lm.complete` Plan request."""
+
+    request_id: str
+    plan_id: str
+    idempotency_key: str
+    messages: Sequence[dict[str, Any]]
+    model: str
+    model_role: str | None = None
+    temperature: float | None = None
+    max_tokens: int | None = None
+    stop: Sequence[str] | None = None
+    output: dict[str, Any] | None = None
+    input_classes: Sequence[str] | None = None
+
+    def to_json_rpc(self) -> dict[str, Any]:
+        """Return a JSON-RPC request for `leaven/lm.complete`."""
+        return {
+            "jsonrpc": "2.0",
+            "id": self.request_id,
+            "method": "leaven/lm.complete",
+            "params": {
+                "schema_version": "leaven.plan.v1",
+                "plan_id": self.plan_id,
+                "consistency": {"kind": "latest_at_start"},
+                "mode": {"kind": "execute"},
+                "ops": [self._lm_call()],
+                "return": ["completion"],
+                "commit": {"kind": "no_graph_writes"},
+            },
+        }
+
+    def _lm_call(self) -> dict[str, Any]:
+        call: dict[str, Any] = {
+            "kind": "lm_complete",
+            "purpose": "python.sdk",
+            "model": self.model,
+            "messages": list(self.messages),
+            "output": self.output or {"kind": "final_message", "max_bytes": 512},
+            "input_classes": list(self.input_classes or ["public"]),
+        }
+        if self.model_role is not None:
+            call["model_role"] = self.model_role
+        sampling: dict[str, Any] = {}
+        if self.temperature is not None:
+            sampling["temperature"] = self.temperature
+        if self.max_tokens is not None:
+            sampling["max_output_tokens"] = self.max_tokens
+        if self.stop is not None:
+            sampling["stop"] = list(self.stop)
+        if sampling:
+            call["sampling"] = sampling
+        return {
+            "kind": "call",
+            "name": "completion",
+            "idempotency_key": self.idempotency_key,
+            "call": call,
+        }
+
+
+__all__ = ["AgentRunRequest", "LmCompleteRequest"]

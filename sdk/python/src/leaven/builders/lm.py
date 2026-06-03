@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Any, Literal, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict
 
 from .._receipts import CallReceipt
+from .._seam import LmCompleteRequest
 
 LmMessageRole = Literal["system", "developer", "user", "assistant", "tool"]
 
@@ -42,6 +44,37 @@ class LmResponse(BaseModel):
 class LmBuilder:
     """LM completion bound to a context. Calls are capability-gated + receipted."""
 
+    def __init__(
+        self,
+        *,
+        _client: _SeamRequester | None = None,
+        _idempotency_prefix: str = "lm-builder",
+        _plan_id: str = "planpythonlmbuilder001",
+        _model: str = "gpt-4.1-mini",
+    ) -> None:
+        self._client = _client
+        self._idempotency_prefix = _idempotency_prefix
+        self._plan_id = _plan_id
+        self._model = _model
+        self._seq = 0
+
+    @classmethod
+    def _for_seam(
+        cls,
+        client: _SeamRequester,
+        *,
+        idempotency_prefix: str = "lm-builder",
+        plan_id: str = "planpythonlmbuilder001",
+        model: str = "gpt-4.1-mini",
+    ) -> LmBuilder:
+        """Bind this builder to the private public-seam process client."""
+        return cls(
+            _client=client,
+            _idempotency_prefix=idempotency_prefix,
+            _plan_id=plan_id,
+            _model=model,
+        )
+
     async def complete(
         self,
         *,
@@ -65,7 +98,113 @@ class LmBuilder:
         `forbidden_input_classes` declare what data the call may carry —
         the seam enforces.
         """
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+        if self._client is None:
+            raise NotImplementedError(
+                "LmBuilder.complete needs an engine-bound public-seam client; "
+                "use the cx.lm instance supplied to a running stage"
+            )
+        if forbidden_input_classes is not None:
+            raise NotImplementedError(
+                "LmBuilder.complete does not lower forbidden_input_classes yet"
+            )
+        if response_format is not None:
+            raise NotImplementedError("LmBuilder.complete does not lower response_format yet")
+        if tools is not None:
+            raise NotImplementedError("LmBuilder.complete does not lower tools yet")
+
+        selected_model = model or self._model
+        request = LmCompleteRequest(
+            request_id=f"{self._idempotency_prefix}-lm-{self._seq}",
+            plan_id=self._plan_id,
+            idempotency_key=f"{self._idempotency_prefix}-lm-{self._seq}",
+            messages=_messages_to_wire(prompt=prompt, messages=messages),
+            model=selected_model,
+            model_role=model_role,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stop=stop,
+            input_classes=input_classes,
+        )
+        self._seq += 1
+        result = await asyncio.to_thread(self._client.request, request.to_json_rpc())
+        return _lm_response_from_result(result, model=selected_model)
+
+
+class _SeamRequester(Protocol):
+    """Small private protocol LmBuilder needs from the seam client."""
+
+    def request(self, request: dict[str, Any]) -> dict[str, Any]: ...
+
+
+def _messages_to_wire(
+    *,
+    prompt: str | None,
+    messages: Sequence[LmMessage] | Sequence[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    if (prompt is None) == (messages is None):
+        raise ValueError("exactly one of prompt= or messages= is required")
+    if prompt is not None:
+        return [_message_to_wire({"role": "user", "content": prompt})]
+    assert messages is not None
+    return [_message_to_wire(message) for message in messages]
+
+
+def _message_to_wire(message: LmMessage | dict[str, Any]) -> dict[str, Any]:
+    value = message.model_dump() if isinstance(message, LmMessage) else dict(message)
+    content = value.get("content")
+    if isinstance(content, str):
+        content = [{"kind": "text", "text": content}]
+    elif not isinstance(content, list):
+        raise NotImplementedError("LmBuilder.complete only lowers text message content yet")
+    wire = {
+        "role": value["role"],
+        "content": content,
+    }
+    if value.get("tool_call_id") is not None:
+        wire["tool_call_id"] = value["tool_call_id"]
+    return wire
+
+
+def _lm_response_from_result(result: dict[str, Any], *, model: str) -> LmResponse:
+    primary = result["primary"]
+    message = primary["message"]
+    text = "".join(
+        part["text"]
+        for part in message["content"]
+        if isinstance(part, dict) and part.get("kind") == "text"
+    )
+    return LmResponse(
+        text=text,
+        parsed=primary.get("parsed"),
+        finish_reason="stop",
+        usage=_usage(primary.get("cost")),
+        cost_usd=_cost_usd(primary.get("cost")),
+        model=model,
+        receipt=CallReceipt(receipt_id=primary["receipt"]),
+    )
+
+
+def _usage(cost: object) -> dict[str, int]:
+    if not isinstance(cost, dict):
+        return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    cost_value = cast("dict[str, Any]", cost)
+    prompt_tokens = int(cost_value.get("input_tokens", 0))
+    completion_tokens = int(cost_value.get("output_tokens", 0))
+    return {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": prompt_tokens + completion_tokens,
+    }
+
+
+def _cost_usd(cost: object) -> float | None:
+    if not isinstance(cost, dict):
+        return None
+    cost_value = cast("dict[str, Any]", cost)
+    usd_micro = cost_value.get("usd_micro")
+    if isinstance(usd_micro, int | float):
+        return float(usd_micro) / 1_000_000
+    return None
 
 
 __all__ = ["LmBuilder", "LmMessage", "LmMessageRole", "LmResponse"]

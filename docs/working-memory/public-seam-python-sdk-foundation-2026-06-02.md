@@ -21,6 +21,11 @@ Status: active foundation slice, not the full Python SDK acceptance gate.
 - Current AgentBuilder slice after `7d21e741`: `AgentBuilder.run` can now be
   privately bound to `leaven._seam`, lower a Codex `agent_run` Plan IR request,
   and project the public-seam result into typed `AgentSession`.
+- Current LmBuilder slice: `LmBuilder.complete` can now be privately bound to
+  `leaven._seam`, lower an `lm_complete` Plan IR request, and project the
+  public-seam result into typed `LmResponse`. A local mock-LM stdio proof uses
+  `leaven seam serve --stdio`, not the legacy `leaven serve --stdio --plan`
+  path.
 
 ## Verification Run
 
@@ -51,12 +56,22 @@ Python SDK project:
 - `LEAVEN_LIVE_CODEX=1 uv run python examples/10_live_codex_seam.py` completed
   through `AgentBuilder.run` with `gpt-5.4-mini`, transcript ref
   `blob_completion_transcript`, and receipt `agentrec_completion`.
+- `uv run pytest`
+- A one-off Python proof bound `LmBuilder.complete` to `SeamClient`, spawned
+  `leaven seam serve --stdio --config`, and returned mock text
+  `mock seam ok`, receipt `lmrec_completion`, and usage
+  `{prompt_tokens: 3, completion_tokens: 2, total_tokens: 5}`.
 
 ## Still Unproven
 
 - Engine-supplied `cx.agent.run` inside `lv.optimize(...).run()` is still
   scaffold. Example 10 binds `AgentBuilder.run` privately, not from a real
   running stage context.
+- Engine-supplied `cx.lm.complete` inside `lv.optimize(...).run()` is still
+  scaffold. The LmBuilder slice binds privately for tests and local proof, not
+  from a real running stage context.
+- Live LM provider configuration from Python remains unproven; the new
+  LmBuilder proof uses the configured deterministic mock LM.
 - Reward-vector execution from Python remains scaffold. `@lv.reward` bodies are
   not yet executed over the public seam except for the prior host-side exact
   match path in example 03.

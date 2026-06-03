@@ -18,21 +18,25 @@ or other documented builders.
 - The locked Leaven public seam JSON-RPC/Plan IR wire in
   `docs/specs/public-seam-v1/`.
 - Provider executables passed as configuration, currently Codex CLI.
+- Capability actions enforced by `leaven-public-seam`, currently
+  `lm.complete`, `workspace.materialize`, and `agent.run` for these helpers.
 
 ## Private Dependencies
 
 - Sibling modules inside `leaven._seam`.
 - No imports from `leaven._serve`; that module owns the older bidirectional
   prompt-optimization scaffold path.
-- No imports from public scaffold builders such as `leaven.builders.agent` until
-  a focused slice deliberately wires those builders through this substrate.
+- Public scaffold builders may import this package only through focused,
+  private bound-client slices such as `AgentBuilder.run` and
+  `LmBuilder.complete`; `_seam` must not import those builders back.
 
 ## Map
 
 - `resolve.py`: repo, Leaven CLI, and Codex CLI discovery.
 - `config.py`: private service config records serialized for Rust.
 - `capability.py`: current effect capability helper for mechanics/live proofs.
-- `plans.py`: Plan IR / JSON-RPC request construction.
+- `plans.py`: Plan IR / JSON-RPC request construction for `agent.run` and
+  `lm.complete`.
 - `client.py`: one-shot process execution and JSON-RPC result/error handling.
 - `__init__.py`: map-only re-exports.
 

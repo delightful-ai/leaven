@@ -41,6 +41,16 @@ def effect_capability(
         },
         "grants": [
             {
+                "action": "lm.complete",
+                "resource": {},
+                "constraints": {
+                    "allowed_input_classes": ["public"],
+                    "purposes": ["python.sdk"],
+                    "models": ["gpt-4.1-mini", "gpt-5.4-mini"],
+                    "model_roles": ["reflector", "grader"],
+                },
+            },
+            {
                 "action": "workspace.materialize",
                 "resource": {"candidate_ids": [candidate]},
                 "constraints": {"workspace_ops": ["materialize"]},

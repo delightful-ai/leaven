@@ -17,12 +17,13 @@ from .config import (
     SeamServiceConfig,
 )
 from .errors import SeamClientError
-from .plans import AgentRunRequest
+from .plans import AgentRunRequest, LmCompleteRequest
 from .resolve import resolve_codex_binary, resolve_leaven_binary, resolve_repo_root
 
 __all__ = [
     "AgentRunRequest",
     "CodexCliRuntimeConfig",
+    "LmCompleteRequest",
     "LocalWorkspaceConfig",
     "MockLmRuntimeConfig",
     "SeamClient",

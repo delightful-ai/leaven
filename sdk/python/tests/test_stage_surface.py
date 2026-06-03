@@ -4,6 +4,7 @@ import leaven as lv
 from leaven._handles import WorkspaceHandle
 from leaven._receipts import CallReceipt
 from leaven.builders.agent import AgentBuilder
+from leaven.builders.lm import LmBuilder
 
 
 def test_optimize_surface_names_the_four_product_inputs() -> None:
@@ -98,6 +99,49 @@ async def test_agent_builder_run_uses_bound_public_seam_client() -> None:
     assert session.cost_usd == 0.25
 
 
+async def test_lm_builder_complete_uses_bound_public_seam_client() -> None:
+    """LmBuilder.complete lowers to the durable public-seam lm.complete route."""
+
+    client = FakeLmSeamClient()
+    lm = LmBuilder._for_seam(
+        client,
+        idempotency_prefix="lm-builder-test",
+        plan_id="planlmbuilder001",
+        model="gpt-4.1-mini",
+    )
+
+    response = await lm.complete(
+        prompt="Say ok.",
+        model_role="reflector",
+        temperature=0.2,
+        max_tokens=12,
+        stop=["DONE"],
+        input_classes=["public"],
+    )
+
+    assert client.request_value["method"] == "leaven/lm.complete"
+    params = client.request_value["params"]
+    assert params["plan_id"] == "planlmbuilder001"
+    assert params["return"] == ["completion"]
+    op = params["ops"][0]
+    assert op["call"]["kind"] == "lm_complete"
+    assert op["call"]["purpose"] == "python.sdk"
+    assert op["call"]["model"] == "gpt-4.1-mini"
+    assert op["call"]["model_role"] == "reflector"
+    assert op["call"]["messages"][0]["content"][0]["text"] == "Say ok."
+    assert op["call"]["sampling"] == {
+        "temperature": 0.2,
+        "max_output_tokens": 12,
+        "stop": ["DONE"],
+    }
+    assert op["call"]["input_classes"] == ["public"]
+    assert response.text == "ok"
+    assert response.usage == {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}
+    assert response.cost_usd == 0.000042
+    assert response.model == "gpt-4.1-mini"
+    assert response.receipt.receipt_id == "lmrec_completion"
+
+
 class FakeSeamClient:
     def __init__(self) -> None:
         self.request_value: dict = {}
@@ -127,4 +171,25 @@ class FakeSeamClient:
                 "cost": {"usd_micro": 250_000},
             },
             "receipts": [{"receipt": "agentrec_completion", "call_kind": "agent_run"}],
+        }
+
+
+class FakeLmSeamClient:
+    def __init__(self) -> None:
+        self.request_value: dict = {}
+
+    def request(self, request: dict) -> dict:
+        self.request_value = request
+        return {
+            "method": "leaven/lm.complete",
+            "primary": {
+                "kind": "lm_response",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"kind": "text", "text": "ok"}],
+                },
+                "receipt": "lmrec_completion",
+                "cost": {"usd_micro": 42, "input_tokens": 3, "output_tokens": 2},
+            },
+            "receipts": [{"receipt": "lmrec_completion", "call_kind": "lm_complete"}],
         }
