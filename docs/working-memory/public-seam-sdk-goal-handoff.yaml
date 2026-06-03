@@ -61,7 +61,8 @@ spec_package:
       `lv.optimize(...).run()` now uses a checked-in private worker package for
       registered runner-stage dispatch in the prompt mechanics slice, and that
       worker can call back to configured `leaven/lm.complete` while a stage is
-      running.
+      running and can call back to configured `leaven/agent.run` for
+      materialized-workspace agent execution.
     - >-
       `leaven serve --stdio --plan --out` is a legacy bidirectional GEPA demo
       path; it is not the durable public SDK server.
@@ -284,9 +285,19 @@ acceptance:
         active. `cargo test -p leaven-seam-service` covers the Rust service
         callback loop, and `uv run pytest tests/test_stage_surface.py -q`
         covers the checked-in Python worker issuing `cx.lm.complete` and using
-        the host response. This still does not prove `cx.agent`, live LM
-        providers, non-runner stages, GEPA search, reward vectors, or
-        inspection.
+        the host response. This still does not prove live LM providers,
+        non-runner stages, GEPA search, reward vectors, or inspection.
+      - >-
+        Partial nested-agent evidence, not live acceptance completion:
+        Python runner stages can call `cx.agent.run` with
+        `cx.rollout_workspace`, causing the checked-in worker to send nested
+        `leaven/agent.run` over the active stage pipe. `uv run pytest
+        tests/test_stage_surface.py -q` proves the Python request shape and
+        result projection; `cargo test -p leaven-seam-service` proves the Rust
+        service handles worker-initiated `agent.run` through configured
+        workspace materialization and the fake Codex CLI adapter. This still
+        does not prove live `gpt-5.4-mini` inside `lv.optimize(...).run()`,
+        cost accounting, reward vectors, GEPA search, or inspection.
     closeout_check: Rust-only harnesses and hardcoded demo plans are rejected.
 
   - id: reward_vector

@@ -49,6 +49,11 @@ Status: active foundation slice, not the full Python SDK acceptance gate.
   worker pipes open while a stage is running. The Python worker can issue
   `leaven/lm.complete` over the same pipe, the Rust service executes the
   configured LM provider, and the runner receives that result through `cx.lm`.
+- Current nested-agent callback slice: Python runner stages can call
+  `cx.agent.run(workspace=cx.rollout_workspace, ...)`, which lowers to nested
+  `leaven/agent.run` over the active worker pipe. `leaven-seam-service` services
+  that callback through configured workspace materialization plus the configured
+  Codex CLI adapter.
 
 ## Verification Run
 
@@ -117,20 +122,28 @@ Python SDK project:
 - `uv run pytest tests/test_stage_surface.py -q` proves the checked-in Python
   worker sends `leaven/lm.complete` from inside a registered runner and uses the
   host response in the returned stage output.
+- `uv run pytest tests/test_stage_surface.py -q` also proves the checked-in
+  Python worker sends `leaven/agent.run` from inside a registered runner with
+  the stage candidate and `cx.rollout_workspace` handle, then uses the returned
+  `agent_session` receipt in stage output.
+- `cargo test -p leaven-seam-service` includes
+  `seam_runtime_services_agent_callback_from_command_worker`, proving
+  worker-initiated `leaven/agent.run` is serviced through configured workspace
+  materialization and the fake Codex CLI adapter.
 
 ## Still Unproven
 
-- Engine-supplied `cx.agent.run` inside `lv.optimize(...).run()` is still
-  scaffold. Example 10 binds `AgentBuilder.run` privately, not from a real
-  running stage context.
+- Engine-supplied `cx.agent.run` inside runner stages is now wired for the
+  prompt mechanics path and proven with the fake Codex adapter. Live Codex
+  `gpt-5.4-mini` inside `lv.optimize(...).run()` remains unproven.
 - Engine-supplied `cx.lm.complete` inside `lv.optimize(...).run()` is now a
   nested `leaven/lm.complete` callback for the prompt mechanics path. Rich
   message lists, model role selection, token/cost projection into the Python
   response, and live LM provider configuration remain unproven.
 - Registered SDK runner functions over the durable `leaven seam serve --stdio`
   route are now proven for the prompt mechanics slice. Non-runner roles,
-  standalone `lv.serve_stage(...)`, non-LM `leaven/*` callbacks, and richer
-  role-scoped `cx` remain unproven.
+  standalone `lv.serve_stage(...)`, non-LM/non-agent `leaven/*` callbacks, and
+  richer role-scoped `cx` remain unproven.
 - Optimizer search over the durable server is still unproven. The current
   `lv.optimize(...).run()` result is a typed mechanics facade over configured
   runner stage calls, not GEPA proposal/admission.
@@ -154,8 +167,8 @@ Python SDK project:
 
 ## Next Slices
 
-1. Wire an engine-supplied `cx.agent` inside a Python stage context so
-   `lv.optimize(...).run()` can use the same `AgentBuilder.run` substrate.
+1. Run a live `gpt-5.4-mini` Codex proof from inside `lv.optimize(...).run()`
+   using the `cx.agent.run` callback substrate.
 2. Add blob persistence/readback to `leaven-seam-service` or record an explicit
    unsupported-provider error if blob fetch is requested before storage exists.
 3. Decide the cost bridge for Codex CLI: either parse provider usage from Codex

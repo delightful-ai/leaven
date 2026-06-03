@@ -266,6 +266,99 @@ async def run(prompt, case, cx):
     assert response["result"]["output"]["value"] == "2 + 2 => 4"
 
 
+def test_checked_in_stage_worker_can_callback_agent_run(tmp_path) -> None:
+    """Scenario: registered runner can call `cx.agent.run` over the active seam."""
+
+    module = tmp_path / "agent_stage.py"
+    module.write_text(
+        """
+import leaven as lv
+
+@lv.runner
+async def run(prompt, case, cx):
+    session = await cx.agent.run(
+        workspace=cx.rollout_workspace,
+        instructions=lv.AgentInstructions(task=f"answer {case.input['question']}"),
+        output=lv.output.text(max_chars=128),
+    )
+    return session.receipt.receipt_id
+""".lstrip(),
+        encoding="utf-8",
+    )
+    request = StageRunRequest(
+        request_id="stage-worker-agent-test",
+        run_id="run_stage_worker_agent",
+        stage_call_id="sc_stage_worker_agent",
+        candidate="cand_stage_worker_agent",
+        case="case_stage_worker_agent",
+        case_input={"question": "2 + 2", "prompt": "Answer the question."},
+    ).to_json_rpc()
+
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "leaven._seam_worker",
+            "--module-file",
+            str(module),
+            "--stage-id",
+            "agent_stage.run",
+            "--stage-name",
+            "run",
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    assert process.stdin is not None
+    assert process.stdout is not None
+    process.stdin.write(json.dumps(request) + "\n")
+    process.stdin.flush()
+
+    callback = json.loads(process.stdout.readline())
+    assert callback["method"] == "leaven/agent.run"
+    params = callback["params"]
+    assert params["ops"][0]["call"]["candidate"] == "cand_stage_worker_agent"
+    assert params["ops"][1]["call"]["workspace"] == "ws_stage_worker_agent_materialized"
+    assert params["ops"][1]["call"]["instructions"]["task"] == "answer 2 + 2"
+    process.stdin.write(
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": callback["id"],
+                "result": {
+                    "method": "leaven/agent.run",
+                    "primary": {
+                        "kind": "agent_session",
+                        "status": "completed",
+                        "receipt": "agentrec_worker_test",
+                        "transcript_ref": {
+                            "kind": "blob_ref",
+                            "id": "blob_worker_agent_transcript",
+                            "sha256": "a" * 64,
+                            "bytes": 8,
+                            "data_classes": ["transcript.raw"],
+                        },
+                        "commands": [],
+                        "cost": {"usd_micro": 0},
+                    },
+                    "receipts": [{"receipt": "agentrec_worker_test", "call_kind": "agent_run"}],
+                },
+            }
+        )
+        + "\n"
+    )
+    process.stdin.flush()
+    response = json.loads(process.stdout.readline())
+    stdout, stderr = process.communicate(timeout=5)
+
+    assert stdout == ""
+    assert process.returncode == 0, stderr
+    assert response["result"]["stage_call_id"] == "sc_stage_worker_agent"
+    assert response["result"]["output"]["value"] == "agentrec_worker_test"
+
+
 class FakeSeamClient:
     def __init__(self) -> None:
         self.request_value: dict = {}

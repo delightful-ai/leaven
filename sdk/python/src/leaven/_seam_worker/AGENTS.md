@@ -5,8 +5,9 @@
 
 It loads checked-in SDK `RegisteredStage` objects, receives one locked
 `leaven/stage.run` JSON-RPC request on stdin, runs the selected Python runner
-stage, can issue nested `leaven/lm.complete` callback requests over the same
-pipe while that stage is running, and writes one JSON-RPC response on stdout.
+stage, can issue nested `leaven/lm.complete` and `leaven/agent.run` callback
+requests over the same pipe while that stage is running, and writes one JSON-RPC
+response on stdout.
 
 It must not own optimizer strategy, public SDK composition, Rust graph
 mutation, service configuration, provider adapters, or transport validation.

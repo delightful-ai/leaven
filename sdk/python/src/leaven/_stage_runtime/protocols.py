@@ -5,6 +5,14 @@ from __future__ import annotations
 from typing import Protocol
 
 
+class AgentRunCallback(Protocol):
+    """Driver capability required by callback-backed `cx.agent.run`."""
+
+    def request(self, request: dict) -> dict:
+        """Send one JSON-RPC request through the active stage seam."""
+        ...
+
+
 class LmCompleteCallback(Protocol):
     """Driver capability required by callback-backed `cx.lm.complete`."""
 
@@ -13,4 +21,4 @@ class LmCompleteCallback(Protocol):
         ...
 
 
-__all__ = ["LmCompleteCallback"]
+__all__ = ["AgentRunCallback", "LmCompleteCallback"]

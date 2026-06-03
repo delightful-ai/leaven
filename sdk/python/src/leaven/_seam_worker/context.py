@@ -9,8 +9,19 @@ from .._seam import LmCompleteRequest
 from .._stage_runtime import CallbackRolloutContext
 
 
-class JsonRpcLmCallback:
-    """Callback-backed LM effect over the active command-runner pipe."""
+class JsonRpcCallbackClient:
+    """Callback-backed effect client over the active command-runner pipe."""
+
+    def request(self, request: dict) -> dict:
+        """Send one callback request and return the public-seam result object."""
+        print(json.dumps(request, sort_keys=True), flush=True)
+        line = sys.stdin.readline()
+        if not line:
+            raise RuntimeError("stage host closed before answering callback request")
+        response = json.loads(line)
+        if "error" in response:
+            raise RuntimeError(f"stage callback failed: {response['error']}")
+        return response["result"]
 
     async def lm_complete(self, prompt: str, *, request_id: str) -> str:
         """Send one `leaven/lm.complete` callback request and read the response."""
@@ -27,14 +38,7 @@ class JsonRpcLmCallback:
             model="mock",
             input_classes=["public"],
         ).to_json_rpc()
-        print(json.dumps(request, sort_keys=True), flush=True)
-        line = sys.stdin.readline()
-        if not line:
-            raise RuntimeError("stage host closed before answering leaven/lm.complete")
-        response = json.loads(line)
-        if "error" in response:
-            raise RuntimeError(f"leaven/lm.complete callback failed: {response['error']}")
-        content = response["result"]["primary"]["message"]["content"]
+        content = self.request(request)["primary"]["message"]["content"]
         return "".join(part["text"] for part in content if part.get("kind") == "text")
 
 
@@ -44,10 +48,12 @@ def rollout_context(
     stage_call_id: str,
 ) -> CallbackRolloutContext:
     """Build the context passed to a registered runner stage."""
+    callback = JsonRpcCallbackClient()
     return CallbackRolloutContext(
-        JsonRpcLmCallback(),
+        callback,
         candidate_id=candidate_id,
         stage_call_id=stage_call_id,
+        agent_callback=callback,
     )
 
 
@@ -63,4 +69,4 @@ def _id_fragment(value: str) -> str:
     return "".join(ch if ch.isalnum() else "_" for ch in value)
 
 
-__all__ = ["JsonRpcLmCallback", "rollout_context"]
+__all__ = ["JsonRpcCallbackClient", "rollout_context"]

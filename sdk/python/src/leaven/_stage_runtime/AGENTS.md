@@ -11,7 +11,8 @@ only `cx.lm`, `cx.agent`, and role-specific context types supplied by Leaven.
 
 - Public context and builder types from `leaven.contexts` and
   `leaven.builders.*`.
-- The locked `leaven/lm.complete` callback semantics from the public seam.
+- The locked `leaven/lm.complete` and `leaven/agent.run` callback semantics
+  from the public seam.
 
 ## Private Dependencies
 

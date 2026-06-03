@@ -744,6 +744,45 @@ mod tests {
     }
 
     #[test]
+    fn seam_runtime_services_agent_callback_from_command_worker() {
+        let fake_worker = fake_stage_worker_with_agent_callback_bin();
+        let fake_codex = fake_codex_bin();
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
+        let service = ConfiguredSeamService::from_package(
+            package.clone(),
+            SeamServiceConfig {
+                context: planexec_context(),
+                capability: Some(effect_capability()),
+                agent: SeamAgentConfig::CodexCli {
+                    codex_bin: fake_codex.display().to_string(),
+                    model: "gpt-5.4-mini".to_owned(),
+                    timeout_s: Some(5),
+                    codex_home: None,
+                    bypass_approvals_and_sandbox: false,
+                },
+                stage: SeamStageConfig::CommandRunner {
+                    argv: vec![fake_worker.display().to_string()],
+                },
+                ..SeamServiceConfig::default()
+            },
+        )
+        .unwrap();
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        let response = runtime.handle_value(&stage_run_request());
+
+        assert!(
+            !response.is_error(),
+            "unexpected error: {:?}",
+            response.value()
+        );
+        assert_eq!(
+            response.value()["result"]["output"]["value"],
+            "runner agent callback saw agentrec_completion"
+        );
+    }
+
+    #[test]
     fn seam_runtime_reports_unconfigured_runner_as_execution_failure() {
         let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
         let service =
@@ -1174,6 +1213,89 @@ result = {
         "kind": "text",
         "summary": "command worker callback output",
         "value": f"runner callback saw {text}",
+        "visibility": "optimizer_visible",
+        "data_classes": ["candidate.output"]
+    }
+}
+print(json.dumps({"jsonrpc": "2.0", "id": stage.get("id"), "result": result}), flush=True)
+"#,
+        )
+        .unwrap();
+        make_executable(&path);
+        path
+    }
+
+    fn fake_stage_worker_with_agent_callback_bin() -> std::path::PathBuf {
+        let dir = tempfile::tempdir().unwrap().keep();
+        let path = dir.join("fake-stage-worker-agent");
+        std::fs::write(
+            &path,
+            r#"#!/usr/bin/env python3
+import json
+import select
+import sys
+
+stage = json.loads(sys.stdin.readline())
+if stage.get("method") != "leaven/stage.run":
+    raise SystemExit(f"unexpected stage request: {stage!r}")
+callback = {
+    "jsonrpc": "2.0",
+    "id": "worker-agent-1",
+    "method": "leaven/agent.run",
+    "params": {
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "plan_worker_agent_callback",
+        "consistency": {"kind": "latest_at_start"},
+        "mode": {"kind": "execute"},
+        "ops": [
+            {
+                "kind": "call",
+                "name": "workspace",
+                "idempotency_key": "worker-agent-workspace",
+                "call": {
+                    "kind": "workspace_materialize",
+                    "candidate": "cand_planexec",
+                    "surface": "program",
+                    "mode": "copy_on_write",
+                    "lifetime": "manual_release"
+                }
+            },
+            {
+                "kind": "call",
+                "name": "completion",
+                "deps": ["workspace"],
+                "idempotency_key": "worker-agent-run",
+                "call": {
+                    "kind": "agent_run",
+                    "runtime": "codex-cli",
+                    "workspace": "ws_planexec_materialized",
+                    "instructions": {"task": "write final answer"},
+                    "tool_policy": {"allow_shell": False},
+                    "output": {"kind": "final_message", "max_bytes": 128},
+                    "limits": {"timeout_s": 5, "max_turns": 1, "max_usd_micro": 1000},
+                    "input_classes": ["public"]
+                }
+            }
+        ],
+        "return": ["workspace", "completion"],
+        "commit": {"kind": "graph_writes_atomic", "on_stale": "reject"}
+    }
+}
+print(json.dumps(callback), flush=True)
+ready, _, _ = select.select([sys.stdin], [], [], 5)
+if not ready:
+    raise SystemExit("timed out waiting for agent.run callback response")
+agent_response = json.loads(sys.stdin.readline())
+receipt = agent_response["result"]["primary"]["receipt"]
+result = {
+    "schema_version": "leaven.stage_run.v1",
+    "message": "stage_run_result",
+    "stage": "runner",
+    "stage_call_id": stage["params"]["payload"]["stage_call_id"],
+    "output": {
+        "kind": "text",
+        "summary": "command worker agent callback output",
+        "value": f"runner agent callback saw {receipt}",
         "visibility": "optimizer_visible",
         "data_classes": ["candidate.output"]
     }

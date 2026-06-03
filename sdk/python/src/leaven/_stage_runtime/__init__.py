@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from .contexts import CallbackRolloutContext
 from .lm import CallbackLmBuilder, lm_response
-from .protocols import LmCompleteCallback
+from .protocols import AgentRunCallback, LmCompleteCallback
 
 __all__ = [
+    "AgentRunCallback",
     "CallbackLmBuilder",
     "CallbackRolloutContext",
     "LmCompleteCallback",
