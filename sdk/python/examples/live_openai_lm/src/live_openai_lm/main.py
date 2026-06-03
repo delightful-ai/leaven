@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-import json
 
 from live_openai_lm.config import LIVE_ENV, LiveOpenAiConfig
-from live_openai_lm.output import valid_live_lm_output
+from live_openai_lm.output import live_lm_output_from_assessment, valid_live_lm_output
 from live_openai_lm.scenario import optimize_with_live_openai
 
 
@@ -19,10 +18,7 @@ async def amain() -> None:
 
     result = await optimize_with_live_openai(config)
     assessment = result.assessment("case_live_openai_lm_001")
-    reward_output = assessment.rewards[0].output
-    assert reward_output is not None
-    assert isinstance(reward_output.value, str)
-    value = json.loads(reward_output.value)
+    value = live_lm_output_from_assessment(assessment)
 
     assert result.best.summary_score == 1.0
     assert valid_live_lm_output(value)

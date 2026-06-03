@@ -15,6 +15,7 @@ leaven = { path = "../..", editable = true }
 
 [dependency-groups]
 private-dev = [
+    "pytest>=8",
     "ruff>=0.7",
     "ty>=0.0.1a1",
 ]
@@ -25,6 +26,7 @@ public_runtime = [
 ]
 public_optional = []
 private_dev = [
+    "pytest",
     "ruff",
     "ty",
 ]

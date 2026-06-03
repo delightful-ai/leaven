@@ -2,9 +2,26 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
+from leaven.assessment import Assessment
+
 from live_openai_lm.config import EXPECTED_TEXT
+
+
+def live_lm_output_from_assessment(assessment: Assessment) -> dict[str, Any]:
+    """Extract the runner's public LM proof output from an assessment."""
+    public = assessment.evidence.public
+    if public is None:
+        raise ValueError(f"assessment {assessment.case.id!r} has no public evidence")
+    raw = public.payload.get("output")
+    if not isinstance(raw, str):
+        raise ValueError(f"assessment {assessment.case.id!r} public output is not inline text")
+    value = json.loads(raw)
+    if not isinstance(value, dict):
+        raise ValueError(f"assessment {assessment.case.id!r} public output is not a JSON object")
+    return value
 
 
 def valid_live_lm_output(value: dict[str, Any]) -> bool:
@@ -18,4 +35,4 @@ def valid_live_lm_output(value: dict[str, Any]) -> bool:
     )
 
 
-__all__ = ["valid_live_lm_output"]
+__all__ = ["live_lm_output_from_assessment", "valid_live_lm_output"]

@@ -515,7 +515,7 @@ acceptance:
       The same Python stage code can use deterministic/mock LM for mechanics
       tests and a real LM provider for live acceptance evidence through
       `cx.lm.complete`.
-    status: pending
+    status: done
     proof_required:
       kind: live_lm_provider_e2e
       must_exercise:
@@ -551,22 +551,22 @@ acceptance:
         the private seam service config and callback-backed `cx.lm.complete`
         preserving usage and receipt in `LmResponse`.
       - >-
-        Live proof scaffold, not executed in this environment:
-        `sdk/python/examples/live_openai_lm/` is a real example project with
-        its own `pyproject.toml`, `src/live_openai_lm` package, console command,
-        and explicit public/private dependency-boundary declaration. It is a
-        live-gated `lv.optimize(...).run()` proof that calls `cx.lm.complete`
-        inside the Python runner and returns assistant text, receipt id, usage,
-        cost field, and model through the assessment output. The numbered
+        Live proof package evidence: `sdk/python/examples/live_openai_lm/` is a
+        real example project with its own `pyproject.toml`,
+        `src/live_openai_lm` package, console command, tests, and explicit
+        public/private dependency-boundary declaration. It is a live-gated
+        `lv.optimize(...).run()` proof that calls `cx.lm.complete` inside the
+        Python runner and returns assistant text, receipt id, usage, cost
+        field, and model through assessment public evidence. The numbered
         `13_live_optimize_openai_lm.py` file is only a tour wrapper into that
-        project command. Current shell evidence: `OPENAI_API_KEY` is unset, so
-        the spend-bearing live OpenAI proof remains pending.
+        project command.
       - >-
-        Current credential check, 2026-06-02: `env | rg
+        Earlier credential blocker, 2026-06-02: `env | rg
         '^(OPENAI_API_KEY|LEAVEN_|CODEX_|OPENAI_)='` printed no OpenAI key in
-        this shell, so the live OpenAI `cx.lm.complete` proof could not be run
-        in this turn. This is a credential blocker for this row only; it is not
-        substitute evidence for live LM provider behavior.
+        that shell, so the live OpenAI `cx.lm.complete` proof could not be run
+        in that turn. The blocker was external credential availability for this
+        row only, not mock fallback behavior and not a failure to spawn the
+        public seam server.
       - >-
         Current blocked proof attempt, 2026-06-03:
         `LEAVEN_LIVE_OPENAI=1 uv run --project examples/live_openai_lm
@@ -576,6 +576,19 @@ acceptance:
         remaining gap is external credential availability for the live OpenAI
         provider proof, not a fallback to mock LM behavior and not a failure to
         spawn the public seam server.
+      - >-
+        Live OpenAI acceptance evidence, 2026-06-03: after `.env` supplied
+        `OPENAI_API_KEY`, `zsh -lc 'set -a; source ./.env; set +a; cd
+        sdk/python; LEAVEN_LIVE_OPENAI=1 uv run --project
+        examples/live_openai_lm live-openai-lm'` returned `run id:
+        live_openai_lm`, `best score: 1.000`, `lm receipt:
+        lmrec_completion`, `lm tokens: 35`, and `cost status: known`.
+        Persisted inspection of
+        `sdk/python/.leaven/runs/live_openai_lm/optimized.json` confirmed
+        assessment score `1.0`, effect receipt `lmrec_completion`, output text
+        `LEAVEN_LIVE_LM_OK`, model `gpt-4.1-mini`, usage status `known`,
+        summary total LM tokens `35`, and the only remaining unsupported fact
+        was run-inspection blob byte readback (`blob_readback_not_implemented`).
     closeout_check: Mock-only LM is acceptable for default CI, but is not live provider proof.
 
   - id: inspection_and_closeout_truth
