@@ -11,7 +11,9 @@ effect/query results and pass them into low-level evidence envelopes.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from .blob_ref import BlobRef
 
 
 class _ReceiptBase(BaseModel):
@@ -29,6 +31,9 @@ class QueryReceipt(_ReceiptBase):
 
 class CallReceipt(_ReceiptBase):
     """Receipt for a costful effect call (LM, agent, sandbox)."""
+
+    blob_refs: list[BlobRef] = Field(default_factory=list)
+    """Blob references reported by the effect result, such as agent transcripts."""
 
 
 class WriteReceipt(_ReceiptBase):

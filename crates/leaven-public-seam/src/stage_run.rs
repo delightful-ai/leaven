@@ -109,6 +109,7 @@ pub struct StageEffectReceipt {
     receipt: String,
     call_kind: Option<String>,
     cost: Option<Value>,
+    blob_refs: Vec<Value>,
 }
 
 impl StageEffectReceipt {
@@ -120,12 +121,14 @@ impl StageEffectReceipt {
         let receipt = required_str(object.get("receipt"), "effect_receipts.receipt")?.to_owned();
         let call_kind = optional_str(object.get("call_kind"), "effect_receipts.call_kind")?;
         let cost = optional_object_value(object.get("cost"), "effect_receipts.cost")?;
+        let blob_refs = value_array(object.get("blob_refs"), "effect_receipts.blob_refs")?;
         validate_effect_receipt_binding(&method, &receipt, call_kind)?;
         Ok(Self {
             method,
             receipt,
             call_kind: call_kind.map(ToOwned::to_owned),
             cost,
+            blob_refs,
         })
     }
 
@@ -147,6 +150,11 @@ impl StageEffectReceipt {
     /// Optional metered cost reported by the callback primary value.
     pub fn cost(&self) -> Option<&Value> {
         self.cost.as_ref()
+    }
+
+    /// Blob references reported by the callback primary value.
+    pub fn blob_refs(&self) -> &[Value] {
+        &self.blob_refs
     }
 }
 
@@ -296,6 +304,16 @@ fn optional_object_value(
             }
         })
         .transpose()
+}
+
+fn value_array(value: Option<&Value>, field: &str) -> Result<Vec<Value>, PublicSeamError> {
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
+    let values = value
+        .as_array()
+        .ok_or_else(|| invalid_stage_run(format!("stage run field `{field}` must be an array")))?;
+    Ok(values.clone())
 }
 
 fn required_receipt_id(value: Option<&Value>, field: &str) -> Result<String, PublicSeamError> {

@@ -39,6 +39,7 @@ from .agent_instructions import AgentInstructions, AgentRoles
 # ----- Built-in artifacts ---------------------------------------------------
 from .artifacts import PromptArtifact, SkillBank
 from .artifacts.skill_bank import SkillFile
+from .blob_ref import BlobRef
 
 # ----- Composition + entry -------------------------------------------------
 from .budget import Budget, budget
@@ -101,6 +102,7 @@ roles = AgentRoles
 for _leaky in (
     "agent_instructions",
     "assessment",
+    "blob_ref",
     "builders",
     "case",
     "contexts",
@@ -126,6 +128,7 @@ __all__ = [
     # records
     "AgentInstructions",
     "AgentRoles",
+    "BlobRef",
     "Budget",
     "Cache",
     "Candidate",

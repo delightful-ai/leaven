@@ -17,8 +17,8 @@ def unsupported_facts_for_runtime(runtime: Runtime) -> tuple[UnsupportedRunFact,
             dependency="python_seam_optimize",
             reason="blob_readback_not_implemented",
             detail=(
-                "this optimize mechanics path returns assessment outputs but does not yet "
-                "persist blob refs for lv.runs.open/readback"
+                "this optimize mechanics path persists blob ref metadata but does not yet "
+                "provide blob-content fetch for lv.runs.open/readback"
             ),
         )
     ]

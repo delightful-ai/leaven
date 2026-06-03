@@ -13,6 +13,7 @@ from .._handles import WorkspaceHandle
 from .._receipts import CallReceipt
 from .._seam import AgentRunRequest
 from ..agent_instructions import AgentInstructions
+from ..blob_ref import BlobRef
 from ..output import FilesOutput, JsonSchemaOutput, OutputContract, TextOutput
 
 
@@ -23,6 +24,8 @@ class AgentSession(BaseModel):
 
     transcript_ref: str
     """Blob ref to the full session transcript."""
+    transcript: BlobRef | None = None
+    """Full transcript blob metadata when the provider reports it."""
 
     parsed: Any | None = None
     """Parsed structured output when `output=lv.output.json_schema(...)`."""
@@ -157,14 +160,19 @@ def _output_to_wire(output: OutputContract | None) -> dict[str, Any]:
 def _agent_session_from_result(result: dict[str, Any]) -> AgentSession:
     primary = result["primary"]
     transcript_ref = primary.get("transcript_ref") or {}
+    transcript = _blob_ref(transcript_ref)
     return AgentSession(
         transcript_ref=transcript_ref.get("id", ""),
+        transcript=transcript,
         parsed=primary.get("parsed"),
         final_message=None,
         files=None,
         commands=list(primary["commands"]),
         cost_usd=_cost_usd(primary.get("cost")),
-        receipt=CallReceipt(receipt_id=primary["receipt"]),
+        receipt=CallReceipt(
+            receipt_id=primary["receipt"],
+            blob_refs=[transcript] if transcript is not None else [],
+        ),
     )
 
 
@@ -176,6 +184,28 @@ def _cost_usd(cost: object) -> float | None:
     if isinstance(usd_micro, int | float):
         return float(usd_micro) / 1_000_000
     return None
+
+
+def _blob_ref(value: object) -> BlobRef | None:
+    if not isinstance(value, dict):
+        return None
+    blob = cast("dict[str, Any]", value)
+    blob_id = blob.get("id")
+    if not isinstance(blob_id, str) or not blob_id:
+        return None
+    sha256 = blob.get("sha256")
+    byte_count = blob.get("bytes")
+    data_classes = blob.get("data_classes")
+    return BlobRef(
+        blob_id=blob_id,
+        sha256=sha256 if isinstance(sha256, str) else None,
+        bytes=byte_count if isinstance(byte_count, int) else None,
+        data_classes=[
+            item for item in data_classes if isinstance(item, str)
+        ]
+        if isinstance(data_classes, list)
+        else [],
+    )
 
 
 __all__ = ["AgentBuilder", "AgentSession"]

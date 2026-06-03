@@ -130,6 +130,12 @@
             }
           },
           "additionalProperties": false
+        },
+        "blob_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/BlobRef"
+          }
         }
       },
       "required": [

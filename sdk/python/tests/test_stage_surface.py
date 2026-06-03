@@ -113,7 +113,11 @@ async def test_agent_builder_run_uses_bound_public_seam_client() -> None:
     assert params["ops"][1]["call"]["tool_policy"]["allowed_commands"] == ["codex"]
     assert params["ops"][1]["call"]["output"] == {"kind": "final_message", "max_bytes": 256}
     assert session.transcript_ref == "blob_agent_builder_transcript"
+    assert session.transcript is not None
+    assert session.transcript.blob_id == "blob_agent_builder_transcript"
+    assert session.transcript.bytes == 128
     assert session.receipt.receipt_id == "agentrec_completion"
+    assert session.receipt.blob_refs == [session.transcript]
     assert session.cost_usd == 0.25
 
 
@@ -404,6 +408,23 @@ async def run(prompt, case, cx):
     assert process.returncode == 0, stderr
     assert response["result"]["stage_call_id"] == "sc_stage_worker_agent"
     assert response["result"]["output"]["value"] == "agentrec_worker_test"
+    assert response["result"]["effect_receipts"] == [
+        {
+            "method": "leaven/agent.run",
+            "receipt": "agentrec_worker_test",
+            "call_kind": "agent_run",
+            "cost": {"usd_micro": 0},
+            "blob_refs": [
+                {
+                    "kind": "blob_ref",
+                    "id": "blob_worker_agent_transcript",
+                    "sha256": "a" * 64,
+                    "bytes": 8,
+                    "data_classes": ["transcript.raw"],
+                }
+            ],
+        }
+    ]
 
 
 def test_optimize_runtime_codex_agent_config_lowers_to_seam(monkeypatch) -> None:
@@ -493,6 +514,7 @@ def test_optimize_summary_names_codex_cost_and_inspection_gaps() -> None:
         ("run.usage", "codex_cli", "provider_usage_not_reported"),
         ("run.inspection", "python_seam_optimize", "blob_readback_not_implemented"),
     }
+    assert "blob ref metadata" in result.summary.unsupported[0].detail
 
 
 async def test_reward_vector_executes_all_registered_rewards() -> None:

@@ -5,6 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .._receipts import CallReceipt
+from ..blob_ref import BlobRef
+
 
 @dataclass(frozen=True)
 class EffectCostTotals:
@@ -14,16 +17,21 @@ class EffectCostTotals:
     lm_tokens: int
 
 
-def effect_receipt_ids_from_stage_result(result: dict[str, Any]) -> list[str]:
-    """Extract opaque effect receipt ids from private worker stage metadata."""
-    ids = []
+def effect_receipts_from_stage_result(result: dict[str, Any]) -> list[CallReceipt]:
+    """Extract opaque effect receipts from private worker stage metadata."""
+    receipts = []
     for value in result.get("effect_receipts", []):
         if not isinstance(value, dict):
             continue
         receipt = value.get("receipt")
         if isinstance(receipt, str) and receipt:
-            ids.append(receipt)
-    return ids
+            receipts.append(
+                CallReceipt(
+                    receipt_id=receipt,
+                    blob_refs=_blob_refs_from_receipt(value),
+                )
+            )
+    return receipts
 
 
 def effect_cost_totals_from_stage_result(result: dict[str, Any]) -> EffectCostTotals:
@@ -56,9 +64,33 @@ def _nonnegative_int(value: object) -> int:
     return 0
 
 
+def _blob_refs_from_receipt(value: dict[str, Any]) -> list[BlobRef]:
+    refs = []
+    for ref in value.get("blob_refs", []):
+        if not isinstance(ref, dict):
+            continue
+        blob_id = ref.get("blob_id") or ref.get("id")
+        if not isinstance(blob_id, str):
+            continue
+        try:
+            refs.append(
+                BlobRef(
+                    blob_id=blob_id,
+                    sha256=ref.get("sha256") if isinstance(ref.get("sha256"), str) else None,
+                    bytes=ref.get("bytes") if isinstance(ref.get("bytes"), int) else None,
+                    data_classes=[
+                        item for item in ref.get("data_classes", []) if isinstance(item, str)
+                    ],
+                )
+            )
+        except ValueError:
+            continue
+    return refs
+
+
 __all__ = [
     "EffectCostTotals",
     "effect_cost_totals_from_stage_result",
-    "effect_receipt_ids_from_stage_result",
+    "effect_receipts_from_stage_result",
     "sum_effect_cost_totals",
 ]

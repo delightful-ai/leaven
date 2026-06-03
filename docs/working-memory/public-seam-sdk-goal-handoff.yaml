@@ -475,6 +475,18 @@ acceptance:
         Codex proposer route but still does not satisfy the remaining live
         Codex/process, apply/admission, provider-cost, or transcript-readback
         gaps.
+      - >-
+        Deterministic transcript-ref evidence, not live acceptance completion:
+        proposer-stage `cx.agent.run` callback receipts now preserve validated
+        `blob_ref` metadata from the agent session transcript and command
+        output refs through `stage_run_result.effect_receipts`. The SDK carries
+        that metadata into run-level `Optimized.effect_receipts`, persists it
+        through `lv.runs.open(...)`, and exposes it from `lv.runs.inspect(...)`
+        under the `proposer_stage` receipt source. This proves durable
+        transcript-reference lineage for the materialized-workspace proposer
+        mechanics path, but still does not prove live Codex provider execution
+        in this turn, proposal apply/admission, provider-authored cost
+        accounting, or blob-content fetch.
     closeout_check: A Rust-side hardcoded child prompt, fixed diff, or deterministic fake-agent transcript is not enough.
 
   - id: real_lm_provider_wiring
@@ -591,6 +603,18 @@ acceptance:
         flattened inspection of `wrec_proposal_batch`. This still does not
         prove Rust graph checkpoint readback, durable blob/transcript fetch,
         provider-authored receipt validation, or complete cost accounting.
+      - >-
+        Transcript blob-ref inspection evidence, not acceptance completion:
+        `lv.runs.inspect(...)` now shows blob-reference metadata associated
+        with call receipts, including proposer-stage `leaven/agent.run`
+        transcript refs. `uv run pytest
+        tests/test_optimize_proposer_mechanics.py::test_optimize_proposer_can_run_agent_then_submit_agent_session_change
+        -q` proves agent transcript blob refs survive stage callback capture,
+        optimize projection, persisted run reopen, and flattened inspection.
+        The unsupported inspection fact was narrowed to blob-content fetch,
+        because blob ref metadata is now persisted. This still does not prove
+        Rust graph checkpoint readback, provider-authored receipt validation,
+        complete cost accounting, or actual blob byte retrieval from a store.
     closeout_check: Stdout transcript alone is not run inspection.
 
 proof_denominator:

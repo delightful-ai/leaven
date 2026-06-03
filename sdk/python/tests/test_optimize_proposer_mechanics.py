@@ -161,3 +161,19 @@ printf '{"type":"message","content":"ok"}\\n'
     assert result.summary.iterations == 1
     assert result.best.id == "cand_seed"
     assert result.assessment("case_agent_submit_001").score.value == 1.0
+    assert [receipt.receipt_id for receipt in result.effect_receipts] == [
+        "agentrec_completion"
+    ]
+    transcript = result.effect_receipts[0].blob_refs[0]
+    assert transcript.blob_id == "blob_completion_transcript"
+    assert transcript.data_classes == ["transcript.raw"]
+
+    reopened = lv.runs.open(result.summary.run_dir or "")
+    assert reopened.effect_receipts[0].blob_refs[0].blob_id == "blob_completion_transcript"
+
+    inspection = lv.runs.inspect(result.summary.run_dir or "")
+    agent_receipt = next(
+        receipt for receipt in inspection.receipts if receipt.receipt_id == "agentrec_completion"
+    )
+    assert agent_receipt.source == "proposer_stage"
+    assert agent_receipt.blob_refs[0].blob_id == "blob_completion_transcript"

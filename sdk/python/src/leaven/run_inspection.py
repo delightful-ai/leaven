@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .assessment import Assessment
+from .blob_ref import BlobRef
 from .result import Optimized
 from .run_status import RunCostStatus, RunUsageStatus, UnsupportedRunFact
 
@@ -22,6 +23,8 @@ class ReceiptSummary(BaseModel):
     receipt_id: str
     source: str
     """Stable source label such as `assessment:<case>` or `proposal_batch`."""
+    blob_refs: list[BlobRef] = Field(default_factory=list)
+    """Blob references associated with this receipt, such as agent transcripts."""
 
 
 class EvidenceSummary(BaseModel):
@@ -101,9 +104,23 @@ def _receipts(result: Optimized[Any]) -> list[ReceiptSummary]:
             for receipt in assessment.read_receipts
         )
         receipts.extend(
-            ReceiptSummary(kind="call", receipt_id=receipt.receipt_id, source=source)
+            ReceiptSummary(
+                kind="call",
+                receipt_id=receipt.receipt_id,
+                source=source,
+                blob_refs=receipt.blob_refs,
+            )
             for receipt in assessment.effect_receipts
         )
+    receipts.extend(
+        ReceiptSummary(
+            kind="call",
+            receipt_id=receipt.receipt_id,
+            source="proposer_stage",
+            blob_refs=receipt.blob_refs,
+        )
+        for receipt in result.effect_receipts
+    )
     receipts.extend(
         ReceiptSummary(
             kind="write",

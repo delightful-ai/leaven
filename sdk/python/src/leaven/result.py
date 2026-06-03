@@ -11,7 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ._receipts import WriteReceipt
+from ._receipts import CallReceipt, WriteReceipt
 from .assessment import Assessment, Replayability
 from .run_status import RunCostStatus, RunUsageStatus, UnsupportedRunFact
 
@@ -81,6 +81,7 @@ class Optimized[A](BaseModel):
     summary: RunSummary
     assessment_rows: list[Assessment] = Field(default_factory=list)
     proposal_receipts: list[WriteReceipt] = Field(default_factory=list)
+    effect_receipts: list[CallReceipt] = Field(default_factory=list)
 
     def assessment(self, case_id: str, *, candidate_id: str | None = None) -> Assessment:
         """Look up one assessment by case id (and optionally candidate id)."""

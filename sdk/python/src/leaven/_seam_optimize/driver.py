@@ -32,13 +32,13 @@ from ..rubric import Rubric
 from ..runtime import Runtime
 from .receipts import (
     effect_cost_totals_from_stage_result,
-    effect_receipt_ids_from_stage_result,
+    effect_receipts_from_stage_result,
     sum_effect_cost_totals,
 )
 from .rewards import evaluate_reward_vector
 from .scoring import mean_score
 from .status import first_agent, unsupported_facts_for_runtime
-from .types import SeamOptimizeReport, SeamStageAssessment
+from .types import ProposerStageReport, SeamOptimizeReport, SeamStageAssessment
 
 PROMPT_SURFACE_FINGERPRINT = "fp_surface_sha256_python_prompt_template"
 PROMPT_CHANGE_SCHEMA = "fp_schema_sha256_python_prompt_patch"
@@ -120,11 +120,11 @@ async def run_prompt_mechanics(
                 output=output,
                 score=score,
                 rewards=rewards,
-                effect_receipts=effect_receipt_ids_from_stage_result(result),
+                effect_receipts=effect_receipts_from_stage_result(result),
                 effect_costs=effect_cost_totals_from_stage_result(result),
             )
         )
-    proposal_receipts = await _run_configured_proposer(
+    proposer_report = await _run_configured_proposer(
         optimizer=optimizer,
         runtime=runtime,
         run_id=run_id,
@@ -138,7 +138,8 @@ async def run_prompt_mechanics(
         assessments=assessments,
         total_cost_usd=effect_totals.cost_usd,
         total_lm_tokens=effect_totals.lm_tokens,
-        proposal_receipts=proposal_receipts,
+        proposal_receipts=proposer_report.proposal_receipts,
+        effect_receipts=proposer_report.effect_receipts,
         unsupported=unsupported_facts_for_runtime(runtime),
     )
 
@@ -149,10 +150,10 @@ async def _run_configured_proposer(
     runtime: Runtime,
     run_id: str,
     assessments: list[SeamStageAssessment],
-) -> list[str]:
+) -> ProposerStageReport:
     propose = optimizer.propose
     if propose is None:
-        return []
+        return ProposerStageReport()
     if propose.kind != "function" or propose.stage is None:
         raise NotImplementedError(
             "this slice supports a function proposer (`Propose.fn(proposer)`); "
@@ -216,7 +217,10 @@ async def _run_configured_proposer(
     ]
     if not proposal_receipts:
         raise RuntimeError("proposer stage result missing proposal_receipts")
-    return proposal_receipts
+    return ProposerStageReport(
+        proposal_receipts=proposal_receipts,
+        effect_receipts=effect_receipts_from_stage_result(result),
+    )
 
 
 def _reflection_summary(assessments: list[SeamStageAssessment]) -> str:
