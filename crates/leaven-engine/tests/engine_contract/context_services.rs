@@ -835,6 +835,86 @@ fn deterministic_evaluation_ignores_cache_entries_with_missing_graph_assessments
 }
 
 #[test]
+fn request_evaluation_records_external_worker_request_through_runcontext() {
+    let (mut graph, mut budget) = graph_and_budget();
+    let case_set = CaseSet::new(vec!["case"]);
+    let candidate = {
+        let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+        seed_ctx.insert_seed(text_artifact("abc"), 0).unwrap()
+    };
+    let evaluator = EvaluatorId::from("external-evaluator");
+    let fingerprint = Fingerprint::from_bytes([29; 32]);
+    let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget).with_case_set(&case_set);
+
+    let request_id = ctx
+        .request_evaluation(
+            evaluator.clone(),
+            fingerprint,
+            independent_request(candidate),
+        )
+        .unwrap();
+
+    let request = ctx
+        .graph()
+        .evaluation_request(request_id)
+        .expect("external evaluation request is graph-visible");
+    assert_eq!(request.evaluator(), &evaluator);
+    assert_eq!(request.evaluator_fingerprint(), fingerprint);
+    assert!(matches!(
+        request.request(),
+        EvaluationRequest::Independent { .. }
+    ));
+    assert_eq!(request.resolved_set().case_ids.len(), 1);
+    assert!(ctx.graph().events().any(|event| matches!(
+        event,
+        RunEvent::EvaluationRequested {
+            request_id: event_request_id,
+            evaluator: event_evaluator,
+            request,
+        } if *event_request_id == request_id
+            && event_evaluator == &evaluator
+            && request.candidate_count == 1
+    )));
+}
+
+#[test]
+fn request_evaluation_refuses_hidden_partition_without_recording_request() {
+    let (mut graph, mut budget) = graph_and_budget();
+    let secret = PartitionId::from("secret");
+    let case_set = CaseSet::new(vec!["case"])
+        .with_partition(secret.clone(), vec![leaven_kernel::CaseId::new(0)]);
+    let candidate = {
+        let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+        seed_ctx.insert_seed(text_artifact("abc"), 0).unwrap()
+    };
+    let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+        .with_case_set(&case_set)
+        .with_trust_policy(TrustPolicy::default().hide_from_optimizers([secret.clone()]));
+
+    let result = ctx.request_evaluation(
+        EvaluatorId::from("external-evaluator"),
+        Fingerprint::from_bytes([30; 32]),
+        EvaluationRequest::Independent {
+            candidates: vec![candidate],
+            set: EvaluationSet::Partition(secret),
+            granularity: AssessmentGranularity::Aggregate,
+            purpose: EvaluationPurpose::Validation,
+        },
+    );
+
+    assert!(matches!(
+        result,
+        Err(leaven_engine::RunContextError::TrustViolation(_))
+    ));
+    assert_eq!(ctx.graph().evaluation_request_count(), 0);
+    assert!(
+        ctx.graph()
+            .events()
+            .any(|event| matches!(event, RunEvent::Error { .. }))
+    );
+}
+
+#[test]
 fn submit_assessments_records_external_worker_output_through_runcontext() {
     block_on(async {
         let (mut graph, mut budget) = graph_and_budget();

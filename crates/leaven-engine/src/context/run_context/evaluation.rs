@@ -375,6 +375,45 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
         request_id
     }
 
+    /// Record an evaluation request produced by an external worker seam.
+    ///
+    /// This resolves and trust-checks the request exactly like in-process
+    /// evaluation, but it does not execute an evaluator. The returned request id
+    /// is the durable graph identity that a later `submit_assessments` call must
+    /// reference.
+    pub fn request_evaluation(
+        &mut self,
+        evaluator: EvaluatorId,
+        evaluator_fingerprint: leaven_kernel::Fingerprint,
+        request: EvaluationRequest,
+    ) -> Result<EvaluationRequestId, RunContextError> {
+        if let Err(error) = self
+            .trust
+            .check_evaluation_request(&crate::Actor::Optimizer, &request)
+        {
+            self.emit(RunEvent::Error {
+                stage: Some(StageId::custom("optimizer")),
+                error: ErrorRecord::from_error(ErrorKind::Trust, &error),
+                policy: ErrorPolicy::Continued,
+            });
+            return Err(RunContextError::TrustViolation(error));
+        }
+        let resolved_set = self.resolve_evaluation_request(&request)?;
+        let candidate_count = super::support::candidate_count(&ResolvedEvaluationRequest {
+            kind: super::support::resolved_kind(&request),
+            set: resolved_set.clone(),
+            granularity: super::support::request_granularity(&request),
+            purpose: super::support::request_purpose(&request),
+        });
+        Ok(self.record_evaluation_request(
+            &evaluator,
+            evaluator_fingerprint,
+            request,
+            resolved_set,
+            candidate_count,
+        ))
+    }
+
     pub(super) fn emit_evaluation_completed(
         &mut self,
         evaluator: &EvaluatorId,
