@@ -69,6 +69,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
             write_json_line(&mut stdin, request);
         }
         write_json_line(&mut stdin, &event_emit_request());
+        write_json_line(&mut stdin, &sandbox_exec_request());
         write_json_line(&mut stdin, &lm_complete_request());
         write_json_line(&mut stdin, &stage_run_request());
     }
@@ -91,7 +92,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
     let responses = response_lines(&output.stdout);
     assert_eq!(
         responses.len(),
-        6 + workspace_queries.len(),
+        7 + workspace_queries.len(),
         "one response per request line"
     );
 
@@ -158,7 +159,27 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         "emit_run_event"
     );
 
-    let lm_index = event_index + 1;
+    let sandbox_index = event_index + 1;
+    assert_eq!(responses[sandbox_index]["id"], json!("sandbox-exec-cli"));
+    assert!(
+        responses[sandbox_index].get("error").is_none(),
+        "unexpected sandbox response: {:?}",
+        responses[sandbox_index]
+    );
+    assert_eq!(
+        responses[sandbox_index]["result"]["primary"]["kind"],
+        "sandbox_exec"
+    );
+    assert_eq!(
+        responses[sandbox_index]["result"]["primary"]["files"]["reports/out.txt"]["bytes"],
+        "sandbox artifact\n".len()
+    );
+    assert_eq!(
+        responses[sandbox_index]["result"]["receipts"][1]["call_kind"],
+        "sandbox_exec"
+    );
+
+    let lm_index = sandbox_index + 1;
     assert_eq!(responses[lm_index]["id"], json!("lm-cli"));
     assert!(
         responses[lm_index].get("error").is_none(),
@@ -435,6 +456,66 @@ fn event_emit_request() -> Value {
     })
 }
 
+fn sandbox_exec_request() -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": "sandbox-exec-cli",
+        "method": "leaven/sandbox.exec",
+        "params": {
+            "schema_version": "leaven.plan.v1",
+            "plan_id": "sandboxexeccli001",
+            "consistency": {
+                "kind": "latest_at_start"
+            },
+            "mode": {
+                "kind": "execute"
+            },
+            "ops": [
+                {
+                    "kind": "call",
+                    "name": "workspace",
+                    "idempotency_key": "sandbox-exec-cli-0001",
+                    "call": {
+                        "kind": "workspace_materialize",
+                        "candidate": "cand_cli",
+                        "surface": "program",
+                        "mode": "copy_on_write",
+                        "lifetime": "manual_release"
+                    }
+                },
+                {
+                    "kind": "call",
+                    "name": "sandboxed",
+                    "deps": ["workspace"],
+                    "idempotency_key": "sandbox-exec-cli-0002",
+                    "call": {
+                        "kind": "sandbox_exec",
+                        "workspace": "ws_cli_materialized",
+                        "argv": [
+                            "sh",
+                            "-c",
+                            "mkdir -p reports && printf 'sandbox artifact\n' > reports/out.txt && printf 'sandbox stdout\n'"
+                        ],
+                        "timeout_s": 5,
+                        "output": {
+                            "kind": "files",
+                            "paths": ["reports/out.txt"],
+                            "max_bytes": 4096
+                        },
+                        "stream_policy": "blob_refs_only",
+                        "input_classes": ["public"]
+                    }
+                }
+            ],
+            "return": ["sandboxed"],
+            "commit": {
+                "kind": "graph_writes_atomic",
+                "on_stale": "reject"
+            }
+        }
+    })
+}
+
 fn seam_capability() -> Value {
     json!({
         "schema_version": "leaven.capability.v1",
@@ -522,6 +603,20 @@ fn seam_capability() -> Value {
                 "action": "event.emit",
                 "resource": {},
                 "constraints": {}
+            },
+            {
+                "action": "sandbox.exec",
+                "resource": {
+                    "workspace_ids": ["ws_cli_materialized"]
+                },
+                "constraints": {
+                    "allowed_input_classes": ["public"],
+                    "workspace_ops": ["exec"],
+                    "allowed_commands": ["sh"]
+                },
+                "limits": {
+                    "timeout_s": 5
+                }
             }
         ],
         "budgets": {},

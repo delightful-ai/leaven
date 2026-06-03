@@ -9,14 +9,15 @@ use crate::lm::{ConfiguredLmError, ConfiguredLmRuntime, SeamLmConfig};
 use crate::stage::SeamStageConfig;
 use leaven_agent::{AgentRunContext, AgentRuntime};
 use leaven_agent_codex_cli::{CodexCliApproval, CodexCliConfig, CodexCliRuntime, CodexCliSandbox};
-use leaven_kernel::{AgentSessionId, BudgetSnapshot};
+use leaven_kernel::{AgentSessionId, BudgetSnapshot, Cost, FingerprintBuilder, Metered};
 use leaven_public_seam::{
     AgentCommandOutputRefs, CapabilityDocument, PlanAgentRunOutcome, PlanAgentRunRequest,
     PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
-    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSubmitProposalBatchOutcome,
-    PlanSubmitProposalBatchRequest, PlanWorkspaceMaterializeOutcome,
-    PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest,
-    PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest, PublicSeamError, PublicSeamPackage,
+    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome, PlanSandboxExecRequest,
+    PlanSubmitProposalBatchOutcome, PlanSubmitProposalBatchRequest,
+    PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome,
+    PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
+    PublicSeamError, PublicSeamPackage,
 };
 use leaven_seam_runtime::{SeamPlanRequest, SeamService, SeamServiceError, SeamStageRunRequest};
 use leaven_workspace::{Workspace, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
@@ -501,6 +502,69 @@ impl PlanExecutionHost for ConfiguredPlanHost {
         }
     }
 
+    fn sandbox_exec(
+        &mut self,
+        request: PlanSandboxExecRequest<'_>,
+    ) -> Result<PlanSandboxExecOutcome, PublicSeamError> {
+        let name = request.name().to_owned();
+        let workspace_id = request.live_workspace()?.to_owned();
+        let workspace =
+            self.workspaces
+                .get_mut(&workspace_id)
+                .ok_or_else(|| PublicSeamError::InvalidPlan {
+                    message: format!("workspace `{workspace_id}` is not materialized"),
+                })?;
+        let mut view = workspace.view();
+        let output = view
+            .run_command(request.into_workspace_command())
+            .map_err(|error| PublicSeamError::InvalidPlan {
+                message: format!(
+                    "sandbox_exec command failed in workspace `{workspace_id}`: {error}"
+                ),
+            })?;
+        let stdout_ref = blob_ref_for_bytes(
+            &format!("blob_{name}_sandbox_stdout"),
+            &output.stdout.bytes,
+            &["transcript.raw"],
+        );
+        let stderr_ref = blob_ref_for_bytes(
+            &format!("blob_{name}_sandbox_stderr"),
+            &output.stderr.bytes,
+            &["transcript.raw"],
+        );
+        let file_refs = output
+            .output_files
+            .iter()
+            .map(|(path, captured)| {
+                (
+                    path.clone(),
+                    blob_ref_for_bytes(
+                        &format!(
+                            "blob_{name}_sandbox_file_{}",
+                            sanitize_blob_id(path.as_str())
+                        ),
+                        &captured.bytes,
+                        &["workspace.file"],
+                    ),
+                )
+            })
+            .collect::<Vec<_>>();
+        PlanSandboxExecOutcome::from_command_output_with_file_refs(
+            Metered::new(
+                output,
+                Cost::custom("sandbox_calls", 1.0).map_err(|error| {
+                    PublicSeamError::InvalidPlan {
+                        message: format!("failed to record sandbox cost: {error}"),
+                    }
+                })?,
+            ),
+            configured_sandbox_fingerprint(),
+            stdout_ref,
+            stderr_ref,
+            file_refs,
+        )
+    }
+
     fn agent_run(
         &mut self,
         request: PlanAgentRunRequest<'_>,
@@ -593,6 +657,25 @@ fn materialized_workspace_id(candidate: &str) -> String {
         })
         .collect::<String>();
     format!("ws_{sanitized}_materialized")
+}
+
+fn sanitize_blob_id(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn configured_sandbox_fingerprint() -> leaven_kernel::Fingerprint {
+    let mut builder = FingerprintBuilder::new();
+    builder.update(b"leaven-seam-service.local-sandbox.v1");
+    builder.finish()
 }
 
 fn blob_ref_for_bytes(id: &str, bytes: &[u8], data_classes: &[&str]) -> Value {
@@ -922,6 +1005,46 @@ mod tests {
         assert_eq!(
             response.value()["result"]["receipts"][0]["write_kind"],
             "emit_run_event"
+        );
+    }
+
+    #[test]
+    fn seam_runtime_executes_sandbox_exec_in_materialized_workspace() {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
+        let service = ConfiguredSeamService::from_package(
+            package.clone(),
+            SeamServiceConfig {
+                context: planexec_context(),
+                capability: Some(effect_capability()),
+                workspace: seeded_workspace_config(),
+                ..SeamServiceConfig::default()
+            },
+        )
+        .unwrap();
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        let response = runtime.handle_value(&sandbox_exec_request());
+        assert!(
+            !response.is_error(),
+            "unexpected sandbox response: {:?}",
+            response.value()
+        );
+        assert_eq!(
+            response.value()["result"]["primary"]["kind"],
+            "sandbox_exec"
+        );
+        assert_eq!(response.value()["result"]["primary"]["exit_code"], 0);
+        assert_eq!(
+            response.value()["result"]["primary"]["stdout_ref"]["bytes"],
+            "sandbox stdout\n".len()
+        );
+        assert_eq!(
+            response.value()["result"]["primary"]["files"]["reports/out.txt"]["bytes"],
+            "sandbox artifact\n".len()
+        );
+        assert_eq!(
+            response.value()["result"]["receipts"][1]["call_kind"],
+            "sandbox_exec"
         );
     }
 
@@ -1587,6 +1710,55 @@ mod tests {
         })
     }
 
+    fn sandbox_exec_request() -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "id": "sandbox-exec-1",
+            "method": "leaven/sandbox.exec",
+            "params": {
+                "schema_version": "leaven.plan.v1",
+                "plan_id": "plansandboxexecservice001",
+                "consistency": {
+                    "kind": "latest_at_start"
+                },
+                "mode": {
+                    "kind": "execute"
+                },
+                "ops": [
+                    workspace_materialize_op("sandbox-exec-service-0001"),
+                    {
+                        "kind": "call",
+                        "name": "sandboxed",
+                        "deps": ["workspace"],
+                        "idempotency_key": "sandbox-exec-service-0002",
+                        "call": {
+                            "kind": "sandbox_exec",
+                            "workspace": "ws_planexec_materialized",
+                            "argv": [
+                                "sh",
+                                "-c",
+                                "mkdir -p reports && printf 'sandbox artifact\n' > reports/out.txt && printf 'sandbox stdout\n'"
+                            ],
+                            "timeout_s": 5,
+                            "output": {
+                                "kind": "files",
+                                "paths": ["reports/out.txt"],
+                                "max_bytes": 4096
+                            },
+                            "stream_policy": "blob_refs_only",
+                            "input_classes": ["public"]
+                        }
+                    }
+                ],
+                "return": ["sandboxed"],
+                "commit": {
+                    "kind": "graph_writes_atomic",
+                    "on_stale": "reject"
+                }
+            }
+        })
+    }
+
     fn workspace_materialize_op(idempotency_key: &str) -> Value {
         json!({
             "kind": "call",
@@ -1960,6 +2132,20 @@ mod tests {
                     "action": "event.emit",
                     "resource": {},
                     "constraints": {}
+                },
+                {
+                    "action": "sandbox.exec",
+                    "resource": {
+                        "workspace_ids": ["ws_planexec_materialized"]
+                    },
+                    "constraints": {
+                        "allowed_input_classes": ["public"],
+                        "workspace_ops": ["exec"],
+                        "allowed_commands": ["sh"]
+                    },
+                    "limits": {
+                        "timeout_s": 5
+                    }
                 },
                 {
                     "action": "agent.run",
