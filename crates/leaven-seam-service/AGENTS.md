@@ -15,6 +15,12 @@ and worker-initiated callback requests are serviced through the configured
 service while the stage is active. Their public wire remains the locked
 `leaven/stage.run` and `leaven/*` JSON-RPC methods.
 
+Current executable method status is product-facing and is recorded in
+`../../docs/specs/public-seam-v1/executable-method-status.md`. Update that file
+in the same change when this crate adds or removes configured service behavior,
+changes a method from mock-only to live-provider-backed, or deliberately marks a
+method unsupported.
+
 ## Map
 
 - `service.rs`: configured Plan IR service composition for LM, workspace, and

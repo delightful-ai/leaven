@@ -51,6 +51,11 @@ Unbounded update queues are forbidden in production Leaven workers.
 
 Leaven extension methods cover the full worker callback surface.
 
+The locked profile defines the method denominator. Current executable service
+availability for `leaven seam serve --stdio` is recorded in
+`../executable-method-status.md`; do not infer service readiness only from a
+method being present in this profile.
+
 Stage dispatch (engine to worker): `leaven/stage.run`. The engine dispatches one stage to the worker as a single generic method carrying a stage kind plus a role-scoped stage payload, and the worker returns that stage's typed output. This is the inverse direction from the callbacks below: here the engine asks the worker to run a stage rather than the worker asking the engine to perform an effect. `leaven/stage.run` binds the dedicated `leaven.stage_run.v1` request and result schemas, not the Plan IR effect schemas the callbacks use.
 
 Graph operations: `leaven/graph.query`, `leaven/case.load`, `leaven/case.input`, `leaven/case.target`, `leaven/case.metadata`.

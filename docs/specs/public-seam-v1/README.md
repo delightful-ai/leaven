@@ -10,10 +10,18 @@ This package is the locked public seam for Leaven v1.
 - `schemas/` contains designed JSON Schemas.
 - `profiles/` contains the Leaven worker profile prose. The current file name
   still contains `acp` as a legacy identifier.
+- `executable-method-status.md` records which locked `leaven/*` method
+  families the durable `leaven seam serve --stdio` route executes today, which
+  are mock/configured/live-provider-backed, and which remain validated-only or
+  intentionally unsupported by the current configured service.
 - `examples/` contains concrete shape examples.
 - `notes/` contains review resolution and conformance tests.
 
 V1 incorporates the comprehensive design pass: reflection/proposal structural separation, Leaven worker transport, all worker callbacks as Leaven `leaven/*` seam methods (no MCP layer in v1), data-class propagation, score output placement, pinned dialects, schema fingerprinting, typed plan results, per-assessment replayability, aggregate budgets, and deferral of watch.v1.
+
+The active SDK server route is `leaven seam serve --stdio`. The legacy
+`leaven serve --stdio --plan --out` path is bridge-demo/provenance only and is
+not completion evidence for Python SDK or Codex/agentic public-seam readiness.
 
 The archived lock draft and any downloaded draft bundles are provenance only.
 They are not alternate correctness standards for V1 unless this package and

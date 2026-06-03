@@ -176,12 +176,12 @@ spec_revisions_before_goal:
       Clarify `leaven seam serve --stdio` as the durable public server route and
       classify legacy `leaven serve --stdio --plan --out` as bridge-demo/provenance.
     rationale: Prevent completion claims from using the old demo path.
-    status: pending
+    status: done
   - update: >-
       Record which `leaven/*` methods are executable, configured-provider-backed,
       mock-only, or intentionally unsupported in V1.
     rationale: Make partial seam execution honest without undercutting the API.
-    status: pending
+    status: done
 
 acceptance:
   - id: docs_and_route_truth
@@ -194,8 +194,17 @@ acceptance:
         - docs/specs/public-seam-v1/README.md
         - docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
         - AGENTS.md and nearest crate AGENTS files touched by the route
-    evidence: []
     evidence:
+      - >-
+        Route/method-status evidence: `docs/specs/public-seam-v1/README.md`
+        now names `leaven seam serve --stdio` as the active SDK server route
+        and classifies legacy `leaven serve --stdio --plan --out` as
+        bridge-demo/provenance only. `docs/specs/public-seam-v1/executable-method-status.md`
+        records which locked `leaven/*` families are mock-configured,
+        configured-local, live-provider-configured, validated-only, or
+        unsupported by the current configured service. The worker profile points
+        readers to that denominator, and `crates/leaven-seam-service/AGENTS.md`
+        requires updating it when service behavior changes.
       - >-
         Partial SDK evidence, not acceptance completion: Python
         `lv.optimize(...).run()` now executes every configured `Rubric` reward
