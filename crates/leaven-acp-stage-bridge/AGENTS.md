@@ -70,7 +70,7 @@ default features as ordinary app-facing API.
   fingerprint, plus negatives for a non-text stage output and target material
   smuggled into the runner request.
 - `worker/serve_stage_runner.py` is the runnable `serve_stage` runner worker the
-  example spawns. The Python authoring scaffold under `docs/specs/leaven_py`
+  example spawns. The Python SDK project under `sdk/python`
   stays `NotImplementedError` by its own AGENTS; this runnable worker lives here,
   like `examples/p9_python_acp_gepa_codex/worker`.
 - `src/host.rs` and `src/artifact.rs` carry crate-local unit tests for the

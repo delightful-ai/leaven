@@ -246,7 +246,7 @@ fn optimize_plan() -> Value {
 }
 
 fn arithmetic_cases() -> Vec<Value> {
-    let fixture = workspace_root().join("docs/specs/leaven_py/examples/fixtures/arithmetic.jsonl");
+    let fixture = workspace_root().join("sdk/python/examples/fixtures/arithmetic.jsonl");
     let text = std::fs::read_to_string(&fixture)
         .unwrap_or_else(|error| panic!("read fixture {}: {error}", fixture.display()));
     text.lines()

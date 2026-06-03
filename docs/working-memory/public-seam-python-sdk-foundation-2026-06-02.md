@@ -13,8 +13,11 @@ Status: active foundation slice, not the full Python SDK acceptance gate.
 - Commit `eb65497c` / change `trynuqxu`: `agent_session.transcript_ref` hashes
   the provider-neutral session transcript bytes instead of a placeholder.
 - Commit `b8662920` / change `mnnxlvoo`: Python scaffold example
-  `docs/specs/leaven_py/examples/10_live_codex_seam.py` drives the same public
+  `docs/specs/leaven_py/examples/10_live_codex_seam.py` drove the same public
   seam process and live Codex path from Python.
+- Current slice: the runnable Python SDK project has hard-cut over to
+  `sdk/python`, with `leaven._seam` as a split private module package for the
+  public-seam process client.
 
 ## Verification Run
 
@@ -34,7 +37,7 @@ Process-level live proof:
   receipts, Codex CLI argv with `--sandbox workspace-write`, and transcript ref
   `bytes = 388`.
 
-Python scaffold:
+Python SDK project:
 
 - `uv run python -c "import py_compile; from pathlib import Path; [py_compile.compile(str(p), doraise=True) for p in Path('examples').glob('*.py')]; print('compiled examples')"`
 - `uv run ruff check src/leaven examples --exclude src/leaven/_types`
@@ -48,7 +51,7 @@ Python scaffold:
 
 ## Still Unproven
 
-- `leaven_py` ergonomic `AgentBuilder.run` / `cx.agent.run` is still scaffold.
+- `sdk/python` ergonomic `AgentBuilder.run` / `cx.agent.run` is still scaffold.
   Example 10 is a direct JSON-RPC client, not the high-level SDK path.
 - Reward-vector execution from Python remains scaffold. `@lv.reward` bodies are
   not yet executed over the public seam except for the prior host-side exact
@@ -68,14 +71,12 @@ Python scaffold:
 
 ## Next Slices
 
-1. Add a small Python seam client abstraction behind the scaffold instead of
-   keeping example 10's JSON-RPC machinery inline.
-2. Wire `AgentBuilder.run` for a single configured Codex CLI runtime through
-   that client, still live-gated in examples.
-3. Add blob persistence/readback to `leaven-seam-service` or record an explicit
+1. Wire `AgentBuilder.run` for a single configured Codex CLI runtime through
+   the private `leaven._seam` substrate, still live-gated in examples.
+2. Add blob persistence/readback to `leaven-seam-service` or record an explicit
    unsupported-provider error if blob fetch is requested before storage exists.
-4. Decide the cost bridge for Codex CLI: either parse provider usage from Codex
+3. Decide the cost bridge for Codex CLI: either parse provider usage from Codex
    JSONL when available or return a typed unsupported-cost marker instead of
    `{}`.
-5. Move from direct `agent.run` proof to a tiny Python `optimize(...).run()`
+4. Move from direct `agent.run` proof to a tiny Python `optimize(...).run()`
    proof that uses a live agent stage and at least one Python-authored reward.

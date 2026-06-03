@@ -126,7 +126,7 @@ fn surface_question(parent: &PromptArtifact, feedback: &[CaseFeedback]) -> Optio
 }
 
 fn arithmetic_cases() -> Vec<OptCase> {
-    let fixture = workspace_root().join("docs/specs/leaven_py/examples/fixtures/arithmetic.jsonl");
+    let fixture = workspace_root().join("sdk/python/examples/fixtures/arithmetic.jsonl");
     let text = std::fs::read_to_string(&fixture)
         .unwrap_or_else(|error| panic!("read fixture {}: {error}", fixture.display()));
     text.lines()

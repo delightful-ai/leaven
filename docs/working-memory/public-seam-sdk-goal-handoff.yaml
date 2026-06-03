@@ -40,8 +40,12 @@ spec_package:
       role: Leaven-owned worker profile; filename still says acp as a legacy identifier.
     - path: docs/specs/public-seam-v1/conformance-matrix.yaml
       role: Row-level proof denominator for seam obligations.
+    - path: sdk/python/
+      role: >-
+        Current real in-repo Python SDK project: importable package, dependency
+        declaration, examples, tests, codegen, and private seam client modules.
     - path: docs/specs/leaven_py/
-      role: Current Python SDK prototype package and executable examples.
+      role: Vendored Python SDK research/provenance only; not the runtime package.
     - path: AGENTS.md
       role: Repo topology, hard-cutover, public-maturity, and verification contract.
   current_state_notes:
@@ -209,7 +213,7 @@ acceptance:
     proof_required:
       kind: python_example_or_integration_test
       must_exercise:
-        - docs/specs/leaven_py package surface
+        - sdk/python package surface
         - runtime config from Python into the spawned server
         - stage dispatch over `leaven/stage.run`
         - stage callbacks over `leaven/*` effect methods
@@ -297,7 +301,7 @@ acceptance:
 proof_denominator:
   focused_first:
     - focused Rust tests for seam runtime/stdio/service crates touched by the implementation
-    - focused Python tests/examples under docs/specs/leaven_py for the SDK path
+    - focused Python tests/examples under sdk/python for the SDK path
     - one JSON-RPC stdio proof that sends real requests through `leaven seam serve --stdio`
     - one Python E2E proof that invokes `lv.optimize(...).run()` through the durable server path
   final_repo_gate:

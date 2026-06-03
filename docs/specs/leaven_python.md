@@ -266,14 +266,15 @@ exactly like it would shell out to `git log`. The CLI is not a separate
 tool; it is the same binary, talking to the same engine, exposed through
 a different I/O shell.
 
-Current scaffold status: `docs/specs/leaven_py/examples/10_live_codex_seam.py`
-is a live-gated Python proof that drives this Leaven-owned stdio wire directly:
-it spawns `leaven seam serve --stdio --config`, sends a locked
-`leaven/agent.run` Plan IR request, and verifies workspace materialization,
-Codex CLI execution, receipts, and transcript refs. That proves the public seam
-can be the Python/Codex substrate. It is not the ergonomic `cx.agent.run`
-implementation, reward-vector execution, persisted blob inspection, or the
-full `optimize(...).run()` live-agent workflow named by the acceptance gate.
+Current SDK status: `sdk/python/examples/10_live_codex_seam.py` is a
+live-gated Python proof that drives this Leaven-owned stdio wire through the
+private `leaven._seam` client package. It spawns
+`leaven seam serve --stdio --config`, sends a locked `leaven/agent.run` Plan IR
+request, and verifies workspace materialization, Codex CLI execution, receipts,
+and transcript refs. That proves the public seam can be the Python/Codex
+substrate. It is not the ergonomic `cx.agent.run` implementation,
+reward-vector execution, persisted blob inspection, or the full
+`optimize(...).run()` live-agent workflow named by the acceptance gate.
 
 ## What is preserved
 
@@ -576,7 +577,7 @@ Linting policy: ruff's `RUF022` (sorted `__all__`) is on by default in the
 `leaven` package's ruff config. There is no current ruff rule for
 "public module must declare `__all__`"; this discipline is enforced by
 review against this spec section and by the convention rule in
-`docs/specs/leaven_py/AGENTS.md`. If a useful lint surfaces (e.g.,
+`sdk/python/AGENTS.md`. If a useful lint surfaces (e.g.,
 `__all__` completeness check vs `dir(module)` minus underscored), turn it
 on in the same change that proposes it.
 

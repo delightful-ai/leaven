@@ -4,7 +4,7 @@ launches a Python ACP subprocess, validates locked V1 ACP request/response
 envelopes, and records a tiny GEPA-shaped seed-to-child acceptance artifact.
 
 This is not the Python SDK implementation. Do not add behavior to
-`docs/specs/leaven_py` to satisfy this example.
+`sdk/python` to satisfy this example.
 
 ## Proof Classification
 `just milestone-p9` is a live mechanics proof. It proves:

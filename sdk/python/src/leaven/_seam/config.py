@@ -1,0 +1,116 @@
+"""Private service config records for `leaven seam serve --stdio --config`."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+
+@dataclass(frozen=True)
+class SeamExecutionContext:
+    """Execution metadata projected into public-seam receipts."""
+
+    capability_fingerprint: str
+    policy_fingerprint: str
+    base_revision: str
+    started_at: str = "2026-06-02T00:00:00Z"
+    completed_at: str = "2026-06-02T00:00:01Z"
+
+    def to_json(self) -> dict[str, str]:
+        """Return the service config JSON shape."""
+        return {
+            "capability_fingerprint": self.capability_fingerprint,
+            "policy_fingerprint": self.policy_fingerprint,
+            "base_revision": self.base_revision,
+            "started_at": self.started_at,
+            "completed_at": self.completed_at,
+        }
+
+
+@dataclass(frozen=True)
+class CodexCliRuntimeConfig:
+    """Configured Codex CLI provider for `leaven/agent.run`."""
+
+    codex_bin: str
+    model: str = "gpt-5.4-mini"
+    timeout_s: int = 180
+    codex_home: str | None = None
+    bypass_approvals_and_sandbox: bool = False
+
+    def to_json(self) -> dict[str, Any]:
+        """Return the service config JSON shape."""
+        return {
+            "kind": "codex_cli",
+            "codex_bin": self.codex_bin,
+            "model": self.model,
+            "timeout_s": self.timeout_s,
+            "codex_home": self.codex_home,
+            "bypass_approvals_and_sandbox": self.bypass_approvals_and_sandbox,
+        }
+
+
+@dataclass(frozen=True)
+class MockLmRuntimeConfig:
+    """Deterministic LM provider config used when a request does not call LM."""
+
+    text: str = "unused"
+    input_tokens: int = 1
+    output_tokens: int = 1
+
+    def to_json(self) -> dict[str, Any]:
+        """Return the service config JSON shape."""
+        return {
+            "kind": "mock",
+            "responses": [
+                {
+                    "text": self.text,
+                    "input_tokens": self.input_tokens,
+                    "output_tokens": self.output_tokens,
+                }
+            ],
+        }
+
+
+@dataclass(frozen=True)
+class LocalWorkspaceConfig:
+    """Configured local workspace substrate for public-seam calls."""
+
+    seed_files: dict[str, str] = field(default_factory=dict)
+    parent: str | None = None
+
+    def to_json(self) -> dict[str, Any]:
+        """Return the service config JSON shape."""
+        value: dict[str, Any] = {"seed_files": self.seed_files}
+        if self.parent is not None:
+            value["parent"] = self.parent
+        return value
+
+
+@dataclass(frozen=True)
+class SeamServiceConfig:
+    """Full private config document passed to `leaven seam serve --stdio`."""
+
+    context: SeamExecutionContext
+    capability: dict[str, Any]
+    agent: CodexCliRuntimeConfig
+    workspace: LocalWorkspaceConfig = field(default_factory=LocalWorkspaceConfig)
+    lm: MockLmRuntimeConfig = field(default_factory=MockLmRuntimeConfig)
+
+    def to_json(self) -> dict[str, Any]:
+        """Return the Rust service config JSON shape."""
+        return {
+            "context": self.context.to_json(),
+            "capability": self.capability,
+            "workspace": self.workspace.to_json(),
+            "agent": self.agent.to_json(),
+            "lm": self.lm.to_json(),
+        }
+
+
+__all__ = [
+    "CodexCliRuntimeConfig",
+    "LocalWorkspaceConfig",
+    "MockLmRuntimeConfig",
+    "SeamExecutionContext",
+    "SeamServiceConfig",
+]

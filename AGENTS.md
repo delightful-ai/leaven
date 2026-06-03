@@ -51,6 +51,12 @@ surface or encode the warning at the owning layer.
   coverage, and public route maturity updates.
 - `crates/leaven`: umbrella import experience and re-exports only.
 - `docs/specs`: durable product and architecture specs. Read the relevant spec before implementing spec-derived behavior.
+- `sdk/python`: real in-repo Python SDK project for Leaven. It owns the
+  importable Python package, examples, Python dependency declaration, codegen
+  tooling, and private public-seam client substrate. It may spawn the public
+  `leaven seam serve --stdio` CLI path; it must not own optimizer strategy,
+  Rust runtime behavior, schema law, provider protocol details, or vendored
+  research sources.
 - `docs/specs/public-seam-v1`: locked public seam specification for external-language workers: plan IR, capability tokens, result receipts, stage payloads, evaluator/evidence envelopes, the Leaven worker profile, and JSON Schemas. The current V1 public seam is Leaven-owned JSON-RPC over stdio; upstream ACP belongs only in an explicit future agent-provider interop slice. Watch is deferred from v1.
 - `docs/working-memory`: active goal ledgers and continuation notes for long-running Leaven work. These files are durable working memory, not product law; use them to resume investigations, then verify against specs/code/tests before implementing or claiming completion.
 - `docs/testing/README.md`: test contract, suite layout, coverage ratchet, and runtime SLA.
