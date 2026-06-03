@@ -19,8 +19,15 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
     std::fs::write(
         &config_path,
         serde_json::to_vec_pretty(&json!({
-            "lm": {
-                "kind": "mock",
+                "capability": seam_capability(),
+                "workspace": {
+                    "seed_files": {
+                        "README.md": "seeded workspace readme\n",
+                        "src/lib.rs": "pub fn answer() -> u8 { 42 }\n"
+                    }
+                },
+                "lm": {
+                    "kind": "mock",
                 "responses": [{
                     "text": "cli seam configured lm ok",
                     "input_tokens": 13,
@@ -31,6 +38,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         .unwrap(),
     )
     .unwrap();
+    let workspace_queries = workspace_query_requests();
 
     let mut child = Command::new(env!("CARGO_BIN_EXE_leaven"))
         .arg("seam")
@@ -51,6 +59,9 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         write_json_line(&mut stdin, &invalid_envelope());
         write_json_line(&mut stdin, &removed_human_review_request());
         write_json_line(&mut stdin, &workspace_release_request());
+        for request in &workspace_queries {
+            write_json_line(&mut stdin, request);
+        }
         write_json_line(&mut stdin, &lm_complete_request());
         write_json_line(&mut stdin, &stage_run_request());
     }
@@ -71,7 +82,11 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
     );
 
     let responses = response_lines(&output.stdout);
-    assert_eq!(responses.len(), 5, "one response per request line");
+    assert_eq!(
+        responses.len(),
+        5 + workspace_queries.len(),
+        "one response per request line"
+    );
 
     assert_eq!(responses[0]["id"], json!("bad-envelope"));
     assert_eq!(responses[0]["error"]["code"], json!(-32600));
@@ -102,28 +117,53 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         "workspace_release"
     );
 
-    assert_eq!(responses[3]["id"], json!("lm-cli"));
+    for (offset, request) in workspace_queries.iter().enumerate() {
+        let response = &responses[3 + offset];
+        let query_name = request["params"]["return"][0].as_str().unwrap();
+        assert_eq!(
+            response["id"],
+            json!(format!("workspace-query-cli-{query_name}"))
+        );
+        assert!(
+            response.get("error").is_none(),
+            "unexpected workspace query error: {response:?}"
+        );
+        assert_eq!(
+            response["result"]["receipts"][0]["call_kind"],
+            "workspace_materialize"
+        );
+        assert_eq!(response["result"]["receipts"][1]["kind"], "query");
+    }
+
+    let lm_index = 3 + workspace_queries.len();
+    assert_eq!(responses[lm_index]["id"], json!("lm-cli"));
+    assert!(
+        responses[lm_index].get("error").is_none(),
+        "unexpected lm response: {:?}",
+        responses[lm_index]
+    );
     assert_eq!(
-        responses[3]["result"]["primary"]["message"]["content"][0]["text"],
+        responses[lm_index]["result"]["primary"]["message"]["content"][0]["text"],
         "cli seam configured lm ok"
     );
     assert_eq!(
-        responses[3]["result"]["primary"]["cost"],
+        responses[lm_index]["result"]["primary"]["cost"],
         json!({
-            "input_tokens": 13,
+                "input_tokens": 13,
             "output_tokens": 5,
             "lm_calls": 1
         })
     );
     assert_eq!(
-        responses[3]["result"]["receipts"][0]["call_kind"],
+        responses[lm_index]["result"]["receipts"][0]["call_kind"],
         "lm_complete"
     );
 
-    assert_eq!(responses[4]["id"], json!("stage-unwired"));
-    assert_eq!(responses[4]["error"]["code"], json!(-32006));
+    let stage_index = lm_index + 1;
+    assert_eq!(responses[stage_index]["id"], json!("stage-unwired"));
+    assert_eq!(responses[stage_index]["error"]["code"], json!(-32006));
     assert!(
-        responses[4]["error"]["message"]
+        responses[stage_index]["error"]["message"]
             .as_str()
             .unwrap()
             .contains("does not provide a stage runner")
@@ -225,6 +265,193 @@ fn workspace_release_request() -> Value {
                 "kind": "graph_writes_atomic",
                 "on_stale": "reject"
             }
+        }
+    })
+}
+
+fn workspace_query_requests() -> Vec<Value> {
+    [
+        (
+            "leaven/workspace.read_file",
+            "file",
+            json!({
+                "kind": "read_file",
+                "path": "README.md",
+                "expected_data_classes": ["workspace.file"]
+            }),
+        ),
+        (
+            "leaven/workspace.list",
+            "listing",
+            json!({"kind": "list", "path": ".", "recursive": false, "max_entries": 10}),
+        ),
+        (
+            "leaven/workspace.stat",
+            "stat",
+            json!({"kind": "stat", "path": "README.md"}),
+        ),
+        (
+            "leaven/workspace.digest",
+            "digest",
+            json!({"kind": "digest", "path": "README.md", "algorithm": "sha256"}),
+        ),
+        (
+            "leaven/workspace.snapshot",
+            "snapshot",
+            json!({"kind": "snapshot"}),
+        ),
+        (
+            "leaven/workspace.capture_artifacts",
+            "captured",
+            json!({"kind": "capture_artifacts", "paths": ["README.md"], "max_bytes": 4096}),
+        ),
+    ]
+    .into_iter()
+    .map(|(method, name, op)| workspace_query_request(method, name, op))
+    .collect()
+}
+
+fn workspace_query_request(method: &str, name: &str, op: Value) -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": format!("workspace-query-cli-{name}"),
+        "method": method,
+        "params": {
+            "schema_version": "leaven.plan.v1",
+            "plan_id": format!("workspacecli{name}001"),
+            "consistency": {
+                "kind": "latest_at_start"
+            },
+            "mode": {
+                "kind": "execute"
+            },
+            "ops": [
+                {
+                    "kind": "call",
+                    "name": "workspace",
+                    "idempotency_key": format!("workspace-query-cli-{name}-0001"),
+                    "call": {
+                        "kind": "workspace_materialize",
+                        "candidate": "cand_cli",
+                        "surface": "program",
+                        "mode": "copy_on_write",
+                        "lifetime": "manual_release"
+                    }
+                },
+                {
+                    "kind": "let",
+                    "name": name,
+                    "deps": ["workspace"],
+                    "expr": {
+                        "kind": "workspace_query",
+                        "workspace": "ws_cli_materialized",
+                        "op": op
+                    }
+                }
+            ],
+            "return": [name],
+            "commit": {
+                "kind": "graph_writes_atomic",
+                "on_stale": "reject"
+            }
+        }
+    })
+}
+
+fn seam_capability() -> Value {
+    json!({
+        "schema_version": "leaven.capability.v1",
+        "jti": "jti_cli_seam_stdio",
+        "capability_fingerprint": "fp_cap_sha256_leaven_seam_local",
+        "policy_fingerprint": "fp_policy_sha256_leaven_seam_local",
+        "subject_fingerprint": "fp_subject_sha256_cli",
+        "issuer": {
+            "kind": "run_engine",
+            "id": "engine_cli"
+        },
+        "subject": {
+            "kind": "stage_call",
+            "run": "run_cli",
+            "stage_call_id": "sc_cli",
+            "role": "runner"
+        },
+        "audience": ["leaven.acp.worker"],
+        "issued_at": "2026-01-01T00:00:00Z",
+        "expires_at": "2026-01-01T00:20:00Z",
+        "expiry_behavior": "drain_inflight_no_new_ops",
+        "token_binding": {
+            "kind": "opaque_lookup",
+            "token_id": "ltok_cli"
+        },
+        "revocation": {
+            "mode": "issuer_epoch",
+            "revocation_epoch": 1,
+            "check": "on_every_request"
+        },
+        "renewal": {
+            "mode": "renew_before_expiry",
+            "max_extensions": 0,
+            "max_total_lifetime_s": 1200
+        },
+        "grants": [
+            {
+                "action": "workspace.materialize",
+                "resource": {
+                    "candidate_ids": ["cand_cli"]
+                },
+                "constraints": {
+                    "workspace_ops": ["materialize"]
+                }
+            },
+            {
+                "action": "workspace.release",
+                "resource": {
+                    "workspace_ids": ["ws_cli_materialized"]
+                },
+                "constraints": {
+                    "workspace_ops": ["release"]
+                }
+            },
+            {
+                "action": "workspace.read",
+                "resource": {
+                    "workspace_ids": ["ws_cli_materialized"]
+                },
+                "constraints": {
+                    "allowed_input_classes": ["candidate.artifact", "workspace.file"],
+                    "workspace_ops": [
+                        "read_file",
+                        "list",
+                        "stat",
+                        "digest",
+                        "snapshot",
+                        "capture_artifacts"
+                    ]
+                }
+            },
+            {
+                "action": "lm.complete",
+                "resource": {},
+                "constraints": {
+                    "purposes": ["test.cli_seam_stdio"],
+                    "models": ["gpt-4.1-mini"],
+                    "allowed_input_classes": ["public"]
+                }
+            }
+        ],
+        "budgets": {},
+        "execution_policy": {
+            "profile": "managed_sandbox",
+            "network": "leaven_endpoint_only",
+            "subprocess": "deny_except_sandbox_exec",
+            "filesystem": "workspace_handles_only",
+            "byo_effects": "forbidden"
+        },
+        "delegation": {
+            "may_delegate": false,
+            "max_depth": 0,
+            "must_attenuate": true,
+            "allowed_actions": []
         }
     })
 }

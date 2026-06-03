@@ -35,6 +35,7 @@ Codex/agentic public-seam readiness.
 | `leaven/lm.complete` | Mock-configured and live-provider configured | `leaven-seam-service::lm` plus provider crates | `Mock` uses `leaven-lm-mock` deterministic scripts. `OpenAi` uses `leaven-lm-openai` and requires the configured API-key environment variable. Missing credentials are an execution failure, not a mock success. |
 | `leaven/workspace.materialize` | Configured local | `leaven-seam-service::service` plus `leaven-workspace-local` | Allocates a local workspace and writes configured seed files. Workspace handles are local to the executing Plan document/callback flow. |
 | `leaven/workspace.release` | Configured local | `leaven-seam-service::service` plus `leaven-workspace-local` | Releases a workspace handle materialized earlier in the same Plan document/callback flow and returns a released workspace handle with receipts. |
+| `leaven/workspace.snapshot`, `leaven/workspace.list`, `leaven/workspace.read_file`, `leaven/workspace.stat`, `leaven/workspace.digest`, `leaven/workspace.capture_artifacts` | Configured local | `leaven-seam-service::service` plus `leaven-workspace-local` | Executes finite reads against the local workspace view with capability-scoped read ops. `capture_artifacts` currently returns listing entries and byte counts; blob byte retrieval still needs a Rust-owned artifact/blob read path before the workspace closeout row is done. |
 | `leaven/agent.run` | Live-provider configured when paired with materialized workspace | `leaven-seam-service::service` plus `leaven-agent-codex-cli` | Uses configured Codex CLI runtime against a materialized local workspace and projects transcript/command output blob refs into the public seam result. Without `SeamAgentConfig::CodexCli`, the service returns an explicit unsupported-provider error. |
 | `leaven/proposal.submit_batch` | Configured local write receipt | `leaven-seam-service::service` | Produces a validated proposal-batch receipt for submitted proposal payloads. This proves public-seam write plumbing, not Rust optimizer admission or proposal application. |
 
@@ -46,12 +47,8 @@ service does not yet provide runtime behavior for these V1 families:
 
 - graph and case reads: `leaven/graph.query`, `leaven/case.load`,
   `leaven/case.input`, `leaven/case.target`, `leaven/case.metadata`
-- workspace queries and lifecycle beyond materialization:
-  `leaven/workspace.snapshot`, `leaven/workspace.list`,
-  `leaven/workspace.read_file`, `leaven/workspace.stat`,
-  `leaven/workspace.digest`, `leaven/workspace.git_log`,
-  `leaven/workspace.git_diff`, `leaven/workspace.git_status`,
-  `leaven/workspace.capture_artifacts`
+- Git-backed workspace queries: `leaven/workspace.git_log`,
+  `leaven/workspace.git_diff`, `leaven/workspace.git_status`
 - remaining effects and graph writes: `leaven/sandbox.exec`,
   `leaven/proposal.apply`, `leaven/assessment.submit`,
   `leaven/evaluation.request`, `leaven/event.emit`

@@ -12,8 +12,8 @@ use leaven_public_seam::{
     PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
     PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSubmitProposalBatchOutcome,
     PlanSubmitProposalBatchRequest, PlanWorkspaceMaterializeOutcome,
-    PlanWorkspaceMaterializeRequest, PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
-    PublicSeamError, PublicSeamPackage,
+    PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest,
+    PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest, PublicSeamError, PublicSeamPackage,
 };
 use leaven_seam_runtime::{SeamPlanRequest, SeamService, SeamServiceError, SeamStageRunRequest};
 use leaven_workspace::{Workspace, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
@@ -95,6 +95,7 @@ impl ConfiguredSeamService {
                 workspace_config: self.config.workspace.clone(),
                 workspace_factory: self.config.workspace.to_factory(),
                 agent: self.config.agent.to_codex_runtime(),
+                graph_revision: self.config.context.base_revision.clone(),
                 workspaces: BTreeMap::new(),
             };
         let report = match &self.capability {
@@ -160,6 +161,14 @@ fn method_primary_kind(method: &str) -> &'static str {
         "leaven/agent.run" => "agent_session",
         "leaven/proposal.submit_batch" => "proposal_batch_receipt",
         "leaven/workspace.materialize" | "leaven/workspace.release" => "workspace_handle",
+        "leaven/workspace.snapshot" | "leaven/workspace.digest" => "workspace_snapshot",
+        "leaven/workspace.list"
+        | "leaven/workspace.stat"
+        | "leaven/workspace.capture_artifacts" => "workspace_listing",
+        "leaven/workspace.read_file" => "workspace_file",
+        "leaven/workspace.git_log"
+        | "leaven/workspace.git_diff"
+        | "leaven/workspace.git_status" => "workspace_diff",
         "leaven/sandbox.exec" => "sandbox_exec",
         _ => "extension",
     }
@@ -321,6 +330,7 @@ struct ConfiguredPlanHost {
     workspace_config: SeamWorkspaceConfig,
     workspace_factory: LocalWorkspaceFactory,
     agent: Option<CodexCliRuntime>,
+    graph_revision: String,
     workspaces: BTreeMap<String, Workspace>,
 }
 
@@ -417,6 +427,27 @@ impl PlanExecutionHost for ConfiguredPlanHost {
             lifetime,
             "fp_runtime_sha256_leaven_local_workspace",
         ))
+    }
+
+    fn workspace_query(
+        &mut self,
+        request: PlanWorkspaceQueryRequest<'_>,
+    ) -> Result<PlanWorkspaceQueryOutcome, PublicSeamError> {
+        let workspace_id = request.workspace().to_owned();
+        let workspace =
+            self.workspaces
+                .get_mut(&workspace_id)
+                .ok_or_else(|| PublicSeamError::InvalidPlan {
+                    message: format!("workspace `{workspace_id}` is not materialized"),
+                })?;
+        let expected = request.expected_data_classes()?;
+        let data_classes = if expected.is_empty() {
+            vec!["workspace.file".to_owned()]
+        } else {
+            expected.into_iter().map(str::to_owned).collect()
+        };
+        let view = workspace.view();
+        request.execute_on_workspace_view(&view, self.graph_revision.clone(), data_classes)
     }
 
     fn agent_run(
@@ -550,6 +581,7 @@ pub enum ConfiguredSeamServiceError {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::mpsc;
@@ -559,7 +591,7 @@ mod tests {
 
     use super::{
         ConfiguredSeamService, SeamAgentConfig, SeamExecutionContextConfig, SeamServiceConfig,
-        SeamStageConfig,
+        SeamStageConfig, SeamWorkspaceConfig,
     };
     use crate::lm::{MockLmResponseConfig, SeamLmConfig};
 
@@ -768,6 +800,42 @@ mod tests {
             response.value()["result"]["receipts"][1]["call_kind"],
             "workspace_release"
         );
+    }
+
+    #[test]
+    fn seam_runtime_executes_finite_workspace_queries_through_configured_service() {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
+        let service = ConfiguredSeamService::from_package(
+            package.clone(),
+            SeamServiceConfig {
+                context: planexec_context(),
+                capability: Some(effect_capability()),
+                workspace: seeded_workspace_config(),
+                ..SeamServiceConfig::default()
+            },
+        )
+        .unwrap();
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        for case in finite_workspace_query_cases() {
+            let response = runtime.handle_value(&workspace_query_request(&case));
+            assert!(
+                !response.is_error(),
+                "unexpected {} error: {:?}",
+                case.method,
+                response.value()
+            );
+            assert_eq!(
+                response.value()["result"]["primary"]["kind"],
+                case.primary_kind
+            );
+            assert_eq!(
+                response.value()["result"]["receipts"][0]["call_kind"],
+                "workspace_materialize"
+            );
+            assert_eq!(response.value()["result"]["receipts"][1]["kind"], "query");
+            (case.assert_primary)(response.value());
+        }
     }
 
     #[test]
@@ -1219,6 +1287,160 @@ mod tests {
         })
     }
 
+    struct WorkspaceQueryCase {
+        method: &'static str,
+        name: &'static str,
+        op: Value,
+        primary_kind: &'static str,
+        assert_primary: fn(&Value),
+    }
+
+    fn finite_workspace_query_cases() -> Vec<WorkspaceQueryCase> {
+        vec![
+            WorkspaceQueryCase {
+                method: "leaven/workspace.read_file",
+                name: "file",
+                op: json!({
+                    "kind": "read_file",
+                    "path": "README.md",
+                    "expected_data_classes": ["workspace.file"]
+                }),
+                primary_kind: "workspace_file",
+                assert_primary: |value| {
+                    assert_eq!(
+                        value["result"]["primary"]["content"],
+                        "seeded workspace readme\n"
+                    );
+                },
+            },
+            WorkspaceQueryCase {
+                method: "leaven/workspace.list",
+                name: "listing",
+                op: json!({"kind": "list", "path": ".", "recursive": false, "max_entries": 10}),
+                primary_kind: "workspace_listing",
+                assert_primary: |value| {
+                    assert_eq!(
+                        value["result"]["primary"]["entries"][0]["path"],
+                        "README.md"
+                    );
+                },
+            },
+            WorkspaceQueryCase {
+                method: "leaven/workspace.stat",
+                name: "stat",
+                op: json!({"kind": "stat", "path": "README.md"}),
+                primary_kind: "workspace_listing",
+                assert_primary: |value| {
+                    assert_eq!(value["result"]["primary"]["entries"][0]["bytes"], 24);
+                },
+            },
+            WorkspaceQueryCase {
+                method: "leaven/workspace.digest",
+                name: "digest",
+                op: json!({"kind": "digest", "path": "README.md", "algorithm": "sha256"}),
+                primary_kind: "workspace_snapshot",
+                assert_primary: |value| {
+                    assert!(
+                        value["result"]["primary"]["digest"]
+                            .as_str()
+                            .unwrap()
+                            .starts_with("sha256:")
+                    );
+                },
+            },
+            WorkspaceQueryCase {
+                method: "leaven/workspace.snapshot",
+                name: "snapshot",
+                op: json!({"kind": "snapshot"}),
+                primary_kind: "workspace_snapshot",
+                assert_primary: |value| {
+                    assert!(
+                        value["result"]["primary"]["digest"]
+                            .as_str()
+                            .unwrap()
+                            .starts_with("blake3:")
+                    );
+                },
+            },
+            WorkspaceQueryCase {
+                method: "leaven/workspace.capture_artifacts",
+                name: "captured",
+                op: json!({"kind": "capture_artifacts", "paths": ["README.md"], "max_bytes": 4096}),
+                primary_kind: "workspace_listing",
+                assert_primary: |value| {
+                    assert_eq!(value["result"]["primary"]["entries"][0]["bytes"], 24);
+                },
+            },
+        ]
+    }
+
+    fn workspace_query_request(case: &WorkspaceQueryCase) -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "id": format!("workspace-query-{}", case.name),
+            "method": case.method,
+            "params": {
+                "schema_version": "leaven.plan.v1",
+                "plan_id": format!("planworkspacequery{}", case.name),
+                "consistency": {
+                    "kind": "latest_at_start"
+                },
+                "mode": {
+                    "kind": "execute"
+                },
+                "ops": [
+                    workspace_materialize_op("workspace-query-service-0001"),
+                    {
+                        "kind": "let",
+                        "name": case.name,
+                        "deps": ["workspace"],
+                        "expr": {
+                            "kind": "workspace_query",
+                            "workspace": "ws_planexec_materialized",
+                            "op": case.op
+                        }
+                    }
+                ],
+                "return": [case.name],
+                "commit": {
+                    "kind": "graph_writes_atomic",
+                    "on_stale": "reject"
+                }
+            }
+        })
+    }
+
+    fn workspace_materialize_op(idempotency_key: &str) -> Value {
+        json!({
+            "kind": "call",
+            "name": "workspace",
+            "idempotency_key": idempotency_key,
+            "call": {
+                "kind": "workspace_materialize",
+                "candidate": "cand_planexec",
+                "surface": "program",
+                "mode": "copy_on_write",
+                "lifetime": "manual_release"
+            }
+        })
+    }
+
+    fn seeded_workspace_config() -> SeamWorkspaceConfig {
+        SeamWorkspaceConfig {
+            parent: None,
+            seed_files: BTreeMap::from([
+                (
+                    "README.md".to_owned(),
+                    "seeded workspace readme\n".to_owned(),
+                ),
+                (
+                    "src/lib.rs".to_owned(),
+                    "pub fn answer() -> u8 { 42 }\n".to_owned(),
+                ),
+            ]),
+        }
+    }
+
     fn stage_run_request() -> Value {
         json!({
             "jsonrpc": "2.0",
@@ -1528,6 +1750,23 @@ mod tests {
                     },
                     "constraints": {
                         "workspace_ops": ["release"]
+                    }
+                },
+                {
+                    "action": "workspace.read",
+                    "resource": {
+                        "workspace_ids": ["ws_planexec_materialized"]
+                    },
+                    "constraints": {
+                        "allowed_input_classes": ["candidate.artifact", "workspace.file"],
+                        "workspace_ops": [
+                            "read_file",
+                            "list",
+                            "stat",
+                            "digest",
+                            "snapshot",
+                            "capture_artifacts"
+                        ]
                     }
                 },
                 {
