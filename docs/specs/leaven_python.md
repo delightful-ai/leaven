@@ -277,15 +277,17 @@ now proves the same durable seam from the product path:
 calls `cx.agent.run` against `cx.parent_workspace`, and the resulting Codex
 `gpt-5.4-mini` agent receipt is cited in a typed proposal submitted through
 `leaven/proposal.submit_batch`. `sdk/python/examples/13_live_optimize_openai_lm.py`
-is the corresponding live-gated OpenAI LM proof scaffold for the product path:
-the runner calls `cx.lm.complete`, receives text, usage, model, and receipt back
-through the callback-backed `LmResponse`, and returns those facts in the
-assessment output. It has deterministic provider-wiring coverage through
-`leaven-seam-service` and SDK tests, but the spend-bearing live proof remains
-pending until `OPENAI_API_KEY` is available. These prove the public seam can be
-the Python/Codex substrate. They are not proposal application/admission,
-persisted blob inspection, full live LM-provider acceptance, or the full GEPA
-search loop named by the acceptance gate.
+is the small entrypoint for the corresponding live-gated OpenAI LM product-path
+proof; its real behavior lives in the `sdk/python/examples/live_openai_lm/`
+package, split into environment config, scenario construction, output
+validation, and command entrypoint modules. The runner calls `cx.lm.complete`,
+receives text, usage, model, and receipt back through the callback-backed
+`LmResponse`, and returns those facts in the reward output. It has deterministic
+provider-wiring coverage through `leaven-seam-service` and SDK tests, but the
+spend-bearing live proof remains pending until `OPENAI_API_KEY` is available.
+These prove the public seam can be the Python/Codex substrate. They are not
+proposal application/admission, persisted blob inspection, full live LM-provider
+acceptance, or the full GEPA search loop named by the acceptance gate.
 
 ## What is preserved
 
@@ -621,6 +623,12 @@ The implementation must honor:
 - **Don't ship without typing.** Pydantic models or dataclasses with
   full type hints. `Optimized[A]` is generic; IDE autocomplete works
   on `result.best.summary()` without guessing.
+- **Don't hide Python dependencies.** `sdk/python/pyproject.toml` is the owning
+  declaration for public runtime dependencies, public optional extras, private
+  dev tooling, and private runtime dependencies. Live provider examples use the
+  Rust public seam service for provider execution; adding a Python provider
+  dependency requires moving it into the declared dependency boundary in the
+  same change.
 - **Don't bundle benchmark catalogs.** `lv.cases.from_jsonl` /
   `lv.cases.from_parquet` are generic loaders. Paper-specific catalogs
   (OfficeQA, SealQA, BrowseComp) live in separate

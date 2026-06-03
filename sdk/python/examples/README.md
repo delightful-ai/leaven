@@ -1,12 +1,12 @@
 # Examples
 
-Ten runnable example scripts that show the full Leaven Python surface.
+Thirteen runnable example scripts that show the full Leaven Python surface.
 Most examples are composable Python that imports cleanly, typechecks under
 `ty`, and prints something illustrative. Bodies that would normally hit
 the engine raise `NotImplementedError` (caught and printed as `(expected)`)
 because the scaffold has no implementation behind the ergonomic SDK surface
 yet. Example 03 is the no-spend wired prompt path; example 10 is live-gated
-Codex seam evidence.
+Codex seam evidence; examples 11-13 are live-gated product-path seam proofs.
 
 ## Run
 
@@ -15,9 +15,10 @@ From `sdk/python/`:
 ```bash
 uv sync                           # one-time
 uv run python examples/01_runtime.py
-just examples                     # run all ten in order; live-gated examples skip by default
+just examples                     # run all thirteen in order; live-gated examples skip by default
 just example 03                   # run just one (by number prefix)
 LEAVEN_LIVE_CODEX=1 just example 10
+LEAVEN_LIVE_OPENAI=1 just example 13
 ```
 
 ## The tour
@@ -34,6 +35,9 @@ LEAVEN_LIVE_CODEX=1 just example 10
 | 08 | `08_dspy_dropin.py` | `dspy.configure(lm=lv.x.dspy.LeavenDSPyLM(...))` — existing DSPy modules unmodified through Leaven's LM seam. |
 | 09 | `09_full_repro.py` | **The front-door showcase** — every product role on the new surface: `Rollout.agent()` + multi-reward `Rubric` in the `Environment`; `gepa(reflect=, propose=, judge=, objective=)` outer loop with a multi-LM runtime. |
 | 10 | `10_live_codex_seam.py` | **Live-gated substrate proof** — Python spawns `leaven seam serve --stdio --config`, sends `leaven/agent.run`, and checks Codex CLI `agent_session` receipts/transcript refs. This is direct public-seam evidence, not the finished `cx.agent.run` SDK. |
+| 11 | `11_live_optimize_codex_stage.py` | **Live-gated product runner proof** — `lv.optimize(...).run()` dispatches a Python runner that calls `cx.agent.run` through the durable seam. |
+| 12 | `12_live_optimize_codex_proposer.py` | **Live-gated product proposer proof** — a configured proposer calls `cx.agent.run` against `cx.parent_workspace` and submits a proposal batch. |
+| 13 | `13_live_optimize_openai_lm.py` | **Live-gated product LM proof** — a small entrypoint into the `live_openai_lm/` example package; the runner calls `cx.lm.complete` through the durable seam and validates text, usage, model, and receipt projection. |
 
 ## Fixtures
 
