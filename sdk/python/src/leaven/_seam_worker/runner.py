@@ -14,8 +14,6 @@ from .context import rollout_context
 async def run_runner_stage(
     stage: RegisteredStage[Any, Any],
     params: Mapping[str, Any],
-    *,
-    lm_text: str,
 ) -> dict[str, Any]:
     """Execute one target-free runner request and return a stage_run_result."""
     payload = params["payload"]
@@ -34,7 +32,6 @@ async def run_runner_stage(
     cx = rollout_context(
         candidate_id=payload["candidate"],
         stage_call_id=payload["stage_call_id"],
-        lm_text=lm_text,
     )
     raw_output = await stage.func(prompt, case, cx)
     output = raw_output if isinstance(raw_output, str) else str(raw_output)

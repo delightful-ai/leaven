@@ -23,7 +23,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         request = read_request()
         request_id = request.get("id")
-        result = asyncio.run(run_runner_stage(stage, request["params"], lm_text=args.lm_text))
+        result = asyncio.run(run_runner_stage(stage, request["params"]))
         write_result(request, result)
         return 0
     except Exception as error:
@@ -36,7 +36,6 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--module-file", required=True, type=Path)
     parser.add_argument("--stage-id", required=True)
     parser.add_argument("--stage-name", required=True)
-    parser.add_argument("--lm-text", required=True)
     return parser
 
 

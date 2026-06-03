@@ -13,9 +13,9 @@ from .protocols import LmCompleteCallback
 class CallbackLmBuilder(LmBuilder):
     """A live `cx.lm` bound to the stage driver's `leaven/lm.complete` callback.
 
-    Only the slice-3 prompt path is wired: `complete(prompt=..., ...)` ships the
-    prompt over the active stage seam and returns the host LM completion. Message
-    lists, model/role selection, tools, and structured output are later slices.
+    The prompt path is wired: `complete(prompt=..., ...)` ships the prompt over
+    the active stage seam and returns the host LM completion. Message lists,
+    model/role selection, tools, and structured output are later slices.
     """
 
     def __init__(self, callback: LmCompleteCallback, stage_call_id: str) -> None:
@@ -49,9 +49,9 @@ class CallbackLmBuilder(LmBuilder):
 def lm_response(text: str) -> LmResponse:
     """Build the `LmResponse` returned by callback-backed `cx.lm.complete`.
 
-    Slice 3 carries only completion text over the stage callback. The
-    deterministic mock LM emits no token usage or cost, so this response reports
-    zero usage and no spend while preserving the call receipt shape.
+    This slice carries completion text over the stage callback. Usage and cost
+    projection remain later slices, so this response reports zero usage and no
+    spend while preserving the call receipt shape.
     """
     return LmResponse(
         text=text,

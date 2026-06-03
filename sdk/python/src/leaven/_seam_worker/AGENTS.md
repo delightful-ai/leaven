@@ -5,7 +5,8 @@
 
 It loads checked-in SDK `RegisteredStage` objects, receives one locked
 `leaven/stage.run` JSON-RPC request on stdin, runs the selected Python runner
-stage, and writes one JSON-RPC response on stdout.
+stage, can issue nested `leaven/lm.complete` callback requests over the same
+pipe while that stage is running, and writes one JSON-RPC response on stdout.
 
 It must not own optimizer strategy, public SDK composition, Rust graph
 mutation, service configuration, provider adapters, or transport validation.
@@ -29,6 +30,6 @@ only the Python worker process implementation.
 - `target.py`: serializable command target for a registered stage.
 - `loader.py`: import a stage module/file and resolve a `RegisteredStage`.
 - `protocol.py`: one-request JSON-RPC read/write and error envelopes.
-- `context.py`: deterministic callback context for the current worker slice.
+- `context.py`: JSON-RPC callback context for the current worker slice.
 - `runner.py`: runner-stage payload projection and result construction.
 - `main.py`: `python -m leaven._seam_worker` entrypoint.

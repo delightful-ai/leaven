@@ -64,6 +64,24 @@ impl ConfiguredSeamService {
 
 impl SeamService for ConfiguredSeamService {
     fn handle_plan(&self, request: SeamPlanRequest<'_>) -> Result<Value, SeamServiceError> {
+        self.execute_plan_method(request.method(), request.params())
+            .map_err(|error| SeamServiceError::execution(error.to_string()))
+    }
+
+    fn handle_stage_run(
+        &self,
+        request: SeamStageRunRequest<'_>,
+    ) -> Result<Value, SeamServiceError> {
+        let mut effects = |method: &str, params: &Value| self.execute_plan_method(method, params);
+        self.config
+            .stage
+            .runner_result(request.params(), &mut effects)
+            .map_err(|error| SeamServiceError::execution(error.to_string()))
+    }
+}
+
+impl ConfiguredSeamService {
+    fn execute_plan_method(&self, method: &str, params: &Value) -> Result<Value, PublicSeamError> {
         let context = self.config.context.to_execution_context();
         let mut host = ConfiguredPlanHost {
             lm: self.config.lm.to_mock_lm(),
@@ -73,29 +91,14 @@ impl SeamService for ConfiguredSeamService {
             workspaces: BTreeMap::new(),
         };
         let report = match &self.capability {
-            Some(capability) => self.package.execute_plan_document_with_capability(
-                request.params(),
-                &context,
-                capability,
-                &mut host,
-            ),
+            Some(capability) => self
+                .package
+                .execute_plan_document_with_capability(params, &context, capability, &mut host),
             None => self
                 .package
-                .execute_plan_document(request.params(), &context, &mut host),
-        }
-        .map_err(|error| SeamServiceError::execution(error.to_string()))?;
-        extension_result_for_plan_report(request.method(), request.params(), report.value())
-            .map_err(|error| SeamServiceError::execution(error.to_string()))
-    }
-
-    fn handle_stage_run(
-        &self,
-        request: SeamStageRunRequest<'_>,
-    ) -> Result<Value, SeamServiceError> {
-        self.config
-            .stage
-            .runner_result(request.params())
-            .map_err(|error| SeamServiceError::execution(error.to_string()))
+                .execute_plan_document(params, &context, &mut host),
+        }?;
+        extension_result_for_plan_report(method, params, report.value())
     }
 }
 
@@ -705,6 +708,42 @@ mod tests {
     }
 
     #[test]
+    fn seam_runtime_services_lm_callback_from_command_worker() {
+        let fake_worker = fake_stage_worker_with_lm_callback_bin();
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
+        let service = ConfiguredSeamService::from_package(
+            package.clone(),
+            SeamServiceConfig {
+                lm: SeamLmConfig::Mock {
+                    responses: vec![MockLmResponseConfig {
+                        text: "callback lm ok".to_owned(),
+                        input_tokens: 5,
+                        output_tokens: 2,
+                    }],
+                },
+                stage: SeamStageConfig::CommandRunner {
+                    argv: vec![fake_worker.display().to_string()],
+                },
+                ..SeamServiceConfig::default()
+            },
+        )
+        .unwrap();
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        let response = runtime.handle_value(&stage_run_request());
+
+        assert!(
+            !response.is_error(),
+            "unexpected error: {:?}",
+            response.value()
+        );
+        assert_eq!(
+            response.value()["result"]["output"]["value"],
+            "runner callback saw callback lm ok"
+        );
+    }
+
+    #[test]
     fn seam_runtime_reports_unconfigured_runner_as_execution_failure() {
         let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
         let service =
@@ -1071,6 +1110,75 @@ case "$line" in
   *) printf 'unexpected request: %s\n' "$line" >&2; exit 17 ;;
 esac
 printf '%s\n' '{"jsonrpc":"2.0","id":"stage-worker-1","result":{"schema_version":"leaven.stage_run.v1","message":"stage_run_result","stage":"runner","stage_call_id":"sc_runner_service","output":{"kind":"text","summary":"command worker output","value":"runner command worker ok","visibility":"optimizer_visible","data_classes":["candidate.output"]}}}'
+"#,
+        )
+        .unwrap();
+        make_executable(&path);
+        path
+    }
+
+    fn fake_stage_worker_with_lm_callback_bin() -> std::path::PathBuf {
+        let dir = tempfile::tempdir().unwrap().keep();
+        let path = dir.join("fake-stage-worker-lm");
+        std::fs::write(
+            &path,
+            r#"#!/usr/bin/env python3
+import json
+import select
+import sys
+
+stage = json.loads(sys.stdin.readline())
+if stage.get("method") != "leaven/stage.run":
+    raise SystemExit(f"unexpected stage request: {stage!r}")
+callback = {
+    "jsonrpc": "2.0",
+    "id": "worker-lm-1",
+    "method": "leaven/lm.complete",
+    "params": {
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "plan_worker_lm_callback",
+        "consistency": {"kind": "latest_at_start"},
+        "mode": {"kind": "execute"},
+        "ops": [{
+            "kind": "call",
+            "name": "completion",
+            "idempotency_key": "worker-lm-1",
+            "call": {
+                "kind": "lm_complete",
+                "purpose": "test.command_worker",
+                "model": "mock",
+                "messages": [{
+                    "role": "user",
+                    "content": [{"kind": "text", "text": "callback prompt"}]
+                }],
+                "output": {"kind": "final_message", "max_bytes": 128},
+                "input_classes": ["public"]
+            }
+        }],
+        "return": ["completion"],
+        "commit": {"kind": "no_graph_writes"}
+    }
+}
+print(json.dumps(callback), flush=True)
+ready, _, _ = select.select([sys.stdin], [], [], 5)
+if not ready:
+    raise SystemExit("timed out waiting for lm.complete callback response")
+lm_response = json.loads(sys.stdin.readline())
+text = lm_response["result"]["primary"]["message"]["content"][0]["text"]
+result = {
+    "schema_version": "leaven.stage_run.v1",
+    "message": "stage_run_result",
+    "stage": "runner",
+    "stage_call_id": stage["params"]["payload"]["stage_call_id"],
+    "output": {
+        "kind": "text",
+        "summary": "command worker callback output",
+        "value": f"runner callback saw {text}",
+        "visibility": "optimizer_visible",
+        "data_classes": ["candidate.output"]
+    }
+}
+print(json.dumps({"jsonrpc": "2.0", "id": stage.get("id"), "result": result}), flush=True)
 "#,
         )
         .unwrap();

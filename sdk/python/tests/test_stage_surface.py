@@ -209,7 +209,7 @@ async def run(prompt, case, cx):
         case_input={"question": "2 + 2", "prompt": "Answer the question."},
     ).to_json_rpc()
 
-    process = subprocess.run(
+    process = subprocess.Popen(
         [
             sys.executable,
             "-m",
@@ -220,17 +220,48 @@ async def run(prompt, case, cx):
             "worker_stage.run",
             "--stage-name",
             "run",
-            "--lm-text",
-            "4",
         ],
-        input=json.dumps(request) + "\n",
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        capture_output=True,
-        check=False,
     )
+    assert process.stdin is not None
+    assert process.stdout is not None
+    process.stdin.write(json.dumps(request) + "\n")
+    process.stdin.flush()
 
-    assert process.returncode == 0, process.stderr
-    response = json.loads(process.stdout)
+    callback = json.loads(process.stdout.readline())
+    assert callback["method"] == "leaven/lm.complete"
+    assert callback["params"]["ops"][0]["call"]["messages"][0]["content"][0]["text"] == (
+        "Answer the question."
+    )
+    process.stdin.write(
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": callback["id"],
+                "result": {
+                    "method": "leaven/lm.complete",
+                    "primary": {
+                        "kind": "lm_response",
+                        "message": {
+                            "role": "assistant",
+                            "content": [{"kind": "text", "text": "4"}],
+                        },
+                        "receipt": "lmrec_worker_test",
+                    },
+                },
+            }
+        )
+        + "\n"
+    )
+    process.stdin.flush()
+    response = json.loads(process.stdout.readline())
+    stdout, stderr = process.communicate(timeout=5)
+
+    assert stdout == ""
+    assert process.returncode == 0, stderr
     assert response["result"]["stage_call_id"] == "sc_stage_worker"
     assert response["result"]["output"]["value"] == "2 + 2 => 4"
 

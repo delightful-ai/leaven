@@ -59,7 +59,9 @@ spec_package:
       deterministic runner `stage.run`, and command-backed runner `stage.run`
       through an explicitly configured subprocess worker. Python
       `lv.optimize(...).run()` now uses a checked-in private worker package for
-      registered runner-stage dispatch in the prompt mechanics slice.
+      registered runner-stage dispatch in the prompt mechanics slice, and that
+      worker can call back to configured `leaven/lm.complete` while a stage is
+      running.
     - >-
       `leaven serve --stdio --plan --out` is a legacy bidirectional GEPA demo
       path; it is not the durable public SDK server.
@@ -275,6 +277,16 @@ acceptance:
         `lv.optimize(...).run()` uses that route through `leaven seam serve
         --stdio`. This still does not prove nested `leaven/*` callbacks,
         non-runner stages, GEPA search, reward vectors, or inspection.
+      - >-
+        Partial nested-effect evidence, not acceptance completion:
+        `leaven-seam-service` now keeps command-worker pipes open and services
+        worker-initiated `leaven/lm.complete` requests while the runner stage is
+        active. `cargo test -p leaven-seam-service` covers the Rust service
+        callback loop, and `uv run pytest tests/test_stage_surface.py -q`
+        covers the checked-in Python worker issuing `cx.lm.complete` and using
+        the host response. This still does not prove `cx.agent`, live LM
+        providers, non-runner stages, GEPA search, reward vectors, or
+        inspection.
     closeout_check: Rust-only harnesses and hardcoded demo plans are rejected.
 
   - id: reward_vector

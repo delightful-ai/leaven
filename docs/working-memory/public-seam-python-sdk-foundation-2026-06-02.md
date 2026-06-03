@@ -45,6 +45,10 @@ Status: active foundation slice, not the full Python SDK acceptance gate.
   and that worker imports the user's stage file, resolves the registered
   `@lv.runner`, binds a rollout context, and returns the locked
   `stage_run_result`.
+- Current nested-LM callback slice: `leaven-seam-service` now keeps command
+  worker pipes open while a stage is running. The Python worker can issue
+  `leaven/lm.complete` over the same pipe, the Rust service executes the
+  configured LM provider, and the runner receives that result through `cx.lm`.
 
 ## Verification Run
 
@@ -106,19 +110,26 @@ Python SDK project:
   checked-in Python command worker. It still returns the expected mechanics
   result (`seed score: 0.000`, `best score: 0.000`) because no optimizer search
   has landed.
+- `cargo test -p leaven-seam-service` includes
+  `seam_runtime_services_lm_callback_from_command_worker`, proving a running
+  command worker can request `leaven/lm.complete` and use the configured
+  service response in its final `stage_run_result`.
+- `uv run pytest tests/test_stage_surface.py -q` proves the checked-in Python
+  worker sends `leaven/lm.complete` from inside a registered runner and uses the
+  host response in the returned stage output.
 
 ## Still Unproven
 
 - Engine-supplied `cx.agent.run` inside `lv.optimize(...).run()` is still
   scaffold. Example 10 binds `AgentBuilder.run` privately, not from a real
   running stage context.
-- Engine-supplied `cx.lm.complete` inside `lv.optimize(...).run()` is still not
-  a nested `leaven/lm.complete` callback. The checked-in worker binds a
-  deterministic local LM callback so registered runner dispatch can run; host
-  effect callbacks over the public seam remain a later slice.
+- Engine-supplied `cx.lm.complete` inside `lv.optimize(...).run()` is now a
+  nested `leaven/lm.complete` callback for the prompt mechanics path. Rich
+  message lists, model role selection, token/cost projection into the Python
+  response, and live LM provider configuration remain unproven.
 - Registered SDK runner functions over the durable `leaven seam serve --stdio`
   route are now proven for the prompt mechanics slice. Non-runner roles,
-  standalone `lv.serve_stage(...)`, nested `leaven/*` callbacks, and richer
+  standalone `lv.serve_stage(...)`, non-LM `leaven/*` callbacks, and richer
   role-scoped `cx` remain unproven.
 - Optimizer search over the durable server is still unproven. The current
   `lv.optimize(...).run()` result is a typed mechanics facade over configured
@@ -143,14 +154,12 @@ Python SDK project:
 
 ## Next Slices
 
-1. Replace the worker's deterministic local LM callback with real nested
-   `leaven/lm.complete` callback handling from inside a running Python stage.
-2. Wire an engine-supplied `cx.agent` inside a Python stage context so
+1. Wire an engine-supplied `cx.agent` inside a Python stage context so
    `lv.optimize(...).run()` can use the same `AgentBuilder.run` substrate.
-3. Add blob persistence/readback to `leaven-seam-service` or record an explicit
+2. Add blob persistence/readback to `leaven-seam-service` or record an explicit
    unsupported-provider error if blob fetch is requested before storage exists.
-4. Decide the cost bridge for Codex CLI: either parse provider usage from Codex
+3. Decide the cost bridge for Codex CLI: either parse provider usage from Codex
    JSONL when available or return a typed unsupported-cost marker instead of
    `{}`.
-5. Move from direct `agent.run` proof to a tiny Python `optimize(...).run()`
+4. Move from direct `agent.run` proof to a tiny Python `optimize(...).run()`
    proof that uses a live agent stage and at least one Python-authored reward.

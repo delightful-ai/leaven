@@ -17,7 +17,7 @@ class StageWorkerTarget:
     stage_name: str
     module_file: Path
 
-    def argv(self, *, lm_text: str) -> tuple[str, ...]:
+    def argv(self) -> tuple[str, ...]:
         """Return the command used by `CommandRunnerStageConfig`."""
         return (
             sys.executable,
@@ -29,19 +29,17 @@ class StageWorkerTarget:
             self.stage_id,
             "--stage-name",
             self.stage_name,
-            "--lm-text",
-            lm_text,
         )
 
 
-def worker_argv_for_stage(stage: Any, *, lm_text: str) -> tuple[str, ...]:
+def worker_argv_for_stage(stage: Any) -> tuple[str, ...]:
     """Build worker argv for a `RegisteredStage` without importing it here."""
     target = StageWorkerTarget(
         stage_id=stage.id,
         stage_name=getattr(stage.func, "__name__", stage.id.rsplit(".", 1)[-1]),
         module_file=_module_file(stage),
     )
-    return target.argv(lm_text=lm_text)
+    return target.argv()
 
 
 def _module_file(stage: Any) -> Path:

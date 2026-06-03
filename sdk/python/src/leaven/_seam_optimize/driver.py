@@ -7,6 +7,7 @@ from typing import Any
 
 from .._seam import (
     CommandRunnerStageConfig,
+    MockLmRuntimeConfig,
     SeamClient,
     SeamExecutionContext,
     SeamServiceConfig,
@@ -33,8 +34,8 @@ async def run_prompt_mechanics(
 
     This is mechanics evidence for the durable server route. The configured
     stage runner is a checked-in Python worker process that dispatches the
-    registered `@lv.runner`; it does not yet perform optimizer search or nested
-    public-seam effect callbacks.
+    registered `@lv.runner` and services `cx.lm.complete` over the active
+    public-seam callback loop; it does not yet perform optimizer search.
     """
     runner_text = _runner_text(runtime)
     client = SeamClient(
@@ -44,9 +45,8 @@ async def run_prompt_mechanics(
                 policy_fingerprint="fp_policy_sha256_python_optimize",
                 base_revision=f"rev_{run_id}",
             ),
-            stage=CommandRunnerStageConfig(
-                argv=worker_argv_for_stage(runner, lm_text=runner_text),
-            ),
+            lm=MockLmRuntimeConfig(text=runner_text),
+            stage=CommandRunnerStageConfig(argv=worker_argv_for_stage(runner)),
         )
     )
     assessments = []
