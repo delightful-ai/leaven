@@ -483,6 +483,7 @@ fn expected_receipt_kind(value_kind: &str) -> Option<&'static str> {
         "proposal_batch_receipt"
         | "assessment_batch_receipt"
         | "evaluation_request_receipt"
+        | "emit_run_event"
         | "apply_receipt" => Some("write"),
         _ => None,
     }

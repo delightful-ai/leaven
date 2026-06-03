@@ -207,6 +207,34 @@
         {
           "type": "object",
           "properties": {
+            "kind": {
+              "const": "emit_run_event"
+            },
+            "event_id": {
+              "type": "string"
+            },
+            "receipt": {
+              "$ref": "common.schema.json#/$defs/ReceiptRef"
+            },
+            "data_classes": {
+              "$ref": "common.schema.json#/$defs/DataClassSet"
+            },
+            "replayability": {
+              "$ref": "common.schema.json#/$defs/Replayability"
+            }
+          },
+          "required": [
+            "kind",
+            "event_id",
+            "receipt",
+            "data_classes",
+            "replayability"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
             "receipt": {
               "$ref": "common.schema.json#/$defs/ReceiptRef"
             },

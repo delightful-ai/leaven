@@ -257,6 +257,14 @@ acceptance:
           - crates/leaven-cli/tests/seam_stdio_server.rs
           - docs/specs/public-seam-v1/executable-method-status.md
         note: Finite workspace reads moved from validated-only to configured local execution through service and stdio; Git queries and blob byte retrieval remain open.
+      - kind: partial_method_matrix_reduction
+        methods:
+          - "`leaven/event.emit`"
+        paths:
+          - crates/leaven-seam-service/src/service.rs
+          - crates/leaven-cli/tests/seam_stdio_server.rs
+          - docs/specs/public-seam-v1/executable-method-status.md
+        note: Event emit moved from unsupported service behavior to typed configured local write receipt through service and stdio; durable RunGraph event persistence remains open for effects closeout.
     closeout_check: No row may remain "validated-only" or "unsupported in service" for locked V1.
 
   - id: graph_and_case_reads_execute
@@ -319,7 +327,15 @@ acceptance:
         - "`leaven/evaluation.request`"
         - "`leaven/event.emit` if retained in locked V1"
         - receipt binding and RunContext-owned mutation where graph state changes
-    evidence: []
+    evidence:
+      - kind: partial_event_emit_execution
+        methods:
+          - "`leaven/event.emit`"
+        commands:
+          - cargo test -p leaven-seam-service seam_runtime_executes_event_emit_through_configured_service
+          - cargo test -p leaven-cli --test seam_stdio_server
+          - cargo test -p leaven-public-seam --test public_seam_contract acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
+        note: Event emit now returns a typed receipt-bound `emit_run_event` value through configured service and stdio; this is not yet durable RunContext/RunGraph event persistence.
     closeout_check: "`proposal.submit_batch` alone is not proposal application."
 
   - id: rust_owned_run_readback_powers_python_inspection

@@ -19,7 +19,7 @@ use serde_json::{Map, Value, json};
 type Result<T> = std::result::Result<T, P9Error>;
 
 const ACP_METHODS: [(&str, &str); 5] = [
-    ("leaven/event.emit", "extension"),
+    ("leaven/event.emit", "emit_run_event"),
     ("leaven/lm.complete", "lm_response"),
     ("leaven/agent.run", "agent_session"),
     ("leaven/proposal.submit_batch", "proposal_batch_receipt"),
@@ -318,7 +318,7 @@ fn response_map(codex: &CodexProof, seed_score: f64, child_score: f64) -> Value 
         let result = match *method {
             "leaven/event.emit" => extension_result(
                 method,
-                extension_primary("event.emit"),
+                event_emit_primary(),
                 write_receipt("emit_run_event", "wrec_event_emit"),
                 &["public"],
             ),
@@ -508,13 +508,13 @@ fn extension_result(method: &str, primary: Value, receipt: Value, data_classes: 
     result
 }
 
-fn extension_primary(op: &str) -> Value {
+fn event_emit_primary() -> Value {
     json!({
-        "kind": "extension",
-        "namespace": "leaven",
-        "op": op,
-        "schema_fingerprint": "fp_schema_sha256_p9",
-        "payload": {"status": "p9-started"}
+        "kind": "emit_run_event",
+        "event_id": "event_p9",
+        "receipt": "wrec_event_emit",
+        "data_classes": ["public"],
+        "replayability": "fully_managed"
     })
 }
 

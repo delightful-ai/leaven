@@ -38,6 +38,7 @@ Codex/agentic public-seam readiness.
 | `leaven/workspace.snapshot`, `leaven/workspace.list`, `leaven/workspace.read_file`, `leaven/workspace.stat`, `leaven/workspace.digest`, `leaven/workspace.capture_artifacts` | Configured local | `leaven-seam-service::service` plus `leaven-workspace-local` | Executes finite reads against the local workspace view with capability-scoped read ops. `capture_artifacts` currently returns listing entries and byte counts; blob byte retrieval still needs a Rust-owned artifact/blob read path before the workspace closeout row is done. |
 | `leaven/agent.run` | Live-provider configured when paired with materialized workspace | `leaven-seam-service::service` plus `leaven-agent-codex-cli` | Uses configured Codex CLI runtime against a materialized local workspace and projects transcript/command output blob refs into the public seam result. Without `SeamAgentConfig::CodexCli`, the service returns an explicit unsupported-provider error. |
 | `leaven/proposal.submit_batch` | Configured local write receipt | `leaven-seam-service::service` | Produces a validated proposal-batch receipt for submitted proposal payloads. This proves public-seam write plumbing, not Rust optimizer admission or proposal application. |
+| `leaven/event.emit` | Configured local write receipt | `leaven-seam-service::service` | Emits a typed local run-event receipt through Plan execution and returns a receipt-bound `emit_run_event` value. This is configured local receipt behavior, not yet durable RunGraph event persistence. |
 
 ## Validated But Not Executed By The Current Service
 
@@ -51,7 +52,7 @@ service does not yet provide runtime behavior for these V1 families:
   `leaven/workspace.git_diff`, `leaven/workspace.git_status`
 - remaining effects and graph writes: `leaven/sandbox.exec`,
   `leaven/proposal.apply`, `leaven/assessment.submit`,
-  `leaven/evaluation.request`, `leaven/event.emit`
+  `leaven/evaluation.request`
 - watch behavior remains deferred to a future V1.x slice
 
 Some of these families have public-seam contract validators, Plan IR lowering

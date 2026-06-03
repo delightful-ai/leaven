@@ -2001,7 +2001,7 @@ fn write_extension_result_cases() -> Vec<(&'static str, Value, Value)> {
         ),
         (
             "leaven/event.emit",
-            extension_primary("event.emit"),
+            emit_run_event_primary(),
             write_receipt("emit_run_event", "wrec_event_emit"),
         ),
     ]
@@ -2398,6 +2398,16 @@ fn evaluation_request_primary() -> Value {
         "data_classes": ["public"],
         "replayability": "fully_managed",
         "receipt": "wrec_evaluation_request"
+    })
+}
+
+fn emit_run_event_primary() -> Value {
+    json!({
+        "kind": "emit_run_event",
+        "event_id": "event_acp",
+        "receipt": "wrec_event_emit",
+        "data_classes": ["public"],
+        "replayability": "fully_managed"
     })
 }
 

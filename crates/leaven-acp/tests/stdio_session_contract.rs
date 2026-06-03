@@ -338,7 +338,6 @@ GENERIC_EXTENSION_OPS = {
     "leaven/case.input": ("case.input", "qrec_case_input", "query", ["public"]),
     "leaven/case.target": ("case.target", "qrec_case_target", "query", ["public"]),
     "leaven/case.metadata": ("case.metadata", "qrec_case_metadata", "query", ["public"]),
-    "leaven/event.emit": ("event.emit", "wrec_event_emit", "write", ["public"]),
 }
 
 WORKSPACE_METHODS = {
@@ -456,6 +455,15 @@ def extension_primary(op):
         "op": op,
         "schema_fingerprint": "fp_schema_sha256_acpextension",
         "payload": {"status": "ok"},
+    }
+
+def event_emit_primary():
+    return {
+        "kind": "emit_run_event",
+        "event_id": "event_acp",
+        "receipt": "wrec_event_emit",
+        "data_classes": ["public"],
+        "replayability": "fully_managed",
     }
 
 def workspace_primary(kind, receipt):
@@ -595,7 +603,11 @@ def effect_or_write_primary(kind):
     raise AssertionError(f"unknown effect/write primary {kind}")
 
 def make_result(method):
-    if method in GENERIC_EXTENSION_OPS:
+    if method == "leaven/event.emit":
+        primary = event_emit_primary()
+        receipt = write_receipt("emit_run_event", "wrec_event_emit")
+        data_classes = ["public"]
+    elif method in GENERIC_EXTENSION_OPS:
         op, receipt_id, receipt_kind, data_classes = GENERIC_EXTENSION_OPS[method]
         primary = extension_primary(op)
         if receipt_kind == "query":
@@ -1606,19 +1618,28 @@ fn extension_result_query_cases() -> Vec<ExtensionCase> {
             "case.metadata",
             "qrec_case_metadata",
         ),
-        ("leaven/event.emit", "event.emit", "wrec_event_emit"),
     ] {
-        let receipt = if method == "leaven/event.emit" {
-            write_receipt("emit_run_event", receipt)
-        } else {
-            query_receipt(receipt)
-        };
         cases.push(case(
             method,
             "extension",
-            extension_result(method, extension_primary(op), receipt, &["public"]),
+            extension_result(
+                method,
+                extension_primary(op),
+                query_receipt(receipt),
+                &["public"],
+            ),
         ));
     }
+    cases.push(case(
+        "leaven/event.emit",
+        "emit_run_event",
+        extension_result(
+            "leaven/event.emit",
+            event_emit_primary(),
+            write_receipt("emit_run_event", "wrec_event_emit"),
+            &["public"],
+        ),
+    ));
     cases
 }
 
@@ -1933,6 +1954,16 @@ fn extension_primary(op: &str) -> Value {
         "op": op,
         "schema_fingerprint": "fp_schema_sha256_acpextension",
         "payload": {"status": "ok"}
+    })
+}
+
+fn event_emit_primary() -> Value {
+    json!({
+        "kind": "emit_run_event",
+        "event_id": "event_acp",
+        "receipt": "wrec_event_emit",
+        "data_classes": ["public"],
+        "replayability": "fully_managed"
     })
 }
 

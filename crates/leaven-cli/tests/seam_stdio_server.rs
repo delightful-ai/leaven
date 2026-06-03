@@ -62,6 +62,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         for request in &workspace_queries {
             write_json_line(&mut stdin, request);
         }
+        write_json_line(&mut stdin, &event_emit_request());
         write_json_line(&mut stdin, &lm_complete_request());
         write_json_line(&mut stdin, &stage_run_request());
     }
@@ -84,7 +85,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
     let responses = response_lines(&output.stdout);
     assert_eq!(
         responses.len(),
-        5 + workspace_queries.len(),
+        6 + workspace_queries.len(),
         "one response per request line"
     );
 
@@ -135,7 +136,23 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         assert_eq!(response["result"]["receipts"][1]["kind"], "query");
     }
 
-    let lm_index = 3 + workspace_queries.len();
+    let event_index = 3 + workspace_queries.len();
+    assert_eq!(responses[event_index]["id"], json!("event-emit-cli"));
+    assert!(
+        responses[event_index].get("error").is_none(),
+        "unexpected event response: {:?}",
+        responses[event_index]
+    );
+    assert_eq!(
+        responses[event_index]["result"]["primary"]["kind"],
+        "emit_run_event"
+    );
+    assert_eq!(
+        responses[event_index]["result"]["receipts"][0]["write_kind"],
+        "emit_run_event"
+    );
+
+    let lm_index = event_index + 1;
     assert_eq!(responses[lm_index]["id"], json!("lm-cli"));
     assert!(
         responses[lm_index].get("error").is_none(),
@@ -358,6 +375,45 @@ fn workspace_query_request(method: &str, name: &str, op: Value) -> Value {
     })
 }
 
+fn event_emit_request() -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": "event-emit-cli",
+        "method": "leaven/event.emit",
+        "params": {
+            "schema_version": "leaven.plan.v1",
+            "plan_id": "eventemitcli001",
+            "consistency": {
+                "kind": "latest_at_start"
+            },
+            "mode": {
+                "kind": "execute"
+            },
+            "ops": [
+                {
+                    "kind": "write",
+                    "name": "status",
+                    "idempotency_key": "event-emit-cli-0001",
+                    "write": {
+                        "kind": "emit_run_event",
+                        "event_kind": "cli.checked",
+                        "payload_schema": "fp_schema_sha256_event",
+                        "payload": {
+                            "ok": true
+                        },
+                        "visibility": "public"
+                    }
+                }
+            ],
+            "return": ["status"],
+            "commit": {
+                "kind": "graph_writes_atomic",
+                "on_stale": "reject"
+            }
+        }
+    })
+}
+
 fn seam_capability() -> Value {
     json!({
         "schema_version": "leaven.capability.v1",
@@ -437,6 +493,11 @@ fn seam_capability() -> Value {
                     "models": ["gpt-4.1-mini"],
                     "allowed_input_classes": ["public"]
                 }
+            },
+            {
+                "action": "event.emit",
+                "resource": {},
+                "constraints": {}
             }
         ],
         "budgets": {},

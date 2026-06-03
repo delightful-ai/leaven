@@ -233,7 +233,7 @@ fn extension_result_contract(method: &str) -> Result<ExtensionResultContract, Pu
             receipt: ReceiptExpectation::Write("request_evaluation"),
         }),
         "leaven/event.emit" => Ok(ExtensionResultContract {
-            primary_kinds: EXTENSION,
+            primary_kinds: &["emit_run_event"],
             receipt: ReceiptExpectation::Write("emit_run_event"),
         }),
         _ => Err(invalid_acp(format!(
@@ -353,7 +353,6 @@ fn validate_extension_primary_op(
         "leaven/case.input" => "case.input",
         "leaven/case.target" => "case.target",
         "leaven/case.metadata" => "case.metadata",
-        "leaven/event.emit" => "event.emit",
         _ => return Ok(()),
     };
     let actual = required_string(primary.get("op"), "primary.op")?;

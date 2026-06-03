@@ -415,13 +415,19 @@ pub(super) fn execute_write<H: PlanExecutionHost>(
             "base_revision": context.base_revision
         }),
     )?;
+    let value = json!({
+        "kind": "emit_run_event",
+        "event_id": outcome.event_id,
+        "receipt": receipt_id,
+        "data_classes": ["public"],
+        "replayability": "fully_managed"
+    });
     let result_hash = prefixed_jcs_hash(
         "fp_result_sha256_",
         &json!({
             "schema_version": "leaven.plan_write_result.v1",
             "name": name,
-            "event_id": outcome.event_id,
-            "committed_revision": outcome.committed_revision
+            "value": value
         }),
     )?;
     state.receipts.push(json!({
@@ -439,13 +445,7 @@ pub(super) fn execute_write<H: PlanExecutionHost>(
         "event_id": outcome.event_id
     }));
     state.final_revision.clone_from(&outcome.committed_revision);
-    state.bindings.insert(
-        name,
-        json!({
-            "kind": "emit_run_event",
-            "event_id": outcome.event_id
-        }),
-    );
+    state.bindings.insert(name, value);
     Ok(())
 }
 

@@ -115,6 +115,9 @@ fn extension_result_for_plan_report(
     plan: &Value,
     result: &Value,
 ) -> Result<Value, PublicSeamError> {
+    if method == "leaven/event.emit" {
+        return event_emit_result_for_plan_report(method, result);
+    }
     let values = result
         .get("values")
         .and_then(Value::as_object)
@@ -155,6 +158,37 @@ fn extension_result_for_plan_report(
     }))
 }
 
+fn event_emit_result_for_plan_report(
+    method: &str,
+    result: &Value,
+) -> Result<Value, PublicSeamError> {
+    let receipt = result
+        .get("receipts")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .find(|receipt| receipt.get("write_kind").and_then(Value::as_str) == Some("emit_run_event"))
+        .ok_or_else(|| PublicSeamError::InvalidPlan {
+            message: "public seam event.emit result missing emit_run_event receipt".to_owned(),
+        })?;
+    let primary = serde_json::json!({
+        "kind": "emit_run_event",
+        "event_id": receipt.get("event_id").cloned().unwrap_or_else(|| serde_json::json!("event_missing")),
+        "receipt": receipt.get("receipt").cloned().unwrap_or_else(|| serde_json::json!("wrec_missing")),
+        "data_classes": ["public"],
+        "replayability": "fully_managed"
+    });
+    Ok(serde_json::json!({
+        "method": method,
+        "primary": primary,
+        "receipts": result.get("receipts").cloned().unwrap_or_else(|| serde_json::json!([])),
+        "redactions": result.get("redactions").cloned().unwrap_or_else(|| serde_json::json!([])),
+        "capability_fingerprint": result.get("capability_fingerprint").cloned().unwrap_or_else(|| serde_json::json!("fp_cap_sha256_missing")),
+        "policy_fingerprint": result.get("policy_fingerprint").cloned().unwrap_or_else(|| serde_json::json!("fp_policy_sha256_missing")),
+        "data_classes": ["public"]
+    }))
+}
+
 fn method_primary_kind(method: &str) -> &'static str {
     match method {
         "leaven/lm.complete" => "lm_response",
@@ -170,6 +204,7 @@ fn method_primary_kind(method: &str) -> &'static str {
         | "leaven/workspace.git_diff"
         | "leaven/workspace.git_status" => "workspace_diff",
         "leaven/sandbox.exec" => "sandbox_exec",
+        "leaven/event.emit" => "emit_run_event",
         _ => "extension",
     }
 }
@@ -346,12 +381,10 @@ impl PlanExecutionHost for ConfiguredPlanHost {
         &mut self,
         request: PlanEmitRunEventRequest<'_>,
     ) -> Result<PlanEmitRunEventOutcome, PublicSeamError> {
-        Err(PublicSeamError::InvalidPlan {
-            message: format!(
-                "configured seam service cannot emit run event `{}` yet",
-                request.name()
-            ),
-        })
+        Ok(PlanEmitRunEventOutcome::new(
+            format!("event_{}", request.name()),
+            format!("{}_event_emit", request.base_revision()),
+        ))
     }
 
     fn submit_proposal_batch(
@@ -836,6 +869,41 @@ mod tests {
             assert_eq!(response.value()["result"]["receipts"][1]["kind"], "query");
             (case.assert_primary)(response.value());
         }
+    }
+
+    #[test]
+    fn seam_runtime_executes_event_emit_through_configured_service() {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
+        let service = ConfiguredSeamService::from_package(
+            package.clone(),
+            SeamServiceConfig {
+                context: planexec_context(),
+                capability: Some(effect_capability()),
+                ..SeamServiceConfig::default()
+            },
+        )
+        .unwrap();
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        let response = runtime.handle_value(&event_emit_request());
+
+        assert!(
+            !response.is_error(),
+            "unexpected error: {:?}",
+            response.value()
+        );
+        assert_eq!(
+            response.value()["result"]["primary"]["kind"],
+            "emit_run_event"
+        );
+        assert_eq!(
+            response.value()["result"]["primary"]["event_id"],
+            "event_status"
+        );
+        assert_eq!(
+            response.value()["result"]["receipts"][0]["write_kind"],
+            "emit_run_event"
+        );
     }
 
     #[test]
@@ -1410,6 +1478,45 @@ mod tests {
         })
     }
 
+    fn event_emit_request() -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "id": "event-emit-1",
+            "method": "leaven/event.emit",
+            "params": {
+                "schema_version": "leaven.plan.v1",
+                "plan_id": "planeventemitservice001",
+                "consistency": {
+                    "kind": "latest_at_start"
+                },
+                "mode": {
+                    "kind": "execute"
+                },
+                "ops": [
+                    {
+                        "kind": "write",
+                        "name": "status",
+                        "idempotency_key": "event-emit-service-0001",
+                        "write": {
+                            "kind": "emit_run_event",
+                            "event_kind": "service.checked",
+                            "payload_schema": "fp_schema_sha256_event",
+                            "payload": {
+                                "ok": true
+                            },
+                            "visibility": "public"
+                        }
+                    }
+                ],
+                "return": ["status"],
+                "commit": {
+                    "kind": "graph_writes_atomic",
+                    "on_stale": "reject"
+                }
+            }
+        })
+    }
+
     fn workspace_materialize_op(idempotency_key: &str) -> Value {
         json!({
             "kind": "call",
@@ -1768,6 +1875,11 @@ mod tests {
                             "capture_artifacts"
                         ]
                     }
+                },
+                {
+                    "action": "event.emit",
+                    "resource": {},
+                    "constraints": {}
                 },
                 {
                     "action": "agent.run",

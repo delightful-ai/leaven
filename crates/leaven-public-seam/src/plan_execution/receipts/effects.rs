@@ -332,6 +332,13 @@ pub(super) fn validate_write_receipt(
         )?,
     )?;
     if write_kind == "emit_run_event" {
+        let value = json!({
+            "kind": "emit_run_event",
+            "event_id": required_string(receipt.get("event_id"), "receipt.event_id")?,
+            "receipt": required_string(receipt.get("receipt"), "receipt.receipt")?,
+            "data_classes": ["public"],
+            "replayability": "fully_managed"
+        });
         require_receipt_field(
             receipt,
             "result_hash",
@@ -340,18 +347,11 @@ pub(super) fn validate_write_receipt(
                 &json!({
                     "schema_version": "leaven.plan_write_result.v1",
                     "name": name,
-                    "event_id": required_string(receipt.get("event_id"), "receipt.event_id")?,
-                    "committed_revision": receipt.get("committed_revision").cloned().unwrap_or(Value::Null)
+                    "value": value
                 }),
             )?,
         )?;
-        state.bindings.insert(
-            name.to_owned(),
-            json!({
-                "kind": "emit_run_event",
-                "event_id": required_string(receipt.get("event_id"), "receipt.event_id")?
-            }),
-        );
+        state.bindings.insert(name.to_owned(), value);
     }
     Ok(())
 }
