@@ -31,7 +31,8 @@ fn stage_run_result_preserves_worker_effect_receipts() {
         {
             "method": "leaven/lm.complete",
             "receipt": "lmrec_completion",
-            "call_kind": "lm_complete"
+            "call_kind": "lm_complete",
+            "cost": {"usd_micro": 42, "input_tokens": 3, "output_tokens": 2}
         }
     ]);
 
@@ -44,6 +45,7 @@ fn stage_run_result_preserves_worker_effect_receipts() {
     assert_eq!(receipts[0].method(), "leaven/lm.complete");
     assert_eq!(receipts[0].receipt(), "lmrec_completion");
     assert_eq!(receipts[0].call_kind(), Some("lm_complete"));
+    assert_eq!(receipts[0].cost().unwrap()["input_tokens"], json!(3));
 }
 
 #[test]

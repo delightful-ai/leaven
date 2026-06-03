@@ -155,8 +155,8 @@ def _to_optimized(
 ) -> Optimized[PromptArtifact]:
     """Project the durable-seam mechanics report into a typed `Optimized`."""
     cost = project_cost_usage(
-        default_cost_usd=0.0,
-        default_lm_tokens=0,
+        default_cost_usd=report.total_cost_usd,
+        default_lm_tokens=report.total_lm_tokens,
         unsupported=report.unsupported,
     )
     best = Candidate(

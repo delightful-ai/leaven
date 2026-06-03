@@ -33,7 +33,7 @@ class JsonRpcCallbackClient:
             self._receipts.record_result(method=method, result=result)
         return result
 
-    def effect_receipts_json(self) -> list[dict[str, str]]:
+    def effect_receipts_json(self) -> list[dict[str, object]]:
         """Return effect receipts observed while running the current stage."""
         return self._receipts.effect_receipts_json()
 

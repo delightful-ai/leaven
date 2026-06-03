@@ -102,6 +102,27 @@
             "lm_complete",
             "agent_run"
           ]
+        },
+        "cost": {
+          "type": "object",
+          "properties": {
+            "usd_micro": {
+              "$ref": "common.schema.json#/$defs/UsdMicro"
+            },
+            "input_tokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "output_tokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "lm_calls": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
         }
       },
       "required": [

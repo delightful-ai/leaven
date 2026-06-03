@@ -30,7 +30,11 @@ from ..lm.openai import OpenAiLm
 from ..optimizers.gepa import Gepa
 from ..rubric import Rubric
 from ..runtime import Runtime
-from .receipts import effect_receipt_ids_from_stage_result
+from .receipts import (
+    effect_cost_totals_from_stage_result,
+    effect_receipt_ids_from_stage_result,
+    sum_effect_cost_totals,
+)
 from .rewards import evaluate_reward_vector
 from .scoring import mean_score
 from .status import first_agent, unsupported_facts_for_runtime
@@ -117,6 +121,7 @@ async def run_prompt_mechanics(
                 score=score,
                 rewards=rewards,
                 effect_receipts=effect_receipt_ids_from_stage_result(result),
+                effect_costs=effect_cost_totals_from_stage_result(result),
             )
         )
     proposal_receipts = await _run_configured_proposer(
@@ -126,10 +131,13 @@ async def run_prompt_mechanics(
         assessments=assessments,
     )
     score = mean_score([assessment.score.value for assessment in assessments])
+    effect_totals = sum_effect_cost_totals([assessment.effect_costs for assessment in assessments])
     return SeamOptimizeReport(
         seed_score=score,
         best_score=score,
         assessments=assessments,
+        total_cost_usd=effect_totals.cost_usd,
+        total_lm_tokens=effect_totals.lm_tokens,
         proposal_receipts=proposal_receipts,
         unsupported=unsupported_facts_for_runtime(runtime),
     )

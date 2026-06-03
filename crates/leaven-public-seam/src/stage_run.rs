@@ -107,6 +107,7 @@ pub struct StageEffectReceipt {
     method: String,
     receipt: String,
     call_kind: Option<String>,
+    cost: Option<Value>,
 }
 
 impl StageEffectReceipt {
@@ -117,11 +118,13 @@ impl StageEffectReceipt {
         let method = required_str(object.get("method"), "effect_receipts.method")?.to_owned();
         let receipt = required_str(object.get("receipt"), "effect_receipts.receipt")?.to_owned();
         let call_kind = optional_str(object.get("call_kind"), "effect_receipts.call_kind")?;
+        let cost = optional_object_value(object.get("cost"), "effect_receipts.cost")?;
         validate_effect_receipt_binding(&method, &receipt, call_kind)?;
         Ok(Self {
             method,
             receipt,
             call_kind: call_kind.map(ToOwned::to_owned),
+            cost,
         })
     }
 
@@ -138,6 +141,11 @@ impl StageEffectReceipt {
     /// Optional receipt family label from the callback result.
     pub fn call_kind(&self) -> Option<&str> {
         self.call_kind.as_deref()
+    }
+
+    /// Optional metered cost reported by the callback primary value.
+    pub fn cost(&self) -> Option<&Value> {
+        self.cost.as_ref()
     }
 }
 
@@ -213,6 +221,23 @@ fn optional_str<'a>(
             value.as_str().ok_or_else(|| {
                 invalid_stage_run(format!("stage run field `{field}` must be a string"))
             })
+        })
+        .transpose()
+}
+
+fn optional_object_value(
+    value: Option<&Value>,
+    field: &str,
+) -> Result<Option<Value>, PublicSeamError> {
+    value
+        .map(|value| {
+            if value.is_object() {
+                Ok(value.clone())
+            } else {
+                Err(invalid_stage_run(format!(
+                    "stage run field `{field}` must be an object"
+                )))
+            }
         })
         .transpose()
 }
