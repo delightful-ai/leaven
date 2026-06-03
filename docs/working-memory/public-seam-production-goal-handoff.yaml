@@ -21,6 +21,12 @@ goal:
       - >-
         Run examples whose README labels match behavior: product examples run
         end to end, while shape-only scaffolds are clearly not product proofs.
+      - >-
+        Prove a live Codex evolution loop only after the retained public-seam
+        backbone methods execute: one Codex-authored reflection/proposal
+        changes an AgentKit skill or system prompt, Leaven materializes and
+        applies the resulting candidate through the seam, and a later Codex
+        stage consumes the evolved artifact rather than the seed.
 
 spec_package:
   package_name: public_seam_v1_production_denominator
@@ -58,6 +64,12 @@ designed_surface:
       user_interaction: >-
         Example labels match reality: behavior-bearing examples run, live
         examples are gated, and any shape-only files are named as scaffolds.
+    - name: codex_evolution_contract
+      user_interaction: >-
+        A live Codex-backed agentic reflection/proposal loop evolves a real
+        AgentKit skill or system prompt, routes materialization/readback and
+        proposal application through the executable public seam, and proves the
+        evolved artifact affects the next Codex stage.
   private_machinery_relevant_to_handoff:
     - RunContext remains the graph mutation authority; proposal apply,
       assessment submit, evaluation request, and event emission must not bypass it.
@@ -88,6 +100,12 @@ misleading_proxy_proofs:
     forbidden_as_completion_evidence: true
   - proxy: "Live OpenAI or Codex examples still pass."
     why_insufficient: They exercise a subset of method families and do not prove the locked V1 denominator.
+    forbidden_as_completion_evidence: true
+  - proxy: "Codex consumed a projected prompt or skill once."
+    why_insufficient: >-
+      One live agent session proves provider consumption only. It does not prove
+      agentic reflection, typed proposal readback, RunContext-owned proposal
+      application, or that the changed artifact is what the next Codex stage saw.
     forbidden_as_completion_evidence: true
 
 spec_revisions_before_goal:
@@ -205,6 +223,38 @@ acceptance:
     evidence: []
     closeout_check: "Reading only `optimized.json` written by Python is a proxy."
 
+  - id: live_codex_evolution_consumes_applied_artifact
+    claim: >-
+      After the retained public-seam method families are executable, a live
+      Codex-backed agentic reflection/proposal loop evolves an AgentKit skill or
+      system prompt and the next Codex stage consumes the applied child artifact.
+    status: pending
+    depends_on:
+      - no_validated_only_locked_v1_methods
+      - workspace_lifecycle_executes
+      - effects_and_graph_writes_execute
+      - rust_owned_run_readback_powers_python_inspection
+    proof_required:
+      kind: live_codex_agentic_evolution_e2e
+      must_exercise:
+        - live Codex run with `gpt-5.4-mini`
+        - separate reflection and proposal stages, not one combined prompt
+        - AgentKit system prompt or `.agents/skills` materialization
+        - Codex-authored workspace mutation parsed into a typed proposal
+        - "`leaven/proposal.submit_batch` through `leaven seam serve --stdio`"
+        - "`leaven/proposal.apply` through `leaven seam serve --stdio`"
+        - RunContext-owned child candidate creation and lineage
+        - durable checkpoint/readback of the applied child artifact
+        - a later live Codex stage that sees the evolved skill or system prompt
+        - evaluation or assessment evidence showing seed-vs-child behavior
+    evidence: []
+    closeout_check: >-
+      A live Codex prompt-consumption test, a deterministic AgentKit projection
+      test, or `proposal.submit_batch` without application cannot close this
+      row. The proof must show that Codex's change hit the next Codex stage
+      through the same executable public-seam backbone that external-language
+      SDK workers use.
+
   - id: examples_match_product_truth
     claim: Examples are classified and verified according to what they actually prove.
     status: pending
@@ -214,6 +264,7 @@ acceptance:
         - examples README maturity table
         - all no-spend product examples
         - live-gated OpenAI and Codex examples when credentials are present
+        - live Codex evolution example only after seam-backed method execution
         - shape-only scaffold examples renamed or labeled as non-product proof
     evidence: []
     closeout_check: A typechecked tour is not a runnable product example.
