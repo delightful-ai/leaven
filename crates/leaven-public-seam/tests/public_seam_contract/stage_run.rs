@@ -21,6 +21,7 @@ fn stage_run_validates_generic_runner_dispatch_request_and_text_result() {
     assert_eq!(result.output().kind(), "text");
     assert_eq!(result.output().visibility(), "optimizer_visible");
     assert!(result.effect_receipts().is_empty());
+    assert!(result.proposal_receipts().is_empty());
 }
 
 #[test]
@@ -46,6 +47,54 @@ fn stage_run_result_preserves_worker_effect_receipts() {
     assert_eq!(receipts[0].receipt(), "lmrec_completion");
     assert_eq!(receipts[0].call_kind(), Some("lm_complete"));
     assert_eq!(receipts[0].cost().unwrap()["input_tokens"], json!(3));
+}
+
+#[test]
+fn stage_run_result_preserves_worker_proposal_receipts() {
+    let package = package();
+    let mut result_value = proposer_stage_run_result();
+    result_value["proposal_receipts"] = json!([
+        {
+            "method": "leaven/proposal.submit_batch",
+            "receipt": "wrec_proposal_submit",
+            "write_kind": "submit_proposal_batch",
+            "proposal_ids": ["prop_stagerun_submit"]
+        }
+    ]);
+
+    let result = package
+        .validate_stage_run_result_document(&result_value)
+        .unwrap();
+
+    let receipts = result.proposal_receipts();
+    assert_eq!(receipts.len(), 1);
+    assert_eq!(receipts[0].method(), "leaven/proposal.submit_batch");
+    assert_eq!(receipts[0].receipt(), "wrec_proposal_submit");
+    assert_eq!(receipts[0].write_kind(), Some("submit_proposal_batch"));
+    assert_eq!(
+        receipts[0].proposal_ids(),
+        &["prop_stagerun_submit".to_owned()]
+    );
+}
+
+#[test]
+fn stage_run_result_rejects_wrong_proposal_receipt_family() {
+    let package = package();
+    let mut wrong_receipt_family = proposer_stage_run_result();
+    wrong_receipt_family["proposal_receipts"] = json!([
+        {
+            "method": "leaven/proposal.submit_batch",
+            "receipt": "lmrec_completion",
+            "write_kind": "submit_proposal_batch"
+        }
+    ]);
+
+    assert!(matches!(
+        package
+            .validate_stage_run_result_document(&wrong_receipt_family)
+            .unwrap_err(),
+        PublicSeamError::InvalidStageRun { .. } | PublicSeamError::ExampleValidation { .. }
+    ));
 }
 
 #[test]

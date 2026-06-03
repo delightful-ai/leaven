@@ -209,7 +209,14 @@ async def _run_configured_proposer(
             reflection_summary=_reflection_summary(assessments),
         ).to_json_rpc(),
     )
-    return [result["output"]["value"]]
+    proposal_receipts = [
+        receipt["receipt"]
+        for receipt in result.get("proposal_receipts", [])
+        if isinstance(receipt, dict) and isinstance(receipt.get("receipt"), str)
+    ]
+    if not proposal_receipts:
+        raise RuntimeError("proposer stage result missing proposal_receipts")
+    return proposal_receipts
 
 
 def _reflection_summary(assessments: list[SeamStageAssessment]) -> str:

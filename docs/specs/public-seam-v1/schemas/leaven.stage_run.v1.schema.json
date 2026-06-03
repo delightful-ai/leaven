@@ -73,6 +73,13 @@
             "$ref": "#/$defs/StageEffectReceipt"
           },
           "default": []
+        },
+        "proposal_receipts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StageProposalReceipt"
+          },
+          "default": []
         }
       },
       "required": [
@@ -123,6 +130,31 @@
             }
           },
           "additionalProperties": false
+        }
+      },
+      "required": [
+        "method",
+        "receipt"
+      ],
+      "additionalProperties": false
+    },
+    "StageProposalReceipt": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "const": "leaven/proposal.submit_batch"
+        },
+        "receipt": {
+          "$ref": "common.schema.json#/$defs/ReceiptRef"
+        },
+        "write_kind": {
+          "const": "submit_proposal_batch"
+        },
+        "proposal_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/ProposalId"
+          }
         }
       },
       "required": [

@@ -106,6 +106,15 @@ async def propose(req, cx):
     assert response["result"]["stage"] == "proposer"
     assert response["result"]["stage_call_id"] == "sc_proposer_worker"
     assert response["result"]["output"]["value"] == "wrec_worker_proposal"
+    assert response["result"]["effect_receipts"] == []
+    assert response["result"]["proposal_receipts"] == [
+        {
+            "method": "leaven/proposal.submit_batch",
+            "receipt": "wrec_worker_proposal",
+            "write_kind": "submit_proposal_batch",
+            "proposal_ids": ["prop_worker"],
+        }
+    ]
 
 
 def _proposer_stage_run_request() -> dict:

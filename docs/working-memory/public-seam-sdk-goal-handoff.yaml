@@ -462,6 +462,19 @@ acceptance:
         the Python SDK and durable public seam. It still does not prove proposal
         apply/admission, full GEPA search, provider cost accounting, or durable
         blob/transcript readback.
+      - >-
+        Deterministic receipt-lineage evidence, not live acceptance completion:
+        `leaven.stage_run.v1` now admits structured proposer-stage
+        `proposal_receipts`, and `leaven-public-seam` preserves them as
+        `StageProposalReceipt` values bound to `leaven/proposal.submit_batch`
+        and `wrec_` write receipts. Python worker tests prove
+        `@lv.proposer` callback submission returns the proposal write receipt
+        with `write_kind` and proposal ids, while optimize tests prove
+        `lv.optimize(...).run()` uses that structured receipt instead of the
+        stage output string. This improves lineage/receipt capture for the
+        Codex proposer route but still does not satisfy the remaining live
+        Codex/process, apply/admission, provider-cost, or transcript-readback
+        gaps.
     closeout_check: A Rust-side hardcoded child prompt, fixed diff, or deterministic fake-agent transcript is not enough.
 
   - id: real_lm_provider_wiring
@@ -565,6 +578,19 @@ acceptance:
         `run.inspection` unsupported fact. This still does not prove Rust graph
         checkpoint readback, blob/transcript fetch, provider-authored receipt
         validation, or complete cost accounting.
+      - >-
+        Proposal write-receipt inspection evidence, not acceptance completion:
+        configured Python proposers now propagate `leaven/proposal.submit_batch`
+        callback receipts through the validated `stage_run_result`
+        `proposal_receipts` field, the SDK optimize driver requires that
+        structured field, and `lv.runs.inspect(...)` exposes the persisted
+        proposal batch receipt as a write receipt with `source:
+        proposal_batch`. `uv run pytest
+        tests/test_proposer_worker.py tests/test_optimize_proposer_mechanics.py
+        -q` proves worker callback capture, optimize receipt propagation, and
+        flattened inspection of `wrec_proposal_batch`. This still does not
+        prove Rust graph checkpoint readback, durable blob/transcript fetch,
+        provider-authored receipt validation, or complete cost accounting.
     closeout_check: Stdout transcript alone is not run inspection.
 
 proof_denominator:

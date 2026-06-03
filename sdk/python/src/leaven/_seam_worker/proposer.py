@@ -9,7 +9,7 @@ from .._receipts import CallReceipt, QueryReceipt
 from ..decorators import RegisteredStage
 from ..proposal import ProposalBatch
 from ..stage_payloads import ProposeRequest, ReflectionResult
-from .context import propose_context
+from .context import JsonRpcCallbackClient, propose_context
 
 
 async def run_proposer_stage(
@@ -26,10 +26,12 @@ async def run_proposer_stage(
         raise ValueError(f"configured stage must be a proposer; got {stage.role!r}")
 
     request = _propose_request_from_payload(payload)
+    callback = JsonRpcCallbackClient(lm_model=lm_model)
     cx = propose_context(
         parent_candidate_id=request.parent_candidate_id,
         stage_call_id=payload["stage_call_id"],
         lm_model=lm_model,
+        callback=callback,
     )
     batch = await stage.func(request, cx)
     if not isinstance(batch, ProposalBatch):
@@ -47,6 +49,8 @@ async def run_proposer_stage(
             "visibility": "optimizer_visible",
             "data_classes": ["public"],
         },
+        "effect_receipts": callback.effect_receipts_json(),
+        "proposal_receipts": callback.proposal_receipts_json(),
     }
 
 

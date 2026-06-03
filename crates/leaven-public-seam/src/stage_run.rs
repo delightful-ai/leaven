@@ -99,6 +99,7 @@ pub struct StageRunResultDocument {
     stage_call_id: String,
     output: OutputRecordDocument,
     effect_receipts: Vec<StageEffectReceipt>,
+    proposal_receipts: Vec<StageProposalReceipt>,
 }
 
 /// Opaque effect receipt reported by a worker while producing a stage result.
@@ -149,6 +150,54 @@ impl StageEffectReceipt {
     }
 }
 
+/// Opaque proposal write receipt reported by a proposer worker.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StageProposalReceipt {
+    method: String,
+    receipt: String,
+    write_kind: Option<String>,
+    proposal_ids: Vec<String>,
+}
+
+impl StageProposalReceipt {
+    fn from_schema_valid_value(value: &Value) -> Result<Self, PublicSeamError> {
+        let object = value
+            .as_object()
+            .ok_or_else(|| invalid_stage_run("stage proposal receipt must be an object"))?;
+        let method = required_str(object.get("method"), "proposal_receipts.method")?.to_owned();
+        let receipt = required_receipt_id(object.get("receipt"), "proposal_receipts.receipt")?;
+        let write_kind = optional_str(object.get("write_kind"), "proposal_receipts.write_kind")?;
+        let proposal_ids = proposal_ids(object.get("proposal_ids"))?;
+        validate_proposal_receipt_binding(&method, &receipt, write_kind)?;
+        Ok(Self {
+            method,
+            receipt,
+            write_kind: write_kind.map(ToOwned::to_owned),
+            proposal_ids,
+        })
+    }
+
+    /// Worker callback method that produced this receipt.
+    pub fn method(&self) -> &str {
+        &self.method
+    }
+
+    /// Opaque proposal write receipt id.
+    pub fn receipt(&self) -> &str {
+        &self.receipt
+    }
+
+    /// Optional receipt family label from the callback result.
+    pub fn write_kind(&self) -> Option<&str> {
+        self.write_kind.as_deref()
+    }
+
+    /// Proposal ids reported by the proposal batch receipt primary value.
+    pub fn proposal_ids(&self) -> &[String] {
+        &self.proposal_ids
+    }
+}
+
 impl StageRunResultDocument {
     pub(crate) fn from_schema_valid_value(value: &Value) -> Result<Self, PublicSeamError> {
         let object = value
@@ -168,11 +217,13 @@ impl StageRunResultDocument {
             ));
         }
         let effect_receipts = effect_receipts(object.get("effect_receipts"))?;
+        let proposal_receipts = proposal_receipts(object.get("proposal_receipts"))?;
         Ok(Self {
             stage,
             stage_call_id,
             output,
             effect_receipts,
+            proposal_receipts,
         })
     }
 
@@ -194,6 +245,11 @@ impl StageRunResultDocument {
     /// Effect receipts reported by worker callbacks while producing this output.
     pub fn effect_receipts(&self) -> &[StageEffectReceipt] {
         &self.effect_receipts
+    }
+
+    /// Proposal write receipts reported by proposer-stage callbacks.
+    pub fn proposal_receipts(&self) -> &[StageProposalReceipt] {
+        &self.proposal_receipts
     }
 }
 
@@ -242,6 +298,16 @@ fn optional_object_value(
         .transpose()
 }
 
+fn required_receipt_id(value: Option<&Value>, field: &str) -> Result<String, PublicSeamError> {
+    match value {
+        Some(Value::String(receipt)) => Ok(receipt.to_owned()),
+        Some(Value::Object(object)) => required_str(object.get("id"), field).map(ToOwned::to_owned),
+        _ => Err(invalid_stage_run(format!(
+            "stage run field `{field}` must be a receipt ref"
+        ))),
+    }
+}
+
 fn effect_receipts(value: Option<&Value>) -> Result<Vec<StageEffectReceipt>, PublicSeamError> {
     let Some(value) = value else {
         return Ok(Vec::new());
@@ -252,6 +318,36 @@ fn effect_receipts(value: Option<&Value>) -> Result<Vec<StageEffectReceipt>, Pub
     receipts
         .iter()
         .map(StageEffectReceipt::from_schema_valid_value)
+        .collect()
+}
+
+fn proposal_receipts(value: Option<&Value>) -> Result<Vec<StageProposalReceipt>, PublicSeamError> {
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
+    let receipts = value
+        .as_array()
+        .ok_or_else(|| invalid_stage_run("proposal_receipts must be an array"))?;
+    receipts
+        .iter()
+        .map(StageProposalReceipt::from_schema_valid_value)
+        .collect()
+}
+
+fn proposal_ids(value: Option<&Value>) -> Result<Vec<String>, PublicSeamError> {
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
+    let ids = value
+        .as_array()
+        .ok_or_else(|| invalid_stage_run("proposal_receipts.proposal_ids must be an array"))?;
+    ids.iter()
+        .map(|value| {
+            value
+                .as_str()
+                .map(ToOwned::to_owned)
+                .ok_or_else(|| invalid_stage_run("proposal id must be a string"))
+        })
         .collect()
 }
 
@@ -278,6 +374,29 @@ fn validate_effect_receipt_binding(
         return Err(invalid_stage_run(format!(
             "effect receipt call_kind must be `{expected_kind}` for method `{method}`"
         )));
+    }
+    Ok(())
+}
+
+fn validate_proposal_receipt_binding(
+    method: &str,
+    receipt: &str,
+    write_kind: Option<&str>,
+) -> Result<(), PublicSeamError> {
+    if method != "leaven/proposal.submit_batch" {
+        return Err(invalid_stage_run(format!(
+            "proposal_receipts.method `{method}` is not a proposal callback method"
+        )));
+    }
+    if !receipt.starts_with("wrec_") {
+        return Err(invalid_stage_run(format!(
+            "proposal receipt `{receipt}` does not match method `{method}`"
+        )));
+    }
+    if write_kind.is_some_and(|kind| kind != "submit_proposal_batch") {
+        return Err(invalid_stage_run(
+            "proposal receipt write_kind must be `submit_proposal_batch`",
+        ));
     }
     Ok(())
 }

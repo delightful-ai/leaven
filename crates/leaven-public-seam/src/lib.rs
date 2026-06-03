@@ -69,6 +69,7 @@ pub use stage_payload::{
     StagePayloadRole, StageProposalEffect,
 };
 pub use stage_run::{
-    StageEffectReceipt, StageRunKind, StageRunRequestDocument, StageRunResultDocument,
+    StageEffectReceipt, StageProposalReceipt, StageRunKind, StageRunRequestDocument,
+    StageRunResultDocument,
 };
 pub use watch::DeferredWatchReplacement;

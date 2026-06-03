@@ -37,6 +37,10 @@ class JsonRpcCallbackClient:
         """Return effect receipts observed while running the current stage."""
         return self._receipts.effect_receipts_json()
 
+    def proposal_receipts_json(self) -> list[dict[str, object]]:
+        """Return proposal write receipts observed while running the current stage."""
+        return self._receipts.proposal_receipts_json()
+
     async def lm_complete(
         self,
         prompt: str,
@@ -93,9 +97,10 @@ def propose_context(
     parent_candidate_id: str,
     stage_call_id: str,
     lm_model: str,
+    callback: JsonRpcCallbackClient | None = None,
 ) -> CallbackProposeContext:
     """Build the context passed to a registered proposer stage."""
-    callback = JsonRpcCallbackClient(lm_model=lm_model)
+    callback = callback or JsonRpcCallbackClient(lm_model=lm_model)
     return CallbackProposeContext(
         callback,
         parent_candidate_id=parent_candidate_id,
