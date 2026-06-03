@@ -1,12 +1,12 @@
 """Stage decorators — `@lv.evaluator`, `@lv.reflector`, `@lv.proposer`, etc.
 
 Each decorator wraps an async function into a stage handler that the engine
-calls via the ACP wire. The decorator is sugar over `register_stage(...)`;
+calls via the Leaven public seam. The decorator is sugar over `register_stage(...)`;
 both forms produce the same `RegisteredStage` value.
 
 A decorated function can run two ways:
-- Composed into an `lv.optimize(...)` run (the engine reaches it in-process via
-  the embedded ACP loop)
+- Composed into an `lv.optimize(...)` run (the engine reaches it through
+  `leaven/stage.run`)
 - Standalone via `if __name__ == "__main__": lv.serve_stage(my_stage)`
   (the engine spawns the script as a subprocess and reaches it over stdio)
 
@@ -15,9 +15,9 @@ stage differs. Scoring is authored with `@lv.reward` (a `Rubric`), not a stage
 decorator.
 
 Scaffold note: the decorators construct real `RegisteredStage` values so
-user code composes cleanly. The engine binding lives in
-`lv.optimize(...).run()` and `lv.serve_stage(...)` — both raise
-NotImplementedError until the implementation lands.
+user code composes cleanly. `lv.optimize(...).run()` can dispatch runner stages
+through the durable seam; standalone `lv.serve_stage(...)` remains a later
+server-mode slice.
 """
 
 from __future__ import annotations
@@ -83,8 +83,8 @@ def _make_registered(
     """Internal: build a RegisteredStage from a decorated function.
 
     Used by all stage decorators. The scaffold returns a real value so user
-    code composes cleanly; engine wiring lives in `lv.optimize(...).run()`
-    and `lv.serve_stage(...)`.
+    code composes cleanly; runner-stage wiring lives in `lv.optimize(...).run()`
+    and standalone server-mode wiring will live in `lv.serve_stage(...)`.
     """
     return RegisteredStage(
         role=role,
@@ -245,16 +245,16 @@ def register_stage(
 
 
 def serve_stage(*stages: RegisteredStage[Any, Any]) -> None:
-    """Run one or more stages as a standalone ACP worker process.
+    """Run one or more stages as a standalone public-seam worker process.
 
     Usage:
         if __name__ == "__main__":
             lv.serve_stage(my_stage)
 
-    Reads `LEAVEN_CAPABILITY_TOKEN`, `LEAVEN_ENDPOINT`, and
-    `LEAVEN_CAPABILITY_FINGERPRINT` from env per the locked ACP profile,
-    spawns the ACP server loop, and dispatches stage calls until the
-    session terminates.
+    Future slice: reads capability env, starts the worker loop, and dispatches
+    stage calls until the session terminates. `lv.optimize(...).run()` uses the
+    checked-in private command worker today; this public standalone entrypoint
+    remains scaffold.
     """
     raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 

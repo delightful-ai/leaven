@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
+
 import leaven as lv
 from leaven._handles import WorkspaceHandle
 from leaven._receipts import CallReceipt
@@ -179,6 +183,56 @@ def test_stage_run_request_names_locked_runner_dispatch_shape() -> None:
         "kind": "command_runner",
         "argv": ["python", "-m", "worker"],
     }
+
+
+def test_checked_in_stage_worker_dispatches_registered_runner(tmp_path) -> None:
+    """Scenario: command worker imports a registered runner and returns stage result."""
+
+    module = tmp_path / "worker_stage.py"
+    module.write_text(
+        """
+import leaven as lv
+
+@lv.runner
+async def run(prompt, case, cx):
+    reply = await cx.lm.complete(prompt=prompt.template)
+    return f"{case.input['question']} => {reply.text}"
+""".lstrip(),
+        encoding="utf-8",
+    )
+    request = StageRunRequest(
+        request_id="stage-worker-test",
+        run_id="run_stage_worker",
+        stage_call_id="sc_stage_worker",
+        candidate="cand_stage_worker",
+        case="case_stage_worker",
+        case_input={"question": "2 + 2", "prompt": "Answer the question."},
+    ).to_json_rpc()
+
+    process = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "leaven._seam_worker",
+            "--module-file",
+            str(module),
+            "--stage-id",
+            "worker_stage.run",
+            "--stage-name",
+            "run",
+            "--lm-text",
+            "4",
+        ],
+        input=json.dumps(request) + "\n",
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert process.returncode == 0, process.stderr
+    response = json.loads(process.stdout)
+    assert response["result"]["stage_call_id"] == "sc_stage_worker"
+    assert response["result"]["output"]["value"] == "2 + 2 => 4"
 
 
 class FakeSeamClient:

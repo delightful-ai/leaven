@@ -6,13 +6,15 @@ import asyncio
 from typing import Any
 
 from .._seam import (
-    MockRunnerStageConfig,
+    CommandRunnerStageConfig,
     SeamClient,
     SeamExecutionContext,
     SeamServiceConfig,
     StageRunRequest,
 )
+from .._seam_worker import worker_argv_for_stage
 from ..artifacts.prompt import PromptArtifact
+from ..decorators import RegisteredStage
 from ..lm.mock import MockLm
 from ..runtime import Runtime
 from .scoring import exact_answer_score, mean_score
@@ -23,14 +25,16 @@ async def run_prompt_mechanics(
     *,
     seed: PromptArtifact,
     cases: list[dict[str, Any]],
+    runner: RegisteredStage[Any, Any],
     run_id: str,
     runtime: Runtime,
 ) -> SeamOptimizeReport:
     """Run the current prompt slice through durable `leaven/stage.run`.
 
     This is mechanics evidence for the durable server route. The configured
-    stage runner is deterministic and service-side; it is not Python-authored
-    worker execution and does not perform optimizer search.
+    stage runner is a checked-in Python worker process that dispatches the
+    registered `@lv.runner`; it does not yet perform optimizer search or nested
+    public-seam effect callbacks.
     """
     runner_text = _runner_text(runtime)
     client = SeamClient(
@@ -40,9 +44,8 @@ async def run_prompt_mechanics(
                 policy_fingerprint="fp_policy_sha256_python_optimize",
                 base_revision=f"rev_{run_id}",
             ),
-            stage=MockRunnerStageConfig(
-                text=runner_text,
-                summary="deterministic durable seam runner output",
+            stage=CommandRunnerStageConfig(
+                argv=worker_argv_for_stage(runner, lm_text=runner_text),
             ),
         )
     )

@@ -27,7 +27,7 @@ class TrustProfile(StrEnum):
     """Third-party scorer packages — score-only, no arbitrary workspace/agent access."""
 
     REMOTE_UNTRUSTED = "remote_untrusted"
-    """Remote ACP workers — strictest checks, minimal implicit authority."""
+    """Remote public-seam workers — strictest checks, minimal implicit authority."""
 
 
 # String-friendly aliases for the convention `trust_profile="managed_sandbox"`.

@@ -57,7 +57,9 @@ spec_package:
       JSON-RPC stdio shell. The CLI path now executes configured service
       families for `lm.complete`, `agent.run` with workspace materialization,
       deterministic runner `stage.run`, and command-backed runner `stage.run`
-      through an explicitly configured subprocess worker.
+      through an explicitly configured subprocess worker. Python
+      `lv.optimize(...).run()` now uses a checked-in private worker package for
+      registered runner-stage dispatch in the prompt mechanics slice.
     - >-
       `leaven serve --stdio --plan --out` is a legacy bidirectional GEPA demo
       path; it is not the durable public SDK server.
@@ -261,6 +263,18 @@ acceptance:
         `Optimized[PromptArtifact]` with deterministic configured-runner scores.
         This does not prove Python-authored worker stages, GEPA search,
         reward-vector execution, or inspectable lineage/evidence.
+      - >-
+        Partial registered-runner evidence, not acceptance completion:
+        `sdk/python/src/leaven/_seam_worker/` is a checked-in private worker
+        package, and `leaven._seam_optimize` now configures
+        `CommandRunnerStageConfig` to invoke it. `uv run pytest
+        tests/test_stage_surface.py -q` proves the worker imports a real
+        registered `@lv.runner`, receives a locked `leaven/stage.run` request,
+        binds a rollout context, and returns the runner output. `LEAVEN_BIN=...
+        uv run python examples/03_prompt_optimize.py` proves
+        `lv.optimize(...).run()` uses that route through `leaven seam serve
+        --stdio`. This still does not prove nested `leaven/*` callbacks,
+        non-runner stages, GEPA search, reward vectors, or inspection.
     closeout_check: Rust-only harnesses and hardcoded demo plans are rejected.
 
   - id: reward_vector

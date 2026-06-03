@@ -5,7 +5,7 @@ Plan IR ops that the engine validates against the locked seam before
 execution. Users see typed results; the wire stays invisible.
 
 The `batch()` builder is special: it accumulates multiple ops into one
-ACP call with one receipt root.
+public-seam call with one receipt root.
 """
 
 from __future__ import annotations

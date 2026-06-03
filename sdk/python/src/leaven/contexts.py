@@ -45,7 +45,7 @@ class _Effects(_StageMeta):
     workspace: WorkspaceReads
 
     def batch(self) -> BatchBuilder:
-        """Collapse multiple ops into one ACP round-trip."""
+        """Collapse multiple ops into one public-seam round-trip."""
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
 

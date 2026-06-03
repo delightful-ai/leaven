@@ -7,9 +7,10 @@ validation / test splits come from `Case.split` tags on the environment's task.
 
 `.run()` for the current prompt mechanics path uses the durable
 `leaven seam serve --stdio` server route and sends locked runner
-`leaven/stage.run` requests through private `_seam` client machinery. This is
-deterministic mechanics evidence for the public seam route; Python-authored
-worker execution and real optimizer search are later slices.
+`leaven/stage.run` requests through private `_seam` client machinery. The
+current prompt slice dispatches registered Python runner stages through a
+checked-in subprocess worker; real optimizer search and nested public-seam
+effect callbacks are later slices.
 """
 
 from __future__ import annotations
@@ -42,7 +43,7 @@ class OptimizeBuilder[A]:
         cancellation.
         """
         seed = self._prompt_seed()
-        self._runner_stage()
+        runner = self._runner_stage()
         self._gepa_config()
         cases = self._plan_cases()
         run_id = self._run_id()
@@ -51,6 +52,7 @@ class OptimizeBuilder[A]:
         report = await run_prompt_mechanics(
             seed=seed,
             cases=cases,
+            runner=runner,
             run_id=run_id,
             runtime=self.runtime,
         )

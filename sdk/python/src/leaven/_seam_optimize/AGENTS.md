@@ -4,9 +4,10 @@
 mechanics path over the durable public seam server.
 
 It may lower the public Python composition into configured
-`leaven seam serve --stdio` calls and project those results into the public
-`Optimized` facade. It must not own optimizer strategy, graph mutation,
-capability policy, provider adapters, or Python worker process dispatch.
+`leaven seam serve --stdio` calls, configure the private Python command worker,
+and project those results into the public `Optimized` facade. It must not own
+optimizer strategy, graph mutation, capability policy, provider adapters, or
+worker protocol implementation.
 
 ## Public Dependencies
 
@@ -18,6 +19,7 @@ capability policy, provider adapters, or Python worker process dispatch.
 ## Private Dependencies
 
 - `leaven._seam` config, request, and one-shot process client helpers.
+- `leaven._seam_worker` command target construction only.
 - No imports from `leaven._serve`; that module is the legacy bridge-demo path
   and must not be part of current `lv.optimize(...).run()` mechanics.
 
@@ -25,5 +27,6 @@ capability policy, provider adapters, or Python worker process dispatch.
 
 - `types.py`: private report/assessment records for the mechanics path.
 - `scoring.py`: deterministic local score projection for current prompt slice.
-- `driver.py`: durable seam process requests for runner-stage mechanics.
+- `driver.py`: durable seam process requests for registered runner-stage
+  mechanics.
 - `__init__.py`: map-only re-export.
