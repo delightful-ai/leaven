@@ -472,12 +472,15 @@ acceptance:
         preserving usage and receipt in `LmResponse`.
       - >-
         Live proof scaffold, not executed in this environment:
-        `sdk/python/examples/13_live_optimize_openai_lm.py` is a live-gated
-        `lv.optimize(...).run()` proof that calls `cx.lm.complete` inside the
-        Python runner and returns assistant text, receipt id, usage, cost field,
-        and model through the assessment output. Current shell evidence:
-        `OPENAI_API_KEY` is unset, so the spend-bearing live OpenAI proof
-        remains pending.
+        `sdk/python/examples/live_openai_lm/` is a real example project with
+        its own `pyproject.toml`, `src/live_openai_lm` package, console command,
+        and explicit public/private dependency-boundary declaration. It is a
+        live-gated `lv.optimize(...).run()` proof that calls `cx.lm.complete`
+        inside the Python runner and returns assistant text, receipt id, usage,
+        cost field, and model through the assessment output. The numbered
+        `13_live_optimize_openai_lm.py` file is only a tour wrapper into that
+        project command. Current shell evidence: `OPENAI_API_KEY` is unset, so
+        the spend-bearing live OpenAI proof remains pending.
     closeout_check: Mock-only LM is acceptable for default CI, but is not live provider proof.
 
   - id: inspection_and_closeout_truth

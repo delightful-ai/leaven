@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import leaven as lv
+
 from live_openai_lm.config import EXPECTED_TEXT, LiveOpenAiConfig
 from live_openai_lm.output import valid_live_lm_output
 

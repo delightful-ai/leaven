@@ -1,0 +1,52 @@
+[project]
+name = "leaven-live-openai-lm"
+version = "0.1.0"
+description = "Live OpenAI LM proof for the Leaven Python SDK public seam"
+requires-python = ">=3.12"
+dependencies = [
+    "leaven",
+]
+
+[project.scripts]
+live-openai-lm = "live_openai_lm.main:run"
+
+[tool.uv.sources]
+leaven = { path = "../..", editable = true }
+
+[dependency-groups]
+private-dev = [
+    "ruff>=0.7",
+    "ty>=0.0.1a1",
+]
+
+[tool.leaven.dependency-boundaries]
+public_runtime = [
+    "leaven",
+]
+public_optional = []
+private_dev = [
+    "ruff",
+    "ty",
+]
+private_runtime = []
+notes = [
+    "This project is a live-spend proof package, not part of the published leaven SDK wheel.",
+    "The only public runtime dependency is the local leaven SDK package under test.",
+    "The OpenAI client dependency is private to the Rust seam service process, configured through leaven runtime settings.",
+    "Private dev dependencies are local lint/type tools for this example project only.",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/live_openai_lm"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]

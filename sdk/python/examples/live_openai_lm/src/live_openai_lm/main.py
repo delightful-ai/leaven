@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 from live_openai_lm.config import LIVE_ENV, LiveOpenAiConfig
@@ -33,4 +34,9 @@ async def amain() -> None:
     print("cost status:     ", result.summary.cost_status)
 
 
-__all__ = ["amain"]
+def run() -> None:
+    """Run the live proof from the project console entrypoint."""
+    asyncio.run(amain())
+
+
+__all__ = ["amain", "run"]

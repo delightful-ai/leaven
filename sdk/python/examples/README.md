@@ -19,6 +19,7 @@ just examples                     # run all thirteen in order; live-gated exampl
 just example 03                   # run just one (by number prefix)
 LEAVEN_LIVE_CODEX=1 just example 10
 LEAVEN_LIVE_OPENAI=1 just example 13
+LEAVEN_LIVE_OPENAI=1 uv run --project examples/live_openai_lm live-openai-lm
 ```
 
 ## The tour
@@ -37,7 +38,7 @@ LEAVEN_LIVE_OPENAI=1 just example 13
 | 10 | `10_live_codex_seam.py` | **Live-gated substrate proof** — Python spawns `leaven seam serve --stdio --config`, sends `leaven/agent.run`, and checks Codex CLI `agent_session` receipts/transcript refs. This is direct public-seam evidence, not the finished `cx.agent.run` SDK. |
 | 11 | `11_live_optimize_codex_stage.py` | **Live-gated product runner proof** — `lv.optimize(...).run()` dispatches a Python runner that calls `cx.agent.run` through the durable seam. |
 | 12 | `12_live_optimize_codex_proposer.py` | **Live-gated product proposer proof** — a configured proposer calls `cx.agent.run` against `cx.parent_workspace` and submits a proposal batch. |
-| 13 | `13_live_optimize_openai_lm.py` | **Live-gated product LM proof** — a small entrypoint into the `live_openai_lm/` example package; the runner calls `cx.lm.complete` through the durable seam and validates text, usage, model, and receipt projection. |
+| 13 | `13_live_optimize_openai_lm.py` | **Live-gated product LM proof** — a small numbered wrapper into the `live_openai_lm/` example project; the runner calls `cx.lm.complete` through the durable seam and validates text, usage, model, and receipt projection. |
 
 ## Fixtures
 

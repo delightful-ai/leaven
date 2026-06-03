@@ -277,10 +277,12 @@ now proves the same durable seam from the product path:
 calls `cx.agent.run` against `cx.parent_workspace`, and the resulting Codex
 `gpt-5.4-mini` agent receipt is cited in a typed proposal submitted through
 `leaven/proposal.submit_batch`. `sdk/python/examples/13_live_optimize_openai_lm.py`
-is the small entrypoint for the corresponding live-gated OpenAI LM product-path
+is the numbered wrapper for the corresponding live-gated OpenAI LM product-path
 proof; its real behavior lives in the `sdk/python/examples/live_openai_lm/`
-package, split into environment config, scenario construction, output
-validation, and command entrypoint modules. The runner calls `cx.lm.complete`,
+project, with its own `pyproject.toml`, dependency-boundary declaration,
+console command, and `src/live_openai_lm` package split into environment
+config, scenario construction, output validation, and command entrypoint
+modules. The runner calls `cx.lm.complete`,
 receives text, usage, model, and receipt back through the callback-backed
 `LmResponse`, and returns those facts in the reward output. It has deterministic
 provider-wiring coverage through `leaven-seam-service` and SDK tests, but the

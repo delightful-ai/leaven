@@ -24,7 +24,7 @@ def main() -> int:
 
     failures: list[tuple[str, str]] = []
     for script in scripts:
-        print(f"\n=== {script.name} " + "=" * (60 - len(script.name)))
+        print(f"\n=== {script.name} " + "=" * (60 - len(script.name)), flush=True)
         spec = importlib.util.spec_from_file_location(script.stem, script)
         if spec is None or spec.loader is None:
             failures.append((script.name, "could not load spec"))
