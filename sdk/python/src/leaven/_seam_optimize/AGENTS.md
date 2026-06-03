@@ -5,16 +5,16 @@ mechanics path over the durable public seam server.
 
 It may lower the public Python composition into configured
 `leaven seam serve --stdio` calls, configure the private Python command worker,
-and project those results into the public `Optimized` facade. It must not own
-optimizer strategy, graph mutation, capability policy, provider adapters, or
-worker protocol implementation.
+dispatch runner/proposer mechanics, and project those results into the public
+`Optimized` facade. It must not own optimizer strategy, graph mutation,
+capability policy, provider adapters, or worker protocol implementation.
 
 ## Public Dependencies
 
 - Public SDK composition records: artifacts, cases, environments, runtimes,
   and `Optimized` result types.
 - The durable `leaven seam serve --stdio` CLI route and locked public-seam
-  runner `leaven/stage.run` request/result schemas.
+  runner/proposer `leaven/stage.run` request/result schemas.
 
 ## Private Dependencies
 
@@ -31,5 +31,5 @@ worker protocol implementation.
 - `rewards.py`: Python reward-vector execution and aggregate score projection.
 - `scoring.py`: deterministic aggregate helpers for current prompt slice.
 - `driver.py`: durable seam process requests for registered runner-stage
-  mechanics.
+  mechanics and submit-only proposer mechanics.
 - `__init__.py`: map-only re-export.

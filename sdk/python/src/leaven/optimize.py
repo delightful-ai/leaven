@@ -6,11 +6,12 @@ typed by the artifact type so `result.best.artifact` is fully typed. Train /
 validation / test splits come from `Case.split` tags on the environment's task.
 
 `.run()` for the current prompt mechanics path uses the durable
-`leaven seam serve --stdio` server route and sends locked runner
+`leaven seam serve --stdio` server route and sends locked runner/proposer
 `leaven/stage.run` requests through private `_seam` client machinery. The
-current prompt slice dispatches registered Python runner stages through a
-checked-in subprocess worker; real optimizer search and nested public-seam
-effect callbacks are later slices.
+current prompt slice dispatches registered Python runner stages and configured
+`Propose.fn(...)` proposer stages through checked-in subprocess workers. The
+proposer path submits a proposal batch only; proposal application, admission,
+and real optimizer search remain later slices.
 """
 
 from __future__ import annotations
@@ -50,7 +51,7 @@ class OptimizeBuilder[A]:
         """
         seed = self._prompt_seed()
         runner = self._runner_stage()
-        self._gepa_config()
+        optimizer = self._gepa_config()
         cases = self._plan_cases()
         run_id = self._run_id()
 
@@ -59,6 +60,7 @@ class OptimizeBuilder[A]:
             seed=seed,
             cases=cases,
             runner=runner,
+            optimizer=optimizer,
             rubric=self.environment.rubric,
             run_id=run_id,
             runtime=self.runtime,
@@ -168,7 +170,7 @@ def _to_optimized(
         run_id=run_id,
         started_at=started_at,
         completed_at=_utcnow(),
-        iterations=0,
+        iterations=len(report.proposal_receipts),
         candidates_evaluated=1,
         total_cost_usd=cost.total_cost_usd,
         cost_status=cost.cost_status,

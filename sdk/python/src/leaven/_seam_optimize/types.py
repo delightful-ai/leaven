@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from ..assessment import RewardAssessment
@@ -32,6 +32,7 @@ class SeamOptimizeReport:
     seed_score: float
     best_score: float
     assessments: list[SeamStageAssessment]
+    proposal_receipts: list[str] = field(default_factory=list)
     unsupported: tuple[UnsupportedRunFact, ...] = ()
 
 

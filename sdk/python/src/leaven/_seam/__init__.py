@@ -7,7 +7,7 @@ package only.
 
 from __future__ import annotations
 
-from .capability import effect_capability
+from .capability import effect_capability, proposal_submit_capability
 from .client import SeamClient
 from .config import (
     CodexCliRuntimeConfig,
@@ -19,7 +19,13 @@ from .config import (
     SeamServiceConfig,
 )
 from .errors import SeamClientError
-from .plans import AgentRunRequest, LmCompleteRequest, ProposalSubmitRequest, StageRunRequest
+from .plans import (
+    AgentRunRequest,
+    LmCompleteRequest,
+    ProposalSubmitRequest,
+    StageRunProposeRequest,
+    StageRunRequest,
+)
 from .resolve import resolve_codex_binary, resolve_leaven_binary, resolve_repo_root
 
 __all__ = [
@@ -35,8 +41,10 @@ __all__ = [
     "SeamClientError",
     "SeamExecutionContext",
     "SeamServiceConfig",
+    "StageRunProposeRequest",
     "StageRunRequest",
     "effect_capability",
+    "proposal_submit_capability",
     "resolve_codex_binary",
     "resolve_leaven_binary",
     "resolve_repo_root",

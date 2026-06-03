@@ -13,8 +13,10 @@ from .._seam import (
     SeamClient,
     SeamExecutionContext,
     SeamServiceConfig,
+    StageRunProposeRequest,
     StageRunRequest,
     effect_capability,
+    proposal_submit_capability,
     resolve_codex_binary,
 )
 from .._seam_worker import worker_argv_for_stage
@@ -23,6 +25,7 @@ from ..artifacts.prompt import PromptArtifact
 from ..decorators import RegisteredStage
 from ..lm.config import LmConfig
 from ..lm.mock import MockLm
+from ..optimizers.gepa import Gepa
 from ..rubric import Rubric
 from ..runtime import Runtime
 from .rewards import evaluate_reward_vector
@@ -30,12 +33,16 @@ from .scoring import mean_score
 from .status import first_agent, unsupported_facts_for_runtime
 from .types import SeamOptimizeReport, SeamStageAssessment
 
+PROMPT_SURFACE_FINGERPRINT = "fp_surface_sha256_python_prompt_template"
+PROMPT_CHANGE_SCHEMA = "fp_schema_sha256_python_prompt_patch"
+
 
 async def run_prompt_mechanics(
     *,
     seed: PromptArtifact,
     cases: list[dict[str, Any]],
     runner: RegisteredStage[Any, Any],
+    optimizer: Gepa,
     rubric: Rubric,
     run_id: str,
     runtime: Runtime,
@@ -106,13 +113,93 @@ async def run_prompt_mechanics(
                 rewards=rewards,
             )
         )
+    proposal_receipts = await _run_configured_proposer(
+        optimizer=optimizer,
+        runtime=runtime,
+        run_id=run_id,
+        assessments=assessments,
+    )
     score = mean_score([assessment.score.value for assessment in assessments])
     return SeamOptimizeReport(
         seed_score=score,
         best_score=score,
         assessments=assessments,
+        proposal_receipts=proposal_receipts,
         unsupported=unsupported_facts_for_runtime(runtime),
     )
+
+
+async def _run_configured_proposer(
+    *,
+    optimizer: Gepa,
+    runtime: Runtime,
+    run_id: str,
+    assessments: list[SeamStageAssessment],
+) -> list[str]:
+    propose = optimizer.propose
+    if propose is None:
+        return []
+    if propose.kind != "function" or propose.stage is None:
+        raise NotImplementedError(
+            "this slice supports a function proposer (`Propose.fn(proposer)`); "
+            f"got proposer kind {propose.kind!r}"
+        )
+    if propose.stage.role != "proposer":
+        raise TypeError(
+            f"the propose stage must be a @lv.proposer; got role {propose.stage.role!r}"
+        )
+
+    stage_call_id = f"sc_{run_id}_proposer_0"
+    capability_fingerprint = "fp_cap_sha256_python_proposer"
+    policy_fingerprint = "fp_policy_sha256_python_proposer"
+    client = SeamClient(
+        config=SeamServiceConfig(
+            context=SeamExecutionContext(
+                capability_fingerprint=capability_fingerprint,
+                policy_fingerprint=policy_fingerprint,
+                base_revision=f"rev_{run_id}",
+            ),
+            capability=proposal_submit_capability(
+                capability_fingerprint=capability_fingerprint,
+                policy_fingerprint=policy_fingerprint,
+                surface_fingerprint=PROMPT_SURFACE_FINGERPRINT,
+                change_schema=PROMPT_CHANGE_SCHEMA,
+                jti=f"jti_{run_id}_python_proposer",
+                stage_call_id=stage_call_id,
+            ),
+            agent=_agent_config(runtime),
+            lm=MockLmRuntimeConfig(text=_runner_text(runtime)),
+            stage=CommandRunnerStageConfig(argv=worker_argv_for_stage(propose.stage)),
+        )
+    )
+    result = await asyncio.to_thread(
+        client.request,
+        StageRunProposeRequest(
+            request_id=f"stage-propose-{run_id}-0",
+            run_id=f"run_{run_id}",
+            stage_call_id=stage_call_id,
+            base_revision=f"rev_{run_id}",
+            parent="cand_seed",
+            surface_fingerprint=PROMPT_SURFACE_FINGERPRINT,
+            change_schema=PROMPT_CHANGE_SCHEMA,
+            capability_fingerprint=capability_fingerprint,
+            query_policy_fingerprint=policy_fingerprint,
+            reflection_summary=_reflection_summary(assessments),
+        ).to_json_rpc(),
+    )
+    return [result["output"]["value"]]
+
+
+def _reflection_summary(assessments: list[SeamStageAssessment]) -> str:
+    if not assessments:
+        return "seed candidate has not been assessed"
+    fragments = []
+    for assessment in assessments:
+        fragments.append(f"{assessment.case_id}: score={assessment.score.value:.3f}")
+        for reward in assessment.rewards:
+            if reward.feedback:
+                fragments.append(f"{reward.id}: {reward.feedback}")
+    return "; ".join(fragments) or "seed assessment completed"
 
 
 def _case_input(seed: PromptArtifact, case: dict[str, Any]) -> dict[str, Any]:

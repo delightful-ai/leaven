@@ -29,10 +29,12 @@ and `cx.agent.run` callbacks while a worker stage is active, Python
 Honest scope: the Python SDK now configures and calls the durable public seam
 server for runner `leaven/stage.run` mechanics, executes the user's Python
 `@lv.runner`, services configured `leaven/*` callbacks, runs Python reward
-vectors, returns a typed `Optimized[PromptArtifact]`, and writes an
-`optimized.json` projection under `.leaven/runs/<run_id>/`. It still does not
-run real GEPA proposal search, persist Rust graph checkpoints, provide durable
-blob readback, or close live provider acceptance by itself.
+vectors, optionally dispatches a configured `Propose.fn(...)` proposer that
+submits a proposal batch over `leaven/proposal.submit_batch`, returns a typed
+`Optimized[PromptArtifact]`, and writes an `optimized.json` projection under
+`.leaven/runs/<run_id>/`. It still does not apply submitted proposals, run real
+GEPA proposal search, persist Rust graph checkpoints, provide durable blob
+readback, or close live provider acceptance by itself.
 
 #### 2. Example 10, live Codex agent.run over the public seam
 

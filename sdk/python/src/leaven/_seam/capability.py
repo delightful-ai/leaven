@@ -79,4 +79,66 @@ def effect_capability(
     }
 
 
-__all__ = ["effect_capability"]
+def proposal_submit_capability(
+    *,
+    capability_fingerprint: str,
+    policy_fingerprint: str,
+    surface_fingerprint: str,
+    change_schema: str,
+    jti: str,
+    stage_call_id: str,
+) -> dict[str, Any]:
+    """Build a proposer-stage capability document for proposal submission only."""
+    return {
+        "schema_version": "leaven.capability.v1",
+        "jti": jti,
+        "capability_fingerprint": capability_fingerprint,
+        "policy_fingerprint": policy_fingerprint,
+        "subject_fingerprint": f"fp_subject_sha256_{stage_call_id}",
+        "issuer": {"kind": "run_engine", "id": "engine_local"},
+        "subject": {
+            "kind": "stage_call",
+            "run": f"run_{stage_call_id}",
+            "stage_call_id": stage_call_id,
+            "role": "proposer",
+        },
+        "audience": ["leaven.acp.worker"],
+        "issued_at": "2026-06-03T00:00:00Z",
+        "expires_at": "2026-06-03T00:20:00Z",
+        "expiry_behavior": "drain_inflight_no_new_ops",
+        "token_binding": {"kind": "opaque_lookup", "token_id": f"ltok_{stage_call_id}"},
+        "revocation": {"mode": "issuer_epoch", "revocation_epoch": 9, "check": "on_every_request"},
+        "renewal": {
+            "mode": "renew_before_expiry",
+            "max_extensions": 0,
+            "max_total_lifetime_s": 1200,
+        },
+        "grants": [
+            {
+                "action": "proposal.submit_batch",
+                "resource": {},
+                "constraints": {
+                    "effects": ["change"],
+                    "allowed_surfaces": [surface_fingerprint],
+                    "change_schemas": [change_schema],
+                },
+            }
+        ],
+        "budgets": {},
+        "execution_policy": {
+            "profile": "managed_sandbox",
+            "network": "leaven_endpoint_only",
+            "subprocess": "deny_except_sandbox_exec",
+            "filesystem": "workspace_handles_only",
+            "byo_effects": "forbidden",
+        },
+        "delegation": {
+            "may_delegate": False,
+            "max_depth": 0,
+            "must_attenuate": True,
+            "allowed_actions": [],
+        },
+    }
+
+
+__all__ = ["effect_capability", "proposal_submit_capability"]

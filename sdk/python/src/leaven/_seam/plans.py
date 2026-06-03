@@ -179,6 +179,71 @@ class StageRunRequest:
 
 
 @dataclass(frozen=True)
+class StageRunProposeRequest:
+    """A single public-seam `leaven/stage.run` proposer dispatch request."""
+
+    request_id: str
+    run_id: str
+    stage_call_id: str
+    base_revision: str
+    parent: str
+    surface_fingerprint: str
+    change_schema: str
+    capability_fingerprint: str
+    query_policy_fingerprint: str
+    reflection_summary: str
+
+    def to_json_rpc(self) -> dict[str, Any]:
+        """Return a JSON-RPC request for `leaven/stage.run`."""
+        return {
+            "jsonrpc": "2.0",
+            "id": self.request_id,
+            "method": "leaven/stage.run",
+            "params": {
+                "schema_version": "leaven.stage_run.v1",
+                "message": "stage_run_request",
+                "stage": "proposer",
+                "payload": {
+                    "schema_version": "leaven.stage_payloads.v1",
+                    "role": "proposer",
+                    "run": self.run_id,
+                    "stage_call_id": self.stage_call_id,
+                    "base_revision": self.base_revision,
+                    "parent": self.parent,
+                    "surface_fingerprint": self.surface_fingerprint,
+                    "reflection_result": self._reflection_result(),
+                    "allowed_effects": ["change"],
+                    "allowed_change_schemas": [self.change_schema],
+                    "source_refs": [self.parent],
+                    "query_policy_fingerprint": self.query_policy_fingerprint,
+                    "capability_fingerprint": self.capability_fingerprint,
+                },
+            },
+        }
+
+    def _reflection_result(self) -> dict[str, Any]:
+        return {
+            "schema_version": "leaven.stage_payloads.v1",
+            "role": "reflection_result",
+            "summary": self.reflection_summary,
+            "failure_modes": [
+                {
+                    "label": "seed_assessment_feedback",
+                    "description": self.reflection_summary,
+                    "source_refs": [self.parent],
+                }
+            ],
+            "surface_suggestions": [],
+            "negative_constraints": [],
+            "positive_constraints": [],
+            "source_refs": [self.parent],
+            "read_receipts": ["qrec_python_seed_assessment"],
+            "data_classes": ["optimizer.visible"],
+            "confidence": 0.5,
+        }
+
+
+@dataclass(frozen=True)
 class ProposalSubmitRequest:
     """A single public-seam `leaven/proposal.submit_batch` Plan request."""
 
@@ -221,5 +286,6 @@ __all__ = [
     "AgentRunRequest",
     "LmCompleteRequest",
     "ProposalSubmitRequest",
+    "StageRunProposeRequest",
     "StageRunRequest",
 ]
