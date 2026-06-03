@@ -2,6 +2,9 @@ use std::collections::BTreeMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 
+use crate::git_workspace::{
+    SeamWorkspaceGitConfig, execute_git_workspace_query, initialize_workspace_git,
+};
 use crate::lm::{ConfiguredLmError, ConfiguredLmRuntime, SeamLmConfig};
 use crate::stage::SeamStageConfig;
 use leaven_agent::{AgentRunContext, AgentRuntime};
@@ -288,6 +291,8 @@ pub struct SeamWorkspaceConfig {
     pub parent: Option<PathBuf>,
     /// UTF-8 seed files written into every materialized workspace.
     pub seed_files: BTreeMap<String, String>,
+    /// Optional Git initialization for workspaces that must answer Git-backed queries.
+    pub git: SeamWorkspaceGitConfig,
 }
 
 impl SeamWorkspaceConfig {
@@ -303,6 +308,7 @@ impl Default for SeamWorkspaceConfig {
         Self {
             parent: None,
             seed_files: BTreeMap::new(),
+            git: SeamWorkspaceGitConfig::default(),
         }
     }
 }
@@ -424,6 +430,9 @@ impl PlanExecutionHost for ConfiguredPlanHost {
                         message: format!("failed to write seed file `{}`: {error}", path.as_str()),
                     })?;
             }
+            if self.workspace_config.git.initialize {
+                initialize_workspace_git(&mut view, &self.workspace_config.git)?;
+            }
         }
         self.workspaces.insert(workspace_id.clone(), workspace);
         Ok(PlanWorkspaceMaterializeOutcome::new(
@@ -479,8 +488,17 @@ impl PlanExecutionHost for ConfiguredPlanHost {
         } else {
             expected.into_iter().map(str::to_owned).collect()
         };
-        let view = workspace.view();
-        request.execute_on_workspace_view(&view, self.graph_revision.clone(), data_classes)
+        let mut view = workspace.view();
+        if matches!(request.op_kind()?, "git_log" | "git_diff" | "git_status") {
+            execute_git_workspace_query(
+                &request,
+                &mut view,
+                self.graph_revision.clone(),
+                data_classes,
+            )
+        } else {
+            request.execute_on_workspace_view(&view, self.graph_revision.clone(), data_classes)
+        }
     }
 
     fn agent_run(
@@ -626,6 +644,7 @@ mod tests {
         ConfiguredSeamService, SeamAgentConfig, SeamExecutionContextConfig, SeamServiceConfig,
         SeamStageConfig, SeamWorkspaceConfig,
     };
+    use crate::SeamWorkspaceGitConfig;
     use crate::lm::{MockLmResponseConfig, SeamLmConfig};
 
     #[test]
@@ -1439,6 +1458,57 @@ mod tests {
                     assert_eq!(value["result"]["primary"]["entries"][0]["bytes"], 24);
                 },
             },
+            WorkspaceQueryCase {
+                method: "leaven/workspace.git_log",
+                name: "gitlog",
+                op: json!({"kind": "git_log", "max_entries": 5}),
+                primary_kind: "workspace_diff",
+                assert_primary: |value| {
+                    assert!(
+                        value["result"]["primary"]["text"]
+                            .as_str()
+                            .unwrap()
+                            .contains("leaven workspace seed")
+                    );
+                    assert_eq!(
+                        value["result"]["primary"]["source_refs"][0]["namespace"],
+                        "leaven.workspace.git_log.max_entries"
+                    );
+                },
+            },
+            WorkspaceQueryCase {
+                method: "leaven/workspace.git_diff",
+                name: "gitdiff",
+                op: json!({"kind": "git_diff", "against": "seed", "max_bytes": 4096}),
+                primary_kind: "workspace_diff",
+                assert_primary: |value| {
+                    let text = value["result"]["primary"]["text"].as_str().unwrap();
+                    assert!(text.contains("-pub fn answer() -> u8 { 42 }"));
+                    assert!(text.contains("+pub fn answer() -> u8 { 43 }"));
+                    assert_eq!(
+                        value["result"]["primary"]["source_refs"][0]["namespace"],
+                        "leaven.workspace.git_diff.against"
+                    );
+                },
+            },
+            WorkspaceQueryCase {
+                method: "leaven/workspace.git_status",
+                name: "gitstatus",
+                op: json!({"kind": "git_status", "porcelain": true}),
+                primary_kind: "workspace_diff",
+                assert_primary: |value| {
+                    assert!(
+                        value["result"]["primary"]["text"]
+                            .as_str()
+                            .unwrap()
+                            .contains(" M src/lib.rs")
+                    );
+                    assert_eq!(
+                        value["result"]["primary"]["source_refs"][0]["namespace"],
+                        "leaven.workspace.git_status.porcelain"
+                    );
+                },
+            },
         ]
     }
 
@@ -1545,6 +1615,13 @@ mod tests {
                     "pub fn answer() -> u8 { 42 }\n".to_owned(),
                 ),
             ]),
+            git: SeamWorkspaceGitConfig {
+                initialize: true,
+                post_commit_files: BTreeMap::from([(
+                    "src/lib.rs".to_owned(),
+                    "pub fn answer() -> u8 { 43 }\n".to_owned(),
+                )]),
+            },
         }
     }
 
@@ -1872,7 +1949,10 @@ mod tests {
                             "stat",
                             "digest",
                             "snapshot",
-                            "capture_artifacts"
+                            "capture_artifacts",
+                            "git_log",
+                            "git_diff",
+                            "git_status"
                         ]
                     }
                 },

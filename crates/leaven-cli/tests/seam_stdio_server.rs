@@ -24,6 +24,12 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
                     "seed_files": {
                         "README.md": "seeded workspace readme\n",
                         "src/lib.rs": "pub fn answer() -> u8 { 42 }\n"
+                    },
+                    "git": {
+                        "initialize": true,
+                        "post_commit_files": {
+                            "src/lib.rs": "pub fn answer() -> u8 { 43 }\n"
+                        }
                     }
                 },
                 "lm": {
@@ -322,6 +328,21 @@ fn workspace_query_requests() -> Vec<Value> {
             "captured",
             json!({"kind": "capture_artifacts", "paths": ["README.md"], "max_bytes": 4096}),
         ),
+        (
+            "leaven/workspace.git_log",
+            "gitlog",
+            json!({"kind": "git_log", "max_entries": 5}),
+        ),
+        (
+            "leaven/workspace.git_diff",
+            "gitdiff",
+            json!({"kind": "git_diff", "against": "seed", "max_bytes": 4096}),
+        ),
+        (
+            "leaven/workspace.git_status",
+            "gitstatus",
+            json!({"kind": "git_status", "porcelain": true}),
+        ),
     ]
     .into_iter()
     .map(|(method, name, op)| workspace_query_request(method, name, op))
@@ -481,7 +502,10 @@ fn seam_capability() -> Value {
                         "stat",
                         "digest",
                         "snapshot",
-                        "capture_artifacts"
+                        "capture_artifacts",
+                        "git_log",
+                        "git_diff",
+                        "git_status"
                     ]
                 }
             },

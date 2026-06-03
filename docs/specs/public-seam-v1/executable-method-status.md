@@ -36,6 +36,7 @@ Codex/agentic public-seam readiness.
 | `leaven/workspace.materialize` | Configured local | `leaven-seam-service::service` plus `leaven-workspace-local` | Allocates a local workspace and writes configured seed files. Workspace handles are local to the executing Plan document/callback flow. |
 | `leaven/workspace.release` | Configured local | `leaven-seam-service::service` plus `leaven-workspace-local` | Releases a workspace handle materialized earlier in the same Plan document/callback flow and returns a released workspace handle with receipts. |
 | `leaven/workspace.snapshot`, `leaven/workspace.list`, `leaven/workspace.read_file`, `leaven/workspace.stat`, `leaven/workspace.digest`, `leaven/workspace.capture_artifacts` | Configured local | `leaven-seam-service::service` plus `leaven-workspace-local` | Executes finite reads against the local workspace view with capability-scoped read ops. `capture_artifacts` currently returns listing entries and byte counts; blob byte retrieval still needs a Rust-owned artifact/blob read path before the workspace closeout row is done. |
+| `leaven/workspace.git_log`, `leaven/workspace.git_diff`, `leaven/workspace.git_status` | Configured local | `leaven-seam-service::service` plus `leaven-workspace-local` | Executes bounded Git commands inside an initialized local workspace and returns source-ref-bound `workspace_diff` values. The CLI proof uses a seed commit plus tracked post-commit edit so log, diff, and porcelain status all carry real Git output. |
 | `leaven/agent.run` | Live-provider configured when paired with materialized workspace | `leaven-seam-service::service` plus `leaven-agent-codex-cli` | Uses configured Codex CLI runtime against a materialized local workspace and projects transcript/command output blob refs into the public seam result. Without `SeamAgentConfig::CodexCli`, the service returns an explicit unsupported-provider error. |
 | `leaven/proposal.submit_batch` | Configured local write receipt | `leaven-seam-service::service` | Produces a validated proposal-batch receipt for submitted proposal payloads. This proves public-seam write plumbing, not Rust optimizer admission or proposal application. |
 | `leaven/event.emit` | Configured local write receipt | `leaven-seam-service::service` | Emits a typed local run-event receipt through Plan execution and returns a receipt-bound `emit_run_event` value. This is configured local receipt behavior, not yet durable RunGraph event persistence. |
@@ -48,8 +49,6 @@ service does not yet provide runtime behavior for these V1 families:
 
 - graph and case reads: `leaven/graph.query`, `leaven/case.load`,
   `leaven/case.input`, `leaven/case.target`, `leaven/case.metadata`
-- Git-backed workspace queries: `leaven/workspace.git_log`,
-  `leaven/workspace.git_diff`, `leaven/workspace.git_status`
 - remaining effects and graph writes: `leaven/sandbox.exec`,
   `leaven/proposal.apply`, `leaven/assessment.submit`,
   `leaven/evaluation.request`
