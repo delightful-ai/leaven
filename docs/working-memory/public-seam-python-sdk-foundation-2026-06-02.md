@@ -18,6 +18,9 @@ Status: active foundation slice, not the full Python SDK acceptance gate.
 - Current slice: the runnable Python SDK project has hard-cut over to
   `sdk/python`, with `leaven._seam` as a split private module package for the
   public-seam process client.
+- Current AgentBuilder slice after `7d21e741`: `AgentBuilder.run` can now be
+  privately bound to `leaven._seam`, lower a Codex `agent_run` Plan IR request,
+  and project the public-seam result into typed `AgentSession`.
 
 ## Verification Run
 
@@ -46,13 +49,14 @@ Python SDK project:
 - `uv run python examples/10_live_codex_seam.py` skips without
   `LEAVEN_LIVE_CODEX=1`.
 - `LEAVEN_LIVE_CODEX=1 uv run python examples/10_live_codex_seam.py` completed
-  with `gpt-5.4-mini`, transcript bytes `402`, and receipts
-  `wrec_workspace, agentrec_completion`.
+  through `AgentBuilder.run` with `gpt-5.4-mini`, transcript ref
+  `blob_completion_transcript`, and receipt `agentrec_completion`.
 
 ## Still Unproven
 
-- `sdk/python` ergonomic `AgentBuilder.run` / `cx.agent.run` is still scaffold.
-  Example 10 is a direct JSON-RPC client, not the high-level SDK path.
+- Engine-supplied `cx.agent.run` inside `lv.optimize(...).run()` is still
+  scaffold. Example 10 binds `AgentBuilder.run` privately, not from a real
+  running stage context.
 - Reward-vector execution from Python remains scaffold. `@lv.reward` bodies are
   not yet executed over the public seam except for the prior host-side exact
   match path in example 03.
@@ -71,8 +75,8 @@ Python SDK project:
 
 ## Next Slices
 
-1. Wire `AgentBuilder.run` for a single configured Codex CLI runtime through
-   the private `leaven._seam` substrate, still live-gated in examples.
+1. Wire an engine-supplied `cx.agent` inside a Python stage context so
+   `lv.optimize(...).run()` can use the same `AgentBuilder.run` substrate.
 2. Add blob persistence/readback to `leaven-seam-service` or record an explicit
    unsupported-provider error if blob fetch is requested before storage exists.
 3. Decide the cost bridge for Codex CLI: either parse provider usage from Codex

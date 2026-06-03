@@ -257,7 +257,15 @@ acceptance:
           Fast local proof for workspace/proposal/receipt mechanics only. This
           proof may keep CI cheap, but it must stay labeled mechanics evidence
           and must not close the live Codex acceptance item.
-    evidence: []
+    evidence:
+      - >-
+        Partial evidence, not acceptance completion: current AgentBuilder slice
+        after `7d21e741`; `sdk/python` test
+        `test_agent_builder_run_uses_bound_public_seam_client` proves
+        `AgentBuilder.run` lowers through `leaven/agent.run`; live-gated
+        `sdk/python/examples/10_live_codex_seam.py` reaches Codex
+        `gpt-5.4-mini` through Leaven and returns typed `AgentSession`. Typed
+        proposal submission remains unproven.
     closeout_check: A Rust-side hardcoded child prompt, fixed diff, or deterministic fake-agent transcript is not enough.
 
   - id: real_lm_provider_wiring

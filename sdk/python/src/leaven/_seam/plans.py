@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -20,7 +21,9 @@ class AgentRunRequest:
     timeout_s: int = 180
     max_turns: int = 1
     max_usd_micro: int = 5_000_000
-    max_bytes: int = 512
+    output: dict[str, Any] | None = None
+    allowed_commands: Sequence[str] | None = None
+    input_classes: Sequence[str] | None = None
 
     def to_json_rpc(self) -> dict[str, Any]:
         """Return a JSON-RPC request for `leaven/agent.run`."""
@@ -54,6 +57,9 @@ class AgentRunRequest:
         }
 
     def _agent_call(self) -> dict[str, Any]:
+        tool_policy: dict[str, Any] = {"allow_shell": False}
+        if self.allowed_commands is not None:
+            tool_policy["allowed_commands"] = list(self.allowed_commands)
         return {
             "kind": "call",
             "name": "completion",
@@ -64,14 +70,14 @@ class AgentRunRequest:
                 "runtime": self.runtime,
                 "workspace": self.workspace,
                 "instructions": self.instructions,
-                "tool_policy": {"allow_shell": False},
-                "output": {"kind": "final_message", "max_bytes": self.max_bytes},
+                "tool_policy": tool_policy,
+                "output": self.output or {"kind": "final_message", "max_bytes": 512},
                 "limits": {
                     "timeout_s": self.timeout_s,
                     "max_turns": self.max_turns,
                     "max_usd_micro": self.max_usd_micro,
                 },
-                "input_classes": ["public"],
+                "input_classes": list(self.input_classes or ["public"]),
             },
         }
 

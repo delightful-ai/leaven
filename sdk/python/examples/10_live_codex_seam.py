@@ -1,10 +1,11 @@
 """Example 10 — live-gated Python client for `leaven/agent.run`.
 
-This is a proof of the public seam substrate, not the ergonomic `cx.agent.run`
-SDK surface. It spawns `leaven seam serve --stdio --config`, sends one locked
-Plan IR `leaven/agent.run` request, and checks that the Rust child materializes
+This is a proof of the public seam substrate through `AgentBuilder.run`, but
+not yet through an engine-supplied `cx.agent` inside `lv.optimize(...).run()`.
+It spawns `leaven seam serve --stdio --config`, lowers one locked
+`leaven/agent.run` Plan IR request, and checks that the Rust child materializes
 a workspace, runs the configured Codex CLI adapter, and returns an
-`agent_session` with receipts and transcript refs.
+`AgentSession` with receipts and transcript refs.
 
 Run only when live Codex spend is intended:
 
@@ -17,8 +18,9 @@ from __future__ import annotations
 
 import os
 
+from leaven._handles import WorkspaceHandle
+from leaven._receipts import CallReceipt
 from leaven._seam import (
-    AgentRunRequest,
     CodexCliRuntimeConfig,
     LocalWorkspaceConfig,
     SeamClient,
@@ -27,6 +29,8 @@ from leaven._seam import (
     effect_capability,
     resolve_codex_binary,
 )
+from leaven.agent_instructions import AgentInstructions
+from leaven.builders.agent import AgentBuilder
 
 
 def main() -> None:
@@ -36,20 +40,48 @@ def main() -> None:
 
     codex = resolve_codex_binary()
     client = SeamClient(config=_service_config(codex))
-    result = client.request(_agent_run_request().to_json_rpc())
+    agent = AgentBuilder._for_seam(
+        client,
+        candidate_id="cand_pylivecodex",
+        idempotency_prefix="py-live-codex",
+        plan_id="planpylivecodex001",
+    )
+    session = _run(agent)
 
-    primary = result["primary"]
-    receipts = result["receipts"]
-    assert primary["kind"] == "agent_session"
-    assert primary["status"] == "completed"
-    assert [receipt["call_kind"] for receipt in receipts] == ["workspace_materialize", "agent_run"]
-    assert primary["transcript_ref"]["bytes"] > 100
+    assert session.transcript_ref == "blob_completion_transcript"
+    assert session.receipt.receipt_id == "agentrec_completion"
+    assert session.commands[1]["status"] == "completed"
 
-    codex_command = primary["commands"][1]["argv"]
-    print("agent status:     ", primary["status"])
+    codex_command = session.commands[1]["argv"]
+    print("agent receipt:    ", session.receipt.receipt_id)
     print("codex model:      ", codex_command[codex_command.index("--model") + 1])
-    print("transcript bytes: ", primary["transcript_ref"]["bytes"])
-    print("receipts:         ", ", ".join(receipt["receipt"] for receipt in receipts))
+    print("transcript ref:   ", session.transcript_ref)
+    print("commands:         ", len(session.commands))
+
+
+def _run(agent: AgentBuilder):
+    import asyncio
+
+    return asyncio.run(
+        agent.run(
+            workspace=WorkspaceHandle(
+                workspace_id="ws_pylivecodex_materialized",
+                candidate_id="cand_pylivecodex",
+                receipt=CallReceipt(receipt_id="wrec_workspace"),
+                lifetime="manual",
+            ),
+            instructions=AgentInstructions(
+                system=(
+                    "You are running inside a temporary Leaven proof workspace. "
+                    "Do not edit files or run tools unless absolutely necessary."
+                ),
+                task=(
+                    "Return exactly this sentence as the final answer: "
+                    "Leaven Python live Codex seam proof succeeded."
+                ),
+            ),
+        )
+    )
 
 
 def _service_config(codex_bin: str) -> SeamServiceConfig:
@@ -75,26 +107,6 @@ def _service_config(codex_bin: str) -> SeamServiceConfig:
             seed_files={"README.md": "Live Codex proof workspace for Leaven Python public seam.\n"}
         ),
         agent=CodexCliRuntimeConfig(codex_bin=codex_bin),
-    )
-
-
-def _agent_run_request() -> AgentRunRequest:
-    return AgentRunRequest(
-        request_id="py-live-codex-agent-1",
-        plan_id="planpylivecodex001",
-        candidate="cand_pylivecodex",
-        workspace="ws_pylivecodex_materialized",
-        idempotency_prefix="py-live-codex",
-        instructions={
-            "system": (
-                "You are running inside a temporary Leaven proof workspace. "
-                "Do not edit files or run tools unless absolutely necessary."
-            ),
-            "task": (
-                "Return exactly this sentence as the final answer: "
-                "Leaven Python live Codex seam proof succeeded."
-            ),
-        },
     )
 
 
