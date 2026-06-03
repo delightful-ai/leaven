@@ -166,14 +166,16 @@ struct ExtensionResultContract {
 }
 
 fn extension_result_contract(method: &str) -> Result<ExtensionResultContract, PublicSeamError> {
-    const EXTENSION: &[&str] = &["extension"];
     match method {
-        "leaven/graph.query"
-        | "leaven/case.load"
+        "leaven/graph.query" => Ok(ExtensionResultContract {
+            primary_kinds: &["graph_set"],
+            receipt: ReceiptExpectation::Query,
+        }),
+        "leaven/case.load"
         | "leaven/case.input"
         | "leaven/case.target"
         | "leaven/case.metadata" => Ok(ExtensionResultContract {
-            primary_kinds: EXTENSION,
+            primary_kinds: &["case_record"],
             receipt: ReceiptExpectation::Query,
         }),
         "leaven/workspace.materialize" => Ok(ExtensionResultContract {
@@ -341,27 +343,13 @@ fn validate_effect_primary_audit(
 }
 
 fn validate_extension_primary_op(
-    method: &str,
+    _method: &str,
     primary: &serde_json::Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
     if primary.get("kind").and_then(Value::as_str) != Some("extension") {
-        return Ok(());
-    }
-    let expected = match method {
-        "leaven/graph.query" => "graph.query",
-        "leaven/case.load" => "case.load",
-        "leaven/case.input" => "case.input",
-        "leaven/case.target" => "case.target",
-        "leaven/case.metadata" => "case.metadata",
-        _ => return Ok(()),
-    };
-    let actual = required_string(primary.get("op"), "primary.op")?;
-    if actual == expected {
         Ok(())
     } else {
-        Err(invalid_acp(format!(
-            "ACP extension result method `{method}` must return extension op `{expected}`, got `{actual}`"
-        )))
+        Ok(())
     }
 }
 

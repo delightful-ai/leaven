@@ -8,7 +8,7 @@ mod stage;
 pub use git_workspace::SeamWorkspaceGitConfig;
 pub use lm::{MockLmResponseConfig, SeamLmConfig};
 pub use service::{
-    ConfiguredSeamService, ConfiguredSeamServiceError, SeamAgentConfig, SeamExecutionContextConfig,
-    SeamServiceConfig, SeamWorkspaceConfig,
+    ConfiguredSeamService, ConfiguredSeamServiceError, SeamAgentConfig, SeamCaseRecordConfig,
+    SeamExecutionContextConfig, SeamGraphConfig, SeamServiceConfig, SeamWorkspaceConfig,
 };
 pub use stage::SeamStageConfig;

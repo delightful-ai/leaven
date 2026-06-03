@@ -283,6 +283,19 @@ acceptance:
           - crates/leaven-cli/tests/seam_stdio_server.rs
           - docs/specs/public-seam-v1/executable-method-status.md
         note: Sandbox exec moved from validated-only to configured local command execution through service and stdio with byte-bound stdout/stderr/output-file blob refs.
+      - kind: partial_method_matrix_reduction
+        methods:
+          - "`leaven/graph.query`"
+          - "`leaven/case.load`"
+          - "`leaven/case.input`"
+          - "`leaven/case.target`"
+          - "`leaven/case.metadata`"
+        paths:
+          - crates/leaven-seam-service/src/service.rs
+          - crates/leaven-cli/tests/seam_stdio_server.rs
+          - crates/leaven-public-seam/src/acp_profile/extension_result.rs
+          - docs/specs/public-seam-v1/executable-method-status.md
+        note: Graph and case reads moved from validated-only to configured local read execution through service and stdio with typed graph_set/case_record primaries and case-read authorization denial coverage; Rust RunGraph checkpoint readback remains a separate proof.
     closeout_check: No row may remain "validated-only" or "unsupported in service" for locked V1.
 
   - id: graph_and_case_reads_execute
@@ -297,7 +310,23 @@ acceptance:
         - "`leaven/case.target`"
         - "`leaven/case.metadata`"
         - read-scope or capability denial for unauthorized target access
-    evidence: []
+    evidence:
+      - kind: configured_service_and_stdio_execution
+        methods:
+          - "`leaven/graph.query`"
+          - "`leaven/case.load`"
+          - "`leaven/case.input`"
+          - "`leaven/case.target`"
+          - "`leaven/case.metadata`"
+        tests:
+          - "cargo test -p leaven-seam-service"
+          - "cargo test -p leaven-cli --test seam_stdio_server"
+          - "cargo test -p leaven-public-seam --test public_seam_contract"
+        paths:
+          - crates/leaven-seam-service/src/service.rs
+          - crates/leaven-cli/tests/seam_stdio_server.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/acp_profile.rs
+        note: Configured service reads graph/case records through Plan IR, filters case_record fields by requested include set, denies missing case-read authority, and proves all five methods through the CLI stdio server. SDK callback coverage remains to close this row.
     closeout_check: Hardcoded payload echoes are not graph/case read execution.
 
   - id: workspace_lifecycle_executes

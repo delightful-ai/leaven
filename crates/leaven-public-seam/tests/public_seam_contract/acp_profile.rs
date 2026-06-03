@@ -1612,21 +1612,23 @@ fn acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_
         PublicSeamError::InvalidScope { .. }
     ));
 
-    let mut malformed_extension_primary = extension_result_for(
+    let mut malformed_graph_primary = extension_result_for(
         "leaven/graph.query",
-        &extension_primary("graph.query"),
+        &graph_set_primary(),
         &query_receipt("qrec_graph"),
         &["public"],
     );
-    malformed_extension_primary["primary"]
+    malformed_graph_primary["primary"]
         .as_object_mut()
         .unwrap()
-        .remove("namespace");
+        .remove("items");
     assert!(matches!(
         package
-            .validate_acp_extension_result_document(&malformed_extension_primary)
+            .validate_acp_extension_result_document(&malformed_graph_primary)
             .unwrap_err(),
         PublicSeamError::ExampleValidation { .. }
+            | PublicSeamError::InvalidPlanResult { .. }
+            | PublicSeamError::InvalidScope { .. }
     ));
 }
 
@@ -1667,20 +1669,23 @@ fn assert_workspace_release_extension_result_negatives(package: &PublicSeamPacka
 fn acp_extension_results_reject_forged_result_hashes_for_extension_and_receiptless_primaries() {
     let package = package();
 
-    let wrong_extension_op = extension_result_for(
+    let wrong_query_primary = extension_result_for(
         "leaven/graph.query",
-        &extension_primary("case.target"),
+        &case_record_primary("case_target", &["case.target"]),
         &query_receipt("qrec_graph"),
         &["public"],
     );
     let error = package
-        .validate_acp_extension_result_document(&wrong_extension_op)
+        .validate_acp_extension_result_document(&wrong_query_primary)
         .unwrap_err();
     assert!(
-        error
-            .to_string()
-            .contains("must return extension op `graph.query`"),
-        "unexpected wrong extension op error: {error:?}"
+        matches!(
+            error,
+            PublicSeamError::ExampleValidation { .. }
+                | PublicSeamError::InvalidPlanResult { .. }
+                | PublicSeamError::InvalidScope { .. }
+        ),
+        "unexpected wrong graph primary error: {error:?}"
     );
 
     let mut forged_same_kind_receipt = extension_result();
@@ -1693,19 +1698,18 @@ fn acp_extension_results_reject_forged_result_hashes_for_extension_and_receiptle
         PublicSeamError::InvalidPlanResult { .. } | PublicSeamError::InvalidScope { .. }
     ));
 
-    let mut forged_generic_extension_hash = extension_result_for(
+    let mut forged_graph_hash = extension_result_for(
         "leaven/graph.query",
-        &extension_primary("graph.query"),
+        &graph_set_primary(),
         &query_receipt("qrec_graph"),
         &["public"],
     );
-    forged_generic_extension_hash["receipts"][0]["result_hash"] =
-        json!("fp_result_sha256_same_kind_unbound");
+    forged_graph_hash["receipts"][0]["result_hash"] = json!("fp_result_sha256_same_kind_unbound");
     assert!(matches!(
         package
-            .validate_acp_extension_result_document(&forged_generic_extension_hash)
+            .validate_acp_extension_result_document(&forged_graph_hash)
             .unwrap_err(),
-        PublicSeamError::InvalidScope { .. }
+        PublicSeamError::InvalidPlanResult { .. } | PublicSeamError::InvalidScope { .. }
     ));
 
     for (method, primary, receipt) in [
@@ -1871,27 +1875,27 @@ fn query_extension_result_cases() -> Vec<(&'static str, Value, Value)> {
     vec![
         (
             "leaven/graph.query",
-            extension_primary("graph.query"),
+            graph_set_primary(),
             query_receipt("qrec_graph"),
         ),
         (
             "leaven/case.load",
-            extension_primary("case.load"),
+            case_record_primary("case_load", &["case.input", "case.target", "case.metadata"]),
             query_receipt("qrec_case_load"),
         ),
         (
             "leaven/case.input",
-            extension_primary("case.input"),
+            case_record_primary("case_input", &["case.input"]),
             query_receipt("qrec_case_input"),
         ),
         (
             "leaven/case.target",
-            extension_primary("case.target"),
+            case_record_primary("case_target", &["case.target"]),
             query_receipt("qrec_case_target"),
         ),
         (
             "leaven/case.metadata",
-            extension_primary("case.metadata"),
+            case_record_primary("case_metadata", &["case.metadata"]),
             query_receipt("qrec_case_metadata"),
         ),
     ]
@@ -2342,6 +2346,45 @@ fn sandbox_exec_primary_with_file(path: &str) -> Value {
     primary["files"] = json!({
         path: fixture_blob_ref("blob_sandbox_file", &["workspace.file"])
     });
+    primary
+}
+
+fn graph_set_primary() -> Value {
+    json!({
+        "kind": "graph_set",
+        "items": [
+            {
+                "kind": "event_summary",
+                "event_kind": "case.loaded",
+                "revision": "rev_acp"
+            }
+        ],
+        "graph_revision": "rev_acp",
+        "data_classes": ["public"],
+        "replayability": "pure_read",
+        "receipt": "qrec_graph"
+    })
+}
+
+fn case_record_primary(receipt_stem: &str, data_classes: &[&str]) -> Value {
+    let receipt = format!("qrec_{receipt_stem}");
+    let mut primary = json!({
+        "kind": "case_record",
+        "case": "case_acp",
+        "graph_revision": "rev_acp",
+        "data_classes": data_classes,
+        "replayability": "pure_read",
+        "receipt": receipt
+    });
+    if data_classes.contains(&"case.input") {
+        primary["input"] = json!({"question": "2 + 3"});
+    }
+    if data_classes.contains(&"case.target") {
+        primary["target"] = json!({"answer": 5});
+    }
+    if data_classes.contains(&"case.metadata") {
+        primary["metadata"] = json!({"partition": "validation"});
+    }
     primary
 }
 

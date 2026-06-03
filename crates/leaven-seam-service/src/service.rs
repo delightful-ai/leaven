@@ -12,9 +12,10 @@ use leaven_agent_codex_cli::{CodexCliApproval, CodexCliConfig, CodexCliRuntime, 
 use leaven_kernel::{AgentSessionId, BudgetSnapshot, Cost, FingerprintBuilder, Metered};
 use leaven_public_seam::{
     AgentCommandOutputRefs, CapabilityDocument, PlanAgentRunOutcome, PlanAgentRunRequest,
-    PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
-    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome, PlanSandboxExecRequest,
-    PlanSubmitProposalBatchOutcome, PlanSubmitProposalBatchRequest,
+    PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest,
+    PlanExecutionContext, PlanExecutionHost, PlanGraphQueryOutcome, PlanGraphQueryRequest,
+    PlanGraphReadScope, PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome,
+    PlanSandboxExecRequest, PlanSubmitProposalBatchOutcome, PlanSubmitProposalBatchRequest,
     PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome,
     PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
     PublicSeamError, PublicSeamPackage,
@@ -99,6 +100,8 @@ impl ConfiguredSeamService {
                 workspace_config: self.config.workspace.clone(),
                 workspace_factory: self.config.workspace.to_factory(),
                 agent: self.config.agent.to_codex_runtime(),
+                graph: self.config.graph.clone(),
+                cases: self.config.cases.clone(),
                 graph_revision: self.config.context.base_revision.clone(),
                 workspaces: BTreeMap::new(),
             };
@@ -198,6 +201,11 @@ fn method_primary_kind(method: &str) -> &'static str {
         "leaven/lm.complete" => "lm_response",
         "leaven/agent.run" => "agent_session",
         "leaven/proposal.submit_batch" => "proposal_batch_receipt",
+        "leaven/graph.query" => "graph_set",
+        "leaven/case.load"
+        | "leaven/case.input"
+        | "leaven/case.target"
+        | "leaven/case.metadata" => "case_record",
         "leaven/workspace.materialize" | "leaven/workspace.release" => "workspace_handle",
         "leaven/workspace.snapshot" | "leaven/workspace.digest" => "workspace_snapshot",
         "leaven/workspace.list"
@@ -229,6 +237,10 @@ pub struct SeamServiceConfig {
     pub lm: SeamLmConfig,
     /// Stage runner configuration.
     pub stage: SeamStageConfig,
+    /// Configured graph read state.
+    pub graph: SeamGraphConfig,
+    /// Configured case records by case id.
+    pub cases: BTreeMap<String, SeamCaseRecordConfig>,
 }
 
 impl Default for SeamServiceConfig {
@@ -240,6 +252,8 @@ impl Default for SeamServiceConfig {
             agent: SeamAgentConfig::default(),
             lm: SeamLmConfig::default(),
             stage: SeamStageConfig::default(),
+            graph: SeamGraphConfig::default(),
+            cases: BTreeMap::new(),
         }
     }
 }
@@ -258,17 +272,33 @@ pub struct SeamExecutionContextConfig {
     pub started_at: String,
     /// Execution completion timestamp.
     pub completed_at: String,
+    /// Optional evaluation run bound to capability-authorized case reads.
+    pub evaluation_run: Option<String>,
+    /// Optional evaluation request id bound to capability-authorized case reads.
+    pub evaluation_request_id: Option<String>,
+    /// Optional case partition bound to capability-authorized case reads.
+    pub case_partition: Option<String>,
 }
 
 impl SeamExecutionContextConfig {
     fn to_execution_context(&self) -> PlanExecutionContext {
-        PlanExecutionContext::new(
+        let mut context = PlanExecutionContext::new(
             &self.capability_fingerprint,
             &self.policy_fingerprint,
             &self.base_revision,
             &self.started_at,
             &self.completed_at,
-        )
+        );
+        if let (Some(run), Some(request_id)) = (
+            self.evaluation_run.as_deref(),
+            self.evaluation_request_id.as_deref(),
+        ) {
+            context = context.with_evaluation_request(run, request_id);
+        }
+        if let Some(partition) = self.case_partition.as_deref() {
+            context = context.with_case_partition(partition);
+        }
+        context
     }
 }
 
@@ -280,6 +310,59 @@ impl Default for SeamExecutionContextConfig {
             base_revision: "rev_leaven_seam_local_base".to_owned(),
             started_at: "2026-01-01T00:00:00Z".to_owned(),
             completed_at: "2026-01-01T00:00:01Z".to_owned(),
+            evaluation_run: None,
+            evaluation_request_id: None,
+            case_partition: None,
+        }
+    }
+}
+
+/// Configured graph read state for public-seam execution.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct SeamGraphConfig {
+    /// Items returned by graph queries.
+    pub items: Vec<Value>,
+    /// Data classes attached to the graph-set value.
+    pub data_classes: Vec<String>,
+    /// Optional pagination cursor returned by graph queries.
+    pub next_cursor: Option<String>,
+}
+
+impl Default for SeamGraphConfig {
+    fn default() -> Self {
+        Self {
+            items: Vec::new(),
+            data_classes: vec!["public".to_owned()],
+            next_cursor: None,
+        }
+    }
+}
+
+/// Configured case read state for public-seam execution.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct SeamCaseRecordConfig {
+    /// Case identifier returned in the public `case_record`.
+    pub case: String,
+    /// Optional case input projection.
+    pub input: Option<Value>,
+    /// Optional case target projection.
+    pub target: Option<Value>,
+    /// Optional case metadata projection.
+    pub metadata: Option<Value>,
+    /// Data classes attached to the case record.
+    pub data_classes: Vec<String>,
+}
+
+impl Default for SeamCaseRecordConfig {
+    fn default() -> Self {
+        Self {
+            case: String::new(),
+            input: None,
+            target: None,
+            metadata: None,
+            data_classes: vec!["public".to_owned()],
         }
     }
 }
@@ -372,11 +455,96 @@ struct ConfiguredPlanHost {
     workspace_config: SeamWorkspaceConfig,
     workspace_factory: LocalWorkspaceFactory,
     agent: Option<CodexCliRuntime>,
+    graph: SeamGraphConfig,
+    cases: BTreeMap<String, SeamCaseRecordConfig>,
     graph_revision: String,
     workspaces: BTreeMap<String, Workspace>,
 }
 
 impl PlanExecutionHost for ConfiguredPlanHost {
+    fn graph_query(
+        &mut self,
+        request: PlanGraphQueryRequest<'_>,
+    ) -> Result<PlanGraphQueryOutcome, PublicSeamError> {
+        let graph_revision = graph_query_revision(request.scope(), &self.graph_revision);
+        let mut outcome = PlanGraphQueryOutcome::new(self.graph.items.clone(), graph_revision)
+            .with_data_classes(self.graph.data_classes.clone());
+        if let Some(next_cursor) = &self.graph.next_cursor {
+            outcome = outcome.with_next_cursor(next_cursor.clone());
+        }
+        Ok(outcome)
+    }
+
+    fn case_query_load(
+        &mut self,
+        request: PlanCaseQueryRequest<'_>,
+    ) -> Result<PlanCaseQueryOutcome, PublicSeamError> {
+        let include = request
+            .query()
+            .get("include")
+            .and_then(Value::as_array)
+            .ok_or_else(|| PublicSeamError::InvalidPlan {
+                message: "case_query.load must carry include fields".to_owned(),
+            })?;
+        let includes = |field: &str| include.iter().any(|value| value.as_str() == Some(field));
+        let case_id = request
+            .query()
+            .get("case")
+            .and_then(|case| case.get("id"))
+            .and_then(Value::as_str)
+            .ok_or_else(|| PublicSeamError::InvalidPlan {
+                message: "case_query.load must carry case.id".to_owned(),
+            })?;
+        let record = self
+            .cases
+            .get(case_id)
+            .ok_or_else(|| PublicSeamError::InvalidPlan {
+                message: format!("case `{case_id}` is not configured"),
+            })?;
+        let data_classes = record
+            .data_classes
+            .iter()
+            .filter(|data_class| match data_class.as_str() {
+                "case.input" => includes("input"),
+                "case.target" => includes("target"),
+                "case.metadata" => includes("metadata"),
+                _ => true,
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut outcome = PlanCaseQueryOutcome::new(&record.case, self.graph_revision.clone())
+            .with_data_classes(data_classes);
+        if includes("input") {
+            let input = record
+                .input
+                .as_ref()
+                .ok_or_else(|| PublicSeamError::InvalidPlan {
+                    message: format!("case `{case_id}` has no configured input"),
+                })?;
+            outcome = outcome.with_input(input.clone());
+        }
+        if includes("target") {
+            let target = record
+                .target
+                .as_ref()
+                .ok_or_else(|| PublicSeamError::InvalidPlan {
+                    message: format!("case `{case_id}` has no configured target"),
+                })?;
+            outcome = outcome.with_target(target.clone());
+        }
+        if includes("metadata") {
+            let metadata =
+                record
+                    .metadata
+                    .as_ref()
+                    .ok_or_else(|| PublicSeamError::InvalidPlan {
+                        message: format!("case `{case_id}` has no configured metadata"),
+                    })?;
+            outcome = outcome.with_metadata(metadata.clone());
+        }
+        Ok(outcome)
+    }
+
     fn lm_complete(
         &mut self,
         request: PlanLmCompleteRequest<'_>,
@@ -678,6 +846,16 @@ fn configured_sandbox_fingerprint() -> leaven_kernel::Fingerprint {
     builder.finish()
 }
 
+fn graph_query_revision(scope: PlanGraphReadScope<'_>, default_revision: &str) -> String {
+    match scope {
+        PlanGraphReadScope::LatestAtStart { revision }
+        | PlanGraphReadScope::AtRevision { revision } => revision.to_owned(),
+        PlanGraphReadScope::SinceRevision { since: _, until } => {
+            until.unwrap_or(default_revision).to_owned()
+        }
+    }
+}
+
 fn blob_ref_for_bytes(id: &str, bytes: &[u8], data_classes: &[&str]) -> Value {
     serde_json::json!({
         "kind": "blob_ref",
@@ -724,8 +902,8 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::{
-        ConfiguredSeamService, SeamAgentConfig, SeamExecutionContextConfig, SeamServiceConfig,
-        SeamStageConfig, SeamWorkspaceConfig,
+        ConfiguredSeamService, SeamAgentConfig, SeamCaseRecordConfig, SeamExecutionContextConfig,
+        SeamGraphConfig, SeamServiceConfig, SeamStageConfig, SeamWorkspaceConfig,
     };
     use crate::SeamWorkspaceGitConfig;
     use crate::lm::{MockLmResponseConfig, SeamLmConfig};
@@ -971,6 +1149,115 @@ mod tests {
             assert_eq!(response.value()["result"]["receipts"][1]["kind"], "query");
             (case.assert_primary)(response.value());
         }
+    }
+
+    #[test]
+    fn seam_runtime_executes_graph_and_case_reads_through_configured_service() {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
+        let service = ConfiguredSeamService::from_package(
+            package.clone(),
+            SeamServiceConfig {
+                context: graph_case_context(),
+                capability: Some(graph_case_capability()),
+                graph: graph_config(),
+                cases: case_config(),
+                ..SeamServiceConfig::default()
+            },
+        )
+        .unwrap();
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        for request in graph_case_read_requests() {
+            let response = runtime.handle_value(&request);
+            assert!(
+                !response.is_error(),
+                "unexpected graph/case response for {:?}: {:?}",
+                request["method"],
+                response.value()
+            );
+            let method = request["method"].as_str().unwrap();
+            match method {
+                "leaven/graph.query" => {
+                    assert_eq!(response.value()["result"]["primary"]["kind"], "graph_set");
+                    assert_eq!(
+                        response.value()["result"]["primary"]["items"][0]["event_kind"],
+                        "case.loaded"
+                    );
+                }
+                "leaven/case.input" => {
+                    assert_eq!(response.value()["result"]["primary"]["kind"], "case_record");
+                    assert_eq!(
+                        response.value()["result"]["primary"]["input"]["question"],
+                        "2 + 3"
+                    );
+                    assert!(
+                        response.value()["result"]["primary"]
+                            .get("target")
+                            .is_none()
+                    );
+                }
+                "leaven/case.target" => {
+                    assert_eq!(response.value()["result"]["primary"]["target"]["answer"], 5);
+                    assert!(response.value()["result"]["primary"].get("input").is_none());
+                }
+                "leaven/case.metadata" => {
+                    assert_eq!(
+                        response.value()["result"]["primary"]["metadata"]["partition"],
+                        "validation"
+                    );
+                }
+                "leaven/case.load" => {
+                    assert_eq!(
+                        response.value()["result"]["primary"]["input"]["question"],
+                        "2 + 3"
+                    );
+                    assert_eq!(response.value()["result"]["primary"]["target"]["answer"], 5);
+                    assert_eq!(
+                        response.value()["result"]["primary"]["metadata"]["partition"],
+                        "validation"
+                    );
+                }
+                other => panic!("unexpected graph/case request {other}"),
+            }
+            assert_eq!(response.value()["result"]["receipts"][0]["kind"], "query");
+        }
+    }
+
+    #[test]
+    fn seam_runtime_denies_case_reads_without_configured_case_authority() {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root()).unwrap();
+        let service = ConfiguredSeamService::from_package(
+            package.clone(),
+            SeamServiceConfig {
+                context: graph_case_context(),
+                graph: graph_config(),
+                cases: case_config(),
+                ..SeamServiceConfig::default()
+            },
+        )
+        .unwrap();
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        let response = runtime.handle_value(&case_query_request(
+            "leaven/case.target",
+            "case_target",
+            &["target"],
+        ));
+
+        assert!(
+            response.is_error(),
+            "case.read should be denied without a grant"
+        );
+        assert!(
+            response.value()["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains(
+                    "case_query.load execution requires capability-authorized Plan execution"
+                ),
+            "unexpected denial response: {:?}",
+            response.value()
+        );
     }
 
     #[test]
@@ -1978,6 +2265,9 @@ mod tests {
             base_revision: "rev_planexec_base".to_owned(),
             started_at: "2026-05-23T00:00:00Z".to_owned(),
             completed_at: "2026-05-23T00:00:01Z".to_owned(),
+            evaluation_run: None,
+            evaluation_request_id: None,
+            case_partition: None,
         }
     }
 
@@ -1988,7 +2278,203 @@ mod tests {
             base_revision: "rev_proposal_base".to_owned(),
             started_at: "2026-06-03T00:00:00Z".to_owned(),
             completed_at: "2026-06-03T00:00:01Z".to_owned(),
+            evaluation_run: None,
+            evaluation_request_id: None,
+            case_partition: None,
         }
+    }
+
+    fn graph_case_context() -> SeamExecutionContextConfig {
+        SeamExecutionContextConfig {
+            evaluation_run: Some("run_demo".to_owned()),
+            evaluation_request_id: Some("evalreq_01".to_owned()),
+            case_partition: Some("validation".to_owned()),
+            ..planexec_context()
+        }
+    }
+
+    fn graph_config() -> SeamGraphConfig {
+        SeamGraphConfig {
+            items: vec![json!({
+                "kind": "event_summary",
+                "event_kind": "case.loaded",
+                "revision": "rev_tip"
+            })],
+            data_classes: vec!["public".to_owned()],
+            next_cursor: None,
+        }
+    }
+
+    fn case_config() -> BTreeMap<String, SeamCaseRecordConfig> {
+        BTreeMap::from([(
+            "case_1".to_owned(),
+            SeamCaseRecordConfig {
+                case: "case_1".to_owned(),
+                input: Some(json!({"question": "2 + 3"})),
+                target: Some(json!({"answer": 5})),
+                metadata: Some(json!({"partition": "validation"})),
+                data_classes: vec![
+                    "case.input".to_owned(),
+                    "case.target".to_owned(),
+                    "case.metadata".to_owned(),
+                ],
+            },
+        )])
+    }
+
+    fn graph_case_capability() -> Value {
+        json!({
+            "schema_version": "leaven.capability.v1",
+            "jti": "jti_graph_case_authority",
+            "capability_fingerprint": "fp_cap_sha256_planexec",
+            "policy_fingerprint": "fp_policy_sha256_planexec",
+            "subject_fingerprint": "fp_subject_sha256_planexec",
+            "issuer": {
+                "kind": "run_engine",
+                "id": "engine_local"
+            },
+            "subject": {
+                "kind": "stage_call",
+                "run": "run_demo",
+                "stage_call_id": "sc_graph_case",
+                "role": "scorer"
+            },
+            "audience": ["leaven.acp.worker"],
+            "issued_at": "2026-05-23T00:00:00Z",
+            "expires_at": "2026-05-23T00:20:00Z",
+            "expiry_behavior": "drain_inflight_no_new_ops",
+            "token_binding": {
+                "kind": "opaque_lookup",
+                "token_id": "ltok_graph_case"
+            },
+            "revocation": {
+                "mode": "issuer_epoch",
+                "revocation_epoch": 7,
+                "check": "on_every_request"
+            },
+            "renewal": {
+                "mode": "renew_before_expiry",
+                "max_extensions": 0,
+                "max_total_lifetime_s": 1200
+            },
+            "grants": [{
+                "action": "case.read",
+                "resource": {
+                    "run": "run_demo",
+                    "evaluation_request_id": "evalreq_01"
+                },
+                "constraints": {
+                    "case_fields": ["input", "target", "metadata"],
+                    "partitions": ["validation"],
+                    "allowed_input_classes": ["case.input", "case.target", "case.metadata"]
+                }
+            }],
+            "budgets": {},
+            "execution_policy": {
+                "profile": "managed_sandbox",
+                "network": "leaven_endpoint_only",
+                "subprocess": "deny_except_sandbox_exec",
+                "filesystem": "workspace_handles_only",
+                "byo_effects": "forbidden"
+            },
+            "delegation": {
+                "may_delegate": false,
+                "max_depth": 0,
+                "must_attenuate": true,
+                "allowed_actions": []
+            }
+        })
+    }
+
+    fn graph_case_read_requests() -> Vec<Value> {
+        vec![
+            graph_query_request(),
+            case_query_request(
+                "leaven/case.load",
+                "case_load",
+                &["input", "target", "metadata"],
+            ),
+            case_query_request("leaven/case.input", "case_input", &["input"]),
+            case_query_request("leaven/case.target", "case_target", &["target"]),
+            case_query_request("leaven/case.metadata", "case_metadata", &["metadata"]),
+        ]
+    }
+
+    fn graph_query_request() -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "id": "graph-query-service",
+            "method": "leaven/graph.query",
+            "params": {
+                "schema_version": "leaven.plan.v1",
+                "plan_id": "plangraphqueryservice001",
+                "consistency": {
+                    "kind": "latest_at_start"
+                },
+                "mode": {
+                    "kind": "execute"
+                },
+                "ops": [{
+                    "kind": "let",
+                    "name": "events",
+                    "expr": {
+                        "kind": "graph_query",
+                        "source": {
+                            "kind": "events"
+                        },
+                        "projection": {
+                            "kind": "ids"
+                        },
+                        "page": {
+                            "limit": 100
+                        }
+                    }
+                }],
+                "return": ["events"],
+                "commit": {
+                    "kind": "no_graph_writes"
+                }
+            }
+        })
+    }
+
+    fn case_query_request(method: &str, name: &str, include: &[&str]) -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "id": format!("{name}-service"),
+            "method": method,
+            "params": {
+                "schema_version": "leaven.plan.v1",
+                "plan_id": format!("plan{name}service001"),
+                "consistency": {
+                    "kind": "latest_at_start"
+                },
+                "mode": {
+                    "kind": "execute"
+                },
+                "ops": [{
+                    "kind": "let",
+                    "name": name,
+                    "expr": {
+                        "kind": "case_query",
+                        "query": {
+                            "kind": "load",
+                            "case": {
+                                "kind": "case",
+                                "run": "run_demo",
+                                "id": "case_1"
+                            },
+                            "include": include,
+                            "projection_schema": "fp_schema_sha256_case_projection"
+                        }
+                    }
+                }],
+                "return": [name],
+                "commit": {
+                    "kind": "no_graph_writes"
+                }
+            }
+        })
     }
 
     fn proposal_capability() -> Value {

@@ -19,7 +19,29 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
     std::fs::write(
         &config_path,
         serde_json::to_vec_pretty(&json!({
+                "context": {
+                    "evaluation_run": "run_demo",
+                    "evaluation_request_id": "evalreq_01",
+                    "case_partition": "validation"
+                },
                 "capability": seam_capability(),
+                "graph": {
+                    "items": [{
+                        "kind": "event_summary",
+                        "event_kind": "case.loaded",
+                        "revision": "rev_cli"
+                    }],
+                    "data_classes": ["public"]
+                },
+                "cases": {
+                    "case_1": {
+                        "case": "case_1",
+                        "input": {"question": "2 + 3"},
+                        "target": {"answer": 5},
+                        "metadata": {"partition": "validation"},
+                        "data_classes": ["case.input", "case.target", "case.metadata"]
+                    }
+                },
                 "workspace": {
                     "seed_files": {
                         "README.md": "seeded workspace readme\n",
@@ -45,6 +67,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
     )
     .unwrap();
     let workspace_queries = workspace_query_requests();
+    let graph_case_queries = graph_case_query_requests();
 
     let mut child = Command::new(env!("CARGO_BIN_EXE_leaven"))
         .arg("seam")
@@ -66,6 +89,9 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         write_json_line(&mut stdin, &removed_human_review_request());
         write_json_line(&mut stdin, &workspace_release_request());
         for request in &workspace_queries {
+            write_json_line(&mut stdin, request);
+        }
+        for request in &graph_case_queries {
             write_json_line(&mut stdin, request);
         }
         write_json_line(&mut stdin, &event_emit_request());
@@ -92,7 +118,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
     let responses = response_lines(&output.stdout);
     assert_eq!(
         responses.len(),
-        7 + workspace_queries.len(),
+        7 + workspace_queries.len() + graph_case_queries.len(),
         "one response per request line"
     );
 
@@ -143,7 +169,53 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         assert_eq!(response["result"]["receipts"][1]["kind"], "query");
     }
 
-    let event_index = 3 + workspace_queries.len();
+    let graph_case_start = 3 + workspace_queries.len();
+    for (offset, request) in graph_case_queries.iter().enumerate() {
+        let response = &responses[graph_case_start + offset];
+        assert_eq!(response["id"], request["id"]);
+        assert!(
+            response.get("error").is_none(),
+            "unexpected graph/case query error: {response:?}"
+        );
+        assert_eq!(response["result"]["receipts"][0]["kind"], "query");
+        match request["method"].as_str().unwrap() {
+            "leaven/graph.query" => {
+                assert_eq!(response["result"]["primary"]["kind"], "graph_set");
+                assert_eq!(
+                    response["result"]["primary"]["items"][0]["event_kind"],
+                    "case.loaded"
+                );
+            }
+            "leaven/case.load" => {
+                assert_eq!(response["result"]["primary"]["kind"], "case_record");
+                assert_eq!(response["result"]["primary"]["input"]["question"], "2 + 3");
+                assert_eq!(response["result"]["primary"]["target"]["answer"], 5);
+                assert_eq!(
+                    response["result"]["primary"]["metadata"]["partition"],
+                    "validation"
+                );
+            }
+            "leaven/case.input" => {
+                assert_eq!(response["result"]["primary"]["input"]["question"], "2 + 3");
+                assert!(response["result"]["primary"].get("target").is_none());
+                assert!(response["result"]["primary"].get("metadata").is_none());
+            }
+            "leaven/case.target" => {
+                assert_eq!(response["result"]["primary"]["target"]["answer"], 5);
+                assert!(response["result"]["primary"].get("input").is_none());
+            }
+            "leaven/case.metadata" => {
+                assert_eq!(
+                    response["result"]["primary"]["metadata"]["partition"],
+                    "validation"
+                );
+                assert!(response["result"]["primary"].get("input").is_none());
+            }
+            other => panic!("unexpected graph/case method {other}"),
+        }
+    }
+
+    let event_index = graph_case_start + graph_case_queries.len();
     assert_eq!(responses[event_index]["id"], json!("event-emit-cli"));
     assert!(
         responses[event_index].get("error").is_none(),
@@ -417,6 +489,113 @@ fn workspace_query_request(method: &str, name: &str, op: Value) -> Value {
     })
 }
 
+fn graph_case_query_requests() -> Vec<Value> {
+    vec![
+        graph_query_request(),
+        case_query_request(
+            "leaven/case.load",
+            "case-load-cli",
+            "case_load",
+            &["input", "target", "metadata"],
+        ),
+        case_query_request(
+            "leaven/case.input",
+            "case-input-cli",
+            "case_input",
+            &["input"],
+        ),
+        case_query_request(
+            "leaven/case.target",
+            "case-target-cli",
+            "case_target",
+            &["target"],
+        ),
+        case_query_request(
+            "leaven/case.metadata",
+            "case-metadata-cli",
+            "case_metadata",
+            &["metadata"],
+        ),
+    ]
+}
+
+fn graph_query_request() -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": "graph-query-cli",
+        "method": "leaven/graph.query",
+        "params": {
+            "schema_version": "leaven.plan.v1",
+            "plan_id": "graphquerycli001",
+            "consistency": {
+                "kind": "latest_at_start"
+            },
+            "mode": {
+                "kind": "execute"
+            },
+            "ops": [{
+                "kind": "let",
+                "name": "events",
+                "expr": {
+                    "kind": "graph_query",
+                    "source": {
+                        "kind": "events"
+                    },
+                    "projection": {
+                        "kind": "ids"
+                    },
+                    "page": {
+                        "limit": 100
+                    }
+                }
+            }],
+            "return": ["events"],
+            "commit": {
+                "kind": "no_graph_writes"
+            }
+        }
+    })
+}
+
+fn case_query_request(method: &str, id: &str, name: &str, include: &[&str]) -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "method": method,
+        "params": {
+            "schema_version": "leaven.plan.v1",
+            "plan_id": format!("{name}cli001"),
+            "consistency": {
+                "kind": "latest_at_start"
+            },
+            "mode": {
+                "kind": "execute"
+            },
+            "ops": [{
+                "kind": "let",
+                "name": name,
+                "expr": {
+                    "kind": "case_query",
+                    "query": {
+                        "kind": "load",
+                        "case": {
+                            "kind": "case",
+                            "run": "run_demo",
+                            "id": "case_1"
+                        },
+                        "include": include,
+                        "projection_schema": "fp_schema_sha256_case_projection"
+                    }
+                }
+            }],
+            "return": [name],
+            "commit": {
+                "kind": "no_graph_writes"
+            }
+        }
+    })
+}
+
 fn event_emit_request() -> Value {
     json!({
         "jsonrpc": "2.0",
@@ -531,7 +710,7 @@ fn seam_capability() -> Value {
             "kind": "stage_call",
             "run": "run_cli",
             "stage_call_id": "sc_cli",
-            "role": "runner"
+            "role": "scorer"
         },
         "audience": ["leaven.acp.worker"],
         "issued_at": "2026-01-01T00:00:00Z",
@@ -597,6 +776,18 @@ fn seam_capability() -> Value {
                     "purposes": ["test.cli_seam_stdio"],
                     "models": ["gpt-4.1-mini"],
                     "allowed_input_classes": ["public"]
+                }
+            },
+            {
+                "action": "case.read",
+                "resource": {
+                    "run": "run_demo",
+                    "evaluation_request_id": "evalreq_01"
+                },
+                "constraints": {
+                    "case_fields": ["input", "target", "metadata"],
+                    "partitions": ["validation"],
+                    "allowed_input_classes": ["case.input", "case.target", "case.metadata"]
                 }
             },
             {

@@ -333,11 +333,14 @@ EXPECTED_METHODS = [
 ]
 
 GENERIC_EXTENSION_OPS = {
-    "leaven/graph.query": ("graph.query", "qrec_graph", "query", ["public"]),
-    "leaven/case.load": ("case.load", "qrec_case_load", "query", ["public"]),
-    "leaven/case.input": ("case.input", "qrec_case_input", "query", ["public"]),
-    "leaven/case.target": ("case.target", "qrec_case_target", "query", ["public"]),
-    "leaven/case.metadata": ("case.metadata", "qrec_case_metadata", "query", ["public"]),
+}
+
+GRAPH_AND_CASE_METHODS = {
+    "leaven/graph.query": ("graph_set", "qrec_graph", ["public"]),
+    "leaven/case.load": ("case_record", "qrec_case_load", ["case.input", "case.target", "case.metadata"]),
+    "leaven/case.input": ("case_record", "qrec_case_input", ["case.input"]),
+    "leaven/case.target": ("case_record", "qrec_case_target", ["case.target"]),
+    "leaven/case.metadata": ("case_record", "qrec_case_metadata", ["case.metadata"]),
 }
 
 WORKSPACE_METHODS = {
@@ -465,6 +468,36 @@ def event_emit_primary():
         "data_classes": ["public"],
         "replayability": "fully_managed",
     }
+
+def graph_or_case_primary(kind, receipt, data_classes):
+    if kind == "graph_set":
+        return {
+            "kind": "graph_set",
+            "items": [{
+                "kind": "event_summary",
+                "event_kind": "case.loaded",
+                "revision": "rev_acp",
+            }],
+            "graph_revision": "rev_acp",
+            "data_classes": data_classes,
+            "replayability": "pure_read",
+            "receipt": receipt,
+        }
+    value = {
+        "kind": "case_record",
+        "case": "case_acp",
+        "graph_revision": "rev_acp",
+        "data_classes": data_classes,
+        "replayability": "pure_read",
+        "receipt": receipt,
+    }
+    if "case.input" in data_classes:
+        value["input"] = {"question": "2 + 3"}
+    if "case.target" in data_classes:
+        value["target"] = {"answer": 5}
+    if "case.metadata" in data_classes:
+        value["metadata"] = {"partition": "validation"}
+    return value
 
 def workspace_primary(kind, receipt):
     if kind == "workspace_handle":
@@ -607,6 +640,10 @@ def make_result(method):
         primary = event_emit_primary()
         receipt = write_receipt("emit_run_event", "wrec_event_emit")
         data_classes = ["public"]
+    elif method in GRAPH_AND_CASE_METHODS:
+        primary_kind, receipt_id, data_classes = GRAPH_AND_CASE_METHODS[method]
+        primary = graph_or_case_primary(primary_kind, receipt_id, data_classes)
+        receipt = query_receipt(receipt_id)
     elif method in GENERIC_EXTENSION_OPS:
         op, receipt_id, receipt_kind, data_classes = GENERIC_EXTENSION_OPS[method]
         primary = extension_primary(op)
@@ -1607,29 +1644,61 @@ fn extension_result_cases() -> Vec<ExtensionCase> {
 }
 
 fn extension_result_query_cases() -> Vec<ExtensionCase> {
-    let mut cases = Vec::new();
-    for (method, op, receipt) in [
-        ("leaven/graph.query", "graph.query", "qrec_graph"),
-        ("leaven/case.load", "case.load", "qrec_case_load"),
-        ("leaven/case.input", "case.input", "qrec_case_input"),
-        ("leaven/case.target", "case.target", "qrec_case_target"),
-        (
-            "leaven/case.metadata",
-            "case.metadata",
-            "qrec_case_metadata",
-        ),
-    ] {
-        cases.push(case(
-            method,
-            "extension",
+    let mut cases = vec![
+        case(
+            "leaven/graph.query",
+            "graph_set",
             extension_result(
-                method,
-                extension_primary(op),
-                query_receipt(receipt),
+                "leaven/graph.query",
+                graph_set_primary(),
+                query_receipt("qrec_graph"),
                 &["public"],
             ),
-        ));
-    }
+        ),
+        case(
+            "leaven/case.load",
+            "case_record",
+            extension_result(
+                "leaven/case.load",
+                case_record_primary(
+                    "qrec_case_load",
+                    &["case.input", "case.target", "case.metadata"],
+                ),
+                query_receipt("qrec_case_load"),
+                &["case.input", "case.target", "case.metadata"],
+            ),
+        ),
+        case(
+            "leaven/case.input",
+            "case_record",
+            extension_result(
+                "leaven/case.input",
+                case_record_primary("qrec_case_input", &["case.input"]),
+                query_receipt("qrec_case_input"),
+                &["case.input"],
+            ),
+        ),
+        case(
+            "leaven/case.target",
+            "case_record",
+            extension_result(
+                "leaven/case.target",
+                case_record_primary("qrec_case_target", &["case.target"]),
+                query_receipt("qrec_case_target"),
+                &["case.target"],
+            ),
+        ),
+        case(
+            "leaven/case.metadata",
+            "case_record",
+            extension_result(
+                "leaven/case.metadata",
+                case_record_primary("qrec_case_metadata", &["case.metadata"]),
+                query_receipt("qrec_case_metadata"),
+                &["case.metadata"],
+            ),
+        ),
+    ];
     cases.push(case(
         "leaven/event.emit",
         "emit_run_event",
@@ -1947,14 +2016,40 @@ fn acp_plan_params_for_method(method: &str) -> Value {
     params
 }
 
-fn extension_primary(op: &str) -> Value {
+fn graph_set_primary() -> Value {
     json!({
-        "kind": "extension",
-        "namespace": "leaven",
-        "op": op,
-        "schema_fingerprint": "fp_schema_sha256_acpextension",
-        "payload": {"status": "ok"}
+        "kind": "graph_set",
+        "items": [{
+            "kind": "event_summary",
+            "event_kind": "case.loaded",
+            "revision": "rev_acp"
+        }],
+        "graph_revision": "rev_acp",
+        "data_classes": ["public"],
+        "replayability": "pure_read",
+        "receipt": "qrec_graph"
     })
+}
+
+fn case_record_primary(receipt: &str, data_classes: &[&str]) -> Value {
+    let mut value = json!({
+        "kind": "case_record",
+        "case": "case_acp",
+        "graph_revision": "rev_acp",
+        "data_classes": data_classes,
+        "replayability": "pure_read",
+        "receipt": receipt
+    });
+    if data_classes.contains(&"case.input") {
+        value["input"] = json!({"question": "2 + 3"});
+    }
+    if data_classes.contains(&"case.target") {
+        value["target"] = json!({"answer": 5});
+    }
+    if data_classes.contains(&"case.metadata") {
+        value["metadata"] = json!({"partition": "validation"});
+    }
+    value
 }
 
 fn event_emit_primary() -> Value {
