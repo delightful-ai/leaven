@@ -567,6 +567,15 @@ acceptance:
         this shell, so the live OpenAI `cx.lm.complete` proof could not be run
         in this turn. This is a credential blocker for this row only; it is not
         substitute evidence for live LM provider behavior.
+      - >-
+        Current blocked proof attempt, 2026-06-03:
+        `LEAVEN_LIVE_OPENAI=1 uv run --project examples/live_openai_lm
+        live-openai-lm` reached the Python SDK durable seam route and failed
+        inside the configured LM provider with
+        `invalid lm request: OPENAI_API_KEY is not set`. This proves the
+        remaining gap is external credential availability for the live OpenAI
+        provider proof, not a fallback to mock LM behavior and not a failure to
+        spawn the public seam server.
     closeout_check: Mock-only LM is acceptable for default CI, but is not live provider proof.
 
   - id: inspection_and_closeout_truth
