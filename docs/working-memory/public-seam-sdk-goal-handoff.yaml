@@ -421,7 +421,7 @@ acceptance:
       A Python-configured GEPA proposer/reflector can run Codex with
       `gpt-5.4-mini` in a materialized workspace and submit typed proposals
       through the seam.
-    status: pending
+    status: done
     proof_required:
       kind: live_codex_agentic_e2e
       must_exercise:
@@ -487,6 +487,27 @@ acceptance:
         mechanics path, but still does not prove live Codex provider execution
         in this turn, proposal apply/admission, provider-authored cost
         accounting, or blob-content fetch.
+      - >-
+        Acceptance proof for this foundation row, current as of 2026-06-02:
+        `LEAVEN_LIVE_CODEX=1
+        LEAVEN_BIN=/Users/darin/src/personal/leaven/target/debug/leaven uv run
+        python examples/12_live_optimize_codex_proposer.py` completed through
+        the Python SDK `lv.optimize(...).run()` path with `run id:
+        live_codex_proposer`, `best score: 1.000`, and `iterations: 1`.
+        Reopening `.leaven/runs/live_codex_proposer` showed
+        `proposal_receipts: ["wrec_proposal_batch"]`, proposer-stage
+        `effect_receipts: ["agentrec_completion"]`, and transcript/command
+        blob refs including `blob_completion_transcript` with
+        `transcript.raw` data class. `lv.runs.inspect(...)` exposed the
+        assessment write receipt, the `agentrec_completion` call receipt under
+        `source: proposer_stage`, the `wrec_proposal_batch` write receipt under
+        `source: proposal_batch`, and honest unsupported facts for
+        blob-content fetch plus Codex CLI cost/usage reporting. This closes the
+        current foundation claim that Python-configured GEPA proposer stages can
+        run Codex `gpt-5.4-mini` in a materialized workspace and submit typed
+        receipt-bound proposals through the durable public seam. It still does
+        not claim proposal apply/admission, full GEPA search, provider-authored
+        cost accounting, or blob byte retrieval.
     closeout_check: A Rust-side hardcoded child prompt, fixed diff, or deterministic fake-agent transcript is not enough.
 
   - id: real_lm_provider_wiring
@@ -540,6 +561,12 @@ acceptance:
         `13_live_optimize_openai_lm.py` file is only a tour wrapper into that
         project command. Current shell evidence: `OPENAI_API_KEY` is unset, so
         the spend-bearing live OpenAI proof remains pending.
+      - >-
+        Current credential check, 2026-06-02: `env | rg
+        '^(OPENAI_API_KEY|LEAVEN_|CODEX_|OPENAI_)='` printed no OpenAI key in
+        this shell, so the live OpenAI `cx.lm.complete` proof could not be run
+        in this turn. This is a credential blocker for this row only; it is not
+        substitute evidence for live LM provider behavior.
     closeout_check: Mock-only LM is acceptable for default CI, but is not live provider proof.
 
   - id: inspection_and_closeout_truth
