@@ -36,15 +36,13 @@ import json
 import os
 import subprocess
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from ._receipts import CallReceipt
+from ._stage_runtime import CallbackRolloutContext
 from .artifacts.prompt import PromptArtifact
-from .builders.lm import LmBuilder, LmMessage, LmResponse
 from .case import InputCaseView
-from .contexts import RolloutContext
 from .decorators import RegisteredStage
 
 # The locked capability env the child requires (the ACP profile auth block).
@@ -269,7 +267,11 @@ class _ParentAgent:
         # projection key, as the structural InputCaseView the runner reads.
         view_input = {k: v for k, v in case_input.items() if k != "prompt"}
         case = InputCaseView(id=payload["case"], input=view_input)
-        cx = _SeamRolloutContext(self, payload["candidate"], stage_call_id)
+        cx = CallbackRolloutContext(
+            self,
+            candidate_id=payload["candidate"],
+            stage_call_id=stage_call_id,
+        )
 
         result = await self._runner.func(prompt, case, cx)
         output = result if isinstance(result, str) else str(result)
@@ -333,82 +335,6 @@ class _ParentAgent:
     async def _write_message(self, message: Mapping[str, Any]) -> None:
         self._stdin.write((json.dumps(message, sort_keys=True) + "\n").encode())
         await self._stdin.drain()
-
-
-class _SeamLmBuilder(LmBuilder):
-    """A live `cx.lm` bound to the parent agent's `leaven/lm.complete` callback.
-
-    Only the slice-3 prompt path is wired: `complete(prompt=..., ...)` ships the
-    prompt over the seam and returns the child host LM's completion. Message
-    lists, model/role selection, tools, and structured output are later slices.
-    """
-
-    def __init__(self, agent: _ParentAgent, stage_call_id: str) -> None:
-        self._agent = agent
-        self._stage_call_id = stage_call_id
-        self._seq = 0
-
-    async def complete(  # type: ignore[override]
-        self,
-        *,
-        prompt: str | None = None,
-        messages: Sequence[LmMessage] | Sequence[dict[str, Any]] | None = None,
-        model: str | None = None,
-        model_role: str | None = None,
-        temperature: float | None = None,
-        max_tokens: int | None = None,
-        stop: Sequence[str] | None = None,
-        response_format: Any | None = None,
-        tools: Sequence[dict[str, Any]] | None = None,
-        input_classes: Sequence[str] | None = None,
-        forbidden_input_classes: Sequence[str] | None = None,
-    ) -> LmResponse:
-        if prompt is None:
-            raise ServeError("cx.lm.complete requires `prompt=` in this slice")
-        request_id = f"{self._stage_call_id}::lm::{self._seq}"
-        self._seq += 1
-        text = await self._agent.lm_complete(prompt, request_id=request_id)
-        return _lm_response(text)
-
-
-class _SeamRolloutContext(RolloutContext):
-    """A live `RolloutContext` for one rollout, bound to the parent agent's seam.
-
-    `cx.lm.complete(...)` routes through the bidirectional seam to the child's
-    host LM. The other effect builders (`agent`, `sandbox`, `workspace`, `batch`)
-    stay scaffold for this slice — the prompt/LM/exact-match path uses only `lm`.
-    """
-
-    def __init__(self, agent: _ParentAgent, candidate_id: str, stage_call_id: str) -> None:
-        self.lm = _SeamLmBuilder(agent, stage_call_id)
-        self._candidate_id = candidate_id
-        self._stage_call_id = stage_call_id
-
-    @property
-    def candidate_id(self) -> str:
-        return self._candidate_id
-
-    @property
-    def stage_id(self) -> str:
-        return self._stage_call_id
-
-
-def _lm_response(text: str) -> LmResponse:
-    """Build the `LmResponse` a `cx.lm.complete(...)` returns from the seam reply.
-
-    Slice 3 carries only the completion text over the seam (the deterministic
-    mock LM emits no token usage or cost), so the response reports zero usage and
-    no cost; the bidirectional seam, not the LM telemetry, is what this slice
-    proves.
-    """
-    return LmResponse(
-        text=text,
-        finish_reason="stop",
-        usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
-        cost_usd=0.0,
-        model="leaven-serve-mock",
-        receipt=CallReceipt(receipt_id="lmrec_leaven_py_optimize"),
-    )
 
 
 __all__ = [
