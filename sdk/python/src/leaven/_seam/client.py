@@ -1,7 +1,5 @@
 """One-shot process client for `leaven seam serve --stdio`."""
 
-from __future__ import annotations
-
 import json
 import subprocess
 import tempfile

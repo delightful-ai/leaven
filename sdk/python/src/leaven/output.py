@@ -5,8 +5,6 @@ These build the typed output contracts passed to `cx.sandbox.exec(output=...)`,
 and shape the typed result the user reads.
 """
 
-from __future__ import annotations
-
 from collections.abc import Sequence
 from typing import Any, Literal
 

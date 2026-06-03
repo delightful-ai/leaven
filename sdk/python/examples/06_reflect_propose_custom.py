@@ -13,8 +13,6 @@ no workspace materialization; a `ProposeContext` may materialize the parent
 candidate, write into its workspace, and submit a typed proposal.
 """
 
-from __future__ import annotations
-
 import asyncio
 from pathlib import Path
 

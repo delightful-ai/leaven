@@ -9,8 +9,6 @@ hide them; advanced evaluator/proposer code may receive opaque handles on
 effect/query results and pass them into low-level evidence envelopes.
 """
 
-from __future__ import annotations
-
 from pydantic import BaseModel, ConfigDict, Field
 
 from .blob_ref import BlobRef

@@ -1,7 +1,5 @@
 """Environment and service configuration for the live OpenAI LM proof."""
 
-from __future__ import annotations
-
 import os
 from dataclasses import dataclass
 

@@ -1,7 +1,5 @@
 """Private receipt projection for durable-seam optimize reports."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any
 

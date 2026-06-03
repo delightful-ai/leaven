@@ -4,8 +4,6 @@ Reserved scaffold per the Rust workspace topology. Firkin is the
 snapshot-fast workspace backend used by the agentic git path.
 """
 
-from __future__ import annotations
-
 from typing import Literal
 
 from .config import WorkspaceConfig

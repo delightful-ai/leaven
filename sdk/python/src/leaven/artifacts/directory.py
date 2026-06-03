@@ -4,8 +4,6 @@ This adapter is for harness/code packages where the artifact projection is a
 tree of files. The rollout stage, not the artifact, decides how to execute it.
 """
 
-from __future__ import annotations
-
 from pydantic import BaseModel, ConfigDict
 
 

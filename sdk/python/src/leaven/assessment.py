@@ -5,8 +5,6 @@ classmethods for independent/pairwise/listwise). `Assessment` is the
 result-side typed handle the user reads from `Optimized.test_assessments()`.
 """
 
-from __future__ import annotations
-
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field

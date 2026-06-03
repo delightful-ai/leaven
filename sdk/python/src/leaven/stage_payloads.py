@@ -9,8 +9,6 @@ hand-shaped versions here exist so the scaffold is importable and the
 decorator signatures resolve.
 """
 
-from __future__ import annotations
-
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field

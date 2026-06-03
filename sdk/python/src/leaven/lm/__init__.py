@@ -5,8 +5,6 @@ configs can be wired into one runtime (`lm=[anthropic(...), openai(...)]`)
 or per-role (`lm={"grader": anthropic(...), "reflector": openai(...)}`).
 """
 
-from __future__ import annotations
-
 from .anthropic import AnthropicLm, anthropic
 from .config import LmConfig
 from .local import LocalLm, local

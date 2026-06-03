@@ -1,7 +1,5 @@
 """`lv.agent.codex(...)` — Codex (app-server or CLI) agent runtime."""
 
-from __future__ import annotations
-
 from collections.abc import Sequence
 from typing import Literal
 

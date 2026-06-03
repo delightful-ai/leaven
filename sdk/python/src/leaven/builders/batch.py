@@ -18,8 +18,6 @@ The placeholders accessed inside the block raise `BatchNotResolvedError` on
 attribute access; outside the block they proxy to the real result.
 """
 
-from __future__ import annotations
-
 from types import TracebackType
 
 from .agent import AgentBuilder

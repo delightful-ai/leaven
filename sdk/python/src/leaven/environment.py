@@ -7,8 +7,6 @@ stay separate, composed at `optimize(seed=..., environment=env, optimizer=...,
 runtime=...)`.
 """
 
-from __future__ import annotations
-
 from pydantic import BaseModel, ConfigDict
 
 from .rubric import Rubric

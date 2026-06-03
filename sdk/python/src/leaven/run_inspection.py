@@ -1,7 +1,5 @@
 """Typed completed-run inspection projections for `lv.runs.inspect(...)`."""
 
-from __future__ import annotations
-
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field

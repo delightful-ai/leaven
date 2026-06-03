@@ -9,8 +9,6 @@ for the minimal local case. `lv.runtime.cache.*` namespaces cache constructors
 so `lv.runtime(cache=lv.runtime.cache.off())` reads naturally.
 """
 
-from __future__ import annotations
-
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict

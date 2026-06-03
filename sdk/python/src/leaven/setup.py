@@ -4,8 +4,6 @@ These are inert declarations on `lv.Case`; the runtime decides whether and
 where they may execute when a stage layout asks for a workspace.
 """
 
-from __future__ import annotations
-
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict

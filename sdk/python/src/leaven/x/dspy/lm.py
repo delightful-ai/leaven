@@ -16,8 +16,6 @@ Per `docs/working-memory/leaven-py-research/2026-05-24-external-worker-prior-art
 neutral types are wired.
 """
 
-from __future__ import annotations
-
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 

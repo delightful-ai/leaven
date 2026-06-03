@@ -5,8 +5,6 @@ composes with Leaven's async stage functions. The result is the DSPy
 prediction object with a Leaven LM receipt attached as `.leaven_lm_receipt`.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from ..._receipts import CallReceipt

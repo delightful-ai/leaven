@@ -15,8 +15,6 @@ predict, no Leaven optimization at all. Use this when you want DSPy
 modules to benefit from Leaven's wire safety without restructuring.
 """
 
-from __future__ import annotations
-
 import leaven as lv
 
 # `dspy` is an optional dep. Install with `uv add dspy-ai` or

@@ -4,8 +4,6 @@ Use directly (`lv.scoring.exact_match(...)`) or compose into a `@lv.reward`.
 Not a complete catalog; rewards can do anything via `@lv.reward`.
 """
 
-from __future__ import annotations
-
 from collections.abc import Sequence
 
 

@@ -4,8 +4,6 @@ Budgets are enforced engine-side via the locked capability document; the
 Python builder is a typed declaration that lowers into the wire shape.
 """
 
-from __future__ import annotations
-
 from pydantic import BaseModel, ConfigDict
 
 

@@ -29,8 +29,6 @@ named declaratively in the plan. The reward vector, agent, and sandbox are later
 slices.
 """
 
-from __future__ import annotations
-
 import asyncio
 import json
 import os

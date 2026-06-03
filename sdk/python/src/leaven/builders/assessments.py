@@ -1,7 +1,5 @@
 """`cx.assessments.*` — submit assessment batches at the end of evaluation."""
 
-from __future__ import annotations
-
 from collections.abc import Sequence
 
 from pydantic import BaseModel, ConfigDict

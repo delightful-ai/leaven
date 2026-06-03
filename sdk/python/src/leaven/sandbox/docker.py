@@ -1,7 +1,5 @@
 """`lv.sandbox.docker(...)` — Docker-backed sandbox for `cx.sandbox.exec`."""
 
-from __future__ import annotations
-
 from typing import Literal
 
 from .config import SandboxConfig

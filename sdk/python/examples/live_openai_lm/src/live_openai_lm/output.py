@@ -1,7 +1,5 @@
 """Output validation helpers for the live OpenAI LM proof."""
 
-from __future__ import annotations
-
 import json
 from typing import Any
 

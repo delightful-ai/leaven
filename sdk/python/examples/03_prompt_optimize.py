@@ -9,8 +9,6 @@ rubric reads the target (`ScoringCaseView`). Everything else is composition of
 typed configs — trivial problems write tiny.
 """
 
-from __future__ import annotations
-
 import asyncio
 from pathlib import Path
 

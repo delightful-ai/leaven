@@ -6,8 +6,6 @@ The job's granularity (`per_case` / `pairwise` / `listwise`) shapes which
 iteration methods are available.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from typing import Literal
 

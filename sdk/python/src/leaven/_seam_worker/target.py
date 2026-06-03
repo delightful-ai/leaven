@@ -1,7 +1,5 @@
 """Serializable worker target for registered Python stages."""
 
-from __future__ import annotations
-
 import inspect
 import sys
 from dataclasses import dataclass

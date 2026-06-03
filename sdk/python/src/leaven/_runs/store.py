@@ -1,7 +1,5 @@
 """Private run-directory store for Python SDK inspection results."""
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import Any

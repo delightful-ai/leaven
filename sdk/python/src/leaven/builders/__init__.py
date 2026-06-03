@@ -8,8 +8,6 @@ The `batch()` builder is special: it accumulates multiple ops into one
 public-seam call with one receipt root.
 """
 
-from __future__ import annotations
-
 from .agent import AgentBuilder
 from .assessments import AssessmentsBuilder
 from .batch import BatchBuilder, batch

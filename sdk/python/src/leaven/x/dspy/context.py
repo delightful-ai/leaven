@@ -10,8 +10,6 @@ because they appear inline in evaluator bodies (the locked spec example
 uses both).
 """
 
-from __future__ import annotations
-
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager, contextmanager
 from typing import Any

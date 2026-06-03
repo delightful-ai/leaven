@@ -1,7 +1,5 @@
 """Private JSON codec for persisted Python SDK run results."""
 
-from __future__ import annotations
-
 from typing import Any, Literal, cast
 
 from ..artifacts.prompt import PromptArtifact

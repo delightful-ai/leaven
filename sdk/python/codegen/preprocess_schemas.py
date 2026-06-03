@@ -33,8 +33,6 @@ Usage:
     uv run python codegen/preprocess_schemas.py SOURCE_DIR DEST_DIR
 """
 
-from __future__ import annotations
-
 import json
 import sys
 from pathlib import Path

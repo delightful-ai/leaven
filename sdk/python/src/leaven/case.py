@@ -6,8 +6,6 @@ tracks receipts and redactions internally; ordinary user code should not thread
 case read receipts by hand.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field

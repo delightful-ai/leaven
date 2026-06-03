@@ -7,8 +7,6 @@ remain the authoring sugar for the function-backed forms (`Rollout.fn`,
 `Reflect.fn`, `Propose.fn`).
 """
 
-from __future__ import annotations
-
 from collections.abc import Sequence
 from typing import Any, Literal
 

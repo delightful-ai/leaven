@@ -1,7 +1,5 @@
 """Workspace backend configs — `lv.workspace.local()`, `lv.workspace.docker(...)`, etc."""
 
-from __future__ import annotations
-
 from .config import WorkspaceConfig
 from .docker import DockerWorkspace, docker
 from .firkin import FirkinWorkspace, firkin

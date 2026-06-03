@@ -1,7 +1,5 @@
 """JSON-RPC protocol helpers for one command-runner worker request."""
 
-from __future__ import annotations
-
 import json
 import sys
 from collections.abc import Mapping

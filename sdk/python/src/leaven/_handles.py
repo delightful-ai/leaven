@@ -4,8 +4,6 @@ Workspaces, candidates, runs — Python users hold typed handles, never raw
 ids. Handle lifetimes are engine-enforced (`stage_call`, `run`, `manual`).
 """
 
-from __future__ import annotations
-
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict

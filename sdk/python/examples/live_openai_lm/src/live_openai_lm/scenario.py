@@ -1,7 +1,5 @@
 """Leaven scenario definition for the live OpenAI LM proof."""
 
-from __future__ import annotations
-
 import json
 
 import leaven as lv

@@ -19,6 +19,15 @@ goal:
         Inspect completed Python SDK runs from Rust-owned durable run/checkpoint
         state, not only an SDK-written projection file.
       - >-
+        Use a real Python SDK project whose public surface is modular,
+        fully typed, Python 3.12+ native, and dependency-explicit, with public
+        and private modules/dependencies clearly separated.
+      - >-
+        Use Python wire types/codecs generated from Rust-owned public-seam
+        truth. Python decodes and shape-checks JSON-RPC at the boundary with
+        typed msgspec records, while Rust remains the authority for method
+        semantics, capability, receipts, and graph mutation.
+      - >-
         Run examples whose README labels match behavior: product examples run
         end to end, while shape-only scaffolds are clearly not product proofs.
       - >-
@@ -39,6 +48,8 @@ spec_package:
       role: Current method execution truth; must reach zero validated-only locked V1 methods.
     - path: docs/working-memory/public-seam-sdk-goal-handoff.yaml
       role: Historical foundation proof and evidence ledger, not sufficient closeout for this goal.
+    - path: sdk/python/codegen/README.md
+      role: Current Python schema/codegen staging notes; must be updated or superseded by Rust-owned msgspec codegen.
     - path: AGENTS.md
       role: Hard cutover, topology, maturity, and verification contract.
 
@@ -60,6 +71,20 @@ designed_surface:
         `lv.runs.open(...)` and `lv.runs.inspect(...)` read durable
         Rust-owned run/checkpoint state or a documented Rust-owned exported
         artifact, not a Python-only shadow projection.
+    - name: python_sdk_project_quality
+      user_interaction: >-
+        The Python SDK remains a proper `uv` package with `py.typed`, clear
+        public/private modules, declared public/private dependencies, strict
+        Ruff/ty gates, no public backbone scaffolds, no `Any` on public or
+        wire-boundary surfaces, and no checked-in Python file over 650 LOC.
+    - name: python_wire_codec_contract
+      user_interaction: >-
+        Python wire records and JSON-RPC codecs are generated from Rust-owned
+        public-seam schema/method truth and implemented with msgspec at the
+        boundary. The codec parses request/response envelopes, preserves
+        missing-vs-null where JSON-RPC requires it, decodes method-specific
+        payloads/results into generated types, and leaves transport, retries,
+        auth, batching, and service semantics outside the codec.
     - name: examples_contract
       user_interaction: >-
         Example labels match reality: behavior-bearing examples run, live
@@ -77,6 +102,9 @@ designed_surface:
       read scope, not hardcoded worker payloads.
     - Workspace methods must be owned by workspace backends and scoped handles.
     - Blob refs without byte retrieval are not sufficient for inspection closeout.
+    - Python may decode and shape-check seam JSON, but it must not duplicate
+      Rust's authority for method semantics, capability policy, receipt truth,
+      or graph mutation.
 
 intent_preservation:
   verdict: preserved
@@ -97,6 +125,19 @@ misleading_proxy_proofs:
     forbidden_as_completion_evidence: true
   - proxy: "Python inspection reads `.leaven/runs/<run_id>/optimized.json`."
     why_insufficient: That is a Python SDK projection, not proven Rust graph/checkpoint readback.
+    forbidden_as_completion_evidence: true
+  - proxy: "The Python SDK has `pyproject.toml`, `uv.lock`, and `py.typed`."
+    why_insufficient: >-
+      Project shape is necessary but not enough. The public SDK must be
+      modular, fully typed, dependency-explicit, Python 3.12+ native, and free
+      of public/wire-boundary `Any` or public backbone `NotImplementedError`
+      gaps before closeout.
+    forbidden_as_completion_evidence: true
+  - proxy: "Python hand-written pydantic models mirror the public-seam schemas."
+    why_insufficient: >-
+      A hand mirror can drift from the Rust-owned wire contract. The SDK needs
+      generated msgspec wire records/codecs from Rust-owned public-seam truth,
+      with handwritten Python reserved for ergonomic SDK wrappers and transport.
     forbidden_as_completion_evidence: true
   - proxy: "Live OpenAI or Codex examples still pass."
     why_insufficient: They exercise a subset of method families and do not prove the locked V1 denominator.
@@ -126,6 +167,12 @@ spec_revisions_before_goal:
       Update example maturity labels so product-proof examples and shape-only
       scaffolds are not mixed under "runnable examples" language.
     rationale: Example labels are part of public maturity truth.
+    status: pending
+  - update: >-
+      Replace or supersede the current Python `_types` staging path with a
+      Rust-owned public-seam schema/method export that generates msgspec wire
+      records and JSON-RPC codecs for Python.
+    rationale: External-language SDKs need typed generated wire truth, not hand-maintained mirrors.
     status: pending
 
 acceptance:
@@ -223,6 +270,56 @@ acceptance:
     evidence: []
     closeout_check: "Reading only `optimized.json` written by Python is a proxy."
 
+  - id: python_wire_codegen_msgspec_boundary
+    claim: >-
+      Python public-seam wire records and JSON-RPC codecs are generated from
+      Rust-owned public-seam truth and use msgspec as the boundary schema/codec
+      layer.
+    status: pending
+    proof_required:
+      kind: rust_schema_codegen_and_python_codec_tests
+      must_exercise:
+        - Rust-owned source of truth for locked methods, params, results, errors, and schema fingerprints
+        - deterministic codegen into split Python modules, not one giant file
+        - "msgspec `Struct` records for JSON-RPC envelopes and method payload/result types"
+        - "explicit `JsonValue`/extension aliases instead of `typing.Any` on public or wire boundaries"
+        - "`UNSET`-style missing-vs-null handling for JSON-RPC result/error fields"
+        - method-specific result decoding from raw payload bytes after the outer envelope is parsed
+        - batch response routing by `id`, never by response order
+        - codec tests for malformed envelopes, both result+error, neither result nor error, unknown methods, null ids, notifications, and typed method payload failures
+        - transport separation: stdio/http/client routing is outside the msgspec codec layer
+        - generated-code line-count split policy under the 650 LOC Python gate
+    evidence: []
+    closeout_check: >-
+      Handwritten Python schema mirrors, pydantic-only wire models, untyped
+      dict payloads, response-order batch routing, or msgspec used as a
+      transport/client abstraction cannot close this row.
+
+  - id: python_sdk_project_quality_gate
+    claim: >-
+      The Python SDK is a real modular typed project with explicit dependency
+      boundaries and production-ready public backbone surfaces.
+    status: pending
+    proof_required:
+      kind: sdk_lint_type_package_contract
+      must_exercise:
+        - "`uv` project metadata, lockfile, package build/import, and `py.typed`"
+        - public vs private module map and `__all__` discipline
+        - public/runtime, optional, private/dev dependency declarations
+        - "`msgspec` declared in the correct public/private dependency bucket for the generated wire codec layer"
+        - no public `leaven/*` backbone method that only raises `NotImplementedError`
+        - no `typing.Any` on public SDK APIs or public-seam wire boundaries
+        - explicit JSON/value aliases or pydantic models instead of untyped dicts
+        - Python 3.12+ native syntax; no `from __future__ import annotations`
+        - Ruff enabled for maintainability families including ANN, ARG, C4, PIE, PL, PT, RET, TCH, TRY, PTH, PERF, and ANN401
+        - "`uv run ty check ...`"
+        - no checked-in non-generated Python file over 650 LOC
+    evidence: []
+    closeout_check: >-
+      Passing tests with broad Ruff ignores, untyped public/wire surfaces,
+      future-annotation imports, or public backbone scaffolds cannot close this
+      row.
+
   - id: live_codex_evolution_consumes_applied_artifact
     claim: >-
       After the retained public-seam method families are executable, a live
@@ -234,6 +331,8 @@ acceptance:
       - workspace_lifecycle_executes
       - effects_and_graph_writes_execute
       - rust_owned_run_readback_powers_python_inspection
+      - python_wire_codegen_msgspec_boundary
+      - python_sdk_project_quality_gate
     proof_required:
       kind: live_codex_agentic_evolution_e2e
       must_exercise:
@@ -278,6 +377,8 @@ acceptance:
         - "`cargo test -p leaven --test topology_contract`"
         - public seam runtime/stdio/service tests
         - Python SDK tests and example matrix
+        - Python wire codegen/msgspec codec tests
+        - Python SDK Ruff/ty/package/import gates
         - "`just check`"
         - "`just coverage` or documented explicit user-approved deferral"
     evidence: []

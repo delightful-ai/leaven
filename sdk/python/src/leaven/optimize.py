@@ -14,8 +14,6 @@ proposer path submits a proposal batch only; proposal application, admission,
 and real optimizer search remain later slices.
 """
 
-from __future__ import annotations
-
 import datetime
 from typing import Any, cast
 

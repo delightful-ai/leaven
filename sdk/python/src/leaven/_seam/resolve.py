@@ -1,7 +1,5 @@
 """Binary and repository discovery for the private public-seam client."""
 
-from __future__ import annotations
-
 import os
 import shutil
 from pathlib import Path

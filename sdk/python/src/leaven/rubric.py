@@ -11,8 +11,6 @@ rewards directly. The engine lowers `Rollout + Rubric` into the same
 assessment/evidence/receipt machinery a hand-written evaluator would author.
 """
 
-from __future__ import annotations
-
 from collections.abc import Awaitable, Callable
 from typing import Any, overload
 

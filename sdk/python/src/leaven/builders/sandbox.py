@@ -1,7 +1,5 @@
 """`cx.sandbox.*` — sandboxed command execution with typed output capture."""
 
-from __future__ import annotations
-
 from collections.abc import Sequence
 from typing import Literal
 

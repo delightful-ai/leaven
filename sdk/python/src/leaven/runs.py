@@ -5,8 +5,6 @@ spawned read-only against the run directory. Useful for retrospective
 analysis, ablation reports, sharing run state with teammates.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 

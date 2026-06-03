@@ -1,7 +1,5 @@
 """`cx.lm.*` — LM completion through the seam's neutral request/response types."""
 
-from __future__ import annotations
-
 import asyncio
 from collections.abc import Sequence
 from typing import Any, Literal, Protocol, cast

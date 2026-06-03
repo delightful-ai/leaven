@@ -12,8 +12,6 @@ when live OpenAI spend is intended:
 Set `LEAVEN_OPENAI_MODEL` to override the default model.
 """
 
-from __future__ import annotations
-
 import os
 import subprocess
 from pathlib import Path

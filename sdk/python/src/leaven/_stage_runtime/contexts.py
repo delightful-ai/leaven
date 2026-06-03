@@ -1,7 +1,5 @@
 """Concrete private contexts supplied to Python stage functions."""
 
-from __future__ import annotations
-
 from .._handles import WorkspaceHandle
 from .._receipts import CallReceipt
 from ..builders.agent import AgentBuilder

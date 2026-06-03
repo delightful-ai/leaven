@@ -5,8 +5,6 @@ BrowseComp, ...) live in separate `leaven_benchmarks_*` packages that users
 opt into. Per spec: no benchmark bundling in core.
 """
 
-from __future__ import annotations
-
 from .csv import from_csv
 from .jsonl import from_jsonl
 from .parquet import from_parquet

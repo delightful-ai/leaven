@@ -1,7 +1,5 @@
 """Reward-vector execution for the durable-seam optimize mechanics path."""
 
-from __future__ import annotations
-
 from typing import Any
 
 from ..assessment import RewardAssessment

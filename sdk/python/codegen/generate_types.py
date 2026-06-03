@@ -18,8 +18,6 @@ Usage:
     uv run python codegen/generate_types.py
 """
 
-from __future__ import annotations
-
 import shutil
 import subprocess
 import sys

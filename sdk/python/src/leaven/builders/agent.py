@@ -1,7 +1,5 @@
 """`cx.agent.*` — agentic run inside a workspace, with typed output contracts."""
 
-from __future__ import annotations
-
 import asyncio
 import math
 from collections.abc import Sequence

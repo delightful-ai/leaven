@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import leaven as lv
 from leaven.proposal import ProposalBatch, ProposalEffect
 

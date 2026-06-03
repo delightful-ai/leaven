@@ -8,8 +8,6 @@ namespaced builders the spec names.
 Governing spec: `docs/specs/leaven_python.md` in the parent repo.
 """
 
-from __future__ import annotations
-
 # Versioning
 __version__ = "0.1.0-alpha.0"
 

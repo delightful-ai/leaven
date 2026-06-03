@@ -5,8 +5,6 @@ files are lowered into source-row manifests; this loader produces the
 Python typed handles over that wire.
 """
 
-from __future__ import annotations
-
 from ..case import CaseSet
 
 

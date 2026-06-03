@@ -10,8 +10,6 @@ will eventually replace this hand-written stub with codegen from the
 skill bank's locked JSON schema.
 """
 
-from __future__ import annotations
-
 from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field

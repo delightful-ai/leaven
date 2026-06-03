@@ -12,8 +12,6 @@ This file shows both shapes side-by-side. It does not call any loader
 exactly what the user writes.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import leaven as lv

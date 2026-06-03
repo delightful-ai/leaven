@@ -1,7 +1,5 @@
 """`lv.cases.from_csv(...)` — load cases from a CSV file."""
 
-from __future__ import annotations
-
 from ..case import CaseSet
 
 

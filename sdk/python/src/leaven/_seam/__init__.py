@@ -5,8 +5,6 @@ public-seam JSON-RPC/Plan IR wire. Private dependency: sibling modules in this
 package only.
 """
 
-from __future__ import annotations
-
 from .capability import effect_capability, proposer_stage_capability
 from .client import SeamClient
 from .config import (

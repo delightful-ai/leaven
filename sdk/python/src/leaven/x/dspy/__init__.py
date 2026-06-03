@@ -8,8 +8,6 @@ The context helpers (`dspy_context`, `dspy_acall`, `dspy_call_context`)
 provide visibility/data-class scoping for DSPy calls inside an evaluator.
 """
 
-from __future__ import annotations
-
 from .context import dspy_call_context, dspy_context
 from .invoke import dspy_acall
 from .lm import LeavenDSPyLM

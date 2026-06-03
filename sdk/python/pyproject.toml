@@ -74,8 +74,20 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
-ignore = ["E501"]  # line length handled by formatter
+select = [
+    "E", "F", "I", "N", "UP", "B", "SIM", "RUF",
+    "ANN", "ARG", "C4", "PIE", "PL", "PT", "RET", "TCH", "TRY", "PTH", "PERF",
+    "TID251",
+]
+ignore = [
+    "E501",    # line length handled by formatter
+    "PLR0913", # SDK config/model constructors mirror public wire shape
+    "PLR2004", # tests and examples use small literal expectations
+    "TRY003",  # current errors keep local actionable messages at raise sites
+    "TC001",   # defer type-only import migration until public surface is stable
+    "TC002",   # defer type-only import migration until public surface is stable
+    "TC003",   # defer type-only import migration until public surface is stable
+]
 
 [tool.ruff.lint.per-file-ignores]
 "examples/08_dspy_dropin.py" = ["F401"]  # dspy is an optional dependency
@@ -87,6 +99,9 @@ ignore = ["E501"]  # line length handled by formatter
 "src/leaven/_types/**" = ["ALL"]
 # build/ is the codegen pipeline's scratch directory (preprocessed schemas).
 "build/**" = ["ALL"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"__future__.annotations".msg = "Leaven targets Python 3.12+; use native annotation syntax instead of future annotations."
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

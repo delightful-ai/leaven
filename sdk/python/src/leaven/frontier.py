@@ -4,8 +4,6 @@ The frontier is the set of candidates the optimizer keeps as the working
 population. Different policies have different admission/eviction semantics.
 """
 
-from __future__ import annotations
-
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict

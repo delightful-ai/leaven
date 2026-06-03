@@ -1,7 +1,5 @@
 """`lv.agent.claude_code(...)` — Claude Code agent runtime."""
 
-from __future__ import annotations
-
 from typing import Literal
 
 from .config import AgentConfig

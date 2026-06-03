@@ -4,8 +4,6 @@ ProposalBatch carries one or more typed changes against typed artifact
 surfaces. Effect kinds are `create` (fresh) and `change` (lineage-bearing).
 """
 
-from __future__ import annotations
-
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field

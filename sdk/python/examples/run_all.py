@@ -6,8 +6,6 @@ completes end-to-end without crashing. Live-gated examples are responsible for
 skipping themselves unless their opt-in env vars are set.
 """
 
-from __future__ import annotations
-
 import importlib.util
 import sys
 import traceback

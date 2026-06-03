@@ -15,8 +15,6 @@ that would hit the engine raise NotImplementedError and the example catches it.
 The point is the SHAPE firing taste, not running an optimization end-to-end.
 """
 
-from __future__ import annotations
-
 import asyncio
 from pathlib import Path
 

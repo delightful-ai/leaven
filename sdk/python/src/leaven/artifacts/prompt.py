@@ -1,7 +1,5 @@
 """PromptArtifact — the simplest case: a template string the optimizer evolves."""
 
-from __future__ import annotations
-
 from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field

@@ -4,8 +4,6 @@ What `await lv.optimize(...).run()` returns and what `lv.runs.open(...)`
 reads back.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from typing import Literal
 

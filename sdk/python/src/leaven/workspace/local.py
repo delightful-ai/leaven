@@ -1,7 +1,5 @@
 """`lv.workspace.local(...)` — local filesystem workspace backend."""
 
-from __future__ import annotations
-
 from typing import Literal
 
 from .config import WorkspaceConfig

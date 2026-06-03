@@ -1,7 +1,5 @@
 """Command entrypoint for the live OpenAI LM optimization proof."""
 
-from __future__ import annotations
-
 import asyncio
 
 from live_openai_lm.config import LIVE_ENV, LiveOpenAiConfig

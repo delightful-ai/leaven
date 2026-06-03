@@ -120,7 +120,8 @@ ruff's `RUF022` (sorted `__all__`) is on. No current ruff rule for
 - Public functions/classes get full type hints, signatures, and docstrings
   but `raise NotImplementedError(...)` bodies (or `...` for pure-type stubs).
 - Pydantic v2 models for wire-shaped types. Dataclasses for internal config
-  shapes. `from __future__ import annotations` at the top of every file.
+  shapes. Leaven targets Python 3.12+; use native annotation syntax and do not
+  add `from __future__ import annotations`.
 - Top-level `lv.*` imports are the public surface; submodule paths
   (`lv.optimizers.gepa`, `lv.lm.anthropic`) are also part of the public
   surface where the spec names them.

@@ -1,7 +1,5 @@
 """`cx.proposals.*` — submit + apply proposal batches from proposer stages."""
 
-from __future__ import annotations
-
 import asyncio
 from typing import Any, Protocol
 

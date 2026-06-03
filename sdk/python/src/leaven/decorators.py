@@ -20,8 +20,6 @@ through the durable seam; standalone `lv.serve_stage(...)` remains a later
 server-mode slice.
 """
 
-from __future__ import annotations
-
 from collections.abc import Awaitable, Callable
 from typing import Any, Literal, overload
 

@@ -6,4 +6,3 @@ from `docs/specs/public-seam-v1/schemas/` while working on the future
 `leaven-types` projection.
 """
 
-from __future__ import annotations

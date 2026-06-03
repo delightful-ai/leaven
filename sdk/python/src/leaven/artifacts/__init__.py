@@ -8,8 +8,6 @@ common workflow uses it, it's here. Otherwise it lives in an adapter
 namespace owned by its semantics.
 """
 
-from __future__ import annotations
-
 from .directory import DirectoryArtifact, directory
 from .prompt import PromptArtifact
 from .skill_bank import SkillBank

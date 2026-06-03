@@ -1,7 +1,5 @@
 """`lv.optimizers.seed_best()` — trivial baseline: just evaluate the seed."""
 
-from __future__ import annotations
-
 from typing import Literal
 
 from .config import OptimizerConfig

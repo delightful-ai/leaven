@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 
 from leaven.assessment import Assessment, RewardAssessment

@@ -13,8 +13,6 @@ trimmed for clarity. It's the evaluator shape EvoSkill-class repros need when a
 plain rubric can't express the scoring.
 """
 
-from __future__ import annotations
-
 from pydantic import BaseModel, Field
 
 import leaven as lv

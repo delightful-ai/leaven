@@ -9,8 +9,6 @@ Spec: `docs/specs/leaven_python.md` · seam: public-seam-v1 trust bundles.
 V1 is a fixed four-value enum. New profiles require a spec revision.
 """
 
-from __future__ import annotations
-
 from enum import StrEnum
 
 

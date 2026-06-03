@@ -19,8 +19,6 @@ This pattern is how third-party judges / reflectors / proposers ship — one
 script, one decorator, one `serve_stage` call.
 """
 
-from __future__ import annotations
-
 from pydantic import BaseModel, Field
 
 import leaven as lv

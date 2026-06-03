@@ -1,7 +1,5 @@
 """`lv.cases.splits(...)` — bundle train/val/test case sets."""
 
-from __future__ import annotations
-
 from ..case import CaseSet, CaseSplits
 
 

@@ -5,8 +5,6 @@ handle) is available to every role; `WorkspaceBuilder` adds materialization and
 writes and is granted only to privileged roles (proposer, evaluator).
 """
 
-from __future__ import annotations
-
 from collections.abc import Sequence
 from typing import Any
 

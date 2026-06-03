@@ -1,7 +1,5 @@
 """`lv.optimizers.gepa(...)` — GEPA (reflective two-phase optimization) config."""
 
-from __future__ import annotations
-
 from typing import Any, Literal
 
 from ..decorators import RegisteredStage

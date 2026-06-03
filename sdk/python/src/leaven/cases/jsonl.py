@@ -1,7 +1,5 @@
 """`lv.cases.from_jsonl(...)` — load cases from a JSONL file."""
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import Any

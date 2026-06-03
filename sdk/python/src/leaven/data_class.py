@@ -11,8 +11,6 @@ These constants are convenience labels; the wire format is the string itself.
 Use either the constant or the string literal — both are accepted.
 """
 
-from __future__ import annotations
-
 from typing import Final
 
 # Case-derived classes

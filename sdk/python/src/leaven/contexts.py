@@ -10,8 +10,6 @@ The case projection (target-free vs target-bearing) is the `case` PARAMETER type
 on the stage function (`InputCaseView` / `ScoringCaseView`), not a `cx` field.
 """
 
-from __future__ import annotations
-
 from ._handles import WorkspaceHandle
 from .builders.agent import AgentBuilder
 from .builders.assessments import AssessmentsBuilder

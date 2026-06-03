@@ -1,7 +1,5 @@
 """`lv.lm.mock(...)` — deterministic mock LM for tests + dry runs."""
 
-from __future__ import annotations
-
 from collections.abc import Sequence
 from typing import Literal
 

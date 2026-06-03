@@ -5,8 +5,6 @@ Rust optimizer with. New optimizers require a new Rust crate; Python users
 configure existing ones.
 """
 
-from __future__ import annotations
-
 from .config import OptimizerConfig
 from .gepa import Gepa, gepa
 from .mipro import Mipro, mipro

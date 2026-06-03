@@ -5,8 +5,6 @@ and split metadata. It is inert data. Stage layouts and runtimes decide how a
 selected case is projected into a workspace.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field

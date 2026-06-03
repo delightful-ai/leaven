@@ -1,7 +1,5 @@
 """Workspace backend config base."""
 
-from __future__ import annotations
-
 from pydantic import BaseModel, ConfigDict
 
 

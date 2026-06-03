@@ -4,8 +4,6 @@ Carries per-run task text plus optional stable system context. Mutable behavior
 belongs in the artifact/workspace, not in this instruction bundle.
 """
 
-from __future__ import annotations
-
 from pydantic import BaseModel, ConfigDict
 
 

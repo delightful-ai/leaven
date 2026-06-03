@@ -6,8 +6,6 @@ evaluator, with explicit `target_derived` flagging so private state cannot
 hide target material under non-target labels.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict

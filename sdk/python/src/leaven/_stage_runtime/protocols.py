@@ -1,7 +1,5 @@
 """Private protocols implemented by Python stage runtime drivers."""
 
-from __future__ import annotations
-
 from collections.abc import Sequence
 from typing import Protocol
 

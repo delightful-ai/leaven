@@ -1,7 +1,5 @@
 """Callback-backed LM builder for active Python stage contexts."""
 
-from __future__ import annotations
-
 from collections.abc import Sequence
 from typing import Any
 

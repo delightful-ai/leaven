@@ -5,8 +5,6 @@ Feedback explains the scalar. The engine binds the rollout output and evidence
 behind the scenes.
 """
 
-from __future__ import annotations
-
 from typing import Self
 
 from pydantic import BaseModel, ConfigDict

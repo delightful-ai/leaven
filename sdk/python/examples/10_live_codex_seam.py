@@ -14,8 +14,6 @@ Run only when live Codex spend is intended:
 Set `LEAVEN_BIN` or `LEAVEN_CODEX_BIN` to override binary discovery.
 """
 
-from __future__ import annotations
-
 import os
 
 from leaven._handles import WorkspaceHandle

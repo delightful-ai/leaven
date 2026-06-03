@@ -11,8 +11,6 @@ to write. The composition glue does not grow with the paper's complexity — onl
 the rollout and the rewards do.
 """
 
-from __future__ import annotations
-
 import asyncio
 from pathlib import Path
 

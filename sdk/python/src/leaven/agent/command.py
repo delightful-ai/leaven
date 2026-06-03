@@ -4,8 +4,6 @@ For agents that aren't packaged as a first-class provider but speak a
 known protocol (stdio JSON-RPC, OpenAI Responses API, etc.).
 """
 
-from __future__ import annotations
-
 from collections.abc import Sequence
 from typing import Literal
 

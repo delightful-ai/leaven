@@ -1,7 +1,5 @@
 """Public run-status records for cost, usage, and unsupported facts."""
 
-from __future__ import annotations
-
 from .cost import RunCostProjection, RunCostStatus, RunUsageStatus, project_cost_usage
 from .unsupported import (
     UnsupportedReason,

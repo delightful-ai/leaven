@@ -1,7 +1,5 @@
 """`lv.optimizers.mipro(...)` — MIPRO-v2 prompt optimization config (reserved scaffold)."""
 
-from __future__ import annotations
-
 from typing import Literal
 
 from ..lm.config import LmConfig

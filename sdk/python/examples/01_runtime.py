@@ -9,8 +9,6 @@ runtime's place in the front door is visible. It does not run an
 optimization — just composes the typed config and prints its shape.
 """
 
-from __future__ import annotations
-
 import leaven as lv
 
 

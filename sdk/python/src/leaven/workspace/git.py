@@ -4,8 +4,6 @@ For artifacts that ARE git repositories (GitProgramArtifact). The backend
 checks out a branch per candidate; proposals are commits/patches.
 """
 
-from __future__ import annotations
-
 from typing import Literal
 
 from .config import WorkspaceConfig

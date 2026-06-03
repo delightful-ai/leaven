@@ -5,8 +5,6 @@ project artifacts, case assets, instructions, and outputs inside a workspace.
 They do not allocate workspaces and do not own artifact or task semantics.
 """
 
-from __future__ import annotations
-
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict

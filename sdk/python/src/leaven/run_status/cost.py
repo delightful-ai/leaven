@@ -1,7 +1,5 @@
 """Cost and usage status projection helpers for public run summaries."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Literal
 
