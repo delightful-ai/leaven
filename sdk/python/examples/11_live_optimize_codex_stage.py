@@ -87,6 +87,7 @@ async def amain() -> None:
     assert result.best.summary_score == 1.0
     print("run id:          ", result.run_id)
     print("best score:      ", f"{result.best.summary_score:.3f}")
+    print("cost status:     ", result.summary.cost_status)
     print("agent receipt:   ", "agentrec_completion")
 
 

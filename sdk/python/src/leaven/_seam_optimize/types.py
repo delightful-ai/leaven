@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from ..run_status import UnsupportedRunFact
+
 
 @dataclass(frozen=True)
 class SeamStageAssessment:
@@ -23,6 +25,7 @@ class SeamOptimizeReport:
     seed_score: float
     best_score: float
     assessments: list[SeamStageAssessment]
+    unsupported: tuple[UnsupportedRunFact, ...] = ()
 
 
 __all__ = ["SeamOptimizeReport", "SeamStageAssessment"]

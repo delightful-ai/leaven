@@ -24,6 +24,7 @@ from .environment import Environment
 from .optimizers.config import OptimizerConfig
 from .optimizers.gepa import Gepa
 from .result import Candidate, Optimized, RunSummary
+from .run_status import project_cost_usage
 from .runtime import Runtime
 
 
@@ -143,6 +144,11 @@ def _to_optimized(
     case_count: int,
 ) -> Optimized[PromptArtifact]:
     """Project the durable-seam mechanics report into a typed `Optimized`."""
+    cost = project_cost_usage(
+        default_cost_usd=0.0,
+        default_lm_tokens=0,
+        unsupported=report.unsupported,
+    )
     best = Candidate(
         id="cand_seed",
         artifact=PromptArtifact(template=seed.template, candidate_id="cand_seed"),
@@ -155,9 +161,12 @@ def _to_optimized(
         completed_at=_utcnow(),
         iterations=0,
         candidates_evaluated=1,
-        total_cost_usd=0.0,
+        total_cost_usd=cost.total_cost_usd,
+        cost_status=cost.cost_status,
         total_calls=case_count,
-        total_lm_tokens=0,
+        total_lm_tokens=cost.total_lm_tokens,
+        usage_status=cost.usage_status,
+        unsupported=report.unsupported,
         replayability="fully_managed",
     )
     return Optimized(run_id=run_id, best=best, frontier=[best], summary=summary)

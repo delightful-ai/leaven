@@ -25,6 +25,7 @@ from . import (
     lm,
     optimizers,
     output,
+    run_status,
     runs,
     sandbox,
     scoring,
@@ -67,6 +68,7 @@ from .optimize import OptimizeBuilder, optimize
 # ----- Result + inspection -------------------------------------------------
 from .result import Candidate, Optimized, ReplayResult, RunSummary, Split
 from .rubric import RewardValue, Rubric, reward
+from .run_status import RunCostStatus, RunUsageStatus, UnsupportedRunFact
 from .runtime import Cache, Runtime, runtime
 from .score import Score
 from .stages import Propose, Reflect, Rollout
@@ -91,7 +93,7 @@ roles = AgentRoles
 # users access these types as `lv.Case`, `lv.Assessment`, not `lv.case.Case`.
 # Submodules INTENDED as namespaces (`agent`, `artifacts`, `lm`, `workspace`,
 # `sandbox`, `cases`, `optimizers`, `frontier`, `output`, `scoring`, `trust`,
-# `runs`, `x`, `data_class`, `layouts`, `setup`) are imported above with
+# `runs`, `run_status`, `x`, `data_class`, `layouts`, `setup`) are imported above with
 # `from . import ...` and stay.
 # NOTE: `budget`, `optimize` are NOT in this list — they're
 # public top-level callables that share names with their owning submodules.
@@ -146,7 +148,9 @@ __all__ = [
     "RolloutContext",
     "Rubric",
     "RubricContext",
+    "RunCostStatus",
     "RunSummary",
+    "RunUsageStatus",
     "Runtime",
     "Score",
     "ScoringCaseView",
@@ -155,6 +159,7 @@ __all__ = [
     "Split",
     "Task",
     "TrustProfile",
+    "UnsupportedRunFact",
     # versioning
     "__version__",
     # namespaces
@@ -182,6 +187,7 @@ __all__ = [
     "register_stage",
     "reward",
     "roles",
+    "run_status",
     "runner",
     "runs",
     "runtime",

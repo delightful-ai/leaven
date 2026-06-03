@@ -9,8 +9,13 @@ from leaven._handles import WorkspaceHandle
 from leaven._receipts import CallReceipt
 from leaven._seam import CommandRunnerStageConfig, MockRunnerStageConfig, StageRunRequest
 from leaven._seam_optimize.driver import _agent_config
+from leaven._seam_optimize.status import unsupported_facts_for_runtime
+from leaven._seam_optimize.types import SeamOptimizeReport
+from leaven.artifacts.prompt import PromptArtifact
 from leaven.builders.agent import AgentBuilder
 from leaven.builders.lm import LmBuilder
+from leaven.optimize import _to_optimized
+from leaven.run_status import UnsupportedRunFact, project_cost_usage
 
 
 def test_optimize_surface_names_the_four_product_inputs() -> None:
@@ -386,6 +391,66 @@ def test_optimize_runtime_codex_agent_config_lowers_to_seam(monkeypatch) -> None
         "timeout_s": 17,
         "codex_home": None,
         "bypass_approvals_and_sandbox": False,
+    }
+
+
+def test_run_status_projection_hides_unsupported_dependency_totals() -> None:
+    """Example: unsupported provider facts prevent fabricated zero-cost summaries."""
+
+    unsupported = (
+        UnsupportedRunFact(
+            surface="run.cost",
+            dependency="codex_cli",
+            reason="provider_cost_not_reported",
+            detail="Codex CLI did not report cost.",
+        ),
+        UnsupportedRunFact(
+            surface="run.usage",
+            dependency="codex_cli",
+            reason="provider_usage_not_reported",
+            detail="Codex CLI did not report tokens.",
+        ),
+    )
+
+    projection = project_cost_usage(
+        default_cost_usd=0.0,
+        default_lm_tokens=0,
+        unsupported=unsupported,
+    )
+
+    assert projection.cost_status == "unsupported_dependency"
+    assert projection.usage_status == "unsupported_dependency"
+    assert projection.total_cost_usd is None
+    assert projection.total_lm_tokens is None
+
+
+def test_optimize_summary_names_codex_cost_and_inspection_gaps() -> None:
+    """Scenario: seam optimize summary names unsupported deps instead of zeroing them."""
+
+    runtime = lv.runtime(
+        workspace=lv.workspace.local(),
+        lm=lv.lm.mock(responses=["unused"]),
+        agent=lv.agent.codex(model="gpt-5.4-mini", transport="cli"),
+    )
+    unsupported = unsupported_facts_for_runtime(runtime)
+    result = _to_optimized(
+        PromptArtifact(template="answer {question}"),
+        SeamOptimizeReport(seed_score=1.0, best_score=1.0, assessments=[], unsupported=unsupported),
+        "codex-status-test",
+        "2026-06-03T00:00:00+00:00",
+        1,
+    )
+
+    assert result.summary.total_cost_usd is None
+    assert result.summary.total_lm_tokens is None
+    assert result.summary.cost_status == "unsupported_dependency"
+    assert result.summary.usage_status == "unsupported_dependency"
+    assert {
+        (fact.surface, fact.dependency, fact.reason) for fact in result.summary.unsupported
+    } == {
+        ("run.cost", "codex_cli", "provider_cost_not_reported"),
+        ("run.usage", "codex_cli", "provider_usage_not_reported"),
+        ("run.inspection", "python_seam_optimize", "blob_readback_not_implemented"),
     }
 
 

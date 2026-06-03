@@ -12,6 +12,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from .assessment import Assessment, Replayability
+from .run_status import RunCostStatus, RunUsageStatus, UnsupportedRunFact
 
 
 class Candidate[A](BaseModel):
@@ -41,9 +42,12 @@ class RunSummary(BaseModel):
     completed_at: str | None
     iterations: int
     candidates_evaluated: int
-    total_cost_usd: float
+    total_cost_usd: float | None
+    cost_status: RunCostStatus = "known"
     total_calls: int
-    total_lm_tokens: int
+    total_lm_tokens: int | None
+    usage_status: RunUsageStatus = "known"
+    unsupported: tuple[UnsupportedRunFact, ...] = ()
     replayability: Replayability
     """Roll-up across assessments; `non_replayable` if any one assessment is."""
 

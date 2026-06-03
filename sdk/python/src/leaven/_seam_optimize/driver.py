@@ -25,6 +25,7 @@ from ..lm.config import LmConfig
 from ..lm.mock import MockLm
 from ..runtime import Runtime
 from .scoring import exact_answer_score, mean_score
+from .status import first_agent, unsupported_facts_for_runtime
 from .types import SeamOptimizeReport, SeamStageAssessment
 
 
@@ -93,7 +94,12 @@ async def run_prompt_mechanics(
             )
         )
     score = mean_score([assessment.score for assessment in assessments])
-    return SeamOptimizeReport(seed_score=score, best_score=score, assessments=assessments)
+    return SeamOptimizeReport(
+        seed_score=score,
+        best_score=score,
+        assessments=assessments,
+        unsupported=unsupported_facts_for_runtime(runtime),
+    )
 
 
 def _case_input(seed: PromptArtifact, case: dict[str, Any]) -> dict[str, Any]:
@@ -113,7 +119,7 @@ def _runner_text(runtime: Runtime) -> str:
 
 
 def _agent_config(runtime: Runtime) -> CodexCliRuntimeConfig | None:
-    agent = _first_agent(runtime.agent)
+    agent = first_agent(runtime.agent)
     if agent is None:
         return None
     if not isinstance(agent, CodexAgent):
@@ -144,16 +150,6 @@ def _first_lm(value: LmConfig | list[LmConfig] | dict[str, LmConfig]) -> LmConfi
         if not value:
             raise ValueError("runtime.lm dict must not be empty")
         return next(iter(value.values()))
-    return value
-
-
-def _first_agent(value: Any) -> Any | None:
-    if value is None:
-        return None
-    if isinstance(value, list):
-        return value[0] if value else None
-    if isinstance(value, dict):
-        return next(iter(value.values())) if value else None
     return value
 
 
