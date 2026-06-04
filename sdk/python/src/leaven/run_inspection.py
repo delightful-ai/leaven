@@ -1,11 +1,12 @@
 """Typed completed-run inspection projections for `lv.runs.inspect(...)`."""
 
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .assessment import Assessment
 from .blob_ref import BlobRef
+from .json_value import JsonObject
 from .result import Optimized
 from .run_status import RunCostStatus, RunUsageStatus, UnsupportedRunFact
 
@@ -90,7 +91,7 @@ class EvidenceSummary(BaseModel):
     case_id: str
     candidate_id: str
     data_classes: list[str] = Field(default_factory=list)
-    payload: dict[str, Any] = Field(default_factory=dict)
+    payload: JsonObject = Field(default_factory=dict)
     target_derived: bool
     rewards: list["RewardDimensionSummary"] = Field(default_factory=list)
 
@@ -132,7 +133,7 @@ class RunInspection(BaseModel):
 
 
 def inspect_optimized(
-    result: Optimized[Any],
+    result: Optimized[object],
     *,
     rust_readback: RustRunReadback | None = None,
 ) -> RunInspection:
@@ -153,7 +154,7 @@ def inspect_optimized(
     )
 
 
-def _receipts(result: Optimized[Any]) -> list[ReceiptSummary]:
+def _receipts(result: Optimized[object]) -> list[ReceiptSummary]:
     receipts: list[ReceiptSummary] = []
     for assessment in result.assessment_rows:
         source = f"assessment:{assessment.case.id}"

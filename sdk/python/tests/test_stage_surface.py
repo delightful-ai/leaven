@@ -179,6 +179,7 @@ def test_stage_run_request_names_locked_runner_dispatch_shape() -> None:
 
     assert request["method"] == "leaven/stage.run"
     params = request["params"]
+    assert isinstance(params, dict)
     assert params["schema_version"] == "leaven.stage_run.v1"
     assert params["message"] == "stage_run_request"
     assert params["stage"] == "runner"
@@ -628,6 +629,7 @@ class FakeSeamClient:
             },
             "receipts": [{"receipt": "agentrec_completion", "call_kind": "agent_run"}],
         }
+
 
 class FakeLmSeamClient:
     def __init__(self) -> None:

@@ -6,9 +6,9 @@ evaluator, with explicit `target_derived` flagging so private state cannot
 hide target material under non-target labels.
 """
 
-from typing import Any
+from pydantic import BaseModel, ConfigDict, Field
 
-from pydantic import BaseModel, ConfigDict
+from .json_value import JsonObject
 
 
 class EvidencePublic(BaseModel):
@@ -18,7 +18,7 @@ class EvidencePublic(BaseModel):
 
     data_classes: list[str]
     """Must cover every data class in the public payload."""
-    payload: dict[str, Any] = {}
+    payload: JsonObject = Field(default_factory=dict)
     """Arbitrary JSON-shaped public state."""
 
 
@@ -29,7 +29,7 @@ class EvidencePrivate(BaseModel):
 
     visibility: str = "evaluator_only"
     data_classes: list[str]
-    payload: dict[str, Any] = {}
+    payload: JsonObject = Field(default_factory=dict)
 
 
 class EvidenceEnvelope(BaseModel):
@@ -47,8 +47,8 @@ class EvidenceEnvelope(BaseModel):
     def public_private(
         cls,
         *,
-        public: dict[str, Any],
-        private: dict[str, Any],
+        public: JsonObject,
+        private: JsonObject,
         target_derived: bool = False,
     ) -> "EvidenceEnvelope":
         """Build an envelope with both visibility projections.
@@ -63,7 +63,7 @@ class EvidenceEnvelope(BaseModel):
     def public_only(
         cls,
         *,
-        payload: dict[str, Any],
+        payload: JsonObject,
         data_classes: list[str],
     ) -> "EvidenceEnvelope":
         """Public evidence with no private payload."""

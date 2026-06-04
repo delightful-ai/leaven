@@ -6,10 +6,9 @@ tracks receipts and redactions internally; ordinary user code should not thread
 case read receipts by hand.
 """
 
-from typing import Any
-
 from pydantic import BaseModel, ConfigDict, Field
 
+from .json_value import JsonObject
 from .sandbox.config import SandboxConfig
 from .setup import SetupScript
 
@@ -22,13 +21,13 @@ class Case(BaseModel):
     id: str
     """Case identifier (paper-source-derived where applicable)."""
 
-    input: dict[str, Any]
+    input: JsonObject
     """Inputs visible to runners."""
 
-    target: dict[str, Any] | None = None
+    target: JsonObject | None = None
     """Hidden answer(s) / rubric. Projected only to target-authorized roles."""
 
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: JsonObject = Field(default_factory=dict)
     """Source-side metadata such as split, difficulty, and provenance."""
 
     files: dict[str, str] = Field(default_factory=dict)
@@ -53,8 +52,8 @@ class InputCaseView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: str
-    input: dict[str, Any]
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    input: JsonObject
+    metadata: JsonObject = Field(default_factory=dict)
 
 
 class ScoringCaseView(InputCaseView):
@@ -65,7 +64,7 @@ class ScoringCaseView(InputCaseView):
     Reading the target does NOT grant egressing it into an LM call.
     """
 
-    target: dict[str, Any] | None = None
+    target: JsonObject | None = None
 
 
 class CaseSet(BaseModel):
