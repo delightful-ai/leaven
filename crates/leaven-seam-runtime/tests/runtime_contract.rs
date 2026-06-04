@@ -81,6 +81,21 @@ fn runtime_validates_stage_run_success_before_returning_jsonrpc_result() {
 }
 
 #[test]
+fn runtime_preserves_numeric_jsonrpc_ids_with_typed_id_carrier() {
+    let runtime = runtime(StageRunService::Valid);
+
+    let response = runtime.handle_value(&json!({
+        "jsonrpc": "2.0",
+        "id": 42,
+        "method": "leaven/stage.run",
+        "params": stage_run_request()
+    }));
+
+    assert!(!response.is_error(), "{:#}", response.value());
+    assert_eq!(response.value()["id"], 42);
+}
+
+#[test]
 fn runtime_rejects_malformed_stage_run_service_results() {
     let runtime = runtime(StageRunService::Invalid);
 

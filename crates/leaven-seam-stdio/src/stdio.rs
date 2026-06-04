@@ -1,6 +1,6 @@
 use std::io::{self, BufRead, Write};
 
-use leaven_seam_runtime::{JsonRpcErrorCode, JsonRpcResponse, SeamRuntime, SeamService};
+use leaven_seam_runtime::{JsonRpcErrorCode, JsonRpcId, JsonRpcResponse, SeamRuntime, SeamService};
 use serde_json::Value;
 
 /// Summary of a stdio serve loop.
@@ -43,7 +43,7 @@ where
         let response = match serde_json::from_str::<Value>(&line) {
             Ok(value) => runtime.handle_value(&value),
             Err(error) => JsonRpcResponse::error(
-                &Value::Null,
+                JsonRpcId::Null,
                 JsonRpcErrorCode::ParseError,
                 format!("failed to parse JSON-RPC line: {error}"),
             ),

@@ -61,7 +61,7 @@ struct RejectingService;
 
 impl SeamService for RejectingService {
     fn handle_plan(&self, request: SeamPlanRequest<'_>) -> Result<Value, SeamServiceError> {
-        Err(SeamServiceError::unavailable(request.method()))
+        Err(SeamServiceError::unavailable(request.method().as_str()))
     }
 
     fn handle_stage_run(
@@ -76,7 +76,7 @@ struct StageRunService;
 
 impl SeamService for StageRunService {
     fn handle_plan(&self, request: SeamPlanRequest<'_>) -> Result<Value, SeamServiceError> {
-        Err(SeamServiceError::unavailable(request.method()))
+        Err(SeamServiceError::unavailable(request.method().as_str()))
     }
 
     fn handle_stage_run(

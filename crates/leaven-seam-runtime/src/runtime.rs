@@ -4,7 +4,7 @@ use leaven_public_seam::{
     AcpJsonRpcRequestDocument, AcpProfileDocument, AcpStageRunRequestDocument, LockedMethod,
     PlanDocument, PublicSeamError, PublicSeamPackage,
 };
-use serde_json::{Value, json};
+use serde_json::{Number, Value, json};
 
 const STAGE_RUN_METHOD: &str = "leaven/stage.run";
 
@@ -47,7 +47,7 @@ pub struct JsonRpcResponse {
 
 impl JsonRpcResponse {
     /// Builds a JSON-RPC error response.
-    pub fn error(id: &Value, code: JsonRpcErrorCode, message: impl Into<String>) -> Self {
+    pub fn error(id: JsonRpcId, code: JsonRpcErrorCode, message: impl Into<String>) -> Self {
         error_response(id, code, message)
     }
 
@@ -64,6 +64,41 @@ impl JsonRpcResponse {
     /// Returns true when the response is a JSON-RPC error.
     pub fn is_error(&self) -> bool {
         self.value.get("error").is_some()
+    }
+}
+
+/// Typed JSON-RPC request id preserved by the runtime envelope.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum JsonRpcId {
+    /// A string request id.
+    String(String),
+    /// A numeric request id.
+    Number(Number),
+    /// Unknown, absent, or invalid id for parse/envelope errors.
+    Null,
+}
+
+impl JsonRpcId {
+    /// Extracts the response id permitted by JSON-RPC error handling.
+    pub fn from_request_value(value: &Value) -> Self {
+        match value.get("id") {
+            Some(Value::String(id)) => Self::String(id.clone()),
+            Some(Value::Number(id)) => Self::Number(id.clone()),
+            _ => Self::Null,
+        }
+    }
+
+    /// Builds a typed string id from a validated profile request.
+    pub fn from_validated_string(id: impl Into<String>) -> Self {
+        Self::String(id.into())
+    }
+
+    fn to_value(&self) -> Value {
+        match self {
+            Self::String(id) => Value::String(id.clone()),
+            Self::Number(id) => Value::Number(id.clone()),
+            Self::Null => Value::Null,
+        }
     }
 }
 
@@ -103,13 +138,16 @@ impl<S> SeamRuntime<S> {
 impl<S: SeamService> SeamRuntime<S> {
     /// Handles one parsed JSON-RPC value and returns one response value.
     pub fn handle_value(&self, value: &Value) -> JsonRpcResponse {
-        let id = response_id(value);
         match self.validate_request(value) {
-            Ok(ValidatedRequest::Plan(request)) => self.handle_plan_request(&id, value, request),
+            Ok(ValidatedRequest::Plan(request)) => self.handle_plan_request(value, request),
             Ok(ValidatedRequest::StageRun(request)) => {
-                self.handle_stage_run_request(&id, value, request)
+                self.handle_stage_run_request(value, request)
             }
-            Err(error) => error_response(&id, error.code, error.to_string()),
+            Err(error) => error_response(
+                JsonRpcId::from_request_value(value),
+                error.code,
+                error.to_string(),
+            ),
         }
     }
 
@@ -141,17 +179,17 @@ impl<S: SeamService> SeamRuntime<S> {
 
     fn handle_plan_request(
         &self,
-        id: &Value,
         value: &Value,
         request: AcpJsonRpcRequestDocument,
     ) -> JsonRpcResponse {
         let Some(params) = value.get("params") else {
             return error_response(
-                id,
+                JsonRpcId::from_request_value(value),
                 JsonRpcErrorCode::InvalidRequest,
                 "request missing params",
             );
         };
+        let id = JsonRpcId::from_request_value(value);
         let validated_request = request.clone();
         let service_request = SeamPlanRequest {
             document: request,
@@ -159,17 +197,15 @@ impl<S: SeamService> SeamRuntime<S> {
         };
         match self.service.handle_plan(service_request) {
             Ok(result) => {
-                let response = json!({"jsonrpc": "2.0", "id": id, "result": result});
+                let response = json!({"jsonrpc": "2.0", "id": id.to_value(), "result": result});
                 match self
                     .package
                     .validate_acp_jsonrpc_response_document(&validated_request, &response)
                 {
                     Ok(_) => JsonRpcResponse { value: response },
-                    Err(error) => error_response(
-                        &response_id(value),
-                        JsonRpcErrorCode::InvalidResult,
-                        error.to_string(),
-                    ),
+                    Err(error) => {
+                        error_response(id, JsonRpcErrorCode::InvalidResult, error.to_string())
+                    }
                 }
             }
             Err(error) => error_response(id, error.code(), error.to_string()),
@@ -178,17 +214,17 @@ impl<S: SeamService> SeamRuntime<S> {
 
     fn handle_stage_run_request(
         &self,
-        id: &Value,
         value: &Value,
         request: AcpStageRunRequestDocument,
     ) -> JsonRpcResponse {
         let Some(params) = value.get("params") else {
             return error_response(
-                id,
+                JsonRpcId::from_request_value(value),
                 JsonRpcErrorCode::InvalidRequest,
                 "request missing params",
             );
         };
+        let id = JsonRpcId::from_request_value(value);
         let validated_request = request.clone();
         let service_request = SeamStageRunRequest {
             document: request,
@@ -196,17 +232,15 @@ impl<S: SeamService> SeamRuntime<S> {
         };
         match self.service.handle_stage_run(service_request) {
             Ok(result) => {
-                let response = json!({"jsonrpc": "2.0", "id": id, "result": result});
+                let response = json!({"jsonrpc": "2.0", "id": id.to_value(), "result": result});
                 match self
                     .package
                     .validate_acp_stage_run_response_document(&validated_request, &response)
                 {
                     Ok(_) => JsonRpcResponse { value: response },
-                    Err(error) => error_response(
-                        &response_id(value),
-                        JsonRpcErrorCode::InvalidResult,
-                        error.to_string(),
-                    ),
+                    Err(error) => {
+                        error_response(id, JsonRpcErrorCode::InvalidResult, error.to_string())
+                    }
                 }
             }
             Err(error) => error_response(id, error.code(), error.to_string()),
@@ -382,25 +416,18 @@ impl RequestError {
 }
 
 fn error_response(
-    id: &Value,
+    id: JsonRpcId,
     code: JsonRpcErrorCode,
     message: impl Into<String>,
 ) -> JsonRpcResponse {
     JsonRpcResponse {
         value: json!({
             "jsonrpc": "2.0",
-            "id": id.clone(),
+            "id": id.to_value(),
             "error": {
                 "code": code.code(),
                 "message": message.into()
             }
         }),
-    }
-}
-
-fn response_id(value: &Value) -> Value {
-    match value.get("id") {
-        Some(id @ (Value::String(_) | Value::Number(_))) => id.clone(),
-        _ => Value::Null,
     }
 }
