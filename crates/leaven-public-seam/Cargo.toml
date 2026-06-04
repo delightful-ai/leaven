@@ -8,6 +8,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+base64.workspace = true
 chrono.workspace = true
 jcs-canonicalize.workspace = true
 jsonschema.workspace = true

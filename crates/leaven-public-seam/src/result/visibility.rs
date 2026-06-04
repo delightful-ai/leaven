@@ -143,6 +143,11 @@ fn collect_workspace_listing_data_classes(
                 "workspace_listing.entries.data_classes",
             )?);
         }
+        collect_optional_blob_ref_data_classes(
+            entry.get("blob_ref"),
+            "workspace_listing.entries.blob_ref",
+            required,
+        )?;
     }
     Ok(())
 }

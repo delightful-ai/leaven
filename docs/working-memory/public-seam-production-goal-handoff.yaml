@@ -260,7 +260,7 @@ acceptance:
           - crates/leaven-seam-service/src/service.rs
           - crates/leaven-cli/tests/seam_stdio_server.rs
           - docs/specs/public-seam-v1/executable-method-status.md
-        note: Finite workspace reads moved from validated-only to configured local execution through service and stdio; Git query execution was closed later, while blob byte retrieval remains a workspace-artifact proof.
+        note: Finite workspace reads moved from validated-only to configured local execution through service and stdio; later capture_artifacts evidence adds inline bytes and matching blob refs, and Git query execution was closed later.
       - kind: partial_method_matrix_reduction
         methods:
           - "`leaven/event.emit`"
@@ -393,7 +393,21 @@ acceptance:
         commands:
           - cargo test -p leaven-seam-service seam_runtime_executes_finite_workspace_queries_through_configured_service
           - cargo test -p leaven-cli --test seam_stdio_server
-        note: Configured service initializes a real local Git repo, commits seed files, applies a tracked post-commit edit, and serves source-ref-bound log/diff/status results through `leaven seam serve --stdio`. Blob byte retrieval for capture_artifacts still keeps the workspace row pending.
+        note: Configured service initializes a real local Git repo, commits seed files, applies a tracked post-commit edit, and serves source-ref-bound log/diff/status results through `leaven seam serve --stdio`.
+      - kind: capture_artifacts_byte_execution
+        methods:
+          - "`leaven/workspace.capture_artifacts`"
+        commands:
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-public-seam --test public_seam_contract workspace_query_contract::workspace_query_executes_finite_reads_through_workspace_view
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service seam_runtime_executes_finite_workspace_queries_through_configured_service
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-cli --test seam_stdio_server
+        paths:
+          - crates/leaven-public-seam/src/plan_execution/queries/workspace_values.rs
+          - crates/leaven-public-seam/src/result/visibility.rs
+          - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
+          - crates/leaven-seam-service/src/service.rs
+          - crates/leaven-cli/tests/seam_stdio_server.rs
+        note: capture_artifacts now returns requested file entries with byte count, SHA-256, inline base64 bytes, and a matching blob_ref; result visibility includes listing-entry blob_ref data classes, and the process-level `leaven seam serve --stdio` test proves those bytes cross the durable CLI route.
     closeout_check: Materialize-only workspace support cannot close this row.
 
   - id: effects_and_graph_writes_execute

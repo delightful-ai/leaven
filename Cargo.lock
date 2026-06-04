@@ -3629,6 +3629,7 @@ dependencies = [
 name = "leaven-public-seam"
 version = "0.0.0"
 dependencies = [
+ "base64",
  "chrono",
  "futures",
  "jcs-canonicalize",

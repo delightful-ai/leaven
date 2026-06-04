@@ -2330,6 +2330,18 @@ mod tests {
                 primary_kind: "workspace_listing",
                 assert_primary: |value| {
                     assert_eq!(value["result"]["primary"]["entries"][0]["bytes"], 24);
+                    assert_eq!(
+                        value["result"]["primary"]["entries"][0]["content_base64"],
+                        "c2VlZGVkIHdvcmtzcGFjZSByZWFkbWUK"
+                    );
+                    assert_eq!(
+                        value["result"]["primary"]["entries"][0]["blob_ref"]["bytes"],
+                        24
+                    );
+                    assert_eq!(
+                        value["result"]["primary"]["entries"][0]["blob_ref"]["sha256"],
+                        value["result"]["primary"]["entries"][0]["sha256"]
+                    );
                 },
             },
             WorkspaceQueryCase {

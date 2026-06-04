@@ -612,6 +612,16 @@
                     "type": "integer",
                     "minimum": 0
                   },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "content_base64": {
+                    "type": "string"
+                  },
+                  "blob_ref": {
+                    "$ref": "common.schema.json#/$defs/BlobRef"
+                  },
                   "data_classes": {
                     "$ref": "common.schema.json#/$defs/DataClassSet"
                   }

@@ -171,6 +171,24 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
             "workspace_materialize"
         );
         assert_eq!(response["result"]["receipts"][1]["kind"], "query");
+        if query_name == "captured" {
+            assert_eq!(
+                response["result"]["primary"]["entries"][0]["bytes"],
+                "seeded workspace readme\n".len()
+            );
+            assert_eq!(
+                response["result"]["primary"]["entries"][0]["content_base64"],
+                "c2VlZGVkIHdvcmtzcGFjZSByZWFkbWUK"
+            );
+            assert_eq!(
+                response["result"]["primary"]["entries"][0]["blob_ref"]["bytes"],
+                "seeded workspace readme\n".len()
+            );
+            assert_eq!(
+                response["result"]["primary"]["entries"][0]["blob_ref"]["sha256"],
+                response["result"]["primary"]["entries"][0]["sha256"]
+            );
+        }
     }
 
     let graph_case_start = 3 + workspace_queries.len();

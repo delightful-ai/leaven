@@ -3,6 +3,7 @@ use std::{
     fmt::Write as _,
 };
 
+use base64::Engine as _;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -193,16 +194,28 @@ fn workspace_capture_artifacts_value_from_view(
         .map(|path| {
             let bytes = view
                 .read_file(&path)
-                .map_err(|error| workspace_error(&error))?
-                .len() as u64;
-            total_bytes = total_bytes.checked_add(bytes).ok_or_else(|| {
+                .map_err(|error| workspace_error(&error))?;
+            let byte_count = bytes.len() as u64;
+            total_bytes = total_bytes.checked_add(byte_count).ok_or_else(|| {
                 invalid_plan("workspace_query capture_artifacts byte count overflowed")
             })?;
             enforce_max_bytes(request.op(), total_bytes, "capture_artifacts")?;
+            let sha256 = format!("{:x}", Sha256::digest(&bytes));
+            let blob_id = format!("blob_workspace_capture_{sha256}");
             Ok(json!({
                 "path": path.as_str(),
                 "kind": "file",
-                "bytes": bytes,
+                "bytes": byte_count,
+                "sha256": sha256,
+                "content_base64": base64::engine::general_purpose::STANDARD.encode(&bytes),
+                "blob_ref": {
+                    "kind": "blob_ref",
+                    "id": blob_id,
+                    "sha256": sha256,
+                    "bytes": byte_count,
+                    "uri": format!("leaven-blob://workspace.capture_artifacts/{sha256}"),
+                    "data_classes": data_classes
+                },
                 "data_classes": data_classes
             }))
         })
