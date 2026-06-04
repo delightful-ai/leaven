@@ -1,10 +1,8 @@
 use std::collections::BTreeSet;
 
-use serde_json::Value;
-
 use super::{
-    AggregateBudgets, CapabilityDenial, CapabilityDenialKind, CapabilityDocument, Grant,
-    TokenBinding, parse_timestamp, string_set, value_allows,
+    AggregateBudgets, CapabilityConstraintValue, CapabilityDenial, CapabilityDenialKind,
+    CapabilityDocument, CapabilityResourceValue, Grant, TokenBinding, parse_timestamp,
 };
 
 /// Validated parent-child capability lineage.
@@ -249,20 +247,20 @@ fn ensure_resource_attenuates(parent: &Grant, child: &Grant) -> Result<bool, Cap
         }
     }
     let mut narrowed = false;
-    for (key, child_value) in &child.resource {
+    for (key, child_value) in child.resource.entries() {
         let Some(parent_value) = parent.resource.get(key) else {
             return Err(CapabilityDenial::new(
                 CapabilityDenialKind::Delegation,
                 format!("child resource `{key}` is not present in parent"),
             ));
         };
-        if !value_allows(parent_value, child_value) {
+        if !parent_value.allows(child_value) {
             return Err(CapabilityDenial::new(
                 CapabilityDenialKind::Delegation,
                 format!("child resource `{key}` widens parent"),
             ));
         }
-        narrowed |= value_narrows(parent_value, child_value);
+        narrowed |= resource_value_narrows(parent_value, child_value);
     }
     Ok(narrowed)
 }
@@ -271,17 +269,17 @@ fn ensure_constraints_attenuate(parent: &Grant, child: &Grant) -> Result<bool, C
     let keys = parent
         .constraints
         .keys()
+        .into_iter()
         .chain(child.constraints.keys())
-        .cloned()
         .collect::<BTreeSet<_>>();
     let mut narrowed = false;
     for key in keys {
-        let parent_value = parent.constraints.get(&key);
-        let child_value = child.constraints.get(&key);
+        let parent_value = parent.constraints.get(key);
+        let child_value = child.constraints.get(key);
         narrowed |= if key.starts_with("forbidden_") {
-            ensure_forbidden_constraint_attenuates(&key, parent_value, child_value)?
+            ensure_forbidden_constraint_attenuates(key, parent_value, child_value)?
         } else {
-            ensure_allowed_constraint_attenuates(&key, parent_value, child_value)?
+            ensure_allowed_constraint_attenuates(key, parent_value, child_value)?
         };
     }
     Ok(narrowed)
@@ -289,10 +287,10 @@ fn ensure_constraints_attenuate(parent: &Grant, child: &Grant) -> Result<bool, C
 
 fn ensure_allowed_constraint_attenuates(
     key: &str,
-    parent: Option<&Value>,
-    child: Option<&Value>,
+    parent: Option<CapabilityConstraintValue>,
+    child: Option<CapabilityConstraintValue>,
 ) -> Result<bool, CapabilityDenial> {
-    match (parent, child) {
+    match (&parent, &child) {
         (None, None) => Ok(false),
         (Some(_), None) => Err(CapabilityDenial::new(
             CapabilityDenialKind::Delegation,
@@ -302,9 +300,7 @@ fn ensure_allowed_constraint_attenuates(
             CapabilityDenialKind::Delegation,
             format!("child constraint `{key}` is absent from parent"),
         )),
-        (Some(parent), Some(child)) if value_allows(parent, child) => {
-            Ok(value_narrows(parent, child))
-        }
+        (Some(parent), Some(child)) if parent.allows(child) => Ok(parent.narrows(child)),
         (Some(_), Some(_)) => Err(CapabilityDenial::new(
             CapabilityDenialKind::Delegation,
             format!("child constraint `{key}` widens parent"),
@@ -314,18 +310,23 @@ fn ensure_allowed_constraint_attenuates(
 
 fn ensure_forbidden_constraint_attenuates(
     key: &str,
-    parent: Option<&Value>,
-    child: Option<&Value>,
+    parent: Option<CapabilityConstraintValue>,
+    child: Option<CapabilityConstraintValue>,
 ) -> Result<bool, CapabilityDenial> {
-    let parent = string_set(parent);
-    let child = string_set(child);
-    if parent.is_subset(&child) {
-        Ok(child.len() > parent.len())
-    } else {
-        Err(CapabilityDenial::new(
+    match (&parent, &child) {
+        (None, None) => Ok(false),
+        (Some(_), None) => Err(CapabilityDenial::new(
+            CapabilityDenialKind::Delegation,
+            format!("child omits parent forbidden constraint `{key}`"),
+        )),
+        (None, Some(_)) => Ok(true),
+        (Some(parent), Some(child)) if parent.forbidden_attenuates(child) => {
+            Ok(parent.forbidden_narrows(child))
+        }
+        (Some(_), Some(_)) => Err(CapabilityDenial::new(
             CapabilityDenialKind::Delegation,
             format!("child forbidden constraint `{key}` weakens parent"),
-        ))
+        )),
     }
 }
 
@@ -431,6 +432,9 @@ fn ensure_optional_u64_attenuates(
     }
 }
 
-fn value_narrows(parent: &Value, child: &Value) -> bool {
-    value_allows(parent, child) && !value_allows(child, parent)
+fn resource_value_narrows(
+    parent: &CapabilityResourceValue,
+    child: &CapabilityResourceValue,
+) -> bool {
+    parent.allows(child) && !child.allows(parent)
 }

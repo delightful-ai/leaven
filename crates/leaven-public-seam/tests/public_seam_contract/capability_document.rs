@@ -47,20 +47,11 @@ fn opaque_token_resolves_to_structured_capability_document() {
         resolved
             .grant("case.read")
             .unwrap()
-            .resource
-            .get("evaluation_request_id")
-            .and_then(Value::as_str),
-        Some("evalreq_01")
+            .allows_resource("evaluation_request_id", "evalreq_01"),
+        true
     );
     assert_eq!(
-        resolved
-            .grant("lm.complete")
-            .unwrap()
-            .limits
-            .as_ref()
-            .unwrap()
-            .get("max_calls")
-            .and_then(Value::as_u64),
+        resolved.grant("lm.complete").unwrap().limit("max_calls"),
         Some(20)
     );
     assert_eq!(

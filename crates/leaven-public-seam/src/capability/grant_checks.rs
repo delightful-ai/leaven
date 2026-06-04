@@ -31,7 +31,7 @@ pub(super) fn ensure_resource(
                 format!("resource `{key}` is not granted"),
             ));
         };
-        if !value_allows(allowed, requested) {
+        if !allowed.allows(requested) {
             return Err(CapabilityDenial::new(
                 CapabilityDenialKind::Resource,
                 format!("resource `{key}` does not match grant"),
@@ -112,7 +112,7 @@ fn ensure_set_constraint(
     requested: &BTreeSet<String>,
     kind: CapabilityDenialKind,
 ) -> Result<(), CapabilityDenial> {
-    let forbidden = string_set(grant.constraints.get(forbidden_key));
+    let forbidden = grant.constraints.string_set(forbidden_key);
     let redactions = requested
         .intersection(&forbidden)
         .cloned()
@@ -133,9 +133,8 @@ fn ensure_allowed_set(
     requested: &BTreeSet<String>,
     kind: CapabilityDenialKind,
 ) -> Result<(), CapabilityDenial> {
-    let allowed_value = grant.constraints.get(allowed_key);
-    let allowed = string_set(allowed_value);
-    if requested.is_empty() && allowed_value.is_some() && !allowed.is_empty() {
+    let allowed = grant.constraints.string_set(allowed_key);
+    if requested.is_empty() && !allowed.is_empty() {
         return Err(CapabilityDenial::new(
             kind,
             format!("request must declare `{allowed_key}`"),
@@ -160,7 +159,7 @@ fn ensure_allowed_one(
     requested: &str,
     kind: CapabilityDenialKind,
 ) -> Result<(), CapabilityDenial> {
-    let allowed = string_set(grant.constraints.get(allowed_key));
+    let allowed = grant.constraints.string_set(allowed_key);
     if allowed.contains(requested) {
         Ok(())
     } else {
@@ -177,7 +176,7 @@ fn ensure_optional_one(
     requested: Option<&str>,
     kind: CapabilityDenialKind,
 ) -> Result<(), CapabilityDenial> {
-    let allowed = string_set(grant.constraints.get(allowed_key));
+    let allowed = grant.constraints.string_set(allowed_key);
     match (requested, allowed.is_empty()) {
         (None, true) => Ok(()),
         (None, false) => Err(CapabilityDenial::new(
@@ -192,8 +191,8 @@ fn ensure_schema_constraint(
     grant: &Grant,
     requested: &BTreeSet<String>,
 ) -> Result<(), CapabilityDenial> {
-    let mut allowed = string_set(grant.constraints.get("schemas"));
-    allowed.extend(string_set(grant.constraints.get("change_schemas")));
+    let mut allowed = grant.constraints.string_set("schemas");
+    allowed.extend(grant.constraints.string_set("change_schemas"));
     if requested.is_empty() && !allowed.is_empty() {
         return Err(CapabilityDenial::new(
             CapabilityDenialKind::Schema,
@@ -307,35 +306,18 @@ fn ensure_limit(
     }
 }
 
-pub(super) fn value_allows(allowed: &Value, requested: &Value) -> bool {
-    match allowed {
-        Value::Array(values) => match requested {
-            Value::Array(requested_values) => requested_values
-                .iter()
-                .all(|value| values.iter().any(|allowed| allowed == value)),
-            _ => values.iter().any(|value| value == requested),
-        },
-        _ => allowed == requested,
-    }
-}
-
-pub(super) fn string_set(value: Option<&Value>) -> BTreeSet<String> {
-    value
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .map(str::to_owned)
-        .collect()
-}
-
 pub(super) fn grant_receives_target(grant: &Grant) -> bool {
-    string_set(grant.constraints.get("case_fields")).contains("target")
-        || string_set(grant.constraints.get("allowed_input_classes")).contains("case.target")
+    grant
+        .constraints
+        .string_set("case_fields")
+        .contains("target")
         || grant
             .constraints
-            .get("target_egress")
-            .and_then(Value::as_str)
+            .string_set("allowed_input_classes")
+            .contains("case.target")
+        || grant
+            .constraints
+            .optional_string("target_egress")
             .is_some_and(|egress| !matches!(egress, "none" | "denied"))
 }
 

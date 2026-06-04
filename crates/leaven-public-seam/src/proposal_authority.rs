@@ -169,7 +169,7 @@ fn validate_apply_proposal_batch(capability: &CapabilityDocument) -> Result<(), 
     let grant = capability
         .grant("proposal.apply_batch")
         .ok_or_else(|| invalid_authority("proposal apply requires proposal.apply_batch grant"))?;
-    match grant.constraints.get("may_apply").and_then(Value::as_bool) {
+    match grant.constraints.optional_bool("may_apply") {
         Some(false) => Err(invalid_authority(
             "proposal apply grant has may_apply=false",
         )),
@@ -187,13 +187,8 @@ fn ensure_allowed_effect(
     let grant = capability
         .grant("proposal.submit_batch")
         .ok_or_else(|| invalid_authority("proposal submit requires proposal.submit_batch grant"))?;
-    let Some(effects) = grant.constraints.get("effects") else {
-        return Ok(());
-    };
-    let effects = effects
-        .as_array()
-        .ok_or_else(|| invalid_authority("grant effects must be an array"))?;
-    if effects.iter().any(|item| item.as_str() == Some(effect)) {
+    let effects = grant.constraints.string_set("effects");
+    if effects.is_empty() || effects.contains(effect) {
         Ok(())
     } else {
         Err(invalid_authority(format!(

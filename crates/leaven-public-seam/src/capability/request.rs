@@ -2,13 +2,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
 
-use super::{CapabilityError, CapabilityLimitUsage};
+use super::{CapabilityError, CapabilityLimitUsage, CapabilityResourceValue};
 
 /// Requested operation dimensions checked against a capability grant.
 #[derive(Clone, Debug, Default)]
 pub struct CapabilityGrantRequest {
     pub(super) action: String,
-    pub(super) resource: BTreeMap<String, Value>,
+    pub(super) resource: BTreeMap<String, CapabilityResourceValue>,
     pub(super) case_fields: BTreeSet<String>,
     pub(super) partition: Option<String>,
     pub(super) input_classes: BTreeSet<String>,
@@ -34,7 +34,8 @@ impl CapabilityGrantRequest {
     /// Adds a resource selector value.
     #[must_use]
     pub fn with_resource(mut self, key: impl Into<String>, value: Value) -> Self {
-        self.resource.insert(key.into(), value);
+        self.resource
+            .insert(key.into(), CapabilityResourceValue::from_json(value));
         self
     }
 
