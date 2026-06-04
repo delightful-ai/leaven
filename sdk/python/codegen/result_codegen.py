@@ -37,6 +37,7 @@ from msgspec import UNSET, Struct, UnsetType
 from .payloads import (
     BlobRef,
     CallReceiptKind,
+    CaseRef,
     Cost,
     GraphRow,
     OperationReceiptKind,
@@ -105,7 +106,7 @@ class ExtensionResultBase(Struct, frozen=True, forbid_unknown_fields=True):
 
 class CaseRecordPrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
     kind: Literal["case_record"]
-    case: ReceiptRef
+    case: CaseRef
     receipt: str
     data_classes: list[str]
     replayability: Replayability

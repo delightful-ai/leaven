@@ -6,7 +6,7 @@ import msgspec
 import pytest
 
 from leaven._seam._wire.methods import LOCKED_METHODS
-from leaven._seam._wire.payloads import EventSummaryGraphRow
+from leaven._seam._wire.payloads import CaseRefRecord, EventSummaryGraphRow
 from leaven._seam._wire.results import (
     METHOD_RESULT_BINDINGS,
     AgentRunResult,
@@ -147,6 +147,45 @@ def test_generated_case_result_accepts_locked_case_methods() -> None:
         payload = {**base, "method": method}
         decoded = msgspec.json.decode(json.dumps(payload).encode(), type=CaseLoadResult)
         assert decoded.method == method
+
+
+def test_generated_case_result_decodes_case_ref_object() -> None:
+    """Example: case_record primary carries a schema-owned CaseRef."""
+
+    payload = _extension_result(
+        "leaven/case.load",
+        {
+            "kind": "case_record",
+            "case": {"kind": "case", "run": "run_1", "id": "case_1"},
+            "receipt": "qrec_case",
+            "data_classes": ["public"],
+            "replayability": "fully_managed",
+            "input": {"question": "2+2?"},
+        },
+    )
+
+    decoded = msgspec.json.decode(json.dumps(payload).encode(), type=CaseLoadResult)
+
+    assert isinstance(decoded.primary.case, CaseRefRecord)
+    assert decoded.primary.case.id == "case_1"
+
+
+def test_generated_case_result_rejects_receipt_object_as_case_ref() -> None:
+    """Regression: case_record.case is a CaseRef, not a ReceiptRef."""
+
+    payload = _extension_result(
+        "leaven/case.load",
+        {
+            "kind": "case_record",
+            "case": {"kind": "receipt", "id": "qrec_case"},
+            "receipt": "qrec_case",
+            "data_classes": ["public"],
+            "replayability": "fully_managed",
+        },
+    )
+
+    with pytest.raises(msgspec.ValidationError, match="Invalid value 'receipt'"):
+        msgspec.json.decode(json.dumps(payload).encode(), type=CaseLoadResult)
 
 
 def test_generated_result_records_decode_remaining_locked_method_families() -> None:

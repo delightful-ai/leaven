@@ -526,7 +526,7 @@ class LeavenValue(Struct, frozen=True, omit_defaults=True, kw_only=True):
     receipt: ReceiptRef | UnsetType = UNSET
     event_id: str | UnsetType = UNSET
     items: list[GraphRow] | UnsetType = UNSET
-    case: ReceiptRef | UnsetType = UNSET
+    case: CaseRef | UnsetType = UNSET
     workspace: str | UnsetType = UNSET
     path: str | UnsetType = UNSET
     status: str | UnsetType = UNSET

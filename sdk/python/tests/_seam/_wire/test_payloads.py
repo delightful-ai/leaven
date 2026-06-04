@@ -167,6 +167,47 @@ def test_plan_result_decodes_typed_values_and_receipts() -> None:
     assert receipt.write_kind == "emit_run_event"
 
 
+def test_plan_result_case_record_uses_case_ref_not_receipt_ref() -> None:
+    body = (
+        b'{"jsonrpc":"2.0","id":"req_1","result":{'
+        b'"schema_version":"leaven.plan_result.v1","plan_id":"plan_1",'
+        b'"capability_fingerprint":"fp_cap_sha256_test",'
+        b'"policy_fingerprint":"fp_policy_sha256_test",'
+        b'"base_revision":"rev_base","final_revision":"rev_final",'
+        b'"replayability_summary":"fully_managed",'
+        b'"values":{"case":{"kind":"case_record",'
+        b'"case":{"kind":"case","run":"run_1","id":"case_1"},'
+        b'"receipt":"qrec_case","graph_revision":"rev_final",'
+        b'"data_classes":["public"],"replayability":"fully_managed"}},'
+        b'"receipts":[],"redactions":[],"charges":[],"errors":[]}}'
+    )
+
+    decoded = decode_response(body, PlanResultDocument)
+    case_value = decoded.values["case"]
+
+    assert isinstance(case_value.case, CaseRefRecord)
+    assert case_value.case.id == "case_1"
+
+
+def test_plan_result_rejects_receipt_object_as_case_record_ref() -> None:
+    body = (
+        b'{"jsonrpc":"2.0","id":"req_1","result":{'
+        b'"schema_version":"leaven.plan_result.v1","plan_id":"plan_1",'
+        b'"capability_fingerprint":"fp_cap_sha256_test",'
+        b'"policy_fingerprint":"fp_policy_sha256_test",'
+        b'"base_revision":"rev_base","final_revision":"rev_final",'
+        b'"replayability_summary":"fully_managed",'
+        b'"values":{"case":{"kind":"case_record",'
+        b'"case":{"kind":"receipt","id":"qrec_case"},'
+        b'"receipt":"qrec_case","graph_revision":"rev_final",'
+        b'"data_classes":["public"],"replayability":"fully_managed"}},'
+        b'"receipts":[],"redactions":[],"charges":[],"errors":[]}}'
+    )
+
+    with pytest.raises(JsonRpcProtocolError):
+        decode_response(body, PlanResultDocument)
+
+
 def test_plan_result_decodes_typed_info_receipt_and_trace_refs() -> None:
     """Scenario: ref leaves keep their schema-owned object identities."""
 
