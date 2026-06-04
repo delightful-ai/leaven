@@ -59,7 +59,16 @@ class AssessmentWrite(BaseModel):
         replayability: Replayability = "boundary_managed",
     ) -> "AssessmentWrite":
         """Single-candidate-per-case assessment (the most common shape)."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+        return cls(
+            kind="independent",
+            candidate=candidate,
+            case=case,
+            score=score,
+            evidence=evidence,
+            read_receipts=list(read_receipts or []),
+            effect_receipts=list(effect_receipts or []),
+            replayability=replayability,
+        )
 
     @classmethod
     def pairwise(
@@ -74,7 +83,20 @@ class AssessmentWrite(BaseModel):
         replayability: Replayability = "boundary_managed",
     ) -> "AssessmentWrite":
         """Pairwise preference assessment (two candidates, one preferred)."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+        if len(candidates) != 2:
+            raise ValueError("pairwise assessments require exactly two candidates")
+        if preference not in candidates:
+            raise ValueError("pairwise preference must be one of the candidates")
+        return cls(
+            kind="pairwise",
+            candidates=list(candidates),
+            case=case,
+            preference=preference,
+            evidence=evidence,
+            read_receipts=list(read_receipts or []),
+            effect_receipts=list(effect_receipts or []),
+            replayability=replayability,
+        )
 
     @classmethod
     def listwise(
@@ -89,7 +111,20 @@ class AssessmentWrite(BaseModel):
         replayability: Replayability = "boundary_managed",
     ) -> "AssessmentWrite":
         """Listwise ranking assessment over N candidates."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+        if len(candidates) < 2:
+            raise ValueError("listwise assessments require at least two candidates")
+        if set(ranking) != set(candidates) or len(ranking) != len(candidates):
+            raise ValueError("listwise ranking must contain the same candidates exactly once")
+        return cls(
+            kind="listwise",
+            candidates=list(candidates),
+            case=case,
+            ranking=list(ranking),
+            evidence=evidence,
+            read_receipts=list(read_receipts or []),
+            effect_receipts=list(effect_receipts or []),
+            replayability=replayability,
+        )
 
 
 class RewardAssessment(BaseModel):

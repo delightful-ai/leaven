@@ -5,6 +5,7 @@ Constructors are explicit: `text(...)`, `json_value(...)`, `blob(...)`,
 `structured(...)`.
 """
 
+from collections.abc import Sequence
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -47,7 +48,13 @@ class OutputRecord(BaseModel):
         data_classes: list[str] | None = None,
     ) -> "OutputRecord":
         """Inline text output. Summary IS the content."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+        return cls(
+            kind="text",
+            visibility=visibility,
+            data_classes=_data_classes(data_classes),
+            summary=summary,
+            value=summary,
+        )
 
     @classmethod
     def structured(
@@ -59,7 +66,13 @@ class OutputRecord(BaseModel):
         data_classes: list[str] | None = None,
     ) -> "OutputRecord":
         """Inline structured output (JSON-shaped). Summary is a human-readable label."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+        return cls(
+            kind="structured",
+            visibility=visibility,
+            data_classes=_data_classes(data_classes),
+            summary=summary,
+            value=_json_object(value),
+        )
 
     @classmethod
     def json_value(
@@ -71,7 +84,13 @@ class OutputRecord(BaseModel):
         data_classes: list[str] | None = None,
     ) -> "OutputRecord":
         """Inline JSON-shaped output."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+        return cls(
+            kind="json",
+            visibility=visibility,
+            data_classes=_data_classes(data_classes),
+            summary=summary,
+            value=_json_value(value),
+        )
 
     @classmethod
     def blob(
@@ -83,7 +102,38 @@ class OutputRecord(BaseModel):
         data_classes: list[str] | None = None,
     ) -> "OutputRecord":
         """Blob-referenced output. The blob_ref is engine-minted."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+        return cls(
+            kind="blob_ref",
+            visibility=visibility,
+            data_classes=_data_classes(data_classes),
+            summary=summary,
+            blob_ref=blob_ref,
+        )
+
+
+def _data_classes(data_classes: list[str] | None) -> list[str]:
+    return [PUBLIC] if data_classes is None else list(data_classes)
+
+
+def _json_object(value: object) -> JsonObject:
+    if not isinstance(value, dict):
+        raise TypeError("JSON value must be an object")
+    output: JsonObject = {}
+    for key, item in value.items():
+        if not isinstance(key, str):
+            raise TypeError("JSON object keys must be strings")
+        output[key] = _json_value(item)
+    return output
+
+
+def _json_value(value: object) -> JsonValue:
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
+    if isinstance(value, dict):
+        return _json_object(value)
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
+        return [_json_value(item) for item in value]
+    raise TypeError(f"value is not JSON: {type(value).__name__}")
 
 
 __all__ = ["OutputKind", "OutputRecord", "Visibility"]

@@ -2483,6 +2483,29 @@ acceptance:
           model-backed structured output, and rejects non-JSON schema shapes.
           This does not claim LM/agent lowerers support every structured-output
           route yet; it removes the public helper scaffold.
+      - kind: public_assessment_evidence_output_record_scaffolds_removed
+        paths:
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/src/leaven/assessment.py
+          - sdk/python/src/leaven/evidence.py
+          - sdk/python/src/leaven/output_record.py
+          - sdk/python/tests/test_assessment.py
+          - sdk/python/tests/test_evidence.py
+          - sdk/python/tests/test_output_record.py
+        commands:
+          - cd sdk/python && uv run pytest tests/test_evidence.py tests/test_assessment.py tests/test_output_record.py -q
+          - cd sdk/python && uv run ruff check src/leaven/evidence.py src/leaven/assessment.py src/leaven/output_record.py tests/test_evidence.py tests/test_assessment.py tests/test_output_record.py
+          - cd sdk/python && uv run ty check src/leaven/evidence.py src/leaven/assessment.py src/leaven/output_record.py tests/test_evidence.py tests/test_assessment.py tests/test_output_record.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+        note: >-
+          Public typed constructor surfaces for evidence, assessment writes,
+          and output records are now behavior-bearing instead of scaffolds.
+          Evidence constructors split visibility payloads from data-class
+          labels and reject undeclared target-derived private evidence;
+          assessment constructors validate independent, pairwise, and listwise
+          candidate shapes; output records construct typed text, structured,
+          JSON, and blob-reference projections. The mirrored-test contract now
+          locks each source module to its matching test file.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this
