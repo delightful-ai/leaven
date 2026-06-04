@@ -966,6 +966,50 @@ acceptance:
           service execution payloads still contain raw JSON islands, and the
           runtime/service `.as_str()` bridges remain explicit temporary work
           for the next typed request/result slices.
+      - kind: typed_top_level_seam_facts_and_python_method_boundary
+        commits:
+          - 82e9a032
+          - 50f67f84
+          - 7430e380
+        paths:
+          - crates/leaven-public-seam/src/plan.rs
+          - crates/leaven-public-seam/src/result.rs
+          - crates/leaven-public-seam/src/result/audit.rs
+          - crates/leaven-public-seam/src/acp_profile/extension_result.rs
+          - crates/leaven-seam-runtime/src/runtime.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_document.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_result.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/acp_profile.rs
+          - crates/leaven-seam-runtime/tests/runtime_contract.rs
+          - sdk/python/src/leaven/_seam/_wire/jsonrpc.py
+          - sdk/python/src/leaven/_seam/_wire/codec.py
+          - sdk/python/src/leaven/_seam/client.py
+          - sdk/python/tests/_seam/_wire/test_codec.py
+          - sdk/python/tests/_seam/test_client.py
+        commands:
+          - cargo test -p leaven-public-seam --test public_seam_contract
+          - cargo test -p leaven-seam-runtime --test runtime_contract
+          - cargo fmt --check
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam -q -k 'not generated_methods_match_current_rust_source'
+          - cd sdk/python && uv run ruff check src/leaven/_seam src/leaven/_seam/_wire tests/_seam codegen/generate_seam_wire.py
+          - cd sdk/python && uv run ty check src/leaven/_seam src/leaven/_seam/_wire tests/_seam
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+        note: >-
+          Validated Plan IR requests now preserve a typed PlanDocument at the
+          seam runtime service boundary instead of discarding validation as a
+          side effect. PlanDocument exposes typed top-level plan id, schema
+          version, mode, commit policy, return bindings, operation names, and
+          direct call/write/query kinds. PlanResultDocument exposes typed value
+          and receipt facts, typed charge/error section summaries, and ACP
+          extension results expose typed primary and expected-receipt facts.
+          Python JSON-RPC request envelopes now require the generated
+          LockedMethod type, and SeamClient rejects unknown methods such as
+          `leaven/human.review` before spawning or writing to the service. This
+          is still not full typed seam closeout: nested Plan IR operation
+          bodies, nested Plan Result values/receipts, evidence, cost, blob refs,
+          capability resources, service execution payloads, and generated
+          Python Raw islands remain to be typed or explicitly justified.
     closeout_check: >-
       Handwritten Python schema mirrors, pydantic-only wire models, untyped
       dict payloads, response-order batch routing, or msgspec used as a
