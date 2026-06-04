@@ -840,11 +840,35 @@ acceptance:
           receipt, return field, and extension envelope. The worker-process
           dispatch contract still proves `leaven/event.emit` crosses the
           stage-run bidirectional bridge and mutates `RunContext` through the
-          public callback path. This is not row closure: stage-bridge
-          `proposal.apply`, `evaluation.request`, and `assessment.submit`
-          extension-result projections still need typed owners, and the event
-          payload body remains a host-domain JSON blocker rather than an
-          approved raw island.
+          public callback path. This is not row closure: the event payload body
+          remains a host-domain JSON blocker rather than an approved raw island.
+      - kind: typed_acp_stage_bridge_graph_projection_foundation
+        commits:
+          - pending-current-run
+        paths:
+          - crates/leaven-acp-stage-bridge/src/lib.rs
+          - crates/leaven-acp-stage-bridge/src/graph_host.rs
+          - crates/leaven-acp-stage-bridge/src/graph_host_projection.rs
+          - crates/leaven-acp-stage-bridge/tests/dispatch_contract.rs
+          - crates/leaven-acp-stage-bridge/tests/graph_effect_contract.rs
+          - crates/leaven/tests/topology_contract.rs
+        commands:
+          - cargo test -p leaven-acp-stage-bridge
+          - cargo check -p leaven-acp-stage-bridge
+          - cargo test -p leaven --test topology_contract
+        note: >-
+          ACP stage-bridge `proposal.apply`, `evaluation.request`, and
+          `assessment.submit` extension-result projections no longer live in
+          `graph_host.rs` as raw PlanResult subtree cloning and string-filtered
+          receipt forwarding. A private `graph_host_projection` module now owns
+          method-specific typed records for apply, evaluation-request, and
+          assessment-submit primaries and write receipts, rejects wrong primary
+          kinds, missing matching write receipts, non-empty unowned redactions,
+          and untyped nested assessment replayability rows, and recomputes the
+          evaluation-request result hash from the typed primary record. This is
+          still foundation evidence only: callback ingress JSON, host-domain
+          assessment/evaluation payload lowering, event payloads, and wider
+          PlanResult/effect leaf slots remain typed-seam blockers.
       - kind: product_route_topology_decision
         paths:
           - docs/working-memory/run-bound-durable-runcontext-service.md

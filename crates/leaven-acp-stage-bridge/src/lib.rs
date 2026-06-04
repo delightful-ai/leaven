@@ -15,6 +15,7 @@
 mod artifact;
 mod error;
 mod graph_host;
+mod graph_host_projection;
 mod host;
 mod loop_;
 mod runner;

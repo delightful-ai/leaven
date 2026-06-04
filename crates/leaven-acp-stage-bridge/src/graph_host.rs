@@ -19,9 +19,14 @@ use leaven_run::{
     PublicProposalWriteReceiptContext, PublicProposalWriteReceiptProjectionError,
 };
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 use thiserror::Error;
 use uuid::Uuid;
+
+use crate::graph_host_projection::{
+    assessment_submit_extension_result, evaluation_request_extension_result,
+    proposal_apply_extension_result,
+};
 
 /// Host-side effect handler for worker-initiated graph-write callbacks.
 pub struct RunContextGraphEffectHost<'context, 'run, P: OptimizationProblem> {
@@ -281,6 +286,14 @@ pub enum RunContextGraphEffectHostError {
         /// Field name.
         field: &'static str,
     },
+    /// A graph-backed public-seam projection had an unexpected shape.
+    #[error("graph-backed public-seam projection field `{field}` had invalid shape: {reason}")]
+    InvalidProjection {
+        /// Field path or semantic field name.
+        field: &'static str,
+        /// Expected shape or violated invariant.
+        reason: &'static str,
+    },
     /// The public batch ref is malformed.
     #[error("proposal_batch must be a pb_<uuid> ref")]
     InvalidProposalBatchRef,
@@ -426,106 +439,6 @@ fn evaluation_request_id(
         .and_then(|value| Uuid::parse_str(value).ok())
         .ok_or(RunContextGraphEffectHostError::InvalidEvaluationRequestRef)?;
     Ok(EvaluationRequestId::from_uuid(uuid))
-}
-
-fn proposal_apply_extension_result(
-    plan_result: &Value,
-) -> Result<Value, RunContextGraphEffectHostError> {
-    let primary = plan_result
-        .pointer("/values/apply")
-        .cloned()
-        .ok_or(RunContextGraphEffectHostError::MissingApplyWrite)?;
-    let receipts = plan_result
-        .get("receipts")
-        .and_then(Value::as_array)
-        .ok_or(RunContextGraphEffectHostError::MissingApplyWrite)?
-        .iter()
-        .filter(|receipt| {
-            receipt.get("write_kind").and_then(Value::as_str) == Some("apply_proposal_batch")
-        })
-        .cloned()
-        .collect::<Vec<_>>();
-    Ok(json!({
-        "method": "leaven/proposal.apply",
-        "primary": primary,
-        "receipts": receipts,
-        "redactions": plan_result.get("redactions").cloned().unwrap_or_else(|| json!([])),
-        "capability_fingerprint": plan_result.get("capability_fingerprint").cloned().unwrap_or_else(|| json!("fp_cap_sha256_stage_bridge")),
-        "policy_fingerprint": plan_result.get("policy_fingerprint").cloned().unwrap_or_else(|| json!("fp_policy_sha256_stage_bridge")),
-        "data_classes": ["public"]
-    }))
-}
-
-fn assessment_submit_extension_result(
-    plan_result: &Value,
-) -> Result<Value, RunContextGraphEffectHostError> {
-    let primary = plan_result
-        .pointer("/values/assessment_batch")
-        .cloned()
-        .ok_or(RunContextGraphEffectHostError::MissingAssessmentWrite)?;
-    let receipts = plan_result
-        .get("receipts")
-        .and_then(Value::as_array)
-        .ok_or(RunContextGraphEffectHostError::MissingAssessmentWrite)?
-        .iter()
-        .filter(|receipt| {
-            receipt.get("write_kind").and_then(Value::as_str) == Some("submit_assessments")
-        })
-        .cloned()
-        .collect::<Vec<_>>();
-    Ok(json!({
-        "method": "leaven/assessment.submit",
-        "primary": primary,
-        "receipts": receipts,
-        "redactions": plan_result.get("redactions").cloned().unwrap_or_else(|| json!([])),
-        "capability_fingerprint": plan_result.get("capability_fingerprint").cloned().unwrap_or_else(|| json!("fp_cap_sha256_stage_bridge")),
-        "policy_fingerprint": plan_result.get("policy_fingerprint").cloned().unwrap_or_else(|| json!("fp_policy_sha256_stage_bridge")),
-        "data_classes": ["public"]
-    }))
-}
-
-fn evaluation_request_extension_result(
-    plan_result: &Value,
-) -> Result<Value, RunContextGraphEffectHostError> {
-    let primary = plan_result
-        .pointer("/values/evaluation_request")
-        .cloned()
-        .ok_or(RunContextGraphEffectHostError::MissingEvaluationRequestWrite)?;
-    let mut receipts = plan_result
-        .get("receipts")
-        .and_then(Value::as_array)
-        .ok_or(RunContextGraphEffectHostError::MissingEvaluationRequestWrite)?
-        .iter()
-        .filter(|receipt| {
-            receipt.get("write_kind").and_then(Value::as_str) == Some("request_evaluation")
-        })
-        .cloned()
-        .collect::<Vec<_>>();
-    for receipt in &mut receipts {
-        if receipt.get("write_kind").and_then(Value::as_str) == Some("request_evaluation") {
-            let op_name = receipt
-                .get("op_var")
-                .and_then(Value::as_str)
-                .unwrap_or("primary");
-            receipt["result_hash"] = json!(prefixed_jcs_hash(
-                "fp_result_sha256_",
-                &json!({
-                    "schema_version": "leaven.plan_write_result.v1",
-                    "name": op_name,
-                    "value": primary
-                }),
-            )?);
-        }
-    }
-    Ok(json!({
-        "method": "leaven/evaluation.request",
-        "primary": primary,
-        "receipts": receipts,
-        "redactions": plan_result.get("redactions").cloned().unwrap_or_else(|| json!([])),
-        "capability_fingerprint": plan_result.get("capability_fingerprint").cloned().unwrap_or_else(|| json!("fp_cap_sha256_stage_bridge")),
-        "policy_fingerprint": plan_result.get("policy_fingerprint").cloned().unwrap_or_else(|| json!("fp_policy_sha256_stage_bridge")),
-        "data_classes": ["public"]
-    }))
 }
 
 struct EventEmitCallback<'a> {
