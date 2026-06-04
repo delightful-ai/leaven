@@ -71,10 +71,10 @@ CODEGEN_FLAGS = [
 ]
 
 
-def run(cmd: list[str], **kw) -> None:
+def run(cmd: list[str]) -> None:
     """Run a subprocess command; raise on non-zero exit."""
     print(f"  $ {' '.join(cmd)}")
-    result = subprocess.run(cmd, check=False, **kw)
+    result = subprocess.run(cmd, check=False)
     if result.returncode != 0:
         raise SystemExit(f"command failed with exit code {result.returncode}")
 
@@ -121,8 +121,6 @@ def main() -> int:
             "Python package will own these records via the same generation\n"
             "pipeline, with explicit public surface.\n"
             '"""\n'
-            "\n"
-            "from __future__ import annotations\n"
         )
 
     # 4. Clean up build dir.

@@ -26,8 +26,13 @@ codegen:
 # Lint + type-check the hand-written public surface and examples.
 # (Generated _types/ is currently NOT lint-clean — see codegen/README.md known gaps.)
 check:
+    uv run python scripts/check_quality_contract.py
     uv run ruff check src/leaven examples --exclude src/leaven/_types
     uv run ty check src/leaven --exclude src/leaven/_types
+
+# Check SDK-specific invariants that generic lint/type tools cannot express.
+quality-contract:
+    uv run python scripts/check_quality_contract.py
 
 # Verify every example file at least compiles (no execution).
 compile-examples:

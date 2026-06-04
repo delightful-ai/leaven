@@ -12,3 +12,7 @@ once two or more test modules need the same machinery.
 Do not add new grab-bag files for unrelated SDK claims. If a test file no
 longer names one clear source module or one clear scenario, split it before
 adding more cases.
+
+`scripts/check_quality_contract.py` enforces the currently locked mirrored-test
+map for public-seam wire, run readback, and case-builder modules. Extend that
+map in the same change when a new module becomes part of the SDK proof surface.
