@@ -12,6 +12,7 @@ use leaven_acp::{AcpEffectHost, AcpTransportError, AcpTransportResult};
 use leaven_core::{Assessment, EvaluationRequest, OptimizationProblem};
 use leaven_engine::{ProposalBatchReport, RunContext, RunEvent};
 use leaven_kernel::{EvaluationRequestId, EvaluatorId, Fingerprint, Metered, ProposalBatchId};
+use leaven_public_seam::LockedMethod;
 use leaven_run::{
     PublicAssessmentWriteReceiptContext, PublicAssessmentWriteReceiptProjectionError,
     PublicEvaluationJobContext, PublicEvaluationJobProjectionError,
@@ -221,15 +222,15 @@ impl<P: OptimizationProblem> AcpEffectHost for RunContextGraphEffectHost<'_, '_,
         })
     }
 
-    fn service(&self, method: &str, params: &Value) -> AcpTransportResult<Value> {
+    fn service(&self, method: LockedMethod, params: &Value) -> AcpTransportResult<Value> {
         match method {
-            "leaven/proposal.apply" => self.proposal_apply(params).map_err(protocol),
-            "leaven/assessment.submit" => self.assessment_submit(params).map_err(protocol),
-            "leaven/evaluation.request" => self.evaluation_request(params).map_err(protocol),
-            "leaven/event.emit" => self.event_emit(params).map_err(protocol),
-            "leaven/lm.complete" => self.lm_complete(params),
+            LockedMethod::ProposalApply => self.proposal_apply(params).map_err(protocol),
+            LockedMethod::AssessmentSubmit => self.assessment_submit(params).map_err(protocol),
+            LockedMethod::EvaluationRequest => self.evaluation_request(params).map_err(protocol),
+            LockedMethod::EventEmit => self.event_emit(params).map_err(protocol),
+            LockedMethod::LmComplete => self.lm_complete(params),
             other => Err(AcpTransportError::EffectUnimplemented {
-                method: other.to_owned(),
+                method: other.as_str().to_owned(),
             }),
         }
     }
