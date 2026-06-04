@@ -1,8 +1,8 @@
-# Parallel rustc frontend: parallelizes the front-end (parse/typeck/borrowck)
-# of each crate, shortening the deep `kernel -> core -> engine -> run -> ...`
-# critical path. Nightly-only; the repo pins nightly via `rust-toolchain.toml`.
-# Sized to local performance cores. Cargo incremental stays enabled in
-# `profile.dev`; run `just build-incremental-canary` after toolchain/profile
-# changes. If incremental plus this flag regresses, remove this flag first.
-[build]
-rustflags = ["-Zthreads=12"]
+# Cargo incremental stays enabled in `profile.dev`; run
+# `just build-incremental-canary` after toolchain/profile changes.
+#
+# The nightly parallel rustc frontend (`-Zthreads`) previously shortened the
+# deep `kernel -> core -> engine -> run -> ...` critical path, but it regressed
+# with repeated incremental dep-graph ICEs on rustc 1.95.0-nightly
+# (873d4682c 2026-01-25). Keep the frontend flag out unless the pinned
+# toolchain can prove the incremental canary again.
