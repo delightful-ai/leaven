@@ -42,6 +42,7 @@ from .refs import (
     WorkspaceRef,
     WorkspaceRefRecord,
 )
+from .writes import GraphWrite
 
 PLAN_SCHEMA_FINGERPRINT = (
     "fp_schema_sha256_dec4dc30152389ce0121e8c3b008a3c9eca02a1c27a14a8ed3df2f79d0f8e680"
@@ -176,10 +177,6 @@ type PlanWriteKind = Literal[
 
 class CapabilityCall(Struct, frozen=True, omit_defaults=True, kw_only=True):
     kind: PlanCallKind
-
-
-class GraphWrite(Struct, frozen=True, omit_defaults=True, kw_only=True):
-    kind: PlanWriteKind
 
 
 class PlanOp(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, kw_only=True):

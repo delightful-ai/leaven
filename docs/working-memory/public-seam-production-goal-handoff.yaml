@@ -1492,6 +1492,31 @@ acceptance:
           JSON-shaped leaves where the public schema itself leaves arbitrary
           JSON or recursive expression content; those remain separate leaf
           owner work rather than implicit approval.
+      - kind: generated_graph_write_proposal_effects_are_typed_records
+        paths:
+          - sdk/python/codegen/generate_seam_wire.py
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/codegen/write_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/src/leaven/_seam/_wire/writes.py
+          - sdk/python/tests/_seam/_wire/test_graph_writes.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run ruff check codegen/generate_seam_wire.py codegen/payload_codegen.py codegen/write_codegen.py src/leaven/_seam/_wire/payloads.py src/leaven/_seam/_wire/writes.py tests/_seam/_wire/test_graph_writes.py
+          - cd sdk/python && uv run ty check codegen/generate_seam_wire.py codegen/payload_codegen.py codegen/write_codegen.py src/leaven/_seam/_wire/payloads.py src/leaven/_seam/_wire/writes.py tests/_seam/_wire/test_graph_writes.py
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_graph_writes.py -q
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Generated Python Plan documents now decode `PlanOp.write` through a
+          tagged `GraphWrite` union instead of a kind-only record. The
+          `submit_proposal_batch` variant has typed proposal records and typed
+          proposal-effect variants for create, change, workspace-diff, and
+          agent-session effects; create/change artifacts, changes, and
+          annotations use the generated `ValueExpr` owner. Focused tests prove
+          create/change effect value expressions preserve their variants and
+          unknown effect kinds are rejected. Assessment/evaluation/event write
+          internals still use JSON-shaped leaves where this slice did not add
+          full owners, so those remain separate typed-owner work.
       - kind: typed_plan_expression_owner_foundation
         commits:
           - a0397e66

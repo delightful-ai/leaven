@@ -41,6 +41,7 @@ from .expressions import PlanExpression, Precondition, ValidationReceipt
 from .refs import (
 {ref_imports}
 )
+from .writes import GraphWrite
 
 PLAN_SCHEMA_FINGERPRINT = (
     "{fingerprints["leaven.plan.v1.schema.json"]}"
@@ -175,10 +176,6 @@ type PlanWriteKind = Literal[
 
 class CapabilityCall(Struct, frozen=True, omit_defaults=True, kw_only=True):
     kind: PlanCallKind
-
-
-class GraphWrite(Struct, frozen=True, omit_defaults=True, kw_only=True):
-    kind: PlanWriteKind
 
 
 class PlanOp(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, kw_only=True):
