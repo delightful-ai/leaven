@@ -1685,6 +1685,33 @@ acceptance:
           encoded generated request round-trips and the old under-shaped raw
           stage payload is rejected. This does not close callback result
           JSON, public stage model codegen, or every schema-owned JSON leaf.
+      - kind: python_stage_worker_callback_results_decode_generated_records
+        paths:
+          - sdk/python/src/leaven/_seam_worker/context.py
+          - sdk/python/src/leaven/_seam_worker/callbacks.py
+          - sdk/python/tests/_seam_worker/test_callbacks.py
+          - sdk/python/tests/test_stage_surface.py
+          - sdk/python/tests/test_proposer_worker.py
+        commands:
+          - cd sdk/python && uv run ruff check src/leaven/_seam_worker tests/_seam_worker tests/test_stage_surface.py tests/test_proposer_worker.py
+          - cd sdk/python && uv run ty check src/leaven/_seam_worker tests/_seam_worker tests/test_stage_surface.py tests/test_proposer_worker.py
+          - cd sdk/python && uv run pytest tests/_seam_worker tests/test_stage_surface.py tests/test_proposer_worker.py -q
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Worker callback responses for `leaven/lm.complete`,
+          `leaven/agent.run`, and `leaven/proposal.submit_batch` now use the
+          shared msgspec JSON-RPC `decode_response()` path and method-specific
+          generated result records instead of `json.loads()` plus dict
+          inspection. Callback receipt capture accepts only generated
+          `LmCompleteResult`, `AgentRunResult`, or `ProposalSubmitResult`
+          objects, narrows primary receipt/cost/proposal/blob projection by
+          result family, and uses generated `Cost`/`BlobRef` records when
+          rendering the private stage result receipt summary. Focused unit
+          tests construct generated result records directly, and subprocess
+          worker tests prove callback response decoding still works through
+          the command-worker stdin/stdout path. Remaining JSON-shaped leaves
+          include public stage result rendering, config/capability JSON
+          construction, and schema-owned arbitrary JSON fields.
       - kind: typed_plan_expression_owner_foundation
         commits:
           - a0397e66

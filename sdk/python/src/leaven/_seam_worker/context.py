@@ -1,18 +1,15 @@
 """Role-scoped context bindings for the command-runner worker."""
 
-import json
 import sys
 from collections.abc import Sequence
 
-from msgspec import ValidationError, convert
-
 from .._seam import AgentRunRequest, LmCompleteRequest, ProposalSubmitRequest, SeamJsonRpcRequest
 from .._seam._wire import JsonObject
-from .._seam._wire.codec import encode_request
-from .._seam._wire.json_value import json_object
+from .._seam._wire.codec import decode_response, encode_request
+from .._seam._wire.errors import JsonRpcProtocolError, JsonRpcRemoteError
 from .._seam._wire.results import AgentRunResult, LmCompleteResult, ProposalSubmitResult
 from .._stage_runtime import CallbackProposeContext, CallbackRolloutContext
-from .callbacks import CallbackReceiptLog
+from .callbacks import CallbackReceiptLog, CallbackResult
 
 
 class JsonRpcCallbackClient:
@@ -22,7 +19,11 @@ class JsonRpcCallbackClient:
         self._lm_model = lm_model
         self._receipts = CallbackReceiptLog()
 
-    def _request_result(self, request: SeamJsonRpcRequest) -> JsonObject:
+    def _request_result[T: CallbackResult](
+        self,
+        request: SeamJsonRpcRequest,
+        result_type: type[T],
+    ) -> T:
         """Send one callback request and return the public-seam result object."""
         print(
             encode_request(
@@ -35,28 +36,22 @@ class JsonRpcCallbackClient:
         line = sys.stdin.readline()
         if not line:
             raise RuntimeError("stage host closed before answering callback request")
-        response = json_object(json.loads(line))
-        if "error" in response:
-            raise RuntimeError(f"stage callback failed: {response['error']}")
-        result = json_object(response["result"])
-        self._receipts.record_result(method=request.method, result=result)
+        try:
+            result = decode_response(line.encode(), result_type)
+        except JsonRpcRemoteError as error:
+            raise RuntimeError(f"stage callback failed: {error.error}") from error
+        except JsonRpcProtocolError as error:
+            raise RuntimeError(f"stage callback returned invalid JSON-RPC: {error}") from error
+        self._receipts.record_result(result)
         return result
 
     def agent_run(self, request: AgentRunRequest) -> AgentRunResult:
         """Send one `leaven/agent.run` callback and decode the typed result."""
-        return _typed_callback_result(
-            self._request_result(request),
-            AgentRunResult,
-            method="leaven/agent.run",
-        )
+        return self._request_result(request, AgentRunResult)
 
     def proposal_submit(self, request: ProposalSubmitRequest) -> ProposalSubmitResult:
         """Send one `leaven/proposal.submit_batch` callback and decode the typed result."""
-        return _typed_callback_result(
-            self._request_result(request),
-            ProposalSubmitResult,
-            method="leaven/proposal.submit_batch",
-        )
+        return self._request_result(request, ProposalSubmitResult)
 
     def effect_receipts_json(self) -> list[JsonObject]:
         """Return effect receipts observed while running the current stage."""
@@ -96,18 +91,7 @@ class JsonRpcCallbackClient:
             stop=stop,
             input_classes=input_classes or ["public"],
         )
-        return _typed_callback_result(
-            self._request_result(request),
-            LmCompleteResult,
-            method="leaven/lm.complete",
-        )
-
-
-def _typed_callback_result[T](result: JsonObject, result_type: type[T], *, method: str) -> T:
-    try:
-        return convert(result, type=result_type)
-    except ValidationError as error:
-        raise RuntimeError(f"{method} callback returned invalid typed result: {error}") from error
+        return self._request_result(request, LmCompleteResult)
 
 
 def rollout_context(
