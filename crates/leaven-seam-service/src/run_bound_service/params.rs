@@ -90,7 +90,6 @@ pub(crate) struct EventEmitParams<'a> {
 
 pub(crate) struct EventEmitWrite<'a> {
     pub(crate) name: &'a str,
-    pub(crate) raw: &'a Value,
     pub(crate) event_kind: &'a str,
     pub(crate) payload_schema: &'a str,
     pub(crate) payload: &'a Value,
@@ -184,7 +183,6 @@ pub(super) fn event_emit_params(
         plan_id,
         write: EventEmitWrite {
             name: op.name,
-            raw: op.write,
             event_kind: string_field(op.write, "event_kind")?,
             payload_schema: string_field(op.write, "payload_schema")?,
             payload: op

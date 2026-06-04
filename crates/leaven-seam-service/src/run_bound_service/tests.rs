@@ -146,6 +146,39 @@ fn run_bound_service_mutates_real_context_and_checkpoint_readback_sees_graph_tru
             .unwrap();
         assert_eq!(event["primary"]["kind"], "emit_run_event");
         assert_eq!(event["receipts"][0]["write_kind"], "emit_run_event");
+        assert_eq!(event["primary"]["receipt"], "wrec_run_bound_event");
+        assert_eq!(
+            event["receipts"][0]["request_hash"],
+            prefixed_jcs_hash(
+                "fp_request_sha256_",
+                &json!({
+                    "schema_version": "leaven.plan_write_request.v1",
+                    "name": "run_bound_event",
+                    "kind": "emit_run_event",
+                    "write": {
+                        "kind": "emit_run_event",
+                        "event_kind": "run_bound.checked",
+                        "payload_schema": "fp_schema_sha256_run_bound_test",
+                        "payload": {"ok": true},
+                        "visibility": "public"
+                    },
+                    "deps": {},
+                    "dependency_data_classes": [],
+                    "base_revision": "rev_run_bound_base"
+                })
+            )
+        );
+        assert_eq!(
+            event["receipts"][0]["result_hash"],
+            prefixed_jcs_hash(
+                "fp_result_sha256_",
+                &json!({
+                    "schema_version": "leaven.plan_write_result.v1",
+                    "name": "run_bound_event",
+                    "value": event["primary"]
+                })
+            )
+        );
         package
             .validate_acp_extension_result_document(&event)
             .expect("event result validates through public seam owner");
@@ -435,6 +468,11 @@ fn response_lines(output: Vec<u8>) -> Vec<Value> {
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
         .collect()
+}
+
+fn prefixed_jcs_hash(prefix: &str, value: &Value) -> String {
+    let digest = jcs_canonicalize::sha256_jcs_hex(value).unwrap();
+    format!("{prefix}{digest}")
 }
 
 fn proposal_apply_request(batch_ref: &str) -> Value {

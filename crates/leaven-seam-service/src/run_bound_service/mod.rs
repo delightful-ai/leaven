@@ -236,7 +236,10 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
         event_emit_extension_result(EventEmitExtensionContext {
             plan_id: params.plan_id,
             name: event.name,
-            write: event.raw,
+            event_kind: event.event_kind,
+            payload_schema: event.payload_schema,
+            payload: event.payload,
+            visibility: event.visibility,
             event_id: &event_id,
             base_revision: &self.base_revision,
             final_revision: &self.final_revision,

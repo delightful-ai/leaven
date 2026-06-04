@@ -1,3 +1,4 @@
+use serde::Serialize;
 use serde_json::{Value, json};
 
 use super::RunBoundGraphEffectError;
@@ -5,7 +6,10 @@ use super::RunBoundGraphEffectError;
 pub(super) struct EventEmitExtensionContext<'a> {
     pub(super) plan_id: &'a str,
     pub(super) name: &'a str,
-    pub(super) write: &'a Value,
+    pub(super) event_kind: &'a str,
+    pub(super) payload_schema: &'a str,
+    pub(super) payload: &'a Value,
+    pub(super) visibility: &'a str,
     pub(super) event_id: &'a str,
     pub(super) base_revision: &'a str,
     pub(super) final_revision: &'a str,
@@ -120,60 +124,163 @@ pub(super) fn event_emit_extension_result(
     let receipt_id = format!("wrec_{}", context.name);
     let request_hash = prefixed_jcs_hash(
         "fp_request_sha256_",
-        &json!({
-            "schema_version": "leaven.plan_write_request.v1",
-            "name": context.name,
-            "kind": "emit_run_event",
-            "write": context.write,
-            "deps": {},
-            "dependency_data_classes": [],
-            "base_revision": context.base_revision
-        }),
+        &EventEmitRequestPreimage {
+            schema_version: "leaven.plan_write_request.v1",
+            name: context.name,
+            kind: "emit_run_event",
+            write: EventEmitWriteProjection {
+                kind: "emit_run_event",
+                event_kind: context.event_kind,
+                payload_schema: context.payload_schema,
+                payload: context.payload,
+                visibility: context.visibility,
+            },
+            deps: EmptyObject {},
+            dependency_data_classes: &[],
+            base_revision: context.base_revision,
+        },
     )?;
-    let primary = json!({
-        "kind": "emit_run_event",
-        "event_id": context.event_id,
-        "receipt": receipt_id,
-        "data_classes": ["public"],
-        "replayability": "fully_managed"
-    });
+    let primary = EventEmitPrimary {
+        kind: "emit_run_event",
+        event_id: context.event_id,
+        receipt: &receipt_id,
+        data_classes: &["public"],
+        replayability: "fully_managed",
+    };
     let result_hash = prefixed_jcs_hash(
         "fp_result_sha256_",
-        &json!({
-            "schema_version": "leaven.plan_write_result.v1",
-            "name": context.name,
-            "value": primary
-        }),
+        &EventEmitResultPreimage {
+            schema_version: "leaven.plan_write_result.v1",
+            name: context.name,
+            value: &primary,
+        },
     )?;
-    let receipt = json!({
-        "kind": "write",
-        "receipt": primary["receipt"],
-        "op_var": context.name,
-        "started_at": context.started_at,
-        "completed_at": context.completed_at,
-        "write_kind": "emit_run_event",
-        "request_hash": request_hash,
-        "result_hash": result_hash,
-        "base_revision": context.base_revision,
-        "committed_revision": context.final_revision,
-        "status": "succeeded",
-        "event_id": context.event_id
-    });
-    Ok(json!({
-        "method": "leaven/event.emit",
-        "primary": primary,
-        "receipts": [receipt],
-        "redactions": [],
-        "capability_fingerprint": context.capability_fingerprint,
-        "policy_fingerprint": context.policy_fingerprint,
-        "data_classes": ["public"],
-        "plan_id": context.plan_id,
-        "return": context.return_values.cloned().unwrap_or_else(|| json!([]))
-    }))
+    let result = EventEmitExtensionResult {
+        method: "leaven/event.emit",
+        primary,
+        receipts: vec![EventEmitReceipt {
+            kind: "write",
+            receipt: &receipt_id,
+            op_var: context.name,
+            started_at: context.started_at,
+            completed_at: context.completed_at,
+            write_kind: "emit_run_event",
+            request_hash: &request_hash,
+            result_hash: &result_hash,
+            base_revision: context.base_revision,
+            committed_revision: context.final_revision,
+            status: "succeeded",
+            event_id: context.event_id,
+        }],
+        redactions: &[],
+        capability_fingerprint: context.capability_fingerprint,
+        policy_fingerprint: context.policy_fingerprint,
+        data_classes: &["public"],
+        plan_id: context.plan_id,
+        return_values: EventEmitReturnValues::from(context.return_values),
+    };
+    serde_json::to_value(result).map_err(|error| RunBoundGraphEffectError::Hash(error.to_string()))
 }
 
-fn prefixed_jcs_hash(prefix: &str, value: &Value) -> Result<String, RunBoundGraphEffectError> {
-    let digest = jcs_canonicalize::sha256_jcs_hex(value)
+#[derive(Serialize)]
+struct EmptyObject {}
+
+#[derive(Serialize)]
+struct EventEmitWriteProjection<'a> {
+    kind: &'static str,
+    event_kind: &'a str,
+    payload_schema: &'a str,
+    payload: &'a Value,
+    visibility: &'a str,
+}
+
+#[derive(Serialize)]
+struct EventEmitRequestPreimage<'a> {
+    schema_version: &'static str,
+    name: &'a str,
+    kind: &'static str,
+    write: EventEmitWriteProjection<'a>,
+    deps: EmptyObject,
+    dependency_data_classes: &'static [&'static str],
+    base_revision: &'a str,
+}
+
+#[derive(Serialize)]
+struct EventEmitPrimary<'a> {
+    kind: &'static str,
+    event_id: &'a str,
+    receipt: &'a str,
+    data_classes: &'static [&'static str],
+    replayability: &'static str,
+}
+
+#[derive(Serialize)]
+struct EventEmitResultPreimage<'a> {
+    schema_version: &'static str,
+    name: &'a str,
+    value: &'a EventEmitPrimary<'a>,
+}
+
+#[derive(Serialize)]
+struct EventEmitReceipt<'a> {
+    kind: &'static str,
+    receipt: &'a str,
+    op_var: &'a str,
+    started_at: &'a str,
+    completed_at: &'a str,
+    write_kind: &'static str,
+    request_hash: &'a str,
+    result_hash: &'a str,
+    base_revision: &'a str,
+    committed_revision: &'a str,
+    status: &'static str,
+    event_id: &'a str,
+}
+
+#[derive(Serialize)]
+struct EventEmitExtensionResult<'a> {
+    method: &'static str,
+    primary: EventEmitPrimary<'a>,
+    receipts: Vec<EventEmitReceipt<'a>>,
+    redactions: &'static [&'static str],
+    capability_fingerprint: &'a str,
+    policy_fingerprint: &'a str,
+    data_classes: &'static [&'static str],
+    plan_id: &'a str,
+    #[serde(rename = "return")]
+    return_values: EventEmitReturnValues<'a>,
+}
+
+enum EventEmitReturnValues<'a> {
+    Empty,
+    Values(&'a Value),
+}
+
+impl<'a> EventEmitReturnValues<'a> {
+    fn from(values: Option<&'a Value>) -> Self {
+        values.map_or(Self::Empty, Self::Values)
+    }
+}
+
+impl Serialize for EventEmitReturnValues<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::Empty => <[&str; 0]>::default().serialize(serializer),
+            Self::Values(values) => values.serialize(serializer),
+        }
+    }
+}
+
+fn prefixed_jcs_hash(
+    prefix: &str,
+    value: &(impl Serialize + ?Sized),
+) -> Result<String, RunBoundGraphEffectError> {
+    let value = serde_json::to_value(value)
+        .map_err(|error| RunBoundGraphEffectError::Hash(error.to_string()))?;
+    let digest = jcs_canonicalize::sha256_jcs_hex(&value)
         .map_err(|error| RunBoundGraphEffectError::Hash(error.to_string()))?;
     Ok(format!("{prefix}{digest}"))
 }
