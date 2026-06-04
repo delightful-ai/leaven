@@ -27,8 +27,8 @@ or other documented builders.
 ## Private Dependencies
 
 - Sibling modules inside `leaven._seam`.
-- No imports from `leaven._serve`; that module owns the older bidirectional
-  prompt-optimization scaffold path.
+- No legacy bridge-demo route: `leaven._serve` has been removed and must not be
+  reintroduced as a parallel seam.
 - Public scaffold builders may import this package only through focused,
   private bound-client slices such as `AgentBuilder.run` and
   `LmBuilder.complete`; `_seam` must not import those builders back.

@@ -7,7 +7,7 @@ from typing import Literal, Protocol
 from msgspec import UNSET
 
 from .._seam import CaseLoadRequest
-from .._seam._wire.payloads import ReceiptRef
+from .._seam._wire.refs import CaseRef
 from .._seam._wire.results import CaseLoadResult
 from ..case import Case
 
@@ -108,13 +108,10 @@ def _case_from_result(result: CaseLoadResult) -> Case:
     )
 
 
-def _case_id(value: ReceiptRef) -> str:
+def _case_id(value: CaseRef) -> str:
     if isinstance(value, str):
         return value
-    case_id = value.get("id")
-    if isinstance(case_id, str):
-        return case_id
-    raise ValueError("case record receipt ref must carry a string id")
+    return value.id
 
 
 __all__ = ["CaseBuilder", "CaseField"]

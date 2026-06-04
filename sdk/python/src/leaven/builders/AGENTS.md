@@ -15,9 +15,10 @@ private seam requester when they are supplied by a running stage context.
 
 - Private request builders from `leaven._seam` for focused process-seam
   bindings.
-- No imports from `_seam_worker`, `_seam_optimize`, or `_serve`; those packages
-  may construct bound builders, but builder modules must not depend on their
-  stage-driver internals.
+- No imports from `_seam_worker` or `_seam_optimize`; those packages may
+  construct bound builders, but builder modules must not depend on their
+  stage-driver internals. `leaven._serve` has been removed and must not return
+  as a builder dependency.
 
 ## Invariants
 

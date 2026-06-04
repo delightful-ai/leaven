@@ -23,7 +23,8 @@ inspection namespace.
 
 - Sibling modules inside `leaven._runs`.
 - Public `leaven.run_inspection` records for typed Rust readback projection.
-- No imports from `leaven._seam`, `_seam_optimize`, or `_serve`.
+- No imports from `leaven._seam` or `_seam_optimize`. `leaven._serve` has been
+  removed and must not return as an inspection dependency.
 
 ## Map
 

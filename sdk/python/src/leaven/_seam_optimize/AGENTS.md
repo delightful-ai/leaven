@@ -20,8 +20,8 @@ capability policy, provider adapters, or worker protocol implementation.
 
 - `leaven._seam` config, request, and one-shot process client helpers.
 - `leaven._seam_worker` command target construction only.
-- No imports from `leaven._serve`; that module is the legacy bridge-demo path
-  and must not be part of current `lv.optimize(...).run()` mechanics.
+- No legacy bridge-demo dependency: `leaven._serve` has been removed and must
+  not be reintroduced as part of current `lv.optimize(...).run()` mechanics.
 
 ## Map
 

@@ -24,7 +24,8 @@ only the Python worker process implementation.
 
 - `leaven._stage_runtime` callback-backed rollout context.
 - Sibling modules in this package only.
-- No imports from `leaven._serve`; that is the legacy bridge-demo route.
+- No legacy bridge-demo dependency: `leaven._serve` has been removed and must
+  not be reintroduced as a parallel worker path.
 
 ## Map
 

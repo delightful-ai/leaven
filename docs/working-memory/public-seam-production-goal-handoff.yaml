@@ -1001,7 +1001,6 @@ acceptance:
           - crates/leaven-cli/src/serve.rs
           - sdk/python/src/leaven/optimize.py
           - sdk/python/src/leaven/_seam_optimize/driver.py
-          - sdk/python/src/leaven/_serve.py
         commands:
           - rg -n "run_bound|RunBound|seam serve|ConfiguredSeamService|RunContext|external-language|leaven seam|public seam|locked V1" docs/specs docs/working-memory crates/leaven-run crates/leaven-engine crates/leaven-seam-service crates/leaven-cli crates/leaven/tests -g '*.md' -g '*.yaml' -g '*.rs'
           - rg -n "optimize\\(|seam serve|stage.run|CommandRunner|proposer|runner|optimized.json|subprocess|leaven seam" sdk/python/src sdk/python/examples -g '*.py' -g '*.md'
@@ -2254,6 +2253,40 @@ acceptance:
           mirrored-test map now locks `cases/jsonl.py` to
           `tests/cases/test_jsonl.py`. This does not close remaining public
           scaffolds or legacy `_serve.py` erasure.
+      - kind: legacy_private_serve_bridge_removed
+        paths:
+          - sdk/python/AGENTS.md
+          - sdk/python/src/leaven/_seam/AGENTS.md
+          - sdk/python/src/leaven/_seam_worker/AGENTS.md
+          - sdk/python/src/leaven/_seam_optimize/AGENTS.md
+          - sdk/python/src/leaven/_stage_runtime/AGENTS.md
+          - sdk/python/src/leaven/_runs/AGENTS.md
+          - sdk/python/src/leaven/builders/AGENTS.md
+          - sdk/python/src/leaven/builders/case.py
+          - sdk/python/examples/07_serve_stage_worker.py
+          - sdk/python/tests/builders/test_case.py
+        commands:
+          - cd sdk/python && uv run ruff check src/leaven examples tests --exclude src/leaven/_types
+          - cd sdk/python && uv run ty check src/leaven tests --exclude src/leaven/_types
+          - cd sdk/python && uv run pytest tests/builders/test_case.py tests/test_product_surface_ring.py tests/test_stage_surface.py tests/_seam_worker tests/_seam_optimize -q
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - >-
+            test ! -e sdk/python/src/leaven/_serve.py
+          - >-
+            rg -n "from \\.?_serve|import .*_serve" sdk/python/src/leaven sdk/python/tests sdk/python/examples -g '*.py' -g '*.md'
+        note: >-
+          The legacy private `_serve.py` bridge-demo module has been deleted.
+          Active SDK route owners now document that `lv.optimize(...).run()`
+          uses `_seam_optimize`, `_seam_worker`, `_stage_runtime`, and `_seam`;
+          standalone `lv.serve_stage(...)` remains an explicit public scaffold
+          in `decorators.py` until it is implemented through the current worker
+          route. Example 07 was corrected to stop claiming a standalone loop
+          exists today. The final grep is expected to return no active import
+          matches; remaining prose references are hard-cutover notes naming the
+          removed module. The broad `ty` check also caught and fixed
+          `CaseBuilder` treating a generated `CaseRef` as a receipt/dict shape;
+          `_case_id` now consumes the generated case reference type directly.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this

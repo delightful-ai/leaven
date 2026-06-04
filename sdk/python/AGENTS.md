@@ -23,8 +23,8 @@ and `cx.agent.run` callbacks while a worker stage is active, Python
 `@lv.reward` vector execution, persisted in-process inspection via
 `lv.runs.open(...)`, and the `Environment`/`Task`/`Rollout.fn`/`Rubric`/
 `runtime.local` records those compose. The private owners are
-`leaven._seam_optimize`, `leaven._seam_worker`, and `leaven._runs`, not legacy
-`leaven._serve`.
+`leaven._seam_optimize`, `leaven._seam_worker`, and `leaven._runs`; the legacy
+`leaven._serve` bridge-demo module has been removed and must not return.
 
 Honest scope: the Python SDK now configures and calls the durable public seam
 server for runner `leaven/stage.run` mechanics, executes the user's Python
@@ -126,8 +126,10 @@ ruff's `RUF022` (sorted `__all__`) is on. No current ruff rule for
 - Top-level `lv.*` imports are the public surface; submodule paths
   (`lv.optimizers.gepa`, `lv.lm.anthropic`) are also part of the public
   surface where the spec names them.
-- Internal modules (`leaven._serve`, `leaven._seam`, `leaven._types.*`) get
-  leading underscore conventions or live under `_types/`.
+- Internal modules (`leaven._seam`, `leaven._types.*`, etc.) get leading
+  underscore conventions or live under `_types/`. Do not reintroduce
+  `leaven._serve`; standalone `lv.serve_stage(...)` must use the current
+  `_seam_worker` / `_stage_runtime` route when implemented.
 - Do not introduce dependencies that aren't in `pyproject.toml`. Adding a
   dep is a taste call worth surfacing in a docstring.
 

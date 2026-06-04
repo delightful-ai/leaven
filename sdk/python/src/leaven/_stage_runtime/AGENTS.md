@@ -21,8 +21,8 @@ types supplied by Leaven.
 - Sibling modules in this package.
 - Callback protocols implemented by host/worker drivers such as
   `leaven._seam_worker`.
-- No imports from `leaven._serve`; drivers depend on this package, never the
-  other way around.
+- No legacy bridge-demo dependency: `leaven._serve` has been removed. Drivers
+  depend on this package, never the other way around.
 
 ## Map
 

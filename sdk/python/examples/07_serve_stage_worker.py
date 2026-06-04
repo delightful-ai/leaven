@@ -1,19 +1,19 @@
-"""Example 07 — standalone Python worker the engine spawns over ACP stdio.
+"""Example 07 — standalone Python worker declaration shape.
 
 A decorated stage (here a `@lv.judge`) can compose into an in-process
-`lv.optimize(...)` call OR run as a standalone Python script the engine reaches
-over ACP stdio JSON-RPC. The decorator + function shape is IDENTICAL in both
-cases.
+`lv.optimize(...)` call OR, in a later slice, run as a standalone Python script
+the engine reaches over Leaven-owned stdio JSON-RPC. The decorator + function
+shape is intended to stay identical in both cases.
 
 Standalone usage looks like:
 
     if __name__ == "__main__":
         lv.serve_stage(my_judge)
 
-The engine spawns this file with `LEAVEN_CAPABILITY_TOKEN`,
-`LEAVEN_ENDPOINT`, and `LEAVEN_CAPABILITY_FINGERPRINT` env vars per the
-locked ACP profile. `lv.serve_stage(...)` reads them, opens the ACP
-loop, and dispatches stage calls until the session terminates.
+The standalone loop is not implemented yet. `lv.serve_stage(...)` currently
+raises an explicit scaffold error; when implemented, it must use the current
+`_seam_worker` / `_stage_runtime` route, not the removed legacy `_serve`
+bridge-demo module.
 
 This pattern is how third-party judges / reflectors / proposers ship — one
 script, one decorator, one `serve_stage` call.
