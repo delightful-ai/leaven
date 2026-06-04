@@ -9,7 +9,7 @@ use std::{
 use leaven_public_seam::{
     AcpJsonRpcRequestDocument, AcpJsonRpcResponseDocument, AcpProfileDocument,
     AcpProgressDisposition, AcpProgressPriority, AcpSessionState, AcpStageRunResponseDocument,
-    AcpStdioWorkerLaunch, AcpWorkerSession, PublicSeamError, PublicSeamPackage,
+    AcpStdioWorkerLaunch, AcpWorkerSession, LockedMethod, PublicSeamError, PublicSeamPackage,
 };
 use serde_json::{Value, json};
 
@@ -54,11 +54,11 @@ pub trait AcpEffectHost {
     ///
     /// The default routes `leaven/lm.complete` to [`AcpEffectHost::lm_complete`]
     /// and rejects every other locked method as unimplemented for this slice.
-    fn service(&self, method: &str, params: &Value) -> AcpTransportResult<Value> {
+    fn service(&self, method: LockedMethod, params: &Value) -> AcpTransportResult<Value> {
         match method {
-            "leaven/lm.complete" => self.lm_complete(params),
+            LockedMethod::LmComplete => self.lm_complete(params),
             other => Err(AcpTransportError::EffectUnimplemented {
-                method: other.to_owned(),
+                method: other.as_str().to_owned(),
             }),
         }
     }
@@ -430,8 +430,8 @@ impl<R: BufRead, W: Write> AcpStdioSession<R, W> {
         let params = value
             .get("params")
             .expect("validated inbound request carries Plan IR params");
-        let result = host.service(request.method().as_str(), params)?;
-        let result = self.stamp_session_fingerprint(request.method().as_str(), result)?;
+        let result = host.service(request.method(), params)?;
+        let result = self.stamp_session_fingerprint(request.method(), result)?;
         // Validate the host's extension result before it crosses the boundary.
         self.package
             .validate_acp_extension_result_document(&result)?;
@@ -450,7 +450,7 @@ impl<R: BufRead, W: Write> AcpStdioSession<R, W> {
     /// never answer on behalf of a different session.
     fn stamp_session_fingerprint(
         &self,
-        method: &str,
+        method: LockedMethod,
         mut result: Value,
     ) -> AcpTransportResult<Value> {
         let object = result
@@ -468,7 +468,7 @@ impl<R: BufRead, W: Write> AcpStdioSession<R, W> {
             }
             Some(actual) if actual == self.capability_fingerprint => Ok(result),
             Some(actual) => Err(AcpTransportError::EffectFingerprintMismatch {
-                method: method.to_owned(),
+                method: method.as_str().to_owned(),
                 expected: self.capability_fingerprint.clone(),
                 actual: actual.to_owned(),
             }),
