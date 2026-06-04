@@ -535,47 +535,13 @@ impl<R: BufRead, W: Write> AcpStdioSession<R, W> {
         &self,
         value: &Value,
     ) -> AcpTransportResult<Option<AcpProgressDisposition>> {
-        let Some(object) = value.as_object() else {
-            return Err(AcpTransportError::Protocol {
-                message: "ACP stdio message must be an object".to_owned(),
-            });
-        };
-        if object.get("method").and_then(Value::as_str) != Some(SESSION_UPDATE_METHOD) {
+        let Some(update) = SessionUpdateNotification::parse(value)? else {
             return Ok(None);
-        }
-        if object.contains_key("id")
-            || object.contains_key("result")
-            || object.contains_key("error")
-        {
-            return Err(AcpTransportError::Protocol {
-                message: "ACP session update must be a notification".to_owned(),
-            });
-        }
-        let params = object
-            .get("params")
-            .and_then(Value::as_object)
-            .ok_or_else(|| AcpTransportError::Protocol {
-                message: "ACP session update must carry params object".to_owned(),
-            })?;
-        let message = params
-            .get("message")
-            .and_then(Value::as_str)
-            .ok_or_else(|| AcpTransportError::Protocol {
-                message: "ACP session update must carry message".to_owned(),
-            })?;
-        let priority = match params.get("priority").and_then(Value::as_str) {
-            Some("noncritical") => AcpProgressPriority::Noncritical,
-            Some("critical") | None => AcpProgressPriority::Critical,
-            Some(other) => {
-                return Err(AcpTransportError::Protocol {
-                    message: format!("unknown ACP session update priority `{other}`"),
-                });
-            }
         };
         let disposition = self
             .lock_session()?
             .lifecycle_mut()
-            .offer_progress(message, priority);
+            .offer_progress(update.message, update.priority);
         match disposition {
             Ok(
                 disposition @ (AcpProgressDisposition::Enqueued(_)
@@ -613,7 +579,7 @@ impl<R: BufRead, W: Write> AcpStdioSession<R, W> {
     }
 
     fn write_cancellation(&self, cancellation: &CancellationParts) -> AcpTransportResult<()> {
-        let notification = cancellation_notification(cancellation);
+        let notification = CancellationNotification::from_parts(cancellation).to_value();
         let mut stdin = self.lock_stdin()?;
         write_json_line(&mut *stdin, &notification)
     }
@@ -636,7 +602,7 @@ impl<W: Write> AcpStdioCancellationHandle<W> {
             .lifecycle_mut()
             .cancel_with_error(reason, receipt, error)
             .map(cancellation_parts)?;
-        let notification = cancellation_notification(&cancellation);
+        let notification = CancellationNotification::from_parts(&cancellation).to_value();
         let mut stdin = self.stdin.lock().map_err(|_| AcpTransportError::Protocol {
             message: "ACP stdio writer lock is poisoned".to_owned(),
         })?;
@@ -661,16 +627,80 @@ fn cancellation_parts(
     }
 }
 
-fn cancellation_notification(cancellation: &CancellationParts) -> Value {
-    json!({
-        "jsonrpc": "2.0",
-        "method": SESSION_CANCEL_METHOD,
-        "params": {
-            "reason": cancellation.reason.clone(),
-            "receipt": cancellation.receipt.clone(),
-            "error": cancellation.error.clone()
+struct SessionUpdateNotification<'a> {
+    message: &'a str,
+    priority: AcpProgressPriority,
+}
+
+impl<'a> SessionUpdateNotification<'a> {
+    fn parse(value: &'a Value) -> AcpTransportResult<Option<Self>> {
+        let Some(object) = value.as_object() else {
+            return Err(AcpTransportError::Protocol {
+                message: "ACP stdio message must be an object".to_owned(),
+            });
+        };
+        if object.get("method").and_then(Value::as_str) != Some(SESSION_UPDATE_METHOD) {
+            return Ok(None);
         }
-    })
+        if object.contains_key("id")
+            || object.contains_key("result")
+            || object.contains_key("error")
+        {
+            return Err(AcpTransportError::Protocol {
+                message: "ACP session update must be a notification".to_owned(),
+            });
+        }
+        let params = object
+            .get("params")
+            .and_then(Value::as_object)
+            .ok_or_else(|| AcpTransportError::Protocol {
+                message: "ACP session update must carry params object".to_owned(),
+            })?;
+        let message = params
+            .get("message")
+            .and_then(Value::as_str)
+            .ok_or_else(|| AcpTransportError::Protocol {
+                message: "ACP session update must carry message".to_owned(),
+            })?;
+        let priority = match params.get("priority").and_then(Value::as_str) {
+            Some("noncritical") => AcpProgressPriority::Noncritical,
+            Some("critical") | None => AcpProgressPriority::Critical,
+            Some(other) => {
+                return Err(AcpTransportError::Protocol {
+                    message: format!("unknown ACP session update priority `{other}`"),
+                });
+            }
+        };
+        Ok(Some(Self { message, priority }))
+    }
+}
+
+struct CancellationNotification<'a> {
+    reason: &'a str,
+    receipt: &'a str,
+    error: &'a Value,
+}
+
+impl<'a> CancellationNotification<'a> {
+    fn from_parts(parts: &'a CancellationParts) -> Self {
+        Self {
+            reason: &parts.reason,
+            receipt: &parts.receipt,
+            error: &parts.error,
+        }
+    }
+
+    fn to_value(&self) -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "method": SESSION_CANCEL_METHOD,
+            "params": {
+                "reason": self.reason,
+                "receipt": self.receipt,
+                "error": self.error.clone()
+            }
+        })
+    }
 }
 
 fn write_json_line<W: Write>(writer: &mut W, value: &Value) -> AcpTransportResult<()> {
