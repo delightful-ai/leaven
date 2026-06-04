@@ -37,10 +37,10 @@ impl AcpExtensionResultDocument {
                 "ACP extension result method `{method_name}` is not in the locked profile"
             ))
         })?;
-        let receipts = required_array(object.get("receipts"), "receipts")?;
-        if receipts.is_empty() {
-            return Err(invalid_acp("ACP extension result must carry receipts"));
-        }
+        let receipts = AcpExtensionReceiptFacts::from_values(required_array(
+            object.get("receipts"),
+            "receipts",
+        )?)?;
         let redactions = required_array(object.get("redactions"), "redactions")?;
         let data_classes = string_array(object.get("data_classes"), "data_classes")?;
         if data_classes.is_empty() {
@@ -68,15 +68,13 @@ impl AcpExtensionResultDocument {
                 }
             }
         }
-        validate_receipts_for_method(method, receipts)?;
-        validate_primary_result_hash(method, primary_value, receipts)?;
-        let expected_receipt = expected_receipt_for_method(method, receipts)?;
-        let expected_receipt_fact = AcpExtensionReceiptFact::from_receipt(expected_receipt)?;
+        let expected_receipt = receipts.expected_for_method(method)?;
+        validate_primary_result_hash(primary_value, expected_receipt)?;
         validate_extension_primary_op(method, primary)?;
         validate_effect_primary_audit(method, primary, expected_receipt)?;
         let primary_receipt = primary.get("receipt").and_then(Value::as_str);
         if let Some(primary_receipt) = primary_receipt {
-            ensure_primary_receipt_is_carried(primary_receipt, receipts)?;
+            receipts.ensure_receipt_is_carried(primary_receipt)?;
         }
         Ok(Self {
             method,
@@ -84,7 +82,7 @@ impl AcpExtensionResultDocument {
                 kind: primary_kind,
                 receipt: primary_receipt.map(ToOwned::to_owned),
             },
-            expected_receipt: expected_receipt_fact,
+            expected_receipt: expected_receipt.clone(),
             primary_kind,
             capability_fingerprint: required_string(
                 object.get("capability_fingerprint"),
@@ -210,14 +208,24 @@ pub struct AcpExtensionReceiptFact {
     kind: PlanResultReceiptKind,
     call_kind: Option<String>,
     write_kind: Option<String>,
+    op_var: Option<String>,
+    result_hash: Option<String>,
+    cost_fingerprint: Option<String>,
 }
 
 impl AcpExtensionReceiptFact {
-    fn from_receipt(receipt: &serde_json::Map<String, Value>) -> Result<Self, PublicSeamError> {
+    fn from_value(value: &Value) -> Result<Self, PublicSeamError> {
+        let receipt = value
+            .as_object()
+            .ok_or_else(|| invalid_acp("ACP extension result receipt must be an object"))?;
         let receipt_id = required_string(receipt.get("receipt"), "receipt.receipt")?.to_owned();
         let kind_name = required_string(receipt.get("kind"), "receipt.kind")?;
         let kind = PlanResultReceiptKind::parse(kind_name)
             .ok_or_else(|| invalid_acp(format!("unknown receipt kind `{kind_name}`")))?;
+        let cost_fingerprint = receipt
+            .get("cost")
+            .map(acp_extension_cost_fingerprint)
+            .transpose()?;
         Ok(Self {
             receipt: receipt_id,
             kind,
@@ -229,6 +237,15 @@ impl AcpExtensionReceiptFact {
                 .get("write_kind")
                 .and_then(Value::as_str)
                 .map(ToOwned::to_owned),
+            op_var: receipt
+                .get("op_var")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+            result_hash: receipt
+                .get("result_hash")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+            cost_fingerprint,
         })
     }
 
@@ -251,6 +268,104 @@ impl AcpExtensionReceiptFact {
     pub fn write_kind(&self) -> Option<&str> {
         self.write_kind.as_deref()
     }
+
+    /// Operation variable bound by the receipt, when the receipt carries one.
+    pub fn op_var(&self) -> Option<&str> {
+        self.op_var.as_deref()
+    }
+
+    /// Result hash carried by the receipt, when present.
+    pub fn result_hash(&self) -> Option<&str> {
+        self.result_hash.as_deref()
+    }
+
+    /// Canonical fingerprint of the receipt cost payload, when the receipt carries cost.
+    pub fn cost_fingerprint(&self) -> Option<&str> {
+        self.cost_fingerprint.as_deref()
+    }
+
+    fn matches_expectation(&self, expectation: MethodReceiptExpectation) -> bool {
+        match expectation {
+            MethodReceiptExpectation::StageRun => false,
+            MethodReceiptExpectation::Query => self.kind == PlanResultReceiptKind::Query,
+            MethodReceiptExpectation::Call(call_kind) => {
+                self.kind == PlanResultReceiptKind::Call && self.call_kind() == Some(call_kind)
+            }
+            MethodReceiptExpectation::Write(write_kind) => {
+                self.kind == PlanResultReceiptKind::Write && self.write_kind() == Some(write_kind)
+            }
+        }
+    }
+
+    fn schema_version(&self) -> &'static str {
+        match self.kind {
+            PlanResultReceiptKind::Query => "leaven.plan_query_result.v1",
+            PlanResultReceiptKind::Call => "leaven.plan_call_result.v1",
+            PlanResultReceiptKind::Write => "leaven.plan_write_result.v1",
+        }
+    }
+
+    fn op_name(&self) -> &str {
+        self.op_var.as_deref().unwrap_or("primary")
+    }
+
+    fn required_result_hash(&self) -> Result<&str, PublicSeamError> {
+        self.result_hash
+            .as_deref()
+            .ok_or_else(|| invalid_acp("receipt.result_hash must be a string"))
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AcpExtensionReceiptFacts {
+    receipts: Vec<AcpExtensionReceiptFact>,
+}
+
+impl AcpExtensionReceiptFacts {
+    fn from_values(values: &[Value]) -> Result<Self, PublicSeamError> {
+        if values.is_empty() {
+            return Err(invalid_acp("ACP extension result must carry receipts"));
+        }
+        let receipts = values
+            .iter()
+            .map(AcpExtensionReceiptFact::from_value)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self { receipts })
+    }
+
+    fn expected_for_method(
+        &self,
+        method: LockedMethod,
+    ) -> Result<&AcpExtensionReceiptFact, PublicSeamError> {
+        let expectation = method.receipt_expectation();
+        self.receipts
+            .iter()
+            .find(|receipt| receipt.matches_expectation(expectation))
+            .ok_or_else(|| {
+                invalid_acp(format!(
+                    "ACP extension result method `{}` is missing its expected receipt",
+                    method.as_str()
+                ))
+            })
+    }
+
+    fn ensure_receipt_is_carried(&self, primary_receipt: &str) -> Result<(), PublicSeamError> {
+        if self
+            .receipts
+            .iter()
+            .any(|receipt| receipt.receipt() == primary_receipt)
+        {
+            Ok(())
+        } else {
+            Err(invalid_acp(format!(
+                "ACP extension result primary receipt `{primary_receipt}` is not carried"
+            )))
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.receipts.len()
+    }
 }
 
 fn validate_primary_kind(
@@ -268,43 +383,12 @@ fn validate_primary_kind(
     }
 }
 
-fn validate_receipts_for_method(
-    method: LockedMethod,
-    receipts: &[Value],
-) -> Result<(), PublicSeamError> {
-    if receipts
-        .iter()
-        .any(|receipt| receipt_matches(receipt, method.receipt_expectation()))
-    {
-        Ok(())
-    } else {
-        Err(invalid_acp(format!(
-            "ACP extension result method `{}` is missing its expected receipt",
-            method.as_str()
-        )))
-    }
-}
-
 fn validate_primary_result_hash(
-    method: LockedMethod,
     primary: &Value,
-    receipts: &[Value],
+    expected_receipt: &AcpExtensionReceiptFact,
 ) -> Result<(), PublicSeamError> {
-    let receipt = expected_receipt_for_method(method, receipts)?;
-    let schema_version = match required_string(receipt.get("kind"), "receipt.kind")? {
-        "query" => "leaven.plan_query_result.v1",
-        "call" => "leaven.plan_call_result.v1",
-        "write" => "leaven.plan_write_result.v1",
-        other => {
-            return Err(invalid_acp(format!(
-                "ACP extension result receipt kind `{other}` cannot bind primary value"
-            )));
-        }
-    };
-    let op_name = receipt
-        .get("op_var")
-        .and_then(Value::as_str)
-        .unwrap_or("primary");
+    let schema_version = expected_receipt.schema_version();
+    let op_name = expected_receipt.op_name();
     let expected = prefixed_jcs_hash(
         "fp_result_sha256_",
         &json!({
@@ -313,11 +397,11 @@ fn validate_primary_result_hash(
             "value": primary
         }),
     )?;
-    let actual = required_string(receipt.get("result_hash"), "receipt.result_hash")?;
+    let actual = expected_receipt.required_result_hash()?;
     if actual != expected {
-        let receipt_id = required_string(receipt.get("receipt"), "receipt.receipt")?;
         return Err(invalid_acp(format!(
-            "ACP extension result receipt `{receipt_id}` result_hash does not bind primary value"
+            "ACP extension result receipt `{}` result_hash does not bind primary value",
+            expected_receipt.receipt()
         )));
     }
     Ok(())
@@ -326,9 +410,9 @@ fn validate_primary_result_hash(
 fn validate_effect_primary_audit(
     method: LockedMethod,
     primary: &serde_json::Map<String, Value>,
-    expected_receipt: &serde_json::Map<String, Value>,
+    expected_receipt: &AcpExtensionReceiptFact,
 ) -> Result<(), PublicSeamError> {
-    let expected_receipt_id = required_string(expected_receipt.get("receipt"), "receipt.receipt")?;
+    let expected_receipt_id = expected_receipt.receipt();
     match method {
         LockedMethod::LmComplete => {
             validate_effect_primary_receipt(primary, expected_receipt_id)?;
@@ -386,9 +470,13 @@ fn validate_effect_primary_receipt(
 fn validate_effect_primary_cost(
     call_kind: &str,
     primary: &serde_json::Map<String, Value>,
-    receipt: &serde_json::Map<String, Value>,
+    receipt: &AcpExtensionReceiptFact,
 ) -> Result<(), PublicSeamError> {
-    match (primary.get("cost"), receipt.get("cost")) {
+    let primary_cost = primary
+        .get("cost")
+        .map(acp_extension_cost_fingerprint)
+        .transpose()?;
+    match (primary_cost.as_deref(), receipt.cost_fingerprint()) {
         (Some(primary_cost), Some(receipt_cost)) if primary_cost == receipt_cost => Ok(()),
         (Some(_), _) => Err(invalid_acp(format!(
             "ACP extension result {call_kind} primary cost must match call receipt cost"
@@ -402,58 +490,6 @@ fn validate_effect_primary_cost(
     }
 }
 
-fn expected_receipt_for_method<'a>(
-    method: LockedMethod,
-    receipts: &'a [Value],
-) -> Result<&'a serde_json::Map<String, Value>, PublicSeamError> {
-    let expectation = method.receipt_expectation();
-    receipts
-        .iter()
-        .find(|receipt| receipt_matches(receipt, expectation))
-        .and_then(Value::as_object)
-        .ok_or_else(|| {
-            invalid_acp(format!(
-                "ACP extension result method `{}` is missing its expected receipt",
-                method.as_str()
-            ))
-        })
-}
-
-fn receipt_matches(receipt: &Value, expectation: MethodReceiptExpectation) -> bool {
-    let Some(object) = receipt.as_object() else {
-        return false;
-    };
-    match expectation {
-        MethodReceiptExpectation::StageRun => false,
-        MethodReceiptExpectation::Query => {
-            object.get("kind").and_then(Value::as_str) == Some("query")
-        }
-        MethodReceiptExpectation::Call(call_kind) => {
-            object.get("kind").and_then(Value::as_str) == Some("call")
-                && object.get("call_kind").and_then(Value::as_str) == Some(call_kind)
-        }
-        MethodReceiptExpectation::Write(write_kind) => {
-            object.get("kind").and_then(Value::as_str) == Some("write")
-                && object.get("write_kind").and_then(Value::as_str) == Some(write_kind)
-        }
-    }
-}
-
-fn ensure_primary_receipt_is_carried(
-    primary_receipt: &str,
-    receipts: &[Value],
-) -> Result<(), PublicSeamError> {
-    if receipts.iter().any(|receipt| {
-        receipt
-            .as_object()
-            .and_then(|object| object.get("receipt"))
-            .and_then(Value::as_str)
-            == Some(primary_receipt)
-    }) {
-        Ok(())
-    } else {
-        Err(invalid_acp(format!(
-            "ACP extension result primary receipt `{primary_receipt}` is not carried"
-        )))
-    }
+fn acp_extension_cost_fingerprint(value: &Value) -> Result<String, PublicSeamError> {
+    prefixed_jcs_hash("fp_cost_sha256_", value)
 }

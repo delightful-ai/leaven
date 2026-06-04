@@ -1124,6 +1124,17 @@ fn acp_extension_results_require_receipts_capability_fingerprint_and_data_classe
         PlanResultReceiptKind::Call
     );
     assert_eq!(result.expected_receipt().call_kind(), Some("lm_complete"));
+    assert_eq!(result.expected_receipt().op_var(), Some("worker_call"));
+    assert_eq!(
+        result.expected_receipt().result_hash(),
+        extension_result()["receipts"][0]["result_hash"].as_str()
+    );
+    assert_eq!(
+        result.expected_receipt().cost_fingerprint(),
+        Some(
+            prefixed_jcs_hash("fp_cost_sha256_", &json!({"lm_calls": 1, "usd_micro": 42})).as_str()
+        )
+    );
     assert_eq!(result.capability_fingerprint(), "fp_cap_sha256_acp");
     assert_eq!(result.receipt_count(), 1);
     assert_eq!(result.data_classes(), &["completion.raw".to_owned()]);
@@ -1197,13 +1208,9 @@ fn acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts() {
             .and_then(Value::as_array)
             .and_then(|items| items.iter().map(Value::as_str).collect::<Option<Vec<_>>>())
             .unwrap_or_else(|| vec!["public"]);
+        let document = extension_result_for(method, &primary, &receipt, &data_classes);
         let result = package
-            .validate_acp_extension_result_document(&extension_result_for(
-                method,
-                &primary,
-                &receipt,
-                &data_classes,
-            ))
+            .validate_acp_extension_result_document(&document)
             .unwrap();
 
         assert_eq!(result.method(), LockedMethod::parse(method).unwrap());
@@ -1211,6 +1218,14 @@ fn acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts() {
         assert_eq!(
             result.expected_receipt().receipt(),
             receipt["receipt"].as_str().unwrap()
+        );
+        assert_eq!(
+            result.expected_receipt().op_var(),
+            receipt["op_var"].as_str()
+        );
+        assert_eq!(
+            result.expected_receipt().result_hash(),
+            document["receipts"][0]["result_hash"].as_str()
         );
         assert_eq!(result.receipt_count(), 1);
     }
