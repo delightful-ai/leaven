@@ -1072,7 +1072,7 @@ acceptance:
           is still not full typed seam closeout: nested Plan IR operation
           bodies, nested Plan Result values/receipts, evidence, cost, blob refs,
           capability resources, service execution payloads, and generated
-          Python Raw islands remain to be typed or explicitly justified.
+          Python Raw islands remain typed-seam blockers to eliminate.
       - kind: typed_internal_method_dispatch_foundation
         commits:
           - 56276ac0
