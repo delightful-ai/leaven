@@ -822,7 +822,7 @@ acceptance:
           explicit `Value` islands that require typed-owner follow-up slices.
       - kind: typed_acp_stage_bridge_event_projection_foundation
         commits:
-          - pending-current-run
+          - 7530355b
         paths:
           - crates/leaven-acp-stage-bridge/Cargo.toml
           - crates/leaven-acp-stage-bridge/src/graph_host.rs
