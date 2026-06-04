@@ -1,13 +1,24 @@
 """Private report records for durable-seam optimize mechanics."""
 
 from dataclasses import dataclass, field
-from typing import Any
 
 from .._receipts import CallReceipt, WriteReceipt
 from ..assessment import RewardAssessment
+from ..json_value import JsonObject, JsonValue
 from ..run_status import UnsupportedRunFact
 from ..score import Score
 from .receipts import EffectCostTotals
+
+
+@dataclass(frozen=True)
+class PlannedOptimizeCase:
+    """One case selected for the current optimize mechanics run."""
+
+    case_id: str
+    input: JsonObject
+    target: JsonObject | None
+    metadata: JsonObject
+    split: str | None
 
 
 @dataclass(frozen=True)
@@ -15,11 +26,11 @@ class SeamStageAssessment:
     """One runner-stage result observed through the durable seam."""
 
     case_id: str
-    case_input: dict[str, Any]
-    case_target: dict[str, Any] | None
-    case_metadata: dict[str, Any]
+    case_input: JsonObject
+    case_target: JsonObject | None
+    case_metadata: JsonObject
     case_split: str | None
-    output: Any
+    output: JsonValue | None
     score: Score
     rewards: list[RewardAssessment]
     receipt: str | None = None
@@ -49,4 +60,9 @@ class ProposerStageReport:
     effect_receipts: list[CallReceipt] = field(default_factory=list)
 
 
-__all__ = ["ProposerStageReport", "SeamOptimizeReport", "SeamStageAssessment"]
+__all__ = [
+    "PlannedOptimizeCase",
+    "ProposerStageReport",
+    "SeamOptimizeReport",
+    "SeamStageAssessment",
+]

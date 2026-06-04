@@ -15,11 +15,11 @@ and real optimizer search remain later slices.
 """
 
 import datetime
-from typing import Any, cast
+from typing import cast
 
 from ._receipts import WriteReceipt
 from ._runs import persist_optimized
-from ._seam_optimize import SeamOptimizeReport, run_prompt_mechanics
+from ._seam_optimize import PlannedOptimizeCase, SeamOptimizeReport, run_prompt_mechanics
 from .artifacts.prompt import PromptArtifact
 from .assessment import Assessment
 from .case import Case
@@ -81,7 +81,7 @@ class OptimizeBuilder[A]:
             )
         return self.seed
 
-    def _runner_stage(self) -> RegisteredStage[Any, Any]:
+    def _runner_stage(self) -> RegisteredStage[object, object]:
         rollout = self.environment.rollout
         if rollout.kind != "function" or rollout.stage is None:
             raise NotImplementedError(
@@ -102,18 +102,18 @@ class OptimizeBuilder[A]:
             )
         return self.optimizer
 
-    def _plan_cases(self) -> list[dict[str, Any]]:
+    def _plan_cases(self) -> list[PlannedOptimizeCase]:
         cases = self.environment.task.cases
         if not cases:
             raise ValueError("the task has no cases to optimize over")
         return [
-            {
-                "case_id": _wire_case_id(case.id),
-                "input": dict(case.input),
-                "target": dict(case.target or {}),
-                "metadata": dict(case.metadata),
-                "split": case.split,
-            }
+            PlannedOptimizeCase(
+                case_id=_wire_case_id(case.id),
+                input=dict(case.input),
+                target=dict(case.target) if case.target is not None else None,
+                metadata=dict(case.metadata),
+                split=case.split,
+            )
             for case in cases
         ]
 

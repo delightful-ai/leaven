@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import msgspec
+import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
 import leaven as lv
@@ -29,10 +30,14 @@ from leaven._seam._wire.results import (
     LmMessageRecord,
     LmResponsePrimary,
 )
-from leaven._seam_optimize.driver import _agent_config, _lm_config, _lm_model
+from leaven._seam_optimize.driver import _agent_config, _case_input, _lm_config, _lm_model
 from leaven._seam_optimize.rewards import evaluate_reward_vector
 from leaven._seam_optimize.status import unsupported_facts_for_runtime
-from leaven._seam_optimize.types import SeamOptimizeReport, SeamStageAssessment
+from leaven._seam_optimize.types import (
+    PlannedOptimizeCase,
+    SeamOptimizeReport,
+    SeamStageAssessment,
+)
 from leaven.artifacts.prompt import PromptArtifact
 from leaven.assessment import RewardAssessment
 from leaven.builders.agent import AgentBuilder
@@ -588,12 +593,13 @@ async def test_reward_vector_executes_all_registered_rewards() -> None:
     score, rewards = await evaluate_reward_vector(
         rubric=lv.Rubric([correct, concise]),
         output="42",
-        case={
-            "case_id": "case_reward_vector",
-            "input": {"question": "6 * 7?"},
-            "target": {"answer": "42"},
-            "metadata": {"source": "unit"},
-        },
+        case=PlannedOptimizeCase(
+            case_id="case_reward_vector",
+            input={"question": "6 * 7?"},
+            target={"answer": "42"},
+            metadata={"source": "unit"},
+            split=None,
+        ),
     )
 
     assert score.value == 0.8333333333333334
@@ -602,6 +608,21 @@ async def test_reward_vector_executes_all_registered_rewards() -> None:
         ("correct", 1.0, 2.0),
         ("concise", 0.5, 1.0),
     ]
+
+
+def test_optimize_case_input_rejects_nested_stage_run_values() -> None:
+    """Regression: planned cases do not erase nested JSON into runner case_input."""
+
+    case = PlannedOptimizeCase(
+        case_id="case_nested_input",
+        input={"question": "2 + 2", "nested": {"answer": "4"}},
+        target=None,
+        metadata={},
+        split=None,
+    )
+
+    with pytest.raises(ValueError, match="runner case_input fields"):
+        _case_input(PromptArtifact(template="{question}"), case)
 
 
 def test_optimized_result_exposes_assessments_rewards_and_lineage() -> None:

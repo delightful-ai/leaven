@@ -1765,6 +1765,32 @@ acceptance:
           closeout: `lv.runs.open(...)` still reads the Python-written
           projection until the durable Rust run/checkpoint export path owns
           the reopen surface.
+      - kind: python_optimize_mechanics_cases_are_typed_records
+        paths:
+          - sdk/python/src/leaven/_seam_optimize/__init__.py
+          - sdk/python/src/leaven/_seam_optimize/driver.py
+          - sdk/python/src/leaven/_seam_optimize/rewards.py
+          - sdk/python/src/leaven/_seam_optimize/types.py
+          - sdk/python/src/leaven/optimize.py
+          - sdk/python/tests/test_stage_surface.py
+        commands:
+          - cd sdk/python && uv run ruff check src/leaven/_seam_optimize src/leaven/optimize.py tests/test_stage_surface.py tests/test_optimize_public_seam_e2e.py tests/test_optimize_proposer_mechanics.py tests/test_run_inspection.py tests/test_reward_vector_inspection.py tests/test_run_receipt_inspection.py
+          - cd sdk/python && uv run ty check src/leaven/_seam_optimize src/leaven/optimize.py tests/test_stage_surface.py tests/test_optimize_public_seam_e2e.py tests/test_optimize_proposer_mechanics.py tests/test_run_inspection.py tests/test_reward_vector_inspection.py tests/test_run_receipt_inspection.py
+          - cd sdk/python && uv run pytest tests/test_stage_surface.py tests/test_optimize_public_seam_e2e.py tests/test_optimize_proposer_mechanics.py tests/test_run_inspection.py tests/test_reward_vector_inspection.py tests/test_run_receipt_inspection.py -q
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - >-
+            rg -n "typing import Any|\\bAny\\b|dict\\[str, Any\\]" sdk/python/src/leaven/_seam_optimize sdk/python/src/leaven/optimize.py -g '*.py'
+        note: >-
+          The active Python `lv.optimize(...).run()` mechanics path now carries
+          planned cases as a private `PlannedOptimizeCase` record with
+          `JsonObject` fields instead of `dict[str, Any]`. Reward evaluation,
+          stage dispatch, and result projection consume that record directly,
+          and stage-run case input is narrowed at the wire boundary to the
+          generated shallow `WireJsonField` shape. A regression test proves
+          nested JSON input fails before being packed into `leaven/stage.run`.
+          The final grep is expected to return no matches for `_seam_optimize`
+          or `optimize.py`; this does not close remaining public SDK scaffolds
+          or the separate `rubric.py` callable erasure.
       - kind: typed_plan_expression_owner_foundation
         commits:
           - a0397e66

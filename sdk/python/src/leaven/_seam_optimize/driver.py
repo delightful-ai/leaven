@@ -2,7 +2,6 @@
 
 import asyncio
 import os
-from typing import Any
 
 from msgspec import UNSET
 
@@ -20,10 +19,12 @@ from .._seam import (
     proposer_stage_capability,
     resolve_codex_binary,
 )
+from .._seam._wire.refs import WireJsonField, WireJsonLeafArray, WireJsonLeafObject
 from .._seam_worker import worker_argv_for_stage
 from ..agent.codex import CodexAgent
 from ..artifacts.prompt import PromptArtifact
 from ..decorators import RegisteredStage
+from ..json_value import JsonObject, JsonValue
 from ..lm.config import LmConfig
 from ..lm.mock import MockLm
 from ..lm.openai import OpenAiLm
@@ -39,7 +40,12 @@ from .receipts import (
 from .rewards import evaluate_reward_vector
 from .scoring import mean_score
 from .status import first_agent, unsupported_facts_for_runtime
-from .types import ProposerStageReport, SeamOptimizeReport, SeamStageAssessment
+from .types import (
+    PlannedOptimizeCase,
+    ProposerStageReport,
+    SeamOptimizeReport,
+    SeamStageAssessment,
+)
 
 PROMPT_SURFACE_FINGERPRINT = "fp_surface_sha256_python_prompt_template"
 PROMPT_CHANGE_SCHEMA = "fp_schema_sha256_python_prompt_patch"
@@ -48,8 +54,8 @@ PROMPT_CHANGE_SCHEMA = "fp_schema_sha256_python_prompt_patch"
 async def run_prompt_mechanics(
     *,
     seed: PromptArtifact,
-    cases: list[dict[str, Any]],
-    runner: RegisteredStage[Any, Any],
+    cases: list[PlannedOptimizeCase],
+    runner: RegisteredStage[object, object],
     optimizer: Gepa,
     rubric: Rubric,
     run_id: str,
@@ -101,11 +107,11 @@ async def run_prompt_mechanics(
                 run_id=f"run_{run_id}",
                 stage_call_id=f"sc_{run_id}_{index}",
                 candidate="cand_seed",
-                case=case["case_id"],
+                case=case.case_id,
                 case_input=_case_input(seed, case),
             ),
         )
-        output = None if result.output.value is UNSET else result.output.value
+        output: JsonValue | None = None if result.output.value is UNSET else result.output.value
         score, rewards = await evaluate_reward_vector(
             rubric=rubric,
             output=output,
@@ -113,11 +119,11 @@ async def run_prompt_mechanics(
         )
         assessments.append(
             SeamStageAssessment(
-                case_id=case["case_id"],
-                case_input=dict(case["input"]),
-                case_target=dict(case.get("target") or {}),
-                case_metadata=dict(case.get("metadata") or {}),
-                case_split=case.get("split"),
+                case_id=case.case_id,
+                case_input=dict(case.input),
+                case_target=dict(case.target) if case.target is not None else None,
+                case_metadata=dict(case.metadata),
+                case_split=case.split,
                 output=output,
                 score=score,
                 rewards=rewards,
@@ -240,13 +246,27 @@ def _materialized_workspace_id(candidate_id: str) -> str:
     return f"ws_{sanitized}_materialized"
 
 
-def _case_input(seed: PromptArtifact, case: dict[str, Any]) -> dict[str, Any]:
-    value = dict(case["input"])
+def _case_input(seed: PromptArtifact, case: PlannedOptimizeCase) -> WireJsonField:
+    value: JsonObject = dict(case.input)
     try:
         value["prompt"] = seed.template.format(**value)
     except KeyError:
         value["prompt"] = seed.template
-    return value
+    return _wire_leaf_object(value)
+
+
+def _wire_leaf_object(value: JsonObject) -> WireJsonLeafObject:
+    return {key: _wire_leaf_field(item) for key, item in value.items()}
+
+
+def _wire_leaf_field(value: JsonValue) -> str | int | float | bool | None | WireJsonLeafArray:
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
+    if isinstance(value, list):
+        if not all(item is None or isinstance(item, str | int | float | bool) for item in value):
+            raise ValueError("runner case_input arrays must contain only JSON scalar values")
+        return value
+    raise ValueError("runner case_input fields must be JSON scalars or scalar arrays")
 
 
 def _runner_text(runtime: Runtime) -> str:
