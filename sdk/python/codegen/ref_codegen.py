@@ -23,29 +23,29 @@ class AssessmentRefRecord(Struct, frozen=True, forbid_unknown_fields=True, tag="
     id: str
     run: str | UnsetType = UNSET
 
-
 class EvaluationRequestRefRecord(Struct, frozen=True, forbid_unknown_fields=True, tag="evaluation_request", tag_field="kind"):
     id: str
     run: str | UnsetType = UNSET
 
-
 class EvaluationAttemptRefRecord(Struct, frozen=True, forbid_unknown_fields=True, tag="evaluation_attempt", tag_field="kind"):
     id: str
     run: str | UnsetType = UNSET
-
 
 class ExternalInfoRefRecord(Struct, frozen=True, forbid_unknown_fields=True, tag="external", tag_field="kind"):
     namespace: str
     id: str
     schema_fingerprint: str | UnsetType = UNSET
 
-
 class ReceiptRefRecord(Struct, frozen=True, forbid_unknown_fields=True, tag="receipt", tag_field="kind"):
     id: str
     fingerprint: str | UnsetType = UNSET
 
-
 type ReceiptRef = str | ReceiptRefRecord
+
+
+class CaseRefRecord(Struct, frozen=True, forbid_unknown_fields=True, tag="case", tag_field="kind"):
+    id: str
+    run: str | UnsetType = UNSET
 
 
 class TraceRefRecord(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
@@ -60,6 +60,7 @@ type CandidateRef = str | CandidateRefRecord
 type ProposalRef = str | ProposalRefRecord
 type ProposalBatchRef = str | ProposalBatchRefRecord
 type AssessmentRef = str | AssessmentRefRecord
+type CaseRef = str | CaseRefRecord
 type EvaluationRequestRef = str | EvaluationRequestRefRecord
 type EvaluationAttemptRef = str | EvaluationAttemptRefRecord
 type InfoRef = (
@@ -77,7 +78,7 @@ type TraceRef = TraceRefRecord
 '''
 
 REF_EXPORTS = (
-    "AssessmentRef AssessmentRefRecord CandidateRef CandidateRefRecord EvaluationAttemptRef "
+    "AssessmentRef AssessmentRefRecord CandidateRef CandidateRefRecord CaseRef CaseRefRecord EvaluationAttemptRef "
     "EvaluationAttemptRefRecord EvaluationRequestRef EvaluationRequestRefRecord ExternalInfoRefRecord "
     "InfoRef ProposalBatchRef ProposalBatchRefRecord ProposalRef ProposalRefRecord ReceiptRef "
     "ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility"

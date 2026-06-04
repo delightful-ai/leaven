@@ -1300,6 +1300,27 @@ acceptance:
           the public schema defines it as open metadata; Plan expressions,
           preconditions, validation receipts, and several result payload leaves
           still need typed Python owners before this acceptance row can close.
+      - kind: generated_stage_ref_slots_are_typed_records
+        paths:
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/tests/_seam/_wire/test_payloads.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run ruff check codegen/payload_codegen.py codegen/ref_codegen.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_payloads.py
+          - cd sdk/python && uv run ty check codegen/payload_codegen.py codegen/ref_codegen.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_payloads.py
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_results.py -q
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Generated Python stage payload records now type runner `candidate`
+          as `CandidateRef`, runner `case` as `CaseRef`, and proposer `parent`
+          as `CandidateRef`, using the same schema-owned msgspec ref records as
+          Plan Result receipts and source refs. Focused tests prove object-form
+          runner refs and proposer parent refs decode into concrete records and
+          that a wrong object-form candidate ref is rejected at the msgspec
+          boundary. Open `case_input` remains JSON-shaped because the stage
+          payload schema intentionally leaves case input unconstrained.
       - kind: typed_plan_expression_owner_foundation
         commits:
           - a0397e66

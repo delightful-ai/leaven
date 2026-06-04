@@ -395,8 +395,8 @@ class RunnerRequest(
     schema_version: Literal["leaven.stage_payloads.v1"]
     run: str
     stage_call_id: str
-    candidate: str | WireJsonObject
-    case: str | WireJsonObject
+    candidate: CandidateRef
+    case: CaseRef
     case_input: WireJsonField
     target_forbidden: bool
 
@@ -421,7 +421,7 @@ class ProposeRequest(
     run: str
     stage_call_id: str
     base_revision: str
-    parent: str | WireJsonObject
+    parent: CandidateRef
     reflection_result: ReflectionResult
     allowed_effects: list[ProposalEffect]
     capability_fingerprint: str
