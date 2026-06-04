@@ -83,13 +83,8 @@ impl PlanDocument {
                     }
                 }
                 PlanOperationDetail::Call { .. } => {}
-                PlanOperationDetail::Write { .. } => {
-                    let write = op
-                        .get("write")
-                        .ok_or_else(|| invalid_plan("write op is missing `write`"))?;
-                    if operation.write_kind() == Some(PlanWriteKind::SubmitAssessments) {
-                        assessment_score_outputs.inspect_submit_assessments(write)?;
-                    }
+                PlanOperationDetail::Write { write } => {
+                    assessment_score_outputs.merge(write.submit_assessments);
                 }
             };
             operation_kinds.push(operation_kind);
@@ -398,7 +393,7 @@ impl PlanOperation {
                     .get("write")
                     .ok_or_else(|| invalid_plan("write op is missing `write`"))?;
                 PlanOperationDetail::Write {
-                    write_kind: PlanWriteKind::parse(nested_kind(Some(write), "write")?)?,
+                    write: PlanWriteOperation::from_schema_valid_value(write)?,
                 }
             }
         };
@@ -426,7 +421,15 @@ impl PlanOperation {
     /// Write kind for `write` operations.
     pub const fn write_kind(&self) -> Option<PlanWriteKind> {
         match self.detail {
-            PlanOperationDetail::Write { write_kind } => Some(write_kind),
+            PlanOperationDetail::Write { write } => Some(write.kind),
+            _ => None,
+        }
+    }
+
+    /// Typed write details for `write` operations.
+    pub const fn write(&self) -> Option<PlanWriteOperation> {
+        match self.detail {
+            PlanOperationDetail::Write { write } => Some(write),
             _ => None,
         }
     }
@@ -444,7 +447,58 @@ impl PlanOperation {
 enum PlanOperationDetail {
     Let { query_kind: Option<PlanQueryKind> },
     Call { call_kind: PlanCallKind },
-    Write { write_kind: PlanWriteKind },
+    Write { write: PlanWriteOperation },
+}
+
+/// Typed details for one Plan IR `write` operation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PlanWriteOperation {
+    kind: PlanWriteKind,
+    submit_assessments: AssessmentScoreOutputUsage,
+}
+
+impl PlanWriteOperation {
+    fn from_schema_valid_value(value: &Value) -> Result<Self, PublicSeamError> {
+        let kind = PlanWriteKind::parse(nested_kind(Some(value), "write")?)?;
+        let mut submit_assessments = AssessmentScoreOutputUsage::default();
+        if kind == PlanWriteKind::SubmitAssessments {
+            submit_assessments.inspect_submit_assessments(value)?;
+        }
+        Ok(Self {
+            kind,
+            submit_assessments,
+        })
+    }
+
+    /// Locked Plan IR write kind.
+    pub const fn kind(self) -> PlanWriteKind {
+        self.kind
+    }
+
+    /// Number of assessment `Score.output` values carried by this write.
+    pub const fn assessment_score_output_count(self) -> usize {
+        self.submit_assessments.total()
+    }
+
+    /// Number of assessment evidence envelopes carried by this write.
+    pub const fn assessment_evidence_count(self) -> usize {
+        self.submit_assessments.evidence_envelopes
+    }
+
+    /// Number of independent assessment outputs carried by this write.
+    pub const fn independent_assessment_score_output_count(self) -> usize {
+        self.submit_assessments.independent
+    }
+
+    /// Number of pairwise assessment outputs carried by this write.
+    pub const fn pairwise_assessment_score_output_count(self) -> usize {
+        self.submit_assessments.pairwise
+    }
+
+    /// Number of listwise assessment outputs carried by this write.
+    pub const fn listwise_assessment_score_output_count(self) -> usize {
+        self.submit_assessments.listwise
+    }
 }
 
 /// Locked Plan IR core operation family.
@@ -601,6 +655,13 @@ struct AssessmentScoreOutputUsage {
 }
 
 impl AssessmentScoreOutputUsage {
+    const fn merge(&mut self, other: Self) {
+        self.independent += other.independent;
+        self.pairwise += other.pairwise;
+        self.listwise += other.listwise;
+        self.evidence_envelopes += other.evidence_envelopes;
+    }
+
     fn inspect_submit_assessments(&mut self, write: &Value) -> Result<(), PublicSeamError> {
         let assessments = write
             .as_object()

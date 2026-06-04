@@ -50,6 +50,11 @@ fn plan_ir_family_accepts_typed_let_call_write_documents() {
     assert_eq!(write_op.name(), "status");
     assert_eq!(write_op.kind(), PlanOperationKind::Write);
     assert_eq!(write_op.write_kind(), Some(PlanWriteKind::EmitRunEvent));
+    let write = write_op
+        .write()
+        .expect("write op exposes typed write facts");
+    assert_eq!(write.kind(), PlanWriteKind::EmitRunEvent);
+    assert_eq!(write.assessment_score_output_count(), 0);
 }
 
 #[test]
@@ -3559,6 +3564,15 @@ fn submit_assessments_score_outputs_cover_all_assessment_shapes() {
     assert_eq!(document.independent_assessment_score_output_count(), 1);
     assert_eq!(document.pairwise_assessment_score_output_count(), 1);
     assert_eq!(document.listwise_assessment_score_output_count(), 1);
+    let write = document.operations()[0]
+        .write()
+        .expect("submit_assessments op exposes typed write facts");
+    assert_eq!(write.kind(), PlanWriteKind::SubmitAssessments);
+    assert_eq!(write.assessment_score_output_count(), 3);
+    assert_eq!(write.assessment_evidence_count(), 3);
+    assert_eq!(write.independent_assessment_score_output_count(), 1);
+    assert_eq!(write.pairwise_assessment_score_output_count(), 1);
+    assert_eq!(write.listwise_assessment_score_output_count(), 1);
 }
 
 #[test]
