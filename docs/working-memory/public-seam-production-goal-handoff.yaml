@@ -660,7 +660,23 @@ acceptance:
         - durable checkpoint write after mutation
         - Rust-owned checkpoint/graph/blob readback proving the same candidate, evaluation request, assessment, event, receipts, lineage, and cost/usage facts
         - negative proof that fallback `SeamGraphState` or configured receipt synthesis cannot satisfy the route
-    evidence: []
+    evidence:
+      - kind: topology_research_handoff
+        paths:
+          - docs/working-memory/run-bound-durable-runcontext-service.md
+          - crates/leaven-seam-service/AGENTS.md
+          - crates/leaven-seam-service/src/run_context_service.rs
+          - crates/leaven-acp-stage-bridge/src/graph_host.rs
+          - crates/leaven-engine/src/context/run_context.rs
+          - crates/leaven-run/src/store.rs
+          - crates/leaven-run/src/run_store.rs
+        commands:
+          - rg -n "RunContext|seam-service|RunContext-backed|durable service|public seam|leaven-seam-service|leaven-seam-runtime|checkpoint|run inspection" docs/specs docs/working-memory crates -g 'AGENTS.md' -g '*.md' -g '*.yaml' -g '*.rs'
+          - morph codebase_search "Where does leaven-run create durable run directories, store checkpoints, and expose run/checkpoint persistence from Engine or RunContext?"
+        note: >-
+          Research split configured local method execution from the stricter
+          run-bound service requirement. This is not completion evidence; it
+          identifies the legal topology and the minimum future scenario proof.
     closeout_check: >-
       The configured `SeamTextProblem` proof path, `leaven-acp-stage-bridge`
       callback tests, public-seam receipt projection tests, and Python
