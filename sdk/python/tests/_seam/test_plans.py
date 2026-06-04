@@ -1,4 +1,5 @@
 from leaven._seam import CaseLoadRequest
+from leaven._seam._wire.json_value import json_object
 
 
 def test_case_load_request_names_locked_single_field_routes() -> None:
@@ -32,12 +33,16 @@ def test_case_load_request_uses_composite_route_for_multi_field_projection() -> 
     ).to_json_rpc()
 
     assert request["method"] == "leaven/case.load"
-    params = request["params"]
+    params = json_object(request["params"])
     assert params["schema_version"] == "leaven.plan.v1"
     assert params["plan_id"] == "plancasebuilder001"
     assert params["return"] == ["case_load"]
     assert params["commit"] == {"kind": "no_graph_writes"}
-    query = params["ops"][0]["expr"]["query"]
+    ops = params["ops"]
+    assert isinstance(ops, list)
+    op = json_object(ops[0])
+    expr = json_object(op["expr"])
+    query = json_object(expr["query"])
     assert query["case"] == {"kind": "case", "run": "run_case_builder", "id": "case_sdk"}
     assert query["include"] == ["input", "target", "metadata"]
     assert query["projection_schema"] == "fp_schema_sha256_python_case_projection"

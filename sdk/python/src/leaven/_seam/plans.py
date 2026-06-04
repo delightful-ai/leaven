@@ -2,7 +2,10 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
+
+from leaven._seam._wire import JsonObject, JsonValue
+from leaven._seam._wire.json_value import json_object
 
 CaseField = Literal["input", "target", "metadata", "files", "setup", "sandbox", "split"]
 
@@ -24,10 +27,10 @@ class CaseLoadRequest:
     include: Sequence[CaseField]
     run_id: str = "run_python_case_builder"
 
-    def to_json_rpc(self) -> dict[str, Any]:
+    def to_json_rpc(self) -> JsonObject:
         """Return a JSON-RPC request for the locked case read route."""
         method, op_name = _case_route(self.include)
-        return {
+        return json_object({
             "jsonrpc": "2.0",
             "id": self.request_id,
             "method": method,
@@ -40,10 +43,10 @@ class CaseLoadRequest:
                 "return": [op_name],
                 "commit": {"kind": "no_graph_writes"},
             },
-        }
+        })
 
-    def _case_query(self, op_name: str) -> dict[str, Any]:
-        return {
+    def _case_query(self, op_name: str) -> JsonObject:
+        return json_object({
             "kind": "let",
             "name": op_name,
             "expr": {
@@ -59,7 +62,7 @@ class CaseLoadRequest:
                     "projection_schema": "fp_schema_sha256_python_case_projection",
                 },
             },
-        }
+        })
 
 
 def _case_route(include: Sequence[CaseField]) -> tuple[str, str]:
@@ -80,13 +83,13 @@ class AgentRunRequest:
     timeout_s: int = 180
     max_turns: int = 1
     max_usd_micro: int = 5_000_000
-    output: dict[str, Any] | None = None
+    output: JsonObject | None = None
     allowed_commands: Sequence[str] | None = None
     input_classes: Sequence[str] | None = None
 
-    def to_json_rpc(self) -> dict[str, Any]:
+    def to_json_rpc(self) -> JsonObject:
         """Return a JSON-RPC request for `leaven/agent.run`."""
-        return {
+        return json_object({
             "jsonrpc": "2.0",
             "id": self.request_id,
             "method": "leaven/agent.run",
@@ -99,10 +102,10 @@ class AgentRunRequest:
                 "return": ["workspace", "completion"],
                 "commit": {"kind": "graph_writes_atomic", "on_stale": "reject"},
             },
-        }
+        })
 
-    def _workspace_call(self) -> dict[str, Any]:
-        return {
+    def _workspace_call(self) -> JsonObject:
+        return json_object({
             "kind": "call",
             "name": "workspace",
             "idempotency_key": f"{self.idempotency_prefix}-workspace",
@@ -113,13 +116,13 @@ class AgentRunRequest:
                 "mode": "copy_on_write",
                 "lifetime": "manual_release",
             },
-        }
+        })
 
-    def _agent_call(self) -> dict[str, Any]:
-        tool_policy: dict[str, Any] = {"allow_shell": False}
+    def _agent_call(self) -> JsonObject:
+        tool_policy: JsonObject = {"allow_shell": False}
         if self.allowed_commands is not None:
             tool_policy["allowed_commands"] = list(self.allowed_commands)
-        return {
+        return json_object({
             "kind": "call",
             "name": "completion",
             "deps": ["workspace"],
@@ -138,7 +141,7 @@ class AgentRunRequest:
                 },
                 "input_classes": list(self.input_classes or ["public"]),
             },
-        }
+        })
 
 
 @dataclass(frozen=True)
@@ -148,18 +151,18 @@ class LmCompleteRequest:
     request_id: str
     plan_id: str
     idempotency_key: str
-    messages: Sequence[dict[str, Any]]
+    messages: Sequence[JsonObject]
     model: str
     model_role: str | None = None
     temperature: float | None = None
     max_tokens: int | None = None
     stop: Sequence[str] | None = None
-    output: dict[str, Any] | None = None
+    output: JsonObject | None = None
     input_classes: Sequence[str] | None = None
 
-    def to_json_rpc(self) -> dict[str, Any]:
+    def to_json_rpc(self) -> JsonObject:
         """Return a JSON-RPC request for `leaven/lm.complete`."""
-        return {
+        return json_object({
             "jsonrpc": "2.0",
             "id": self.request_id,
             "method": "leaven/lm.complete",
@@ -172,10 +175,10 @@ class LmCompleteRequest:
                 "return": ["completion"],
                 "commit": {"kind": "no_graph_writes"},
             },
-        }
+        })
 
-    def _lm_call(self) -> dict[str, Any]:
-        call: dict[str, Any] = {
+    def _lm_call(self) -> JsonObject:
+        call: JsonObject = {
             "kind": "lm_complete",
             "purpose": "python.sdk",
             "model": self.model,
@@ -185,7 +188,7 @@ class LmCompleteRequest:
         }
         if self.model_role is not None:
             call["model_role"] = self.model_role
-        sampling: dict[str, Any] = {}
+        sampling: JsonObject = {}
         if self.temperature is not None:
             sampling["temperature"] = self.temperature
         if self.max_tokens is not None:
@@ -194,12 +197,12 @@ class LmCompleteRequest:
             sampling["stop"] = list(self.stop)
         if sampling:
             call["sampling"] = sampling
-        return {
+        return json_object({
             "kind": "call",
             "name": "completion",
             "idempotency_key": self.idempotency_key,
             "call": call,
-        }
+        })
 
 
 @dataclass(frozen=True)
@@ -211,11 +214,11 @@ class StageRunRequest:
     stage_call_id: str
     candidate: str
     case: str
-    case_input: dict[str, Any]
+    case_input: JsonValue
 
-    def to_json_rpc(self) -> dict[str, Any]:
+    def to_json_rpc(self) -> JsonObject:
         """Return a JSON-RPC request for `leaven/stage.run`."""
-        return {
+        return json_object({
             "jsonrpc": "2.0",
             "id": self.request_id,
             "method": "leaven/stage.run",
@@ -234,7 +237,7 @@ class StageRunRequest:
                     "target_forbidden": True,
                 },
             },
-        }
+        })
 
 
 @dataclass(frozen=True)
@@ -252,9 +255,9 @@ class StageRunProposeRequest:
     query_policy_fingerprint: str
     reflection_summary: str
 
-    def to_json_rpc(self) -> dict[str, Any]:
+    def to_json_rpc(self) -> JsonObject:
         """Return a JSON-RPC request for `leaven/stage.run`."""
-        return {
+        return json_object({
             "jsonrpc": "2.0",
             "id": self.request_id,
             "method": "leaven/stage.run",
@@ -278,10 +281,10 @@ class StageRunProposeRequest:
                     "capability_fingerprint": self.capability_fingerprint,
                 },
             },
-        }
+        })
 
-    def _reflection_result(self) -> dict[str, Any]:
-        return {
+    def _reflection_result(self) -> JsonObject:
+        return json_object({
             "schema_version": "leaven.stage_payloads.v1",
             "role": "reflection_result",
             "summary": self.reflection_summary,
@@ -299,7 +302,7 @@ class StageRunProposeRequest:
             "read_receipts": ["qrec_python_seed_assessment"],
             "data_classes": ["optimizer.visible"],
             "confidence": 0.5,
-        }
+        })
 
 
 @dataclass(frozen=True)
@@ -309,11 +312,11 @@ class ProposalSubmitRequest:
     request_id: str
     plan_id: str
     idempotency_key: str
-    proposals: Sequence[dict[str, Any]]
+    proposals: Sequence[JsonObject]
 
-    def to_json_rpc(self) -> dict[str, Any]:
+    def to_json_rpc(self) -> JsonObject:
         """Return a JSON-RPC request for `leaven/proposal.submit_batch`."""
-        return {
+        return json_object({
             "jsonrpc": "2.0",
             "id": self.request_id,
             "method": "leaven/proposal.submit_batch",
@@ -326,10 +329,10 @@ class ProposalSubmitRequest:
                 "return": ["proposal_batch"],
                 "commit": {"kind": "graph_writes_atomic", "on_stale": "reject"},
             },
-        }
+        })
 
-    def _submit_write(self) -> dict[str, Any]:
-        return {
+    def _submit_write(self) -> JsonObject:
+        return json_object({
             "kind": "write",
             "name": "proposal_batch",
             "idempotency_key": self.idempotency_key,
@@ -338,7 +341,7 @@ class ProposalSubmitRequest:
                 "semantics": "sequence",
                 "proposals": list(self.proposals),
             },
-        }
+        })
 
 
 __all__ = [

@@ -1,6 +1,7 @@
 """Capability document helpers for private public-seam proofs."""
 
-from typing import Any
+from leaven._seam._wire import JsonObject
+from leaven._seam._wire.json_value import json_object
 
 
 def effect_capability(
@@ -11,9 +12,9 @@ def effect_capability(
     workspace: str,
     jti: str,
     stage_call_id: str,
-) -> dict[str, Any]:
+) -> JsonObject:
     """Build the current effect capability document for a workspace+agent proof."""
-    return {
+    return json_object({
         "schema_version": "leaven.capability.v1",
         "jti": jti,
         "capability_fingerprint": capability_fingerprint,
@@ -74,7 +75,7 @@ def effect_capability(
             "must_attenuate": True,
             "allowed_actions": [],
         },
-    }
+    })
 
 
 def proposer_stage_capability(
@@ -88,9 +89,9 @@ def proposer_stage_capability(
     jti: str,
     stage_call_id: str,
     allow_agent: bool,
-) -> dict[str, Any]:
+) -> JsonObject:
     """Build a proposer-stage capability document for proposal submission."""
-    grants: list[dict[str, Any]] = [
+    grants: list[JsonObject] = [
         {
             "action": "proposal.submit_batch",
             "resource": {},
@@ -117,7 +118,7 @@ def proposer_stage_capability(
                 },
             ]
         )
-    return {
+    return json_object({
         "schema_version": "leaven.capability.v1",
         "jti": jti,
         "capability_fingerprint": capability_fingerprint,
@@ -156,7 +157,7 @@ def proposer_stage_capability(
             "must_attenuate": True,
             "allowed_actions": [],
         },
-    }
+    })
 
 
 __all__ = ["effect_capability", "proposer_stage_capability"]

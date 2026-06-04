@@ -1,7 +1,9 @@
 """Private service config records for `leaven seam serve --stdio --config`."""
 
 from dataclasses import dataclass, field
-from typing import Any
+
+from leaven._seam._wire import JsonObject
+from leaven._seam._wire.json_value import json_object
 
 
 @dataclass(frozen=True)
@@ -35,16 +37,16 @@ class CodexCliRuntimeConfig:
     codex_home: str | None = None
     bypass_approvals_and_sandbox: bool = False
 
-    def to_json(self) -> dict[str, Any]:
+    def to_json(self) -> JsonObject:
         """Return the service config JSON shape."""
-        return {
+        return json_object({
             "kind": "codex_cli",
             "codex_bin": self.codex_bin,
             "model": self.model,
             "timeout_s": self.timeout_s,
             "codex_home": self.codex_home,
             "bypass_approvals_and_sandbox": self.bypass_approvals_and_sandbox,
-        }
+        })
 
 
 @dataclass(frozen=True)
@@ -55,9 +57,9 @@ class MockLmRuntimeConfig:
     input_tokens: int = 1
     output_tokens: int = 1
 
-    def to_json(self) -> dict[str, Any]:
+    def to_json(self) -> JsonObject:
         """Return the service config JSON shape."""
-        return {
+        return json_object({
             "kind": "mock",
             "responses": [
                 {
@@ -66,7 +68,7 @@ class MockLmRuntimeConfig:
                     "output_tokens": self.output_tokens,
                 }
             ],
-        }
+        })
 
 
 @dataclass(frozen=True)
@@ -78,15 +80,15 @@ class OpenAiLmRuntimeConfig:
     timeout_s: int | None = None
     max_retries: int | None = None
 
-    def to_json(self) -> dict[str, Any]:
+    def to_json(self) -> JsonObject:
         """Return the service config JSON shape."""
-        return {
+        return json_object({
             "kind": "open_ai",
             "api_key_env": self.api_key_env,
             "base_url": self.base_url,
             "timeout_s": self.timeout_s,
             "max_retries": self.max_retries,
-        }
+        })
 
 
 @dataclass(frozen=True)
@@ -96,13 +98,13 @@ class MockRunnerStageConfig:
     text: str = "ok"
     summary: str = "mock runner output"
 
-    def to_json(self) -> dict[str, Any]:
+    def to_json(self) -> JsonObject:
         """Return the service config JSON shape."""
-        return {
+        return json_object({
             "kind": "mock_runner",
             "text": self.text,
             "summary": self.summary,
-        }
+        })
 
 
 @dataclass(frozen=True)
@@ -111,12 +113,12 @@ class CommandRunnerStageConfig:
 
     argv: tuple[str, ...]
 
-    def to_json(self) -> dict[str, Any]:
+    def to_json(self) -> JsonObject:
         """Return the service config JSON shape."""
-        return {
+        return json_object({
             "kind": "command_runner",
             "argv": list(self.argv),
-        }
+        })
 
 
 @dataclass(frozen=True)
@@ -126,9 +128,9 @@ class LocalWorkspaceConfig:
     seed_files: dict[str, str] = field(default_factory=dict)
     parent: str | None = None
 
-    def to_json(self) -> dict[str, Any]:
+    def to_json(self) -> JsonObject:
         """Return the service config JSON shape."""
-        value: dict[str, Any] = {"seed_files": self.seed_files}
+        value = json_object({"seed_files": self.seed_files})
         if self.parent is not None:
             value["parent"] = self.parent
         return value
@@ -139,22 +141,22 @@ class SeamServiceConfig:
     """Full private config document passed to `leaven seam serve --stdio`."""
 
     context: SeamExecutionContext
-    capability: dict[str, Any] | None = None
+    capability: JsonObject | None = None
     agent: CodexCliRuntimeConfig | None = None
     workspace: LocalWorkspaceConfig = field(default_factory=LocalWorkspaceConfig)
     lm: MockLmRuntimeConfig | OpenAiLmRuntimeConfig = field(default_factory=MockLmRuntimeConfig)
     stage: MockRunnerStageConfig | CommandRunnerStageConfig | None = None
 
-    def to_json(self) -> dict[str, Any]:
+    def to_json(self) -> JsonObject:
         """Return the Rust service config JSON shape."""
-        return {
+        return json_object({
             "context": self.context.to_json(),
             "capability": self.capability,
             "workspace": self.workspace.to_json(),
             "agent": self.agent.to_json() if self.agent is not None else {"kind": "none"},
             "lm": self.lm.to_json(),
             "stage": self.stage.to_json() if self.stage is not None else {"kind": "none"},
-        }
+        })
 
 
 __all__ = [
