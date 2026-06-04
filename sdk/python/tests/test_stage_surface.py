@@ -4,7 +4,6 @@ import sys
 from pathlib import Path
 
 import msgspec
-import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
 import leaven as lv
@@ -30,21 +29,10 @@ from leaven._seam._wire.results import (
     LmMessageRecord,
     LmResponsePrimary,
 )
-from leaven._seam_optimize.driver import _agent_config, _case_input, _lm_config, _lm_model
-from leaven._seam_optimize.rewards import evaluate_reward_vector
-from leaven._seam_optimize.status import unsupported_facts_for_runtime
-from leaven._seam_optimize.types import (
-    PlannedOptimizeCase,
-    SeamOptimizeReport,
-    SeamStageAssessment,
-)
-from leaven.artifacts.prompt import PromptArtifact
-from leaven.assessment import RewardAssessment
+from leaven._seam_optimize.driver import _agent_config, _lm_config, _lm_model
 from leaven.builders.agent import AgentBuilder
 from leaven.builders.lm import LmBuilder
 from leaven.json_value import JsonObject, JsonValue
-from leaven.optimize import _to_optimized
-from leaven.run_status import UnsupportedRunFact, project_cost_usage
 
 
 def test_optimize_surface_names_the_four_product_inputs() -> None:
@@ -512,163 +500,6 @@ def test_optimize_runtime_codex_agent_config_lowers_to_seam(monkeypatch: MonkeyP
         "codex_home": None,
         "bypass_approvals_and_sandbox": False,
     }
-
-
-def test_run_status_projection_hides_unsupported_dependency_totals() -> None:
-    """Example: unsupported provider facts prevent fabricated zero-cost summaries."""
-
-    unsupported = (
-        UnsupportedRunFact(
-            surface="run.cost",
-            dependency="codex_cli",
-            reason="provider_cost_not_reported",
-            detail="Codex CLI did not report cost.",
-        ),
-        UnsupportedRunFact(
-            surface="run.usage",
-            dependency="codex_cli",
-            reason="provider_usage_not_reported",
-            detail="Codex CLI did not report tokens.",
-        ),
-    )
-
-    projection = project_cost_usage(
-        default_cost_usd=0.0,
-        default_lm_tokens=0,
-        unsupported=unsupported,
-    )
-
-    assert projection.cost_status == "unsupported_dependency"
-    assert projection.usage_status == "unsupported_dependency"
-    assert projection.total_cost_usd is None
-    assert projection.total_lm_tokens is None
-
-
-def test_optimize_summary_names_codex_cost_and_inspection_gaps() -> None:
-    """Scenario: seam optimize summary names unsupported deps instead of zeroing them."""
-
-    runtime = lv.runtime(
-        workspace=lv.workspace.local(),
-        lm=lv.lm.mock(responses=["unused"]),
-        agent=lv.agent.codex(model="gpt-5.4-mini", transport="cli"),
-    )
-    unsupported = unsupported_facts_for_runtime(runtime)
-    result = _to_optimized(
-        PromptArtifact(template="answer {question}"),
-        SeamOptimizeReport(seed_score=1.0, best_score=1.0, assessments=[], unsupported=unsupported),
-        "codex-status-test",
-        "2026-06-03T00:00:00+00:00",
-        1,
-    )
-
-    assert result.summary.total_cost_usd is None
-    assert result.summary.total_lm_tokens is None
-    assert result.summary.cost_status == "unsupported_dependency"
-    assert result.summary.usage_status == "unsupported_dependency"
-    assert {
-        (fact.surface, fact.dependency, fact.reason) for fact in result.summary.unsupported
-    } == {
-        ("run.cost", "codex_cli", "provider_cost_not_reported"),
-        ("run.usage", "codex_cli", "provider_usage_not_reported"),
-        ("run.inspection", "python_seam_optimize", "blob_readback_not_implemented"),
-    }
-    assert "blob ref metadata" in result.summary.unsupported[0].detail
-
-
-async def test_reward_vector_executes_all_registered_rewards() -> None:
-    """Example: Python rubric rewards produce per-axis rows and aggregate score."""
-
-    @lv.reward(weight=2.0, id="correct")
-    async def correct(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
-        _ = cx
-        return 1.0 if output == (case.target or {})["answer"] else 0.0
-
-    @lv.reward(weight=1.0, id="concise")
-    async def concise(
-        output: str, case: lv.ScoringCaseView, cx: lv.RubricContext
-    ) -> lv.RewardValue:
-        _ = (case, cx)
-        return lv.RewardValue(value=0.5, feedback=f"{len(output)} chars")
-
-    score, rewards = await evaluate_reward_vector(
-        rubric=lv.Rubric([correct, concise]),
-        output="42",
-        case=PlannedOptimizeCase(
-            case_id="case_reward_vector",
-            input={"question": "6 * 7?"},
-            target={"answer": "42"},
-            metadata={"source": "unit"},
-            split=None,
-        ),
-    )
-
-    assert score.value == 0.8333333333333334
-    assert score.feedback == "concise: 2 chars"
-    assert [(reward.id, reward.value, reward.weight) for reward in rewards] == [
-        ("correct", 1.0, 2.0),
-        ("concise", 0.5, 1.0),
-    ]
-
-
-def test_optimize_case_input_rejects_nested_stage_run_values() -> None:
-    """Regression: planned cases do not erase nested JSON into runner case_input."""
-
-    case = PlannedOptimizeCase(
-        case_id="case_nested_input",
-        input={"question": "2 + 2", "nested": {"answer": "4"}},
-        target=None,
-        metadata={},
-        split=None,
-    )
-
-    with pytest.raises(ValueError, match="runner case_input fields"):
-        _case_input(PromptArtifact(template="{question}"), case)
-
-
-def test_optimized_result_exposes_assessments_rewards_and_lineage() -> None:
-    """Scenario: completed result inspection is not stdout-only."""
-
-    result = _to_optimized(
-        PromptArtifact(template="answer {question}"),
-        SeamOptimizeReport(
-            seed_score=0.75,
-            best_score=0.75,
-            assessments=[
-                SeamStageAssessment(
-                    case_id="case_inspect_001",
-                    case_input={"question": "6 * 7?"},
-                    case_target={"answer": "42"},
-                    case_metadata={"source": "unit"},
-                    case_split="test",
-                    output="42",
-                    score=lv.Score(value=0.75, feedback="weighted"),
-                    rewards=[
-                        RewardAssessment(id="correct", value=1.0, weight=2.0),
-                        RewardAssessment(
-                            id="concise",
-                            value=0.25,
-                            weight=1.0,
-                            feedback="short enough",
-                        ),
-                    ],
-                )
-            ],
-        ),
-        "inspection-test",
-        "2026-06-03T00:00:00+00:00",
-        1,
-    )
-
-    assessment = result.assessment("case_inspect_001")
-
-    assert result.lineage(result.best.id) == [result.best]
-    assert list(result.test_assessments()) == [assessment]
-    assert assessment.case.target == {"answer": "42"}
-    assert assessment.score.value == 0.75
-    assert [(reward.id, reward.value) for reward in assessment.rewards] == [
-        ("correct", 1.0),
-        ("concise", 0.25),
-    ]
 
 
 def _json_object(value: JsonValue) -> JsonObject:

@@ -2218,6 +2218,42 @@ acceptance:
           narrows the public API JSON boundary but does not close the row:
           builders, generated wire consumption, optimize/run private surfaces,
           and examples still need the same typed-owner treatment.
+      - kind: public_reward_stage_gepa_jsonl_typing_and_test_split
+        paths:
+          - sdk/python/src/leaven/rubric.py
+          - sdk/python/src/leaven/stages.py
+          - sdk/python/src/leaven/optimizers/gepa.py
+          - sdk/python/src/leaven/cases/jsonl.py
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/tests/cases/test_jsonl.py
+          - sdk/python/tests/_seam_optimize/test_rewards.py
+          - sdk/python/tests/run_status/test_cost.py
+          - sdk/python/tests/test_optimize.py
+          - sdk/python/tests/test_stage_surface.py
+        commands:
+          - cd sdk/python && uv run ruff check src/leaven/rubric.py src/leaven/stages.py src/leaven/optimizers/gepa.py src/leaven/cases/jsonl.py scripts/check_quality_contract.py tests/cases/test_jsonl.py tests/_seam_optimize/test_rewards.py tests/run_status/test_cost.py tests/test_optimize.py tests/test_stage_surface.py tests/test_optimize_public_seam_e2e.py tests/test_optimize_proposer_mechanics.py tests/test_run_inspection.py tests/test_reward_vector_inspection.py tests/test_run_receipt_inspection.py
+          - cd sdk/python && uv run ty check src/leaven/rubric.py src/leaven/stages.py src/leaven/optimizers/gepa.py src/leaven/cases/jsonl.py scripts/check_quality_contract.py tests/cases/test_jsonl.py tests/_seam_optimize/test_rewards.py tests/run_status/test_cost.py tests/test_optimize.py tests/test_stage_surface.py tests/test_optimize_public_seam_e2e.py tests/test_optimize_proposer_mechanics.py tests/test_run_inspection.py tests/test_reward_vector_inspection.py tests/test_run_receipt_inspection.py
+          - cd sdk/python && uv run pytest tests/cases/test_jsonl.py tests/_seam_optimize/test_rewards.py tests/run_status/test_cost.py tests/test_optimize.py tests/test_stage_surface.py tests/test_optimize_public_seam_e2e.py tests/test_optimize_proposer_mechanics.py tests/test_run_inspection.py tests/test_reward_vector_inspection.py tests/test_run_receipt_inspection.py -q
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - >-
+            rg -n "from typing import Any|\\bAny\\b|dict\\[str, Any\\]|from __future__" sdk/python/src/leaven/rubric.py sdk/python/src/leaven/stages.py sdk/python/src/leaven/optimizers/gepa.py sdk/python/src/leaven/cases/jsonl.py sdk/python/tests/cases/test_jsonl.py sdk/python/tests/_seam_optimize/test_rewards.py sdk/python/tests/run_status/test_cost.py sdk/python/tests/test_optimize.py -g '*.py'
+          - wc -l sdk/python/tests/test_stage_surface.py sdk/python/tests/test_optimize.py sdk/python/tests/_seam_optimize/test_rewards.py sdk/python/tests/run_status/test_cost.py sdk/python/tests/cases/test_jsonl.py
+        note: >-
+          Public reward registration, stage configuration, GEPA judge
+          configuration, and JSONL case loading no longer import or expose
+          `typing.Any`. Reward functions receive `object` until a future
+          output-contract-specific type binds the rollout output shape, and
+          text-specific reward tests now narrow before string operations.
+          `Rollout.fn`, `Reflect.fn`, `Propose.fn`, and `gepa(judge=...)`
+          accept generic registered stages at their public call sites and cast
+          only into private storage fields. `cases.from_jsonl` parses rows into
+          validated `JsonObject` fields instead of passing arbitrary decoded
+          JSON through to `Case`. The oversized stage-surface test file was
+          split into mirrored source-owner files, and the quality-contract
+          mirrored-test map now locks `cases/jsonl.py` to
+          `tests/cases/test_jsonl.py`. This does not close remaining public
+          scaffolds or legacy `_serve.py` erasure.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this

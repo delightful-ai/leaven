@@ -1,6 +1,6 @@
 """`lv.optimizers.gepa(...)` — GEPA (reflective two-phase optimization) config."""
 
-from typing import Any, Literal
+from typing import Literal, cast
 
 from ..decorators import RegisteredStage
 from ..frontier import FrontierConfig
@@ -50,11 +50,11 @@ class Gepa(OptimizerConfig):
     propose: Propose | None = None
     """Proposal stage override; None uses GEPA's built-in proposer."""
 
-    judge: RegisteredStage[Any, Any] | None = None
+    judge: RegisteredStage[object, object] | None = None
     """Optional pairwise/listwise judge (from `@lv.judge`)."""
 
 
-def gepa(
+def gepa[A, O](
     *,
     population_size: int = 10,
     frontier: FrontierConfig | None = None,
@@ -65,7 +65,7 @@ def gepa(
     objective: Objective = "instance",
     reflect: Reflect | None = None,
     propose: Propose | None = None,
-    judge: RegisteredStage[Any, Any] | None = None,
+    judge: RegisteredStage[A, O] | None = None,
 ) -> Gepa:
     """GEPA optimizer config builder.
 
@@ -83,7 +83,7 @@ def gepa(
         objective=objective,
         reflect=reflect,
         propose=propose,
-        judge=judge,
+        judge=None if judge is None else cast("RegisteredStage[object, object]", judge),
     )
 
 

@@ -8,7 +8,7 @@ remain the authoring sugar for the function-backed forms (`Rollout.fn`,
 """
 
 from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -25,21 +25,25 @@ class Rollout(BaseModel):
 
     kind: Literal["function", "command", "agent"]
     layout: WorkspaceLayout
-    stage: RegisteredStage[Any, Any] | None = None
+    stage: RegisteredStage[object, object] | None = None
     argv: list[str] | None = None
     agent_config: AgentConfig | None = None
     instructions: str | None = None
     output: OutputContract | None = None
 
     @classmethod
-    def fn(
+    def fn[A, O](
         cls,
-        stage: RegisteredStage[Any, Any],
+        stage: RegisteredStage[A, O],
         *,
         layout: WorkspaceLayout | None = None,
     ) -> "Rollout":
         """Use a registered `@lv.runner` stage as the rollout."""
-        return cls(kind="function", stage=stage, layout=layout or case_workspace())
+        return cls(
+            kind="function",
+            stage=cast("RegisteredStage[object, object]", stage),
+            layout=layout or case_workspace(),
+        )
 
     @classmethod
     def command(
@@ -84,12 +88,12 @@ class Reflect(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid")
 
     kind: Literal["function", "default_gepa"]
-    stage: RegisteredStage[Any, Any] | None = None
+    stage: RegisteredStage[object, object] | None = None
 
     @classmethod
-    def fn(cls, stage: RegisteredStage[Any, Any]) -> "Reflect":
+    def fn[A, O](cls, stage: RegisteredStage[A, O]) -> "Reflect":
         """Use a registered `@lv.reflector` stage."""
-        return cls(kind="function", stage=stage)
+        return cls(kind="function", stage=cast("RegisteredStage[object, object]", stage))
 
     @classmethod
     def default_gepa(cls) -> "Reflect":
@@ -103,14 +107,14 @@ class Propose(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid")
 
     kind: Literal["function", "agent_edit"]
-    stage: RegisteredStage[Any, Any] | None = None
+    stage: RegisteredStage[object, object] | None = None
     agent_config: AgentConfig | None = None
     layout: WorkspaceLayout = Field(default_factory=edit_artifact)
 
     @classmethod
-    def fn(cls, stage: RegisteredStage[Any, Any]) -> "Propose":
+    def fn[A, O](cls, stage: RegisteredStage[A, O]) -> "Propose":
         """Use a registered `@lv.proposer` stage."""
-        return cls(kind="function", stage=stage)
+        return cls(kind="function", stage=cast("RegisteredStage[object, object]", stage))
 
     @classmethod
     def agent_edit(

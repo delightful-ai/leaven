@@ -12,10 +12,12 @@ assessment/evidence/receipt machinery a hand-written evaluator would author.
 """
 
 from collections.abc import Awaitable, Callable
-from typing import Any, overload
+from typing import overload
 
 from pydantic import BaseModel, ConfigDict
 
+from .case import ScoringCaseView
+from .contexts import RubricContext
 from .output_record import OutputRecord
 
 
@@ -35,7 +37,10 @@ class RewardValue(BaseModel):
 
 
 # A reward function body: `(output, case, cx) -> float | RewardValue`.
-RewardFunc = Callable[..., Awaitable["float | RewardValue"]]
+RewardFunc = Callable[
+    [object, ScoringCaseView, RubricContext],
+    Awaitable["float | RewardValue"],
+]
 
 
 class RegisteredReward(BaseModel):
@@ -45,7 +50,7 @@ class RegisteredReward(BaseModel):
 
     id: str
     weight: float = 1.0
-    func: Any
+    func: RewardFunc
     """The wrapped async reward function. Engine-internal."""
 
 
@@ -60,7 +65,7 @@ def reward(
     *,
     weight: float = 1.0,
     id: str | None = None,
-) -> Any:
+) -> RegisteredReward | Callable[[RewardFunc], RegisteredReward]:
     """Decorate an async `(output, case, cx) -> float | RewardValue` as a reward.
 
     Use bare (`@lv.reward`) for weight 1.0, or `@lv.reward(weight=0.3)` to set
