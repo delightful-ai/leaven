@@ -12,6 +12,15 @@ fn stage_run_validates_generic_runner_dispatch_request_and_text_result() {
     assert_eq!(request.stage(), StageRunKind::Runner);
     assert_eq!(request.stage().as_str(), "runner");
     assert_eq!(request.payload().role(), StagePayloadRole::Runner);
+    let case_input = request.payload().runner_case_input().unwrap();
+    assert_eq!(case_input.candidate(), "cand_stagerun_parent");
+    assert_eq!(case_input.case(), "case_stagerun");
+    assert_eq!(case_input.case_input_keys(), &["question".to_owned()]);
+    assert!(
+        case_input
+            .case_input_fingerprint()
+            .starts_with("fp_stage_case_input_sha256_")
+    );
 
     let result = package
         .validate_stage_run_result_document(&stage_run_result())
@@ -132,6 +141,7 @@ fn stage_run_validates_generic_proposer_dispatch_request_and_text_result() {
     assert_eq!(request.stage(), StageRunKind::Proposer);
     assert_eq!(request.stage().as_str(), "proposer");
     assert_eq!(request.payload().role(), StagePayloadRole::Proposer);
+    assert!(request.payload().runner_case_input().is_none());
 
     let result = package
         .validate_stage_run_result_document(&proposer_stage_run_result())

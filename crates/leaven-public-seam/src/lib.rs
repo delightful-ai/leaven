@@ -75,8 +75,8 @@ pub use result::{
     PlanResultReceiptKind, PlanResultValueFact, PlanResultValueKind, Replayability,
 };
 pub use stage_payload::{
-    ReflectProposeHandoffDocument, ReflectProposeSubmissionDocument, StagePayloadDocument,
-    StagePayloadRole, StageProposalEffect,
+    ReflectProposeHandoffDocument, ReflectProposeSubmissionDocument, RunnerCaseInputDocument,
+    StagePayloadDocument, StagePayloadRole, StageProposalEffect,
 };
 pub use stage_run::{
     StageEffectReceipt, StageProposalReceipt, StageRunKind, StageRunRequestDocument,

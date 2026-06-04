@@ -33,6 +33,20 @@ pub struct StagePayloadDocument {
     allowed_change_schema_count: usize,
     output_count: usize,
     payload_schema: Option<String>,
+    runner_case_input: Option<RunnerCaseInputDocument>,
+}
+
+/// Typed runner-stage case input facts.
+///
+/// The public seam validates the exact JSON object at ingress, but downstream
+/// code should not need to re-walk raw JSON to know which candidate/case pair
+/// a runner saw or to compare the case-input object by content.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RunnerCaseInputDocument {
+    candidate: String,
+    case: String,
+    case_input_fingerprint: String,
+    case_input_keys: Vec<String>,
 }
 
 /// Validated reflect-then-propose handoff across separate public-seam stages.
@@ -354,7 +368,7 @@ impl StagePayloadDocument {
             StagePayloadRole::Proposer => inspect_propose_request(object)?,
             _ => (Vec::new(), 0),
         };
-        match role {
+        let runner_case_input = match role {
             StagePayloadRole::ReflectionResult => {
                 inspect_reflection_result(
                     object,
@@ -362,17 +376,25 @@ impl StagePayloadDocument {
                     read_receipt_count,
                     &data_classes,
                 )?;
+                None
             }
-            StagePayloadRole::Runner => inspect_runner_request(object)?,
-            StagePayloadRole::Scorer => inspect_score_context(object)?,
-            StagePayloadRole::Judge => inspect_judge_context(object)?,
+            StagePayloadRole::Runner => Some(inspect_runner_request(object)?),
+            StagePayloadRole::Scorer => {
+                inspect_score_context(object)?;
+                None
+            }
+            StagePayloadRole::Judge => {
+                inspect_judge_context(object)?;
+                None
+            }
             StagePayloadRole::Callback
             | StagePayloadRole::ArtifactAdapter
             | StagePayloadRole::DatasetAdapter => {
                 inspect_schema_bound_payload(object)?;
+                None
             }
-            StagePayloadRole::Reflector | StagePayloadRole::Proposer => {}
-        }
+            StagePayloadRole::Reflector | StagePayloadRole::Proposer => None,
+        };
         let output_count = array_len(object.get("outputs"), "outputs")?
             + usize::from(object.get("output").is_some());
         let payload_schema = optional_string(object.get("payload_schema"))?;
@@ -390,6 +412,7 @@ impl StagePayloadDocument {
             allowed_change_schema_count,
             output_count,
             payload_schema,
+            runner_case_input,
         })
     }
 
@@ -451,6 +474,47 @@ impl StagePayloadDocument {
     /// Payload schema fingerprint for callback and adapter payloads.
     pub fn payload_schema(&self) -> Option<&str> {
         self.payload_schema.as_deref()
+    }
+
+    /// Runner-stage case-input facts when this payload is a runner request.
+    pub const fn runner_case_input(&self) -> Option<&RunnerCaseInputDocument> {
+        self.runner_case_input.as_ref()
+    }
+}
+
+impl RunnerCaseInputDocument {
+    pub(super) fn new(
+        candidate: String,
+        case: String,
+        case_input_fingerprint: String,
+        case_input_keys: Vec<String>,
+    ) -> Self {
+        Self {
+            candidate,
+            case,
+            case_input_fingerprint,
+            case_input_keys,
+        }
+    }
+
+    /// Candidate id whose artifact the runner executed.
+    pub fn candidate(&self) -> &str {
+        &self.candidate
+    }
+
+    /// Case id whose target-free input the runner received.
+    pub fn case(&self) -> &str {
+        &self.case
+    }
+
+    /// Stable JCS SHA-256 fingerprint of the exact case-input object.
+    pub fn case_input_fingerprint(&self) -> &str {
+        &self.case_input_fingerprint
+    }
+
+    /// Sorted top-level keys present in the case-input object.
+    pub fn case_input_keys(&self) -> &[String] {
+        &self.case_input_keys
     }
 }
 

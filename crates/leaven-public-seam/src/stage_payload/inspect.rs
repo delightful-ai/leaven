@@ -6,12 +6,14 @@ use crate::PublicSeamError;
 
 use super::inspect_helpers::{
     array_len, contains_case_target_marker, invalid_stage_payload,
-    literal_expr_array_contains_string, receipt_ref_id, receipt_ref_ids, reject_target_leakage,
-    require_field, require_non_empty_array, require_read_receipt_refs, required_array,
-    required_string, source_ref_key, source_ref_set, string_array,
+    literal_expr_array_contains_string, prefixed_stage_payload_hash, receipt_ref_id,
+    receipt_ref_ids, reject_target_leakage, require_field, require_non_empty_array,
+    require_read_receipt_refs, required_array, required_object, required_string, source_ref_key,
+    source_ref_set, string_array,
 };
 use super::{
-    ReflectProposeSubmissionDocument, StagePayloadDocument, StagePayloadRole, StageProposalEffect,
+    ReflectProposeSubmissionDocument, RunnerCaseInputDocument, StagePayloadDocument,
+    StagePayloadRole, StageProposalEffect,
 };
 
 pub(super) fn inspect_reflect_request(
@@ -514,14 +516,28 @@ fn collect_output_record_data_classes(
 
 pub(super) fn inspect_runner_request(
     object: &serde_json::Map<String, Value>,
-) -> Result<(), PublicSeamError> {
+) -> Result<RunnerCaseInputDocument, PublicSeamError> {
     if object.get("target_forbidden") != Some(&Value::Bool(true)) {
         return Err(invalid_stage_payload(
             "runner request must declare target_forbidden=true",
         ));
     }
-    reject_target_leakage(object.get("case_input"), "runner case_input")?;
-    Ok(())
+    let candidate = required_string(object.get("candidate"), "candidate")?.to_owned();
+    let case = required_string(object.get("case"), "case")?.to_owned();
+    let case_input_value = object
+        .get("case_input")
+        .ok_or_else(|| invalid_stage_payload("runner request must carry case_input"))?;
+    let case_input = required_object(case_input_value, "runner case_input")?;
+    reject_target_leakage(Some(case_input_value), "runner case_input")?;
+    let case_input_fingerprint =
+        prefixed_stage_payload_hash("fp_stage_case_input_sha256_", case_input_value)?;
+    let case_input_keys = case_input.keys().cloned().collect();
+    Ok(RunnerCaseInputDocument::new(
+        candidate,
+        case,
+        case_input_fingerprint,
+        case_input_keys,
+    ))
 }
 
 pub(super) fn inspect_score_context(
