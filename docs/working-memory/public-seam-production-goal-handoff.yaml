@@ -902,6 +902,8 @@ acceptance:
           JSON, outer-envelope-only Python msgspec records, and the provisional
           Value-based run route cannot close this row.
       - kind: rust_export_backed_msgspec_codec_foundation
+        commits:
+          - d1ad3e1
         paths:
           - crates/leaven-cli/src/main.rs
           - crates/leaven-cli/src/seam.rs
@@ -913,7 +915,9 @@ acceptance:
         commands:
           - cargo run -q -p leaven-cli -- seam profile --root .
           - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cargo run -p leaven-cli -- seam profile
           - cd sdk/python && uv run pytest tests/_seam/_wire -q
+          - cd sdk/python && uv run pytest tests/_seam/_wire -q -k 'not generated_methods_match_current_rust_source'
           - cd sdk/python && uv run ruff check src/leaven/_seam/_wire src/leaven/_seam/client.py tests/_seam/_wire codegen/generate_seam_wire.py
           - cd sdk/python && uv run ty check src/leaven/_seam/_wire src/leaven/_seam/client.py tests/_seam/_wire
         note: >-
@@ -925,11 +929,16 @@ acceptance:
           envelopes, UNSET result/error handling, method-specific result
           decoding, batch routing by id, unknown-method rejection, null-id
           handling, and typed JSON-object coercion without public/wire `Any`.
-          A follow-up slice added generated top-level msgspec payload/result
-          records for Plan IR, Plan Result, and Stage Run, with nested operation
-          and receipt bodies intentionally kept as msgspec Raw. This is still a
-          foundation slice: full generated nested Plan IR and Plan Result schema
-          branches remain before this row can be marked done.
+          A follow-up slice removed msgspec Raw from generated payload records
+          and added typed generated records for plan consistency, eval mode,
+          commit policy, stage runner/proposer payloads, reflection payload
+          pieces, output/cost/blob/redaction/error records, stage receipts, and
+          plan-result collections. The generator and generated payload module
+          remain under the 650 LOC file cap. This is still a foundation slice:
+          JSON-RPC envelope Raw buffers, error data, bounded open JSON slots
+          such as PlanOp/LeavenValue/OperationReceipt/metadata/info refs, and
+          full recursive nested Plan IR and Plan Result schema branches remain
+          before this row can be marked done.
       - kind: typed_locked_method_identity_foundation
         paths:
           - crates/leaven-public-seam/src/acp_profile/methods.rs
@@ -971,15 +980,19 @@ acceptance:
           - 82e9a032
           - 50f67f84
           - 7430e380
+          - 25dc6105
+          - 8a4ecdda
         paths:
           - crates/leaven-public-seam/src/plan.rs
           - crates/leaven-public-seam/src/result.rs
           - crates/leaven-public-seam/src/result/audit.rs
           - crates/leaven-public-seam/src/acp_profile/extension_result.rs
+          - crates/leaven-public-seam/src/stage_run.rs
           - crates/leaven-seam-runtime/src/runtime.rs
           - crates/leaven-public-seam/tests/public_seam_contract/plan_document.rs
           - crates/leaven-public-seam/tests/public_seam_contract/plan_result.rs
           - crates/leaven-public-seam/tests/public_seam_contract/acp_profile.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/stage_run.rs
           - crates/leaven-seam-runtime/tests/runtime_contract.rs
           - sdk/python/src/leaven/_seam/_wire/jsonrpc.py
           - sdk/python/src/leaven/_seam/_wire/codec.py
@@ -988,6 +1001,8 @@ acceptance:
           - sdk/python/tests/_seam/test_client.py
         commands:
           - cargo test -p leaven-public-seam --test public_seam_contract
+          - cargo test -p leaven-public-seam --test public_seam_contract stage_run
+          - cargo test -p leaven-public-seam --test public_seam_contract acp_profile
           - cargo test -p leaven-seam-runtime --test runtime_contract
           - cargo fmt --check
           - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
@@ -1002,7 +1017,11 @@ acceptance:
           version, mode, commit policy, return bindings, operation names, and
           direct call/write/query kinds. PlanResultDocument exposes typed value
           and receipt facts, typed charge/error section summaries, and ACP
-          extension results expose typed primary and expected-receipt facts.
+          extension results expose typed primary and expected-receipt facts. A
+          follow-up slice typed StageEffectReceipt cost/blob-ref facts instead
+          of exposing raw Value accessors, and another typed ACP extension
+          expected-receipt facts including op_var, result_hash, and cost
+          fingerprint instead of re-walking raw receipt JSON for those checks.
           Python JSON-RPC request envelopes now require the generated
           LockedMethod type, and SeamClient rejects unknown methods such as
           `leaven/human.review` before spawning or writing to the service. This
