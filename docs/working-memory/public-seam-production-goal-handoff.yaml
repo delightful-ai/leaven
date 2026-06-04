@@ -787,7 +787,7 @@ acceptance:
           - a43492a5
           - fe4b0471
           - f692bb8a
-          - pending-current-run
+          - 2dc4abe3
         paths:
           - crates/leaven-seam-service/src/run_bound_service/mod.rs
           - crates/leaven-seam-service/src/run_bound_service/params.rs
