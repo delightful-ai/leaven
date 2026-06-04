@@ -6,6 +6,7 @@ import msgspec
 import pytest
 
 from leaven._seam._wire.methods import LOCKED_METHODS
+from leaven._seam._wire.payloads import EventSummaryGraphRow
 from leaven._seam._wire.results import (
     METHOD_RESULT_BINDINGS,
     AgentRunResult,
@@ -178,6 +179,18 @@ def test_generated_result_records_decode_remaining_locked_method_families() -> N
         )
         assert decoded.method == method
         assert decoded.primary.kind == primary["kind"]
+
+
+def test_generated_graph_query_result_decodes_typed_rows() -> None:
+    """Example: graph.query result rows keep their tagged shape in Python."""
+
+    decoded = msgspec.json.decode(
+        json.dumps(_extension_result("leaven/graph.query", _graph_set_primary())).encode(),
+        type=GraphQueryResult,
+    )
+
+    assert isinstance(decoded.primary.items[0], EventSummaryGraphRow)
+    assert decoded.primary.items[0].event_kind == "case.loaded"
 
 
 def test_generated_workspace_result_rejects_wrong_primary_kind() -> None:

@@ -1250,6 +1250,32 @@ acceptance:
           close the row: several primary records retain named JSON leaf slots
           such as graph-set items and case/input metadata until Rust/Python
           owners are introduced for those leaves.
+      - kind: generated_graph_rows_are_typed_records
+        paths:
+          - sdk/python/codegen/generate_seam_wire.py
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/codegen/result_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/src/leaven/_seam/_wire/results.py
+          - sdk/python/tests/_seam/_wire/test_payloads.py
+          - sdk/python/tests/_seam/_wire/test_results.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run ruff check codegen/generate_seam_wire.py codegen/payload_codegen.py codegen/result_codegen.py src/leaven/_seam/_wire/payloads.py src/leaven/_seam/_wire/results.py tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_results.py
+          - cd sdk/python && uv run ty check codegen/generate_seam_wire.py codegen/payload_codegen.py codegen/result_codegen.py src/leaven/_seam/_wire/payloads.py src/leaven/_seam/_wire/results.py tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_results.py
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_results.py -q
+        note: >-
+          Python generated Plan Result and extension-result records now decode
+          `graph_set.items` through tagged msgspec `GraphRow` records:
+          candidate_summary, proposal_summary, assessment_summary,
+          event_summary, and explicit extension rows. Unknown graph row kinds
+          fail typed decode, and graph.query result tests assert the SDK-facing
+          primary carries typed row objects. The codegen orchestrator was split
+          from `payload_codegen.py` so both authored Python files and generated
+          wire modules stay below 650 LOC. This removes graph-set item shape
+          erasure, but the inner row payload leaves `scores`, `artifact`,
+          `effect`, `evidence`, and extension `payload` still need deeper
+          owners before the row can close.
       - kind: typed_plan_expression_owner_foundation
         commits:
           - a0397e66

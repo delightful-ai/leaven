@@ -38,6 +38,7 @@ from .payloads import (
     BlobRef,
     CallReceiptKind,
     Cost,
+    GraphRow,
     OperationReceiptKind,
     PlanResultStatus,
     ReceiptRef,
@@ -115,7 +116,7 @@ class CaseRecordPrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_de
 
 class GraphSetPrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
     kind: Literal["graph_set"]
-    items: list[WireJsonObject]
+    items: list[GraphRow]
     graph_revision: str
     data_classes: list[str]
     replayability: Replayability
