@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use leaven_core::{Assessment, EvaluationRequest, OptimizationProblem};
 use leaven_engine::{ProposalBatchReport, RunContext, RunEvent};
 use leaven_kernel::{EvaluatorId, Fingerprint, Metered, ProposalBatchId};
+use leaven_public_seam::LockedMethod;
 use leaven_seam_runtime::{SeamPlanRequest, SeamService, SeamServiceError, SeamStageRunRequest};
 use serde_json::Value;
 
@@ -121,16 +122,16 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
     /// Executes one locked graph-write method against the bound run context.
     pub fn handle_method(
         &self,
-        method: &str,
+        method: LockedMethod,
         params: &Value,
     ) -> Result<Value, RunBoundGraphEffectError> {
         match method {
-            "leaven/proposal.apply" => self.proposal_apply(params),
-            "leaven/evaluation.request" => self.evaluation_request(params),
-            "leaven/assessment.submit" => self.assessment_submit(params),
-            "leaven/event.emit" => self.event_emit(params),
+            LockedMethod::ProposalApply => self.proposal_apply(params),
+            LockedMethod::EvaluationRequest => self.evaluation_request(params),
+            LockedMethod::AssessmentSubmit => self.assessment_submit(params),
+            LockedMethod::EventEmit => self.event_emit(params),
             other => Err(RunBoundGraphEffectError::UnsupportedMethod {
-                method: other.to_owned(),
+                method: other.as_str().to_owned(),
             }),
         }
     }
@@ -245,7 +246,7 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
 
 impl<P: OptimizationProblem> SeamService for RunBoundGraphEffectService<'_, '_, P> {
     fn handle_plan(&self, request: SeamPlanRequest<'_>) -> Result<Value, SeamServiceError> {
-        self.handle_method(request.method().as_str(), request.params())
+        self.handle_method(request.method(), request.params())
             .map_err(|error| SeamServiceError::execution(error.to_string()))
     }
 

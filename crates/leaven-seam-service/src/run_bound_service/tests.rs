@@ -14,6 +14,7 @@ use leaven_engine::{
 use leaven_kernel::{
     Budget, CandidateId, ContentId, Cost, EvaluatorId, Fingerprint, MetadataBag, Metered, StageId,
 };
+use leaven_public_seam::LockedMethod;
 use leaven_seam_runtime::SeamRuntime;
 use leaven_seam_stdio::serve_reader_writer;
 use leaven_store::CheckpointStore;
@@ -92,7 +93,10 @@ fn run_bound_service_mutates_real_context_and_checkpoint_readback_sees_graph_tru
         });
 
         let apply = service
-            .handle_method("leaven/proposal.apply", &proposal_apply_request(&batch_ref))
+            .handle_method(
+                LockedMethod::ProposalApply,
+                &proposal_apply_request(&batch_ref),
+            )
             .unwrap();
         assert_eq!(apply["primary"]["kind"], "apply_receipt");
         assert_eq!(apply["receipts"][0]["write_kind"], "apply_proposal_batch");
@@ -101,7 +105,10 @@ fn run_bound_service_mutates_real_context_and_checkpoint_readback_sees_graph_tru
             .expect("apply result validates through public seam owner");
 
         let evaluation = service
-            .handle_method("leaven/evaluation.request", &evaluation_request_request())
+            .handle_method(
+                LockedMethod::EvaluationRequest,
+                &evaluation_request_request(),
+            )
             .unwrap();
         let evaluation_ref = evaluation["primary"]["evaluation_request_id"]
             .as_str()
@@ -115,7 +122,7 @@ fn run_bound_service_mutates_real_context_and_checkpoint_readback_sees_graph_tru
 
         let assessment = service
             .handle_method(
-                "leaven/assessment.submit",
+                LockedMethod::AssessmentSubmit,
                 &assessment_submit_request(&evaluation_ref),
             )
             .unwrap();
@@ -129,7 +136,7 @@ fn run_bound_service_mutates_real_context_and_checkpoint_readback_sees_graph_tru
             .expect("assessment result validates through public seam owner");
 
         let event = service
-            .handle_method("leaven/event.emit", &event_emit_request())
+            .handle_method(LockedMethod::EventEmit, &event_emit_request())
             .unwrap();
         assert_eq!(event["primary"]["kind"], "emit_run_event");
         assert_eq!(event["receipts"][0]["write_kind"], "emit_run_event");
@@ -194,7 +201,7 @@ fn run_bound_service_refuses_configured_alias_batch_refs() {
 
     let error = service
         .handle_method(
-            "leaven/proposal.apply",
+            LockedMethod::ProposalApply,
             &proposal_apply_request("pb_configured_run_context"),
         )
         .unwrap_err();

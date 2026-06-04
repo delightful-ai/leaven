@@ -17,7 +17,7 @@ use leaven_agent_codex_cli::{CodexCliApproval, CodexCliConfig, CodexCliRuntime, 
 use leaven_kernel::{AgentSessionId, BudgetSnapshot, Cost, FingerprintBuilder, Metered};
 use leaven_public_seam::{
     AgentCommandOutputRefs, CapabilityDocument, CapabilityGrantRequest, EvaluationJobDocument,
-    PlanAgentRunOutcome, PlanAgentRunRequest, PlanApplyProposalBatchOutcome,
+    LockedMethod, PlanAgentRunOutcome, PlanAgentRunRequest, PlanApplyProposalBatchOutcome,
     PlanApplyProposalBatchRequest, PlanCaseQueryOutcome, PlanCaseQueryRequest,
     PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
     PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanLmCompleteOutcome, PlanLmCompleteRequest,
@@ -89,7 +89,7 @@ impl ConfiguredSeamService {
 
 impl SeamService for ConfiguredSeamService {
     fn handle_plan(&self, request: SeamPlanRequest<'_>) -> Result<Value, SeamServiceError> {
-        self.execute_plan_method(request.method().as_str(), request.params())
+        self.execute_plan_method(request.method(), request.params())
             .map_err(|error| SeamServiceError::execution(error.to_string()))
     }
 
@@ -97,7 +97,13 @@ impl SeamService for ConfiguredSeamService {
         &self,
         request: SeamStageRunRequest<'_>,
     ) -> Result<Value, SeamServiceError> {
-        let mut effects = |method: &str, params: &Value| self.execute_plan_method(method, params);
+        let mut effects = |method: &str, params: &Value| {
+            let method =
+                LockedMethod::parse(method).ok_or_else(|| PublicSeamError::InvalidPlan {
+                    message: format!("stage worker requested unknown Leaven method `{method}`"),
+                })?;
+            self.execute_plan_method(method, params)
+        };
         self.config
             .stage
             .runner_result(request.params(), &mut effects)
@@ -106,8 +112,12 @@ impl SeamService for ConfiguredSeamService {
 }
 
 impl ConfiguredSeamService {
-    fn execute_plan_method(&self, method: &str, params: &Value) -> Result<Value, PublicSeamError> {
-        if method == "leaven/proposal.apply"
+    fn execute_plan_method(
+        &self,
+        method: LockedMethod,
+        params: &Value,
+    ) -> Result<Value, PublicSeamError> {
+        if method == LockedMethod::ProposalApply
             && let Some(state) = &self.run_context_state
         {
             self.package.validate_plan_document(params)?;
@@ -124,7 +134,7 @@ impl ConfiguredSeamService {
                     });
             }
         }
-        if method == "leaven/event.emit"
+        if method == LockedMethod::EventEmit
             && let Some(state) = &self.run_context_state
         {
             self.package.validate_plan_document(params)?;
@@ -141,7 +151,7 @@ impl ConfiguredSeamService {
                     });
             }
         }
-        if method == "leaven/evaluation.request"
+        if method == LockedMethod::EvaluationRequest
             && let Some(state) = &self.run_context_state
         {
             self.package.validate_plan_document(params)?;
@@ -158,7 +168,7 @@ impl ConfiguredSeamService {
                     });
             }
         }
-        if method == "leaven/assessment.submit"
+        if method == LockedMethod::AssessmentSubmit
             && let Some(state) = &self.run_context_state
         {
             self.package.validate_plan_document(params)?;
@@ -175,7 +185,7 @@ impl ConfiguredSeamService {
                     });
             }
         }
-        if method == "leaven/evaluation.request" {
+        if method == LockedMethod::EvaluationRequest {
             return self.execute_evaluation_request_method(method, params);
         }
         let context = self.config.context.to_execution_context();
@@ -208,7 +218,7 @@ impl ConfiguredSeamService {
 
     fn execute_evaluation_request_method(
         &self,
-        method: &str,
+        method: LockedMethod,
         params: &Value,
     ) -> Result<Value, PublicSeamError> {
         let context = self.config.context.to_execution_context();
@@ -237,11 +247,11 @@ impl ConfiguredSeamService {
 }
 
 pub(crate) fn extension_result_for_plan_report(
-    method: &str,
+    method: LockedMethod,
     plan: &Value,
     result: &Value,
 ) -> Result<Value, PublicSeamError> {
-    if method == "leaven/event.emit" {
+    if method == LockedMethod::EventEmit {
         return event_emit_result_for_plan_report(method, result);
     }
     let values = result
@@ -275,7 +285,7 @@ pub(crate) fn extension_result_for_plan_report(
         .unwrap_or_else(|| serde_json::json!([]));
     let receipts = acp_extension_receipts_for_plan_report(method, result, primary)?;
     Ok(serde_json::json!({
-        "method": method,
+        "method": method.as_str(),
         "primary": primary,
         "receipts": receipts,
         "redactions": result.get("redactions").cloned().unwrap_or_else(|| serde_json::json!([])),
@@ -286,14 +296,14 @@ pub(crate) fn extension_result_for_plan_report(
 }
 
 fn acp_extension_receipts_for_plan_report(
-    method: &str,
+    method: LockedMethod,
     result: &Value,
     primary: &Value,
 ) -> Result<Value, PublicSeamError> {
     let Some(receipts) = result.get("receipts").cloned() else {
         return Ok(serde_json::json!([]));
     };
-    if method != "leaven/evaluation.request" {
+    if method != LockedMethod::EvaluationRequest {
         return Ok(receipts);
     }
     let mut receipts = receipts;
@@ -564,7 +574,7 @@ fn evaluation_request_plan_result(
 }
 
 fn event_emit_result_for_plan_report(
-    method: &str,
+    method: LockedMethod,
     result: &Value,
 ) -> Result<Value, PublicSeamError> {
     let receipt = result
@@ -584,7 +594,7 @@ fn event_emit_result_for_plan_report(
         "replayability": "fully_managed"
     });
     Ok(serde_json::json!({
-        "method": method,
+        "method": method.as_str(),
         "primary": primary,
         "receipts": result.get("receipts").cloned().unwrap_or_else(|| serde_json::json!([])),
         "redactions": result.get("redactions").cloned().unwrap_or_else(|| serde_json::json!([])),
@@ -594,31 +604,31 @@ fn event_emit_result_for_plan_report(
     }))
 }
 
-pub(crate) fn method_primary_kind(method: &str) -> &'static str {
+pub(crate) fn method_primary_kind(method: LockedMethod) -> &'static str {
     match method {
-        "leaven/lm.complete" => "lm_response",
-        "leaven/agent.run" => "agent_session",
-        "leaven/proposal.submit_batch" => "proposal_batch_receipt",
-        "leaven/proposal.apply" => "apply_receipt",
-        "leaven/assessment.submit" => "assessment_batch_receipt",
-        "leaven/evaluation.request" => "evaluation_request_receipt",
-        "leaven/graph.query" => "graph_set",
-        "leaven/case.load"
-        | "leaven/case.input"
-        | "leaven/case.target"
-        | "leaven/case.metadata" => "case_record",
-        "leaven/workspace.materialize" | "leaven/workspace.release" => "workspace_handle",
-        "leaven/workspace.snapshot" | "leaven/workspace.digest" => "workspace_snapshot",
-        "leaven/workspace.list"
-        | "leaven/workspace.stat"
-        | "leaven/workspace.capture_artifacts" => "workspace_listing",
-        "leaven/workspace.read_file" => "workspace_file",
-        "leaven/workspace.git_log"
-        | "leaven/workspace.git_diff"
-        | "leaven/workspace.git_status" => "workspace_diff",
-        "leaven/sandbox.exec" => "sandbox_exec",
-        "leaven/event.emit" => "emit_run_event",
-        _ => "extension",
+        LockedMethod::LmComplete => "lm_response",
+        LockedMethod::AgentRun => "agent_session",
+        LockedMethod::ProposalSubmitBatch => "proposal_batch_receipt",
+        LockedMethod::ProposalApply => "apply_receipt",
+        LockedMethod::AssessmentSubmit => "assessment_batch_receipt",
+        LockedMethod::EvaluationRequest => "evaluation_request_receipt",
+        LockedMethod::GraphQuery => "graph_set",
+        LockedMethod::CaseLoad
+        | LockedMethod::CaseInput
+        | LockedMethod::CaseTarget
+        | LockedMethod::CaseMetadata => "case_record",
+        LockedMethod::WorkspaceMaterialize | LockedMethod::WorkspaceRelease => "workspace_handle",
+        LockedMethod::WorkspaceSnapshot | LockedMethod::WorkspaceDigest => "workspace_snapshot",
+        LockedMethod::WorkspaceList
+        | LockedMethod::WorkspaceStat
+        | LockedMethod::WorkspaceCaptureArtifacts => "workspace_listing",
+        LockedMethod::WorkspaceReadFile => "workspace_file",
+        LockedMethod::WorkspaceGitLog
+        | LockedMethod::WorkspaceGitDiff
+        | LockedMethod::WorkspaceGitStatus => "workspace_diff",
+        LockedMethod::SandboxExec => "sandbox_exec",
+        LockedMethod::EventEmit => "emit_run_event",
+        LockedMethod::StageRun => "stage_run_text_output",
     }
 }
 

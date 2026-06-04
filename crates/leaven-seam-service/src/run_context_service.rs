@@ -13,7 +13,8 @@ use leaven_kernel::{
     MetadataBag, Metered, RunId, StageId,
 };
 use leaven_public_seam::{
-    PlanApplyProposalBatchRequest, PlanGraphQueryOutcome, PlanGraphQueryRequest, PublicSeamError,
+    LockedMethod, PlanApplyProposalBatchRequest, PlanGraphQueryOutcome, PlanGraphQueryRequest,
+    PublicSeamError,
 };
 use leaven_run::{
     PublicAssessmentWriteReceiptContext, PublicEvaluationJobContext,
@@ -181,7 +182,7 @@ impl RunContextProposalApplyState {
 
     pub(crate) fn apply_proposal_batch(
         &mut self,
-        method: &str,
+        method: LockedMethod,
         params: &Value,
         context: &SeamExecutionContextConfig,
     ) -> Result<Value, PublicSeamError> {
@@ -236,7 +237,7 @@ impl RunContextProposalApplyState {
 
     pub(crate) fn request_evaluation(
         &mut self,
-        method: &str,
+        method: LockedMethod,
         params: &Value,
         context: &SeamExecutionContextConfig,
     ) -> Result<Value, PublicSeamError> {
@@ -288,7 +289,7 @@ impl RunContextProposalApplyState {
 
     pub(crate) fn submit_assessments(
         &mut self,
-        method: &str,
+        method: LockedMethod,
         params: &Value,
         context: &SeamExecutionContextConfig,
     ) -> Result<Value, PublicSeamError> {
@@ -343,7 +344,7 @@ impl RunContextProposalApplyState {
 
     pub(crate) fn emit_run_event(
         &mut self,
-        method: &str,
+        method: LockedMethod,
         params: &Value,
         context: &SeamExecutionContextConfig,
     ) -> Result<Value, PublicSeamError> {
@@ -510,7 +511,7 @@ fn event_emit_write(params: &Value) -> Result<EventEmitWrite<'_>, PublicSeamErro
 }
 
 fn run_context_event_emit_extension_result(
-    method: &str,
+    method: LockedMethod,
     event: EventEmitWrite<'_>,
     context: &SeamExecutionContextConfig,
 ) -> Result<Value, PublicSeamError> {
@@ -544,7 +545,7 @@ fn run_context_event_emit_extension_result(
         }),
     )?;
     Ok(json!({
-        "method": method,
+        "method": method.as_str(),
         "primary": primary,
         "receipts": [{
             "kind": "write",
