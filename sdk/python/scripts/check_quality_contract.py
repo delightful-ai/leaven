@@ -71,6 +71,7 @@ MIRRORED_TESTS = {
     / "test_public_surface.py",
     ROOT / "src" / "leaven" / "cases" / "csv.py": ROOT / "tests" / "cases" / "test_csv.py",
     ROOT / "src" / "leaven" / "cases" / "jsonl.py": ROOT / "tests" / "cases" / "test_jsonl.py",
+    ROOT / "src" / "leaven" / "output.py": ROOT / "tests" / "test_output.py",
     ROOT / "src" / "leaven" / "run_inspection.py": ROOT / "tests" / "test_run_inspection.py",
     ROOT / "src" / "leaven" / "score.py": ROOT / "tests" / "test_score.py",
     ROOT / "src" / "leaven" / "scoring.py": ROOT / "tests" / "test_scoring.py",

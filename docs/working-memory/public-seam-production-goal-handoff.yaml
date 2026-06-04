@@ -2466,6 +2466,23 @@ acceptance:
           `Score.exact_match` returns a feedback-bearing `Score`. The mirrored
           test contract now locks `score.py` to `tests/test_score.py` and
           `scoring.py` to `tests/test_scoring.py`.
+      - kind: public_output_json_schema_scaffold_removed
+        paths:
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/src/leaven/output.py
+          - sdk/python/tests/test_output.py
+        commands:
+          - cd sdk/python && uv run pytest tests/test_output.py -q
+          - cd sdk/python && uv run ruff check src/leaven/output.py tests/test_output.py
+          - cd sdk/python && uv run ty check src/leaven/output.py tests/test_output.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+        note: >-
+          `lv.output.json_schema(...)` is now a real public output-contract
+          helper for Pydantic model classes and raw JSON Schema objects. It
+          parses schemas into the SDK JSON aliases, preserves `parse_to` for
+          model-backed structured output, and rejects non-JSON schema shapes.
+          This does not claim LM/agent lowerers support every structured-output
+          route yet; it removes the public helper scaffold.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this

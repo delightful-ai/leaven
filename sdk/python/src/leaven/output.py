@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from .json_value import JsonSchema
+from .json_value import JsonArray, JsonObject, JsonSchema, JsonValue
 
 
 class OutputContract(BaseModel):
@@ -60,12 +60,44 @@ def json_schema(model_or_schema: object) -> JsonSchemaOutput:
     raw JSON Schema dict. When given a model, the parsed result lifts back
     into an instance of that model.
     """
-    raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+    if isinstance(model_or_schema, type) and issubclass(model_or_schema, BaseModel):
+        return JsonSchemaOutput(
+            schema_=_json_object(model_or_schema.model_json_schema()),
+            parse_to=model_or_schema,
+        )
+    if isinstance(model_or_schema, dict):
+        return JsonSchemaOutput(schema_=_json_object(model_or_schema))
+    raise TypeError("expected a pydantic model class or JSON schema object")
 
 
 def text(*, max_chars: int | None = None) -> TextOutput:
     """Output contract: plain text response with optional length cap."""
     return TextOutput(max_chars=max_chars)
+
+
+def _json_object(value: object) -> JsonObject:
+    if not isinstance(value, dict):
+        raise TypeError("JSON value must be an object")
+    output: JsonObject = {}
+    for key, item in value.items():
+        if not isinstance(key, str):
+            raise TypeError("JSON object keys must be strings")
+        output[key] = _json_value(item)
+    return output
+
+
+def _json_value(value: object) -> JsonValue:
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
+    if isinstance(value, list):
+        return _json_array(value)
+    if isinstance(value, dict):
+        return _json_object(value)
+    raise TypeError(f"value is not JSON: {type(value).__name__}")
+
+
+def _json_array(value: Sequence[object]) -> JsonArray:
+    return [_json_value(item) for item in value]
 
 
 __all__ = [
