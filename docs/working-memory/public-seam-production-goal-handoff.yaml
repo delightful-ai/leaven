@@ -2241,9 +2241,9 @@ acceptance:
         note: >-
           Public reward registration, stage configuration, GEPA judge
           configuration, and JSONL case loading no longer import or expose
-          `typing.Any`. Reward functions receive `object` until a future
-          output-contract-specific type binds the rollout output shape, and
-          text-specific reward tests now narrow before string operations.
+          `typing.Any`. This earlier slice still left rewards typed as
+          `object`; the later `public_reward_text_contract_and_defensive_erasure_lint`
+          evidence hard-cuts the current wired reward path to `str`.
           `Rollout.fn`, `Reflect.fn`, `Propose.fn`, and `gepa(judge=...)`
           accept generic registered stages at their public call sites and cast
           only into private storage fields. `cases.from_jsonl` parses rows into
@@ -2287,6 +2287,44 @@ acceptance:
           removed module. The broad `ty` check also caught and fixed
           `CaseBuilder` treating a generated `CaseRef` as a receipt/dict shape;
           `_case_id` now consumes the generated case reference type directly.
+      - kind: public_reward_text_contract_and_defensive_erasure_lint
+        commits:
+          - 713275a0
+          - 44e6f63b
+        paths:
+          - sdk/python/AGENTS.md
+          - docs/specs/leaven_python.md
+          - sdk/python/pyproject.toml
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/tests/scripts/test_check_quality_contract.py
+          - sdk/python/src/leaven/rubric.py
+          - sdk/python/src/leaven/_seam_optimize/driver.py
+          - sdk/python/src/leaven/_seam_optimize/rewards.py
+          - sdk/python/src/leaven/_seam_worker/runner.py
+          - sdk/python/src/leaven/_seam_worker/proposer.py
+          - sdk/python/src/leaven/builders/lm.py
+          - sdk/python/examples/04_evoskill_skill_bank.py
+          - sdk/python/examples/05_evaluator_with_judge.py
+          - sdk/python/examples/06_reflect_propose_custom.py
+          - sdk/python/examples/07_serve_stage_worker.py
+          - sdk/python/examples/09_full_repro.py
+        commands:
+          - cd sdk/python && uv run ruff check src/leaven examples tests scripts --exclude src/leaven/_types
+          - cd sdk/python && uv run ty check src/leaven tests scripts --exclude src/leaven/_types
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && uv run pytest -q
+        note: >-
+          The SDK local rules and executable quality contract now forbid
+          defensive type erasure: public or internal code may not widen callback
+          output to `object`, stringify unknown domain values with `str(...)`,
+          branch on `isinstance(...)` to mask bad reward output types, or probe
+          arbitrary domain objects with `.get(...)`/`getattr(...)`. The current
+          wired optimize path is now explicit: runner stages must return text,
+          seam-worker/optimize boundaries reject non-text output, and
+          `RewardFunc` consumes `str`. Examples and tests no longer use
+          `(case.target or {}).get(...)` or `str(output)` fallbacks. The pytest
+          config now runs with importlib import mode so the documented plain
+          `uv run pytest` gate passes despite mirrored test basenames.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this

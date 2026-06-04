@@ -107,5 +107,6 @@ ignore = [
 "__future__.annotations".msg = "Leaven targets Python 3.12+; use native annotation syntax instead of future annotations."
 
 [tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
