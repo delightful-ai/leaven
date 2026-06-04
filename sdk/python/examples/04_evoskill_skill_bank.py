@@ -26,6 +26,7 @@ FIXTURE = HERE / "fixtures" / "arithmetic.jsonl"
 # also reach `cx.rollout_workspace` to grade captured files.
 @lv.reward(weight=1.0)
 async def correct(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> lv.RewardValue:
+    _ = cx
     target = (case.target or {}).get("answer", "")
     return lv.RewardValue(
         value=lv.scoring.multi_tolerance(output, target),
@@ -35,6 +36,7 @@ async def correct(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -
 
 @lv.reward(weight=0.3)
 async def shows_work(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
+    _ = (case, cx)
     return 1.0 if "=" in str(output) else 0.0
 
 

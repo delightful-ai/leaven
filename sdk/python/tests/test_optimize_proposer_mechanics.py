@@ -1,9 +1,14 @@
+from pathlib import Path
+
+from _pytest.monkeypatch import MonkeyPatch
+
 import leaven as lv
 from leaven.proposal import ProposalBatch, ProposalEffect
+from leaven.stage_payloads import ProposeRequest
 
 
 @lv.runner
-async def run(prompt: lv.PromptArtifact, case: lv.Case, cx: lv.RolloutContext) -> str:
+async def run(prompt: lv.PromptArtifact, case: lv.InputCaseView, cx: lv.RolloutContext) -> str:
     _ = cx
     return prompt.template.format(**case.input)
 
@@ -15,7 +20,7 @@ async def exact(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> 
 
 
 @lv.proposer(stage_id="tests.optimize_proposer.submit_change")
-async def submit_change(req, cx):
+async def submit_change(req: ProposeRequest, cx: lv.ProposeContext) -> ProposalBatch:
     _ = cx
     return ProposalBatch(
         effects=[
@@ -30,7 +35,7 @@ async def submit_change(req, cx):
 
 
 @lv.proposer(stage_id="tests.optimize_proposer.submit_agent_change")
-async def submit_agent_change(req, cx):
+async def submit_agent_change(req: ProposeRequest, cx: lv.ProposeContext) -> ProposalBatch:
     session = await cx.agent.run(
         workspace=cx.parent_workspace,
         instructions=lv.AgentInstructions(task="propose a prompt edit"),
@@ -50,7 +55,7 @@ async def submit_agent_change(req, cx):
 
 
 async def test_optimize_runs_configured_proposer_as_submit_only_slice(
-    tmp_path, monkeypatch
+    tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
     """Scenario: optimize dispatches a configured proposer and submits its batch."""
 
@@ -101,7 +106,7 @@ async def test_optimize_runs_configured_proposer_as_submit_only_slice(
 
 
 async def test_optimize_proposer_can_run_agent_then_submit_agent_session_change(
-    tmp_path, monkeypatch
+    tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
     """Scenario: configured proposer can cite a seam-agent receipt in its proposal."""
 

@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict
 from .agent.config import AgentConfig
 from .budget import Budget
 from .lm.config import LmConfig
+from .lm.mock import mock
 from .sandbox.config import SandboxConfig
 from .trust import TrustProfile
 from .workspace.config import WorkspaceConfig
@@ -114,8 +115,6 @@ class _RuntimeBuilder:
         Useful for smoke tests of authoring code. Real LMs and agents must be
         wired through full `lv.runtime(...)`.
         """
-        from .lm.mock import mock
-
         return self(
             workspace=workspace_local(),
             lm=mock(responses=["[mock]"]),

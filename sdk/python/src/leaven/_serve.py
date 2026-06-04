@@ -282,7 +282,7 @@ class _ParentAgent:
         *,
         request_id: str,
         model: str,
-        **_: Any,
+        **extra: object,
     ) -> dict[str, Any]:
         """Worker-initiated `leaven/lm.complete`: bind the prompt, read the reply.
 
@@ -292,6 +292,7 @@ class _ParentAgent:
         answers on its stdout. The child stamps the launched capability
         fingerprint onto the reply; we verify it.
         """
+        _ = (model, extra)
         await self._write_message(
             {
                 "jsonrpc": "2.0",

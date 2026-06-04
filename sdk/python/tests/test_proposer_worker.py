@@ -1,9 +1,10 @@
 import json
 import subprocess
 import sys
+from pathlib import Path
 
 
-def test_checked_in_stage_worker_can_callback_proposal_submit(tmp_path) -> None:
+def test_checked_in_stage_worker_can_callback_proposal_submit(tmp_path: Path) -> None:
     """Scenario: registered proposer can submit a ProposalBatch over the active seam."""
 
     module = tmp_path / "proposer_stage.py"

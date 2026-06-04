@@ -928,6 +928,39 @@ acceptance:
           exactly 650 lines. The broader project-quality row remains pending
           until all public SDK/wire `Any` and public backbone scaffolds are
           audited and removed or explicitly kept private.
+      - kind: sdk_quality_gate_lint_type_tests_package
+        paths:
+          - sdk/python/pyproject.toml
+          - sdk/python/justfile
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/src/leaven/_seam_optimize/
+          - sdk/python/src/leaven/_seam_worker/
+          - sdk/python/src/leaven/_stage_runtime/
+          - sdk/python/src/leaven/x/dspy/
+          - sdk/python/examples/
+          - sdk/python/tests/
+        commands:
+          - cd sdk/python && just check
+          - cd sdk/python && uv run ruff check src/leaven examples tests --exclude src/leaven/_types
+          - cd sdk/python && uv run ty check src/leaven tests --exclude src/leaven/_types
+          - cd sdk/python && uv run pytest
+          - cd sdk/python && just compile-examples
+          - cd sdk/python && uv run python -c "import leaven; print('import ok', 'optimize' in dir(leaven), 'runs' in dir(leaven))"
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv build
+        note: >-
+          The SDK quality gate now runs the custom line-count/future-annotation/
+          mirrored-test/wire-Any checker, Ruff maintainability lint over
+          hand-written source and examples, and ty over hand-written source
+          successfully. The stricter documented checks over tests also pass:
+          Ruff over source/examples/tests, ty over source/tests, all 55 pytest
+          tests, example compilation, package import sanity, seam-wire codegen
+          check, and wheel/sdist build. This slice also replaces several
+          private scaffold `Any` annotations with `object` or local protocols
+          and adds explicit test fixture/callback annotations. The row remains
+          pending because public backbone scaffold removal/audit and all
+          remaining public API `Any` decisions are not completed by lint success
+          alone.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this

@@ -17,12 +17,12 @@ neutral types are wired.
 """
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     # dspy is an optional dep; treated as Any so the scaffold's type checker
     # doesn't require dspy to be present for the import to resolve.
-    DspyBaseLM: Any = object
+    DspyBaseLM: type[object] = object
 else:
     try:
         from dspy import BaseLM as DspyBaseLM
@@ -47,10 +47,10 @@ class LeavenDSPyLM(DspyBaseLM):  # type: ignore[misc, valid-type]
         *,
         model: str = "leaven-routed",
         model_type: str = "chat",
-        cx: Any | None = None,
-        lm_config: Any | None = None,
+        cx: object | None = None,
+        lm_config: object | None = None,
         cache: bool = True,
-        **kwargs: Any,
+        **kwargs: object,
     ) -> None:
         """Construct a Leaven-backed DSPy LM.
 
@@ -63,18 +63,18 @@ class LeavenDSPyLM(DspyBaseLM):  # type: ignore[misc, valid-type]
     def forward(
         self,
         prompt: str | None = None,
-        messages: Sequence[dict[str, Any]] | None = None,
-        **kwargs: Any,
-    ) -> Any:
+        messages: Sequence[dict[str, object]] | None = None,
+        **kwargs: object,
+    ) -> object:
         """DSPy LM contract: return an OpenAI-chat-shaped response."""
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
     async def aforward(
         self,
         prompt: str | None = None,
-        messages: Sequence[dict[str, Any]] | None = None,
-        **kwargs: Any,
-    ) -> Any:
+        messages: Sequence[dict[str, object]] | None = None,
+        **kwargs: object,
+    ) -> object:
         """Async variant of forward; preferred inside Leaven stages."""
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 

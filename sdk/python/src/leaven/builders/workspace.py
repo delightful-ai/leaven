@@ -159,7 +159,7 @@ class WorkspaceBuilder(WorkspaceReads):
         """Write a workspace-relative file. Receipt binds the change."""
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
-    async def write_skills(self, handle: WorkspaceHandle, bank: Any) -> CallReceipt:
+    async def write_skills(self, handle: WorkspaceHandle, bank: object) -> CallReceipt:
         """Skill-bank convenience: write a SkillBank into the workspace layout.
 
         Equivalent to walking the bank and calling `write_file` per file.

@@ -1,7 +1,6 @@
 """Callback-backed LM builder for active Python stage contexts."""
 
 from collections.abc import Sequence
-from typing import Any
 
 from .._receipts import CallReceipt
 from ..builders.lm import LmBuilder, LmMessage, LmResponse, _lm_response_from_result
@@ -32,17 +31,18 @@ class CallbackLmBuilder(LmBuilder):
         self,
         *,
         prompt: str | None = None,
-        messages: Sequence[LmMessage] | Sequence[dict[str, Any]] | None = None,
+        messages: Sequence[LmMessage] | Sequence[dict[str, object]] | None = None,
         model: str | None = None,
         model_role: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
         stop: Sequence[str] | None = None,
-        response_format: Any | None = None,
-        tools: Sequence[dict[str, Any]] | None = None,
+        response_format: object | None = None,
+        tools: Sequence[dict[str, object]] | None = None,
         input_classes: Sequence[str] | None = None,
         forbidden_input_classes: Sequence[str] | None = None,
     ) -> LmResponse:
+        _ = (messages, response_format, tools, forbidden_input_classes)
         if prompt is None:
             raise NotImplementedError("cx.lm.complete requires `prompt=` in this slice")
         request_id = f"{self._stage_call_id}::lm::{self._seq}"

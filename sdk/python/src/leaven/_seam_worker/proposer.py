@@ -81,7 +81,7 @@ def _candidate_id(value: object) -> str:
     if isinstance(value, str):
         return value
     if isinstance(value, Mapping):
-        candidate = cast(Mapping[str, object], value)
+        candidate = cast("Mapping[str, object]", value)
         candidate_id = candidate.get("id")
         if isinstance(candidate_id, str):
             return candidate_id

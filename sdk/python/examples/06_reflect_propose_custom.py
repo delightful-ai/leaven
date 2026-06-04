@@ -29,12 +29,14 @@ FIXTURE = HERE / "fixtures" / "arithmetic.jsonl"
 
 @lv.runner
 async def run(bank: lv.SkillBank, case: lv.InputCaseView, cx: lv.RolloutContext) -> str:
+    _ = bank
     reply = await cx.lm.complete(prompt=case.input["question"], max_tokens=64)
     return reply.text.strip()
 
 
 @lv.reward
 async def exact(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
+    _ = cx
     return 1.0 if output == (case.target or {}).get("answer", "") else 0.0
 
 

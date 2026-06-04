@@ -171,6 +171,7 @@ def proposer(
     Proposers consume a `ReflectionResult` and emit a `ProposalBatch`.
     `repair_attempts` configures parse-retry budget on malformed output.
     """
+    _ = repair_attempts
 
     def wrap(f: ProposerFunc) -> RegisteredStage[Any, ProposalBatch]:
         return _make_registered("proposer", f, stage_id, trust_profile)
@@ -233,12 +234,13 @@ def register_stage(
     *,
     id: str | None = None,
     trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
-    **role_kwargs: Any,
+    **role_kwargs: object,
 ) -> RegisteredStage[Any, Any]:
     """Function form of the stage decorators; equivalent to `@lv.<role>(...)`.
 
     Useful for dynamic registration. The decorator forms are sugar over this.
     """
+    _ = role_kwargs
     return _make_registered(role, func, id, trust_profile)
 
 

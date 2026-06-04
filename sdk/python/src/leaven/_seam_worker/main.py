@@ -25,11 +25,12 @@ def main(argv: list[str] | None = None) -> int:
         request = read_request()
         request_id = request.get("id")
         result = asyncio.run(run_stage(stage, request["params"], lm_model=args.lm_model))
-        write_result(request, result)
-        return 0
     except Exception as error:
         write_error(request_id, str(error))
         return 1
+    else:
+        write_result(request, result)
+        return 0
 
 
 def _parser() -> argparse.ArgumentParser:

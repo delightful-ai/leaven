@@ -20,7 +20,7 @@ import leaven as lv
 @lv.runner
 async def run(prompt: lv.PromptArtifact, case: lv.InputCaseView, cx: lv.RolloutContext) -> str:
     """Run Codex through the active stage seam and return its receipt id."""
-    _ = prompt
+    _ = (prompt, case)
     session = await cx.agent.run(
         workspace=cx.rollout_workspace,
         instructions=lv.AgentInstructions(

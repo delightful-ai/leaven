@@ -103,7 +103,10 @@ async def run_prompt_mechanics(
                 case_input=_case_input(seed, case),
             ).to_json_rpc(),
         )
-        output = result["output"]["value"]
+        output_record = result.get("output")
+        if not isinstance(output_record, dict):
+            raise TypeError("stage.run result missing output object")
+        output = output_record.get("value")
         score, rewards = await evaluate_reward_vector(
             rubric=rubric,
             output=output,
@@ -224,9 +227,11 @@ def _reflection_summary(assessments: list[SeamStageAssessment]) -> str:
     fragments = []
     for assessment in assessments:
         fragments.append(f"{assessment.case_id}: score={assessment.score.value:.3f}")
-        for reward in assessment.rewards:
-            if reward.feedback:
-                fragments.append(f"{reward.id}: {reward.feedback}")
+        fragments.extend(
+            f"{reward.id}: {reward.feedback}"
+            for reward in assessment.rewards
+            if reward.feedback
+        )
     return "; ".join(fragments) or "seed assessment completed"
 
 

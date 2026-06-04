@@ -51,7 +51,7 @@ def files(paths: Sequence[str], *, max_bytes: int | None = None) -> FilesOutput:
     return FilesOutput(paths=list(paths), max_bytes=max_bytes)
 
 
-def json_schema(model_or_schema: Any) -> JsonSchemaOutput:
+def json_schema(model_or_schema: object) -> JsonSchemaOutput:
     """Output contract: response must match the given JSON Schema or pydantic model.
 
     Accepts a pydantic `BaseModel` subclass (extracts its JSON schema) or a

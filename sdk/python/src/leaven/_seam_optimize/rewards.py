@@ -13,7 +13,7 @@ from ..score import Score
 async def evaluate_reward_vector(
     *,
     rubric: Rubric,
-    output: Any,
+    output: object,
     case: dict[str, Any],
 ) -> tuple[Score, list[RewardAssessment]]:
     """Run every configured Python reward and return aggregate + vector rows."""

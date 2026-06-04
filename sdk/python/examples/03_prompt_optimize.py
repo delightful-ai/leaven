@@ -34,6 +34,7 @@ async def run(prompt: lv.PromptArtifact, case: lv.InputCaseView, cx: lv.RolloutC
 # is readable here (gated + receipted under the hood).
 @lv.reward
 async def exact(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
+    _ = cx
     return 1.0 if output == (case.target or {})["answer"] else 0.0
 
 

@@ -1,8 +1,12 @@
+from pathlib import Path
+
+from _pytest.monkeypatch import MonkeyPatch
+
 import leaven as lv
 
 
 @lv.runner
-async def run(prompt: lv.PromptArtifact, case: lv.Case, cx: lv.RolloutContext) -> str:
+async def run(prompt: lv.PromptArtifact, case: lv.InputCaseView, cx: lv.RolloutContext) -> str:
     _ = cx
     return prompt.template.format(**case.input)
 
@@ -19,7 +23,10 @@ async def short(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> 
     return lv.RewardValue(value=1.0 if len(output) < 8 else 0.0, feedback=f"{len(output)} chars")
 
 
-async def test_optimize_persists_openable_inspection_result(tmp_path, monkeypatch) -> None:
+async def test_optimize_persists_openable_inspection_result(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
     """Scenario: a completed SDK run can be reopened with scores, rewards, and lineage."""
 
     monkeypatch.chdir(tmp_path)

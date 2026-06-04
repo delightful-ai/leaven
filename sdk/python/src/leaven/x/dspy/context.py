@@ -12,12 +12,11 @@ uses both).
 
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager, contextmanager
-from typing import Any
 
 
 @contextmanager
 def dspy_context(
-    cx: Any,
+    cx: object,
     *,
     model_role: str | None = None,
     strict: bool = True,
@@ -28,6 +27,7 @@ def dspy_context(
     configured to use one) routes LM calls through `cx.lm.*`. `strict=True`
     means DSPy calls outside this context raise rather than fall through.
     """
+    _ = (cx, model_role, strict)
     raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
     yield  # type: ignore[unreachable] — body is scaffold; yield satisfies generator protocol
 
@@ -44,6 +44,7 @@ async def dspy_call_context(
     hasn't passed `input_classes` / `forbidden_input_classes` explicitly.
     Nests inside `dspy_context(cx, ...)`.
     """
+    _ = (input_classes, forbidden_input_classes)
     raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
     yield  # type: ignore[unreachable] — body is scaffold; yield satisfies async-generator protocol
 

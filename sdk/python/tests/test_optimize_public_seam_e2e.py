@@ -1,6 +1,8 @@
 import shlex
 from pathlib import Path
 
+from _pytest.monkeypatch import MonkeyPatch
+
 import leaven as lv
 from leaven._seam.resolve import resolve_leaven_binary
 
@@ -8,7 +10,7 @@ from leaven._seam.resolve import resolve_leaven_binary
 @lv.runner
 async def run_with_lm(
     prompt: lv.PromptArtifact,
-    case: lv.Case,
+    case: lv.InputCaseView,
     cx: lv.RolloutContext,
 ) -> str:
     reply = await cx.lm.complete(prompt=prompt.template.format(**case.input), max_tokens=12)
@@ -23,7 +25,7 @@ async def exact(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> 
 
 async def test_optimize_run_spawns_public_seam_and_returns_inspectable_receipts(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: MonkeyPatch,
 ) -> None:
     """Scenario: SDK optimize drives the real public seam and returns audit facts."""
 

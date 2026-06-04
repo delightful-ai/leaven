@@ -1,10 +1,14 @@
+from pathlib import Path
+
+from _pytest.monkeypatch import MonkeyPatch
+
 import leaven as lv
 
 
 @lv.runner
 async def run_with_lm(
     prompt: lv.PromptArtifact,
-    case: lv.Case,
+    case: lv.InputCaseView,
     cx: lv.RolloutContext,
 ) -> str:
     reply = await cx.lm.complete(prompt=prompt.template.format(**case.input), max_tokens=12)
@@ -17,7 +21,10 @@ async def exact(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> 
     return 1.0 if output == (case.target or {})["answer"] else 0.0
 
 
-async def test_run_inspection_preserves_callback_effect_receipts(tmp_path, monkeypatch) -> None:
+async def test_run_inspection_preserves_callback_effect_receipts(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
     """Scenario: callback receipts survive persisted run inspection."""
 
     monkeypatch.chdir(tmp_path)

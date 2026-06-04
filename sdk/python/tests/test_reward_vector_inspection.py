@@ -1,8 +1,12 @@
+from pathlib import Path
+
+from _pytest.monkeypatch import MonkeyPatch
+
 import leaven as lv
 
 
 @lv.runner
-async def run(prompt: lv.PromptArtifact, case: lv.Case, cx: lv.RolloutContext) -> str:
+async def run(prompt: lv.PromptArtifact, case: lv.InputCaseView, cx: lv.RolloutContext) -> str:
     _ = cx
     return prompt.template.format(**case.input)
 
@@ -15,13 +19,13 @@ async def exact(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> 
 
 @lv.reward(weight=1.0, id="concise")
 async def concise(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> lv.RewardValue:
-    _ = case
+    _ = (case, cx)
     return lv.RewardValue(value=0.5, feedback=f"{len(output)} chars")
 
 
 async def test_reward_vector_aggregate_and_dimensions_survive_inspection(
-    tmp_path,
-    monkeypatch,
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
 ) -> None:
     """Scenario: reward vectors drive aggregate score and remain inspectable."""
 

@@ -1,7 +1,5 @@
 """Private run-status facts observed by the durable-seam optimize route."""
 
-from typing import Any
-
 from ..agent.codex import CodexAgent
 from ..run_status import UnsupportedRunFact
 from ..runtime import Runtime
@@ -47,7 +45,7 @@ def unsupported_facts_for_runtime(runtime: Runtime) -> tuple[UnsupportedRunFact,
     return tuple(facts)
 
 
-def first_agent(value: Any) -> Any | None:
+def first_agent(value: object) -> object | None:
     """Return the first configured agent without assigning provider semantics."""
     if value is None:
         return None

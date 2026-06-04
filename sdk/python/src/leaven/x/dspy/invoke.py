@@ -5,6 +5,7 @@ composes with Leaven's async stage functions. The result is the DSPy
 prediction object with a Leaven LM receipt attached as `.leaven_lm_receipt`.
 """
 
+from collections.abc import Callable
 from typing import Any
 
 from ..._receipts import CallReceipt
@@ -20,7 +21,7 @@ class DspyPrediction:
 
     leaven_lm_receipt: CallReceipt
 
-    def __getattr__(self, name: str) -> Any:
+    def __getattr__(self, name: str) -> object:
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
     def to_dict(self) -> dict[str, Any]:
@@ -28,7 +29,7 @@ class DspyPrediction:
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
 
-async def dspy_acall(module: Any, **kwargs: Any) -> DspyPrediction:
+async def dspy_acall(module: Callable[..., object], **kwargs: object) -> DspyPrediction:
     """Async-invoke a DSPy module under the current Leaven context.
 
     `module` is any callable DSPy module (`dspy.Predict`, `dspy.ChainOfThought`,

@@ -2,9 +2,10 @@
 
 import inspect
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Protocol
 
 
 @dataclass(frozen=True)
@@ -32,7 +33,12 @@ class StageWorkerTarget:
         )
 
 
-def worker_argv_for_stage(stage: Any, *, lm_model: str = "mock") -> tuple[str, ...]:
+class _StageLike(Protocol):
+    id: str
+    func: Callable[..., object]
+
+
+def worker_argv_for_stage(stage: _StageLike, *, lm_model: str = "mock") -> tuple[str, ...]:
     """Build worker argv for a `RegisteredStage` without importing it here."""
     target = StageWorkerTarget(
         stage_id=stage.id,
@@ -42,7 +48,7 @@ def worker_argv_for_stage(stage: Any, *, lm_model: str = "mock") -> tuple[str, .
     return target.argv(lm_model=lm_model)
 
 
-def _module_file(stage: Any) -> Path:
+def _module_file(stage: _StageLike) -> Path:
     path = inspect.getsourcefile(stage.func) or inspect.getfile(stage.func)
     if not path:
         raise ValueError(f"registered stage {stage.id!r} has no source file")

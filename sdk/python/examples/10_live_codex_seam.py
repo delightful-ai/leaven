@@ -14,7 +14,10 @@ Run only when live Codex spend is intended:
 Set `LEAVEN_BIN` or `LEAVEN_CODEX_BIN` to override binary discovery.
 """
 
+import asyncio
 import os
+
+from leaven.agent_session import AgentSession
 
 from leaven._handles import WorkspaceHandle
 from leaven._receipts import CallReceipt
@@ -57,9 +60,7 @@ def main() -> None:
     print("commands:         ", len(session.commands))
 
 
-def _run(agent: AgentBuilder):
-    import asyncio
-
+def _run(agent: AgentBuilder) -> AgentSession:
     return asyncio.run(
         agent.run(
             workspace=WorkspaceHandle(
