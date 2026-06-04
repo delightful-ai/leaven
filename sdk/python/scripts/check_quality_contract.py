@@ -65,6 +65,7 @@ MIRRORED_TESTS = {
     / "_seam_worker"
     / "test_protocol.py",
     ROOT / "src" / "leaven" / "builders" / "case.py": ROOT / "tests" / "builders" / "test_case.py",
+    ROOT / "src" / "leaven" / "cases" / "csv.py": ROOT / "tests" / "cases" / "test_csv.py",
     ROOT / "src" / "leaven" / "cases" / "jsonl.py": ROOT / "tests" / "cases" / "test_jsonl.py",
     ROOT / "src" / "leaven" / "run_inspection.py": ROOT / "tests" / "test_run_inspection.py",
     ROOT / "scripts" / "check_quality_contract.py": ROOT

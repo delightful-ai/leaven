@@ -2346,6 +2346,28 @@ acceptance:
           This removes one public SDK scaffold but does not close the row;
           `cases.csv`, `cases.parquet`, standalone `serve_stage`, and broader
           backbone surfaces still need implementation or explicit removal.
+      - kind: public_csv_case_loader_scaffold_removed
+        paths:
+          - sdk/python/src/leaven/cases/csv.py
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/tests/cases/test_csv.py
+        commands:
+          - cd sdk/python && uv run pytest tests/cases/test_csv.py tests/cases/test_jsonl.py -q
+          - cd sdk/python && uv run ruff check src/leaven/cases scripts/check_quality_contract.py tests/cases
+          - cd sdk/python && uv run ty check src/leaven/cases scripts/check_quality_contract.py tests/cases
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - cd sdk/python && uv run pytest -q
+        note: >-
+          `leaven.cases.from_csv` is now a real stdlib-backed public loader
+          instead of a scaffold. It reads CSV rows with `csv.DictReader`,
+          requires explicit input column ownership, maps selected input,
+          target, and metadata columns into typed `Case` JSON-object fields,
+          preserves limit/name/delimiter options, and rejects missing columns or
+          empty input ownership. The mirrored-test quality map now locks
+          `cases/csv.py` to `tests/cases/test_csv.py`. This still does not
+          close the SDK quality row: `cases.parquet`, standalone `serve_stage`,
+          and larger public backbone surfaces remain open.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this
