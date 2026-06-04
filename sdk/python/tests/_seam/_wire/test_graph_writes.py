@@ -10,6 +10,8 @@ from leaven._seam._wire.payloads import (
 )
 from leaven._seam._wire.writes import (
     EmitRunEventWrite,
+    EvaluationSetCases,
+    EvaluationSetNamed,
     ProposalEffectChange,
     ProposalEffectCreate,
     RequestEvaluationWrite,
@@ -63,6 +65,8 @@ def test_assessment_evaluation_and_event_writes_decode_typed_records() -> None:
     assert isinstance(evaluation, RequestEvaluationWrite)
     assert evaluation.request.shape == "independent"
     assert evaluation.request.candidates == ["cand_seed"]
+    assert isinstance(evaluation.request.set, EvaluationSetNamed)
+    assert evaluation.request.set.name == "validation"
     assert isinstance(event, EmitRunEventWrite)
     assert event.visibility == "optimizer_visible"
 
@@ -85,6 +89,37 @@ def test_event_write_rejects_unknown_visibility() -> None:
             _mixed_write_plan().replace(
                 b'"visibility":"optimizer_visible"',
                 b'"visibility":"secret"',
+            ),
+            type=PlanDocument,
+        )
+
+
+def test_evaluation_request_decodes_typed_cases_set() -> None:
+    """Example: evaluation request set variants preserve their identity."""
+
+    decoded = msgspec.json.decode(
+        _mixed_write_plan().replace(
+            b'"set":{"kind":"named","name":"validation"}',
+            b'"set":{"kind":"cases","cases":["case_1"],"requires_partition_resolution":true}',
+        ),
+        type=PlanDocument,
+    )
+    evaluation = decoded.ops[1].write
+
+    assert isinstance(evaluation, RequestEvaluationWrite)
+    assert isinstance(evaluation.request.set, EvaluationSetCases)
+    assert evaluation.request.set.cases == ["case_1"]
+    assert evaluation.request.set.requires_partition_resolution is True
+
+
+def test_evaluation_request_rejects_unknown_set_kind() -> None:
+    """Boundary check: evaluation set expressions are tagged records."""
+
+    with pytest.raises(msgspec.ValidationError):
+        msgspec.json.decode(
+            _mixed_write_plan().replace(
+                b'"set":{"kind":"named","name":"validation"}',
+                b'"set":{"kind":"mystery","name":"validation"}',
             ),
             type=PlanDocument,
         )
