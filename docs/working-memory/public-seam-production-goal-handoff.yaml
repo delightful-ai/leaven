@@ -450,7 +450,7 @@ acceptance:
 
   - id: effects_and_graph_writes_execute
     claim: Remaining backbone effect/write methods execute with real side effects, receipts, and graph/run integration.
-    status: pending
+    status: done
     proof_required:
       kind: engine_integrated_stdio_tests
       must_exercise:
@@ -561,7 +561,23 @@ acceptance:
           - crates/leaven-seam-service/src/run_context_service.rs
           - crates/leaven-seam-service/src/service.rs
           - crates/leaven-cli/tests/seam_stdio_server.rs
-        note: The durable `leaven seam serve --stdio` service can now route an explicit `run_context.checked` `leaven/event.emit` plan through `RunContext::emit(RunEvent::ExternalEventEmitted { ... })`, return a receipt-bound extension result, and read back the same service-owned RunContext graph summary showing the external event in emitted_events and the engine event count advanced. The row remains pending until `assessment.submit` and `evaluation.request` also execute through the durable RunContext service route.
+        note: The durable `leaven seam serve --stdio` service can now route an explicit `run_context.checked` `leaven/event.emit` plan through `RunContext::emit(RunEvent::ExternalEventEmitted { ... })`, return a receipt-bound extension result, and read back the same service-owned RunContext graph summary showing the external event in emitted_events and the engine event count advanced.
+      - kind: durable_stdio_runcontext_evaluation_and_assessment
+        methods:
+          - "`leaven/evaluation.request`"
+          - "`leaven/assessment.submit`"
+          - "`leaven/graph.query`"
+        commands:
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-cli --test seam_stdio_server
+          - cargo test -p leaven --test topology_contract
+        paths:
+          - crates/leaven-seam-service/src/run_context_service.rs
+          - crates/leaven-seam-service/src/service.rs
+          - crates/leaven-seam-service/Cargo.toml
+          - crates/leaven-cli/tests/seam_stdio_server.rs
+          - docs/specs/public-seam-v1/executable-method-status.md
+        note: The durable `leaven seam serve --stdio` service can now route `eval_run_context` evaluation requests through `RunContext::request_evaluation`, project the graph-backed evaluation job/receipt through leaven-run, then route `evalreq_run_context_latest` assessment submission through the stored engine request with `RunContext::submit_assessments` and an inline evidence store. The stdio proof reads back the real `evalreq_<uuid>` and graph-backed assessment ids from the service-owned RunContext state.
       - kind: runcontext_graph_backed_evaluation_request_projection
         methods:
           - "`leaven/evaluation.request`"

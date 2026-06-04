@@ -23,6 +23,7 @@ leaven-run = { workspace = true }
 leaven-seam-runtime = { workspace = true }
 leaven-store = { workspace = true }
 leaven-store-file = { workspace = true }
+leaven-store-inline = { workspace = true }
 leaven-workspace = { workspace = true }
 leaven-workspace-local = { workspace = true }
 serde = { workspace = true }

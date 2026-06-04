@@ -3698,6 +3698,7 @@ dependencies = [
  "leaven-seam-runtime",
  "leaven-store",
  "leaven-store-file",
+ "leaven-store-inline",
  "leaven-workspace",
  "leaven-workspace-local",
  "serde",

@@ -110,6 +110,12 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
             &mut stdin,
             &run_context_graph_readback_after_event_request(),
         );
+        write_json_line(&mut stdin, &run_context_evaluation_request_request());
+        write_json_line(&mut stdin, &run_context_assessment_submit_request());
+        write_json_line(
+            &mut stdin,
+            &run_context_graph_readback_after_assessment_request(),
+        );
         write_json_line(&mut stdin, &assessment_submit_request());
         write_json_line(&mut stdin, &evaluation_request_request());
         write_json_line(&mut stdin, &event_emit_request());
@@ -137,7 +143,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
     let responses = response_lines(&output.stdout);
     assert_eq!(
         responses.len(),
-        15 + workspace_queries.len() + graph_case_queries.len(),
+        18 + workspace_queries.len() + graph_case_queries.len(),
         "one response per request line"
     );
 
@@ -365,7 +371,76 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         json!(true)
     );
 
-    let assessment_submit_index = run_context_event_readback_index + 1;
+    let run_context_evaluation_index = run_context_event_readback_index + 1;
+    assert_eq!(
+        responses[run_context_evaluation_index]["id"],
+        json!("run-context-evaluation-request-cli")
+    );
+    assert!(
+        responses[run_context_evaluation_index]
+            .get("error")
+            .is_none(),
+        "unexpected RunContext evaluation response: {:?}",
+        responses[run_context_evaluation_index]
+    );
+    assert_eq!(
+        responses[run_context_evaluation_index]["result"]["primary"]["kind"],
+        "evaluation_request_receipt"
+    );
+    let run_context_eval =
+        responses[run_context_evaluation_index]["result"]["primary"]["evaluation_request_id"]
+            .as_str()
+            .expect("RunContext evaluation returns request id")
+            .to_owned();
+
+    let run_context_assessment_index = run_context_evaluation_index + 1;
+    assert_eq!(
+        responses[run_context_assessment_index]["id"],
+        json!("run-context-assessment-submit-cli")
+    );
+    assert!(
+        responses[run_context_assessment_index]
+            .get("error")
+            .is_none(),
+        "unexpected RunContext assessment response: {:?}",
+        responses[run_context_assessment_index]
+    );
+    assert_eq!(
+        responses[run_context_assessment_index]["result"]["primary"]["kind"],
+        "assessment_batch_receipt"
+    );
+    assert_eq!(
+        responses[run_context_assessment_index]["result"]["primary"]["evaluation_request_id"],
+        run_context_eval
+    );
+    assert_eq!(
+        responses[run_context_assessment_index]["result"]["primary"]["assessment_ids"]
+            .as_array()
+            .expect("RunContext assessment ids")
+            .len(),
+        1
+    );
+
+    let run_context_assessment_readback_index = run_context_assessment_index + 1;
+    assert_eq!(
+        responses[run_context_assessment_readback_index]["id"],
+        json!("run-context-graph-readback-after-assessment-cli")
+    );
+    let assessment_readback = &responses[run_context_assessment_readback_index]["result"]["primary"]
+        ["items"][0]["payload"];
+    assert_eq!(
+        assessment_readback["evaluation_request_id"],
+        run_context_eval
+    );
+    assert_eq!(
+        assessment_readback["assessment_ids"]
+            .as_array()
+            .expect("RunContext readback assessment ids")
+            .len(),
+        1
+    );
+
+    let assessment_submit_index = run_context_assessment_readback_index + 1;
     assert_eq!(
         responses[assessment_submit_index]["id"],
         json!("assessment-submit-cli")
@@ -915,6 +990,128 @@ fn run_context_graph_readback_after_event_request() -> Value {
     let mut request = run_context_graph_readback_request();
     request["id"] = json!("run-context-graph-readback-after-event-cli");
     request
+}
+
+fn run_context_graph_readback_after_assessment_request() -> Value {
+    let mut request = run_context_graph_readback_request();
+    request["id"] = json!("run-context-graph-readback-after-assessment-cli");
+    request
+}
+
+fn run_context_evaluation_request_request() -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": "run-context-evaluation-request-cli",
+        "method": "leaven/evaluation.request",
+        "params": {
+            "schema_version": "leaven.plan.v1",
+            "plan_id": "runcontextevaluationrequestcli001",
+            "consistency": {
+                "kind": "latest_at_start"
+            },
+            "mode": {
+                "kind": "execute"
+            },
+            "ops": [{
+                "kind": "write",
+                "name": "evaluation_request",
+                "idempotency_key": "run-context-evaluation-request-cli-0001",
+                "write": {
+                    "kind": "request_evaluation",
+                    "request": {
+                        "shape": "independent",
+                        "evaluator": "eval_run_context",
+                        "candidates": ["cand_run_context_child"],
+                        "granularity": "per_case",
+                        "purpose": "validation",
+                        "set": {
+                            "kind": "named",
+                            "name": "validation"
+                        }
+                    }
+                }
+            }],
+            "return": ["evaluation_request"],
+            "commit": {
+                "kind": "graph_writes_atomic",
+                "on_stale": "reject"
+            }
+        }
+    })
+}
+
+fn run_context_assessment_submit_request() -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": "run-context-assessment-submit-cli",
+        "method": "leaven/assessment.submit",
+        "params": {
+            "schema_version": "leaven.plan.v1",
+            "plan_id": "runcontextassessmentsubmitcli001",
+            "consistency": {
+                "kind": "latest_at_start"
+            },
+            "mode": {
+                "kind": "execute"
+            },
+            "ops": [{
+                "kind": "write",
+                "name": "assessment_batch",
+                "idempotency_key": "run-context-assessment-submit-cli-0001",
+                "write": {
+                    "kind": "submit_assessments",
+                    "evaluation_request_id": "evalreq_run_context_latest",
+                    "assessments": [{
+                        "kind": "independent",
+                        "candidate": "cand_run_context_child",
+                        "target": {
+                            "case": "case_1"
+                        },
+                        "score": {
+                            "value": 1.0,
+                            "output": {
+                                "kind": "structured",
+                                "summary": "RunContext child assessed",
+                                "value": {
+                                    "candidate": "cand_run_context_child",
+                                    "output": "RunContext child assessed",
+                                    "ok": true
+                                },
+                                "visibility": "public",
+                                "data_classes": ["candidate.output"]
+                            }
+                        },
+                        "evidence": {
+                            "schema_version": "leaven.evidence_envelope.v1",
+                            "target_derived": false,
+                            "public": {
+                                "summary": "RunContext child assessed",
+                                "data_classes": ["public"]
+                            },
+                            "redaction_policy": {
+                                "optimizer": "score_only",
+                                "reflector": "score_only",
+                                "operator": "score_only"
+                            },
+                            "producer": {
+                                "stage_call_id": "sc_run_context_assessment_cli"
+                            },
+                            "source_receipts": {
+                                "read": ["qrec_run_context_assessment_source"],
+                                "effect": []
+                            }
+                        },
+                        "replayability": "pure_read"
+                    }]
+                }
+            }],
+            "return": ["assessment_batch"],
+            "commit": {
+                "kind": "graph_writes_atomic",
+                "on_stale": "reject"
+            }
+        }
+    })
 }
 
 fn run_context_event_emit_request() -> Value {

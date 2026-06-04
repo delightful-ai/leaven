@@ -367,6 +367,7 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-seam-runtime",
             "leaven-store",
             "leaven-store-file",
+            "leaven-store-inline",
             "leaven-workspace",
             "leaven-workspace-local",
         ],

@@ -141,6 +141,40 @@ impl ConfiguredSeamService {
                     });
             }
         }
+        if method == "leaven/evaluation.request"
+            && let Some(state) = &self.run_context_state
+        {
+            self.package.validate_plan_document(params)?;
+            let mut state = state.lock().map_err(|_| PublicSeamError::InvalidPlan {
+                message: "RunContext seam service state lock poisoned".to_owned(),
+            })?;
+            if state.accepts_evaluation_request(params) {
+                return state
+                    .request_evaluation(method, params, &self.config.context)
+                    .and_then(|result| {
+                        self.package
+                            .validate_acp_extension_result_document(&result)?;
+                        Ok(result)
+                    });
+            }
+        }
+        if method == "leaven/assessment.submit"
+            && let Some(state) = &self.run_context_state
+        {
+            self.package.validate_plan_document(params)?;
+            let mut state = state.lock().map_err(|_| PublicSeamError::InvalidPlan {
+                message: "RunContext seam service state lock poisoned".to_owned(),
+            })?;
+            if state.accepts_assessment_submit(params) {
+                return state
+                    .submit_assessments(method, params, &self.config.context)
+                    .and_then(|result| {
+                        self.package
+                            .validate_acp_extension_result_document(&result)?;
+                        Ok(result)
+                    });
+            }
+        }
         if method == "leaven/evaluation.request" {
             return self.execute_evaluation_request_method(method, params);
         }

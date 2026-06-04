@@ -1,17 +1,25 @@
 use std::{convert::Infallible, fmt};
 
 use leaven_core::{
-    Artifact, ArtifactIdentity, CacheIdentity, Evidence, OptimizationProblem, Proposal,
+    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, CacheIdentity,
+    EvaluationPurpose, EvaluationRequest, EvaluationSet, Evidence, OptimizationProblem, Proposal,
     ProposalBatch, ProposalBatchSemantics,
 };
 use leaven_engine::{
-    ApplyOutcome, BudgetLedger, ProposalBatchReport, RunContext, RunEvent, RunGraph,
+    ApplyOutcome, BudgetLedger, CaseSet, ProposalBatchReport, RunContext, RunEvent, RunGraph,
 };
-use leaven_kernel::{Budget, ContentId, Cost, MetadataBag, RunId, StageId};
+use leaven_kernel::{
+    Budget, CandidateId, ContentId, Cost, EvaluationRequestId, EvaluatorId, Fingerprint,
+    MetadataBag, Metered, RunId, StageId,
+};
 use leaven_public_seam::{
     PlanApplyProposalBatchRequest, PlanGraphQueryOutcome, PlanGraphQueryRequest, PublicSeamError,
 };
-use leaven_run::PublicProposalWriteReceiptContext;
+use leaven_run::{
+    PublicAssessmentWriteReceiptContext, PublicEvaluationJobContext,
+    PublicProposalWriteReceiptContext,
+};
+use leaven_store_inline::InlineEvidenceStore;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -50,9 +58,16 @@ impl Default for SeamRunContextConfig {
 pub(crate) struct RunContextProposalApplyState {
     graph: RunGraph<SeamTextProblem>,
     budget: BudgetLedger,
+    case_set: CaseSet<()>,
+    evidence_store: InlineEvidenceStore<SeamTextEvidence>,
+    seed_candidate: CandidateId,
     batch: ProposalBatchReport,
     config: SeamRunContextConfig,
     created_candidates: Vec<String>,
+    created_candidate_ids: Vec<CandidateId>,
+    evaluation_request: Option<EvaluationRequestId>,
+    evaluation_request_ref: Option<String>,
+    assessment_ids: Vec<String>,
     emitted_events: Vec<Value>,
     event_count: usize,
     candidate_count: usize,
@@ -66,6 +81,8 @@ impl fmt::Debug for RunContextProposalApplyState {
             .field("batch", &self.batch)
             .field("config", &self.config)
             .field("created_candidates", &self.created_candidates)
+            .field("evaluation_request_ref", &self.evaluation_request_ref)
+            .field("assessment_ids", &self.assessment_ids)
             .field("emitted_events", &self.emitted_events)
             .field("event_count", &self.event_count)
             .field("candidate_count", &self.candidate_count)
@@ -98,9 +115,16 @@ impl RunContextProposalApplyState {
         Ok(Self {
             graph,
             budget,
+            case_set: CaseSet::new(vec![()]),
+            evidence_store: InlineEvidenceStore::new("seam-run-context"),
+            seed_candidate: seed,
             batch,
             config,
             created_candidates: Vec::new(),
+            created_candidate_ids: Vec::new(),
+            evaluation_request: None,
+            evaluation_request_ref: None,
+            assessment_ids: Vec::new(),
             emitted_events: Vec::new(),
             event_count: 2,
             candidate_count: 1,
@@ -119,6 +143,24 @@ impl RunContextProposalApplyState {
     pub(crate) fn accepts_event_emit(&self, params: &Value) -> bool {
         event_emit_write(params)
             .map(|event| event.event_kind == "run_context.checked")
+            .unwrap_or(false)
+    }
+
+    pub(crate) fn accepts_evaluation_request(&self, params: &Value) -> bool {
+        request_evaluation_write(params)
+            .map(|write| write.evaluator == "eval_run_context")
+            .unwrap_or(false)
+    }
+
+    pub(crate) fn accepts_assessment_submit(&self, params: &Value) -> bool {
+        let Some(expected) = self.evaluation_request_ref.as_deref() else {
+            return false;
+        };
+        submit_assessments_write(params)
+            .map(|write| {
+                write.evaluation_request_id == expected
+                    || write.evaluation_request_id == "evalreq_run_context_latest"
+            })
             .unwrap_or(false)
     }
 
@@ -186,8 +228,116 @@ impl RunContextProposalApplyState {
                 ApplyOutcome::Failure { .. } => None,
             })
             .collect();
+        self.created_candidate_ids = apply.successful_candidates().collect();
         self.candidate_count += self.created_candidates.len();
         self.applied = true;
+        extension_result_for_plan_report(method, params, &plan_result)
+    }
+
+    pub(crate) fn request_evaluation(
+        &mut self,
+        method: &str,
+        params: &Value,
+        context: &SeamExecutionContextConfig,
+    ) -> Result<Value, PublicSeamError> {
+        request_evaluation_write(params)?;
+        let candidates = if self.created_candidate_ids.is_empty() {
+            vec![self.seed_candidate]
+        } else {
+            self.created_candidate_ids.clone()
+        };
+        let request = EvaluationRequest::Independent {
+            candidates,
+            set: EvaluationSet::All,
+            granularity: AssessmentGranularity::PerCase,
+            purpose: EvaluationPurpose::Validation,
+        };
+        let mut run_context = RunContext::<SeamTextProblem>::new(&mut self.graph, &mut self.budget)
+            .with_case_set(&self.case_set);
+        let request_id = run_context
+            .request_evaluation(
+                EvaluatorId::from("eval_run_context"),
+                Fingerprint::from_bytes([57; 32]),
+                request,
+            )
+            .map_err(invalid_run_context)?;
+        let graph = run_context.graph();
+        let request = graph
+            .evaluation_request(request_id)
+            .ok_or_else(|| invalid_plan("RunContext evaluation request was not readable"))?;
+        let job_context = PublicEvaluationJobContext::new(
+            "sc_run_context_evaluation_request",
+            &context.base_revision,
+            &context.capability_fingerprint,
+            &context.policy_fingerprint,
+            "2026-05-23T00:20:00Z",
+        )
+        .with_evaluation_request_receipt_timing(&context.started_at, &context.completed_at);
+        let job = job_context
+            .evaluation_job_document(&graph, &request)
+            .map_err(|error| invalid_plan(format!("RunContext evaluation job failed: {error}")))?;
+        let plan_result = job_context
+            .evaluation_request_receipt_plan_result(&job)
+            .map_err(|error| {
+                invalid_plan(format!("RunContext evaluation receipt failed: {error}"))
+            })?;
+        self.evaluation_request = Some(request_id);
+        self.evaluation_request_ref = Some(format!("evalreq_{}", request_id.as_uuid()));
+        extension_result_for_plan_report(method, params, &plan_result)
+    }
+
+    pub(crate) fn submit_assessments(
+        &mut self,
+        method: &str,
+        params: &Value,
+        context: &SeamExecutionContextConfig,
+    ) -> Result<Value, PublicSeamError> {
+        submit_assessments_write(params)?;
+        let request_id = self.evaluation_request.ok_or_else(|| {
+            invalid_plan("RunContext assessment submit requires prior evaluation request")
+        })?;
+        let candidates = if self.created_candidate_ids.is_empty() {
+            vec![self.seed_candidate]
+        } else {
+            self.created_candidate_ids.clone()
+        };
+        let assessments = candidates
+            .into_iter()
+            .map(|candidate| Assessment::Independent {
+                candidate,
+                target: AssessmentTarget::Unscoped,
+                evidence: SeamTextEvidence,
+                cost: Cost::zero(),
+                metadata: MetadataBag::new(),
+            })
+            .collect::<Vec<_>>();
+        let mut run_context = RunContext::<SeamTextProblem>::new(&mut self.graph, &mut self.budget)
+            .with_evidence_store(&self.evidence_store);
+        let report = run_context
+            .submit_assessments(request_id, Metered::new(assessments, Cost::zero()))
+            .map_err(invalid_run_context)?;
+        let graph = run_context.graph();
+        let plan_id = params
+            .get("plan_id")
+            .and_then(Value::as_str)
+            .unwrap_or("runcontextassessmentsubmit001");
+        let plan_result = PublicAssessmentWriteReceiptContext::new(
+            plan_id,
+            &context.base_revision,
+            &self.config.final_revision,
+            &context.capability_fingerprint,
+            &context.policy_fingerprint,
+        )
+        .with_timing(&context.started_at, &context.completed_at)
+        .submit_assessments_plan_result(&graph, &report)
+        .map_err(|error| {
+            invalid_plan(format!("RunContext assessment projection failed: {error}"))
+        })?;
+        self.assessment_ids = report
+            .assessment_ids
+            .iter()
+            .map(|id| format!("assess_{}", id.as_uuid()))
+            .collect();
         extension_result_for_plan_report(method, params, &plan_result)
     }
 
@@ -231,6 +381,8 @@ impl RunContextProposalApplyState {
                     "created_candidates": self.created_candidates,
                     "event_count": self.event_count,
                     "emitted_events": self.emitted_events,
+                    "evaluation_request_id": self.evaluation_request_ref,
+                    "assessment_ids": self.assessment_ids,
                     "applied": self.applied
                 }
             })],
@@ -260,6 +412,65 @@ fn proposal_apply_batch_ref(params: &Value) -> Option<&str> {
         .find(|write| write.get("kind").and_then(Value::as_str) == Some("apply_proposal_batch"))
         .and_then(|write| write.get("proposal_batch"))
         .and_then(Value::as_str)
+}
+
+struct RequestEvaluationWrite<'a> {
+    evaluator: &'a str,
+}
+
+fn request_evaluation_write(params: &Value) -> Result<RequestEvaluationWrite<'_>, PublicSeamError> {
+    let ops = params
+        .get("ops")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_plan("evaluation.request plan must carry ops"))?;
+    for op in ops {
+        let Some(write) = op.get("write") else {
+            continue;
+        };
+        if write.get("kind").and_then(Value::as_str) == Some("request_evaluation") {
+            let request = write
+                .get("request")
+                .ok_or_else(|| invalid_plan("request_evaluation must carry request"))?;
+            return Ok(RequestEvaluationWrite {
+                evaluator: request
+                    .get("evaluator")
+                    .and_then(Value::as_str)
+                    .unwrap_or("eval_run_context"),
+            });
+        }
+    }
+    Err(invalid_plan(
+        "evaluation.request method must carry a request_evaluation write",
+    ))
+}
+
+struct SubmitAssessmentsWrite<'a> {
+    evaluation_request_id: &'a str,
+}
+
+fn submit_assessments_write(params: &Value) -> Result<SubmitAssessmentsWrite<'_>, PublicSeamError> {
+    let ops = params
+        .get("ops")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_plan("assessment.submit plan must carry ops"))?;
+    for op in ops {
+        let Some(write) = op.get("write") else {
+            continue;
+        };
+        if write.get("kind").and_then(Value::as_str) == Some("submit_assessments") {
+            return Ok(SubmitAssessmentsWrite {
+                evaluation_request_id: write
+                    .get("evaluation_request_id")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                    invalid_plan("submit_assessments must carry evaluation_request_id")
+                })?,
+            });
+        }
+    }
+    Err(invalid_plan(
+        "assessment.submit method must carry a submit_assessments write",
+    ))
 }
 
 struct EventEmitWrite<'a> {
