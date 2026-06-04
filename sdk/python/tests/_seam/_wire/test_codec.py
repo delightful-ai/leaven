@@ -7,13 +7,18 @@ import msgspec
 import pytest
 
 from leaven._seam._wire import (
-    JsonObject,
     JsonRpcProtocolError,
     JsonRpcRemoteError,
     LockedMethod,
     decode_batch_responses,
     decode_response,
     encode_request,
+)
+from leaven._seam._wire.payloads import (
+    CommitPolicyNoGraphWrites,
+    ConsistencyLatestAtStart,
+    EvalModeExecute,
+    PlanDocument,
 )
 
 
@@ -24,9 +29,17 @@ class Widget(msgspec.Struct, frozen=True):
     name: str
 
 
-def plan_params() -> JsonObject:
-    """Return a minimal Plan IR-shaped params object."""
-    return {"schema_version": "leaven.plan.v1"}
+def plan_params() -> PlanDocument:
+    """Return a minimal typed Plan IR params object."""
+    return PlanDocument(
+        schema_version="leaven.plan.v1",
+        plan_id="plan_codec",
+        consistency=ConsistencyLatestAtStart(),
+        mode=EvalModeExecute(),
+        ops=[],
+        return_=[],
+        commit=CommitPolicyNoGraphWrites(),
+    )
 
 
 def test_encode_request_accepts_locked_method() -> None:
@@ -39,7 +52,15 @@ def test_encode_request_accepts_locked_method() -> None:
     assert json.loads(body) == {
         "method": "leaven/lm.complete",
         "jsonrpc": "2.0",
-        "params": {"schema_version": "leaven.plan.v1"},
+        "params": {
+            "schema_version": "leaven.plan.v1",
+            "plan_id": "plan_codec",
+            "consistency": {"kind": "latest_at_start"},
+            "mode": {"kind": "execute"},
+            "ops": [],
+            "return": [],
+            "commit": {"kind": "no_graph_writes"},
+        },
         "id": "req_1",
     }
 
@@ -57,7 +78,7 @@ def test_encode_request_omits_notification_id() -> None:
 def test_encode_request_rejects_unknown_method() -> None:
     method = cast("LockedMethod", "leaven/human.review")
     with pytest.raises(ValueError, match="unknown locked Leaven public-seam method"):
-        encode_request(method=method, request_id="req_1", params={})
+        encode_request(method=method, request_id="req_1", params=plan_params())
 
 
 def test_decode_response_decodes_method_specific_raw_result() -> None:

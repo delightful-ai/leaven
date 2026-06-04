@@ -3,8 +3,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+import msgspec
+
 from leaven._seam._wire import JsonObject
 from leaven._seam._wire.codec import encode_request
+from leaven._seam._wire.payloads import StageRunRequest as StageRunParams
 
 
 def test_checked_in_stage_worker_can_callback_proposal_submit(tmp_path: Path) -> None:
@@ -134,8 +137,8 @@ async def propose(req, cx):
     ]
 
 
-def _proposer_stage_run_request_params() -> JsonObject:
-    return {
+def _proposer_stage_run_request_params() -> StageRunParams:
+    value: JsonObject = {
         "schema_version": "leaven.stage_run.v1",
         "message": "stage_run_request",
         "stage": "proposer",
@@ -173,3 +176,4 @@ def _proposer_stage_run_request_params() -> JsonObject:
             "capability_fingerprint": "fp_cap_sha256_proposer_worker",
         },
     }
+    return msgspec.json.decode(msgspec.json.encode(value), type=StageRunParams)

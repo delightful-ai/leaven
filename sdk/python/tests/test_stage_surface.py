@@ -3,6 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import msgspec
 from _pytest.monkeypatch import MonkeyPatch
 
 import leaven as lv
@@ -120,7 +121,7 @@ async def test_agent_builder_run_uses_bound_public_seam_client() -> None:
     )
 
     assert client.request_value.method == "leaven/agent.run"
-    params = client.request_value.to_params()
+    params = _params_object(client.request_value.to_params())
     assert params["plan_id"] == "planagentbuilder001"
     ops = _json_array(params["ops"])
     workspace_op = _json_object(ops[0])
@@ -165,7 +166,7 @@ async def test_lm_builder_complete_uses_bound_public_seam_client() -> None:
     )
 
     assert client.request_value.method == "leaven/lm.complete"
-    params = client.request_value.to_params()
+    params = _params_object(client.request_value.to_params())
     assert params["plan_id"] == "planlmbuilder001"
     assert params["return"] == ["completion"]
     ops = _json_array(params["ops"])
@@ -206,7 +207,7 @@ def test_stage_run_request_names_locked_runner_dispatch_shape() -> None:
     )
 
     assert request.method == "leaven/stage.run"
-    params = request.to_params()
+    params = _params_object(request.to_params())
     assert params["schema_version"] == "leaven.stage_run.v1"
     assert params["message"] == "stage_run_request"
     assert params["stage"] == "runner"
@@ -650,6 +651,12 @@ def _json_object(value: JsonValue) -> JsonObject:
 
 def _json_array(value: JsonValue) -> list[JsonValue]:
     assert isinstance(value, list)
+    return value
+
+
+def _params_object(params: object) -> JsonObject:
+    value = json.loads(msgspec.json.encode(params))
+    assert isinstance(value, dict)
     return value
 
 

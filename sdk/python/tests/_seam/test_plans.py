@@ -1,6 +1,9 @@
+import json
+
 import msgspec
 
 from leaven._seam import CaseLoadRequest
+from leaven._seam._wire import JsonObject
 from leaven._seam._wire.calls import AgentRunCall, LmCompleteCall, WorkspaceMaterializeCall
 from leaven._seam._wire.json_value import json_object
 from leaven._seam._wire.payloads import PlanDocument
@@ -38,7 +41,7 @@ def test_case_load_request_uses_composite_route_for_multi_field_projection() -> 
     )
 
     assert request.method == "leaven/case.load"
-    params = request.to_params()
+    params = _params_object(request.to_params())
     assert params["schema_version"] == "leaven.plan.v1"
     assert params["plan_id"] == "plancasebuilder001"
     assert params["return"] == ["case_load"]
@@ -97,3 +100,9 @@ def test_lm_request_params_decode_typed_call_variant() -> None:
 
 def _decode_plan_params(params: object) -> PlanDocument:
     return msgspec.json.decode(msgspec.json.encode(params), type=PlanDocument)
+
+
+def _params_object(params: object) -> JsonObject:
+    value = json.loads(msgspec.json.encode(params))
+    assert isinstance(value, dict)
+    return value

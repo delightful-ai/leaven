@@ -1,5 +1,7 @@
+import json
 from typing import Literal
 
+import msgspec
 import pytest
 
 from leaven._seam import CaseLoadRequest
@@ -32,7 +34,7 @@ async def test_load_uses_bound_public_seam_client() -> None:
     )
 
     assert client.request_value.method == "leaven/case.load"
-    params = client.request_value.to_params()
+    params = _params_object(client.request_value.to_params())
     assert params["plan_id"] == "plancasebuilder001"
     assert params["return"] == ["case_load"]
     assert params["commit"] == {"kind": "no_graph_writes"}
@@ -104,7 +106,7 @@ class FakeCaseSeamClient:
         method = _case_method(request.method)
         if self.deny_target and method == "leaven/case.target":
             raise PermissionError("case target denied")
-        params = request.to_params()
+        params = _params_object(request.to_params())
         ops = _json_array(params["ops"])
         op = _json_object(ops[0])
         expr = _json_object(op["expr"])
@@ -155,7 +157,13 @@ def _json_array(value: JsonValue) -> list[JsonValue]:
 
 
 def _op_name(request: CaseLoadRequest) -> JsonValue:
-    params = request.to_params()
+    params = _params_object(request.to_params())
     ops = _json_array(params["ops"])
     op = _json_object(ops[0])
     return op["name"]
+
+
+def _params_object(params: object) -> JsonObject:
+    value = json.loads(msgspec.json.encode(params))
+    assert isinstance(value, dict)
+    return value

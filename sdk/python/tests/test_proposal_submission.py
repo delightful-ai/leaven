@@ -1,3 +1,6 @@
+import json
+
+import msgspec
 import pytest
 
 from leaven._receipts import CallReceipt, QueryReceipt
@@ -34,7 +37,7 @@ async def test_proposals_builder_submits_agent_session_batch_through_seam() -> N
     submission = await proposals.submit(batch)
 
     assert client.request_value.method == "leaven/proposal.submit_batch"
-    params = client.request_value.to_params()
+    params = _params_object(client.request_value.to_params())
     assert params["plan_id"] == "planproposalbuilder001"
     assert params["return"] == ["proposal_batch"]
     ops = _json_array(params["ops"])
@@ -89,6 +92,12 @@ def _json_object(value: JsonValue) -> JsonObject:
 
 def _json_array(value: JsonValue) -> list[JsonValue]:
     assert isinstance(value, list)
+    return value
+
+
+def _params_object(params: object) -> JsonObject:
+    value = json.loads(msgspec.json.encode(params))
+    assert isinstance(value, dict)
     return value
 
 

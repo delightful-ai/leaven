@@ -1621,10 +1621,43 @@ acceptance:
           unknown LM content parts; request-builder tests decode produced LM
           and agent params through generated `PlanDocument` to catch builder
           drift at the typed call boundary. Schema/provider-hint leaves remain
-          JSON-shaped where the Rust-owned public schema allows arbitrary JSON,
-          and request records still expose `to_params() -> JsonObject`; full
-          request-builder cutover to generated Plan/Stage structs remains a
-          separate follow-up.
+          JSON-shaped where the Rust-owned public schema allows arbitrary JSON.
+          At this slice, request records still exposed `to_params() ->
+          JsonObject`; the later typed-request-param cutover row closes that
+          top-level request-builder gap.
+      - kind: python_request_params_return_generated_wire_records
+        paths:
+          - sdk/python/src/leaven/_seam/plans.py
+          - sdk/python/src/leaven/_seam/_wire/codec.py
+          - sdk/python/src/leaven/_seam/_wire/__init__.py
+          - sdk/python/src/leaven/_seam_worker/context.py
+          - sdk/python/tests/_seam/_wire/test_codec.py
+          - sdk/python/tests/_seam/test_plans.py
+          - sdk/python/tests/test_stage_surface.py
+          - sdk/python/tests/test_proposer_worker.py
+          - sdk/python/tests/builders/test_case.py
+          - sdk/python/tests/test_proposal_submission.py
+        commands:
+          - cd sdk/python && uv run ruff check src/leaven/_seam src/leaven/_seam_worker tests/_seam tests/test_stage_surface.py tests/test_proposer_worker.py tests/builders/test_case.py tests/test_proposal_submission.py
+          - cd sdk/python && uv run ty check src/leaven/_seam src/leaven/_seam_worker tests/_seam tests/test_stage_surface.py tests/test_proposer_worker.py tests/builders/test_case.py tests/test_proposal_submission.py
+          - cd sdk/python && uv run pytest tests/_seam tests/_seam_worker tests/test_stage_surface.py tests/test_proposer_worker.py tests/builders/test_case.py tests/test_proposal_submission.py -q
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          The Python private seam request protocol now returns generated
+          `RequestParams` records (`PlanDocument` or stage-run request params)
+          instead of `JsonObject` top-level params. The JSON-RPC encoder
+          accepts only generated request params, `Raw`, or `UNSET`; codec tests
+          now encode a generated Plan document instead of a raw dict. Case,
+          LM, agent, stage-run, stage-propose, and proposal-submit request
+          builders construct generated Plan/Stage records and parse proposal,
+          output-contract, message, and write leaves into generated owner
+          records before transport encoding. Focused tests prove existing
+          bound builders and command-worker fixtures still emit the expected
+          JSON wire shape after typed params. Remaining JSON-shaped leaves are
+          limited to schema-owned arbitrary JSON slots, stage worker callback
+          result inspection, config/capability JSON construction, and
+          worker-role request parsing, all still needing narrower typed-owner
+          follow-up before full Python seam typedness closeout.
       - kind: typed_plan_expression_owner_foundation
         commits:
           - a0397e66

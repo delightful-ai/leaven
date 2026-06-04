@@ -4,8 +4,38 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-from leaven._seam._wire import JsonObject, JsonValue
-from leaven._seam._wire.json_value import json_object
+from msgspec import UNSET, convert
+
+from leaven._seam._wire import JsonObject
+from leaven._seam._wire.calls import (
+    AgentInstructions,
+    AgentLimits,
+    AgentRunCall,
+    AgentToolPolicy,
+    LmCompleteCall,
+    LmMessage,
+    LmOutputContract,
+    LmSampling,
+    OutputContract,
+    WorkspaceMaterializeCall,
+)
+from leaven._seam._wire.codec import RequestParams
+from leaven._seam._wire.expressions import PlanExpressionCaseQuery
+from leaven._seam._wire.payloads import (
+    CommitPolicyGraphWritesAtomic,
+    CommitPolicyNoGraphWrites,
+    ConsistencyLatestAtStart,
+    EvalModeExecute,
+    FailureMode,
+    PlanDocument,
+    PlanOp,
+    ProposeRequest,
+    ReflectionResult,
+    RunnerRequest,
+)
+from leaven._seam._wire.payloads import StageRunRequest as StageRunParams
+from leaven._seam._wire.refs import WireJsonField
+from leaven._seam._wire.writes import ProposalWriteRecord, SubmitProposalBatchWrite
 
 CaseField = Literal["input", "target", "metadata", "files", "setup", "sandbox", "split"]
 SeamRequestMethod = Literal[
@@ -37,7 +67,7 @@ class SeamJsonRpcRequest(Protocol):
         """Locked Leaven public-seam method this request targets."""
         ...
 
-    def to_params(self) -> JsonObject:
+    def to_params(self) -> RequestParams:
         """Return the method-specific JSON-RPC params object."""
         ...
 
@@ -57,26 +87,22 @@ class CaseLoadRequest:
         """Locked case read method selected by `include`."""
         return _case_route(self.include)[0]
 
-    def to_params(self) -> JsonObject:
+    def to_params(self) -> PlanDocument:
         """Return the locked case read Plan params."""
         _, op_name = _case_route(self.include)
-        return json_object({
-            "schema_version": "leaven.plan.v1",
-            "plan_id": self.plan_id,
-            "consistency": {"kind": "latest_at_start"},
-            "mode": {"kind": "execute"},
-            "ops": [self._case_query(op_name)],
-            "return": [op_name],
-            "commit": {"kind": "no_graph_writes"},
-        })
+        return _plan_document(
+            plan_id=self.plan_id,
+            ops=[self._case_query(op_name)],
+            return_names=[op_name],
+            commit=CommitPolicyNoGraphWrites(),
+        )
 
-    def _case_query(self, op_name: str) -> JsonObject:
-        return json_object({
-            "kind": "let",
-            "name": op_name,
-            "expr": {
-                "kind": "case_query",
-                "query": {
+    def _case_query(self, op_name: str) -> PlanOp:
+        return PlanOp(
+            kind="let",
+            name=op_name,
+            expr=PlanExpressionCaseQuery(
+                query={
                     "kind": "load",
                     "case": {
                         "kind": "case",
@@ -85,9 +111,9 @@ class CaseLoadRequest:
                     },
                     "include": list(self.include),
                     "projection_schema": "fp_schema_sha256_python_case_projection",
-                },
-            },
-        })
+                }
+            ),
+        )
 
 
 def _case_route(include: Sequence[CaseField]) -> tuple[SeamRequestMethod, str]:
@@ -117,56 +143,56 @@ class AgentRunRequest:
         """Locked agent method."""
         return "leaven/agent.run"
 
-    def to_params(self) -> JsonObject:
+    def to_params(self) -> PlanDocument:
         """Return the locked agent Plan params."""
-        return json_object({
-            "schema_version": "leaven.plan.v1",
-            "plan_id": self.plan_id,
-            "consistency": {"kind": "latest_at_start"},
-            "mode": {"kind": "execute"},
-            "ops": [self._workspace_call(), self._agent_call()],
-            "return": ["workspace", "completion"],
-            "commit": {"kind": "graph_writes_atomic", "on_stale": "reject"},
-        })
+        return _plan_document(
+            plan_id=self.plan_id,
+            ops=[self._workspace_call(), self._agent_call()],
+            return_names=["workspace", "completion"],
+            commit=CommitPolicyGraphWritesAtomic(on_stale="reject"),
+        )
 
-    def _workspace_call(self) -> JsonObject:
-        return json_object({
-            "kind": "call",
-            "name": "workspace",
-            "idempotency_key": f"{self.idempotency_prefix}-workspace",
-            "call": {
-                "kind": "workspace_materialize",
-                "candidate": self.candidate,
-                "surface": "program",
-                "mode": "copy_on_write",
-                "lifetime": "manual_release",
-            },
-        })
+    def _workspace_call(self) -> PlanOp:
+        return PlanOp(
+            kind="call",
+            name="workspace",
+            idempotency_key=f"{self.idempotency_prefix}-workspace",
+            call=WorkspaceMaterializeCall(
+                candidate=self.candidate,
+                surface="program",
+                mode="copy_on_write",
+                lifetime="manual_release",
+            ),
+        )
 
-    def _agent_call(self) -> JsonObject:
-        tool_policy: JsonObject = {"allow_shell": False}
-        if self.allowed_commands is not None:
-            tool_policy["allowed_commands"] = list(self.allowed_commands)
-        return json_object({
-            "kind": "call",
-            "name": "completion",
-            "deps": ["workspace"],
-            "idempotency_key": f"{self.idempotency_prefix}-agent",
-            "call": {
-                "kind": "agent_run",
-                "runtime": self.runtime,
-                "workspace": self.workspace,
-                "instructions": self.instructions,
-                "tool_policy": tool_policy,
-                "output": self.output or {"kind": "final_message", "max_bytes": 512},
-                "limits": {
-                    "timeout_s": self.timeout_s,
-                    "max_turns": self.max_turns,
-                    "max_usd_micro": self.max_usd_micro,
-                },
-                "input_classes": list(self.input_classes or ["public"]),
-            },
-        })
+    def _agent_call(self) -> PlanOp:
+        allowed_commands = (
+            list(self.allowed_commands) if self.allowed_commands is not None else UNSET
+        )
+        return PlanOp(
+            kind="call",
+            name="completion",
+            deps=["workspace"],
+            idempotency_key=f"{self.idempotency_prefix}-agent",
+            call=AgentRunCall(
+                runtime=self.runtime,
+                workspace=self.workspace,
+                instructions=convert(self.instructions, type=AgentInstructions),
+                tool_policy=AgentToolPolicy(
+                    allow_shell=False,
+                    allowed_commands=allowed_commands,
+                ),
+                output=_wire_output_contract(
+                    self.output or {"kind": "final_message", "max_bytes": 512}
+                ),
+                limits=AgentLimits(
+                    timeout_s=self.timeout_s,
+                    max_turns=self.max_turns,
+                    max_usd_micro=self.max_usd_micro,
+                ),
+                input_classes=list(self.input_classes or ["public"]),
+            ),
+        )
 
 
 @dataclass(frozen=True)
@@ -190,44 +216,39 @@ class LmCompleteRequest:
         """Locked LM method."""
         return "leaven/lm.complete"
 
-    def to_params(self) -> JsonObject:
+    def to_params(self) -> PlanDocument:
         """Return the locked LM Plan params."""
-        return json_object({
-            "schema_version": "leaven.plan.v1",
-            "plan_id": self.plan_id,
-            "consistency": {"kind": "latest_at_start"},
-            "mode": {"kind": "execute"},
-            "ops": [self._lm_call()],
-            "return": ["completion"],
-            "commit": {"kind": "no_graph_writes"},
-        })
+        return _plan_document(
+            plan_id=self.plan_id,
+            ops=[self._lm_call()],
+            return_names=["completion"],
+            commit=CommitPolicyNoGraphWrites(),
+        )
 
-    def _lm_call(self) -> JsonObject:
-        call: JsonObject = {
-            "kind": "lm_complete",
-            "purpose": "python.sdk",
-            "model": self.model,
-            "messages": list(self.messages),
-            "output": self.output or {"kind": "final_message", "max_bytes": 512},
-            "input_classes": list(self.input_classes or ["public"]),
-        }
-        if self.model_role is not None:
-            call["model_role"] = self.model_role
-        sampling: JsonObject = {}
+    def _lm_call(self) -> PlanOp:
+        sampling = {}
         if self.temperature is not None:
             sampling["temperature"] = self.temperature
         if self.max_tokens is not None:
             sampling["max_output_tokens"] = self.max_tokens
         if self.stop is not None:
             sampling["stop"] = list(self.stop)
-        if sampling:
-            call["sampling"] = sampling
-        return json_object({
-            "kind": "call",
-            "name": "completion",
-            "idempotency_key": self.idempotency_key,
-            "call": call,
-        })
+        return PlanOp(
+            kind="call",
+            name="completion",
+            idempotency_key=self.idempotency_key,
+            call=LmCompleteCall(
+                purpose="python.sdk",
+                model=self.model,
+                model_role=self.model_role if self.model_role is not None else UNSET,
+                messages=[convert(message, type=LmMessage) for message in self.messages],
+                output=_wire_lm_output_contract(
+                    self.output or {"kind": "final_message", "max_bytes": 512}
+                ),
+                sampling=convert(sampling, type=LmSampling) if sampling else UNSET,
+                input_classes=list(self.input_classes or ["public"]),
+            ),
+        )
 
 
 @dataclass(frozen=True)
@@ -239,30 +260,29 @@ class StageRunRequest:
     stage_call_id: str
     candidate: str
     case: str
-    case_input: JsonValue
+    case_input: WireJsonField
 
     @property
     def method(self) -> SeamRequestMethod:
         """Locked stage-run method."""
         return "leaven/stage.run"
 
-    def to_params(self) -> JsonObject:
+    def to_params(self) -> StageRunParams:
         """Return the locked runner stage dispatch params."""
-        return json_object({
-            "schema_version": "leaven.stage_run.v1",
-            "message": "stage_run_request",
-            "stage": "runner",
-            "payload": {
-                "schema_version": "leaven.stage_payloads.v1",
-                "role": "runner",
-                "run": self.run_id,
-                "stage_call_id": self.stage_call_id,
-                "candidate": self.candidate,
-                "case": self.case,
-                "case_input": self.case_input,
-                "target_forbidden": True,
-            },
-        })
+        return StageRunParams(
+            schema_version="leaven.stage_run.v1",
+            message="stage_run_request",
+            stage="runner",
+            payload=RunnerRequest(
+                schema_version="leaven.stage_payloads.v1",
+                run=self.run_id,
+                stage_call_id=self.stage_call_id,
+                candidate=self.candidate,
+                case=self.case,
+                case_input=self.case_input,
+                target_forbidden=True,
+            ),
+        )
 
 
 @dataclass(frozen=True)
@@ -285,49 +305,47 @@ class StageRunProposeRequest:
         """Locked stage-run method."""
         return "leaven/stage.run"
 
-    def to_params(self) -> JsonObject:
+    def to_params(self) -> StageRunParams:
         """Return the locked proposer stage dispatch params."""
-        return json_object({
-            "schema_version": "leaven.stage_run.v1",
-            "message": "stage_run_request",
-            "stage": "proposer",
-            "payload": {
-                "schema_version": "leaven.stage_payloads.v1",
-                "role": "proposer",
-                "run": self.run_id,
-                "stage_call_id": self.stage_call_id,
-                "base_revision": self.base_revision,
-                "parent": self.parent,
-                "surface_fingerprint": self.surface_fingerprint,
-                "reflection_result": self._reflection_result(),
-                "allowed_effects": ["change"],
-                "allowed_change_schemas": [self.change_schema],
-                "source_refs": [self.parent],
-                "query_policy_fingerprint": self.query_policy_fingerprint,
-                "capability_fingerprint": self.capability_fingerprint,
-            },
-        })
+        return StageRunParams(
+            schema_version="leaven.stage_run.v1",
+            message="stage_run_request",
+            stage="proposer",
+            payload=ProposeRequest(
+                schema_version="leaven.stage_payloads.v1",
+                run=self.run_id,
+                stage_call_id=self.stage_call_id,
+                base_revision=self.base_revision,
+                parent=self.parent,
+                surface_fingerprint=self.surface_fingerprint,
+                reflection_result=self._reflection_result(),
+                allowed_effects=["change"],
+                allowed_change_schemas=[self.change_schema],
+                source_refs=[self.parent],
+                query_policy_fingerprint=self.query_policy_fingerprint,
+                capability_fingerprint=self.capability_fingerprint,
+            ),
+        )
 
-    def _reflection_result(self) -> JsonObject:
-        return json_object({
-            "schema_version": "leaven.stage_payloads.v1",
-            "role": "reflection_result",
-            "summary": self.reflection_summary,
-            "failure_modes": [
-                {
-                    "label": "seed_assessment_feedback",
-                    "description": self.reflection_summary,
-                    "source_refs": [self.parent],
-                }
+    def _reflection_result(self) -> ReflectionResult:
+        return ReflectionResult(
+            schema_version="leaven.stage_payloads.v1",
+            summary=self.reflection_summary,
+            failure_modes=[
+                FailureMode(
+                    label="seed_assessment_feedback",
+                    description=self.reflection_summary,
+                    source_refs=[self.parent],
+                )
             ],
-            "surface_suggestions": [],
-            "negative_constraints": [],
-            "positive_constraints": [],
-            "source_refs": [self.parent],
-            "read_receipts": ["qrec_python_seed_assessment"],
-            "data_classes": ["optimizer.visible"],
-            "confidence": 0.5,
-        })
+            surface_suggestions=[],
+            negative_constraints=[],
+            positive_constraints=[],
+            source_refs=[self.parent],
+            read_receipts=["qrec_python_seed_assessment"],
+            data_classes=["optimizer.visible"],
+            confidence=0.5,
+        )
 
 
 @dataclass(frozen=True)
@@ -344,29 +362,53 @@ class ProposalSubmitRequest:
         """Locked proposal submission method."""
         return "leaven/proposal.submit_batch"
 
-    def to_params(self) -> JsonObject:
+    def to_params(self) -> PlanDocument:
         """Return the locked proposal submission Plan params."""
-        return json_object({
-            "schema_version": "leaven.plan.v1",
-            "plan_id": self.plan_id,
-            "consistency": {"kind": "latest_at_start"},
-            "mode": {"kind": "execute"},
-            "ops": [self._submit_write()],
-            "return": ["proposal_batch"],
-            "commit": {"kind": "graph_writes_atomic", "on_stale": "reject"},
-        })
+        return _plan_document(
+            plan_id=self.plan_id,
+            ops=[self._submit_write()],
+            return_names=["proposal_batch"],
+            commit=CommitPolicyGraphWritesAtomic(on_stale="reject"),
+        )
 
-    def _submit_write(self) -> JsonObject:
-        return json_object({
-            "kind": "write",
-            "name": "proposal_batch",
-            "idempotency_key": self.idempotency_key,
-            "write": {
-                "kind": "submit_proposal_batch",
-                "semantics": "sequence",
-                "proposals": list(self.proposals),
-            },
-        })
+    def _submit_write(self) -> PlanOp:
+        return PlanOp(
+            kind="write",
+            name="proposal_batch",
+            idempotency_key=self.idempotency_key,
+            write=SubmitProposalBatchWrite(
+                semantics="sequence",
+                proposals=[
+                    convert(proposal, type=ProposalWriteRecord) for proposal in self.proposals
+                ],
+            ),
+        )
+
+
+def _plan_document(
+    *,
+    plan_id: str,
+    ops: list[PlanOp],
+    return_names: list[str],
+    commit: CommitPolicyNoGraphWrites | CommitPolicyGraphWritesAtomic,
+) -> PlanDocument:
+    return PlanDocument(
+        schema_version="leaven.plan.v1",
+        plan_id=plan_id,
+        consistency=ConsistencyLatestAtStart(),
+        mode=EvalModeExecute(),
+        ops=ops,
+        return_=return_names,
+        commit=commit,
+    )
+
+
+def _wire_output_contract(value: JsonObject) -> OutputContract:
+    return convert(value, type=OutputContract)
+
+
+def _wire_lm_output_contract(value: JsonObject) -> LmOutputContract:
+    return convert(value, type=LmOutputContract)
 
 
 __all__ = [

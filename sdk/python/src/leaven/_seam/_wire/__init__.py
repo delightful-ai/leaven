@@ -1,6 +1,6 @@
 """Private generated wire metadata and msgspec JSON-RPC codec for `_seam`."""
 
-from .codec import decode_batch_responses, decode_response, encode_request
+from .codec import RequestParams, decode_batch_responses, decode_response, encode_request
 from .errors import JsonRpcError, JsonRpcProtocolError, JsonRpcRemoteError
 from .json_value import JsonArray, JsonObject, JsonRpcId, JsonScalar, JsonValue
 from .methods import (
@@ -39,6 +39,7 @@ __all__ = [
     "LockedMethodBinding",
     "PlanDocument",
     "PlanResultDocument",
+    "RequestParams",
     "StageRunKind",
     "StageRunRequest",
     "StageRunResult",
