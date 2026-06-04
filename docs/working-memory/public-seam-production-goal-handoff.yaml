@@ -782,11 +782,46 @@ acceptance:
           proof to engine lifecycle proof, but the row remains pending until a
           product public SDK server/API route exposes this mount to
           external-language workers.
+      - kind: product_route_topology_decision
+        paths:
+          - docs/working-memory/run-bound-durable-runcontext-service.md
+          - docs/specs/public-seam-v1/executable-method-status.md
+          - crates/leaven-run/AGENTS.md
+          - crates/leaven-seam-service/AGENTS.md
+          - crates/leaven-seam-runtime/AGENTS.md
+          - crates/leaven-seam-stdio/AGENTS.md
+          - crates/leaven-acp-stage-bridge/AGENTS.md
+          - crates/leaven-cli/src/main.rs
+          - crates/leaven-cli/src/serve.rs
+          - sdk/python/src/leaven/optimize.py
+          - sdk/python/src/leaven/_seam_optimize/driver.py
+          - sdk/python/src/leaven/_serve.py
+        commands:
+          - rg -n "run_bound|RunBound|seam serve|ConfiguredSeamService|RunContext|external-language|leaven seam|public seam|locked V1" docs/specs docs/working-memory crates/leaven-run crates/leaven-engine crates/leaven-seam-service crates/leaven-cli crates/leaven/tests -g '*.md' -g '*.yaml' -g '*.rs'
+          - rg -n "optimize\\(|seam serve|stage.run|CommandRunner|proposer|runner|optimized.json|subprocess|leaven seam" sdk/python/src sdk/python/examples -g '*.py' -g '*.md'
+          - morph codebase_search "Where are the public seam V1 service, runtime, stdio, run optimizer APIs, and RunContext-backed graph effect service wired today, and what dependencies connect leaven-run, leaven-seam-service, leaven-seam-runtime, leaven-seam-stdio, and leaven-public-seam?"
+          - explorer subagent read-only docs/topology pass on the public-seam V1 RunContext-backed durable service route
+        note: >-
+          Research confirms the row-closing route should be a behavior-bearing
+          composition layer above `leaven-run` and `leaven-seam-service`, wired
+          through the public `leaven seam ...` command family. `leaven-run` owns
+          ordinary durable run lifecycle and cannot depend on `leaven-seam-service`
+          without a cycle; `leaven-seam-service` owns the reusable run-bound
+          adapter but must not become a run builder; `leaven-seam-runtime` and
+          `leaven-seam-stdio` stay dispatch/transport only; `leaven-acp-stage-bridge`
+          and top-level `leaven serve --stdio --plan --out` remain bridge-demo
+          provenance, not acceptance evidence. Python `lv.optimize(...).run()`
+          currently orchestrates `leaven seam serve --stdio --config` and writes
+          `optimized.json`, so it cannot close Rust-owned run durability until it
+          moves to the successor Rust-owned route. This is planning evidence only;
+          no product route has been implemented by this entry.
     closeout_check: >-
       The configured `SeamTextProblem` proof path, `leaven-acp-stage-bridge`
-      callback tests, public-seam receipt projection tests, and Python
-      `optimized.json` inspection are prerequisite evidence only; none can close
-      this row without a run-bound durable checkpoint/readback scenario.
+      callback tests, top-level `leaven serve --stdio --plan --out` bridge-demo
+      behavior, public-seam receipt projection tests, and Python `optimized.json`
+      inspection are prerequisite evidence only; none can close this row without
+      a launchable run-bound public SDK route that persists and reads back Rust
+      checkpoint/graph truth.
 
   - id: rust_owned_run_readback_powers_python_inspection
     claim: Python run inspection reads Rust-owned durable run/checkpoint state or a Rust-owned exported artifact.

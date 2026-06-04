@@ -1,7 +1,7 @@
 # Run-Bound Durable RunContext Service
 
-Status: implementation foundation in progress
-Updated: 2026-06-04T02:10:00Z
+Status: topology decision recorded; product-route implementation pending
+Updated: 2026-06-04T03:25:00Z
 
 ## Intent
 
@@ -62,23 +62,25 @@ aliases such as `pb_configured_run_context`, `eval_run_context`, and
 the generalized SDK service.
 
 The remaining missing proof is wiring this service shape into a product public
-SDK server route. The current module proves the generic service, runtime/stdio
-delivery, durable checkpoint mechanics, and engine optimizer-lifecycle mounting,
-but not a product API/CLI route that external-language SDK workers can launch
-for an ordinary run.
+SDK route. The current module proves the generic service, runtime/stdio delivery,
+durable checkpoint mechanics, and engine optimizer-lifecycle mounting, but not a
+product API/CLI route that external-language SDK workers can launch for an
+ordinary run.
 
 The important topology consequence is that the next row-closing change is not a
-larger `ConfiguredSeamService` patch. The run/stage owner must hold the live
-`RunContext`, case set, evidence store, persistence, optimizer checkpoint state,
-and typed problem-specific lowerers. `leaven-seam-service` may provide the
-adapter that implements `SeamService`, but it must be constructed by the
-run/stage owner while that run is active.
+larger `ConfiguredSeamService` patch and not a `leaven-run -> leaven-seam-service`
+dependency. The run/stage owner must hold the live `RunContext`, case set,
+evidence store, persistence, optimizer checkpoint state, and typed
+problem-specific lowerers. `leaven-seam-service` may provide the adapter that
+implements `SeamService`, but it must be constructed by the run/stage owner while
+that run is active.
 
 Do not close `run_bound_durable_runcontext_service` with:
 
 - `SeamGraphState` read-after-write rows;
 - `SeamTextProblem` configured service summaries;
 - `leaven-acp-stage-bridge` callback tests alone;
+- top-level `leaven serve --stdio --plan --out` bridge-demo behavior;
 - public-seam receipt projection tests alone;
 - Python `optimized.json` or Python-only inspection.
 
@@ -103,6 +105,12 @@ Ownership stays split:
 - `leaven-seam-stdio`: line-delimited transport only.
 - `leaven-acp-stage-bridge`: bidirectional stage callback proof and reusable
   host-effect shape, not the durable public SDK server route.
+- a new behavior-bearing composition layer above `leaven-run` and
+  `leaven-seam-service`: product SDK-run orchestration when one route must own
+  both ordinary run lifecycle and public-seam worker serving. This layer may
+  depend on both crates and on `leaven-seam-runtime`/`leaven-seam-stdio`, but it
+  must have its own boundary docs, topology rows, tests, and public maturity
+  classification before it is treated as the row-closing route.
 
 The durable implementation should reuse the `RunContextGraphEffectHost` shape:
 public JSON stays at the boundary, host-owned typed lowerers convert to concrete
@@ -122,13 +130,10 @@ engine values, and graph mutations route through `RunContext` finalizers.
    run/stage, not a free-floating configured proof graph. The implementation
    must respect the existing dependency direction: `leaven-run` owns the product
    lifecycle facts, while `leaven-seam-service` owns the service adapter and
-   already depends on `leaven-run`. That means the first proof should either:
-   - mount `RunBoundGraphEffectService` from an optimizer/stage-owned
-     `RunContext` in `leaven-seam-service` tests, proving the adapter works
-     inside a real engine lifecycle; or
-   - introduce a behavior-bearing composition crate above both `leaven-run` and
-     `leaven-seam-service` if a durable product route needs to own both builder
-     lifecycle and seam serving without creating a dependency cycle.
+   already depends on `leaven-run`. The foundation mount inside
+   `leaven-seam-service` tests is done; the row-closing route now needs a
+   behavior-bearing composition layer above both crates so it can own builder
+   lifecycle and seam serving without creating a dependency cycle.
 4. After each graph-write callback, rely on `RunContext` checkpointing through
    `.with_persistence(...)`; where optimizer-private state must advance latest,
    call `checkpoint_with_optimizer_state(...)` from the optimizer owner.
@@ -158,18 +163,50 @@ The next implementation should preserve this dependency direction:
   `leaven-seam-service` is preferable to reversing the existing dependency if
   the product route must own both ordinary run builder lifecycle and seam server
   mounting.
-- `leaven-cli::seam serve --stdio` remains the configured operator server; it
-  cannot by itself own an optimizer/run/stage lifecycle without becoming a
-  product-run implementation bucket.
+- `leaven-cli::seam serve --stdio` remains the configured operator server for
+  service-mode method execution. It cannot by itself own an optimizer/run/stage
+  lifecycle without becoming a product-run implementation bucket.
+- top-level `leaven serve --stdio --plan --out` is legacy bridge-demo/provenance.
+  It proves bidirectional stage dispatch but not `leaven-run` product durability,
+  `RunContext` graph truth, or Rust-owned inspection. A successor should live
+  under the public seam command family (for example a hard-cut `leaven seam run
+  --stdio ...`) or in an explicitly named composition crate that the CLI calls.
 - `leaven-acp-stage-bridge` remains bridge evidence and reusable design input,
   not a dependency of the durable public SDK server route.
 
+## Product Route Decision
+
+The row-closing implementation should introduce a real composition owner rather
+than stretching existing crates:
+
+1. Add a behavior-bearing public-seam run composition crate above
+   `leaven-run` and `leaven-seam-service`. It owns the launchable SDK-run route:
+   run plan/config loading, external worker process/session launch, stage
+   dispatch, worker callback service mounting, run directory selection, and final
+   proof readback. It does not own optimizer strategy, graph mutation, wire
+   schemas, stdio framing, provider protocols, or Python SDK ergonomics.
+2. Wire CLI entry through the `leaven seam ...` family, not the old top-level
+   bridge-demo `serve` command. The new route should be a hard cutover for
+   production evidence; the old command can remain only as explicitly labelled
+   provenance until removed.
+3. The first behavior-bearing proof should be deterministic and no-spend:
+   a small prompt-like problem, a checked-in external worker that issues at least
+   one graph-write callback, and a durable local run dir. It must restore the
+   latest Rust checkpoint and assert the candidate/evaluation/assessment/event
+   facts from graph truth rather than a projected result file.
+4. Once the Rust route exists, Python `lv.optimize(...).run()` should move toward
+   spawning that route instead of orchestrating a standalone configured
+   `leaven seam serve --stdio --config` process and writing `optimized.json` as
+   the source of truth.
+
 ## Focused Verification Target
 
-Minimum closeout for the first implementation slice:
+Minimum closeout for the composition-route slice:
 
-- `CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service <run-bound test name>`
+- `CARGO_INCREMENTAL=0 cargo test -p <composition-crate> <run-bound route test name>`
+- `CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service run_bound_service`
 - `CARGO_INCREMENTAL=0 cargo test -p leaven-run inspection`
+- `CARGO_INCREMENTAL=0 cargo test -p leaven-cli <new seam route test name>`
 - `cargo test -p leaven --test topology_contract`
 - YAML evidence update under `run_bound_durable_runcontext_service`
 
