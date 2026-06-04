@@ -2447,6 +2447,25 @@ acceptance:
           typed JSON parsing instead of fallback `.get(...)` coercion. The
           schema preprocessor now uses a local recursive JSON type instead of
           `Any`.
+      - kind: public_scoring_helpers_scaffold_removed
+        paths:
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/src/leaven/score.py
+          - sdk/python/src/leaven/scoring.py
+          - sdk/python/tests/test_score.py
+          - sdk/python/tests/test_scoring.py
+        commands:
+          - cd sdk/python && uv run pytest tests/test_scoring.py tests/test_score.py -q
+          - cd sdk/python && uv run ruff check src/leaven/scoring.py src/leaven/score.py tests/test_scoring.py tests/test_score.py
+          - cd sdk/python && uv run ty check src/leaven/scoring.py src/leaven/score.py tests/test_scoring.py tests/test_score.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+        note: >-
+          Ordinary public scoring helpers are now behavior-bearing instead of
+          scaffolds: `exact_match`, `normalized_match`, `multi_tolerance`, and
+          token-level `f1` return deterministic float scores, and
+          `Score.exact_match` returns a feedback-bearing `Score`. The mirrored
+          test contract now locks `score.py` to `tests/test_score.py` and
+          `scoring.py` to `tests/test_scoring.py`.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this
