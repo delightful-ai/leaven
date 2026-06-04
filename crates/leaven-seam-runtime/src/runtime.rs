@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use leaven_public_seam::{
-    AcpExtensionMethod, AcpJsonRpcRequestDocument, AcpProfileDocument, AcpStageRunRequestDocument,
+    AcpJsonRpcRequestDocument, AcpProfileDocument, AcpStageRunRequestDocument, LockedMethod,
     PublicSeamError, PublicSeamPackage,
 };
 use serde_json::{Value, json};
@@ -96,7 +96,7 @@ impl<S> SeamRuntime<S> {
         self.profile
             .extension_methods()
             .iter()
-            .map(AcpExtensionMethod::method)
+            .map(|method| method.method().as_str())
     }
 }
 
@@ -118,7 +118,7 @@ impl<S: SeamService> SeamRuntime<S> {
             .get("method")
             .and_then(Value::as_str)
             .ok_or_else(|| RequestError::invalid("JSON-RPC request must carry method"))?;
-        if self.profile.method(method).is_none() {
+        if self.profile.method_by_name(method).is_none() {
             return Err(RequestError {
                 code: JsonRpcErrorCode::MethodNotFound,
                 message: format!("method `{method}` is not in the locked Leaven worker profile"),
@@ -233,7 +233,7 @@ impl<'a> SeamPlanRequest<'a> {
     }
 
     /// Leaven method name.
-    pub fn method(&self) -> &str {
+    pub const fn method(&self) -> LockedMethod {
         self.document.method()
     }
 
@@ -291,7 +291,7 @@ pub struct RejectingSeamService;
 
 impl SeamService for RejectingSeamService {
     fn handle_plan(&self, request: SeamPlanRequest<'_>) -> Result<Value, SeamServiceError> {
-        Err(SeamServiceError::unavailable(request.method()))
+        Err(SeamServiceError::unavailable(request.method().as_str()))
     }
 
     fn handle_stage_run(

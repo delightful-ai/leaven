@@ -1,5 +1,318 @@
 use serde_json::{Value, json};
 
+/// Locked V1 Leaven extension method.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum LockedMethod {
+    /// Host-to-worker stage dispatch.
+    StageRun,
+    /// Graph read query.
+    GraphQuery,
+    /// Full case record read.
+    CaseLoad,
+    /// Case input read.
+    CaseInput,
+    /// Case target read.
+    CaseTarget,
+    /// Case metadata read.
+    CaseMetadata,
+    /// Workspace materialization call.
+    WorkspaceMaterialize,
+    /// Workspace snapshot read.
+    WorkspaceSnapshot,
+    /// Workspace listing read.
+    WorkspaceList,
+    /// Workspace file read.
+    WorkspaceReadFile,
+    /// Workspace stat read.
+    WorkspaceStat,
+    /// Workspace digest read.
+    WorkspaceDigest,
+    /// Workspace git log read.
+    WorkspaceGitLog,
+    /// Workspace git diff read.
+    WorkspaceGitDiff,
+    /// Workspace git status read.
+    WorkspaceGitStatus,
+    /// Workspace artifact capture read.
+    WorkspaceCaptureArtifacts,
+    /// Workspace release call.
+    WorkspaceRelease,
+    /// LM completion call.
+    LmComplete,
+    /// Agent run call.
+    AgentRun,
+    /// Sandbox execution call.
+    SandboxExec,
+    /// Proposal batch submission write.
+    ProposalSubmitBatch,
+    /// Proposal batch apply write.
+    ProposalApply,
+    /// Assessment submission write.
+    AssessmentSubmit,
+    /// Evaluation request write.
+    EvaluationRequest,
+    /// Run event emission write.
+    EventEmit,
+}
+
+impl LockedMethod {
+    /// Locked methods in canonical profile order.
+    pub const ALL: [Self; 25] = [
+        Self::StageRun,
+        Self::GraphQuery,
+        Self::CaseLoad,
+        Self::CaseInput,
+        Self::CaseTarget,
+        Self::CaseMetadata,
+        Self::WorkspaceMaterialize,
+        Self::WorkspaceSnapshot,
+        Self::WorkspaceList,
+        Self::WorkspaceReadFile,
+        Self::WorkspaceStat,
+        Self::WorkspaceDigest,
+        Self::WorkspaceGitLog,
+        Self::WorkspaceGitDiff,
+        Self::WorkspaceGitStatus,
+        Self::WorkspaceCaptureArtifacts,
+        Self::WorkspaceRelease,
+        Self::LmComplete,
+        Self::AgentRun,
+        Self::SandboxExec,
+        Self::ProposalSubmitBatch,
+        Self::ProposalApply,
+        Self::AssessmentSubmit,
+        Self::EvaluationRequest,
+        Self::EventEmit,
+    ];
+
+    /// Parses a locked method name.
+    pub fn parse(value: &str) -> Option<Self> {
+        Some(match value {
+            "leaven/stage.run" => Self::StageRun,
+            "leaven/graph.query" => Self::GraphQuery,
+            "leaven/case.load" => Self::CaseLoad,
+            "leaven/case.input" => Self::CaseInput,
+            "leaven/case.target" => Self::CaseTarget,
+            "leaven/case.metadata" => Self::CaseMetadata,
+            "leaven/workspace.materialize" => Self::WorkspaceMaterialize,
+            "leaven/workspace.snapshot" => Self::WorkspaceSnapshot,
+            "leaven/workspace.list" => Self::WorkspaceList,
+            "leaven/workspace.read_file" => Self::WorkspaceReadFile,
+            "leaven/workspace.stat" => Self::WorkspaceStat,
+            "leaven/workspace.digest" => Self::WorkspaceDigest,
+            "leaven/workspace.git_log" => Self::WorkspaceGitLog,
+            "leaven/workspace.git_diff" => Self::WorkspaceGitDiff,
+            "leaven/workspace.git_status" => Self::WorkspaceGitStatus,
+            "leaven/workspace.capture_artifacts" => Self::WorkspaceCaptureArtifacts,
+            "leaven/workspace.release" => Self::WorkspaceRelease,
+            "leaven/lm.complete" => Self::LmComplete,
+            "leaven/agent.run" => Self::AgentRun,
+            "leaven/sandbox.exec" => Self::SandboxExec,
+            "leaven/proposal.submit_batch" => Self::ProposalSubmitBatch,
+            "leaven/proposal.apply" => Self::ProposalApply,
+            "leaven/assessment.submit" => Self::AssessmentSubmit,
+            "leaven/evaluation.request" => Self::EvaluationRequest,
+            "leaven/event.emit" => Self::EventEmit,
+            _ => return None,
+        })
+    }
+
+    /// Wire method name.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::StageRun => "leaven/stage.run",
+            Self::GraphQuery => "leaven/graph.query",
+            Self::CaseLoad => "leaven/case.load",
+            Self::CaseInput => "leaven/case.input",
+            Self::CaseTarget => "leaven/case.target",
+            Self::CaseMetadata => "leaven/case.metadata",
+            Self::WorkspaceMaterialize => "leaven/workspace.materialize",
+            Self::WorkspaceSnapshot => "leaven/workspace.snapshot",
+            Self::WorkspaceList => "leaven/workspace.list",
+            Self::WorkspaceReadFile => "leaven/workspace.read_file",
+            Self::WorkspaceStat => "leaven/workspace.stat",
+            Self::WorkspaceDigest => "leaven/workspace.digest",
+            Self::WorkspaceGitLog => "leaven/workspace.git_log",
+            Self::WorkspaceGitDiff => "leaven/workspace.git_diff",
+            Self::WorkspaceGitStatus => "leaven/workspace.git_status",
+            Self::WorkspaceCaptureArtifacts => "leaven/workspace.capture_artifacts",
+            Self::WorkspaceRelease => "leaven/workspace.release",
+            Self::LmComplete => "leaven/lm.complete",
+            Self::AgentRun => "leaven/agent.run",
+            Self::SandboxExec => "leaven/sandbox.exec",
+            Self::ProposalSubmitBatch => "leaven/proposal.submit_batch",
+            Self::ProposalApply => "leaven/proposal.apply",
+            Self::AssessmentSubmit => "leaven/assessment.submit",
+            Self::EvaluationRequest => "leaven/evaluation.request",
+            Self::EventEmit => "leaven/event.emit",
+        }
+    }
+
+    /// Required capability action.
+    pub const fn required_action(self) -> MethodAction {
+        match self {
+            Self::StageRun => MethodAction::StageRun,
+            Self::GraphQuery => MethodAction::GraphQuery,
+            Self::CaseLoad | Self::CaseInput | Self::CaseTarget | Self::CaseMetadata => {
+                MethodAction::CaseRead
+            }
+            Self::WorkspaceMaterialize => MethodAction::WorkspaceMaterialize,
+            Self::WorkspaceSnapshot
+            | Self::WorkspaceList
+            | Self::WorkspaceReadFile
+            | Self::WorkspaceStat
+            | Self::WorkspaceDigest
+            | Self::WorkspaceGitLog
+            | Self::WorkspaceGitDiff
+            | Self::WorkspaceGitStatus
+            | Self::WorkspaceCaptureArtifacts => MethodAction::WorkspaceRead,
+            Self::WorkspaceRelease => MethodAction::WorkspaceRelease,
+            Self::LmComplete => MethodAction::LmComplete,
+            Self::AgentRun => MethodAction::AgentRun,
+            Self::SandboxExec => MethodAction::SandboxExec,
+            Self::ProposalSubmitBatch => MethodAction::ProposalSubmitBatch,
+            Self::ProposalApply => MethodAction::ProposalApplyBatch,
+            Self::AssessmentSubmit => MethodAction::AssessmentSubmit,
+            Self::EvaluationRequest => MethodAction::EvaluationRequest,
+            Self::EventEmit => MethodAction::EventEmit,
+        }
+    }
+
+    /// Params schema bound to this method.
+    pub const fn params_schema(self) -> MethodSchema {
+        match self {
+            Self::StageRun => MethodSchema::StageRun,
+            _ => MethodSchema::PlanIr,
+        }
+    }
+
+    /// Result schema bound to this method.
+    pub const fn result_schema(self) -> MethodSchema {
+        match self {
+            Self::StageRun => MethodSchema::StageRun,
+            _ => MethodSchema::PlanResult,
+        }
+    }
+
+    /// Accepted primary result kinds for this method.
+    pub const fn primary_kinds(self) -> &'static [MethodPrimaryKind] {
+        match self {
+            Self::StageRun => &[MethodPrimaryKind::StageRunTextOutput],
+            Self::GraphQuery => &[MethodPrimaryKind::GraphSet],
+            Self::CaseLoad | Self::CaseInput | Self::CaseTarget | Self::CaseMetadata => {
+                &[MethodPrimaryKind::CaseRecord]
+            }
+            Self::WorkspaceMaterialize | Self::WorkspaceRelease => {
+                &[MethodPrimaryKind::WorkspaceHandle]
+            }
+            Self::WorkspaceSnapshot | Self::WorkspaceDigest => {
+                &[MethodPrimaryKind::WorkspaceSnapshot]
+            }
+            Self::WorkspaceReadFile => &[MethodPrimaryKind::WorkspaceFile],
+            Self::WorkspaceList | Self::WorkspaceStat | Self::WorkspaceCaptureArtifacts => {
+                &[MethodPrimaryKind::WorkspaceListing]
+            }
+            Self::WorkspaceGitLog | Self::WorkspaceGitDiff | Self::WorkspaceGitStatus => {
+                &[MethodPrimaryKind::WorkspaceDiff]
+            }
+            Self::LmComplete => &[MethodPrimaryKind::LmResponse],
+            Self::AgentRun => &[MethodPrimaryKind::AgentSession],
+            Self::SandboxExec => &[MethodPrimaryKind::SandboxExec],
+            Self::ProposalSubmitBatch => &[MethodPrimaryKind::ProposalBatchReceipt],
+            Self::ProposalApply => &[MethodPrimaryKind::ApplyReceipt],
+            Self::AssessmentSubmit => &[MethodPrimaryKind::AssessmentBatchReceipt],
+            Self::EvaluationRequest => &[MethodPrimaryKind::EvaluationRequestReceipt],
+            Self::EventEmit => &[MethodPrimaryKind::EmitRunEvent],
+        }
+    }
+
+    /// Receipt expectation for this method.
+    pub const fn receipt_expectation(self) -> MethodReceiptExpectation {
+        match self {
+            Self::StageRun => MethodReceiptExpectation::StageRun,
+            Self::GraphQuery
+            | Self::CaseLoad
+            | Self::CaseInput
+            | Self::CaseTarget
+            | Self::CaseMetadata
+            | Self::WorkspaceSnapshot
+            | Self::WorkspaceList
+            | Self::WorkspaceReadFile
+            | Self::WorkspaceStat
+            | Self::WorkspaceDigest
+            | Self::WorkspaceGitLog
+            | Self::WorkspaceGitDiff
+            | Self::WorkspaceGitStatus
+            | Self::WorkspaceCaptureArtifacts => MethodReceiptExpectation::Query,
+            Self::WorkspaceMaterialize => MethodReceiptExpectation::Call("workspace_materialize"),
+            Self::WorkspaceRelease => MethodReceiptExpectation::Call("workspace_release"),
+            Self::LmComplete => MethodReceiptExpectation::Call("lm_complete"),
+            Self::AgentRun => MethodReceiptExpectation::Call("agent_run"),
+            Self::SandboxExec => MethodReceiptExpectation::Call("sandbox_exec"),
+            Self::ProposalSubmitBatch => MethodReceiptExpectation::Write("submit_proposal_batch"),
+            Self::ProposalApply => MethodReceiptExpectation::Write("apply_proposal_batch"),
+            Self::AssessmentSubmit => MethodReceiptExpectation::Write("submit_assessments"),
+            Self::EvaluationRequest => MethodReceiptExpectation::Write("request_evaluation"),
+            Self::EventEmit => MethodReceiptExpectation::Write("emit_run_event"),
+        }
+    }
+}
+
+/// Capability action required by a locked method.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MethodAction {
+    /// `stage.run`
+    StageRun,
+    /// `graph.query`
+    GraphQuery,
+    /// `case.read`
+    CaseRead,
+    /// `workspace.materialize`
+    WorkspaceMaterialize,
+    /// `workspace.read`
+    WorkspaceRead,
+    /// `workspace.release`
+    WorkspaceRelease,
+    /// `lm.complete`
+    LmComplete,
+    /// `agent.run`
+    AgentRun,
+    /// `sandbox.exec`
+    SandboxExec,
+    /// `proposal.submit_batch`
+    ProposalSubmitBatch,
+    /// `proposal.apply_batch`
+    ProposalApplyBatch,
+    /// `assessment.submit`
+    AssessmentSubmit,
+    /// `evaluation.request`
+    EvaluationRequest,
+    /// `event.emit`
+    EventEmit,
+}
+
+impl MethodAction {
+    /// Wire action spelling.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::StageRun => "stage.run",
+            Self::GraphQuery => "graph.query",
+            Self::CaseRead => "case.read",
+            Self::WorkspaceMaterialize => "workspace.materialize",
+            Self::WorkspaceRead => "workspace.read",
+            Self::WorkspaceRelease => "workspace.release",
+            Self::LmComplete => "lm.complete",
+            Self::AgentRun => "agent.run",
+            Self::SandboxExec => "sandbox.exec",
+            Self::ProposalSubmitBatch => "proposal.submit_batch",
+            Self::ProposalApplyBatch => "proposal.apply_batch",
+            Self::AssessmentSubmit => "assessment.submit",
+            Self::EvaluationRequest => "evaluation.request",
+            Self::EventEmit => "event.emit",
+        }
+    }
+}
+
 /// The locked V1 extension-method profile rows, in canonical order.
 ///
 /// Each row carries the locked `params_schema`/`result_schema` binding, the
@@ -8,18 +321,14 @@ use serde_json::{Value, json};
 /// profile document is assembled from, so the engine client, the bridge, and the
 /// conformance tests stop re-encoding the 25-method table by hand.
 pub(super) fn locked_extension_method_rows() -> Vec<Value> {
-    locked_extension_methods()
+    LockedMethod::ALL
         .into_iter()
         .map(|method| {
-            let (params, result) =
-                schema_binding_for_method(method).expect("locked method has a schema binding");
-            let action =
-                required_action_for_method(method).expect("locked method has a required action");
             json!({
-                "method": method,
-                "params_schema": params.schema_file(),
-                "result_schema": result.schema_file(),
-                "required_action": action,
+                "method": method.as_str(),
+                "params_schema": method.params_schema().schema_file(),
+                "result_schema": method.result_schema().schema_file(),
+                "required_action": method.required_action().as_str(),
                 "produces_receipt": true
             })
         })
@@ -31,7 +340,7 @@ pub(super) fn locked_extension_method_rows() -> Vec<Value> {
 /// The 25 worker callbacks bind the Plan IR schemas, while the one host->worker
 /// stage-dispatch method binds the dedicated stage-run schema.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum MethodSchema {
+pub enum MethodSchema {
     /// Locked Plan IR request schema (`leaven.plan.v1.schema.json`).
     PlanIr,
     /// Locked Plan Result schema (`leaven.plan_result.v1.schema.json`).
@@ -41,7 +350,8 @@ pub(super) enum MethodSchema {
 }
 
 impl MethodSchema {
-    pub(super) const fn schema_file(self) -> &'static str {
+    /// JSON Schema file bound to this schema family.
+    pub const fn schema_file(self) -> &'static str {
         match self {
             Self::PlanIr => "leaven.plan.v1.schema.json",
             Self::PlanResult => "leaven.plan_result.v1.schema.json",
@@ -50,80 +360,99 @@ impl MethodSchema {
     }
 }
 
-pub(super) fn locked_extension_methods() -> [&'static str; 25] {
-    [
-        "leaven/stage.run",
-        "leaven/graph.query",
-        "leaven/case.load",
-        "leaven/case.input",
-        "leaven/case.target",
-        "leaven/case.metadata",
-        "leaven/workspace.materialize",
-        "leaven/workspace.snapshot",
-        "leaven/workspace.list",
-        "leaven/workspace.read_file",
-        "leaven/workspace.stat",
-        "leaven/workspace.digest",
-        "leaven/workspace.git_log",
-        "leaven/workspace.git_diff",
-        "leaven/workspace.git_status",
-        "leaven/workspace.capture_artifacts",
-        "leaven/workspace.release",
-        "leaven/lm.complete",
-        "leaven/agent.run",
-        "leaven/sandbox.exec",
-        "leaven/proposal.submit_batch",
-        "leaven/proposal.apply",
-        "leaven/assessment.submit",
-        "leaven/evaluation.request",
-        "leaven/event.emit",
-    ]
+/// Primary result kind bound to a locked method.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MethodPrimaryKind {
+    /// Stage run text output.
+    StageRunTextOutput,
+    /// `graph_set`
+    GraphSet,
+    /// `case_record`
+    CaseRecord,
+    /// `workspace_handle`
+    WorkspaceHandle,
+    /// `workspace_snapshot`
+    WorkspaceSnapshot,
+    /// `workspace_file`
+    WorkspaceFile,
+    /// `workspace_listing`
+    WorkspaceListing,
+    /// `workspace_diff`
+    WorkspaceDiff,
+    /// `lm_response`
+    LmResponse,
+    /// `agent_session`
+    AgentSession,
+    /// `sandbox_exec`
+    SandboxExec,
+    /// `proposal_batch_receipt`
+    ProposalBatchReceipt,
+    /// `apply_receipt`
+    ApplyReceipt,
+    /// `assessment_batch_receipt`
+    AssessmentBatchReceipt,
+    /// `evaluation_request_receipt`
+    EvaluationRequestReceipt,
+    /// `emit_run_event`
+    EmitRunEvent,
 }
 
-pub(super) fn required_action_for_method(method: &str) -> Option<&'static str> {
-    match method {
-        "leaven/stage.run" => Some("stage.run"),
-        "leaven/graph.query" => Some("graph.query"),
-        "leaven/case.load"
-        | "leaven/case.input"
-        | "leaven/case.target"
-        | "leaven/case.metadata" => Some("case.read"),
-        "leaven/workspace.materialize" => Some("workspace.materialize"),
-        "leaven/workspace.snapshot"
-        | "leaven/workspace.list"
-        | "leaven/workspace.read_file"
-        | "leaven/workspace.stat"
-        | "leaven/workspace.digest"
-        | "leaven/workspace.git_log"
-        | "leaven/workspace.git_diff"
-        | "leaven/workspace.git_status"
-        | "leaven/workspace.capture_artifacts" => Some("workspace.read"),
-        "leaven/workspace.release" => Some("workspace.release"),
-        "leaven/lm.complete" => Some("lm.complete"),
-        "leaven/agent.run" => Some("agent.run"),
-        "leaven/sandbox.exec" => Some("sandbox.exec"),
-        "leaven/proposal.submit_batch" => Some("proposal.submit_batch"),
-        "leaven/proposal.apply" => Some("proposal.apply_batch"),
-        "leaven/assessment.submit" => Some("assessment.submit"),
-        "leaven/evaluation.request" => Some("evaluation.request"),
-        "leaven/event.emit" => Some("event.emit"),
-        _ => None,
+impl MethodPrimaryKind {
+    /// Wire primary-kind spelling.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::StageRunTextOutput => "stage_run_text_output",
+            Self::GraphSet => "graph_set",
+            Self::CaseRecord => "case_record",
+            Self::WorkspaceHandle => "workspace_handle",
+            Self::WorkspaceSnapshot => "workspace_snapshot",
+            Self::WorkspaceFile => "workspace_file",
+            Self::WorkspaceListing => "workspace_listing",
+            Self::WorkspaceDiff => "workspace_diff",
+            Self::LmResponse => "lm_response",
+            Self::AgentSession => "agent_session",
+            Self::SandboxExec => "sandbox_exec",
+            Self::ProposalBatchReceipt => "proposal_batch_receipt",
+            Self::ApplyReceipt => "apply_receipt",
+            Self::AssessmentBatchReceipt => "assessment_batch_receipt",
+            Self::EvaluationRequestReceipt => "evaluation_request_receipt",
+            Self::EmitRunEvent => "emit_run_event",
+        }
+    }
+
+    /// Parses a locked primary-kind spelling.
+    pub fn parse(value: &str) -> Option<Self> {
+        Some(match value {
+            "stage_run_text_output" => Self::StageRunTextOutput,
+            "graph_set" => Self::GraphSet,
+            "case_record" => Self::CaseRecord,
+            "workspace_handle" => Self::WorkspaceHandle,
+            "workspace_snapshot" => Self::WorkspaceSnapshot,
+            "workspace_file" => Self::WorkspaceFile,
+            "workspace_listing" => Self::WorkspaceListing,
+            "workspace_diff" => Self::WorkspaceDiff,
+            "lm_response" => Self::LmResponse,
+            "agent_session" => Self::AgentSession,
+            "sandbox_exec" => Self::SandboxExec,
+            "proposal_batch_receipt" => Self::ProposalBatchReceipt,
+            "apply_receipt" => Self::ApplyReceipt,
+            "assessment_batch_receipt" => Self::AssessmentBatchReceipt,
+            "evaluation_request_receipt" => Self::EvaluationRequestReceipt,
+            "emit_run_event" => Self::EmitRunEvent,
+            _ => return None,
+        })
     }
 }
 
-/// Locked params/result schema bindings for a Leaven ACP extension method.
-///
-/// `leaven/stage.run` is host->worker stage dispatch and binds the dedicated
-/// stage-run schema in both directions; every other locked method is a
-/// worker->host Plan IR effect callback and binds Plan IR params plus a Plan
-/// Result.
-pub(super) fn schema_binding_for_method(method: &str) -> Option<(MethodSchema, MethodSchema)> {
-    // Only methods in the locked set carry a binding; the stage-dispatch method
-    // binds the stage-run schema in both directions and every effect callback
-    // binds Plan IR params plus a Plan Result.
-    required_action_for_method(method)?;
-    Some(match method {
-        "leaven/stage.run" => (MethodSchema::StageRun, MethodSchema::StageRun),
-        _ => (MethodSchema::PlanIr, MethodSchema::PlanResult),
-    })
+/// Receipt family expected from one locked method.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MethodReceiptExpectation {
+    /// Stage-run result receipt.
+    StageRun,
+    /// Query receipt.
+    Query,
+    /// Call receipt with expected call kind.
+    Call(&'static str),
+    /// Write receipt with expected write kind.
+    Write(&'static str),
 }

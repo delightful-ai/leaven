@@ -430,8 +430,8 @@ impl<R: BufRead, W: Write> AcpStdioSession<R, W> {
         let params = value
             .get("params")
             .expect("validated inbound request carries Plan IR params");
-        let result = host.service(request.method(), params)?;
-        let result = self.stamp_session_fingerprint(request.method(), result)?;
+        let result = host.service(request.method().as_str(), params)?;
+        let result = self.stamp_session_fingerprint(request.method().as_str(), result)?;
         // Validate the host's extension result before it crosses the boundary.
         self.package
             .validate_acp_extension_result_document(&result)?;

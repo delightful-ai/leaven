@@ -245,7 +245,7 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
 
 impl<P: OptimizationProblem> SeamService for RunBoundGraphEffectService<'_, '_, P> {
     fn handle_plan(&self, request: SeamPlanRequest<'_>) -> Result<Value, SeamServiceError> {
-        self.handle_method(request.method(), request.params())
+        self.handle_method(request.method().as_str(), request.params())
             .map_err(|error| SeamServiceError::execution(error.to_string()))
     }
 

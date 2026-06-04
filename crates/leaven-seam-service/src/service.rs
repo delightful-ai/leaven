@@ -89,7 +89,7 @@ impl ConfiguredSeamService {
 
 impl SeamService for ConfiguredSeamService {
     fn handle_plan(&self, request: SeamPlanRequest<'_>) -> Result<Value, SeamServiceError> {
-        self.execute_plan_method(request.method(), request.params())
+        self.execute_plan_method(request.method().as_str(), request.params())
             .map_err(|error| SeamServiceError::execution(error.to_string()))
     }
 

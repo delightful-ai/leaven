@@ -1,8 +1,8 @@
 use serde_json::Value;
 
 use super::{
-    AcpProfileDocument, invalid_acp, jsonrpc_id, require_jsonrpc_2, require_jsonrpc_members,
-    required_string,
+    AcpProfileDocument, LockedMethod, invalid_acp, jsonrpc_id, require_jsonrpc_2,
+    require_jsonrpc_members, required_string,
 };
 use crate::{PublicSeamError, StageRunRequestDocument, StageRunResultDocument};
 
@@ -48,7 +48,7 @@ impl AcpStageRunRequestDocument {
                 "ACP stage-run request method must be `{STAGE_RUN_METHOD}`, not `{method}`"
             )));
         }
-        if profile.method(method).is_none() {
+        if profile.method(LockedMethod::StageRun).is_none() {
             return Err(invalid_acp(
                 "ACP stage-run method is not in the locked Leaven profile",
             ));

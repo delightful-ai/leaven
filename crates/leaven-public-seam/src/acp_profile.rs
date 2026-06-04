@@ -16,6 +16,9 @@ pub use lifecycle::{
     AcpProgressDisposition, AcpProgressPriority, AcpSessionCancellation, AcpSessionLifecycle,
     AcpSessionState, AcpSessionUpdate,
 };
+pub use methods::{
+    LockedMethod, MethodAction, MethodPrimaryKind, MethodReceiptExpectation, MethodSchema,
+};
 pub use permission::{
     AcpPermissionDecision, AcpPermissionRequest, authenticate, authorize_permission,
 };
@@ -94,11 +97,9 @@ impl AcpProfileDocument {
         let extension_methods = extension_methods(object.get("extension_methods"))?;
         let advertised = extension_methods
             .iter()
-            .map(|method| method.method.as_str())
+            .map(|method| method.method)
             .collect::<BTreeSet<_>>();
-        let locked = locked_extension_methods()
-            .into_iter()
-            .collect::<BTreeSet<_>>();
+        let locked = LockedMethod::ALL.into_iter().collect::<BTreeSet<_>>();
         if advertised != locked {
             return Err(invalid_acp(
                 "ACP profile must advertise exactly the locked Leaven V1 extension methods",
@@ -172,43 +173,48 @@ impl AcpProfileDocument {
         self.backpressure
     }
 
-    /// Looks up one extension method by name.
-    pub fn method(&self, method: &str) -> Option<&AcpExtensionMethod> {
+    /// Looks up one extension method by typed method.
+    pub fn method(&self, method: LockedMethod) -> Option<&AcpExtensionMethod> {
         self.extension_methods
             .iter()
             .find(|entry| entry.method == method)
+    }
+
+    /// Looks up one extension method by wire name.
+    pub fn method_by_name(&self, method: &str) -> Option<&AcpExtensionMethod> {
+        LockedMethod::parse(method).and_then(|method| self.method(method))
     }
 }
 
 /// One Leaven ACP extension method declaration.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AcpExtensionMethod {
-    method: String,
-    params_schema: String,
-    result_schema: String,
-    required_action: String,
+    method: LockedMethod,
+    params_schema: MethodSchema,
+    result_schema: MethodSchema,
+    required_action: MethodAction,
     produces_receipt: bool,
 }
 
 impl AcpExtensionMethod {
     /// ACP extension method name.
-    pub fn method(&self) -> &str {
-        &self.method
+    pub const fn method(&self) -> LockedMethod {
+        self.method
     }
 
     /// Required capability action.
-    pub fn required_action(&self) -> &str {
-        &self.required_action
+    pub const fn required_action(&self) -> MethodAction {
+        self.required_action
     }
 
     /// JSON Schema used for method params.
-    pub fn params_schema(&self) -> &str {
-        &self.params_schema
+    pub const fn params_schema(&self) -> MethodSchema {
+        self.params_schema
     }
 
     /// JSON Schema used for method results.
-    pub fn result_schema(&self) -> &str {
-        &self.result_schema
+    pub const fn result_schema(&self) -> MethodSchema {
+        self.result_schema
     }
 
     /// Whether the method declares receipt-producing results.
@@ -254,7 +260,7 @@ impl AcpBackpressure {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AcpJsonRpcRequestDocument {
     id: String,
-    method: String,
+    method: LockedMethod,
 }
 
 impl AcpJsonRpcRequestDocument {
@@ -277,10 +283,15 @@ impl AcpJsonRpcRequestDocument {
             "ACP JSON-RPC request",
         )?;
         let id = jsonrpc_id(object.get("id"))?;
-        let method = required_string(object.get("method"), "method")?.to_owned();
-        if profile.method(&method).is_none() {
+        let method_name = required_string(object.get("method"), "method")?;
+        let method = LockedMethod::parse(method_name).ok_or_else(|| {
+            invalid_acp(format!(
+                "ACP JSON-RPC request method `{method_name}` is not in the locked Leaven profile"
+            ))
+        })?;
+        if profile.method(method).is_none() {
             return Err(invalid_acp(format!(
-                "ACP JSON-RPC request method `{method}` is not in the locked Leaven profile"
+                "ACP JSON-RPC request method `{method_name}` is not in the locked Leaven profile"
             )));
         }
         object
@@ -295,8 +306,8 @@ impl AcpJsonRpcRequestDocument {
     }
 
     /// Leaven ACP extension method.
-    pub fn method(&self) -> &str {
-        &self.method
+    pub const fn method(&self) -> LockedMethod {
+        self.method
     }
 }
 
@@ -304,8 +315,8 @@ impl AcpJsonRpcRequestDocument {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AcpJsonRpcResponseDocument {
     id: String,
-    method: String,
-    primary_kind: String,
+    method: LockedMethod,
+    primary_kind: MethodPrimaryKind,
     result: Value,
 }
 
@@ -350,8 +361,8 @@ impl AcpJsonRpcResponseDocument {
         }
         Ok(Self {
             id,
-            method: extension.method().to_owned(),
-            primary_kind: extension.primary_kind().to_owned(),
+            method: extension.method(),
+            primary_kind: extension.primary_kind(),
             result: object
                 .get("result")
                 .expect("result was required above")
@@ -365,13 +376,13 @@ impl AcpJsonRpcResponseDocument {
     }
 
     /// Leaven ACP extension method answered by this response.
-    pub fn method(&self) -> &str {
-        &self.method
+    pub const fn method(&self) -> LockedMethod {
+        self.method
     }
 
     /// Primary result kind returned by the extension result.
-    pub fn primary_kind(&self) -> &str {
-        &self.primary_kind
+    pub const fn primary_kind(&self) -> MethodPrimaryKind {
+        self.primary_kind
     }
 
     /// Validated ACP extension result payload carried by the JSON-RPC response.
@@ -388,27 +399,27 @@ fn extension_methods(value: Option<&Value>) -> Result<Vec<AcpExtensionMethod>, P
         let entry = entry
             .as_object()
             .ok_or_else(|| invalid_acp("extension method entries must be objects"))?;
-        let method = required_string(entry.get("method"), "extension_methods.method")?.to_owned();
-        if !method.starts_with("leaven/") || method.to_ascii_lowercase().contains("mcp") {
+        let method_name = required_string(entry.get("method"), "extension_methods.method")?;
+        if !method_name.starts_with("leaven/") || method_name.to_ascii_lowercase().contains("mcp") {
             return Err(invalid_acp(format!(
-                "extension method `{method}` is not a Leaven ACP method"
+                "extension method `{method_name}` is not a Leaven ACP method"
             )));
         }
-        if !seen.insert(method.clone()) {
+        let method = LockedMethod::parse(method_name).ok_or_else(|| {
+            invalid_acp(format!(
+                "extension method `{method_name}` is not in the locked ACP profile"
+            ))
+        })?;
+        if !seen.insert(method) {
             return Err(invalid_acp(format!(
-                "duplicate ACP extension method `{method}`"
+                "duplicate ACP extension method `{method_name}`"
             )));
         }
-        let required_action =
-            required_string(entry.get("required_action"), "required_action")?.to_owned();
-        let Some(expected_action) = required_action_for_method(&method) else {
+        let expected_action = method.required_action();
+        let required_action = required_string(entry.get("required_action"), "required_action")?;
+        if required_action != expected_action.as_str() {
             return Err(invalid_acp(format!(
-                "extension method `{method}` is not in the locked ACP profile"
-            )));
-        };
-        if expected_action != required_action {
-            return Err(invalid_acp(format!(
-                "extension method `{method}` required_action does not match Leaven profile"
+                "extension method `{method_name}` required_action does not match Leaven profile"
             )));
         }
         let produces_receipt = entry
@@ -417,44 +428,34 @@ fn extension_methods(value: Option<&Value>) -> Result<Vec<AcpExtensionMethod>, P
             .ok_or_else(|| invalid_acp("extension method must declare produces_receipt"))?;
         if !produces_receipt {
             return Err(invalid_acp(format!(
-                "extension method `{method}` must produce receipts"
+                "extension method `{method_name}` must produce receipts"
             )));
         }
-        let (expected_params, expected_result) =
-            schema_binding_for_method(&method).ok_or_else(|| {
-                invalid_acp(format!(
-                    "extension method `{method}` is not in the locked ACP profile"
-                ))
-            })?;
-        let params_schema =
-            required_string(entry.get("params_schema"), "params_schema")?.to_owned();
+        let expected_params = method.params_schema();
+        let expected_result = method.result_schema();
+        let params_schema = required_string(entry.get("params_schema"), "params_schema")?;
         if params_schema != expected_params.schema_file() {
             return Err(invalid_acp(format!(
-                "extension method `{method}` params_schema must bind `{}`",
+                "extension method `{method_name}` params_schema must bind `{}`",
                 expected_params.schema_file()
             )));
         }
-        let result_schema =
-            required_string(entry.get("result_schema"), "result_schema")?.to_owned();
+        let result_schema = required_string(entry.get("result_schema"), "result_schema")?;
         if result_schema != expected_result.schema_file() {
             return Err(invalid_acp(format!(
-                "extension method `{method}` result_schema must bind `{}`",
+                "extension method `{method_name}` result_schema must bind `{}`",
                 expected_result.schema_file()
             )));
         }
         output.push(AcpExtensionMethod {
             method,
-            params_schema,
-            result_schema,
-            required_action,
+            params_schema: expected_params,
+            result_schema: expected_result,
+            required_action: expected_action,
             produces_receipt,
         });
     }
     Ok(output)
-}
-
-fn locked_extension_methods() -> [&'static str; 25] {
-    methods::locked_extension_methods()
 }
 
 /// Builds the canonical locked V1 Leaven ACP profile document JSON.
@@ -490,16 +491,6 @@ pub fn locked_acp_profile_value() -> Value {
             "heartbeat_ms": 1000
         }
     })
-}
-
-fn required_action_for_method(method: &str) -> Option<&'static str> {
-    methods::required_action_for_method(method)
-}
-
-fn schema_binding_for_method(
-    method: &str,
-) -> Option<(methods::MethodSchema, methods::MethodSchema)> {
-    methods::schema_binding_for_method(method)
 }
 
 fn require_const(

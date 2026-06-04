@@ -37,8 +37,13 @@ returns typed seam records.
 
 ## Non-Negotiable Rule
 
-No unbranded raw JSON crosses the seam contract, runtime, service, SDK, or
-worker protocol boundaries.
+No unbranded raw JSON crosses or moves within Leaven's seam, runtime, service,
+engine-facing, SDK, or worker protocol code.
+
+The rule is not only an external-boundary rule. Inside Leaven, raw JSON is still
+type erasure unless it is one of the named islands below or a local parse buffer
+that is immediately consumed into a typed record and never exposed to another
+module.
 
 Allowed raw JSON must be represented by named types. Each type needs an owning
 module, a doc comment explaining why it cannot be more specific, law/example

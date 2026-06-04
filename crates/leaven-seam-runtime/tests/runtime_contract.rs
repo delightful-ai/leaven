@@ -131,8 +131,8 @@ impl SeamService for RecordingService {
         self.called_methods
             .lock()
             .unwrap()
-            .push(request.method().to_owned());
-        Err(SeamServiceError::unavailable(request.method()))
+            .push(request.method().as_str().to_owned());
+        Err(SeamServiceError::unavailable(request.method().as_str()))
     }
 
     fn handle_stage_run(
@@ -154,7 +154,7 @@ enum StageRunService {
 
 impl SeamService for StageRunService {
     fn handle_plan(&self, request: SeamPlanRequest<'_>) -> Result<Value, SeamServiceError> {
-        Err(SeamServiceError::unavailable(request.method()))
+        Err(SeamServiceError::unavailable(request.method().as_str()))
     }
 
     fn handle_stage_run(

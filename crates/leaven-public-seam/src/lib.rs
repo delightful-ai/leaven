@@ -27,7 +27,8 @@ pub use acp_profile::{
     AcpPermissionDecision, AcpPermissionRequest, AcpProfileDocument, AcpProgressDisposition,
     AcpProgressPriority, AcpSessionCancellation, AcpSessionLifecycle, AcpSessionState,
     AcpSessionUpdate, AcpStageRunRequestDocument, AcpStageRunResponseDocument,
-    AcpStdioWorkerLaunch, AcpWorkerSession,
+    AcpStdioWorkerLaunch, AcpWorkerSession, LockedMethod, MethodAction, MethodPrimaryKind,
+    MethodReceiptExpectation, MethodSchema,
 };
 pub use call_authority::{
     CallAuthorityDenial, CallAuthorityDenialKind, CallAuthorityError, CallAuthorityReport,

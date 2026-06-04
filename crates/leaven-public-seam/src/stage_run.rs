@@ -1,6 +1,8 @@
 use serde_json::Value;
 
-use crate::{OutputRecordDocument, PublicSeamError, StagePayloadDocument, StagePayloadRole};
+use crate::{
+    LockedMethod, OutputRecordDocument, PublicSeamError, StagePayloadDocument, StagePayloadRole,
+};
 
 /// Stage kind dispatched by one generic `leaven/stage.run` call.
 ///
@@ -105,7 +107,7 @@ pub struct StageRunResultDocument {
 /// Opaque effect receipt reported by a worker while producing a stage result.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StageEffectReceipt {
-    method: String,
+    method: LockedMethod,
     receipt: String,
     call_kind: Option<String>,
     cost: Option<Value>,
@@ -117,12 +119,17 @@ impl StageEffectReceipt {
         let object = value
             .as_object()
             .ok_or_else(|| invalid_stage_run("stage effect receipt must be an object"))?;
-        let method = required_str(object.get("method"), "effect_receipts.method")?.to_owned();
+        let method_name = required_str(object.get("method"), "effect_receipts.method")?;
+        let method = LockedMethod::parse(method_name).ok_or_else(|| {
+            invalid_stage_run(format!(
+                "effect_receipts.method `{method_name}` is not a locked callback method"
+            ))
+        })?;
         let receipt = required_str(object.get("receipt"), "effect_receipts.receipt")?.to_owned();
         let call_kind = optional_str(object.get("call_kind"), "effect_receipts.call_kind")?;
         let cost = optional_object_value(object.get("cost"), "effect_receipts.cost")?;
         let blob_refs = value_array(object.get("blob_refs"), "effect_receipts.blob_refs")?;
-        validate_effect_receipt_binding(&method, &receipt, call_kind)?;
+        validate_effect_receipt_binding(method, &receipt, call_kind)?;
         Ok(Self {
             method,
             receipt,
@@ -133,8 +140,8 @@ impl StageEffectReceipt {
     }
 
     /// Worker callback method that produced this receipt.
-    pub fn method(&self) -> &str {
-        &self.method
+    pub const fn method(&self) -> LockedMethod {
+        self.method
     }
 
     /// Opaque effect receipt id.
@@ -161,7 +168,7 @@ impl StageEffectReceipt {
 /// Opaque proposal write receipt reported by a proposer worker.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StageProposalReceipt {
-    method: String,
+    method: LockedMethod,
     receipt: String,
     write_kind: Option<String>,
     proposal_ids: Vec<String>,
@@ -172,11 +179,16 @@ impl StageProposalReceipt {
         let object = value
             .as_object()
             .ok_or_else(|| invalid_stage_run("stage proposal receipt must be an object"))?;
-        let method = required_str(object.get("method"), "proposal_receipts.method")?.to_owned();
+        let method_name = required_str(object.get("method"), "proposal_receipts.method")?;
+        let method = LockedMethod::parse(method_name).ok_or_else(|| {
+            invalid_stage_run(format!(
+                "proposal_receipts.method `{method_name}` is not a locked callback method"
+            ))
+        })?;
         let receipt = required_receipt_id(object.get("receipt"), "proposal_receipts.receipt")?;
         let write_kind = optional_str(object.get("write_kind"), "proposal_receipts.write_kind")?;
         let proposal_ids = proposal_ids(object.get("proposal_ids"))?;
-        validate_proposal_receipt_binding(&method, &receipt, write_kind)?;
+        validate_proposal_receipt_binding(method, &receipt, write_kind)?;
         Ok(Self {
             method,
             receipt,
@@ -186,8 +198,8 @@ impl StageProposalReceipt {
     }
 
     /// Worker callback method that produced this receipt.
-    pub fn method(&self) -> &str {
-        &self.method
+    pub const fn method(&self) -> LockedMethod {
+        self.method
     }
 
     /// Opaque proposal write receipt id.
@@ -370,45 +382,50 @@ fn proposal_ids(value: Option<&Value>) -> Result<Vec<String>, PublicSeamError> {
 }
 
 fn validate_effect_receipt_binding(
-    method: &str,
+    method: LockedMethod,
     receipt: &str,
     call_kind: Option<&str>,
 ) -> Result<(), PublicSeamError> {
     let (expected_prefix, expected_kind) = match method {
-        "leaven/lm.complete" => ("lmrec_", "lm_complete"),
-        "leaven/agent.run" => ("agentrec_", "agent_run"),
+        LockedMethod::LmComplete => ("lmrec_", "lm_complete"),
+        LockedMethod::AgentRun => ("agentrec_", "agent_run"),
         other => {
             return Err(invalid_stage_run(format!(
-                "effect_receipts.method `{other}` is not an effect callback method"
+                "effect_receipts.method `{}` is not an effect callback method",
+                other.as_str()
             )));
         }
     };
     if !receipt.starts_with(expected_prefix) {
         return Err(invalid_stage_run(format!(
-            "effect receipt `{receipt}` does not match method `{method}`"
+            "effect receipt `{receipt}` does not match method `{}`",
+            method.as_str()
         )));
     }
     if call_kind.is_some_and(|kind| kind != expected_kind) {
         return Err(invalid_stage_run(format!(
-            "effect receipt call_kind must be `{expected_kind}` for method `{method}`"
+            "effect receipt call_kind must be `{expected_kind}` for method `{}`",
+            method.as_str()
         )));
     }
     Ok(())
 }
 
 fn validate_proposal_receipt_binding(
-    method: &str,
+    method: LockedMethod,
     receipt: &str,
     write_kind: Option<&str>,
 ) -> Result<(), PublicSeamError> {
-    if method != "leaven/proposal.submit_batch" {
+    if method != LockedMethod::ProposalSubmitBatch {
         return Err(invalid_stage_run(format!(
-            "proposal_receipts.method `{method}` is not a proposal callback method"
+            "proposal_receipts.method `{}` is not a proposal callback method",
+            method.as_str()
         )));
     }
     if !receipt.starts_with("wrec_") {
         return Err(invalid_stage_run(format!(
-            "proposal receipt `{receipt}` does not match method `{method}`"
+            "proposal receipt `{receipt}` does not match method `{}`",
+            method.as_str()
         )));
     }
     if write_kind.is_some_and(|kind| kind != "submit_proposal_batch") {

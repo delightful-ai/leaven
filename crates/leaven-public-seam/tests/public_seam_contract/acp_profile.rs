@@ -5,8 +5,7 @@ use leaven_public_seam::{
     AcpAuthenticateRequest, AcpBackpressure, AcpPermissionRequest, AcpProgressDisposition,
     AcpProgressPriority, AcpSessionLifecycle, AcpSessionState, AcpStdioWorkerLaunch,
     AcpWorkerSession, CapabilityDocument, CapabilityRegistry, LockedMethod, MethodAction,
-    MethodPrimaryKind, MethodReceiptExpectation, MethodSchema, PublicSeamError,
-    PublicSeamPackage,
+    MethodPrimaryKind, MethodReceiptExpectation, MethodSchema, PublicSeamError, PublicSeamPackage,
 };
 use serde_json::{Value, json};
 
@@ -57,7 +56,10 @@ fn acp_profile_validates_pinned_stdio_leaven_methods_and_bounded_updates() {
     assert_eq!(stage_run.method().as_str(), "leaven/stage.run");
     assert_eq!(stage_run.required_action(), MethodAction::StageRun);
     assert_eq!(stage_run.params_schema(), MethodSchema::StageRun);
-    assert_eq!(stage_run.params_schema().schema_file(), "leaven.stage_run.v1.schema.json");
+    assert_eq!(
+        stage_run.params_schema().schema_file(),
+        "leaven.stage_run.v1.schema.json"
+    );
     assert_eq!(stage_run.result_schema(), MethodSchema::StageRun);
     assert!(stage_run.produces_receipt());
 }
@@ -1111,8 +1113,8 @@ fn acp_extension_results_require_receipts_capability_fingerprint_and_data_classe
         .validate_acp_extension_result_document(&extension_result())
         .unwrap();
 
-    assert_eq!(result.method(), "leaven/lm.complete");
-    assert_eq!(result.primary_kind(), "lm_response");
+    assert_eq!(result.method(), LockedMethod::LmComplete);
+    assert_eq!(result.primary_kind(), MethodPrimaryKind::LmResponse);
     assert_eq!(result.capability_fingerprint(), "fp_cap_sha256_acp");
     assert_eq!(result.receipt_count(), 1);
     assert_eq!(result.data_classes(), &["completion.raw".to_owned()]);
@@ -1195,7 +1197,7 @@ fn acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts() {
             ))
             .unwrap();
 
-        assert_eq!(result.method(), method);
+        assert_eq!(result.method(), LockedMethod::parse(method).unwrap());
         assert_eq!(result.receipt_count(), 1);
     }
 }

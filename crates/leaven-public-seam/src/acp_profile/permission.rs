@@ -176,7 +176,7 @@ pub fn authorize_permission(
             Vec::new(),
         );
     }
-    let Some(method) = profile.method(&request.method) else {
+    let Some(method) = profile.method_by_name(&request.method) else {
         return denied(
             capability.capability_fingerprint(),
             "extension_error",
@@ -184,7 +184,7 @@ pub fn authorize_permission(
             Vec::new(),
         );
     };
-    let mut grant = CapabilityGrantRequest::for_action(method.required_action().to_owned());
+    let mut grant = CapabilityGrantRequest::for_action(method.required_action().as_str());
     for (key, value) in request.resource {
         grant = grant.with_resource(key, value);
     }

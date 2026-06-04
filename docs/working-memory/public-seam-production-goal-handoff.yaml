@@ -894,11 +894,13 @@ acceptance:
           denominator: JSON remains only a transport encoding, while method
           semantics must flow through Rust-owned typed method, request, result,
           receipt, capability, runtime, service, Python msgspec, and worker
-          records. It names the few allowed raw JSON islands and requires each
-          to have an owning type, tests, and quality-gate allowlist entry. This
-          is planning evidence only; it explicitly says schema validation over
-          raw JSON, outer-envelope-only Python msgspec records, and the
-          provisional Value-based run route cannot close this row.
+          records. The rule applies inside Leaven too: raw JSON is permitted
+          only as a named island or an immediately consumed local parse buffer.
+          The plan names the few allowed raw JSON islands and requires each to
+          have an owning type, tests, and quality-gate allowlist entry. This is
+          planning evidence only; it explicitly says schema validation over raw
+          JSON, outer-envelope-only Python msgspec records, and the provisional
+          Value-based run route cannot close this row.
       - kind: rust_export_backed_msgspec_codec_foundation
         paths:
           - crates/leaven-cli/src/main.rs
@@ -928,6 +930,42 @@ acceptance:
           and receipt bodies intentionally kept as msgspec Raw. This is still a
           foundation slice: full generated nested Plan IR and Plan Result schema
           branches remain before this row can be marked done.
+      - kind: typed_locked_method_identity_foundation
+        paths:
+          - crates/leaven-public-seam/src/acp_profile/methods.rs
+          - crates/leaven-public-seam/src/acp_profile.rs
+          - crates/leaven-public-seam/src/acp_profile/extension_result.rs
+          - crates/leaven-public-seam/src/stage_run.rs
+          - crates/leaven-seam-runtime/src/runtime.rs
+          - crates/leaven-seam-service/src/service.rs
+          - crates/leaven-seam-service/src/run_bound_service/mod.rs
+          - crates/leaven-cli/src/seam.rs
+          - crates/leaven-acp/src/stdio.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/acp_profile.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/stage_run.rs
+          - crates/leaven-seam-runtime/tests/runtime_contract.rs
+          - crates/leaven-acp/tests/stdio_session_contract.rs
+        commands:
+          - cargo fmt --check
+          - cargo test -p leaven-public-seam --test public_seam_contract
+          - cargo test -p leaven-seam-runtime --test runtime_contract
+          - cargo test -p leaven-seam-service
+          - cargo test -p leaven-acp --test stdio_session_contract
+          - cargo test -p leaven-cli --test seam_stdio_server
+          - cargo test -p leaven --test topology_contract
+          - cargo run -q -p leaven-cli -- seam profile --root .
+        note: >-
+          Locked V1 method identity now has a Rust-owned typed enum and typed
+          schema/action/primary-kind/receipt metadata. The locked profile table
+          is generated from that model, and parsed ACP profile documents,
+          JSON-RPC request/response documents, stage-run receipts, runtime
+          dispatch, service bridges, CLI profile export, and ACP stdio tests
+          now carry or assert typed method/primary-kind identity instead of
+          comparing arbitrary strings. This is phase-1 foundation only: Plan IR
+          values, Plan Result bodies, capability resources, cost/blob refs, and
+          service execution payloads still contain raw JSON islands, and the
+          runtime/service `.as_str()` bridges remain explicit temporary work
+          for the next typed request/result slices.
     closeout_check: >-
       Handwritten Python schema mirrors, pydantic-only wire models, untyped
       dict payloads, response-order batch routing, or msgspec used as a

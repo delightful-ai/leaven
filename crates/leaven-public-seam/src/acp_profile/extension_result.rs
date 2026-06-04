@@ -1,6 +1,9 @@
 use serde_json::{Value, json};
 
-use super::{invalid_acp, prefixed_jcs_hash, required_array, required_string, string_array};
+use super::{
+    LockedMethod, MethodPrimaryKind, MethodReceiptExpectation, invalid_acp, prefixed_jcs_hash,
+    required_array, required_string, string_array,
+};
 use crate::{
     PublicSeamError,
     plan_execution::{validate_agent_session_value, validate_sandbox_exec_value},
@@ -8,8 +11,8 @@ use crate::{
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AcpExtensionResultDocument {
-    method: String,
-    primary_kind: String,
+    method: LockedMethod,
+    primary_kind: MethodPrimaryKind,
     capability_fingerprint: String,
     receipt_count: usize,
     redaction_count: usize,
@@ -21,12 +24,17 @@ impl AcpExtensionResultDocument {
         let object = value
             .as_object()
             .ok_or_else(|| invalid_acp("ACP extension result must be an object"))?;
-        let method = required_string(object.get("method"), "method")?.to_owned();
-        if !method.starts_with("leaven/") || method.contains("mcp") {
+        let method_name = required_string(object.get("method"), "method")?;
+        if !method_name.starts_with("leaven/") || method_name.contains("mcp") {
             return Err(invalid_acp(
                 "ACP extension result method must be Leaven-only",
             ));
         }
+        let method = LockedMethod::parse(method_name).ok_or_else(|| {
+            invalid_acp(format!(
+                "ACP extension result method `{method_name}` is not in the locked profile"
+            ))
+        })?;
         let receipts = required_array(object.get("receipts"), "receipts")?;
         if receipts.is_empty() {
             return Err(invalid_acp("ACP extension result must carry receipts"));
@@ -42,8 +50,13 @@ impl AcpExtensionResultDocument {
         let primary = primary_value
             .as_object()
             .ok_or_else(|| invalid_acp("ACP extension result must carry primary object"))?;
-        let primary_kind = required_string(primary.get("kind"), "primary.kind")?.to_owned();
-        validate_primary_kind(&method, &primary_kind)?;
+        let primary_kind_name = required_string(primary.get("kind"), "primary.kind")?;
+        let primary_kind = MethodPrimaryKind::parse(primary_kind_name).ok_or_else(|| {
+            invalid_acp(format!(
+                "ACP extension result primary kind `{primary_kind_name}` is not in the typed method model"
+            ))
+        })?;
+        validate_primary_kind(method, primary_kind)?;
         if let Some(primary_data_classes) = primary.get("data_classes") {
             for data_class in string_array(Some(primary_data_classes), "primary.data_classes")? {
                 if !data_classes.contains(&data_class) {
@@ -53,11 +66,11 @@ impl AcpExtensionResultDocument {
                 }
             }
         }
-        validate_receipts_for_method(&method, receipts)?;
-        validate_primary_result_hash(&method, primary_value, receipts)?;
-        let expected_receipt = expected_receipt_for_method(&method, receipts)?;
-        validate_extension_primary_op(&method, primary)?;
-        validate_effect_primary_audit(&method, primary, expected_receipt)?;
+        validate_receipts_for_method(method, receipts)?;
+        validate_primary_result_hash(method, primary_value, receipts)?;
+        let expected_receipt = expected_receipt_for_method(method, receipts)?;
+        validate_extension_primary_op(method, primary)?;
+        validate_effect_primary_audit(method, primary, expected_receipt)?;
         if let Some(primary_receipt) = primary.get("receipt").and_then(Value::as_str) {
             ensure_primary_receipt_is_carried(primary_receipt, receipts)?;
         }
@@ -122,13 +135,13 @@ impl AcpExtensionResultDocument {
     }
 
     /// Extension method name.
-    pub fn method(&self) -> &str {
-        &self.method
+    pub const fn method(&self) -> LockedMethod {
+        self.method
     }
 
     /// Primary result value kind.
-    pub fn primary_kind(&self) -> &str {
-        &self.primary_kind
+    pub const fn primary_kind(&self) -> MethodPrimaryKind {
+        self.primary_kind
     }
 
     /// Capability fingerprint attached to the result.
@@ -152,125 +165,40 @@ impl AcpExtensionResultDocument {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum ReceiptExpectation {
-    Query,
-    Call(&'static str),
-    Write(&'static str),
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct ExtensionResultContract {
-    primary_kinds: &'static [&'static str],
-    receipt: ReceiptExpectation,
-}
-
-fn extension_result_contract(method: &str) -> Result<ExtensionResultContract, PublicSeamError> {
-    match method {
-        "leaven/graph.query" => Ok(ExtensionResultContract {
-            primary_kinds: &["graph_set"],
-            receipt: ReceiptExpectation::Query,
-        }),
-        "leaven/case.load"
-        | "leaven/case.input"
-        | "leaven/case.target"
-        | "leaven/case.metadata" => Ok(ExtensionResultContract {
-            primary_kinds: &["case_record"],
-            receipt: ReceiptExpectation::Query,
-        }),
-        "leaven/workspace.materialize" => Ok(ExtensionResultContract {
-            primary_kinds: &["workspace_handle"],
-            receipt: ReceiptExpectation::Call("workspace_materialize"),
-        }),
-        "leaven/workspace.snapshot" | "leaven/workspace.digest" => Ok(ExtensionResultContract {
-            primary_kinds: &["workspace_snapshot"],
-            receipt: ReceiptExpectation::Query,
-        }),
-        "leaven/workspace.read_file" => Ok(ExtensionResultContract {
-            primary_kinds: &["workspace_file"],
-            receipt: ReceiptExpectation::Query,
-        }),
-        "leaven/workspace.list"
-        | "leaven/workspace.stat"
-        | "leaven/workspace.capture_artifacts" => Ok(ExtensionResultContract {
-            primary_kinds: &["workspace_listing"],
-            receipt: ReceiptExpectation::Query,
-        }),
-        "leaven/workspace.git_log"
-        | "leaven/workspace.git_diff"
-        | "leaven/workspace.git_status" => Ok(ExtensionResultContract {
-            primary_kinds: &["workspace_diff"],
-            receipt: ReceiptExpectation::Query,
-        }),
-        "leaven/workspace.release" => Ok(ExtensionResultContract {
-            primary_kinds: &["workspace_handle"],
-            receipt: ReceiptExpectation::Call("workspace_release"),
-        }),
-        "leaven/lm.complete" => Ok(ExtensionResultContract {
-            primary_kinds: &["lm_response"],
-            receipt: ReceiptExpectation::Call("lm_complete"),
-        }),
-        "leaven/agent.run" => Ok(ExtensionResultContract {
-            primary_kinds: &["agent_session"],
-            receipt: ReceiptExpectation::Call("agent_run"),
-        }),
-        "leaven/sandbox.exec" => Ok(ExtensionResultContract {
-            primary_kinds: &["sandbox_exec"],
-            receipt: ReceiptExpectation::Call("sandbox_exec"),
-        }),
-        "leaven/proposal.submit_batch" => Ok(ExtensionResultContract {
-            primary_kinds: &["proposal_batch_receipt"],
-            receipt: ReceiptExpectation::Write("submit_proposal_batch"),
-        }),
-        "leaven/proposal.apply" => Ok(ExtensionResultContract {
-            primary_kinds: &["apply_receipt"],
-            receipt: ReceiptExpectation::Write("apply_proposal_batch"),
-        }),
-        "leaven/assessment.submit" => Ok(ExtensionResultContract {
-            primary_kinds: &["assessment_batch_receipt"],
-            receipt: ReceiptExpectation::Write("submit_assessments"),
-        }),
-        "leaven/evaluation.request" => Ok(ExtensionResultContract {
-            primary_kinds: &["evaluation_request_receipt"],
-            receipt: ReceiptExpectation::Write("request_evaluation"),
-        }),
-        "leaven/event.emit" => Ok(ExtensionResultContract {
-            primary_kinds: &["emit_run_event"],
-            receipt: ReceiptExpectation::Write("emit_run_event"),
-        }),
-        _ => Err(invalid_acp(format!(
-            "ACP extension result method `{method}` is not in the locked profile"
-        ))),
-    }
-}
-
-fn validate_primary_kind(method: &str, primary_kind: &str) -> Result<(), PublicSeamError> {
-    let contract = extension_result_contract(method)?;
-    if contract.primary_kinds.contains(&primary_kind) {
+fn validate_primary_kind(
+    method: LockedMethod,
+    primary_kind: MethodPrimaryKind,
+) -> Result<(), PublicSeamError> {
+    if method.primary_kinds().contains(&primary_kind) {
         Ok(())
     } else {
         Err(invalid_acp(format!(
-            "ACP extension result method `{method}` cannot return primary kind `{primary_kind}`"
+            "ACP extension result method `{}` cannot return primary kind `{}`",
+            method.as_str(),
+            primary_kind.as_str()
         )))
     }
 }
 
-fn validate_receipts_for_method(method: &str, receipts: &[Value]) -> Result<(), PublicSeamError> {
-    let contract = extension_result_contract(method)?;
+fn validate_receipts_for_method(
+    method: LockedMethod,
+    receipts: &[Value],
+) -> Result<(), PublicSeamError> {
     if receipts
         .iter()
-        .any(|receipt| receipt_matches(receipt, contract.receipt))
+        .any(|receipt| receipt_matches(receipt, method.receipt_expectation()))
     {
         Ok(())
     } else {
         Err(invalid_acp(format!(
-            "ACP extension result method `{method}` is missing its expected receipt"
+            "ACP extension result method `{}` is missing its expected receipt",
+            method.as_str()
         )))
     }
 }
 
 fn validate_primary_result_hash(
-    method: &str,
+    method: LockedMethod,
     primary: &Value,
     receipts: &[Value],
 ) -> Result<(), PublicSeamError> {
@@ -308,27 +236,27 @@ fn validate_primary_result_hash(
 }
 
 fn validate_effect_primary_audit(
-    method: &str,
+    method: LockedMethod,
     primary: &serde_json::Map<String, Value>,
     expected_receipt: &serde_json::Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
     let expected_receipt_id = required_string(expected_receipt.get("receipt"), "receipt.receipt")?;
     match method {
-        "leaven/lm.complete" => {
+        LockedMethod::LmComplete => {
             validate_effect_primary_receipt(primary, expected_receipt_id)?;
             validate_effect_primary_cost("lm_complete", primary, expected_receipt)
         }
-        "leaven/agent.run" => {
+        LockedMethod::AgentRun => {
             validate_effect_primary_receipt(primary, expected_receipt_id)?;
             validate_agent_session_value("agent_run", None, primary, expected_receipt_id)?;
             validate_effect_primary_cost("agent_run", primary, expected_receipt)
         }
-        "leaven/sandbox.exec" => {
+        LockedMethod::SandboxExec => {
             validate_effect_primary_receipt(primary, expected_receipt_id)?;
             validate_sandbox_exec_value("sandbox_exec", primary)?;
             validate_effect_primary_cost("sandbox_exec", primary, expected_receipt)
         }
-        "leaven/workspace.release" => {
+        LockedMethod::WorkspaceRelease => {
             validate_effect_primary_receipt(primary, expected_receipt_id)?;
             if primary.get("released").and_then(Value::as_bool) == Some(true) {
                 Ok(())
@@ -343,7 +271,7 @@ fn validate_effect_primary_audit(
 }
 
 fn validate_extension_primary_op(
-    _method: &str,
+    _method: LockedMethod,
     primary: &serde_json::Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
     if primary.get("kind").and_then(Value::as_str) != Some("extension") {
@@ -387,32 +315,36 @@ fn validate_effect_primary_cost(
 }
 
 fn expected_receipt_for_method<'a>(
-    method: &str,
+    method: LockedMethod,
     receipts: &'a [Value],
 ) -> Result<&'a serde_json::Map<String, Value>, PublicSeamError> {
-    let expectation = extension_result_contract(method)?.receipt;
+    let expectation = method.receipt_expectation();
     receipts
         .iter()
         .find(|receipt| receipt_matches(receipt, expectation))
         .and_then(Value::as_object)
         .ok_or_else(|| {
             invalid_acp(format!(
-                "ACP extension result method `{method}` is missing its expected receipt"
+                "ACP extension result method `{}` is missing its expected receipt",
+                method.as_str()
             ))
         })
 }
 
-fn receipt_matches(receipt: &Value, expectation: ReceiptExpectation) -> bool {
+fn receipt_matches(receipt: &Value, expectation: MethodReceiptExpectation) -> bool {
     let Some(object) = receipt.as_object() else {
         return false;
     };
     match expectation {
-        ReceiptExpectation::Query => object.get("kind").and_then(Value::as_str) == Some("query"),
-        ReceiptExpectation::Call(call_kind) => {
+        MethodReceiptExpectation::StageRun => false,
+        MethodReceiptExpectation::Query => {
+            object.get("kind").and_then(Value::as_str) == Some("query")
+        }
+        MethodReceiptExpectation::Call(call_kind) => {
             object.get("kind").and_then(Value::as_str) == Some("call")
                 && object.get("call_kind").and_then(Value::as_str) == Some(call_kind)
         }
-        ReceiptExpectation::Write(write_kind) => {
+        MethodReceiptExpectation::Write(write_kind) => {
             object.get("kind").and_then(Value::as_str) == Some("write")
                 && object.get("write_kind").and_then(Value::as_str) == Some(write_kind)
         }

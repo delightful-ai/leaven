@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use leaven_public_seam::{PublicSeamPackage, SchemaFingerprint};
+use leaven_public_seam::{MethodSchema, PublicSeamPackage, SchemaFingerprint};
 use leaven_seam_runtime::{SeamRuntime, SeamRuntimeError};
 use leaven_seam_service::{ConfiguredSeamService, ConfiguredSeamServiceError, SeamServiceConfig};
 use leaven_seam_stdio::{SeamStdioError, serve_inherited_stdio};
@@ -22,10 +22,10 @@ impl SeamProfileCommand {
                 let params_fingerprint = schema_fingerprint(&package, method.params_schema())?;
                 let result_fingerprint = schema_fingerprint(&package, method.result_schema())?;
                 Ok(json!({
-                    "method": method.method(),
-                    "params_schema": method.params_schema(),
-                    "result_schema": method.result_schema(),
-                    "required_action": method.required_action(),
+                    "method": method.method().as_str(),
+                    "params_schema": method.params_schema().schema_file(),
+                    "result_schema": method.result_schema().schema_file(),
+                    "required_action": method.required_action().as_str(),
                     "params_schema_fingerprint": params_fingerprint,
                     "result_schema_fingerprint": result_fingerprint,
                     "produces_receipt": method.produces_receipt()
@@ -47,9 +47,9 @@ impl SeamProfileCommand {
 
 fn schema_fingerprint(
     package: &PublicSeamPackage,
-    schema: &str,
+    schema: MethodSchema,
 ) -> Result<String, SeamCommandError> {
-    let value: Value = package.schema_json(schema)?;
+    let value: Value = package.schema_json(schema.schema_file())?;
     Ok(SchemaFingerprint::for_json_value(&value)?
         .as_str()
         .to_owned())

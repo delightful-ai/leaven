@@ -4,7 +4,9 @@ use leaven_acp::{
     AcpEffectHost, AcpProcessCommand, AcpStdioProcessSession, AcpTransportError,
     RejectAllEffectHost,
 };
-use leaven_public_seam::{AcpProfileDocument, AcpProgressDisposition, PublicSeamPackage};
+use leaven_public_seam::{
+    AcpProfileDocument, AcpProgressDisposition, LockedMethod, MethodPrimaryKind, PublicSeamPackage,
+};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
@@ -46,8 +48,8 @@ printf '%s\n' "$LEAVEN_TEST_RESPONSE" | sed "s/__CAPABILITY_FINGERPRINT__/$LEAVE
             &RejectAllEffectHost,
         )
         .unwrap();
-    assert_eq!(response.method(), "leaven/lm.complete");
-    assert_eq!(response.primary_kind(), "lm_response");
+    assert_eq!(response.method(), LockedMethod::LmComplete);
+    assert_eq!(response.primary_kind(), MethodPrimaryKind::LmResponse);
 }
 
 #[test]
@@ -120,8 +122,8 @@ print(json.dumps(response, sort_keys=True), flush=True)
             &RejectAllEffectHost,
         )
         .unwrap();
-    assert_eq!(result.method(), "leaven/lm.complete");
-    assert_eq!(result.primary_kind(), "lm_response");
+    assert_eq!(result.method(), LockedMethod::LmComplete);
+    assert_eq!(result.primary_kind(), MethodPrimaryKind::LmResponse);
     assert_eq!(
         session
             .worker_session_snapshot()
@@ -252,7 +254,7 @@ with open(os.environ["LEAVEN_TEST_OBSERVED_RESPONSE"], "w", encoding="utf-8") as
     let host = RecordingLmCompleteHost::new();
     let request = session.serve_next_inbound_request(&host).unwrap();
     assert_eq!(request.id(), "worker-req-7");
-    assert_eq!(request.method(), "leaven/lm.complete");
+    assert_eq!(request.method(), LockedMethod::LmComplete);
     // The worker's session/update preceding the request was applied as lifecycle
     // control, not confused with the inbound request.
     assert_eq!(
@@ -758,8 +760,8 @@ with open(os.environ["LEAVEN_TEST_OBSERVED_REQUESTS"], "w", encoding="utf-8") as
             )
             .unwrap_or_else(|error| panic!("program call {index} {method} failed: {error:?}"));
         assert_eq!(response.id(), format!("leaven-acp-{index}"));
-        assert_eq!(response.method(), *method);
-        assert_eq!(response.primary_kind(), *primary_kind);
+        assert_eq!(response.method(), locked_method(method));
+        assert_eq!(response.primary_kind(), primary_kind_for(primary_kind));
     }
     assert_eq!(
         session
@@ -961,7 +963,7 @@ print(json.dumps({
             &RejectAllEffectHost,
         )
         .unwrap();
-    assert_eq!(response.primary_kind(), "workspace_handle");
+    assert_eq!(response.primary_kind(), MethodPrimaryKind::WorkspaceHandle);
     assert!(matches!(
         session.call_extension(
             "leaven/lm.complete",
@@ -1103,8 +1105,8 @@ printf '%s\n' "$LEAVEN_TEST_RESPONSE" | sed "s/__CAPABILITY_FINGERPRINT__/$LEAVE
         let response = session
             .call_extension(case.method, &acp_plan_params(), &RejectAllEffectHost)
             .unwrap_or_else(|error| panic!("case {index} {} failed: {error:?}", case.method));
-        assert_eq!(response.method(), case.method);
-        assert_eq!(response.primary_kind(), case.primary_kind);
+        assert_eq!(response.method(), locked_method(case.method));
+        assert_eq!(response.primary_kind(), primary_kind_for(case.primary_kind));
     }
 }
 
@@ -1546,6 +1548,14 @@ struct ExtensionCase {
     method: &'static str,
     primary_kind: &'static str,
     result: Value,
+}
+
+fn locked_method(value: &str) -> LockedMethod {
+    LockedMethod::parse(value).unwrap_or_else(|| panic!("unknown locked method {value}"))
+}
+
+fn primary_kind_for(value: &str) -> MethodPrimaryKind {
+    MethodPrimaryKind::parse(value).unwrap_or_else(|| panic!("unknown primary kind {value}"))
 }
 
 fn package() -> PublicSeamPackage {
