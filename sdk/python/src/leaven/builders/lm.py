@@ -2,12 +2,18 @@
 
 import asyncio
 from collections.abc import Sequence
-from typing import Any, Literal, Protocol, cast
+from typing import Literal, Protocol
 
+from msgspec import UNSET, UnsetType
 from pydantic import BaseModel, ConfigDict
 
 from .._receipts import CallReceipt
 from .._seam import LmCompleteRequest
+from .._seam._wire import JsonObject
+from .._seam._wire.json_value import json_object
+from .._seam._wire.payloads import Cost
+from .._seam.results import LmCompleteResult
+from ..json_value import JsonValue
 
 LmMessageRole = Literal["system", "developer", "user", "assistant", "tool"]
 
@@ -29,7 +35,7 @@ class LmResponse(BaseModel):
 
     text: str
     """Assistant-authored final response text."""
-    parsed: Any | None = None
+    parsed: JsonValue | None = None
     """Parsed structured output when `response_format` was used."""
     finish_reason: str
     usage: dict[str, int]
@@ -77,14 +83,14 @@ class LmBuilder:
         self,
         *,
         prompt: str | None = None,
-        messages: Sequence[LmMessage] | Sequence[dict[str, Any]] | None = None,
+        messages: Sequence[LmMessage] | Sequence[JsonObject] | None = None,
         model: str | None = None,
         model_role: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
         stop: Sequence[str] | None = None,
         response_format: object | None = None,
-        tools: Sequence[dict[str, Any]] | None = None,
+        tools: Sequence[JsonObject] | None = None,
         input_classes: Sequence[str] | None = None,
         forbidden_input_classes: Sequence[str] | None = None,
     ) -> LmResponse:
@@ -124,21 +130,21 @@ class LmBuilder:
             input_classes=input_classes,
         )
         self._seq += 1
-        result = await asyncio.to_thread(self._client.request, request.to_json_rpc())
+        result = await asyncio.to_thread(self._client.lm_complete, request.to_json_rpc())
         return _lm_response_from_result(result, model=selected_model)
 
 
 class _SeamRequester(Protocol):
     """Small private protocol LmBuilder needs from the seam client."""
 
-    def request(self, request: dict[str, Any]) -> dict[str, Any]: ...
+    def lm_complete(self, request: JsonObject) -> LmCompleteResult: ...
 
 
 def _messages_to_wire(
     *,
     prompt: str | None,
-    messages: Sequence[LmMessage] | Sequence[dict[str, Any]] | None,
-) -> list[dict[str, Any]]:
+    messages: Sequence[LmMessage] | Sequence[JsonObject] | None,
+) -> list[JsonObject]:
     if (prompt is None) == (messages is None):
         raise ValueError("exactly one of prompt= or messages= is required")
     if prompt is not None:
@@ -147,7 +153,7 @@ def _messages_to_wire(
     return [_message_to_wire(message) for message in messages]
 
 
-def _message_to_wire(message: LmMessage | dict[str, Any]) -> dict[str, Any]:
+def _message_to_wire(message: LmMessage | JsonObject) -> JsonObject:
     value = message.model_dump() if isinstance(message, LmMessage) else dict(message)
     content = value.get("content")
     if isinstance(content, str):
@@ -160,34 +166,29 @@ def _message_to_wire(message: LmMessage | dict[str, Any]) -> dict[str, Any]:
     }
     if value.get("tool_call_id") is not None:
         wire["tool_call_id"] = value["tool_call_id"]
-    return wire
+    return json_object(wire)
 
 
-def _lm_response_from_result(result: dict[str, Any], *, model: str) -> LmResponse:
-    primary = result["primary"]
-    message = primary["message"]
-    text = "".join(
-        part["text"]
-        for part in message["content"]
-        if isinstance(part, dict) and part.get("kind") == "text"
-    )
+def _lm_response_from_result(result: LmCompleteResult, *, model: str) -> LmResponse:
+    primary = result.primary
+    message = primary.message
+    text = "".join(part.text for part in message.content)
     return LmResponse(
         text=text,
-        parsed=primary.get("parsed"),
+        parsed=None,
         finish_reason="stop",
-        usage=_usage(primary.get("cost")),
-        cost_usd=_cost_usd(primary.get("cost")),
+        usage=_usage(primary.cost),
+        cost_usd=_cost_usd(primary.cost),
         model=model,
-        receipt=CallReceipt(receipt_id=primary["receipt"]),
+        receipt=CallReceipt(receipt_id=primary.receipt),
     )
 
 
-def _usage(cost: object) -> dict[str, int]:
-    if not isinstance(cost, dict):
+def _usage(cost: Cost | UnsetType) -> dict[str, int]:
+    if cost is UNSET:
         return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-    cost_value = cast("dict[str, Any]", cost)
-    prompt_tokens = int(cost_value.get("input_tokens", 0))
-    completion_tokens = int(cost_value.get("output_tokens", 0))
+    prompt_tokens = 0 if cost.input_tokens is UNSET else cost.input_tokens
+    completion_tokens = 0 if cost.output_tokens is UNSET else cost.output_tokens
     return {
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
@@ -195,14 +196,11 @@ def _usage(cost: object) -> dict[str, int]:
     }
 
 
-def _cost_usd(cost: object) -> float | None:
-    if not isinstance(cost, dict):
+def _cost_usd(cost: Cost | UnsetType) -> float | None:
+    if cost is UNSET:
         return None
-    cost_value = cast("dict[str, Any]", cost)
-    usd_micro = cost_value.get("usd_micro")
-    if isinstance(usd_micro, int | float):
-        return float(usd_micro) / 1_000_000
-    return None
+    usd_micro = cost.usd_micro
+    return None if usd_micro is UNSET else usd_micro / 1_000_000
 
 
 __all__ = ["LmBuilder", "LmMessage", "LmMessageRole", "LmResponse"]

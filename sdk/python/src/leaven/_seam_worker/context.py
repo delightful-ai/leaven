@@ -4,9 +4,12 @@ import json
 import sys
 from collections.abc import Sequence
 
+from msgspec import ValidationError, convert
+
 from .._seam import LmCompleteRequest
 from .._seam._wire import JsonObject
 from .._seam._wire.json_value import json_object
+from .._seam.results import AgentRunResult, LmCompleteResult, ProposalSubmitResult
 from .._stage_runtime import CallbackProposeContext, CallbackRolloutContext
 from .callbacks import CallbackReceiptLog
 
@@ -18,7 +21,7 @@ class JsonRpcCallbackClient:
         self._lm_model = lm_model
         self._receipts = CallbackReceiptLog()
 
-    def request(self, request: JsonObject) -> JsonObject:
+    def _request_result(self, request: JsonObject) -> JsonObject:
         """Send one callback request and return the public-seam result object."""
         print(json.dumps(request, sort_keys=True), flush=True)
         line = sys.stdin.readline()
@@ -32,6 +35,22 @@ class JsonRpcCallbackClient:
         if isinstance(method, str):
             self._receipts.record_result(method=method, result=result)
         return result
+
+    def agent_run(self, request: JsonObject) -> AgentRunResult:
+        """Send one `leaven/agent.run` callback and decode the typed result."""
+        return _typed_callback_result(
+            self._request_result(request),
+            AgentRunResult,
+            method="leaven/agent.run",
+        )
+
+    def proposal_submit(self, request: JsonObject) -> ProposalSubmitResult:
+        """Send one `leaven/proposal.submit_batch` callback and decode the typed result."""
+        return _typed_callback_result(
+            self._request_result(request),
+            ProposalSubmitResult,
+            method="leaven/proposal.submit_batch",
+        )
 
     def effect_receipts_json(self) -> list[JsonObject]:
         """Return effect receipts observed while running the current stage."""
@@ -52,7 +71,7 @@ class JsonRpcCallbackClient:
         max_tokens: int | None = None,
         stop: Sequence[str] | None = None,
         input_classes: Sequence[str] | None = None,
-    ) -> JsonObject:
+    ) -> LmCompleteResult:
         """Send one `leaven/lm.complete` callback request and read the response."""
         request = LmCompleteRequest(
             request_id=request_id,
@@ -71,7 +90,18 @@ class JsonRpcCallbackClient:
             stop=stop,
             input_classes=input_classes or ["public"],
         ).to_json_rpc()
-        return self.request(request)
+        return _typed_callback_result(
+            self._request_result(request),
+            LmCompleteResult,
+            method="leaven/lm.complete",
+        )
+
+
+def _typed_callback_result[T](result: JsonObject, result_type: type[T], *, method: str) -> T:
+    try:
+        return convert(result, type=result_type)
+    except ValidationError as error:
+        raise RuntimeError(f"{method} callback returned invalid typed result: {error}") from error
 
 
 def rollout_context(

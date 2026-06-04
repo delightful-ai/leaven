@@ -14,6 +14,17 @@ from leaven._seam import (
     OpenAiLmRuntimeConfig,
     StageRunRequest,
 )
+from leaven._seam._wire.payloads import BlobRef as WireBlobRef
+from leaven._seam._wire.payloads import Cost
+from leaven._seam.results import (
+    AgentCommandRecord,
+    AgentRunResult,
+    AgentSessionPrimary,
+    LmCompleteResult,
+    LmContentPart,
+    LmMessageRecord,
+    LmResponsePrimary,
+)
 from leaven._seam_optimize.driver import _agent_config, _lm_config, _lm_model
 from leaven._seam_optimize.rewards import evaluate_reward_vector
 from leaven._seam_optimize.status import unsupported_facts_for_runtime
@@ -302,6 +313,11 @@ async def run(prompt, case, cx):
                         "cost": {"input_tokens": 3, "output_tokens": 2, "lm_calls": 1},
                         "receipt": "lmrec_worker_test",
                     },
+                    "receipts": [],
+                    "redactions": [],
+                    "capability_fingerprint": "fp_cap_worker_test",
+                    "policy_fingerprint": "fp_policy_worker_test",
+                    "data_classes": ["public"],
                 },
             }
         )
@@ -396,7 +412,19 @@ async def run(prompt, case, cx):
                         "commands": [],
                         "cost": {"usd_micro": 0},
                     },
-                    "receipts": [{"receipt": "agentrec_worker_test", "call_kind": "agent_run"}],
+                    "receipts": [
+                        {
+                            "kind": "call",
+                            "receipt": "agentrec_worker_test",
+                            "status": "succeeded",
+                            "result_hash": "fp_result_worker_agent",
+                            "call_kind": "agent_run",
+                        }
+                    ],
+                    "redactions": [],
+                    "capability_fingerprint": "fp_cap_worker_test",
+                    "policy_fingerprint": "fp_policy_worker_test",
+                    "data_classes": ["public"],
                 },
             }
         )
@@ -603,50 +631,57 @@ class FakeSeamClient:
     def __init__(self) -> None:
         self.request_value: dict = {}
 
-    def request(self, request: dict) -> dict:
+    def agent_run(self, request: dict) -> AgentRunResult:
         self.request_value = request
-        return {
-            "method": "leaven/agent.run",
-            "primary": {
-                "kind": "agent_session",
-                "status": "completed",
-                "receipt": "agentrec_completion",
-                "transcript_ref": {
-                    "kind": "blob_ref",
-                    "id": "blob_agent_builder_transcript",
-                    "sha256": "a" * 64,
-                    "bytes": 128,
-                    "data_classes": ["transcript.raw"],
-                },
-                "commands": [
-                    {
-                        "argv": ["codex", "exec"],
-                        "status": "completed",
-                        "receipt": "agentrec_completion",
-                    }
+        return AgentRunResult(
+            method="leaven/agent.run",
+            primary=AgentSessionPrimary(
+                kind="agent_session",
+                status="completed",
+                receipt="agentrec_completion",
+                transcript_ref=WireBlobRef(
+                    id="blob_agent_builder_transcript",
+                    sha256="a" * 64,
+                    bytes=128,
+                    data_classes=["transcript.raw"],
+                ),
+                commands=[
+                    AgentCommandRecord(
+                        argv=["codex", "exec"],
+                        status="completed",
+                        receipt="agentrec_completion",
+                    )
                 ],
-                "cost": {"usd_micro": 250_000},
-            },
-            "receipts": [{"receipt": "agentrec_completion", "call_kind": "agent_run"}],
-        }
+                cost=Cost(usd_micro=250_000),
+            ),
+            receipts=[],
+            redactions=[],
+            capability_fingerprint="fp_cap_test",
+            policy_fingerprint="fp_policy_test",
+            data_classes=["public"],
+        )
 
 
 class FakeLmSeamClient:
     def __init__(self) -> None:
         self.request_value: dict = {}
 
-    def request(self, request: dict) -> dict:
+    def lm_complete(self, request: dict) -> LmCompleteResult:
         self.request_value = request
-        return {
-            "method": "leaven/lm.complete",
-            "primary": {
-                "kind": "lm_response",
-                "message": {
-                    "role": "assistant",
-                    "content": [{"kind": "text", "text": "ok"}],
-                },
-                "receipt": "lmrec_completion",
-                "cost": {"usd_micro": 42, "input_tokens": 3, "output_tokens": 2},
-            },
-            "receipts": [{"receipt": "lmrec_completion", "call_kind": "lm_complete"}],
-        }
+        return LmCompleteResult(
+            method="leaven/lm.complete",
+            primary=LmResponsePrimary(
+                kind="lm_response",
+                message=LmMessageRecord(
+                    role="assistant",
+                    content=[LmContentPart(kind="text", text="ok")],
+                ),
+                receipt="lmrec_completion",
+                cost=Cost(usd_micro=42, input_tokens=3, output_tokens=2),
+            ),
+            receipts=[],
+            redactions=[],
+            capability_fingerprint="fp_cap_test",
+            policy_fingerprint="fp_policy_test",
+            data_classes=["public"],
+        )

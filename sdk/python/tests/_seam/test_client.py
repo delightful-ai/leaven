@@ -21,7 +21,7 @@ def test_client_rejects_unknown_method_before_subprocess() -> None:
     )
 
     with pytest.raises(SeamClientError, match="unknown locked Leaven public-seam method"):
-        client.request(
+        client.agent_run(
             {
                 "jsonrpc": "2.0",
                 "method": "leaven/human.review",

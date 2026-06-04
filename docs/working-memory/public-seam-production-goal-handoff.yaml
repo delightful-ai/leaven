@@ -1153,6 +1153,39 @@ acceptance:
           Later Rust slices type PlanError details and runner case-input facts,
           but Python generation still needs to consume those owners. No
           remaining leaf slot may close by approval-only exception.
+      - kind: private_client_builder_result_typing
+        paths:
+          - sdk/python/src/leaven/_seam/client.py
+          - sdk/python/src/leaven/_seam/results.py
+          - sdk/python/src/leaven/builders/agent.py
+          - sdk/python/src/leaven/builders/lm.py
+          - sdk/python/src/leaven/builders/proposals.py
+          - sdk/python/src/leaven/builders/case.py
+          - sdk/python/src/leaven/_seam_worker/context.py
+          - sdk/python/src/leaven/_stage_runtime/protocols.py
+          - sdk/python/src/leaven/_stage_runtime/lm.py
+          - sdk/python/tests/_seam/test_client.py
+          - sdk/python/tests/test_stage_surface.py
+          - sdk/python/tests/test_proposal_submission.py
+          - sdk/python/tests/builders/test_case.py
+        commands:
+          - cd sdk/python && uv run ruff check src/leaven/_seam/client.py src/leaven/_seam/results.py src/leaven/builders/agent.py src/leaven/builders/lm.py src/leaven/builders/proposals.py src/leaven/builders/case.py src/leaven/_seam_worker/context.py src/leaven/_stage_runtime/protocols.py src/leaven/_stage_runtime/lm.py tests/_seam/test_client.py tests/test_stage_surface.py tests/test_proposal_submission.py tests/builders/test_case.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/client.py src/leaven/_seam/results.py src/leaven/builders/agent.py src/leaven/builders/lm.py src/leaven/builders/proposals.py src/leaven/builders/case.py src/leaven/_seam_worker/context.py src/leaven/_stage_runtime/protocols.py src/leaven/_stage_runtime/lm.py tests/_seam/test_client.py tests/test_stage_surface.py tests/test_proposal_submission.py tests/builders/test_case.py
+          - cd sdk/python && uv run pytest tests/_seam/test_client.py tests/test_stage_surface.py tests/test_proposal_submission.py tests/builders/test_case.py -q
+          - python3 scripts/lint-line-count.py --root sdk/python/src/leaven
+          - rg -n "Any|hasattr|def request\\(|\\.request\\(" sdk/python/src/leaven/_seam/client.py sdk/python/src/leaven/_seam/results.py sdk/python/src/leaven/builders/agent.py sdk/python/src/leaven/builders/lm.py sdk/python/src/leaven/builders/proposals.py sdk/python/src/leaven/builders/case.py sdk/python/src/leaven/_seam_worker/context.py sdk/python/src/leaven/_stage_runtime/protocols.py sdk/python/src/leaven/_stage_runtime/lm.py sdk/python/tests/_seam/test_client.py sdk/python/tests/test_stage_surface.py sdk/python/tests/test_proposal_submission.py sdk/python/tests/builders/test_case.py
+        note: >-
+          The private process client no longer exposes a generic raw
+          `request(...) -> JsonObject` success path; builder-owned methods now
+          call method-specific typed client methods and decode msgspec result
+          records for agent.run, lm.complete, proposal.submit_batch, and case
+          reads. Worker callbacks now return the same typed result records to
+          callback-backed builders, and tests use typed result fixtures rather
+          than arbitrary dict-shaped success values. This removes the immediate
+          Python builder/client result-erasure point, but it does not close the
+          row: the method result projections in `_seam/results.py` are still
+          hand-authored and must be generated from Rust-owned public-seam truth
+          before this claim can be marked done.
       - kind: typed_plan_expression_owner_foundation
         commits:
           - a0397e66

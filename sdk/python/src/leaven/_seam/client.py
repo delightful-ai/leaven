@@ -14,10 +14,11 @@ from ._wire import (
     JsonRpcRemoteError,
     require_locked_method,
 )
-from ._wire.codec import decode_response_object, encode_request
+from ._wire.codec import decode_response, encode_request
 from .config import SeamServiceConfig
 from .errors import SeamClientError
 from .resolve import resolve_leaven_binary, resolve_repo_root
+from .results import AgentRunResult, CaseLoadResult, LmCompleteResult, ProposalSubmitResult
 
 
 class SeamClient:
@@ -34,8 +35,23 @@ class SeamClient:
         self._leaven_bin = leaven_bin or resolve_leaven_binary()
         self._repo_root = repo_root or resolve_repo_root()
 
-    def request(self, request: JsonObject, *, timeout_s: int = 240) -> JsonObject:
-        """Send one JSON-RPC request and return the `result` object."""
+    def agent_run(self, request: JsonObject, *, timeout_s: int = 240) -> AgentRunResult:
+        """Send one `leaven/agent.run` request and return its typed result."""
+        return self._typed_request(request, AgentRunResult, timeout_s=timeout_s)
+
+    def lm_complete(self, request: JsonObject, *, timeout_s: int = 240) -> LmCompleteResult:
+        """Send one `leaven/lm.complete` request and return its typed result."""
+        return self._typed_request(request, LmCompleteResult, timeout_s=timeout_s)
+
+    def proposal_submit(self, request: JsonObject, *, timeout_s: int = 240) -> ProposalSubmitResult:
+        """Send one `leaven/proposal.submit_batch` request and return its typed result."""
+        return self._typed_request(request, ProposalSubmitResult, timeout_s=timeout_s)
+
+    def case_load(self, request: JsonObject, *, timeout_s: int = 240) -> CaseLoadResult:
+        """Send one case read request and return its typed result."""
+        return self._typed_request(request, CaseLoadResult, timeout_s=timeout_s)
+
+    def _request_bytes(self, request: JsonObject, *, timeout_s: int) -> bytes:
         with tempfile.TemporaryDirectory(prefix="leaven-seam-client-") as tmp:
             config_path = Path(tmp) / "seam-config.json"
             config_path.write_text(
@@ -50,8 +66,18 @@ class SeamClient:
                 f"status: {process.returncode}\nstdout:\n{process.stdout}\n"
                 f"stderr:\n{process.stderr}"
             )
+        return process.stdout.encode()
+
+    def _typed_request[T](
+        self,
+        request: JsonObject,
+        result_type: type[T],
+        *,
+        timeout_s: int,
+    ) -> T:
+        body = self._request_bytes(request, timeout_s=timeout_s)
         try:
-            return decode_response_object(process.stdout.encode())
+            return decode_response(body, result_type)
         except JsonRpcRemoteError as error:
             raise SeamClientError(f"seam returned JSON-RPC error: {error.error}") from error
         except JsonRpcProtocolError as error:

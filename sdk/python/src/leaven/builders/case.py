@@ -2,9 +2,14 @@
 
 import asyncio
 from collections.abc import Sequence
-from typing import Any, Literal, Protocol, cast
+from typing import Literal, Protocol
+
+from msgspec import UNSET
 
 from .._seam import CaseLoadRequest
+from .._seam._wire import JsonObject as WireJsonObject
+from .._seam._wire.payloads import ReceiptRef
+from .._seam.results import CaseLoadResult
 from ..case import Case
 
 CaseField = Literal["input", "target", "metadata", "files", "setup", "sandbox", "split"]
@@ -75,7 +80,7 @@ class CaseBuilder:
             run_id=self._run_id,
         )
         self._seq += 1
-        result = await asyncio.to_thread(self._client.request, request.to_json_rpc())
+        result = await asyncio.to_thread(self._client.case_load, request.to_json_rpc())
         return _case_from_result(result)
 
     async def load_batch(
@@ -91,35 +96,26 @@ class CaseBuilder:
 class _SeamRequester(Protocol):
     """Small private protocol CaseBuilder needs from the seam client."""
 
-    def request(self, request: dict[str, Any]) -> dict[str, Any]: ...
+    def case_load(self, request: WireJsonObject) -> CaseLoadResult: ...
 
 
-def _case_from_result(result: dict[str, Any]) -> Case:
-    primary = result["primary"]
-    if not isinstance(primary, dict):
-        raise TypeError("case query result primary must be an object")
-    record = cast("dict[str, Any]", primary)
+def _case_from_result(result: CaseLoadResult) -> Case:
+    record = result.primary
     return Case(
-        id=str(record["case"]),
-        input=_object_field(record, "input"),
-        target=_optional_object_field(record, "target"),
-        metadata=_object_field(record, "metadata"),
+        id=_case_id(record.case),
+        input={} if record.input is UNSET else record.input,
+        target=None if record.target is UNSET else record.target,
+        metadata={} if record.metadata is UNSET else record.metadata,
     )
 
 
-def _object_field(record: dict[str, Any], field: str) -> dict[str, Any]:
-    value = record.get(field, {})
-    if value is None:
-        return {}
-    if not isinstance(value, dict):
-        raise TypeError(f"case query result {field} must be an object")
-    return cast("dict[str, Any]", value)
-
-
-def _optional_object_field(record: dict[str, Any], field: str) -> dict[str, Any] | None:
-    if field not in record or record[field] is None:
-        return None
-    return _object_field(record, field)
+def _case_id(value: ReceiptRef) -> str:
+    if isinstance(value, str):
+        return value
+    case_id = value.get("id")
+    if isinstance(case_id, str):
+        return case_id
+    raise ValueError("case record receipt ref must carry a string id")
 
 
 __all__ = ["CaseBuilder", "CaseField"]

@@ -1,6 +1,7 @@
 import pytest
 
 from leaven._receipts import CallReceipt, QueryReceipt
+from leaven._seam.results import ProposalBatchPrimary, ProposalSubmitResult
 from leaven.builders.proposals import ProposalsBuilder
 from leaven.proposal import ProposalBatch, ProposalEffect
 
@@ -80,21 +81,20 @@ class FakeProposalSeamClient:
     def __init__(self) -> None:
         self.request_value: dict = {}
 
-    def request(self, request: dict) -> dict:
+    def proposal_submit(self, request: dict) -> ProposalSubmitResult:
         self.request_value = request
-        return {
-            "method": "leaven/proposal.submit_batch",
-            "primary": {
-                "kind": "proposal_batch_receipt",
-                "batch_id": "pb_submitted",
-                "proposal_ids": ["prop_submitted"],
-                "status": "committed",
-                "receipt": "wrec_proposal_submit",
-            },
-            "receipts": [
-                {
-                    "receipt": "wrec_proposal_submit",
-                    "write_kind": "submit_proposal_batch",
-                }
-            ],
-        }
+        return ProposalSubmitResult(
+            method="leaven/proposal.submit_batch",
+            primary=ProposalBatchPrimary(
+                kind="proposal_batch_receipt",
+                batch_id="pb_submitted",
+                proposal_ids=["prop_submitted"],
+                status="committed",
+                receipt="wrec_proposal_submit",
+            ),
+            receipts=[],
+            redactions=[],
+            capability_fingerprint="fp_cap_test",
+            policy_fingerprint="fp_policy_test",
+            data_classes=["public"],
+        )

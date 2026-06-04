@@ -1,12 +1,16 @@
 """`cx.proposals.*` — submit + apply proposal batches from proposer stages."""
 
 import asyncio
-from typing import Any, Protocol
+from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict
 
 from .._receipts import WriteReceipt
 from .._seam import ProposalSubmitRequest
+from .._seam._wire import JsonObject
+from .._seam._wire.json_value import json_object
+from .._seam.results import ProposalSubmitResult
+from ..json_value import JsonValue
 from ..proposal import ProposalBatch, ProposalEffect
 
 
@@ -22,7 +26,7 @@ class ProposalSubmission(BaseModel):
 class _SeamRequester(Protocol):
     """Small private protocol ProposalsBuilder needs from the seam client."""
 
-    def request(self, request: dict[str, Any]) -> dict[str, Any]: ...
+    def proposal_submit(self, request: JsonObject) -> ProposalSubmitResult: ...
 
 
 class ProposalsBuilder:
@@ -67,7 +71,7 @@ class ProposalsBuilder:
             idempotency_key=f"{self._idempotency_prefix}-submit",
             proposals=[_effect_to_wire(effect, batch) for effect in batch.effects],
         )
-        result = await asyncio.to_thread(self._client.request, request.to_json_rpc())
+        result = await asyncio.to_thread(self._client.proposal_submit, request.to_json_rpc())
         return _proposal_submission_from_result(result)
 
     async def apply(self, submission: ProposalSubmission) -> WriteReceipt:
@@ -79,15 +83,15 @@ class ProposalsBuilder:
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
 
-def _proposal_submission_from_result(result: dict[str, Any]) -> ProposalSubmission:
-    primary = result["primary"]
+def _proposal_submission_from_result(result: ProposalSubmitResult) -> ProposalSubmission:
+    primary = result.primary
     return ProposalSubmission(
-        receipt=WriteReceipt(receipt_id=primary["receipt"]),
-        proposal_ids=list(primary["proposal_ids"]),
+        receipt=WriteReceipt(receipt_id=primary.receipt),
+        proposal_ids=list(primary.proposal_ids),
     )
 
 
-def _effect_to_wire(effect: ProposalEffect, batch: ProposalBatch) -> dict[str, Any]:
+def _effect_to_wire(effect: ProposalEffect, batch: ProposalBatch) -> JsonObject:
     if effect.kind == "create":
         return _create_effect_to_wire(effect, batch)
     if effect.kind in {"change", "change_from_workspace_diff", "change_from_agent_session"}:
@@ -95,24 +99,26 @@ def _effect_to_wire(effect: ProposalEffect, batch: ProposalBatch) -> dict[str, A
     raise TypeError(f"unsupported proposal effect: {effect.kind}")
 
 
-def _create_effect_to_wire(effect: ProposalEffect, batch: ProposalBatch) -> dict[str, Any]:
-    return {
-        "effect": {
-            "kind": "create",
-            "artifact_type": _required_payload_string(effect, "artifact_type"),
-            "artifact_schema": _required_payload_string(effect, "artifact_schema"),
-            "artifact": _literal_expr(effect.payload.get("artifact")),
-        },
-        "causal": {"inputs": []},
-        "informed_by": _literal_expr(_receipt_ids(batch)),
-        "read_receipts": _receipt_ids(batch),
-    }
+def _create_effect_to_wire(effect: ProposalEffect, batch: ProposalBatch) -> JsonObject:
+    return json_object(
+        {
+            "effect": {
+                "kind": "create",
+                "artifact_type": _required_payload_string(effect, "artifact_type"),
+                "artifact_schema": _required_payload_string(effect, "artifact_schema"),
+                "artifact": _literal_expr(effect.payload.get("artifact")),
+            },
+            "causal": {"inputs": []},
+            "informed_by": _literal_expr(_receipt_ids(batch)),
+            "read_receipts": _receipt_ids(batch),
+        }
+    )
 
 
-def _change_effect_to_wire(effect: ProposalEffect, batch: ProposalBatch) -> dict[str, Any]:
+def _change_effect_to_wire(effect: ProposalEffect, batch: ProposalBatch) -> JsonObject:
     if effect.parent_candidate_id is None:
         raise ValueError(f"{effect.kind} proposal effects require parent_candidate_id")
-    wire_effect: dict[str, Any] = {
+    wire_effect: JsonObject = {
         "kind": effect.kind,
         "target": effect.parent_candidate_id,
         "surface_fingerprint": effect.surface,
@@ -128,12 +134,14 @@ def _change_effect_to_wire(effect: ProposalEffect, batch: ProposalBatch) -> dict
         wire_effect["agent_receipt"] = agent_receipt
         wire_effect["parser"] = _required_payload_string(effect, "parser")
         read_receipts = [*read_receipts, agent_receipt]
-    return {
-        "effect": wire_effect,
-        "causal": {"inputs": [effect.parent_candidate_id]},
-        "informed_by": _literal_expr(read_receipts),
-        "read_receipts": read_receipts,
-    }
+    return json_object(
+        {
+            "effect": wire_effect,
+            "causal": {"inputs": [effect.parent_candidate_id]},
+            "informed_by": _literal_expr(read_receipts),
+            "read_receipts": read_receipts,
+        }
+    )
 
 
 def _receipt_ids(batch: ProposalBatch) -> list[str]:
@@ -143,8 +151,8 @@ def _receipt_ids(batch: ProposalBatch) -> list[str]:
     ]
 
 
-def _literal_expr(value: object) -> dict[str, object]:
-    return {"kind": "literal", "value": value}
+def _literal_expr(value: JsonValue) -> JsonObject:
+    return json_object({"kind": "literal", "value": value})
 
 
 def _required_payload_string(effect: ProposalEffect, key: str) -> str:

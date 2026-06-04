@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 
 from .._receipts import CallReceipt
+from .._seam._wire import JsonObject
 from ..builders.lm import LmBuilder, LmMessage, LmResponse, _lm_response_from_result
 from .protocols import LmCompleteCallback
 
@@ -31,14 +32,14 @@ class CallbackLmBuilder(LmBuilder):
         self,
         *,
         prompt: str | None = None,
-        messages: Sequence[LmMessage] | Sequence[dict[str, object]] | None = None,
+        messages: Sequence[LmMessage] | Sequence[JsonObject] | None = None,
         model: str | None = None,
         model_role: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
         stop: Sequence[str] | None = None,
         response_format: object | None = None,
-        tools: Sequence[dict[str, object]] | None = None,
+        tools: Sequence[JsonObject] | None = None,
         input_classes: Sequence[str] | None = None,
         forbidden_input_classes: Sequence[str] | None = None,
     ) -> LmResponse:

@@ -3,16 +3,33 @@
 import asyncio
 import math
 from collections.abc import Sequence
-from typing import Any, Protocol, cast
+from typing import Protocol
 
+from msgspec import UNSET, UnsetType
 from pydantic import BaseModel, ConfigDict
 
 from .._handles import WorkspaceHandle
 from .._receipts import CallReceipt
 from .._seam import AgentRunRequest
+from .._seam._wire import JsonObject
+from .._seam._wire.json_value import json_object
+from .._seam._wire.payloads import BlobRef as WireBlobRef
+from .._seam._wire.payloads import Cost
+from .._seam.results import AgentRunResult
 from ..agent_instructions import AgentInstructions
 from ..blob_ref import BlobRef
+from ..json_value import JsonValue
 from ..output import FilesOutput, JsonSchemaOutput, OutputContract, TextOutput
+
+
+class AgentCommand(BaseModel):
+    """One command audited inside an agent session."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    argv: list[str]
+    status: str
+    receipt: str | None = None
 
 
 class AgentSession(BaseModel):
@@ -25,7 +42,7 @@ class AgentSession(BaseModel):
     transcript: BlobRef | None = None
     """Full transcript blob metadata when the provider reports it."""
 
-    parsed: Any | None = None
+    parsed: JsonValue | None = None
     """Parsed structured output when `output=lv.output.json_schema(...)`."""
 
     final_message: str | None = None
@@ -34,7 +51,7 @@ class AgentSession(BaseModel):
     files: dict[str, bytes] | None = None
     """Captured files when `output=lv.output.files(...)`."""
 
-    commands: list[dict[str, Any]]
+    commands: list[AgentCommand]
     """Recorded commands the agent ran in the workspace."""
 
     cost_usd: float | None = None
@@ -44,7 +61,7 @@ class AgentSession(BaseModel):
 class _SeamRequester(Protocol):
     """Small private protocol AgentBuilder needs from the seam client."""
 
-    def request(self, request: dict[str, Any]) -> dict[str, Any]: ...
+    def agent_run(self, request: JsonObject) -> AgentRunResult: ...
 
 
 class AgentBuilder:
@@ -123,7 +140,7 @@ class AgentBuilder:
             allowed_commands=allowed_commands,
             input_classes=input_classes,
         )
-        result = await asyncio.to_thread(self._client.request, request.to_json_rpc())
+        result = await asyncio.to_thread(self._client.agent_run, request.to_json_rpc())
         return _agent_session_from_result(result)
 
 
@@ -140,70 +157,62 @@ def _timeout_seconds(timeout_s: float | None) -> int:
     return max(1, math.ceil(timeout_s)) if timeout_s is not None else 180
 
 
-def _output_to_wire(output: OutputContract | None) -> dict[str, Any]:
+def _output_to_wire(output: OutputContract | None) -> JsonObject:
     if output is None:
         return {"kind": "final_message", "max_bytes": 512}
     if isinstance(output, TextOutput):
-        value: dict[str, Any] = {"kind": "final_message"}
+        value: JsonObject = {"kind": "final_message"}
         if output.max_chars is not None:
             value["max_bytes"] = output.max_chars
         return value
     if isinstance(output, FilesOutput):
-        return {"kind": "files", "paths": output.paths}
+        return json_object({"kind": "files", "paths": output.paths})
     if isinstance(output, JsonSchemaOutput):
         raise NotImplementedError("AgentBuilder.run does not lower json_schema output yet")
     raise TypeError(f"unsupported agent output contract: {type(output).__name__}")
 
 
-def _agent_session_from_result(result: dict[str, Any]) -> AgentSession:
-    primary = result["primary"]
-    transcript_ref = primary.get("transcript_ref") or {}
-    transcript = _blob_ref(transcript_ref)
+def _agent_session_from_result(result: AgentRunResult) -> AgentSession:
+    primary = result.primary
+    transcript = _blob_ref(primary.transcript_ref)
     return AgentSession(
-        transcript_ref=transcript_ref.get("id", ""),
+        transcript_ref=transcript.blob_id if transcript is not None else "",
         transcript=transcript,
-        parsed=primary.get("parsed"),
+        parsed=None,
         final_message=None,
         files=None,
-        commands=list(primary["commands"]),
-        cost_usd=_cost_usd(primary.get("cost")),
+        commands=[
+            AgentCommand(
+                argv=list(command.argv),
+                status=command.status,
+                receipt=None if command.receipt is UNSET else command.receipt,
+            )
+            for command in primary.commands
+        ],
+        cost_usd=_cost_usd(primary.cost),
         receipt=CallReceipt(
-            receipt_id=primary["receipt"],
-            blob_refs=[transcript] if transcript is not None else [],
+            receipt_id=primary.receipt,
+            blob_refs=[] if transcript is None else [transcript],
         ),
     )
 
 
-def _cost_usd(cost: object) -> float | None:
-    if not isinstance(cost, dict):
+def _cost_usd(cost: Cost | UnsetType) -> float | None:
+    if cost is UNSET:
         return None
-    cost_value = cast("dict[str, Any]", cost)
-    usd_micro = cost_value.get("usd_micro")
-    if isinstance(usd_micro, int | float):
-        return float(usd_micro) / 1_000_000
-    return None
+    usd_micro = cost.usd_micro
+    return None if usd_micro is UNSET else usd_micro / 1_000_000
 
 
-def _blob_ref(value: object) -> BlobRef | None:
-    if not isinstance(value, dict):
+def _blob_ref(value: WireBlobRef | UnsetType) -> BlobRef | None:
+    if value is UNSET:
         return None
-    blob = cast("dict[str, Any]", value)
-    blob_id = blob.get("id")
-    if not isinstance(blob_id, str) or not blob_id:
-        return None
-    sha256 = blob.get("sha256")
-    byte_count = blob.get("bytes")
-    data_classes = blob.get("data_classes")
     return BlobRef(
-        blob_id=blob_id,
-        sha256=sha256 if isinstance(sha256, str) else None,
-        bytes=byte_count if isinstance(byte_count, int) else None,
-        data_classes=[
-            item for item in data_classes if isinstance(item, str)
-        ]
-        if isinstance(data_classes, list)
-        else [],
+        blob_id=value.id,
+        sha256=value.sha256,
+        bytes=value.bytes,
+        data_classes=list(value.data_classes),
     )
 
 
-__all__ = ["AgentBuilder", "AgentSession"]
+__all__ = ["AgentBuilder", "AgentCommand", "AgentSession"]

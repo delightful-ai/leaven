@@ -1,8 +1,17 @@
-from typing import Any
+from typing import Literal
 
 import pytest
 
+from leaven._seam.results import CaseLoadResult, CaseRecordPrimary
 from leaven.builders.case import CaseBuilder
+from leaven.json_value import JsonObject, JsonValue
+
+CaseMethod = Literal[
+    "leaven/case.load",
+    "leaven/case.input",
+    "leaven/case.target",
+    "leaven/case.metadata",
+]
 
 
 async def test_load_uses_bound_public_seam_client() -> None:
@@ -22,15 +31,17 @@ async def test_load_uses_bound_public_seam_client() -> None:
     )
 
     assert client.request_value["method"] == "leaven/case.load"
-    params = client.request_value["params"]
+    params = _json_object(client.request_value["params"])
     assert params["plan_id"] == "plancasebuilder001"
     assert params["return"] == ["case_load"]
     assert params["commit"] == {"kind": "no_graph_writes"}
-    op = params["ops"][0]
+    ops = _json_array(params["ops"])
+    op = _json_object(ops[0])
     assert op["kind"] == "let"
     assert op["name"] == "case_load"
-    assert op["expr"]["kind"] == "case_query"
-    query = op["expr"]["query"]
+    expr = _json_object(op["expr"])
+    assert expr["kind"] == "case_query"
+    query = _json_object(expr["query"])
     assert query["kind"] == "load"
     assert query["case"] == {"kind": "case", "run": "run_case_builder", "id": "case_sdk"}
     assert query["include"] == ["input", "target", "metadata"]
@@ -56,7 +67,7 @@ async def test_single_field_methods_use_locked_case_routes() -> None:
         "leaven/case.target",
         "leaven/case.metadata",
     ]
-    assert [request["params"]["ops"][0]["name"] for request in client.requests] == [
+    assert [_op_name(request) for request in client.requests] == [
         "case_input",
         "case_target",
         "case_metadata",
@@ -78,23 +89,67 @@ async def test_target_denial_propagates_seam_error() -> None:
 class FakeCaseSeamClient:
     def __init__(self, *, deny_target: bool = False) -> None:
         self.deny_target = deny_target
-        self.request_value: dict[str, Any] = {}
-        self.requests: list[dict[str, Any]] = []
+        self.request_value: JsonObject = {}
+        self.requests: list[JsonObject] = []
 
-    def request(self, request: dict[str, Any]) -> dict[str, Any]:
+    def case_load(self, request: JsonObject) -> CaseLoadResult:
         self.request_value = request
         self.requests.append(request)
-        if self.deny_target and request["method"] == "leaven/case.target":
+        method = _case_method(request["method"])
+        if self.deny_target and method == "leaven/case.target":
             raise PermissionError("case target denied")
-        return {
-            "method": request["method"],
-            "primary": {
-                "kind": "case_record",
-                "case": request["params"]["ops"][0]["expr"]["query"]["case"]["id"],
-                "input": {"question": "2 + 2?"},
-                "target": {"answer": "4"},
-                "metadata": {"split": "validation"},
-                "receipt": "caserec_builder",
-            },
-            "receipts": [{"receipt": "caserec_builder", "call_kind": "case_query"}],
-        }
+        params = _json_object(request["params"])
+        ops = _json_array(params["ops"])
+        op = _json_object(ops[0])
+        expr = _json_object(op["expr"])
+        query = _json_object(expr["query"])
+        case = _json_object(query["case"])
+        case_id = case["id"]
+        assert isinstance(case_id, str)
+        return CaseLoadResult(
+            method=method,
+            primary=CaseRecordPrimary(
+                kind="case_record",
+                case=case_id,
+                input={"question": "2 + 2?"},
+                target={"answer": "4"},
+                metadata={"split": "validation"},
+                receipt="caserec_builder",
+                data_classes=["public"],
+                replayability="fully_managed",
+            ),
+            receipts=[],
+            redactions=[],
+            capability_fingerprint="fp_cap_test",
+            policy_fingerprint="fp_policy_test",
+            data_classes=["public"],
+        )
+
+
+def _case_method(value: JsonValue) -> CaseMethod:
+    if value == "leaven/case.load":
+        return "leaven/case.load"
+    if value == "leaven/case.input":
+        return "leaven/case.input"
+    if value == "leaven/case.target":
+        return "leaven/case.target"
+    if value == "leaven/case.metadata":
+        return "leaven/case.metadata"
+    raise AssertionError(f"unexpected case method: {value!r}")
+
+
+def _json_object(value: JsonValue) -> JsonObject:
+    assert isinstance(value, dict)
+    return value
+
+
+def _json_array(value: JsonValue) -> list[JsonValue]:
+    assert isinstance(value, list)
+    return value
+
+
+def _op_name(request: JsonObject) -> JsonValue:
+    params = _json_object(request["params"])
+    ops = _json_array(params["ops"])
+    op = _json_object(ops[0])
+    return op["name"]
