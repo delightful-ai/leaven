@@ -4,7 +4,9 @@ use crate::support::{
 use leaven_public_seam::{
     AcpAuthenticateRequest, AcpBackpressure, AcpPermissionRequest, AcpProgressDisposition,
     AcpProgressPriority, AcpSessionLifecycle, AcpSessionState, AcpStdioWorkerLaunch,
-    AcpWorkerSession, CapabilityDocument, CapabilityRegistry, PublicSeamError, PublicSeamPackage,
+    AcpWorkerSession, CapabilityDocument, CapabilityRegistry, LockedMethod, MethodAction,
+    MethodPrimaryKind, MethodReceiptExpectation, MethodSchema, PublicSeamError,
+    PublicSeamPackage,
 };
 use serde_json::{Value, json};
 
@@ -31,30 +33,61 @@ fn acp_profile_validates_pinned_stdio_leaven_methods_and_bounded_updates() {
     );
     assert_eq!(
         profile
-            .method("leaven/proposal.apply")
+            .method(LockedMethod::ProposalApply)
             .unwrap()
             .required_action(),
-        "proposal.apply_batch"
+        MethodAction::ProposalApplyBatch
     );
     assert_eq!(
         profile
-            .method("leaven/lm.complete")
+            .method(LockedMethod::LmComplete)
             .unwrap()
             .params_schema(),
-        "leaven.plan.v1.schema.json"
+        MethodSchema::PlanIr
     );
     assert!(
         profile
-            .method("leaven/lm.complete")
+            .method(LockedMethod::LmComplete)
             .unwrap()
             .produces_receipt()
     );
 
-    let stage_run = profile.method("leaven/stage.run").unwrap();
-    assert_eq!(stage_run.required_action(), "stage.run");
-    assert_eq!(stage_run.params_schema(), "leaven.stage_run.v1.schema.json");
-    assert_eq!(stage_run.result_schema(), "leaven.stage_run.v1.schema.json");
+    let stage_run = profile.method(LockedMethod::StageRun).unwrap();
+    assert_eq!(stage_run.method(), LockedMethod::StageRun);
+    assert_eq!(stage_run.method().as_str(), "leaven/stage.run");
+    assert_eq!(stage_run.required_action(), MethodAction::StageRun);
+    assert_eq!(stage_run.params_schema(), MethodSchema::StageRun);
+    assert_eq!(stage_run.params_schema().schema_file(), "leaven.stage_run.v1.schema.json");
+    assert_eq!(stage_run.result_schema(), MethodSchema::StageRun);
     assert!(stage_run.produces_receipt());
+}
+
+#[test]
+fn locked_method_model_carries_schema_action_primary_kind_and_receipt_metadata() {
+    assert_eq!(LockedMethod::ALL.len(), 25);
+
+    let lm = LockedMethod::LmComplete;
+    assert_eq!(lm.as_str(), "leaven/lm.complete");
+    assert_eq!(lm.required_action(), MethodAction::LmComplete);
+    assert_eq!(lm.params_schema(), MethodSchema::PlanIr);
+    assert_eq!(lm.result_schema(), MethodSchema::PlanResult);
+    assert_eq!(lm.primary_kinds(), &[MethodPrimaryKind::LmResponse]);
+    assert_eq!(
+        lm.receipt_expectation(),
+        MethodReceiptExpectation::Call("lm_complete")
+    );
+
+    let stage_run = LockedMethod::StageRun;
+    assert_eq!(stage_run.params_schema(), MethodSchema::StageRun);
+    assert_eq!(stage_run.result_schema(), MethodSchema::StageRun);
+    assert_eq!(
+        stage_run.primary_kinds(),
+        &[MethodPrimaryKind::StageRunTextOutput]
+    );
+    assert_eq!(
+        stage_run.receipt_expectation(),
+        MethodReceiptExpectation::StageRun
+    );
 }
 
 #[test]
@@ -547,7 +580,7 @@ fn acp_jsonrpc_requests_and_responses_bind_plan_ir_and_extension_results() {
         .validate_acp_jsonrpc_request_document(&profile, &request_value)
         .unwrap();
     assert_eq!(request.id(), "req-lm-001");
-    assert_eq!(request.method(), "leaven/lm.complete");
+    assert_eq!(request.method(), LockedMethod::LmComplete);
 
     let response_value = json!({
         "jsonrpc": "2.0",
@@ -558,8 +591,8 @@ fn acp_jsonrpc_requests_and_responses_bind_plan_ir_and_extension_results() {
         .validate_acp_jsonrpc_response_document(&request, &response_value)
         .unwrap();
     assert_eq!(response.id(), "req-lm-001");
-    assert_eq!(response.method(), "leaven/lm.complete");
-    assert_eq!(response.primary_kind(), "lm_response");
+    assert_eq!(response.method(), LockedMethod::LmComplete);
+    assert_eq!(response.primary_kind(), MethodPrimaryKind::LmResponse);
 }
 
 #[test]

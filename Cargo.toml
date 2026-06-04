@@ -38,6 +38,7 @@ members = [
     "crates/leaven-preference",
     "crates/leaven-public-seam",
     "crates/leaven-run",
+    "crates/leaven-seam-run",
     "crates/leaven-seam-runtime",
     "crates/leaven-seam-service",
     "crates/leaven-seam-stdio",
@@ -163,6 +164,7 @@ leaven-population = { path = "crates/leaven-population", version = "0.0.0" }
 leaven-preference = { path = "crates/leaven-preference", version = "0.0.0" }
 leaven-public-seam = { path = "crates/leaven-public-seam", version = "0.0.0" }
 leaven-run = { path = "crates/leaven-run", version = "0.0.0" }
+leaven-seam-run = { path = "crates/leaven-seam-run", version = "0.0.0" }
 leaven-seam-runtime = { path = "crates/leaven-seam-runtime", version = "0.0.0" }
 leaven-seam-service = { path = "crates/leaven-seam-service", version = "0.0.0" }
 leaven-seam-stdio = { path = "crates/leaven-seam-stdio", version = "0.0.0" }

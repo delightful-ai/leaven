@@ -1,5 +1,5 @@
 use crate::support::package;
-use leaven_public_seam::{PublicSeamError, StagePayloadRole, StageRunKind};
+use leaven_public_seam::{LockedMethod, PublicSeamError, StagePayloadRole, StageRunKind};
 use serde_json::{Value, json};
 
 #[test]
@@ -52,7 +52,8 @@ fn stage_run_result_preserves_worker_effect_receipts() {
 
     let receipts = result.effect_receipts();
     assert_eq!(receipts.len(), 1);
-    assert_eq!(receipts[0].method(), "leaven/lm.complete");
+    assert_eq!(receipts[0].method(), LockedMethod::LmComplete);
+    assert_eq!(receipts[0].method().as_str(), "leaven/lm.complete");
     assert_eq!(receipts[0].receipt(), "lmrec_completion");
     assert_eq!(receipts[0].call_kind(), Some("lm_complete"));
     assert_eq!(receipts[0].cost().unwrap()["input_tokens"], json!(3));
@@ -81,7 +82,7 @@ fn stage_run_result_preserves_worker_proposal_receipts() {
 
     let receipts = result.proposal_receipts();
     assert_eq!(receipts.len(), 1);
-    assert_eq!(receipts[0].method(), "leaven/proposal.submit_batch");
+    assert_eq!(receipts[0].method(), LockedMethod::ProposalSubmitBatch);
     assert_eq!(receipts[0].receipt(), "wrec_proposal_submit");
     assert_eq!(receipts[0].write_kind(), Some("submit_proposal_batch"));
     assert_eq!(

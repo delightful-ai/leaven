@@ -1,0 +1,30 @@
+[package]
+name = "leaven-seam-run"
+description = "Run-bound public seam composition route for Leaven SDK workers."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+leaven-core = { workspace = true }
+leaven-public-seam = { workspace = true }
+leaven-run = { workspace = true }
+leaven-seam-runtime = { workspace = true }
+leaven-seam-service = { workspace = true }
+leaven-seam-stdio = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+futures = { workspace = true }
+leaven-engine = { workspace = true }
+leaven-kernel = { workspace = true }
+leaven-store-file = { workspace = true }
+leaven-store-inline = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

@@ -3676,6 +3676,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "leaven-seam-run"
+version = "0.0.0"
+dependencies = [
+ "futures",
+ "leaven-core",
+ "leaven-engine",
+ "leaven-kernel",
+ "leaven-public-seam",
+ "leaven-run",
+ "leaven-seam-runtime",
+ "leaven-seam-service",
+ "leaven-seam-stdio",
+ "leaven-store-file",
+ "leaven-store-inline",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "leaven-seam-runtime"
 version = "0.0.0"
 dependencies = [
