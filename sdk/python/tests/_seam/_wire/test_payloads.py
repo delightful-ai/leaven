@@ -9,6 +9,7 @@ from leaven._seam._wire.expressions import (
     GraphSourceByCandidate,
     PlanExpressionGraphQuery,
     PlanExpressionLiteral,
+    PreconditionCandidateExists,
 )
 from leaven._seam._wire.payloads import (
     PLAN_RESULT_SCHEMA_FINGERPRINT,
@@ -106,6 +107,43 @@ def test_plan_document_rejects_unknown_expression_kind() -> None:
         b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
         b'"ops":[{"kind":"let","name":"x","expr":{"kind":"private_expr","value":"ok"}}],'
         b'"return":["x"],"commit":{"kind":"no_graph_writes"}}'
+    )
+
+    with pytest.raises(msgspec.ValidationError):
+        msgspec.json.decode(body, type=PlanDocument)
+
+
+def test_plan_document_decodes_typed_write_preconditions() -> None:
+    """Example: write preconditions carry tagged records, not arbitrary objects."""
+
+    body = (
+        b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
+        b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
+        b'"ops":[{"kind":"write","name":"evt","idempotency_key":"idem_1",'
+        b'"write":{"kind":"emit_run_event"},'
+        b'"preconditions":[{"kind":"candidate_exists",'
+        b'"candidate":{"kind":"candidate","id":"cand_1"}}]}],'
+        b'"return":["evt"],"commit":{"kind":"graph_writes_atomic","on_stale":"reject"}}'
+    )
+
+    decoded = msgspec.json.decode(body, type=PlanDocument)
+    preconditions = decoded.ops[0].preconditions
+
+    assert preconditions is not UNSET
+    assert isinstance(preconditions[0], PreconditionCandidateExists)
+    assert isinstance(preconditions[0].candidate, CandidateRefRecord)
+
+
+def test_plan_document_rejects_unknown_precondition_kind() -> None:
+    """Regression: write preconditions are no longer arbitrary JSON objects."""
+
+    body = (
+        b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
+        b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
+        b'"ops":[{"kind":"write","name":"evt","idempotency_key":"idem_1",'
+        b'"write":{"kind":"emit_run_event"},'
+        b'"preconditions":[{"kind":"private_condition","candidate":"cand_1"}]}],'
+        b'"return":["evt"],"commit":{"kind":"graph_writes_atomic","on_stale":"reject"}}'
     )
 
     with pytest.raises(msgspec.ValidationError):

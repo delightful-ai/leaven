@@ -7,7 +7,10 @@ EXPRESSION_EXPORTS = (
     "GraphSourceRecentFailures PageRequest PlanExpression PlanExpressionCaseQuery "
     "PlanExpressionExtract PlanExpressionFilter PlanExpressionGraphQuery PlanExpressionLimit "
     "PlanExpressionLiteral PlanExpressionProject PlanExpressionRefsFromResult "
-    "PlanExpressionSort PlanExpressionTemplate PlanExpressionVar PlanExpressionWorkspaceQuery SortKey"
+    "PlanExpressionSort PlanExpressionTemplate PlanExpressionVar PlanExpressionWorkspaceQuery Precondition "
+    "PreconditionAssessmentExists PreconditionCandidateExists PreconditionCandidateIdentity "
+    "PreconditionGraphRevisionAtLeast PreconditionGraphRevisionEquals PreconditionReceiptExists "
+    "PreconditionSchemaValid SortKey"
 )
 
 
@@ -23,9 +26,11 @@ from typing import Literal
 from msgspec import UNSET, Struct, UnsetType, field
 
 from .refs import (
+    AssessmentRef,
     CandidateRef,
     ProposalBatchRef,
     ProposalRef,
+    ReceiptRef,
     WireJsonField,
     WireJsonObject,
     WorkspaceRef,
@@ -185,6 +190,47 @@ type PlanExpression = (
     | PlanExpressionExtract
     | PlanExpressionRefsFromResult
     | ExtensionObjectExpression
+)
+
+
+class PreconditionCandidateExists(Struct, frozen=True, forbid_unknown_fields=True, tag="candidate_exists", tag_field="kind"):
+    candidate: CandidateRef
+
+
+class PreconditionCandidateIdentity(Struct, frozen=True, forbid_unknown_fields=True, tag="candidate_identity", tag_field="kind"):
+    candidate: CandidateRef
+    identity: str
+
+
+class PreconditionGraphRevisionAtLeast(Struct, frozen=True, forbid_unknown_fields=True, tag="graph_revision_at_least", tag_field="kind"):
+    revision: str
+
+
+class PreconditionGraphRevisionEquals(Struct, frozen=True, forbid_unknown_fields=True, tag="graph_revision_equals", tag_field="kind"):
+    revision: str
+
+
+class PreconditionAssessmentExists(Struct, frozen=True, forbid_unknown_fields=True, tag="assessment_exists", tag_field="kind"):
+    assessment: AssessmentRef
+
+
+class PreconditionReceiptExists(Struct, frozen=True, forbid_unknown_fields=True, tag="receipt_exists", tag_field="kind"):
+    receipt: ReceiptRef
+
+
+class PreconditionSchemaValid(Struct, frozen=True, forbid_unknown_fields=True, tag="schema_valid", tag_field="kind"):
+    schema_fingerprint: str
+    value: WireJsonObject
+
+
+type Precondition = (
+    PreconditionCandidateExists
+    | PreconditionCandidateIdentity
+    | PreconditionGraphRevisionAtLeast
+    | PreconditionGraphRevisionEquals
+    | PreconditionAssessmentExists
+    | PreconditionReceiptExists
+    | PreconditionSchemaValid
 )
 
 

@@ -37,7 +37,7 @@ from typing import Literal
 
 from msgspec import UNSET, Struct, UnsetType, field
 
-from .expressions import PlanExpression
+from .expressions import PlanExpression, Precondition
 from .refs import (
 {ref_imports}
 )
@@ -188,7 +188,7 @@ class PlanOp(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True
     call: CapabilityCall | UnsetType = UNSET
     write: GraphWrite | UnsetType = UNSET
     idempotency_key: str | UnsetType = UNSET
-    preconditions: list[WireJsonObject] | UnsetType = UNSET
+    preconditions: list[Precondition] | UnsetType = UNSET
     deps: PlanDeps | UnsetType = UNSET
 
 
@@ -588,7 +588,7 @@ __all__ = (  # noqa: PLE0605, SIM905
     "CommitPolicyGraphWritesSequential CommitPolicyNoGraphWrites Consistency ConsistencyAtRevision "
     "ConsistencyLatestAtStart ConsistencySinceRevision Cost DataClassSet EvalMode EvalModeDryRun "
     "EvalModeExecute EvalModeReplay EvalModeRequireCached EventSummaryGraphRow ExtensionGraphRow FailureMode "
-    "GraphRow GraphWrite InfoRef LeavenValue MetadataBag OperationReceipt OutputRecord PlanDocument PlanExpression "
+    "GraphRow GraphWrite InfoRef LeavenValue MetadataBag OperationReceipt OutputRecord PlanDocument PlanExpression Precondition "
     "PlanError PlanOp PlanResultDocument ProposalBatchRef ProposalBatchRefRecord ProposalEffect ProposeRequest "
     "ProposalRef ProposalRefRecord ProposalSummaryGraphRow ReceiptRef Redaction ReflectionResult Replayability "
     "RunnerRequest Score "
