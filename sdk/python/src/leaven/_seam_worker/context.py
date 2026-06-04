@@ -8,6 +8,7 @@ from msgspec import ValidationError, convert
 
 from .._seam import AgentRunRequest, LmCompleteRequest, ProposalSubmitRequest, SeamJsonRpcRequest
 from .._seam._wire import JsonObject
+from .._seam._wire.codec import encode_request
 from .._seam._wire.json_value import json_object
 from .._seam._wire.results import AgentRunResult, LmCompleteResult, ProposalSubmitResult
 from .._stage_runtime import CallbackProposeContext, CallbackRolloutContext
@@ -23,7 +24,14 @@ class JsonRpcCallbackClient:
 
     def _request_result(self, request: SeamJsonRpcRequest) -> JsonObject:
         """Send one callback request and return the public-seam result object."""
-        print(json.dumps(request.to_json_rpc(), sort_keys=True), flush=True)
+        print(
+            encode_request(
+                method=request.method,
+                request_id=request.request_id,
+                params=request.to_params(),
+            ).decode(),
+            flush=True,
+        )
         line = sys.stdin.readline()
         if not line:
             raise RuntimeError("stage host closed before answering callback request")

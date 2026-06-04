@@ -41,10 +41,6 @@ class SeamJsonRpcRequest(Protocol):
         """Return the method-specific JSON-RPC params object."""
         ...
 
-    def to_json_rpc(self) -> JsonObject:
-        """Return the JSON-RPC request object for transport adapters."""
-        ...
-
 
 @dataclass(frozen=True)
 class CaseLoadRequest:
@@ -72,15 +68,6 @@ class CaseLoadRequest:
             "ops": [self._case_query(op_name)],
             "return": [op_name],
             "commit": {"kind": "no_graph_writes"},
-        })
-
-    def to_json_rpc(self) -> JsonObject:
-        """Return a JSON-RPC request for the locked case read route."""
-        return json_object({
-            "jsonrpc": "2.0",
-            "id": self.request_id,
-            "method": self.method,
-            "params": self.to_params(),
         })
 
     def _case_query(self, op_name: str) -> JsonObject:
@@ -140,15 +127,6 @@ class AgentRunRequest:
             "ops": [self._workspace_call(), self._agent_call()],
             "return": ["workspace", "completion"],
             "commit": {"kind": "graph_writes_atomic", "on_stale": "reject"},
-        })
-
-    def to_json_rpc(self) -> JsonObject:
-        """Return a JSON-RPC request for `leaven/agent.run`."""
-        return json_object({
-            "jsonrpc": "2.0",
-            "id": self.request_id,
-            "method": self.method,
-            "params": self.to_params(),
         })
 
     def _workspace_call(self) -> JsonObject:
@@ -224,15 +202,6 @@ class LmCompleteRequest:
             "commit": {"kind": "no_graph_writes"},
         })
 
-    def to_json_rpc(self) -> JsonObject:
-        """Return a JSON-RPC request for `leaven/lm.complete`."""
-        return json_object({
-            "jsonrpc": "2.0",
-            "id": self.request_id,
-            "method": self.method,
-            "params": self.to_params(),
-        })
-
     def _lm_call(self) -> JsonObject:
         call: JsonObject = {
             "kind": "lm_complete",
@@ -295,15 +264,6 @@ class StageRunRequest:
             },
         })
 
-    def to_json_rpc(self) -> JsonObject:
-        """Return a JSON-RPC request for `leaven/stage.run`."""
-        return json_object({
-            "jsonrpc": "2.0",
-            "id": self.request_id,
-            "method": self.method,
-            "params": self.to_params(),
-        })
-
 
 @dataclass(frozen=True)
 class StageRunProposeRequest:
@@ -346,15 +306,6 @@ class StageRunProposeRequest:
                 "query_policy_fingerprint": self.query_policy_fingerprint,
                 "capability_fingerprint": self.capability_fingerprint,
             },
-        })
-
-    def to_json_rpc(self) -> JsonObject:
-        """Return a JSON-RPC request for `leaven/stage.run`."""
-        return json_object({
-            "jsonrpc": "2.0",
-            "id": self.request_id,
-            "method": self.method,
-            "params": self.to_params(),
         })
 
     def _reflection_result(self) -> JsonObject:
@@ -403,15 +354,6 @@ class ProposalSubmitRequest:
             "ops": [self._submit_write()],
             "return": ["proposal_batch"],
             "commit": {"kind": "graph_writes_atomic", "on_stale": "reject"},
-        })
-
-    def to_json_rpc(self) -> JsonObject:
-        """Return a JSON-RPC request for `leaven/proposal.submit_batch`."""
-        return json_object({
-            "jsonrpc": "2.0",
-            "id": self.request_id,
-            "method": self.method,
-            "params": self.to_params(),
         })
 
     def _submit_write(self) -> JsonObject:

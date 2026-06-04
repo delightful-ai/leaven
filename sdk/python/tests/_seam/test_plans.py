@@ -8,19 +8,19 @@ def test_case_load_request_names_locked_single_field_routes() -> None:
         plan_id="plan-input",
         case_id="case_input",
         include=("input",),
-    ).to_json_rpc()["method"] == "leaven/case.input"
+    ).method == "leaven/case.input"
     assert CaseLoadRequest(
         request_id="case-target",
         plan_id="plan-target",
         case_id="case_target",
         include=("target",),
-    ).to_json_rpc()["method"] == "leaven/case.target"
+    ).method == "leaven/case.target"
     assert CaseLoadRequest(
         request_id="case-metadata",
         plan_id="plan-metadata",
         case_id="case_metadata",
         include=("metadata",),
-    ).to_json_rpc()["method"] == "leaven/case.metadata"
+    ).method == "leaven/case.metadata"
 
 
 def test_case_load_request_uses_composite_route_for_multi_field_projection() -> None:
@@ -30,10 +30,10 @@ def test_case_load_request_uses_composite_route_for_multi_field_projection() -> 
         case_id="case_sdk",
         include=("input", "target", "metadata"),
         run_id="run_case_builder",
-    ).to_json_rpc()
+    )
 
-    assert request["method"] == "leaven/case.load"
-    params = json_object(request["params"])
+    assert request.method == "leaven/case.load"
+    params = request.to_params()
     assert params["schema_version"] == "leaven.plan.v1"
     assert params["plan_id"] == "plancasebuilder001"
     assert params["return"] == ["case_load"]

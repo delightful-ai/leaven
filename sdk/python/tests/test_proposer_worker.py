@@ -3,6 +3,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+from leaven._seam._wire import JsonObject
+from leaven._seam._wire.codec import encode_request
+
 
 def test_checked_in_stage_worker_can_callback_proposal_submit(tmp_path: Path) -> None:
     """Scenario: registered proposer can submit a ProposalBatch over the active seam."""
@@ -31,7 +34,7 @@ async def propose(req, cx):
 """.lstrip(),
         encoding="utf-8",
     )
-    request = _proposer_stage_run_request()
+    request_params = _proposer_stage_run_request_params()
 
     process = subprocess.Popen(
         [
@@ -54,7 +57,14 @@ async def propose(req, cx):
     )
     assert process.stdin is not None
     assert process.stdout is not None
-    process.stdin.write(json.dumps(request) + "\n")
+    process.stdin.write(
+        encode_request(
+            method="leaven/stage.run",
+            request_id="proposer-worker-test",
+            params=request_params,
+        ).decode()
+        + "\n"
+    )
     process.stdin.flush()
 
     callback = json.loads(process.stdout.readline())
@@ -87,10 +97,18 @@ async def propose(req, cx):
                     },
                     "receipts": [
                         {
+                            "kind": "write",
                             "receipt": "wrec_worker_proposal",
+                            "status": "succeeded",
+                            "result_hash": "sha256:worker_proposal",
                             "write_kind": "submit_proposal_batch",
+                            "proposal_ids": ["prop_worker"],
                         }
                     ],
+                    "redactions": [],
+                    "capability_fingerprint": "fp_cap_worker_test",
+                    "policy_fingerprint": "fp_policy_worker_test",
+                    "data_classes": ["public"],
                 },
             }
         )
@@ -116,47 +134,42 @@ async def propose(req, cx):
     ]
 
 
-def _proposer_stage_run_request() -> dict:
+def _proposer_stage_run_request_params() -> JsonObject:
     return {
-        "jsonrpc": "2.0",
-        "id": "proposer-worker-test",
-        "method": "leaven/stage.run",
-        "params": {
-            "schema_version": "leaven.stage_run.v1",
-            "message": "stage_run_request",
-            "stage": "proposer",
-            "payload": {
+        "schema_version": "leaven.stage_run.v1",
+        "message": "stage_run_request",
+        "stage": "proposer",
+        "payload": {
+            "schema_version": "leaven.stage_payloads.v1",
+            "role": "proposer",
+            "run": "run_proposer_worker",
+            "stage_call_id": "sc_proposer_worker",
+            "base_revision": "rev_proposer_worker",
+            "parent": "cand_proposer_worker_parent",
+            "surface_fingerprint": "fp_surface_sha256_proposer_worker",
+            "reflection_result": {
                 "schema_version": "leaven.stage_payloads.v1",
-                "role": "proposer",
-                "run": "run_proposer_worker",
-                "stage_call_id": "sc_proposer_worker",
-                "base_revision": "rev_proposer_worker",
-                "parent": "cand_proposer_worker_parent",
-                "surface_fingerprint": "fp_surface_sha256_proposer_worker",
-                "reflection_result": {
-                    "schema_version": "leaven.stage_payloads.v1",
-                    "role": "reflection_result",
-                    "summary": "empty inputs fail",
-                    "failure_modes": [
-                        {
-                            "label": "missing_empty_input_guard",
-                            "description": "empty inputs fail",
-                            "source_refs": ["cand_proposer_worker_parent"],
-                        }
-                    ],
-                    "surface_suggestions": [],
-                    "negative_constraints": [],
-                    "positive_constraints": [],
-                    "source_refs": ["cand_proposer_worker_parent"],
-                    "read_receipts": ["qrec_reflection"],
-                    "data_classes": ["optimizer.visible"],
-                    "confidence": 0.8,
-                },
-                "allowed_effects": ["change_from_agent_session"],
-                "allowed_change_schemas": ["fp_schema_sha256_proposer_worker_patch"],
+                "role": "reflection_result",
+                "summary": "empty inputs fail",
+                "failure_modes": [
+                    {
+                        "label": "missing_empty_input_guard",
+                        "description": "empty inputs fail",
+                        "source_refs": ["cand_proposer_worker_parent"],
+                    }
+                ],
+                "surface_suggestions": [],
+                "negative_constraints": [],
+                "positive_constraints": [],
                 "source_refs": ["cand_proposer_worker_parent"],
-                "query_policy_fingerprint": "fp_policy_sha256_proposer_worker",
-                "capability_fingerprint": "fp_cap_sha256_proposer_worker",
+                "read_receipts": ["qrec_reflection"],
+                "data_classes": ["optimizer.visible"],
+                "confidence": 0.8,
             },
+            "allowed_effects": ["change_from_agent_session"],
+            "allowed_change_schemas": ["fp_schema_sha256_proposer_worker_patch"],
+            "source_refs": ["cand_proposer_worker_parent"],
+            "query_policy_fingerprint": "fp_policy_sha256_proposer_worker",
+            "capability_fingerprint": "fp_cap_sha256_proposer_worker",
         },
     }

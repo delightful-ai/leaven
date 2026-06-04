@@ -16,6 +16,7 @@ from leaven._seam import (
     OpenAiLmRuntimeConfig,
     StageRunRequest,
 )
+from leaven._seam._wire.codec import encode_request
 from leaven._seam._wire.payloads import BlobRef as WireBlobRef
 from leaven._seam._wire.payloads import Cost
 from leaven._seam._wire.results import (
@@ -202,11 +203,10 @@ def test_stage_run_request_names_locked_runner_dispatch_shape() -> None:
         candidate="cand_stage_builder",
         case="case_stage_builder",
         case_input={"question": "2 + 2"},
-    ).to_json_rpc()
+    )
 
-    assert request["method"] == "leaven/stage.run"
-    params = request["params"]
-    assert isinstance(params, dict)
+    assert request.method == "leaven/stage.run"
+    params = request.to_params()
     assert params["schema_version"] == "leaven.stage_run.v1"
     assert params["message"] == "stage_run_request"
     assert params["stage"] == "runner"
@@ -280,7 +280,7 @@ async def run(prompt, case, cx):
         candidate="cand_stage_worker",
         case="case_stage_worker",
         case_input={"question": "2 + 2", "prompt": "Answer the question."},
-    ).to_json_rpc()
+    )
 
     process = subprocess.Popen(
         [
@@ -303,7 +303,7 @@ async def run(prompt, case, cx):
     )
     assert process.stdin is not None
     assert process.stdout is not None
-    process.stdin.write(json.dumps(request) + "\n")
+    process.stdin.write(_json_rpc_line(request) + "\n")
     process.stdin.flush()
 
     callback = json.loads(process.stdout.readline())
@@ -375,7 +375,7 @@ async def run(prompt, case, cx):
         candidate="cand_stage_worker_agent",
         case="case_stage_worker_agent",
         case_input={"question": "2 + 2", "prompt": "Answer the question."},
-    ).to_json_rpc()
+    )
 
     process = subprocess.Popen(
         [
@@ -398,7 +398,7 @@ async def run(prompt, case, cx):
     )
     assert process.stdin is not None
     assert process.stdout is not None
-    process.stdin.write(json.dumps(request) + "\n")
+    process.stdin.write(_json_rpc_line(request) + "\n")
     process.stdin.flush()
 
     callback = json.loads(process.stdout.readline())
@@ -651,6 +651,14 @@ def _json_object(value: JsonValue) -> JsonObject:
 def _json_array(value: JsonValue) -> list[JsonValue]:
     assert isinstance(value, list)
     return value
+
+
+def _json_rpc_line(request: StageRunRequest) -> str:
+    return encode_request(
+        method=request.method,
+        request_id=request.request_id,
+        params=request.to_params(),
+    ).decode()
 
 
 class FakeSeamClient:

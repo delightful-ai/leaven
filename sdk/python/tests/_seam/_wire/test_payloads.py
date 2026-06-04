@@ -24,7 +24,6 @@ from leaven._seam._wire.payloads import (
     EvalModeExecute,
     EventSummaryGraphRow,
     ExternalInfoRefRecord,
-    GraphWrite,
     LeavenValue,
     OperationReceipt,
     PlanDocument,
@@ -36,6 +35,7 @@ from leaven._seam._wire.payloads import (
     StageRunResult,
     TraceRefRecord,
 )
+from leaven._seam._wire.writes import EmitRunEventWrite
 
 
 def test_plan_document_decodes_top_level_shape() -> None:
@@ -64,7 +64,9 @@ def test_plan_document_decodes_typed_operation_kinds() -> None:
         b'{"kind":"call","name":"lm","idempotency_key":"idem_1",'
         b'"call":{"kind":"lm_complete","model":"gpt-test"}},'
         b'{"kind":"write","name":"evt","idempotency_key":"idem_2",'
-        b'"write":{"kind":"emit_run_event","event":{"kind":"stage_completed"}}}'
+        b'"write":{"kind":"emit_run_event","event_kind":"stage_completed",'
+        b'"payload_schema":"fp_schema_event","payload":{"ok":true},'
+        b'"visibility":"optimizer_visible"}}'
         b'],"return":["evt"],"commit":{"kind":"no_graph_writes"}}'
     )
 
@@ -73,11 +75,11 @@ def test_plan_document_decodes_typed_operation_kinds() -> None:
     call = decoded.ops[1].call
     write = decoded.ops[2].write
     assert isinstance(call, CapabilityCall)
-    assert isinstance(write, GraphWrite)
+    assert isinstance(write, EmitRunEventWrite)
     assert isinstance(decoded.ops[0].expr, PlanExpressionLiteral)
     assert decoded.ops[0].kind == "let"
     assert call.kind == "lm_complete"
-    assert write.kind == "emit_run_event"
+    assert write.event_kind == "stage_completed"
 
 
 def test_plan_document_decodes_typed_plan_expression_source_refs() -> None:
@@ -121,7 +123,9 @@ def test_plan_document_decodes_typed_write_preconditions() -> None:
         b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
         b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
         b'"ops":[{"kind":"write","name":"evt","idempotency_key":"idem_1",'
-        b'"write":{"kind":"emit_run_event"},'
+        b'"write":{"kind":"emit_run_event","event_kind":"stage_completed",'
+        b'"payload_schema":"fp_schema_event","payload":{"ok":true},'
+        b'"visibility":"optimizer_visible"},'
         b'"preconditions":[{"kind":"candidate_exists",'
         b'"candidate":{"kind":"candidate","id":"cand_1"}}]}],'
         b'"return":["evt"],"commit":{"kind":"graph_writes_atomic","on_stale":"reject"}}'
@@ -142,7 +146,9 @@ def test_plan_document_rejects_unknown_precondition_kind() -> None:
         b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
         b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
         b'"ops":[{"kind":"write","name":"evt","idempotency_key":"idem_1",'
-        b'"write":{"kind":"emit_run_event"},'
+        b'"write":{"kind":"emit_run_event","event_kind":"stage_completed",'
+        b'"payload_schema":"fp_schema_event","payload":{"ok":true},'
+        b'"visibility":"optimizer_visible"},'
         b'"preconditions":[{"kind":"private_condition","candidate":"cand_1"}]}],'
         b'"return":["evt"],"commit":{"kind":"graph_writes_atomic","on_stale":"reject"}}'
     )

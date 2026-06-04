@@ -1565,6 +1565,34 @@ acceptance:
           recursion-safe owner slice, and `requires_partition_resolution`
           constant-true validation remains Rust/schema authority because
           msgspec does not support `Literal[True]`.
+      - kind: python_request_envelope_raw_dict_escape_removed
+        paths:
+          - sdk/python/src/leaven/_seam/client.py
+          - sdk/python/src/leaven/_seam/plans.py
+          - sdk/python/src/leaven/_seam/_wire/codec.py
+          - sdk/python/src/leaven/_seam/_wire/__init__.py
+          - sdk/python/src/leaven/_seam_worker/context.py
+          - sdk/python/tests/_seam/test_client.py
+          - sdk/python/tests/_seam/test_plans.py
+          - sdk/python/tests/test_stage_surface.py
+          - sdk/python/tests/test_proposer_worker.py
+        commands:
+          - rg -n 'to_json_rpc\(|def to_json_rpc|decode_response_object|json.dumps\(request\)' sdk/python/src/leaven sdk/python/tests -g '*.py'
+          - cd sdk/python && uv run ruff check src/leaven/_seam src/leaven/_seam_worker tests/_seam tests/test_stage_surface.py tests/test_proposer_worker.py
+          - cd sdk/python && uv run ty check src/leaven/_seam src/leaven/_seam_worker tests/_seam tests/test_stage_surface.py tests/test_proposer_worker.py
+          - cd sdk/python && uv run pytest tests/_seam tests/_seam_worker tests/test_stage_surface.py tests/test_proposer_worker.py -q
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          The Python private client no longer exposes request-record
+          `to_json_rpc()` helpers, no worker test writes a caller-assembled
+          JSON-RPC request dict, callback requests route through the msgspec
+          JSON-RPC encoder, and the unused raw `decode_response_object` escape
+          hatch is no longer exported. This is not full request-side typedness:
+          request records still lower method params through `to_params() ->
+          JsonObject`, and generated `PlanOp.call` still lacks method-specific
+          typed call owners for LM, agent, workspace, sandbox, and release
+          calls. Those must be cut over before the Python request surface can
+          be called fully typed end to end.
       - kind: typed_plan_expression_owner_foundation
         commits:
           - a0397e66
