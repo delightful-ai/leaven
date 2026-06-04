@@ -941,6 +941,41 @@ acceptance:
           `RunEvent::ExternalEventEmitted` itself still accepts a serialized
           payload slot that needs a deeper engine-domain owner in a later
           typed-seam slice.
+      - kind: typed_engine_external_event_payload_foundation
+        commits:
+          - 8c66efd8
+        paths:
+          - crates/leaven-engine/src/events.rs
+          - crates/leaven-engine/src/lib.rs
+          - crates/leaven-seam-service/src/run_context_service.rs
+          - crates/leaven-seam-service/src/run_bound_service/params.rs
+          - crates/leaven-seam-service/src/run_bound_service/mod.rs
+          - crates/leaven-seam-service/src/run_bound_service/extension_result.rs
+          - crates/leaven-seam-service/src/run_bound_service/error.rs
+          - crates/leaven-acp-stage-bridge/src/graph_host.rs
+          - crates/leaven-acp-stage-bridge/tests/dispatch_contract.rs
+          - crates/leaven-cli/tests/seam_stdio_server.rs
+          - crates/leaven/tests/topology_contract.rs
+        commands:
+          - cargo fmt
+          - cargo test -p leaven-acp-stage-bridge
+          - cargo test -p leaven-seam-service
+          - cargo check -p leaven-engine -p leaven-seam-service -p leaven-acp-stage-bridge
+          - cargo test -p leaven-cli --test seam_stdio_server
+          - cargo test -p leaven --test topology_contract
+        note: >-
+          `RunEvent::ExternalEventEmitted` no longer stores external event
+          payloads as arbitrary `serde_json::Value`. `leaven-engine` now owns
+          `ExternalEventPayload { ok, stage_call_id? }`, exports it from the
+          engine crate map, and the configured RunContext service, run-bound
+          service, and ACP stage bridge all parse public `event.emit` callback
+          payloads into that engine type before calling `RunContext::emit`.
+          Stage-bridge tests also prove the optional `stage_call_id`
+          provenance survives as typed graph state. This removes the deeper
+          engine payload-erasure blocker noted by
+          `typed_runcontext_event_projection_foundation`, but remains
+          foundation evidence: public Plan IR ingress and broader graph/query
+          result payload families still need typed owners.
       - kind: product_route_topology_decision
         paths:
           - docs/working-memory/run-bound-durable-runcontext-service.md
