@@ -132,8 +132,8 @@ class RunInspection(BaseModel):
         ]
 
 
-def inspect_optimized(
-    result: Optimized[object],
+def inspect_optimized[A](
+    result: Optimized[A],
     *,
     rust_readback: RustRunReadback | None = None,
 ) -> RunInspection:
@@ -154,7 +154,7 @@ def inspect_optimized(
     )
 
 
-def _receipts(result: Optimized[object]) -> list[ReceiptSummary]:
+def _receipts[A](result: Optimized[A]) -> list[ReceiptSummary]:
     receipts: list[ReceiptSummary] = []
     for assessment in result.assessment_rows:
         source = f"assessment:{assessment.case.id}"
