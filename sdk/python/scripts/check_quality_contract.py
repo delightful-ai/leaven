@@ -21,16 +21,16 @@ SKIPPED_PARTS = {
     "build",
 }
 
-WIRE_ROOT = ROOT / "src" / "leaven" / "_seam" / "_wire"
+TYPED_BOUNDARY_ROOTS = (
+    ROOT / "src" / "leaven" / "_seam" / "_wire",
+    ROOT / "src" / "leaven" / "_seam_worker",
+)
 MIRRORED_TESTS = {
     ROOT / "src" / "leaven" / "_runs" / "rust_export.py": ROOT
     / "tests"
     / "_runs"
     / "test_rust_export.py",
-    ROOT / "src" / "leaven" / "_seam" / "plans.py": ROOT
-    / "tests"
-    / "_seam"
-    / "test_plans.py",
+    ROOT / "src" / "leaven" / "_seam" / "plans.py": ROOT / "tests" / "_seam" / "test_plans.py",
     ROOT / "src" / "leaven" / "_seam" / "_wire" / "codec.py": ROOT
     / "tests"
     / "_seam"
@@ -46,10 +46,15 @@ MIRRORED_TESTS = {
     / "_seam"
     / "_wire"
     / "test_payloads.py",
-    ROOT / "src" / "leaven" / "builders" / "case.py": ROOT
+    ROOT / "src" / "leaven" / "_seam_worker" / "callbacks.py": ROOT
     / "tests"
-    / "builders"
-    / "test_case.py",
+    / "_seam_worker"
+    / "test_callbacks.py",
+    ROOT / "src" / "leaven" / "_seam_worker" / "protocol.py": ROOT
+    / "tests"
+    / "_seam_worker"
+    / "test_protocol.py",
+    ROOT / "src" / "leaven" / "builders" / "case.py": ROOT / "tests" / "builders" / "test_case.py",
     ROOT / "src" / "leaven" / "run_inspection.py": ROOT / "tests" / "test_run_inspection.py",
 }
 
@@ -83,9 +88,7 @@ def check_line_counts() -> list[str]:
     for path in project_python_files():
         lines = path.read_text(encoding="utf-8").splitlines()
         if len(lines) > MAX_PYTHON_LINES:
-            failures.append(
-                f"{relative(path)} has {len(lines)} lines; max is {MAX_PYTHON_LINES}"
-            )
+            failures.append(f"{relative(path)} has {len(lines)} lines; max is {MAX_PYTHON_LINES}")
     return failures
 
 
@@ -101,11 +104,12 @@ def check_future_annotations() -> list[str]:
 
 def check_wire_any() -> list[str]:
     failures: list[str] = []
-    for path in sorted(WIRE_ROOT.rglob("*.py")):
-        if SKIPPED_PARTS.isdisjoint(path.relative_to(ROOT).parts):
-            text = path.read_text(encoding="utf-8")
-            if "Any" in text:
-                failures.append(f"{relative(path)} contains `Any` in the wire boundary")
+    for root in TYPED_BOUNDARY_ROOTS:
+        for path in sorted(root.rglob("*.py")):
+            if SKIPPED_PARTS.isdisjoint(path.relative_to(ROOT).parts):
+                text = path.read_text(encoding="utf-8")
+                if "Any" in text:
+                    failures.append(f"{relative(path)} contains `Any` in a typed seam boundary")
     return failures
 
 

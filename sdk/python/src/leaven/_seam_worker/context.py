@@ -5,6 +5,8 @@ import sys
 from collections.abc import Sequence
 
 from .._seam import LmCompleteRequest
+from .._seam._wire import JsonObject
+from .._seam._wire.json_value import json_object
 from .._stage_runtime import CallbackProposeContext, CallbackRolloutContext
 from .callbacks import CallbackReceiptLog
 
@@ -16,26 +18,26 @@ class JsonRpcCallbackClient:
         self._lm_model = lm_model
         self._receipts = CallbackReceiptLog()
 
-    def request(self, request: dict) -> dict:
+    def request(self, request: JsonObject) -> JsonObject:
         """Send one callback request and return the public-seam result object."""
         print(json.dumps(request, sort_keys=True), flush=True)
         line = sys.stdin.readline()
         if not line:
             raise RuntimeError("stage host closed before answering callback request")
-        response = json.loads(line)
+        response = json_object(json.loads(line))
         if "error" in response:
             raise RuntimeError(f"stage callback failed: {response['error']}")
-        result = response["result"]
+        result = json_object(response["result"])
         method = request.get("method")
-        if isinstance(method, str) and isinstance(result, dict):
+        if isinstance(method, str):
             self._receipts.record_result(method=method, result=result)
         return result
 
-    def effect_receipts_json(self) -> list[dict[str, object]]:
+    def effect_receipts_json(self) -> list[JsonObject]:
         """Return effect receipts observed while running the current stage."""
         return self._receipts.effect_receipts_json()
 
-    def proposal_receipts_json(self) -> list[dict[str, object]]:
+    def proposal_receipts_json(self) -> list[JsonObject]:
         """Return proposal write receipts observed while running the current stage."""
         return self._receipts.proposal_receipts_json()
 
@@ -50,7 +52,7 @@ class JsonRpcCallbackClient:
         max_tokens: int | None = None,
         stop: Sequence[str] | None = None,
         input_classes: Sequence[str] | None = None,
-    ) -> dict:
+    ) -> JsonObject:
         """Send one `leaven/lm.complete` callback request and read the response."""
         request = LmCompleteRequest(
             request_id=request_id,

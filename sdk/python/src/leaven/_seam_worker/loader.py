@@ -2,7 +2,6 @@
 
 import runpy
 from pathlib import Path
-from typing import Any
 
 from ..decorators import RegisteredStage
 
@@ -12,7 +11,7 @@ def load_stage_from_file(
     *,
     stage_id: str,
     stage_name: str,
-) -> RegisteredStage[Any, Any]:
+) -> RegisteredStage[object, object]:
     """Execute a stage file as a module and return the requested stage."""
     namespace = runpy.run_path(str(module_file), run_name=_run_name(module_file))
     stage = namespace.get(stage_name)
