@@ -1546,27 +1546,40 @@ acceptance:
       - kind: public_core_json_surface_typing
         commits:
           - 023d85e3
+          - 3c9a5ff7
         paths:
           - sdk/python/src/leaven/json_value.py
+          - sdk/python/src/leaven/case.py
+          - sdk/python/src/leaven/evidence.py
           - sdk/python/src/leaven/output.py
           - sdk/python/src/leaven/output_record.py
           - sdk/python/src/leaven/proposal.py
+          - sdk/python/src/leaven/run_inspection.py
           - sdk/python/src/leaven/task.py
           - sdk/python/src/leaven/stage_payloads.py
+          - sdk/python/tests/test_stage_surface.py
         commands:
           - cd sdk/python && uv run ruff format --check src/leaven/json_value.py src/leaven/output.py src/leaven/output_record.py src/leaven/proposal.py src/leaven/task.py src/leaven/stage_payloads.py
           - cd sdk/python && uv run ruff check src/leaven/json_value.py src/leaven/output.py src/leaven/output_record.py src/leaven/proposal.py src/leaven/task.py src/leaven/stage_payloads.py
           - cd sdk/python && uv run ty check src/leaven/json_value.py src/leaven/output.py src/leaven/output_record.py src/leaven/proposal.py src/leaven/task.py src/leaven/stage_payloads.py
           - cd sdk/python && uv run pytest tests/test_product_surface_ring.py tests/test_stage_surface.py tests/test_proposal_submission.py tests/test_optimize_proposer_mechanics.py tests/test_proposer_worker.py -q
           - rg -n "from typing import Any|\bAny\b|dict\[str, Any\]|Mapping\[str, Any\]|from __future__" sdk/python/src/leaven/json_value.py sdk/python/src/leaven/output.py sdk/python/src/leaven/output_record.py sdk/python/src/leaven/proposal.py sdk/python/src/leaven/task.py sdk/python/src/leaven/stage_payloads.py
+          - cd sdk/python && uv run ruff format --check src/leaven/case.py src/leaven/evidence.py src/leaven/run_inspection.py tests/test_stage_surface.py
+          - cd sdk/python && uv run ruff check src/leaven/case.py src/leaven/evidence.py src/leaven/run_inspection.py tests/test_run_inspection.py tests/test_product_surface_ring.py tests/test_stage_surface.py
+          - cd sdk/python && uv run ty check src/leaven/case.py src/leaven/evidence.py src/leaven/run_inspection.py tests/test_run_inspection.py tests/test_product_surface_ring.py tests/test_stage_surface.py
+          - cd sdk/python && uv run pytest tests/test_product_surface_ring.py tests/test_stage_surface.py tests/test_run_inspection.py tests/test_run_receipt_inspection.py tests/test_reward_vector_inspection.py -q
+          - rg -n "from typing import Any|\bAny\b|dict\[str, Any\]|Mapping\[str, Any\]|from __future__" sdk/python/src/leaven/case.py sdk/python/src/leaven/evidence.py sdk/python/src/leaven/run_inspection.py sdk/python/tests/test_stage_surface.py
         note: >-
           Core public SDK records now use `JsonValue`, `JsonObject`,
           `JsonSchema`, and concrete model types instead of `typing.Any` on
           output contracts, output records, proposal/task records, and stage
-          payload declarations. This narrows the public API JSON boundary but
-          does not close the row: case/evidence/run-inspection/builders,
-          generated wire consumption, and examples still need the same typed
-          owner treatment.
+          payload declarations. A follow-up slice moved public case
+          input/target/metadata, evidence public/private payloads, and
+          run-inspection evidence payloads to `JsonObject`, and narrowed a
+          stage-surface test before indexing recursive JSON-RPC params. This
+          narrows the public API JSON boundary but does not close the row:
+          builders, generated wire consumption, optimize/run private surfaces,
+          and examples still need the same typed-owner treatment.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this
