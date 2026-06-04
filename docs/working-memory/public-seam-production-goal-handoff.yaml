@@ -1016,6 +1016,7 @@ acceptance:
           - 88d47081
           - 2eafaf05
           - 1efc043e
+          - e8a404bb
         paths:
           - crates/leaven-seam-service/src/service.rs
           - crates/leaven-seam-service/src/run_context_service.rs
@@ -1024,11 +1025,14 @@ acceptance:
           - crates/leaven-seam-service/src/stage.rs
           - crates/leaven-acp/src/stdio.rs
           - crates/leaven-acp/tests/stdio_session_contract.rs
+          - crates/leaven-acp-stage-bridge/src/graph_host.rs
         commands:
           - cargo check -p leaven-seam-service
           - cargo test -p leaven-seam-service
           - cargo check -p leaven-acp
           - cargo test -p leaven-acp --test stdio_session_contract
+          - cargo check -p leaven-acp-stage-bridge
+          - cargo test -p leaven-acp-stage-bridge
           - cargo fmt --check
         note: >-
           Configured seam service dispatch, run-context graph-write fast paths,
@@ -1042,10 +1046,12 @@ acceptance:
           through that public transport helper and are not preserved by a raw
           call test hole. Configured stage-run command workers now parse
           worker-initiated callback method names at JSON-RPC ingress and pass
-          LockedMethod into service effect execution. This is method-identity
-          evidence only: service params, run-context lowerers, ACP result
-          payloads, costs, blob refs, and nested Plan IR/Result bodies remain
-          raw JSON islands.
+          LockedMethod into service effect execution. The older ACP stage bridge
+          RunContext graph-effect host now dispatches callbacks by LockedMethod
+          variants too, closing the stale raw-string trait override. This is
+          method-identity evidence only: service params, run-context lowerers,
+          ACP result payloads, costs, blob refs, and nested Plan IR/Result
+          bodies remain raw JSON islands.
     closeout_check: >-
       Handwritten Python schema mirrors, pydantic-only wire models, untyped
       dict payloads, response-order batch routing, or msgspec used as a
