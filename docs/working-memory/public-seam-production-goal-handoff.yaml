@@ -871,7 +871,7 @@ acceptance:
           PlanResult/effect leaf slots remain typed-seam blockers.
       - kind: typed_acp_stage_bridge_lowerer_params_foundation
         commits:
-          - pending-current-run
+          - 5ad958b7
         paths:
           - crates/leaven-acp-stage-bridge/src/lib.rs
           - crates/leaven-acp-stage-bridge/src/graph_host.rs
