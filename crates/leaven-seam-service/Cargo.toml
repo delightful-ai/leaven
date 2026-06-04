@@ -34,6 +34,7 @@ tokio = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+leaven-seam-stdio = { workspace = true }
 tempfile = { workspace = true }
 
 [lints]

@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use leaven_core::{Assessment, EvaluationRequest, OptimizationProblem};
 use leaven_engine::{ProposalBatchReport, RunContext, RunEvent};
 use leaven_kernel::{EvaluatorId, Fingerprint, Metered, ProposalBatchId};
+use leaven_seam_runtime::{SeamPlanRequest, SeamService, SeamServiceError, SeamStageRunRequest};
 use serde_json::Value;
 
 mod error;
@@ -239,6 +240,20 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
             },
             params,
         )
+    }
+}
+
+impl<P: OptimizationProblem> SeamService for RunBoundGraphEffectService<'_, '_, P> {
+    fn handle_plan(&self, request: SeamPlanRequest<'_>) -> Result<Value, SeamServiceError> {
+        self.handle_method(request.method(), request.params())
+            .map_err(|error| SeamServiceError::execution(error.to_string()))
+    }
+
+    fn handle_stage_run(
+        &self,
+        _request: SeamStageRunRequest<'_>,
+    ) -> Result<Value, SeamServiceError> {
+        Err(SeamServiceError::unavailable("leaven/stage.run"))
     }
 }
 

@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::fmt;
+use std::io::Cursor;
 
 use leaven_core::{
     Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget,
@@ -12,6 +13,8 @@ use leaven_engine::{
 use leaven_kernel::{
     Budget, ContentId, Cost, EvaluatorId, Fingerprint, MetadataBag, Metered, StageId,
 };
+use leaven_seam_runtime::SeamRuntime;
+use leaven_seam_stdio::serve_reader_writer;
 use leaven_store::CheckpointStore;
 use leaven_store_file::FileStore;
 use leaven_store_inline::InlineEvidenceStore;
@@ -201,23 +204,208 @@ fn run_bound_service_refuses_configured_alias_batch_refs() {
     ));
 }
 
+#[test]
+fn run_bound_service_routes_graph_writes_through_runtime_and_stdio() {
+    let package = leaven_public_seam::PublicSeamPackage::active_from_repo(workspace_root())
+        .expect("public seam package loads from workspace");
+    let temp = TempDir::new().unwrap();
+    let store = FileStore::open(temp.path()).unwrap();
+    let persistence = StoreRunPersistence::new(store.clone());
+    let evidence_store = InlineEvidenceStore::<RunBoundEvidence>::new("run-bound");
+    let case_set = CaseSet::new(vec![RunBoundCase]);
+    let mut graph = leaven_engine::RunGraph::new(leaven_kernel::RunId::new());
+    let mut budget = BudgetLedger::new(Budget::unlimited());
+    let mut ctx = RunContext::<RunBoundProblem>::new(&mut graph, &mut budget)
+        .with_case_set(&case_set)
+        .with_evidence_store(&evidence_store)
+        .with_persistence(Some(&persistence));
+    let seed = ctx.insert_seed(RunBoundArtifact(1), 0).unwrap();
+    let batch = ctx
+        .record_proposal_batch(
+            StageId::custom("run-bound-runtime-proposer"),
+            ProposalBatch {
+                proposals: vec![Proposal::mutate(seed, 5).build()],
+                semantics: ProposalBatchSemantics::Alternatives,
+                metadata: MetadataBag::new(),
+            },
+            Cost::zero(),
+        )
+        .unwrap();
+    let batch_ref = format!("pb_{}", batch.batch_id.as_uuid());
+    {
+        let service = RunBoundGraphEffectService::new(
+            &mut ctx,
+            [batch],
+            "fp_cap_sha256_run_bound",
+            "fp_policy_sha256_run_bound",
+            "rev_run_bound_base",
+            "rev_run_bound_final",
+        )
+        .with_evaluation_requester({
+            move |_params| {
+                Ok(RunBoundEvaluationRequest {
+                    evaluator: EvaluatorId::from("eval_run_bound"),
+                    evaluator_fingerprint: Fingerprint::from_bytes([37; 32]),
+                    request: EvaluationRequest::Independent {
+                        candidates: vec![seed],
+                        set: EvaluationSet::All,
+                        granularity: AssessmentGranularity::PerCase,
+                        purpose: EvaluationPurpose::Validation,
+                    },
+                })
+            }
+        })
+        .with_assessment_submitter({
+            move |_params| {
+                Ok(Metered::new(
+                    vec![Assessment::Independent {
+                        candidate: seed,
+                        target: AssessmentTarget::Unscoped,
+                        evidence: RunBoundEvidence,
+                        cost: Cost::zero(),
+                        metadata: MetadataBag::new(),
+                    }],
+                    Cost::zero(),
+                ))
+            }
+        });
+        let runtime = SeamRuntime::from_package(package, service).unwrap();
+
+        let first_input = format!(
+            "{}\n{}\n",
+            jsonrpc_request(
+                "runtime-apply",
+                "leaven/proposal.apply",
+                proposal_apply_request(&batch_ref)
+            ),
+            jsonrpc_request(
+                "runtime-evaluation",
+                "leaven/evaluation.request",
+                evaluation_request_request()
+            ),
+        );
+        let mut first_output = Vec::new();
+        let first_report =
+            serve_reader_writer(&runtime, Cursor::new(first_input), &mut first_output).unwrap();
+        assert_eq!(first_report.requests, 2);
+        let first_lines = response_lines(first_output);
+        assert!(
+            first_lines.iter().all(|line| line.get("error").is_none()),
+            "runtime/stdio returned error responses: {first_lines:?}"
+        );
+        assert_eq!(
+            first_lines[0]["result"]["receipts"][0]["write_kind"],
+            "apply_proposal_batch"
+        );
+        assert_eq!(
+            first_lines[1]["result"]["primary"]["kind"],
+            "evaluation_request_receipt"
+        );
+        let evaluation_ref = first_lines[1]["result"]["primary"]["evaluation_request_id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+
+        let second_input = format!(
+            "{}\n{}\n",
+            jsonrpc_request(
+                "runtime-assessment",
+                "leaven/assessment.submit",
+                assessment_submit_request(&evaluation_ref),
+            ),
+            jsonrpc_request("runtime-event", "leaven/event.emit", event_emit_request()),
+        );
+        let mut second_output = Vec::new();
+        let second_report =
+            serve_reader_writer(&runtime, Cursor::new(second_input), &mut second_output).unwrap();
+        assert_eq!(second_report.requests, 2);
+        let second_lines = response_lines(second_output);
+        assert!(
+            second_lines.iter().all(|line| line.get("error").is_none()),
+            "runtime/stdio returned error responses: {second_lines:?}"
+        );
+        assert_eq!(
+            second_lines[0]["result"]["receipts"][0]["write_kind"],
+            "submit_assessments"
+        );
+        assert_eq!(
+            second_lines[1]["result"]["receipts"][0]["write_kind"],
+            "emit_run_event"
+        );
+    }
+
+    ctx.checkpoint_with_optimizer_state(
+        OptimizerStateWrite::json(
+            Fingerprint::from_bytes([93; 32]),
+            Fingerprint::from_bytes([94; 32]),
+            &json!({"boundary": "run-bound-runtime-stdio"}),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    drop(ctx);
+
+    let restored = persistence
+        .latest_checkpoint::<RunBoundProblem>()
+        .unwrap()
+        .expect("latest checkpoint restores after stdio-routed callbacks");
+    let mut restored_graph = restored.graph;
+    let mut restored_budget = restored.budget;
+    let restored_ctx =
+        RunContext::<RunBoundProblem>::new(&mut restored_graph, &mut restored_budget);
+    let graph = restored_ctx.graph();
+    assert_eq!(graph.candidate_count(), 2);
+    assert_eq!(graph.evaluation_request_count(), 1);
+    assert_eq!(graph.assessment_count(), 1);
+    assert!(graph.events().any(|event| matches!(
+        event,
+        RunEvent::ExternalEventEmitted { event_kind, .. }
+            if event_kind == "run_bound.checked"
+    )));
+}
+
+fn jsonrpc_request(id: &str, method: &str, params: Value) -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "method": method,
+        "params": params,
+    })
+}
+
+fn response_lines(output: Vec<u8>) -> Vec<Value> {
+    String::from_utf8(output)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect()
+}
+
 fn proposal_apply_request(batch_ref: &str) -> Value {
     json!({
         "schema_version": "leaven.plan.v1",
         "plan_id": "plan_run_bound_apply",
-        "mode": "live",
-        "base_revision": "rev_run_bound_base",
+        "consistency": {
+            "kind": "latest_at_start"
+        },
+        "mode": {
+            "kind": "execute"
+        },
         "ops": [{
+            "kind": "write",
             "name": "apply",
+            "idempotency_key": "run-bound-apply-0001",
             "write": {
                 "kind": "apply_proposal_batch",
-                "idempotency_key": "run-bound-apply-0001",
                 "proposal_batch": batch_ref,
-                "base_revision": "rev_run_bound_base",
-                "preconditions": []
+                "policy": "apply_first_valid"
             }
         }],
-        "return": ["apply"]
+        "return": ["apply"],
+        "commit": {
+            "kind": "graph_writes_atomic",
+            "on_stale": "reject"
+        }
     })
 }
 
@@ -225,26 +413,36 @@ fn evaluation_request_request() -> Value {
     json!({
         "schema_version": "leaven.plan.v1",
         "plan_id": "plan_run_bound_evaluation",
-        "mode": "live",
-        "base_revision": "rev_run_bound_base",
+        "consistency": {
+            "kind": "latest_at_start"
+        },
+        "mode": {
+            "kind": "execute"
+        },
         "ops": [{
+            "kind": "write",
             "name": "evaluation_request",
+            "idempotency_key": "run-bound-evaluation-0001",
             "write": {
                 "kind": "request_evaluation",
-                "idempotency_key": "run-bound-evaluation-0001",
                 "request": {
                     "evaluator": "eval_run_bound",
                     "shape": "independent",
                     "candidates": ["cand_placeholder"],
-                    "case_set": {"kind": "all"},
+                    "set": {
+                        "kind": "named",
+                        "name": "validation"
+                    },
                     "granularity": "per_case",
                     "purpose": "validation"
-                },
-                "base_revision": "rev_run_bound_base",
-                "capability": "cap_run_bound"
+                }
             }
         }],
-        "return": ["evaluation_request"]
+        "return": ["evaluation_request"],
+        "commit": {
+            "kind": "graph_writes_atomic",
+            "on_stale": "reject"
+        }
     })
 }
 
@@ -252,19 +450,67 @@ fn assessment_submit_request(evaluation_request_id: &str) -> Value {
     json!({
         "schema_version": "leaven.plan.v1",
         "plan_id": "plan_run_bound_assessment",
-        "mode": "live",
-        "base_revision": "rev_run_bound_base",
+        "consistency": {
+            "kind": "latest_at_start"
+        },
+        "mode": {
+            "kind": "execute"
+        },
         "ops": [{
+            "kind": "write",
             "name": "assessment_batch",
+            "idempotency_key": "run-bound-assessment-0001",
             "write": {
                 "kind": "submit_assessments",
-                "idempotency_key": "run-bound-assessment-0001",
                 "evaluation_request_id": evaluation_request_id,
-                "assessments": [],
-                "base_revision": "rev_run_bound_base"
+                "assessments": [{
+                    "kind": "independent",
+                    "candidate": "cand_a",
+                    "target": {
+                        "case": "case_1"
+                    },
+                    "score": {
+                        "value": 1.0,
+                        "output": {
+                            "kind": "structured",
+                            "summary": "candidate answered correctly",
+                            "value": {
+                                "candidate": "cand_a",
+                                "output": "candidate answered correctly"
+                            },
+                            "visibility": "public",
+                            "data_classes": ["candidate.output"]
+                        }
+                    },
+                    "evidence": {
+                        "schema_version": "leaven.evidence_envelope.v1",
+                        "target_derived": false,
+                        "public": {
+                            "summary": "candidate answered correctly",
+                            "data_classes": ["public"]
+                        },
+                        "redaction_policy": {
+                            "optimizer": "score_only",
+                            "reflector": "score_only",
+                            "operator": "score_only"
+                        },
+                        "producer": {
+                            "stage_call_id": "sc_run_bound_assessment"
+                        },
+                        "source_receipts": {
+                            "read": ["qrec_run_bound_assessment_source"],
+                            "effect": []
+                        }
+                    },
+                    "replayability": "pure_read"
+                }]
             }
         }],
-        "return": ["assessment_batch"]
+        "return": ["assessment_batch"],
+        "commit": {
+            "kind": "graph_writes_atomic",
+            "on_stale": "reject"
+        }
     })
 }
 
@@ -272,21 +518,29 @@ fn event_emit_request() -> Value {
     json!({
         "schema_version": "leaven.plan.v1",
         "plan_id": "plan_run_bound_event",
-        "mode": "live",
-        "base_revision": "rev_run_bound_base",
+        "consistency": {
+            "kind": "latest_at_start"
+        },
+        "mode": {
+            "kind": "execute"
+        },
         "ops": [{
+            "kind": "write",
             "name": "run_bound_event",
+            "idempotency_key": "run-bound-event-0001",
             "write": {
                 "kind": "emit_run_event",
-                "idempotency_key": "run-bound-event-0001",
                 "event_kind": "run_bound.checked",
-                "payload_schema": "leaven.run_bound_test.v1",
+                "payload_schema": "fp_schema_sha256_run_bound_test",
                 "payload": {"ok": true},
-                "visibility": "public",
-                "base_revision": "rev_run_bound_base"
+                "visibility": "public"
             }
         }],
-        "return": ["run_bound_event"]
+        "return": ["run_bound_event"],
+        "commit": {
+            "kind": "graph_writes_atomic",
+            "on_stale": "reject"
+        }
     })
 }
 

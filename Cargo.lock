@@ -3701,6 +3701,7 @@ dependencies = [
  "leaven-public-seam",
  "leaven-run",
  "leaven-seam-runtime",
+ "leaven-seam-stdio",
  "leaven-store",
  "leaven-store-file",
  "leaven-store-inline",

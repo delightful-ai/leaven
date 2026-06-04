@@ -42,6 +42,10 @@ of the same mutated facts.
   `leaven-public-seam`, advances a latest checkpoint at a clean run boundary,
   and restores the checkpoint to prove candidate/evaluation/assessment/event
   graph facts survived durable readback.
+- `RunBoundGraphEffectService` now implements `leaven-seam-runtime::SeamService`.
+  Its stdio-focused test routes all four graph-write methods through
+  `SeamRuntime` and `leaven-seam-stdio::serve_reader_writer`, so the proof no
+  longer stops at direct module calls.
 
 ## Why This Is Not Done
 
@@ -52,8 +56,8 @@ the generalized SDK service.
 
 The remaining missing proof is wiring this service shape into the public SDK
 server route during a real optimizer run/stage lifecycle. The current module
-proves the generic service and durable checkpoint mechanics, but not
-`leaven seam serve --stdio` process delivery for a run-bound service.
+proves the generic service, runtime/stdio delivery, and durable checkpoint
+mechanics, but not a run-owned server mounted by an optimizer/stage lifecycle.
 
 Do not close `run_bound_durable_runcontext_service` with:
 

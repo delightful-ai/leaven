@@ -706,6 +706,27 @@ acceptance:
           readback. This remains foundation evidence until wired through a real
           public SDK server/optimizer lifecycle route rather than a direct module
           test.
+      - kind: run_bound_service_runtime_stdio_foundation
+        paths:
+          - crates/leaven-seam-service/src/run_bound_service/mod.rs
+          - crates/leaven-seam-service/src/run_bound_service/tests.rs
+          - crates/leaven-seam-service/Cargo.toml
+          - docs/working-memory/run-bound-durable-runcontext-service.md
+        commands:
+          - cargo fmt --check
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service run_bound_service
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-run inspection
+          - cargo test -p leaven --test topology_contract
+        note: >-
+          `RunBoundGraphEffectService` now implements the runtime `SeamService`
+          trait. A focused test sends `proposal.apply`, `evaluation.request`,
+          `assessment.submit`, and `event.emit` as JSON-RPC lines through
+          `SeamRuntime` plus `leaven-seam-stdio::serve_reader_writer`, then
+          checkpoints and restores the run to assert the same graph facts. This
+          removes the direct-module-only proof gap, but the row remains pending
+          until an optimizer/stage owner mounts the service during a real run
+          lifecycle.
     closeout_check: >-
       The configured `SeamTextProblem` proof path, `leaven-acp-stage-bridge`
       callback tests, public-seam receipt projection tests, and Python
