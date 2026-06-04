@@ -1345,6 +1345,29 @@ acceptance:
           case `input`, `target`, and `metadata` fields remain JSON-shaped
           because the current public schema leaves those payloads
           unconstrained.
+      - kind: generated_refs_are_private_wire_module
+        paths:
+          - sdk/python/codegen/generate_seam_wire.py
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/refs.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/src/leaven/_seam/_wire/results.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run ruff check codegen/generate_seam_wire.py codegen/ref_codegen.py codegen/payload_codegen.py codegen/result_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/payloads.py src/leaven/_seam/_wire/results.py tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_results.py
+          - cd sdk/python && uv run ty check codegen/generate_seam_wire.py codegen/ref_codegen.py codegen/payload_codegen.py codegen/result_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/payloads.py src/leaven/_seam/_wire/results.py tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_results.py
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_results.py -q
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Generated reference records now live in the private
+          `_seam._wire.refs` module, and generated payload/result modules
+          import those schema-owned ref aliases rather than defining them
+          inline. This keeps the generated payload module below 600 LOC and
+          creates room for the next generated Plan expression owner module
+          without violating the Python 650 LOC ceiling. This is dependency
+          cleanup for typed Python wire closure, not a standalone product
+          behavior proof.
       - kind: typed_plan_expression_owner_foundation
         commits:
           - a0397e66

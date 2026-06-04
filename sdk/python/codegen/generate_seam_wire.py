@@ -7,12 +7,14 @@ from pathlib import Path
 
 from method_codegen import MethodCodegenRow, render_methods
 from payload_codegen import PayloadMethodRow, render_payloads
+from ref_codegen import render_refs
 from result_codegen import ReceiptExpectation, ResultMethodRow, render_results
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 WIRE_DIR = REPO_ROOT / "sdk/python/src/leaven/_seam/_wire"
 METHODS_OUTPUT = WIRE_DIR / "methods.py"
 PAYLOADS_OUTPUT = WIRE_DIR / "payloads.py"
+REFS_OUTPUT = WIRE_DIR / "refs.py"
 RESULTS_OUTPUT = WIRE_DIR / "results.py"
 
 
@@ -49,6 +51,7 @@ def generated_files() -> dict[Path, str]:
     rows = export_profile_rows()
     return {
         METHODS_OUTPUT: render_methods(method_rows(rows)),
+        REFS_OUTPUT: render_refs(),
         PAYLOADS_OUTPUT: render_payloads(rows),
         RESULTS_OUTPUT: render_results(result_rows(rows)),
     }
