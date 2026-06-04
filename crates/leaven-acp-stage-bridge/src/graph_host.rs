@@ -106,8 +106,8 @@ impl<'context, 'run, P: OptimizationProblem> RunContextGraphEffectHost<'context,
     }
 
     fn proposal_apply(&self, params: &Value) -> Result<Value, RunContextGraphEffectHostError> {
-        let plan_id = string_field(params, "plan_id")?;
-        let batch_id = proposal_batch_id(params)?;
+        let callback = ProposalApplyCallback::parse(params)?;
+        let batch_id = callback.write.batch_id;
         let batch = self
             .batches
             .get(&batch_id)
@@ -117,7 +117,7 @@ impl<'context, 'run, P: OptimizationProblem> RunContextGraphEffectHost<'context,
         let apply = context.apply_batch(batch_id)?;
         let graph = context.graph();
         let plan_result = PublicProposalWriteReceiptContext::new(
-            plan_id,
+            callback.plan_id,
             &self.base_revision,
             &self.final_revision,
             &self.capability_fingerprint,
@@ -130,38 +130,34 @@ impl<'context, 'run, P: OptimizationProblem> RunContextGraphEffectHost<'context,
     }
 
     fn event_emit(&self, params: &Value) -> Result<Value, RunContextGraphEffectHostError> {
-        let event = event_emit_write(params)?;
-        let plan_id = string_field(params, "plan_id")?;
-        let event_id = format!("event_{}", event.name);
+        let callback = EventEmitCallback::parse(params)?;
+        let event_id = format!("event_{}", callback.write.name);
         self.context
             .borrow_mut()
             .emit(RunEvent::ExternalEventEmitted {
                 event_id: event_id.clone(),
-                event_kind: event.event_kind.to_owned(),
-                payload_schema: event.payload_schema.to_owned(),
-                payload: event.payload.clone(),
-                visibility: event.visibility.to_owned(),
+                event_kind: callback.write.event_kind.to_owned(),
+                payload_schema: callback.write.payload_schema.to_owned(),
+                payload: callback.write.payload.clone(),
+                visibility: callback.write.visibility.to_owned(),
             });
-        event_emit_extension_result(
-            EventEmitExtensionContext {
-                plan_id,
-                name: event.name,
-                write: event.write,
-                event_id: &event_id,
-                base_revision: &self.base_revision,
-                final_revision: &self.final_revision,
-                capability_fingerprint: &self.capability_fingerprint,
-                policy_fingerprint: &self.policy_fingerprint,
-                started_at: &self.started_at,
-                completed_at: &self.completed_at,
-            },
-            params,
-        )
+        event_emit_extension_result(EventEmitExtensionContext {
+            plan_id: callback.plan_id,
+            name: callback.write.name,
+            write: callback.write.raw,
+            event_id: &event_id,
+            base_revision: &self.base_revision,
+            final_revision: &self.final_revision,
+            capability_fingerprint: &self.capability_fingerprint,
+            policy_fingerprint: &self.policy_fingerprint,
+            started_at: &self.started_at,
+            completed_at: &self.completed_at,
+            returned: callback.returned,
+        })
     }
 
     fn assessment_submit(&self, params: &Value) -> Result<Value, RunContextGraphEffectHostError> {
-        let plan_id = string_field(params, "plan_id")?;
-        let request_id = evaluation_request_id(params)?;
+        let callback = AssessmentSubmitCallback::parse(params)?;
         let submitter = self
             .assessment_submitter
             .as_ref()
@@ -169,10 +165,10 @@ impl<'context, 'run, P: OptimizationProblem> RunContextGraphEffectHost<'context,
         let metered =
             submitter(params).map_err(RunContextGraphEffectHostError::AssessmentSubmit)?;
         let mut context = self.context.borrow_mut();
-        let report = context.submit_assessments(request_id, metered)?;
+        let report = context.submit_assessments(callback.write.request_id, metered)?;
         let graph = context.graph();
         let plan_result = PublicAssessmentWriteReceiptContext::new(
-            plan_id,
+            callback.plan_id,
             &self.base_revision,
             &self.final_revision,
             &self.capability_fingerprint,
@@ -184,11 +180,11 @@ impl<'context, 'run, P: OptimizationProblem> RunContextGraphEffectHost<'context,
     }
 
     fn evaluation_request(&self, params: &Value) -> Result<Value, RunContextGraphEffectHostError> {
+        let _callback = EvaluationRequestCallback::parse(params)?;
         let requester = self
             .evaluation_requester
             .as_ref()
             .ok_or(RunContextGraphEffectHostError::MissingEvaluationRequester)?;
-        request_evaluation_write(params)?;
         let external =
             requester(params).map_err(RunContextGraphEffectHostError::EvaluationRequest)?;
         let mut context = self.context.borrow_mut();
@@ -304,70 +300,128 @@ pub enum RunContextGraphEffectHostError {
     Hash(String),
 }
 
-fn request_evaluation_write(params: &Value) -> Result<(), RunContextGraphEffectHostError> {
+struct ProposalApplyCallback<'a> {
+    plan_id: &'a str,
+    write: ProposalApplyWrite,
+}
+
+struct ProposalApplyWrite {
+    batch_id: ProposalBatchId,
+}
+
+impl<'a> ProposalApplyCallback<'a> {
+    fn parse(params: &'a Value) -> Result<Self, RunContextGraphEffectHostError> {
+        let op = plan_write_op(params, "apply_proposal_batch", || {
+            RunContextGraphEffectHostError::MissingApplyWrite
+        })?;
+        Ok(Self {
+            plan_id: op.plan_id,
+            write: ProposalApplyWrite {
+                batch_id: proposal_batch_id(op.write)?,
+            },
+        })
+    }
+}
+
+struct AssessmentSubmitCallback<'a> {
+    plan_id: &'a str,
+    write: AssessmentSubmitWrite,
+}
+
+struct AssessmentSubmitWrite {
+    request_id: EvaluationRequestId,
+}
+
+impl<'a> AssessmentSubmitCallback<'a> {
+    fn parse(params: &'a Value) -> Result<Self, RunContextGraphEffectHostError> {
+        let op = plan_write_op(params, "submit_assessments", || {
+            RunContextGraphEffectHostError::MissingAssessmentWrite
+        })?;
+        Ok(Self {
+            plan_id: op.plan_id,
+            write: AssessmentSubmitWrite {
+                request_id: evaluation_request_id(op.write)?,
+            },
+        })
+    }
+}
+
+struct EvaluationRequestCallback<'a> {
+    _plan_id: &'a str,
+    _write: EvaluationRequestWrite,
+}
+
+struct EvaluationRequestWrite;
+
+impl<'a> EvaluationRequestCallback<'a> {
+    fn parse(params: &'a Value) -> Result<Self, RunContextGraphEffectHostError> {
+        let op = plan_write_op(params, "request_evaluation", || {
+            RunContextGraphEffectHostError::MissingEvaluationRequestWrite
+        })?;
+        Ok(Self {
+            _plan_id: op.plan_id,
+            _write: EvaluationRequestWrite,
+        })
+    }
+}
+
+struct PlanWriteOp<'a> {
+    plan_id: &'a str,
+    name: &'a str,
+    write: &'a Value,
+    returned: Option<&'a Value>,
+}
+
+fn plan_write_op<'a>(
+    params: &'a Value,
+    expected_kind: &'static str,
+    missing: impl Fn() -> RunContextGraphEffectHostError,
+) -> Result<PlanWriteOp<'a>, RunContextGraphEffectHostError> {
+    let plan_id = string_field(params, "plan_id")?;
     let ops = params
         .get("ops")
         .and_then(Value::as_array)
-        .ok_or(RunContextGraphEffectHostError::MissingEvaluationRequestWrite)?;
+        .ok_or_else(&missing)?;
     for op in ops {
         let Some(write) = op.get("write") else {
             continue;
         };
-        if write.get("kind").and_then(Value::as_str) == Some("request_evaluation") {
-            return Ok(());
+        if write.get("kind").and_then(Value::as_str) == Some(expected_kind) {
+            return Ok(PlanWriteOp {
+                plan_id,
+                name: string_field(op, "name")?,
+                write,
+                returned: params.get("return"),
+            });
         }
     }
-    Err(RunContextGraphEffectHostError::MissingEvaluationRequestWrite)
+    Err(missing())
+}
+
+fn proposal_batch_id(write: &Value) -> Result<ProposalBatchId, RunContextGraphEffectHostError> {
+    let public_ref = write
+        .get("proposal_batch")
+        .and_then(Value::as_str)
+        .ok_or(RunContextGraphEffectHostError::InvalidProposalBatchRef)?;
+    let uuid = public_ref
+        .strip_prefix("pb_")
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .ok_or(RunContextGraphEffectHostError::InvalidProposalBatchRef)?;
+    Ok(ProposalBatchId::from_uuid(uuid))
 }
 
 fn evaluation_request_id(
-    params: &Value,
+    write: &Value,
 ) -> Result<EvaluationRequestId, RunContextGraphEffectHostError> {
-    let ops = params
-        .get("ops")
-        .and_then(Value::as_array)
-        .ok_or(RunContextGraphEffectHostError::MissingAssessmentWrite)?;
-    for op in ops {
-        let Some(write) = op.get("write") else {
-            continue;
-        };
-        if write.get("kind").and_then(Value::as_str) == Some("submit_assessments") {
-            let public_ref = write
-                .get("evaluation_request_id")
-                .and_then(Value::as_str)
-                .ok_or(RunContextGraphEffectHostError::InvalidEvaluationRequestRef)?;
-            let uuid = public_ref
-                .strip_prefix("evalreq_")
-                .and_then(|value| Uuid::parse_str(value).ok())
-                .ok_or(RunContextGraphEffectHostError::InvalidEvaluationRequestRef)?;
-            return Ok(EvaluationRequestId::from_uuid(uuid));
-        }
-    }
-    Err(RunContextGraphEffectHostError::MissingAssessmentWrite)
-}
-
-fn proposal_batch_id(params: &Value) -> Result<ProposalBatchId, RunContextGraphEffectHostError> {
-    let ops = params
-        .get("ops")
-        .and_then(Value::as_array)
-        .ok_or(RunContextGraphEffectHostError::MissingApplyWrite)?;
-    for op in ops {
-        let Some(write) = op.get("write") else {
-            continue;
-        };
-        if write.get("kind").and_then(Value::as_str) == Some("apply_proposal_batch") {
-            let public_ref = write
-                .get("proposal_batch")
-                .and_then(Value::as_str)
-                .ok_or(RunContextGraphEffectHostError::InvalidProposalBatchRef)?;
-            let uuid = public_ref
-                .strip_prefix("pb_")
-                .and_then(|value| Uuid::parse_str(value).ok())
-                .ok_or(RunContextGraphEffectHostError::InvalidProposalBatchRef)?;
-            return Ok(ProposalBatchId::from_uuid(uuid));
-        }
-    }
-    Err(RunContextGraphEffectHostError::MissingApplyWrite)
+    let public_ref = write
+        .get("evaluation_request_id")
+        .and_then(Value::as_str)
+        .ok_or(RunContextGraphEffectHostError::InvalidEvaluationRequestRef)?;
+    let uuid = public_ref
+        .strip_prefix("evalreq_")
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .ok_or(RunContextGraphEffectHostError::InvalidEvaluationRequestRef)?;
+    Ok(EvaluationRequestId::from_uuid(uuid))
 }
 
 fn proposal_apply_extension_result(
@@ -470,9 +524,15 @@ fn evaluation_request_extension_result(
     }))
 }
 
+struct EventEmitCallback<'a> {
+    plan_id: &'a str,
+    write: EventEmitWrite<'a>,
+    returned: Option<&'a Value>,
+}
+
 struct EventEmitWrite<'a> {
     name: &'a str,
-    write: &'a Value,
+    raw: &'a Value,
     event_kind: &'a str,
     payload_schema: &'a str,
     payload: &'a Value,
@@ -490,36 +550,34 @@ struct EventEmitExtensionContext<'a> {
     policy_fingerprint: &'a str,
     started_at: &'a str,
     completed_at: &'a str,
+    returned: Option<&'a Value>,
 }
 
-fn event_emit_write(params: &Value) -> Result<EventEmitWrite<'_>, RunContextGraphEffectHostError> {
-    let ops = params
-        .get("ops")
-        .and_then(Value::as_array)
-        .ok_or(RunContextGraphEffectHostError::MissingEventWrite)?;
-    for op in ops {
-        let Some(write) = op.get("write") else {
-            continue;
-        };
-        if write.get("kind").and_then(Value::as_str) == Some("emit_run_event") {
-            return Ok(EventEmitWrite {
-                name: string_field(op, "name")?,
-                write,
-                event_kind: string_field(write, "event_kind")?,
-                payload_schema: string_field(write, "payload_schema")?,
-                payload: write
+impl<'a> EventEmitCallback<'a> {
+    fn parse(params: &'a Value) -> Result<Self, RunContextGraphEffectHostError> {
+        let op = plan_write_op(params, "emit_run_event", || {
+            RunContextGraphEffectHostError::MissingEventWrite
+        })?;
+        Ok(Self {
+            plan_id: op.plan_id,
+            write: EventEmitWrite {
+                name: op.name,
+                raw: op.write,
+                event_kind: string_field(op.write, "event_kind")?,
+                payload_schema: string_field(op.write, "payload_schema")?,
+                payload: op
+                    .write
                     .get("payload")
                     .ok_or(RunContextGraphEffectHostError::MissingValue { field: "payload" })?,
-                visibility: string_field(write, "visibility")?,
-            });
-        }
+                visibility: string_field(op.write, "visibility")?,
+            },
+            returned: op.returned,
+        })
     }
-    Err(RunContextGraphEffectHostError::MissingEventWrite)
 }
 
 fn event_emit_extension_result(
     context: EventEmitExtensionContext<'_>,
-    params: &Value,
 ) -> Result<Value, RunContextGraphEffectHostError> {
     let receipt_id = format!("wrec_{}", context.name);
     let request_hash = prefixed_jcs_hash(
@@ -572,7 +630,7 @@ fn event_emit_extension_result(
         "policy_fingerprint": context.policy_fingerprint,
         "data_classes": ["public"],
         "plan_id": context.plan_id,
-        "return": params.get("return").cloned().unwrap_or_else(|| json!([]))
+        "return": context.returned.cloned().unwrap_or_else(|| json!([]))
     }))
 }
 
