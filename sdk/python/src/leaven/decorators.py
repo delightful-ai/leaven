@@ -7,17 +7,16 @@ both forms produce the same `RegisteredStage` value.
 A decorated function can run two ways:
 - Composed into an `lv.optimize(...)` run (the engine reaches it through
   `leaven/stage.run`)
-- Standalone via `if __name__ == "__main__": lv.serve_stage(my_stage)`
-  (the engine spawns the script as a subprocess and reaches it over stdio)
+- Out-of-process worker mode after the standalone loop exists.
 
 The user code is identical in both cases; only the way the engine reaches the
 stage differs. Scoring is authored with `@lv.reward` (a `Rubric`), not a stage
 decorator.
 
-Scaffold note: the decorators construct real `RegisteredStage` values so
-user code composes cleanly. `lv.optimize(...).run()` can dispatch runner stages
-through the durable seam; standalone `lv.serve_stage(...)` remains a later
-server-mode slice.
+Decorators construct real `RegisteredStage` values so user code composes
+cleanly. `lv.optimize(...).run()` can dispatch runner stages through the
+durable seam; standalone worker service mode is not exported until it uses the
+current worker runtime.
 """
 
 from collections.abc import Awaitable, Callable
@@ -42,7 +41,7 @@ StageRole = Literal["evaluator", "reflector", "proposer", "runner", "judge"]
 
 
 class RegisteredStage[A, O](BaseModel):
-    """A registered stage handle. Pass to `lv.optimize(...)` or `lv.serve_stage(...)`.
+    """A registered stage handle. Pass to `lv.optimize(...)` composition APIs.
 
     `A` is the artifact type the stage operates on; `O` is the stage's
     return type. Both are erased at runtime; the typing is for IDE support.
@@ -81,8 +80,7 @@ def _make_registered[A, O](
     """Internal: build a RegisteredStage from a decorated function.
 
     Used by all stage decorators. The scaffold returns a real value so user
-    code composes cleanly; runner-stage wiring lives in `lv.optimize(...).run()`
-    and standalone server-mode wiring will live in `lv.serve_stage(...)`.
+    code composes cleanly; runner-stage wiring lives in `lv.optimize(...).run()`.
     """
     return RegisteredStage(
         role=role,
@@ -250,21 +248,6 @@ def register_stage[O](
     return _make_registered(role, func, id, trust_profile)
 
 
-def serve_stage[A, O](*stages: RegisteredStage[A, O]) -> None:
-    """Run one or more stages as a standalone public-seam worker process.
-
-    Usage:
-        if __name__ == "__main__":
-            lv.serve_stage(my_stage)
-
-    Future slice: reads capability env, starts the worker loop, and dispatches
-    stage calls until the session terminates. `lv.optimize(...).run()` uses the
-    checked-in private command worker today; this public standalone entrypoint
-    remains scaffold.
-    """
-    raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
-
-
 __all__ = [
     "EvaluatorFunc",
     "JudgeFunc",
@@ -279,5 +262,4 @@ __all__ = [
     "reflector",
     "register_stage",
     "runner",
-    "serve_stage",
 ]

@@ -120,10 +120,14 @@ class Optimized[A](BaseModel):
         """Walk ancestor candidates from `candidate_id` back to a seed."""
         by_id = {candidate.id: candidate for candidate in self.frontier}
         lineage = []
-        current = by_id.get(candidate_id)
+        current = _candidate_by_id(by_id, candidate_id)
         while current is not None:
             lineage.append(current)
-            current = by_id.get(current.parent_id) if current.parent_id is not None else None
+            current = (
+                by_id[current.parent_id]
+                if current.parent_id is not None and current.parent_id in by_id
+                else None
+            )
         if not lineage:
             raise KeyError(f"unknown candidate {candidate_id!r}")
         return lineage
@@ -136,6 +140,12 @@ class Optimized[A](BaseModel):
     ) -> ReplayResult:
         """Replay one assessment deterministically; verify the receipt holds."""
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+
+
+def _candidate_by_id[A](by_id: dict[str, Candidate[A]], candidate_id: str) -> Candidate[A] | None:
+    if candidate_id not in by_id:
+        return None
+    return by_id[candidate_id]
 
 
 __all__ = ["Candidate", "Optimized", "ReplayResult", "RunSummary", "Split"]

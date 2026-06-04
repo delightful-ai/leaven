@@ -2278,13 +2278,12 @@ acceptance:
         note: >-
           The legacy private `_serve.py` bridge-demo module has been deleted.
           Active SDK route owners now document that `lv.optimize(...).run()`
-          uses `_seam_optimize`, `_seam_worker`, `_stage_runtime`, and `_seam`;
-          standalone `lv.serve_stage(...)` remains an explicit public scaffold
-          in `decorators.py` until it is implemented through the current worker
-          route. Example 07 was corrected to stop claiming a standalone loop
-          exists today. The final grep is expected to return no active import
-          matches; remaining prose references are hard-cutover notes naming the
-          removed module. The broad `ty` check also caught and fixed
+          uses `_seam_optimize`, `_seam_worker`, `_stage_runtime`, and `_seam`.
+          A later slice removed the public `lv.serve_stage(...)` scaffold
+          entirely rather than leaving a top-level `NotImplementedError`
+          backbone entrypoint. The final grep is expected to return no active
+          import matches; remaining prose references are hard-cutover notes
+          naming the removed module. The broad `ty` check also caught and fixed
           `CaseBuilder` treating a generated `CaseRef` as a receipt/dict shape;
           `_case_id` now consumes the generated case reference type directly.
       - kind: public_reward_text_contract_and_defensive_erasure_lint
@@ -2344,8 +2343,8 @@ acceptance:
           `leaven.cases.__all__`, preserves configured field names, and rejects
           non-object target/input fields instead of erasing arbitrary JSON.
           This removes one public SDK scaffold but does not close the row;
-          `cases.csv`, `cases.parquet`, standalone `serve_stage`, and broader
-          backbone surfaces still need implementation or explicit removal.
+          `cases.csv`, `cases.parquet`, and broader backbone surfaces still
+          need implementation or explicit removal.
       - kind: public_csv_case_loader_scaffold_removed
         paths:
           - sdk/python/src/leaven/cases/csv.py
@@ -2366,8 +2365,8 @@ acceptance:
           preserves limit/name/delimiter options, and rejects missing columns or
           empty input ownership. The mirrored-test quality map now locks
           `cases/csv.py` to `tests/cases/test_csv.py`. This still does not
-          close the SDK quality row: `cases.parquet`, standalone `serve_stage`,
-          and larger public backbone surfaces remain open.
+          close the SDK quality row: `cases.parquet` and larger public backbone
+          surfaces remain open.
       - kind: public_parquet_case_loader_scaffold_removed
         paths:
           - docs/specs/leaven_python.md
@@ -2393,8 +2392,61 @@ acceptance:
           `from_jsonl`, `from_iterable`, and `from_csv`. The only active
           `from_parquet` matches are the negative public-surface test proving
           the loader is no longer advertised. This does not close the SDK
-          quality row; standalone `serve_stage` and wider public backbone
-          surfaces still need implementation or removal.
+          quality row; wider public backbone surfaces still need implementation
+          or removal.
+      - kind: public_serve_stage_scaffold_removed
+        paths:
+          - docs/specs/leaven_python.md
+          - sdk/python/AGENTS.md
+          - sdk/python/examples/07_serve_stage_worker.py
+          - sdk/python/examples/README.md
+          - sdk/python/src/leaven/__init__.py
+          - sdk/python/src/leaven/decorators.py
+          - sdk/python/tests/test_product_surface_ring.py
+        commands:
+          - cd sdk/python && uv run pytest tests/test_product_surface_ring.py -q
+          - cd sdk/python && uv run ruff check src/leaven/decorators.py src/leaven/__init__.py examples/07_serve_stage_worker.py examples/README.md tests/test_product_surface_ring.py
+          - cd sdk/python && uv run ty check src/leaven/decorators.py src/leaven/__init__.py examples/07_serve_stage_worker.py tests/test_product_surface_ring.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - cd sdk/python && uv run pytest -q
+          - >-
+            rg -n "serve_stage" sdk/python/src/leaven sdk/python/examples sdk/python/tests docs/specs/leaven_python.md sdk/python/AGENTS.md
+        note: >-
+          The standalone Python worker helper is no longer a public SDK
+          scaffold. `lv.serve_stage` was removed from the top-level import
+          surface and from `decorators.__all__`; the `NotImplementedError`
+          implementation was deleted. Example 07 now demonstrates only the
+          advanced judge declaration shape, and the spec/AGENTS guidance says
+          standalone worker serving must not be exported until it is wired
+          through the current `_seam_worker` / `_stage_runtime` route. The
+          remaining `serve_stage` matches are negative public-surface tests and
+          handoff notes for this removal.
+      - kind: python_no_unparsed_get_probe_lint_hardened
+        paths:
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/tests/scripts/test_check_quality_contract.py
+          - sdk/python/codegen/preprocess_schemas.py
+          - sdk/python/codegen/result_codegen.py
+          - sdk/python/src/leaven/_runs/codec.py
+          - sdk/python/src/leaven/_seam_worker/loader.py
+          - sdk/python/src/leaven/builders/proposals.py
+          - sdk/python/src/leaven/result.py
+          - sdk/python/examples/live_openai_lm/src/live_openai_lm/output.py
+        commands:
+          - cd sdk/python && uv run pytest tests/scripts/test_check_quality_contract.py tests/test_product_surface_ring.py -q
+          - cd sdk/python && uv run ruff check scripts/check_quality_contract.py tests/scripts/test_check_quality_contract.py codegen/result_codegen.py src/leaven/_runs/codec.py src/leaven/_seam_worker/loader.py src/leaven/builders/proposals.py src/leaven/result.py src/leaven/decorators.py src/leaven/__init__.py examples/07_serve_stage_worker.py examples/live_openai_lm/src/live_openai_lm/output.py tests/test_product_surface_ring.py
+          - cd sdk/python && uv run ty check scripts/check_quality_contract.py tests/scripts/test_check_quality_contract.py codegen/result_codegen.py src/leaven/_runs/codec.py src/leaven/_seam_worker/loader.py src/leaven/builders/proposals.py src/leaven/result.py src/leaven/decorators.py src/leaven/__init__.py examples/07_serve_stage_worker.py examples/live_openai_lm/src/live_openai_lm/output.py tests/test_product_surface_ring.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+        note: >-
+          The Python quality contract now rejects any `.get(...)` call whose
+          receiver is not an explicitly annotated mapping or `os.environ`,
+          closing the prior loophole where arbitrary decoded/domain objects
+          could be matched by field probing. Existing handwritten call sites
+          were updated to use required-field helpers, membership checks, or
+          typed JSON parsing instead of fallback `.get(...)` coercion. The
+          schema preprocessor now uses a local recursive JSON type instead of
+          `Any`.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this

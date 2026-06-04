@@ -31,6 +31,9 @@ async def reward(output: object, case, cx) -> float:
     target = (case.target or {}).get("answer", "")
     return 1.0 if str(output) == target else 0.0
 
+def decode(decoded) -> object:
+    return decoded.get("result")
+
 def ref_id(value: object) -> str:
     return getattr(value, "id", "")
 """
@@ -41,7 +44,8 @@ def ref_id(value: object) -> str:
         "tests/scripts/lint_probe.py:2: widens callback output to object",
         "tests/scripts/lint_probe.py:3: uses .get(...) on an unparsed domain value",
         "tests/scripts/lint_probe.py:4: uses str(...) to coerce a domain value",
-        "tests/scripts/lint_probe.py:7: uses getattr(...) to probe a domain value",
+        "tests/scripts/lint_probe.py:7: uses .get(...) on an unparsed domain value",
+        "tests/scripts/lint_probe.py:10: uses getattr(...) to probe a domain value",
     ]
 
 

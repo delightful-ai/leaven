@@ -1,7 +1,7 @@
 """Render generated msgspec result records for the private seam wire layer."""
 
 from collections.abc import Iterable, Sequence
-from typing import NotRequired, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 
 class ReceiptExpectation(TypedDict):
@@ -457,10 +457,19 @@ def _result_binding(row: ResultMethodRow) -> str:
         f'        method="{row["method"]}",\n'
         f"        primary_kinds={_tuple_literal(row['primary_kinds'])},\n"
         f'        receipt_kind="{expectation["kind"]}",\n'
-        f"        call_kind={expectation.get('call_kind')!r},\n"
-        f"        write_kind={expectation.get('write_kind')!r},\n"
+        f"        call_kind={_optional_expectation(expectation, 'call_kind')!r},\n"
+        f"        write_kind={_optional_expectation(expectation, 'write_kind')!r},\n"
         "    ),"
     )
+
+
+def _optional_expectation(
+    expectation: ReceiptExpectation,
+    key: Literal["call_kind", "write_kind"],
+) -> str | None:
+    if key not in expectation:
+        return None
+    return expectation[key]
 
 
 def _literal_union(values: Iterable[str]) -> str:

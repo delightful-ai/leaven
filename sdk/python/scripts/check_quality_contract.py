@@ -245,9 +245,7 @@ class DefensiveTypeErasureVisitor(ast.NodeVisitor):
         owner = node.func.value
         if self._is_os_environ(owner):
             return False
-        if isinstance(owner, ast.Name) and owner.id in self.mapping_names:
-            return False
-        return self._is_domain_value(owner) or self._is_case_target_or_empty(owner)
+        return not (isinstance(owner, ast.Name) and owner.id in self.mapping_names)
 
     def _is_getattr_probe(self, node: ast.Call) -> bool:
         return (

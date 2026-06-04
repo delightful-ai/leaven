@@ -14,9 +14,10 @@ def load_stage_from_file(
 ) -> RegisteredStage[object, object]:
     """Execute a stage file as a module and return the requested stage."""
     namespace = runpy.run_path(str(module_file), run_name=_run_name(module_file))
-    stage = namespace.get(stage_name)
-    if isinstance(stage, RegisteredStage):
-        return stage
+    if stage_name in namespace:
+        stage = namespace[stage_name]
+        if isinstance(stage, RegisteredStage):
+            return stage
     for value in namespace.values():
         if isinstance(value, RegisteredStage) and value.id == stage_id:
             return value

@@ -1,22 +1,8 @@
-"""Example 07 — standalone Python worker declaration shape.
+"""Example 07 — advanced Python judge declaration shape.
 
-A decorated stage (here a `@lv.judge`) can compose into an in-process
-`lv.optimize(...)` call OR, in a later slice, run as a standalone Python script
-the engine reaches over Leaven-owned stdio JSON-RPC. The decorator + function
-shape is intended to stay identical in both cases.
-
-Standalone usage looks like:
-
-    if __name__ == "__main__":
-        lv.serve_stage(my_judge)
-
-The standalone loop is not implemented yet. `lv.serve_stage(...)` currently
-raises an explicit scaffold error; when implemented, it must use the current
-`_seam_worker` / `_stage_runtime` route, not the removed legacy `_serve`
-bridge-demo module.
-
-This pattern is how third-party judges / reflectors / proposers ship — one
-script, one decorator, one `serve_stage` call.
+A decorated stage (here a `@lv.judge`) composes into Leaven optimizer/runtime
+configuration. A public standalone Python worker loop is not exported until it
+can run through the current `_seam_worker` / `_stage_runtime` route.
 """
 
 from pydantic import BaseModel, Field
@@ -85,8 +71,4 @@ def _target_rubric(case: lv.Case) -> JsonValue:
 
 
 if __name__ == "__main__":
-    # Engine reaches this binary over ACP stdio; serve_stage handles the loop.
-    try:
-        lv.serve_stage(judge)
-    except NotImplementedError as e:
-        print(f"(expected) serve_stage scaffold: {e}")
+    print(f"declared judge stage: {judge.id}")

@@ -356,12 +356,12 @@ form for dynamic stage registration (rare).
 
 Function stages run in-process with the optimization (composed into the
 environment as `Rollout.fn(run)` / `Rubric([reward])`, or onto the optimizer
-as `gepa(reflect=..., propose=...)`) or out-of-process as standalone Python
-workers (via `lv.serve_stage(my_stage)` in a script's `__main__`). The engine spawns
-out-of-process stages by command path with capability env vars per the
-locked Leaven worker profile. The decorator shape and the function signature are
-identical in both cases; only the way the engine reaches the stage
-differs.
+as `gepa(reflect=..., propose=...)`). Standalone out-of-process Python worker
+serving is not a public SDK entrypoint until it is wired through the current
+Leaven-owned worker runtime with capability env vars per the locked worker
+profile. The decorator shape and the function signature are intended to stay
+identical when that route lands; only the way the engine reaches the stage
+will differ.
 
 The role-scoped context objects (`RolloutContext`, `RubricContext`,
 `ReflectContext`, `ProposeContext`, `JudgeContext`, `EvaluatorContext`) carry

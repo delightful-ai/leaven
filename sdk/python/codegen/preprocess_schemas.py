@@ -36,7 +36,11 @@ Usage:
 import json
 import sys
 from pathlib import Path
-from typing import Any
+
+type JsonArray = list[JsonValue]
+type JsonObject = dict[str, JsonValue]
+type JsonScalar = str | int | float | bool | None
+type JsonValue = JsonScalar | JsonObject | JsonArray
 
 # Keys whose value is always a schema (recurse + normalize).
 SCHEMA_VALUE_KEYS = {
@@ -70,7 +74,7 @@ SCHEMA_LIST_KEYS = {
 }
 
 
-def normalize_schema(node: Any) -> Any:
+def normalize_schema(node: JsonValue) -> JsonValue:
     """Recursively normalize boolean schemas inside a schema position."""
     if node is True:
         return {}
@@ -78,7 +82,7 @@ def normalize_schema(node: Any) -> Any:
         return {"not": {}}
     if not isinstance(node, dict):
         return node
-    out: dict[str, Any] = {}
+    out: JsonObject = {}
     for k, v in node.items():
         if k in SCHEMA_VALUE_KEYS:
             out[k] = normalize_schema(v)
@@ -89,6 +93,22 @@ def normalize_schema(node: Any) -> Any:
         else:
             out[k] = v  # leave booleans/values alone outside schema positions
     return out
+
+
+def json_value(value: object) -> JsonValue:
+    """Return `value` as a JSON value or raise `TypeError`."""
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
+    if isinstance(value, dict):
+        output: JsonObject = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise TypeError("JSON object keys must be strings")
+            output[key] = json_value(item)
+        return output
+    if isinstance(value, list):
+        return [json_value(item) for item in value]
+    raise TypeError(f"value is not JSON: {type(value).__name__}")
 
 
 def main(argv: list[str]) -> int:
@@ -107,7 +127,7 @@ def main(argv: list[str]) -> int:
 
     for path in schema_files:
         with path.open() as f:
-            schema = json.load(f)
+            schema = json_value(json.load(f))
         normalized = normalize_schema(schema)
         out = dst / path.name
         with out.open("w") as f:

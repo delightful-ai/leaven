@@ -34,7 +34,7 @@ LEAVEN_LIVE_OPENAI=1 uv run --project examples/live_openai_lm live-openai-lm
 | 04 | `04_evoskill_skill_bank.py` | shape scaffold | expected boundary in `just examples` | EvoSkill-class `SkillBank` composition shape. Current front door rejects non-`PromptArtifact` seeds. |
 | 05 | `05_evaluator_with_judge.py` | shape scaffold | `just examples` | Advanced evaluator authoring shape and evidence vocabulary. |
 | 06 | `06_reflect_propose_custom.py` | shape scaffold | expected boundary in `just examples` | Separated reflector/proposer authoring shape. Current front door rejects non-`PromptArtifact` seeds here. |
-| 07 | `07_serve_stage_worker.py` | shape scaffold | `just examples` | Standalone worker declaration shape. This is not stdio worker execution proof. |
+| 07 | `07_serve_stage_worker.py` | shape scaffold | `just examples` | Advanced judge declaration shape. Standalone worker serving is not public until it is implemented. |
 | 08 | `08_dspy_dropin.py` | optional-adapter scaffold | `just examples` without `dspy-ai` installed | DSPy adapter import/configuration shape. It is not LM execution proof. |
 | 09 | `09_full_repro.py` | shape scaffold | expected boundary in `just examples` | Full front-door role composition shape. It is not a runnable product reproduction. |
 | 10 | `10_live_codex_seam.py` | live-gated substrate proof | skips unless `LEAVEN_LIVE_CODEX=1` | Direct Python client proof for `leaven/agent.run` over `leaven seam serve --stdio --config`; not the finished engine-supplied `cx.agent.run` path. |

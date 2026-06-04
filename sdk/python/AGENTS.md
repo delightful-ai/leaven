@@ -137,8 +137,8 @@ ruff's `RUF022` (sorted `__all__`) is on. No current ruff rule for
   surface where the spec names them.
 - Internal modules (`leaven._seam`, `leaven._types.*`, etc.) get leading
   underscore conventions or live under `_types/`. Do not reintroduce
-  `leaven._serve`; standalone `lv.serve_stage(...)` must use the current
-  `_seam_worker` / `_stage_runtime` route when implemented.
+  `leaven._serve`. Do not export standalone stage-serving helpers until they
+  use the current `_seam_worker` / `_stage_runtime` route end to end.
 - Do not introduce dependencies that aren't in `pyproject.toml`. Adding a
   dep is a taste call worth surfacing in a docstring.
 
@@ -187,7 +187,7 @@ Paths in the list below are relative to `docs/specs/leaven_py/`.
 - `repos/inspect_ai/` — `@solver`/`@scorer`/`@task` decorators + context
   injection. Read when working on stage decorators or context objects.
 - `repos/mcp-python-sdk/` — stdio JSON-RPC + FastMCP idioms + known
-  failure modes. Read when working on `lv.serve_stage` shape or
+  failure modes. Read when working on standalone worker-serving shape or
   considering wire-level decisions in the `leaven-acp` Rust crate.
 
 Phase 2 vendored (2026-05-24) — eval framework compatibility targets:

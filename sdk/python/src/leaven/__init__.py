@@ -59,7 +59,6 @@ from .decorators import (
     reflector,
     register_stage,
     runner,
-    serve_stage,
 )
 from .environment import Environment
 from .optimize import OptimizeBuilder, optimize
@@ -195,7 +194,6 @@ __all__ = [
     "runtime",
     "sandbox",
     "scoring",
-    "serve_stage",
     "setup",
     "trust",
     "workspace",

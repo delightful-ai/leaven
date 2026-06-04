@@ -106,7 +106,7 @@ def _create_effect_to_wire(effect: ProposalEffect, batch: ProposalBatch) -> Json
                 "kind": "create",
                 "artifact_type": _required_payload_string(effect, "artifact_type"),
                 "artifact_schema": _required_payload_string(effect, "artifact_schema"),
-                "artifact": _literal_expr(effect.payload.get("artifact")),
+                "artifact": _literal_expr(_required_payload(effect, "artifact")),
             },
             "causal": {"inputs": []},
             "informed_by": _literal_expr(_receipt_ids(batch)),
@@ -125,7 +125,7 @@ def _change_effect_to_wire(effect: ProposalEffect, batch: ProposalBatch) -> Json
         "change_schema": _required_payload_string(effect, "change_schema"),
     }
     if effect.kind == "change":
-        wire_effect["change"] = _literal_expr(effect.payload.get("change"))
+        wire_effect["change"] = _literal_expr(_required_payload(effect, "change"))
     read_receipts = _receipt_ids(batch)
     if effect.kind == "change_from_agent_session":
         if effect.agent_session_receipt is None:
@@ -156,10 +156,16 @@ def _literal_expr(value: JsonValue) -> JsonObject:
 
 
 def _required_payload_string(effect: ProposalEffect, key: str) -> str:
-    value = effect.payload.get(key)
+    value = _required_payload(effect, key)
     if not isinstance(value, str):
         raise TypeError(f"{effect.kind} proposal payload requires string `{key}`")
     return value
+
+
+def _required_payload(effect: ProposalEffect, key: str) -> JsonValue:
+    if key not in effect.payload:
+        raise KeyError(f"{effect.kind} proposal payload requires `{key}`")
+    return effect.payload[key]
 
 
 __all__ = ["ProposalSubmission", "ProposalsBuilder"]
