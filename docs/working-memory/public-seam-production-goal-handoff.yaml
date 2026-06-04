@@ -783,6 +783,10 @@ acceptance:
           product public SDK server/API route exposes this mount to
           external-language workers.
       - kind: typed_run_bound_callback_params_foundation
+        commits:
+          - a43492a5
+          - fe4b0471
+          - f692bb8a
         paths:
           - crates/leaven-seam-service/src/run_bound_service/mod.rs
           - crates/leaven-seam-service/src/run_bound_service/params.rs
@@ -799,11 +803,14 @@ acceptance:
           worker callback params once into typed private records for
           `proposal.apply`, `evaluation.request`, `assessment.submit`, and
           `event.emit` before touching `RunContext`, host lowerers, or receipt
+          projection. A follow-up service slice typed `event.emit`
+          request/result hash preimages, primary result, receipt, and extension
+          envelope records instead of carrying a raw event write through service
           projection. This is not row closure: ACP/runtime ingress still
-          receives transport JSON, nested host-domain payloads, extension-result
-          projection, receipt hash preimages, and output construction remain
-          explicit `Value` islands that require typed-owner follow-up slices or
-          an approved raw-island entry.
+          receives transport JSON, nested host-domain payloads, non-event
+          extension-result projection, and ACP stage-bridge event projection
+          remain explicit `Value` islands that require typed-owner follow-up
+          slices or an approved raw-island entry.
       - kind: product_route_topology_decision
         paths:
           - docs/working-memory/run-bound-durable-runcontext-service.md
@@ -926,6 +933,7 @@ acceptance:
       - kind: rust_export_backed_msgspec_codec_foundation
         commits:
           - d1ad3e1
+          - f1b11d9a
         paths:
           - crates/leaven-cli/src/main.rs
           - crates/leaven-cli/src/seam.rs
@@ -951,16 +959,21 @@ acceptance:
           envelopes, UNSET result/error handling, method-specific result
           decoding, batch routing by id, unknown-method rejection, null-id
           handling, and typed JSON-object coercion without public/wire `Any`.
-          A follow-up slice removed msgspec Raw from generated payload records
-          and added typed generated records for plan consistency, eval mode,
-          commit policy, stage runner/proposer payloads, reflection payload
-          pieces, output/cost/blob/redaction/error records, stage receipts, and
-          plan-result collections. The generator and generated payload module
-          remain under the 650 LOC file cap. This is still a foundation slice:
-          JSON-RPC envelope Raw buffers, error data, bounded open JSON slots
-          such as PlanOp/LeavenValue/OperationReceipt/metadata/info refs, and
-          full recursive nested Plan IR and Plan Result schema branches remain
-          before this row can be marked done.
+          Follow-up slices removed msgspec Raw from generated payload records,
+          added typed generated records for plan consistency, eval mode, commit
+          policy, stage runner/proposer payloads, reflection payload pieces,
+          output/cost/blob/redaction/error records, stage receipts, and
+          plan-result collections, and replaced the central `PlanOp`,
+          `LeavenValue`, and `OperationReceipt` open aliases with msgspec
+          Struct records carrying Literal-typed kind fields for locked Plan and
+          Plan Result branches. Unknown plan call/write kinds and result
+          value/receipt kinds now fail typed decode. The generator and generated
+          payload module remain under the 650 LOC file cap. This is still a
+          foundation slice: JSON-RPC envelope Raw buffers, error data, and
+          bounded leaf JSON slots such as metadata/info refs, plan expressions,
+          preconditions, output values, PlanError details, stage payload case
+          inputs, and nested result fragments remain before this row can be
+          marked done.
       - kind: typed_locked_method_identity_foundation
         paths:
           - crates/leaven-public-seam/src/acp_profile/methods.rs
@@ -1060,7 +1073,13 @@ acceptance:
           - e8a404bb
           - fe4b0471
           - a43492a5
+          - 3f161e15
+          - f692bb8a
+          - 8ba42c80
+          - fb179b81
         paths:
+          - crates/leaven-public-seam/src/plan.rs
+          - crates/leaven-public-seam/src/acp_profile/lifecycle.rs
           - crates/leaven-seam-service/src/service.rs
           - crates/leaven-seam-service/src/run_context_service.rs
           - crates/leaven-seam-service/src/run_bound_service/mod.rs
@@ -1071,12 +1090,14 @@ acceptance:
           - crates/leaven-acp/src/stdio.rs
           - crates/leaven-acp/tests/stdio_session_contract.rs
           - crates/leaven-acp-stage-bridge/src/graph_host.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_document.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/acp_profile.rs
         commands:
-          - cargo check -p leaven-seam-service
+          - cargo check -p leaven-public-seam -p leaven-seam-runtime -p leaven-seam-service -p leaven-acp -p leaven-acp-stage-bridge -p leaven-cli
+          - cargo test -p leaven-public-seam --test public_seam_contract
           - cargo test -p leaven-seam-service
           - cargo check -p leaven-acp
           - cargo test -p leaven-acp --test stdio_session_contract
-          - cargo check -p leaven-acp-stage-bridge
           - cargo test -p leaven-acp-stage-bridge
           - cargo fmt --check
         note: >-
@@ -1096,12 +1117,16 @@ acceptance:
           variants too, closing the stale raw-string trait override. Follow-up
           slices parse run-bound and stage-bridge callback params into typed
           private records before graph mutation for proposal apply, evaluation
-          request, assessment submit, and event emit. This is still foundation
-          evidence only: transport ingress, nested domain payloads, ACP result
-          payloads, extension-result projection, costs, blob refs, receipt hash
-          preimages, and nested Plan IR/Result bodies remain raw JSON islands
-          that must be eliminated or approved explicitly before typed-seam
-          closeout.
+          request, assessment submit, and event emit; parse `submit_assessments`
+          Plan writes into typed PlanDocument write facts; type service
+          `event.emit` projection preimages; type ACP stdio lifecycle
+          notifications; and store ACP cancellation PlanErrors as typed
+          `AcpClosedPlanError` facts while retaining the original JSON only for
+          transport projection. This is still foundation evidence only:
+          transport ingress, nested domain payloads, ACP result payloads,
+          non-event extension-result projection, costs, blob refs, and nested
+          Plan Result bodies remain raw JSON islands that must be eliminated or
+          approved explicitly before typed-seam closeout.
     closeout_check: >-
       Handwritten Python schema mirrors, pydantic-only wire models, untyped
       dict payloads, response-order batch routing, or msgspec used as a
@@ -1294,7 +1319,29 @@ acceptance:
         - Python SDK Ruff/ty/package/import gates
         - "`just check`"
         - "`just coverage` or documented explicit user-approved deferral"
-    evidence: []
+    evidence:
+      - kind: build_loop_incremental_frontend_fix
+        commits:
+          - 80d72cef
+        paths:
+          - .cargo/config.toml
+          - AGENTS.md
+        commands:
+          - RUSTFLAGS='' cargo test -p leaven-seam-service
+          - cargo check -p leaven-public-seam -p leaven-seam-runtime -p leaven-seam-service -p leaven-acp -p leaven-acp-stage-bridge -p leaven-cli
+          - cargo test -p leaven-seam-service service::tests::seam_runtime_services_agent_callback_from_command_worker -- --exact
+          - cargo test -p leaven-seam-service
+          - cargo test -p leaven-acp-stage-bridge
+        note: >-
+          Repeated default verification runs hit rustc 1.95.0-nightly
+          incremental dep-graph ICEs while `-Zthreads=12` was injected by the
+          repo Cargo config. The user explicitly rejected `CARGO_INCREMENTAL=0`,
+          and root AGENTS says to remove the parallel frontend flag before
+          disabling incremental when this regression appears. The config now
+          leaves Cargo incremental enabled and no longer injects `-Zthreads`;
+          the affected check/service/stage-bridge commands pass on the default
+          path after the change. This is release-gate hygiene, not public-seam
+          semantic closeout.
     closeout_check: Broad gates cannot replace method-specific proof, and method-specific proof cannot replace public contract hygiene.
 
 explicit_non_goals:
