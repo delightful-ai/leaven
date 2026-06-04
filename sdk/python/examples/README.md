@@ -1,12 +1,14 @@
 # Examples
 
-Thirteen runnable example scripts that show the full Leaven Python surface.
-Most examples are composable Python that imports cleanly, typechecks under
-`ty`, and prints something illustrative. Bodies that would normally hit
-the engine raise `NotImplementedError` (caught and printed as `(expected)`)
-because the scaffold has no implementation behind the ergonomic SDK surface
-yet. Example 03 is the no-spend wired prompt path; example 10 is live-gated
-Codex seam evidence; examples 11-13 are live-gated product-path seam proofs.
+Thirteen example scripts show the current Leaven Python surface, but they do
+not all prove the same maturity level. The table below is the contract: cite an
+example only for the proof class it names.
+
+Most examples are shape scaffolds that import, typecheck, and demonstrate the
+authoring API while stopping at expected `NotImplementedError` boundaries.
+Example 03 is the no-spend wired prompt mechanics path. Examples 10-13 are
+live-gated seam/provider proofs and skip by default unless the required
+environment variables are set.
 
 ## Run
 
@@ -22,23 +24,23 @@ LEAVEN_LIVE_OPENAI=1 just example 13
 LEAVEN_LIVE_OPENAI=1 uv run --project examples/live_openai_lm live-openai-lm
 ```
 
-## The tour
+## The Tour
 
-| # | File | Shows |
-|---|------|-------|
-| 01 | `01_runtime.py` | Every slot `lv.runtime(...)` accepts: workspace, multi-role LMs, multi-role agents, sandbox, trust profile, budget, cache; then a minimal `lv.optimize(...)` compose showing where the runtime lands. |
-| 02 | `02_cases_and_artifacts.py` | `lv.PromptArtifact`, `lv.SkillBank` + skill files, JSONL case loader call shape, hand-built `lv.Case` with `split=` tags. |
-| 03 | `03_prompt_optimize.py` | **The canonical minimal sketch** — `Rollout.fn(run)` + `Rubric([exact])` + `lv.optimize(environment=...).run()`, typed `InputCaseView`/`RolloutContext` (target-free) and `ScoringCaseView`/`RubricContext`. |
-| 04 | `04_evoskill_skill_bank.py` | **The canonical big sketch** — `Rollout.agent()` + multi-reward `Rubric` + `gepa(propose=Propose.agent_edit(...))` over a SkillBank, EvoSkill-class shape with no runner body. |
-| 05 | `05_evaluator_with_judge.py` | **Advanced seam** — rich `@lv.evaluator` body (`cx.case.load`, `cx.batch()` fan-out, `cx.agent.run` with `lv.output.json_schema(...)`, public/private evidence). Ordinary scoring is a `Rubric`; reach here only when it isn't enough. |
-| 06 | `06_reflect_propose_custom.py` | Custom `@lv.reflector` + `@lv.proposer` attached via `gepa(reflect=Reflect.fn(...), propose=Propose.fn(...))` — the load-bearing reflection/proposal stage split, typed `ReflectContext`/`ProposeContext`. |
-| 07 | `07_serve_stage_worker.py` | Standalone Python worker — `lv.serve_stage(my_judge)` script the engine spawns over ACP stdio. Same `@lv.judge` decorator shape as in-process, typed `JudgeContext`. |
-| 08 | `08_dspy_dropin.py` | `dspy.configure(lm=lv.x.dspy.LeavenDSPyLM(...))` — existing DSPy modules unmodified through Leaven's LM seam. |
-| 09 | `09_full_repro.py` | **The front-door showcase** — every product role on the new surface: `Rollout.agent()` + multi-reward `Rubric` in the `Environment`; `gepa(reflect=, propose=, judge=, objective=)` outer loop with a multi-LM runtime. |
-| 10 | `10_live_codex_seam.py` | **Live-gated substrate proof** — Python spawns `leaven seam serve --stdio --config`, sends `leaven/agent.run`, and checks Codex CLI `agent_session` receipts/transcript refs. This is direct public-seam evidence, not the finished `cx.agent.run` SDK. |
-| 11 | `11_live_optimize_codex_stage.py` | **Live-gated product runner proof** — `lv.optimize(...).run()` dispatches a Python runner that calls `cx.agent.run` through the durable seam. |
-| 12 | `12_live_optimize_codex_proposer.py` | **Live-gated product proposer proof** — a configured proposer calls `cx.agent.run` against `cx.parent_workspace` and submits a proposal batch. |
-| 13 | `13_live_optimize_openai_lm.py` | **Live-gated product LM proof** — a small numbered wrapper into the `live_openai_lm/` example project; the runner calls `cx.lm.complete` through the durable seam and validates text, usage, model, and receipt projection. |
+| # | File | Proof class | Default verification | Shows |
+|---|------|-------------|----------------------|-------|
+| 01 | `01_runtime.py` | shape scaffold | `just examples` | Runtime composition slots and a minimal builder composition. |
+| 02 | `02_cases_and_artifacts.py` | shape scaffold | `just examples` | Prompt artifacts, skill banks, JSONL cases, and split-tagged `lv.Case` records. |
+| 03 | `03_prompt_optimize.py` | no-spend mechanics proof | `just examples`, `just example 03` | `lv.optimize(...).run()` over the durable `leaven seam serve --stdio --config` mechanics path for a `PromptArtifact` seed. This does not prove optimizer search, proposal application, or Rust checkpoint readback. |
+| 04 | `04_evoskill_skill_bank.py` | shape scaffold | expected boundary in `just examples` | EvoSkill-class `SkillBank` composition shape. Current front door rejects non-`PromptArtifact` seeds. |
+| 05 | `05_evaluator_with_judge.py` | shape scaffold | `just examples` | Advanced evaluator authoring shape and evidence vocabulary. |
+| 06 | `06_reflect_propose_custom.py` | shape scaffold | expected boundary in `just examples` | Separated reflector/proposer authoring shape. Current front door rejects non-`PromptArtifact` seeds here. |
+| 07 | `07_serve_stage_worker.py` | shape scaffold | `just examples` | Standalone worker declaration shape. This is not stdio worker execution proof. |
+| 08 | `08_dspy_dropin.py` | optional-adapter scaffold | `just examples` without `dspy-ai` installed | DSPy adapter import/configuration shape. It is not LM execution proof. |
+| 09 | `09_full_repro.py` | shape scaffold | expected boundary in `just examples` | Full front-door role composition shape. It is not a runnable product reproduction. |
+| 10 | `10_live_codex_seam.py` | live-gated substrate proof | skips unless `LEAVEN_LIVE_CODEX=1` | Direct Python client proof for `leaven/agent.run` over `leaven seam serve --stdio --config`; not the finished engine-supplied `cx.agent.run` path. |
+| 11 | `11_live_optimize_codex_stage.py` | live-gated product-path mechanics proof | skips unless `LEAVEN_LIVE_CODEX=1` | `lv.optimize(...).run()` dispatches a Python runner that calls `cx.agent.run` through the seam. Not Codex evolution proof. |
+| 12 | `12_live_optimize_codex_proposer.py` | live-gated product-path mechanics proof | skips unless `LEAVEN_LIVE_CODEX=1` | A configured proposer calls `cx.agent.run` against `cx.parent_workspace` and submits a proposal batch. It does not prove proposal application. |
+| 13 | `13_live_optimize_openai_lm.py` | live-gated product-path mechanics proof | skips unless `LEAVEN_LIVE_OPENAI=1` | A runner calls `cx.lm.complete` through the seam and validates text, usage, model, and receipt projection. |
 
 ## Fixtures
 
@@ -46,8 +48,7 @@ LEAVEN_LIVE_OPENAI=1 uv run --project examples/live_openai_lm live-openai-lm
 
 ## What this is not
 
-Most examples don't run a real optimization (the scaffold has
-`NotImplementedError` at every effect boundary). They exist so:
+Shape scaffold examples do not run a real optimization. They exist so:
 
 - You can read the file and the SHAPE of user code fires your taste
 - IDE autocomplete works on every decorator, builder, and context object

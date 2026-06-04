@@ -17,8 +17,6 @@ Set `LEAVEN_BIN` or `LEAVEN_CODEX_BIN` to override binary discovery.
 import asyncio
 import os
 
-from leaven.agent_session import AgentSession
-
 from leaven._handles import WorkspaceHandle
 from leaven._receipts import CallReceipt
 from leaven._seam import (
@@ -31,7 +29,7 @@ from leaven._seam import (
     resolve_codex_binary,
 )
 from leaven.agent_instructions import AgentInstructions
-from leaven.builders.agent import AgentBuilder
+from leaven.builders.agent import AgentBuilder, AgentSession
 
 
 def main() -> None:

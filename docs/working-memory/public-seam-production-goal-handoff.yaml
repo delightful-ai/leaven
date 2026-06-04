@@ -1011,7 +1011,32 @@ acceptance:
         - live-gated OpenAI and Codex examples when credentials are present
         - live Codex evolution example only after seam-backed method execution
         - shape-only scaffold examples renamed or labeled as non-product proof
-    evidence: []
+    evidence:
+      - kind: python_examples_maturity_table_and_no_spend_tour
+        paths:
+          - sdk/python/examples/README.md
+          - sdk/python/examples/run_all.py
+          - sdk/python/examples/03_prompt_optimize.py
+          - sdk/python/examples/10_live_codex_seam.py
+          - sdk/python/examples/11_live_optimize_codex_stage.py
+          - sdk/python/examples/12_live_optimize_codex_proposer.py
+          - sdk/python/examples/13_live_optimize_openai_lm.py
+        commands:
+          - cd sdk/python && just examples
+          - cd sdk/python && just compile-examples
+          - cd sdk/python && just check
+          - cd sdk/python && uv run ruff check examples/10_live_codex_seam.py
+        note: >-
+          The Python examples README now classifies every numbered example by
+          proof class and default verification path: shape scaffold, no-spend
+          mechanics proof, optional-adapter scaffold, live-gated substrate proof,
+          or live-gated product-path mechanics proof. The no-spend tour runs all
+          13 scripts: examples 04, 06, and 09 hit documented
+          non-`PromptArtifact` scaffold boundaries; examples 10-13 skip without
+          live env vars; example 03 exercises the current durable-seam prompt
+          mechanics path. This is not row closure because live OpenAI/Codex
+          examples and the future Codex evolution example still need live proof
+          when their prerequisite rows are ready.
     closeout_check: A typechecked tour is not a runnable product example.
 
   - id: release_gate_for_public_contract
