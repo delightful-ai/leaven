@@ -9,9 +9,13 @@ from leaven._seam._wire.payloads import (
     PLAN_RESULT_SCHEMA_FINGERPRINT,
     PLAN_SCHEMA_FINGERPRINT,
     STAGE_RUN_SCHEMA_FINGERPRINT,
+    CapabilityCall,
     CommitPolicyNoGraphWrites,
     ConsistencyLatestAtStart,
     EvalModeExecute,
+    GraphWrite,
+    LeavenValue,
+    OperationReceipt,
     PlanDocument,
     PlanResultDocument,
     RunnerRequest,
@@ -35,6 +39,43 @@ def test_plan_document_decodes_top_level_shape() -> None:
     assert isinstance(decoded.mode, EvalModeExecute)
     assert isinstance(decoded.commit, CommitPolicyNoGraphWrites)
     assert decoded.return_ == []
+
+
+def test_plan_document_decodes_typed_operation_kinds() -> None:
+    body = (
+        b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
+        b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
+        b'"ops":['
+        b'{"kind":"let","name":"x","expr":{"kind":"literal","value":"ok"}},'
+        b'{"kind":"call","name":"lm","idempotency_key":"idem_1",'
+        b'"call":{"kind":"lm_complete","model":"gpt-test"}},'
+        b'{"kind":"write","name":"evt","idempotency_key":"idem_2",'
+        b'"write":{"kind":"emit_run_event","event":{"kind":"stage_completed"}}}'
+        b'],"return":["evt"],"commit":{"kind":"no_graph_writes"}}'
+    )
+
+    decoded = msgspec.json.decode(body, type=PlanDocument)
+
+    call = decoded.ops[1].call
+    write = decoded.ops[2].write
+    assert isinstance(call, CapabilityCall)
+    assert isinstance(write, GraphWrite)
+    assert decoded.ops[0].kind == "let"
+    assert call.kind == "lm_complete"
+    assert write.kind == "emit_run_event"
+
+
+def test_plan_document_rejects_unknown_operation_payload_kind() -> None:
+    body = (
+        b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
+        b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
+        b'"ops":[{"kind":"call","name":"bad","idempotency_key":"idem_1",'
+        b'"call":{"kind":"private_transport"}}],'
+        b'"return":[],"commit":{"kind":"no_graph_writes"}}'
+    )
+
+    with pytest.raises(msgspec.ValidationError):
+        msgspec.json.decode(body, type=PlanDocument)
 
 
 def test_plan_document_rejects_wrong_schema_version() -> None:
@@ -87,6 +128,55 @@ def test_plan_result_decodes_as_method_specific_json_rpc_result() -> None:
     assert decoded.final_revision == "rev_final"
     assert decoded.replayability_summary == "fully_managed"
     assert decoded.receipts == []
+
+
+def test_plan_result_decodes_typed_values_and_receipts() -> None:
+    body = (
+        b'{"jsonrpc":"2.0","id":"req_1","result":{'
+        b'"schema_version":"leaven.plan_result.v1","plan_id":"plan_1",'
+        b'"capability_fingerprint":"fp_cap_sha256_test",'
+        b'"policy_fingerprint":"fp_policy_sha256_test",'
+        b'"base_revision":"rev_base","final_revision":"rev_final",'
+        b'"replayability_summary":"fully_managed",'
+        b'"values":{"evt":{"kind":"emit_run_event","event_id":"event_1",'
+        b'"receipt":"wrec_1","graph_revision":"rev_final",'
+        b'"data_classes":["public"],"replayability":"fully_managed"}},'
+        b'"receipts":[{"kind":"write","receipt":"wrec_1","status":"succeeded",'
+        b'"write_kind":"emit_run_event","request_hash":"fp_request_sha256_test",'
+        b'"result_hash":"fp_result_sha256_test","base_revision":"rev_base",'
+        b'"event_id":"event_1"}],'
+        b'"redactions":[],"charges":[],"errors":[]}}'
+    )
+
+    decoded = decode_response(body, PlanResultDocument)
+
+    value = decoded.values["evt"]
+    receipt = decoded.receipts[0]
+    assert isinstance(value, LeavenValue)
+    assert isinstance(receipt, OperationReceipt)
+    assert value.kind == "emit_run_event"
+    assert value.event_id == "event_1"
+    assert receipt.kind == "write"
+    assert receipt.write_kind == "emit_run_event"
+
+
+def test_plan_result_rejects_unknown_value_or_receipt_kind() -> None:
+    body = (
+        b'{"jsonrpc":"2.0","id":"req_1","result":{'
+        b'"schema_version":"leaven.plan_result.v1","plan_id":"plan_1",'
+        b'"capability_fingerprint":"fp_cap_sha256_test",'
+        b'"policy_fingerprint":"fp_policy_sha256_test",'
+        b'"base_revision":"rev_base","final_revision":"rev_final",'
+        b'"replayability_summary":"fully_managed",'
+        b'"values":{"x":{"kind":"private_value","graph_revision":"rev_final",'
+        b'"data_classes":["public"],"replayability":"fully_managed"}},'
+        b'"receipts":[{"kind":"private_receipt","receipt":"rec_1","status":"succeeded",'
+        b'"result_hash":"fp_result_sha256_test"}],'
+        b'"redactions":[],"charges":[],"errors":[]}}'
+    )
+
+    with pytest.raises(JsonRpcProtocolError):
+        decode_response(body, PlanResultDocument)
 
 
 def test_plan_result_failure_is_reported_as_protocol_error() -> None:

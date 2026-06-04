@@ -45,7 +45,7 @@ class ConsistencyLatestAtStart(
     tag="latest_at_start",
     tag_field="kind",
 ):
-    """Plan consistency pinned to the latest graph revision at plan start."""
+    pass
 
 
 class ConsistencyAtRevision(
@@ -55,8 +55,6 @@ class ConsistencyAtRevision(
     tag="at_revision",
     tag_field="kind",
 ):
-    """Plan consistency pinned to one graph revision."""
-
     revision: str
 
 
@@ -68,8 +66,6 @@ class ConsistencySinceRevision(
     tag="since_revision",
     tag_field="kind",
 ):
-    """Plan consistency pinned to a revision range."""
-
     since: str
     until: str | UnsetType = UNSET
 
@@ -78,11 +74,11 @@ type Consistency = ConsistencyLatestAtStart | ConsistencyAtRevision | Consistenc
 
 
 class EvalModeExecute(Struct, frozen=True, forbid_unknown_fields=True, tag="execute", tag_field="kind"):
-    """Execute plan effects."""
+    pass
 
 
 class EvalModeDryRun(Struct, frozen=True, forbid_unknown_fields=True, tag="dry_run", tag_field="kind"):
-    """Validate and plan without committing effects."""
+    pass
 
 
 class EvalModeRequireCached(
@@ -92,12 +88,10 @@ class EvalModeRequireCached(
     tag="require_cached",
     tag_field="kind",
 ):
-    """Execute only operations with reusable cached receipts."""
+    pass
 
 
 class EvalModeReplay(Struct, frozen=True, forbid_unknown_fields=True, tag="replay", tag_field="kind"):
-    """Replay from explicit receipts."""
-
     receipts: list[ReceiptRef]
 
 
@@ -111,7 +105,7 @@ class CommitPolicyNoGraphWrites(
     tag="no_graph_writes",
     tag_field="kind",
 ):
-    """Forbid graph writes."""
+    pass
 
 
 type StaleWritePolicy = Literal["reject", "allow_if_policy_allows", "rebase_extension"]
@@ -124,8 +118,6 @@ class CommitPolicyGraphWritesAtomic(
     tag="graph_writes_atomic",
     tag_field="kind",
 ):
-    """Commit graph writes atomically."""
-
     on_stale: StaleWritePolicy
 
 
@@ -136,8 +128,6 @@ class CommitPolicyGraphWritesSequential(
     tag="graph_writes_sequential",
     tag_field="kind",
 ):
-    """Commit graph writes sequentially."""
-
     on_failure: Literal["stop", "continue"]
     on_stale: StaleWritePolicy
 
@@ -145,12 +135,40 @@ class CommitPolicyGraphWritesSequential(
 type CommitPolicy = (
     CommitPolicyNoGraphWrites | CommitPolicyGraphWritesAtomic | CommitPolicyGraphWritesSequential
 )
-type PlanOp = WireJsonObject
+type PlanDeps = list[str]
+type PlanOpKind = Literal["let", "call", "write"]
+type PlanCallKind = Literal[
+    "lm_complete", "agent_run", "sandbox_exec", "workspace_materialize", "workspace_release"
+]
+type PlanWriteKind = Literal[
+    "submit_proposal_batch",
+    "submit_assessments",
+    "request_evaluation",
+    "apply_proposal_batch",
+    "emit_run_event",
+]
+
+
+class CapabilityCall(Struct, frozen=True, omit_defaults=True, kw_only=True):
+    kind: PlanCallKind
+
+
+class GraphWrite(Struct, frozen=True, omit_defaults=True, kw_only=True):
+    kind: PlanWriteKind
+
+
+class PlanOp(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, kw_only=True):
+    kind: PlanOpKind
+    name: str
+    expr: WireJsonObject | UnsetType = UNSET
+    call: CapabilityCall | UnsetType = UNSET
+    write: GraphWrite | UnsetType = UNSET
+    idempotency_key: str | UnsetType = UNSET
+    preconditions: list[WireJsonObject] | UnsetType = UNSET
+    deps: PlanDeps | UnsetType = UNSET
 
 
 class Cost(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
-    """Leaven wire cost record."""
-
     usd_micro: int | UnsetType = UNSET
     input_tokens: int | UnsetType = UNSET
     output_tokens: int | UnsetType = UNSET
@@ -162,8 +180,6 @@ class Cost(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
 
 
 class BlobRef(Struct, frozen=True, forbid_unknown_fields=True, tag="blob_ref", tag_field="kind"):
-    """Blob reference from common public-seam schema."""
-
     id: str
     sha256: str
     bytes: int
@@ -184,8 +200,6 @@ type VisibilityClass = Literal[
 
 
 class OutputRecord(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
-    """Reportable stage or score output."""
-
     kind: Literal["text", "json", "blob_ref", "structured", "agent_session", "workspace_diff"]
     visibility: VisibilityClass
     data_classes: DataClassSet
@@ -196,8 +210,6 @@ class OutputRecord(Struct, frozen=True, forbid_unknown_fields=True, omit_default
 
 
 class Redaction(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
-    """Redaction marker from common public-seam schema."""
-
     path: str
     reason: str
     policy_fingerprint: str | UnsetType = UNSET
@@ -206,8 +218,6 @@ class Redaction(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=T
 
 
 class PlanError(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
-    """Plan error from common public-seam schema."""
-
     code: str
     message: str
     op: str | UnsetType = UNSET
@@ -218,8 +228,6 @@ class PlanError(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=T
 
 
 class StageCost(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
-    """Stage effect receipt cost subset."""
-
     usd_micro: int | UnsetType = UNSET
     input_tokens: int | UnsetType = UNSET
     output_tokens: int | UnsetType = UNSET
@@ -227,8 +235,6 @@ class StageCost(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=T
 
 
 class StageEffectReceipt(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
-    """Receipt for LM or agent calls made by a stage."""
-
     method: Literal["leaven/lm.complete", "leaven/agent.run"]
     receipt: str
     call_kind: Literal["lm_complete", "agent_run"] | UnsetType = UNSET
@@ -237,8 +243,6 @@ class StageEffectReceipt(Struct, frozen=True, forbid_unknown_fields=True, omit_d
 
 
 class StageProposalReceipt(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
-    """Receipt for proposal submission made by a stage."""
-
     method: Literal["leaven/proposal.submit_batch"]
     receipt: ReceiptRef
     write_kind: Literal["submit_proposal_batch"] | UnsetType = UNSET
@@ -246,8 +250,6 @@ class StageProposalReceipt(Struct, frozen=True, forbid_unknown_fields=True, omit
 
 
 class FailureMode(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
-    """Reflection failure mode."""
-
     label: str
     description: str
     severity: Literal["low", "medium", "high", "blocking"] | UnsetType = UNSET
@@ -255,8 +257,6 @@ class FailureMode(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults
 
 
 class SurfaceSuggestion(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
-    """Reflection surface suggestion."""
-
     surface_fingerprint: str
     diagnosis: str
     part_label: str | UnsetType = UNSET
@@ -273,8 +273,6 @@ class ReflectionResult(
     tag="reflection_result",
     tag_field="role",
 ):
-    """Reflection result stage payload."""
-
     schema_version: Literal["leaven.stage_payloads.v1"]
     summary: str
     source_refs: list[InfoRef]
@@ -294,8 +292,6 @@ class RunnerRequest(
     tag="runner",
     tag_field="role",
 ):
-    """Runner stage payload."""
-
     schema_version: Literal["leaven.stage_payloads.v1"]
     run: str
     stage_call_id: str
@@ -321,8 +317,6 @@ class ProposeRequest(
     tag="proposer",
     tag_field="role",
 ):
-    """Proposer stage payload."""
-
     schema_version: Literal["leaven.stage_payloads.v1"]
     run: str
     stage_call_id: str
@@ -338,13 +332,93 @@ class ProposeRequest(
 
 
 type StageRunPayload = RunnerRequest | ProposeRequest
-type LeavenValue = WireJsonObject
-type OperationReceipt = WireJsonObject
+type PlanResultStatus = Literal["succeeded", "failed", "cancelled", "timeout"]
+type LeavenValueKind = Literal[
+    "emit_run_event",
+    "graph_set",
+    "case_record",
+    "workspace_handle",
+    "workspace_snapshot",
+    "workspace_file",
+    "workspace_diff",
+    "workspace_listing",
+    "lm_response",
+    "agent_session",
+    "sandbox_exec",
+    "proposal_batch_receipt",
+    "assessment_batch_receipt",
+    "evaluation_request_receipt",
+    "apply_receipt",
+]
+type OperationReceiptKind = Literal["query", "call", "write"]
+type CallReceiptKind = Literal[
+    "lm_complete", "agent_run", "sandbox_exec", "workspace_materialize", "workspace_release", "extension"
+]
+type WriteReceiptKind = Literal[
+    "submit_proposal_batch",
+    "submit_assessments",
+    "request_evaluation",
+    "apply_proposal_batch",
+    "emit_run_event",
+]
+
+
+class LeavenValue(Struct, frozen=True, omit_defaults=True, kw_only=True):
+    kind: LeavenValueKind
+    graph_revision: str
+    data_classes: DataClassSet
+    replayability: Replayability
+    receipt: ReceiptRef | UnsetType = UNSET
+    event_id: str | UnsetType = UNSET
+    items: list[WireJsonObject] | UnsetType = UNSET
+    case: ReceiptRef | UnsetType = UNSET
+    workspace: str | UnsetType = UNSET
+    path: str | UnsetType = UNSET
+    status: str | UnsetType = UNSET
+    proposal_ids: list[str] | UnsetType = UNSET
+    assessment_ids: list[str] | UnsetType = UNSET
+    evaluation_request_id: str | UnsetType = UNSET
+    created_candidates: list[ReceiptRef] | UnsetType = UNSET
+    redactions: list[Redaction] | UnsetType = UNSET
+    source_refs: list[InfoRef] | UnsetType = UNSET
+    trace_refs: list[TraceRef] | UnsetType = UNSET
+
+
+class OperationReceipt(Struct, frozen=True, omit_defaults=True, kw_only=True):
+    kind: OperationReceiptKind
+    receipt: ReceiptRef
+    status: PlanResultStatus
+    op_var: str | UnsetType = UNSET
+    started_at: str | UnsetType = UNSET
+    completed_at: str | UnsetType = UNSET
+    error: PlanError | UnsetType = UNSET
+    trace_refs: list[TraceRef] | UnsetType = UNSET
+    op_hash: str | UnsetType = UNSET
+    result_hash: str
+    graph_revision: str | UnsetType = UNSET
+    read_scope_fingerprint: str | UnsetType = UNSET
+    projection_fingerprint: str | UnsetType = UNSET
+    source_refs: list[InfoRef] | UnsetType = UNSET
+    bytes: int | UnsetType = UNSET
+    call_kind: CallReceiptKind | UnsetType = UNSET
+    request_hash: str | UnsetType = UNSET
+    runtime_fingerprint: str | UnsetType = UNSET
+    cost: Cost | UnsetType = UNSET
+    charge_receipts: list[str] | UnsetType = UNSET
+    write_kind: WriteReceiptKind | UnsetType = UNSET
+    base_revision: str | UnsetType = UNSET
+    committed_revision: str | UnsetType = UNSET
+    proposal_batch_id: str | UnsetType = UNSET
+    proposal_ids: list[str] | UnsetType = UNSET
+    evaluation_request_id: str | UnsetType = UNSET
+    assessment_ids: list[str] | UnsetType = UNSET
+    created_candidates: list[ReceiptRef] | UnsetType = UNSET
+    event_id: str | UnsetType = UNSET
+    preconditions: list[WireJsonObject] | UnsetType = UNSET
+    validation_receipts: list[WireJsonObject] | UnsetType = UNSET
 
 
 class ChargeReceipt(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
-    """Charge receipt from the plan result schema."""
-
     receipt: str
     source_receipt: ReceiptRef
     cost: Cost
@@ -353,8 +427,6 @@ class ChargeReceipt(Struct, frozen=True, forbid_unknown_fields=True, omit_defaul
 
 
 class PlanDocument(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
-    """Top-level `leaven.plan.v1` payload."""
-
     schema_version: Literal["leaven.plan.v1"]
     plan_id: str
     consistency: Consistency
@@ -366,8 +438,6 @@ class PlanDocument(Struct, frozen=True, forbid_unknown_fields=True, omit_default
 
 
 class PlanResultDocument(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
-    """Top-level `leaven.plan_result.v1` result."""
-
     schema_version: Literal["leaven.plan_result.v1"]
     plan_id: str
     capability_fingerprint: str
@@ -387,8 +457,6 @@ type StageRunKind = Literal["runner"] | Literal["proposer"]
 
 
 class StageRunRequest(Struct, frozen=True, forbid_unknown_fields=True):
-    """Top-level `leaven.stage_run.v1` request."""
-
     schema_version: Literal["leaven.stage_run.v1"]
     message: Literal["stage_run_request"]
     stage: StageRunKind
@@ -396,8 +464,6 @@ class StageRunRequest(Struct, frozen=True, forbid_unknown_fields=True):
 
 
 class StageRunResult(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
-    """Top-level `leaven.stage_run.v1` result."""
-
     schema_version: Literal["leaven.stage_run.v1"]
     message: Literal["stage_run_result"]
     stage: StageRunKind
@@ -407,57 +473,15 @@ class StageRunResult(Struct, frozen=True, forbid_unknown_fields=True, omit_defau
     proposal_receipts: list[StageProposalReceipt] | UnsetType = UNSET
 
 
-__all__ = [
-    "PLAN_RESULT_SCHEMA_FINGERPRINT",
-    "PLAN_SCHEMA_FINGERPRINT",
-    "STAGE_RUN_SCHEMA_FINGERPRINT",
-    "BlobRef",
-    "ChargeReceipt",
-    "CommitPolicy",
-    "CommitPolicyGraphWritesAtomic",
-    "CommitPolicyGraphWritesSequential",
-    "CommitPolicyNoGraphWrites",
-    "Consistency",
-    "ConsistencyAtRevision",
-    "ConsistencyLatestAtStart",
-    "ConsistencySinceRevision",
-    "Cost",
-    "DataClassSet",
-    "EvalMode",
-    "EvalModeDryRun",
-    "EvalModeExecute",
-    "EvalModeReplay",
-    "EvalModeRequireCached",
-    "FailureMode",
-    "InfoRef",
-    "LeavenValue",
-    "MetadataBag",
-    "OperationReceipt",
-    "OutputRecord",
-    "PlanDocument",
-    "PlanError",
-    "PlanOp",
-    "PlanResultDocument",
-    "ProposalEffect",
-    "ProposeRequest",
-    "ReceiptRef",
-    "Redaction",
-    "ReflectionResult",
-    "Replayability",
-    "RunnerRequest",
-    "StageEffectReceipt",
-    "StageProposalReceipt",
-    "StageRunKind",
-    "StageRunPayload",
-    "StageRunRequest",
-    "StageRunResult",
-    "StaleWritePolicy",
-    "SurfaceSuggestion",
-    "TraceRef",
-    "VisibilityClass",
-    "WireJsonField",
-    "WireJsonLeafArray",
-    "WireJsonLeafObject",
-    "WireJsonObject",
-    "WireJsonScalar",
-]
+__all__ = (  # noqa: PLE0605, SIM905
+    "PLAN_RESULT_SCHEMA_FINGERPRINT PLAN_SCHEMA_FINGERPRINT STAGE_RUN_SCHEMA_FINGERPRINT "
+    "BlobRef CapabilityCall ChargeReceipt CommitPolicy CommitPolicyGraphWritesAtomic "
+    "CommitPolicyGraphWritesSequential CommitPolicyNoGraphWrites Consistency ConsistencyAtRevision "
+    "ConsistencyLatestAtStart ConsistencySinceRevision Cost DataClassSet EvalMode EvalModeDryRun "
+    "EvalModeExecute EvalModeReplay EvalModeRequireCached FailureMode GraphWrite InfoRef LeavenValue "
+    "MetadataBag OperationReceipt OutputRecord PlanDocument PlanError PlanOp PlanResultDocument "
+    "ProposalEffect ProposeRequest ReceiptRef Redaction ReflectionResult Replayability RunnerRequest "
+    "StageEffectReceipt StageProposalReceipt StageRunKind StageRunPayload StageRunRequest StageRunResult "
+    "StaleWritePolicy SurfaceSuggestion TraceRef VisibilityClass WireJsonField WireJsonLeafArray "
+    "WireJsonLeafObject WireJsonObject WireJsonScalar"
+).split()
