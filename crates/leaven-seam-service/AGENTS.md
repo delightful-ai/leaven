@@ -25,6 +25,10 @@ method unsupported.
 
 - `service.rs`: configured Plan IR service composition for LM, workspace, and
   agent effects.
+- `graph_state.rs`: private serve-process graph readback state for configured
+  Plan IR graph writes. It may record schema-valid public graph rows for
+  read-after-write proof inside one `leaven seam serve --stdio` process; it is
+  not Rust `RunGraph` or durable checkpoint storage.
 - `lm.rs`: configured LM provider selection for mock and OpenAI-backed
   `leaven/lm.complete`. Public dependencies are `leaven-lm` and configured
   provider crates; provider protocol details stay in the provider crates.

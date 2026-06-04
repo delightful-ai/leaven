@@ -264,7 +264,7 @@ acceptance:
           - crates/leaven-seam-service/src/service.rs
           - crates/leaven-cli/tests/seam_stdio_server.rs
           - docs/specs/public-seam-v1/executable-method-status.md
-        note: Event emit moved from unsupported service behavior to typed configured local write receipt through service and stdio; later bridge evidence proves worker-initiated RunContext event persistence, while the durable CLI service route remains configured-local receipt behavior.
+        note: Event emit moved from unsupported service behavior to typed configured local write receipt through service and stdio; later bridge evidence proves worker-initiated RunContext event persistence, and later configured-service evidence proves same-process schema-valid graph.query readback for the durable CLI route.
       - kind: partial_method_matrix_reduction
         methods:
           - "`leaven/workspace.git_log`"
@@ -295,7 +295,7 @@ acceptance:
           - crates/leaven-cli/tests/seam_stdio_server.rs
           - crates/leaven-public-seam/src/acp_profile/extension_result.rs
           - docs/specs/public-seam-v1/executable-method-status.md
-        note: Graph and case reads moved from validated-only to configured local read execution through service and stdio with typed graph_set/case_record primaries and case-read authorization denial coverage; Rust RunGraph checkpoint readback remains a separate proof.
+        note: Graph and case reads moved from validated-only to configured local read execution through service and stdio with typed graph_set/case_record primaries and case-read authorization denial coverage; later configured-service evidence proves same-process read-after-write summaries, while Rust RunGraph checkpoint readback remains a separate proof.
       - kind: partial_method_matrix_reduction
         methods:
           - "`leaven/proposal.apply`"
@@ -306,7 +306,7 @@ acceptance:
           - crates/leaven-seam-service/src/service.rs
           - crates/leaven-cli/tests/seam_stdio_server.rs
           - docs/specs/public-seam-v1/executable-method-status.md
-        note: Proposal apply and assessment submit moved from validated-only to configured local write execution through service and stdio; later bridge evidence proves worker-initiated RunContext mutation for both methods, while the durable CLI service route remains configured-local receipt behavior.
+        note: Proposal apply and assessment submit moved from validated-only to configured local write execution through service and stdio; later bridge evidence proves worker-initiated RunContext mutation for both methods, and later configured-service evidence proves same-process schema-valid graph.query readback for the durable CLI route.
       - kind: method_matrix_reduction
         methods:
           - "`leaven/evaluation.request`"
@@ -316,7 +316,7 @@ acceptance:
           - crates/leaven-seam-service/src/service.rs
           - crates/leaven-cli/tests/seam_stdio_server.rs
           - docs/specs/public-seam-v1/executable-method-status.md
-        note: Evaluation request moved from validated-only to configured local write execution through service and stdio. The service validates a constructed EvaluationJobDocument and context-bound request-evaluation receipt before projecting the ACP-facing primary receipt; durable RunContext evaluation-job persistence still belongs to effects_and_graph_writes_execute.
+        note: Evaluation request moved from validated-only to configured local write execution through service and stdio. The service validates a constructed EvaluationJobDocument and context-bound request-evaluation receipt before projecting the ACP-facing primary receipt; later configured-service evidence proves same-process schema-valid graph.query readback, while durable RunContext evaluation-job persistence still belongs to effects_and_graph_writes_execute.
     closeout_check: No row may remain "validated-only" or "unsupported in service" for locked V1.
 
   - id: graph_and_case_reads_execute
@@ -507,6 +507,22 @@ acceptance:
           - crates/leaven-acp-stage-bridge/tests/graph_effect_contract.rs
           - docs/specs/public-seam-v1/executable-method-status.md
         note: The engine exposes `RunContext::request_evaluation` for externally supplied typed evaluation requests; it trust-checks, resolves, records evaluator identity, emits `EvaluationRequested`, and refuses hidden optimizer partitions without mutation. The bidirectional stdio stage bridge now services a worker-initiated `leaven/evaluation.request` callback by parsing locked Plan IR, using a host-owned typed lowerer for `EvaluationRequest`, calling `RunContext::request_evaluation`, returning a receipt-bound extension result, and proving graph persistence. The durable `leaven seam serve --stdio` SDK service still uses configured receipt plumbing.
+      - kind: configured_stdio_graph_write_readback
+        methods:
+          - "`leaven/proposal.apply`"
+          - "`leaven/assessment.submit`"
+          - "`leaven/evaluation.request`"
+          - "`leaven/event.emit`"
+          - "`leaven/graph.query`"
+        commands:
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-cli --test seam_stdio_server
+        paths:
+          - crates/leaven-seam-service/src/graph_state.rs
+          - crates/leaven-seam-service/src/service.rs
+          - crates/leaven-cli/tests/seam_stdio_server.rs
+          - docs/specs/public-seam-v1/executable-method-status.md
+        note: The durable `leaven seam serve --stdio` route now records schema-valid serve-process graph rows for configured proposal apply, assessment submit, evaluation request, and event emit writes, then proves a later `leaven/graph.query` in the same process reads those rows back. This closes configured read-after-write smoke for the CLI route but is still not Rust `RunContext` or durable checkpoint readback.
       - kind: partial_configured_evaluation_request_execution
         methods:
           - "`leaven/evaluation.request`"

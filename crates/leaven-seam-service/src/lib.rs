@@ -1,6 +1,7 @@
 //! Configured executable services behind the Leaven public seam runtime.
 
 mod git_workspace;
+mod graph_state;
 mod lm;
 mod service;
 mod stage;

@@ -98,6 +98,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         write_json_line(&mut stdin, &assessment_submit_request());
         write_json_line(&mut stdin, &evaluation_request_request());
         write_json_line(&mut stdin, &event_emit_request());
+        write_json_line(&mut stdin, &graph_write_readback_request());
         write_json_line(&mut stdin, &sandbox_exec_request());
         write_json_line(&mut stdin, &lm_complete_request());
         write_json_line(&mut stdin, &stage_run_request());
@@ -121,7 +122,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
     let responses = response_lines(&output.stdout);
     assert_eq!(
         responses.len(),
-        10 + workspace_queries.len() + graph_case_queries.len(),
+        11 + workspace_queries.len() + graph_case_queries.len(),
         "one response per request line"
     );
 
@@ -291,7 +292,37 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         "emit_run_event"
     );
 
-    let sandbox_index = event_index + 1;
+    let readback_index = event_index + 1;
+    assert_eq!(responses[readback_index]["id"], json!("graph-readback-cli"));
+    assert!(
+        responses[readback_index].get("error").is_none(),
+        "unexpected graph readback response: {:?}",
+        responses[readback_index]
+    );
+    let readback_items = responses[readback_index]["result"]["primary"]["items"]
+        .as_array()
+        .expect("graph readback returns items");
+    for expected_event_kind in [
+        "proposal.apply",
+        "assessment.submit",
+        "evaluation.request",
+        "cli.checked",
+    ] {
+        assert!(
+            readback_items
+                .iter()
+                .any(|item| item["event_kind"].as_str() == Some(expected_event_kind)),
+            "graph readback missing {expected_event_kind}: {readback_items:?}"
+        );
+    }
+    assert!(
+        readback_items
+            .iter()
+            .any(|item| item["payload"]["value"].get("ok").and_then(Value::as_bool) == Some(true)),
+        "graph readback missing emitted event payload: {readback_items:?}"
+    );
+
+    let sandbox_index = readback_index + 1;
     assert_eq!(responses[sandbox_index]["id"], json!("sandbox-exec-cli"));
     assert!(
         responses[sandbox_index].get("error").is_none(),
@@ -587,6 +618,44 @@ fn graph_query_request() -> Value {
         "params": {
             "schema_version": "leaven.plan.v1",
             "plan_id": "graphquerycli001",
+            "consistency": {
+                "kind": "latest_at_start"
+            },
+            "mode": {
+                "kind": "execute"
+            },
+            "ops": [{
+                "kind": "let",
+                "name": "events",
+                "expr": {
+                    "kind": "graph_query",
+                    "source": {
+                        "kind": "events"
+                    },
+                    "projection": {
+                        "kind": "ids"
+                    },
+                    "page": {
+                        "limit": 100
+                    }
+                }
+            }],
+            "return": ["events"],
+            "commit": {
+                "kind": "no_graph_writes"
+            }
+        }
+    })
+}
+
+fn graph_write_readback_request() -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": "graph-readback-cli",
+        "method": "leaven/graph.query",
+        "params": {
+            "schema_version": "leaven.plan.v1",
+            "plan_id": "graphreadbackcli001",
             "consistency": {
                 "kind": "latest_at_start"
             },

@@ -1,10 +1,12 @@
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use crate::git_workspace::{
     SeamWorkspaceGitConfig, execute_git_workspace_query, initialize_workspace_git,
 };
+use crate::graph_state::SeamGraphState;
 use crate::lm::{ConfiguredLmError, ConfiguredLmRuntime, SeamLmConfig};
 use crate::stage::SeamStageConfig;
 use leaven_agent::{AgentRunContext, AgentRuntime};
@@ -15,12 +17,12 @@ use leaven_public_seam::{
     PlanAgentRunOutcome, PlanAgentRunRequest, PlanApplyProposalBatchOutcome,
     PlanApplyProposalBatchRequest, PlanCaseQueryOutcome, PlanCaseQueryRequest,
     PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
-    PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope, PlanLmCompleteOutcome,
-    PlanLmCompleteRequest, PlanSandboxExecOutcome, PlanSandboxExecRequest,
-    PlanSubmitAssessmentsOutcome, PlanSubmitAssessmentsRequest, PlanSubmitProposalBatchOutcome,
-    PlanSubmitProposalBatchRequest, PlanWorkspaceMaterializeOutcome,
-    PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest,
-    PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest, PublicSeamError, PublicSeamPackage,
+    PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanLmCompleteOutcome, PlanLmCompleteRequest,
+    PlanSandboxExecOutcome, PlanSandboxExecRequest, PlanSubmitAssessmentsOutcome,
+    PlanSubmitAssessmentsRequest, PlanSubmitProposalBatchOutcome, PlanSubmitProposalBatchRequest,
+    PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome,
+    PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
+    PublicSeamError, PublicSeamPackage,
 };
 use leaven_seam_runtime::{SeamPlanRequest, SeamService, SeamServiceError, SeamStageRunRequest};
 use leaven_workspace::{Workspace, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
@@ -35,6 +37,7 @@ pub struct ConfiguredSeamService {
     package: PublicSeamPackage,
     config: SeamServiceConfig,
     capability: Option<CapabilityDocument>,
+    graph_state: Arc<Mutex<SeamGraphState>>,
 }
 
 impl ConfiguredSeamService {
@@ -60,6 +63,7 @@ impl ConfiguredSeamService {
             .transpose()?;
         Ok(Self {
             package,
+            graph_state: Arc::new(Mutex::new(SeamGraphState::new(&config.graph))),
             config,
             capability,
         })
@@ -105,7 +109,7 @@ impl ConfiguredSeamService {
                 workspace_config: self.config.workspace.clone(),
                 workspace_factory: self.config.workspace.to_factory(),
                 agent: self.config.agent.to_codex_runtime(),
-                graph: self.config.graph.clone(),
+                graph_state: Arc::clone(&self.graph_state),
                 cases: self.config.cases.clone(),
                 graph_revision: self.config.context.base_revision.clone(),
                 workspaces: BTreeMap::new(),
@@ -141,6 +145,12 @@ impl ConfiguredSeamService {
         let result = evaluation_request_plan_result(params, name, &context, &job)?;
         self.package
             .validate_evaluation_request_receipt_document(&job, &result)?;
+        self.graph_state
+            .lock()
+            .map_err(|_| PublicSeamError::InvalidPlan {
+                message: "configured seam graph state lock poisoned".to_owned(),
+            })?
+            .record_evaluation_request(name, &job, context.base_revision());
         extension_result_for_plan_report(method, params, &result)
     }
 }
@@ -765,7 +775,7 @@ struct ConfiguredPlanHost {
     workspace_config: SeamWorkspaceConfig,
     workspace_factory: LocalWorkspaceFactory,
     agent: Option<CodexCliRuntime>,
-    graph: SeamGraphConfig,
+    graph_state: Arc<Mutex<SeamGraphState>>,
     cases: BTreeMap<String, SeamCaseRecordConfig>,
     graph_revision: String,
     workspaces: BTreeMap<String, Workspace>,
@@ -776,13 +786,13 @@ impl PlanExecutionHost for ConfiguredPlanHost {
         &mut self,
         request: PlanGraphQueryRequest<'_>,
     ) -> Result<PlanGraphQueryOutcome, PublicSeamError> {
-        let graph_revision = graph_query_revision(request.scope(), &self.graph_revision);
-        let mut outcome = PlanGraphQueryOutcome::new(self.graph.items.clone(), graph_revision)
-            .with_data_classes(self.graph.data_classes.clone());
-        if let Some(next_cursor) = &self.graph.next_cursor {
-            outcome = outcome.with_next_cursor(next_cursor.clone());
-        }
-        Ok(outcome)
+        Ok(self
+            .graph_state
+            .lock()
+            .map_err(|_| PublicSeamError::InvalidPlan {
+                message: "configured seam graph state lock poisoned".to_owned(),
+            })?
+            .query(request.scope(), &self.graph_revision))
     }
 
     fn case_query_load(
@@ -866,54 +876,49 @@ impl PlanExecutionHost for ConfiguredPlanHost {
         &mut self,
         request: PlanEmitRunEventRequest<'_>,
     ) -> Result<PlanEmitRunEventOutcome, PublicSeamError> {
-        Ok(PlanEmitRunEventOutcome::new(
-            format!("event_{}", request.name()),
-            format!("{}_event_emit", request.base_revision()),
-        ))
+        Ok(self
+            .graph_state
+            .lock()
+            .map_err(|_| PublicSeamError::InvalidPlan {
+                message: "configured seam graph state lock poisoned".to_owned(),
+            })?
+            .emit_run_event(request))
     }
 
     fn submit_proposal_batch(
         &mut self,
         request: PlanSubmitProposalBatchRequest<'_>,
     ) -> Result<PlanSubmitProposalBatchOutcome, PublicSeamError> {
-        let proposal_ids = (0..request.proposal_count()?)
-            .map(|index| format!("prop_{}_{}", request.name(), index))
-            .collect();
-        Ok(PlanSubmitProposalBatchOutcome::new(
-            format!("pb_{}", request.name()),
-            proposal_ids,
-            format!("{}_proposal_submit", request.base_revision()),
-        ))
+        self.graph_state
+            .lock()
+            .map_err(|_| PublicSeamError::InvalidPlan {
+                message: "configured seam graph state lock poisoned".to_owned(),
+            })?
+            .submit_proposal_batch(request)
     }
 
     fn apply_proposal_batch(
         &mut self,
         request: PlanApplyProposalBatchRequest<'_>,
     ) -> Result<PlanApplyProposalBatchOutcome, PublicSeamError> {
-        let batch = request
-            .write()
-            .get("proposal_batch")
-            .and_then(Value::as_str)
-            .ok_or_else(|| PublicSeamError::InvalidPlan {
-                message: "apply_proposal_batch must carry proposal_batch".to_owned(),
-            })?;
-        Ok(PlanApplyProposalBatchOutcome::new(
-            vec![format!("cand_{}_applied", sanitize_id_fragment(batch))],
-            format!("{}_proposal_apply", request.base_revision()),
-        ))
+        self.graph_state
+            .lock()
+            .map_err(|_| PublicSeamError::InvalidPlan {
+                message: "configured seam graph state lock poisoned".to_owned(),
+            })?
+            .apply_proposal_batch(request)
     }
 
     fn submit_assessments(
         &mut self,
         request: PlanSubmitAssessmentsRequest<'_>,
     ) -> Result<PlanSubmitAssessmentsOutcome, PublicSeamError> {
-        let assessment_ids = (0..request.assessment_count()?)
-            .map(|index| format!("assess_{}_{}", request.name(), index))
-            .collect();
-        Ok(PlanSubmitAssessmentsOutcome::new(
-            assessment_ids,
-            format!("{}_assessment_submit", request.base_revision()),
-        ))
+        self.graph_state
+            .lock()
+            .map_err(|_| PublicSeamError::InvalidPlan {
+                message: "configured seam graph state lock poisoned".to_owned(),
+            })?
+            .submit_assessments(request)
     }
 
     fn workspace_materialize(
@@ -1179,16 +1184,6 @@ fn configured_sandbox_fingerprint() -> leaven_kernel::Fingerprint {
     let mut builder = FingerprintBuilder::new();
     builder.update(b"leaven-seam-service.local-sandbox.v1");
     builder.finish()
-}
-
-fn graph_query_revision(scope: PlanGraphReadScope<'_>, default_revision: &str) -> String {
-    match scope {
-        PlanGraphReadScope::LatestAtStart { revision }
-        | PlanGraphReadScope::AtRevision { revision } => revision.to_owned(),
-        PlanGraphReadScope::SinceRevision { since: _, until } => {
-            until.unwrap_or(default_revision).to_owned()
-        }
-    }
 }
 
 fn blob_ref_for_bytes(id: &str, bytes: &[u8], data_classes: &[&str]) -> Value {
