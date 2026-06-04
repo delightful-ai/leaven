@@ -343,7 +343,7 @@
         "max_agent_usd_micro": {
           "$ref": "common.schema.json#/$defs/UsdMicro"
         },
-        "max_human_usd_micro": {
+        "max_evaluator_usd_micro": {
           "$ref": "common.schema.json#/$defs/UsdMicro"
         },
         "max_wall_ms": {

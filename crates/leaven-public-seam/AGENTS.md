@@ -555,7 +555,7 @@ backpressure, or runtime watch support.
   intersections before execution. It rejects `case.target` and other forbidden
   classes even when the Plan IR schema itself accepts the call shape, and it
   reports typed call-authority redaction facts. It does not produce Plan Result
-  `Redaction` wire objects or execute LM, agent, sandbox, or human-review
+  `Redaction` wire objects or execute LM, agent, sandbox, or evaluator
   runtimes.
 - `tests/proposal_authority.rs` proves schema-valid proposal writes are checked
   against capability-granted proposal effects, change schemas, surface

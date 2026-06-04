@@ -130,9 +130,9 @@ impl CapabilityDocument {
         self.budgets.concurrent_calls
     }
 
-    /// Aggregate human-review budget in USD micro-units.
-    pub fn max_human_usd_micro(&self) -> Option<u64> {
-        self.budgets.human_usd_micro
+    /// Aggregate evaluator budget in USD micro-units.
+    pub fn max_evaluator_usd_micro(&self) -> Option<u64> {
+        self.budgets.evaluator_usd_micro
     }
 
     /// Aggregate wall-clock budget in milliseconds.
@@ -459,8 +459,8 @@ struct AggregateBudgets {
     lm_usd_micro: Option<u64>,
     #[serde(default, rename = "max_agent_usd_micro")]
     agent_usd_micro: Option<u64>,
-    #[serde(default, rename = "max_human_usd_micro")]
-    human_usd_micro: Option<u64>,
+    #[serde(default, rename = "max_evaluator_usd_micro")]
+    evaluator_usd_micro: Option<u64>,
     #[serde(default, rename = "max_wall_ms")]
     wall_ms: Option<u64>,
     #[serde(default, rename = "max_concurrent_calls")]

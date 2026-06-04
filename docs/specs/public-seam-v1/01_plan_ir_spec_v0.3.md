@@ -10,7 +10,7 @@
 
 `Let` nodes can query graph, cases, and workspace snapshots.
 
-`Call` nodes can invoke LM, agent, sandbox, human review, workspace materialization, and extensions.
+`Call` nodes can invoke LM, agent, sandbox, workspace materialization, and extensions.
 
 `Write` nodes can submit proposals, submit assessments, request evaluations, apply proposals, emit events, and invoke extension writes.
 

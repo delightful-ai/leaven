@@ -6,7 +6,6 @@ use super::{AggregateBudgets, CapabilityDenial, CapabilityDenialKind, Capability
 const AXIS_USD_MICRO: &str = "usd_micro";
 const AXIS_LM_USD_MICRO: &str = "lm.usd_micro";
 const AXIS_AGENT_USD_MICRO: &str = "agent.usd_micro";
-const AXIS_HUMAN_USD_MICRO: &str = "human.usd_micro";
 const AXIS_SANDBOX_USD_MICRO: &str = "sandbox.usd_micro";
 const AXIS_EVALUATOR_USD_MICRO: &str = "evaluator.usd_micro";
 const AXIS_WALL_MS: &str = "wall_ms";
@@ -20,7 +19,6 @@ pub struct CapabilityBudgetUsage {
     other_usd_micro: u64,
     lm_usd_micro: u64,
     agent_usd_micro: u64,
-    human_usd_micro: u64,
     sandbox_usd_micro: u64,
     evaluator_usd_micro: u64,
     wall_ms: u64,
@@ -50,14 +48,6 @@ impl CapabilityBudgetUsage {
     pub const fn agent_usd_micro(amount: u64) -> Self {
         Self {
             agent_usd_micro: amount,
-            ..Self::zero()
-        }
-    }
-
-    /// Records human-review spend against the role-specific and aggregate totals.
-    pub const fn human_usd_micro(amount: u64) -> Self {
-        Self {
-            human_usd_micro: amount,
             ..Self::zero()
         }
     }
@@ -132,7 +122,6 @@ impl CapabilityBudgetUsage {
         )?;
         cost = add_runtime_axis(cost, AXIS_LM_USD_MICRO, self.lm_usd_micro)?;
         cost = add_runtime_axis(cost, AXIS_AGENT_USD_MICRO, self.agent_usd_micro)?;
-        cost = add_runtime_axis(cost, AXIS_HUMAN_USD_MICRO, self.human_usd_micro)?;
         cost = add_runtime_axis(cost, AXIS_SANDBOX_USD_MICRO, self.sandbox_usd_micro)?;
         cost = add_runtime_axis(cost, AXIS_EVALUATOR_USD_MICRO, self.evaluator_usd_micro)?;
         cost = add_runtime_axis(cost, AXIS_WALL_MS, self.wall_ms)?;
@@ -145,7 +134,6 @@ impl CapabilityBudgetUsage {
             other_usd_micro: 0,
             lm_usd_micro: 0,
             agent_usd_micro: 0,
-            human_usd_micro: 0,
             sandbox_usd_micro: 0,
             evaluator_usd_micro: 0,
             wall_ms: 0,
@@ -160,7 +148,6 @@ impl CapabilityBudgetUsage {
         for amount in [
             self.lm_usd_micro,
             self.agent_usd_micro,
-            self.human_usd_micro,
             self.sandbox_usd_micro,
             self.evaluator_usd_micro,
         ] {
@@ -273,10 +260,10 @@ impl CapabilityBudgetLedger {
             usage.agent_usd_micro,
         )?;
         ensure_aggregate_budget(
-            "max_human_usd_micro",
-            self.budgets.human_usd_micro,
-            self.spent.human_usd_micro,
-            usage.human_usd_micro,
+            "max_evaluator_usd_micro",
+            self.budgets.evaluator_usd_micro,
+            self.spent.evaluator_usd_micro,
+            usage.evaluator_usd_micro,
         )?;
         ensure_aggregate_budget(
             "max_wall_ms",
@@ -387,18 +374,13 @@ fn add_budget_usage(
             spent.agent_usd_micro,
             usage.agent_usd_micro,
         )?,
-        human_usd_micro: checked_usage_add(
-            "max_human_usd_micro",
-            spent.human_usd_micro,
-            usage.human_usd_micro,
-        )?,
         sandbox_usd_micro: checked_usage_add(
             "max_total_usd_micro",
             spent.sandbox_usd_micro,
             usage.sandbox_usd_micro,
         )?,
         evaluator_usd_micro: checked_usage_add(
-            "max_total_usd_micro",
+            "max_evaluator_usd_micro",
             spent.evaluator_usd_micro,
             usage.evaluator_usd_micro,
         )?,
@@ -420,7 +402,7 @@ impl AggregateBudgets {
         budget = add_runtime_limit(budget, AXIS_USD_MICRO, self.total_usd_micro)?;
         budget = add_runtime_limit(budget, AXIS_LM_USD_MICRO, self.lm_usd_micro)?;
         budget = add_runtime_limit(budget, AXIS_AGENT_USD_MICRO, self.agent_usd_micro)?;
-        budget = add_runtime_limit(budget, AXIS_HUMAN_USD_MICRO, self.human_usd_micro)?;
+        budget = add_runtime_limit(budget, AXIS_EVALUATOR_USD_MICRO, self.evaluator_usd_micro)?;
         budget = add_runtime_limit(budget, AXIS_WALL_MS, self.wall_ms)?;
         budget = add_runtime_limit(budget, AXIS_PLAN_NODES, self.plan_nodes)?;
         add_runtime_limit(budget, AXIS_MATERIALIZED_BYTES, self.materialized_bytes)

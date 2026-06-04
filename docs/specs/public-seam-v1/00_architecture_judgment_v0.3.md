@@ -33,7 +33,7 @@ Proposal produces graph mutation intent.
 The Leaven worker profile handles external-worker lifecycle and transport over
 the public seam.
 
-Leaven `leaven/*` seam methods handle all worker callbacks uniformly: graph queries, case reads, workspace operations, LM dispatch, agent runs, sandbox exec, human review, proposal submission, assessment submission.
+Leaven `leaven/*` seam methods handle all worker callbacks uniformly: graph queries, case reads, workspace operations, LM dispatch, agent runs, sandbox exec, proposal submission, assessment submission, evaluation requests, and event emission.
 
 Leaven handles domain truth, policy, receipts, costs, redactions, and graph mutation.
 

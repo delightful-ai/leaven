@@ -1115,7 +1115,8 @@ for diagnostics without a comparable value, so absence is explicit.
 
 Plain scalar/bool/`Score` returns are metered as zero additional scoring cost.
 If a scoring function calls an LLM judge, subprocess, external verifier, or
-human-review system, it must return `Metered<Score>` with the cost it incurred.
+operator-facing evaluator, it must return `Metered<Score>` with the cost it
+incurred.
 The adapter charges that cost exactly once after successful scoring. Score
 errors may also carry `BudgetExceeded` when scoring stopped before producing a
 score.

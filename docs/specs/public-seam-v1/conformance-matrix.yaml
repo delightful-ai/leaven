@@ -1472,8 +1472,9 @@ rows:
       - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
     owner_boundary: agent/worker transport plus public-seam implementation owner
     positive_proof: >
-      Graph, case, workspace, LM, agent, sandbox, human review, proposal, and
-      assessment extension results carry the full result envelope fields.
+      Graph, case, workspace, LM, agent, sandbox, proposal, assessment,
+      evaluation request, and event extension results carry the full result
+      envelope fields.
     negative_proof: >
       Extension results missing receipts, data classes, redactions, or capability
       fingerprint are rejected by contract tests.

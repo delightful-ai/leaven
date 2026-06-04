@@ -198,16 +198,20 @@ acceptance:
           - crates/leaven-public-seam/src/call_authority.rs
           - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
           - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
+          - docs/specs/public-seam-v1/schemas/leaven.capability.v1.schema.json
           - docs/specs/public-seam-v1/schemas/common.schema.json
           - docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
           - docs/specs/public-seam-v1/executable-method-status.md
-        note: Locked V1 method/profile rows, Plan IR call shape, result receipt kind, data class, cost axis, and active docs no longer advertise or accept human review.
+          - crates/leaven-public-seam/src/capability.rs
+          - crates/leaven-public-seam/src/capability/budget.rs
+          - crates/leaven-public-seam/src/capability/delegation.rs
+        note: Locked V1 method/profile rows, Plan IR call shape, result receipt kind, data class, budget axis, and active docs no longer advertise or accept human review. The old human-specific budget field was hard-cut to evaluator budget vocabulary.
       - kind: negative_stdio_request
         command: cargo test -p leaven-cli --test seam_stdio_server
         note: Process-level `leaven seam serve --stdio` proof sends `leaven/human.review` and receives JSON-RPC method-not-found before service execution.
       - kind: active_inventory
-        command: rg -n 'human_review_usd_micro|human_review_result|human_review_calls|human_review"|human\.review|HumanReviewCall' --glob '!target/**' --glob '!sdk/python/.venv/**' --glob '!docs/working-memory/public-seam-production-goal-handoff.yaml'
-        note: Only remaining active-tree match is the intentional negative stdio request in `crates/leaven-cli/tests/seam_stdio_server.rs`.
+        command: rg -n 'human_review_usd_micro|human_review_result|human_review_calls|human_review"|human\.review|HumanReviewCall|max_human_usd_micro|human_usd_micro|human\.usd_micro|human-review|human review' --glob '!target/**' --glob '!sdk/python/.venv/**' --glob '!docs/working-memory/public-seam-production-goal-handoff.yaml'
+        note: Only remaining non-archival active-tree match is the intentional negative stdio request in `crates/leaven-cli/tests/seam_stdio_server.rs`; remaining prose hits are archival review/provenance files outside the active public contract.
       - kind: verification
         commands:
           - cargo fmt --check

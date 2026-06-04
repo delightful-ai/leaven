@@ -4,7 +4,7 @@ Reorganized the bundle by abstraction plane.
 
 Replaced `worker_protocol` with the Leaven ACP profile.
 
-Dropped MCP-over-ACP from v1. All worker callbacks (LM dispatch, agent runs, sandbox exec, human review, graph queries, case reads, workspace operations, proposal/assessment writes) ride ACP extension methods uniformly. A future v1.x may add an MCP bridge for interoperability with non-Leaven MCP clients, but it is not required to use the seam.
+Dropped MCP-over-ACP from v1. All worker callbacks (LM dispatch, agent runs, sandbox exec, graph queries, case reads, workspace operations, proposal/assessment writes, evaluation requests, and event emission) ride ACP extension methods uniformly. A future v1.x may add an MCP bridge for interoperability with non-Leaven MCP clients, but it is not required to use the seam.
 
 Deferred `watch.v1` to v1.1.
 

@@ -217,9 +217,9 @@ fn ensure_budget_attenuates(
             child.agent_usd_micro,
         ),
         (
-            "max_human_usd_micro",
-            parent.human_usd_micro,
-            child.human_usd_micro,
+            "max_evaluator_usd_micro",
+            parent.evaluator_usd_micro,
+            child.evaluator_usd_micro,
         ),
         ("max_wall_ms", parent.wall_ms, child.wall_ms),
         (
