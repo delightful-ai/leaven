@@ -677,6 +677,35 @@ acceptance:
           Research split configured local method execution from the stricter
           run-bound service requirement. This is not completion evidence; it
           identifies the legal topology and the minimum future scenario proof.
+      - kind: run_bound_service_module_foundation
+        paths:
+          - crates/leaven-seam-service/src/run_bound_service/mod.rs
+          - crates/leaven-seam-service/src/run_bound_service/error.rs
+          - crates/leaven-seam-service/src/run_bound_service/params.rs
+          - crates/leaven-seam-service/src/run_bound_service/extension_result.rs
+          - crates/leaven-seam-service/src/run_bound_service/tests.rs
+          - crates/leaven-seam-service/src/lib.rs
+          - crates/leaven-seam-service/Cargo.toml
+          - docs/working-memory/run-bound-durable-runcontext-service.md
+        commands:
+          - cargo fmt --check
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service run_bound
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-run inspection
+          - cargo test -p leaven --test topology_contract
+          - uv run --with pyyaml python - <<'PY' ...
+        note: >-
+          `leaven-seam-service` now has a generic run-bound graph-effect service
+          that binds a live `RunContext<P>`, host-owned typed lowerers,
+          registered proposal batches, and installed persistence. The focused
+          test services `proposal.apply`, `evaluation.request`,
+          `assessment.submit`, and `event.emit`, validates each extension result
+          through `leaven-public-seam`, advances a latest checkpoint at a clean
+          run boundary, restores it through `StoreRunPersistence<FileStore>`,
+          and asserts candidate/evaluation/assessment/event graph facts survived
+          readback. This remains foundation evidence until wired through a real
+          public SDK server/optimizer lifecycle route rather than a direct module
+          test.
     closeout_check: >-
       The configured `SeamTextProblem` proof path, `leaven-acp-stage-bridge`
       callback tests, public-seam receipt projection tests, and Python

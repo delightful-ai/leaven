@@ -1,6 +1,6 @@
 # Run-Bound Durable RunContext Service
 
-Status: research / implementation handoff
+Status: implementation foundation in progress
 Updated: 2026-06-04T01:35:31Z
 
 ## Intent
@@ -32,6 +32,16 @@ of the same mutated facts.
   receipt projections and rejects forged graph facts.
 - `RunContext` already checkpoints after mutating operations when constructed
   with `.with_persistence(...)`.
+- `crates/leaven-seam-service/src/run_bound_service/` now provides a generic
+  run-bound graph-effect service. The public surface lives in `mod.rs`; JSON
+  parsing, receipt projection, errors, and focused tests live in private sibling
+  modules. Its focused test binds a real
+  `RunContext<P>` with `StoreRunPersistence<FileStore>`, records a proposal
+  batch, services `proposal.apply`, `evaluation.request`, `assessment.submit`,
+  and `event.emit`, validates each extension result through
+  `leaven-public-seam`, advances a latest checkpoint at a clean run boundary,
+  and restores the checkpoint to prove candidate/evaluation/assessment/event
+  graph facts survived durable readback.
 
 ## Why This Is Not Done
 
@@ -40,10 +50,10 @@ aliases such as `pb_configured_run_context`, `eval_run_context`, and
 `run_context.checked`. It is mechanics proof for the public server route, not
 the generalized SDK service.
 
-The missing proof is a service bound to a real optimizer run/stage lifecycle:
-the callback payload must lower into that run's concrete problem/evidence types,
-mutate that run's `RunContext`, checkpoint through the run's `RunPersistence`,
-and then be inspected from the durable run store.
+The remaining missing proof is wiring this service shape into the public SDK
+server route during a real optimizer run/stage lifecycle. The current module
+proves the generic service and durable checkpoint mechanics, but not
+`leaven seam serve --stdio` process delivery for a run-bound service.
 
 Do not close `run_bound_durable_runcontext_service` with:
 
@@ -80,7 +90,8 @@ engine values, and graph mutations route through `RunContext` finalizers.
 1. Define a run-bound service state in `leaven-seam-service` that is generic over
    a concrete `OptimizationProblem` or is constructed by a typed owner with:
    `&mut RunContext<P>`, case set, evidence store, optional evaluation cache, and
-   persistence.
+   persistence. **Done as foundation in `run_bound_service/`; still needs a
+   public server entrypoint.**
 2. Reuse or move the host-effect lowering pattern from
    `leaven-acp-stage-bridge::RunContextGraphEffectHost` without making
    `leaven-acp-stage-bridge` a dependency of the durable server route.
