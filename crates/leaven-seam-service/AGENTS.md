@@ -15,6 +15,14 @@ and worker-initiated callback requests are serviced through the configured
 service while the stage is active. Their public wire remains the locked
 `leaven/stage.run` and `leaven/*` JSON-RPC methods.
 
+RunContext-backed service execution also belongs here when the public SDK server
+needs real graph mutation through `leaven seam serve --stdio`. This crate may
+depend on `leaven-core`, `leaven-engine`, `leaven-run`, and store crates for
+that configured execution mode, but only to compose `RunContext` mutation and
+the existing public-seam receipt projection helpers. It must not inspect or
+mutate `RunGraph` internals directly, become an optimizer strategy home, or
+route durable SDK server behavior through `leaven-acp-stage-bridge`.
+
 Current executable method status is product-facing and is recorded in
 `../../docs/specs/public-seam-v1/executable-method-status.md`. Update that file
 in the same change when this crate adds or removes configured service behavior,
@@ -29,6 +37,10 @@ method unsupported.
   Plan IR graph writes. It may record schema-valid public graph rows for
   read-after-write proof inside one `leaven seam serve --stdio` process; it is
   not Rust `RunGraph` or durable checkpoint storage.
+- `run_context_service.rs`: configured `RunContext`-backed graph-write service
+  mode for durable public-seam execution. It composes engine mutation and
+  `leaven-run` public-seam receipt projection; it must not use `SeamGraphState`
+  as graph-truth evidence.
 - `lm.rs`: configured LM provider selection for mock and OpenAI-backed
   `leaven/lm.complete`. Public dependencies are `leaven-lm` and configured
   provider crates; provider protocol details stay in the provider crates.
