@@ -64,7 +64,8 @@ def from_iterable(
     name: str = "inline",
 ) -> CaseSet:
     """Build a CaseSet from an in-memory list of dicts. For tests and tiny demos."""
-    raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+    cases = [_row_to_case(row, id_field, input_field, target_field, metadata_field) for row in items]
+    return CaseSet(name=name, cases=cases)
 
 
 def _optional_json_object(value: JsonValue | None) -> JsonObject | None:

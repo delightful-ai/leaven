@@ -2325,6 +2325,27 @@ acceptance:
           `(case.target or {}).get(...)` or `str(output)` fallbacks. The pytest
           config now runs with importlib import mode so the documented plain
           `uv run pytest` gate passes despite mirrored test basenames.
+      - kind: public_case_iterable_loader_scaffold_removed
+        paths:
+          - sdk/python/src/leaven/cases/__init__.py
+          - sdk/python/src/leaven/cases/jsonl.py
+          - sdk/python/tests/cases/test_jsonl.py
+        commands:
+          - cd sdk/python && uv run pytest tests/cases/test_jsonl.py -q
+          - cd sdk/python && uv run ruff check src/leaven/cases/__init__.py src/leaven/cases/jsonl.py tests/cases/test_jsonl.py
+          - cd sdk/python && uv run ty check src/leaven/cases/__init__.py src/leaven/cases/jsonl.py tests/cases/test_jsonl.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - cd sdk/python && uv run pytest -q
+        note: >-
+          `leaven.cases.from_iterable` is now a real public loader rather than
+          a scaffold: it projects inline `JsonObject` rows through the same
+          typed `Case` construction path as `from_jsonl`, exports through
+          `leaven.cases.__all__`, preserves configured field names, and rejects
+          non-object target/input fields instead of erasing arbitrary JSON.
+          This removes one public SDK scaffold but does not close the row;
+          `cases.csv`, `cases.parquet`, standalone `serve_stage`, and broader
+          backbone surfaces still need implementation or explicit removal.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this
