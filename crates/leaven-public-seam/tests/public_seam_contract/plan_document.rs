@@ -6,12 +6,12 @@ use leaven_public_seam::{
     AgentCommandOutputRefs, CapabilityDocument, PlanAgentRunOutcome, PlanAgentRunRequest,
     PlanCallKind, PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanCommitKind,
     PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
-    PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope, PlanLmCompleteOutcome,
-    PlanLmCompleteRequest, PlanMode, PlanOperationKind, PlanQueryKind, PlanSandboxExecOutcome,
-    PlanSandboxExecRequest, PlanSchemaVersion, PlanWorkspaceMaterializeOutcome,
-    PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest,
-    PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest, PlanWriteKind, PublicSeamError,
-    PublicSeamPackage,
+    PlanExpressionKind, PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope,
+    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanMode, PlanOperationKind, PlanQueryKind,
+    PlanSandboxExecOutcome, PlanSandboxExecRequest, PlanSchemaVersion,
+    PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome,
+    PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
+    PlanWriteKind, PublicSeamError, PublicSeamPackage,
 };
 use serde_json::{Value, json};
 
@@ -43,6 +43,7 @@ fn plan_ir_family_accepts_typed_let_call_write_documents() {
     };
     assert_eq!(let_op.name(), "prompt");
     assert_eq!(let_op.kind(), PlanOperationKind::Let);
+    assert_eq!(let_op.expression_kind(), Some(PlanExpressionKind::Literal));
     assert_eq!(let_op.query_kind(), None);
     assert_eq!(call_op.name(), "completion");
     assert_eq!(call_op.kind(), PlanOperationKind::Call);
@@ -66,6 +67,10 @@ fn plan_ir_accessors_classify_direct_query_operation_identity() {
     let query_op = &document.operations()[0];
     assert_eq!(query_op.name(), "events");
     assert_eq!(query_op.kind(), PlanOperationKind::Let);
+    assert_eq!(
+        query_op.expression_kind(),
+        Some(PlanExpressionKind::GraphQuery)
+    );
     assert_eq!(query_op.query_kind(), Some(PlanQueryKind::GraphQuery));
 }
 

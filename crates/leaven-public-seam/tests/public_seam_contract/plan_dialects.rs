@@ -1,5 +1,5 @@
 use crate::support::package;
-use leaven_public_seam::PublicSeamError;
+use leaven_public_seam::{PlanExpressionKind, PublicSeamError};
 use serde_json::{Value, json};
 
 #[test]
@@ -8,6 +8,10 @@ fn pinned_dialects_replay_pointer_jsonpath_and_template_deterministically() {
     let document = package
         .validate_plan_document(&pinned_dialect_plan())
         .unwrap();
+    assert_eq!(
+        document.operations()[0].expression_kind(),
+        Some(PlanExpressionKind::Template)
+    );
     assert_eq!(document.pinned_pointer_count(), 2);
     assert_eq!(document.pinned_jsonpath_count(), 1);
     assert_eq!(document.strict_template_count(), 1);
