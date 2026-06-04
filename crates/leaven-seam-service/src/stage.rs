@@ -1,7 +1,7 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{ChildStdin, Command, Stdio};
 
-use leaven_public_seam::PublicSeamError;
+use leaven_public_seam::{LockedMethod, PublicSeamError};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -29,7 +29,7 @@ impl SeamStageConfig {
     pub(crate) fn runner_result(
         &self,
         params: &Value,
-        effects: &mut impl FnMut(&str, &Value) -> Result<Value, PublicSeamError>,
+        effects: &mut impl FnMut(LockedMethod, &Value) -> Result<Value, PublicSeamError>,
     ) -> Result<Value, PublicSeamError> {
         match self {
             Self::None => Err(PublicSeamError::InvalidPlan {
@@ -52,7 +52,7 @@ impl Default for SeamStageConfig {
 fn command_runner_result(
     argv: &[String],
     params: &Value,
-    effects: &mut impl FnMut(&str, &Value) -> Result<Value, PublicSeamError>,
+    effects: &mut impl FnMut(LockedMethod, &Value) -> Result<Value, PublicSeamError>,
 ) -> Result<Value, PublicSeamError> {
     let (program, args) = argv
         .split_first()
@@ -111,7 +111,7 @@ fn read_command_runner_messages(
     program: &str,
     stdout: impl Read,
     stdin: &mut ChildStdin,
-    effects: &mut impl FnMut(&str, &Value) -> Result<Value, PublicSeamError>,
+    effects: &mut impl FnMut(LockedMethod, &Value) -> Result<Value, PublicSeamError>,
 ) -> Result<Value, PublicSeamError> {
     let mut reader = BufReader::new(stdout);
     let mut line = String::new();
@@ -139,13 +139,19 @@ fn read_command_runner_messages(
                     "configured stage runner `{program}` emitted invalid JSON-RPC message: {error}"
                 ),
             })?;
-        if let Some(method) = message.get("method").and_then(Value::as_str) {
+        if let Some(method_name) = message.get("method").and_then(Value::as_str) {
+            let method =
+                LockedMethod::parse(method_name).ok_or_else(|| PublicSeamError::InvalidPlan {
+                    message: format!(
+                        "configured stage runner `{program}` requested unknown Leaven method `{method_name}`"
+                    ),
+                })?;
             let id = message.get("id").cloned().unwrap_or(Value::Null);
             let params = message
                 .get("params")
                 .ok_or_else(|| PublicSeamError::InvalidPlan {
                     message: format!(
-                        "configured stage runner `{program}` request `{method}` missing params"
+                        "configured stage runner `{program}` request `{method_name}` missing params"
                     ),
                 })?;
             let response = match effects(method, params) {

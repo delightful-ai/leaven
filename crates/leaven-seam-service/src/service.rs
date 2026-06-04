@@ -97,13 +97,8 @@ impl SeamService for ConfiguredSeamService {
         &self,
         request: SeamStageRunRequest<'_>,
     ) -> Result<Value, SeamServiceError> {
-        let mut effects = |method: &str, params: &Value| {
-            let method =
-                LockedMethod::parse(method).ok_or_else(|| PublicSeamError::InvalidPlan {
-                    message: format!("stage worker requested unknown Leaven method `{method}`"),
-                })?;
-            self.execute_plan_method(method, params)
-        };
+        let mut effects =
+            |method: LockedMethod, params: &Value| self.execute_plan_method(method, params);
         self.config
             .stage
             .runner_result(request.params(), &mut effects)
