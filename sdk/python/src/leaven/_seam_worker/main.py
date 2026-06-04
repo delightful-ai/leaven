@@ -5,7 +5,7 @@ import asyncio
 from pathlib import Path
 
 from .._seam._wire import JsonObject, JsonRpcId
-from .._seam._wire.json_value import json_object
+from .._seam._wire.payloads import StageRunRequest
 from ..decorators import RegisteredStage
 from .loader import load_stage_from_file
 from .proposer import run_proposer_stage
@@ -24,9 +24,8 @@ def main(argv: list[str] | None = None) -> int:
             stage_name=args.stage_name,
         )
         request = read_request()
-        request_id = _request_id(request.get("id"))
-        params = json_object(request["params"])
-        result = asyncio.run(run_stage(stage, params, lm_model=args.lm_model))
+        request_id = request.request_id
+        result = asyncio.run(run_stage(stage, request.params, lm_model=args.lm_model))
     except Exception as error:
         write_error(request_id, str(error))
         return 1
@@ -46,7 +45,7 @@ def _parser() -> argparse.ArgumentParser:
 
 async def run_stage(
     stage: RegisteredStage[object, object],
-    params: JsonObject,
+    params: StageRunRequest,
     *,
     lm_model: str,
 ) -> JsonObject:
@@ -56,16 +55,6 @@ async def run_stage(
     if stage.role == "proposer":
         return await run_proposer_stage(stage, params, lm_model=lm_model)
     raise ValueError(f"unsupported worker stage role: {stage.role!r}")
-
-
-def _request_id(value: object) -> JsonRpcId:
-    if value is None:
-        return value
-    if isinstance(value, bool):
-        raise TypeError("stage.run JSON-RPC id must be a string, integer, or null")
-    if isinstance(value, str | int):
-        return value
-    raise TypeError("stage.run JSON-RPC id must be a string, integer, or null")
 
 
 __all__ = ["main", "run_stage"]

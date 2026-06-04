@@ -1658,6 +1658,33 @@ acceptance:
           result inspection, config/capability JSON construction, and
           worker-role request parsing, all still needing narrower typed-owner
           follow-up before full Python seam typedness closeout.
+      - kind: python_stage_worker_ingress_decodes_generated_stage_request
+        paths:
+          - sdk/python/src/leaven/_seam_worker/protocol.py
+          - sdk/python/src/leaven/_seam_worker/main.py
+          - sdk/python/src/leaven/_seam_worker/runner.py
+          - sdk/python/src/leaven/_seam_worker/proposer.py
+          - sdk/python/tests/_seam_worker/test_protocol.py
+          - sdk/python/tests/test_stage_surface.py
+          - sdk/python/tests/test_proposer_worker.py
+        commands:
+          - cd sdk/python && uv run ruff check src/leaven/_seam_worker tests/_seam_worker tests/test_stage_surface.py tests/test_proposer_worker.py
+          - cd sdk/python && uv run ty check src/leaven/_seam_worker tests/_seam_worker tests/test_stage_surface.py tests/test_proposer_worker.py
+          - cd sdk/python && uv run pytest tests/_seam_worker tests/test_stage_surface.py tests/test_proposer_worker.py -q
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          The Python one-shot stage worker no longer parses stdin into an
+          arbitrary request object and then hand-peels `params["payload"]`.
+          `read_request()` decodes the JSON-RPC envelope with msgspec, rejects
+          missing ids or params, decodes params into the generated
+          `StageRunRequest`, and returns a typed `WorkerRequest`. Worker
+          dispatch now passes that generated request through `main.py`; runner
+          and proposer adapters dispatch on generated `RunnerRequest` and
+          `ProposeRequest` payload variants before converting into the current
+          public Python stage models. Focused protocol tests prove a valid
+          encoded generated request round-trips and the old under-shaped raw
+          stage payload is rejected. This does not close callback result
+          JSON, public stage model codegen, or every schema-owned JSON leaf.
       - kind: typed_plan_expression_owner_foundation
         commits:
           - a0397e66
