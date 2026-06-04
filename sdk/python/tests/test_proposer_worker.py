@@ -96,6 +96,9 @@ async def propose(req, cx):
                         "batch_id": "pb_worker",
                         "proposal_ids": ["prop_worker"],
                         "status": "committed",
+                        "graph_revision": "rev_worker_proposal",
+                        "data_classes": ["public"],
+                        "replayability": "fully_managed",
                         "receipt": "wrec_worker_proposal",
                     },
                     "receipts": [

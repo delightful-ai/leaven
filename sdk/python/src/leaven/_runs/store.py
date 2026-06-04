@@ -2,19 +2,19 @@
 
 import json
 from pathlib import Path
-from typing import Any
 
+from .._seam._wire.json_value import json_object
 from ..result import Optimized
 from .codec import decode_optimized, encode_optimized
 
 RUN_RESULT_FILE = "optimized.json"
 
 
-def persist_optimized(
-    result: Optimized[Any],
+def persist_optimized[A](
+    result: Optimized[A],
     *,
     root: str | Path = ".leaven/runs",
-) -> Optimized[Any]:
+) -> Optimized[A]:
     """Persist an optimized result and return the copy carrying its run directory."""
     run_dir = Path(root) / _run_dir_name(result.run_id)
     summary = result.summary.model_copy(update={"run_dir": str(run_dir)})
@@ -30,10 +30,10 @@ def persist_optimized(
     return persisted
 
 
-def open_optimized(path: str | Path) -> Optimized[Any]:
+def open_optimized(path: str | Path) -> Optimized[object]:
     """Open a persisted optimized result from a run directory or result file."""
     result_path = _result_path(Path(path))
-    return decode_optimized(json.loads(result_path.read_text(encoding="utf-8")))
+    return decode_optimized(json_object(json.loads(result_path.read_text(encoding="utf-8"))))
 
 
 def list_run_dirs(root: str | Path = ".leaven/runs") -> list[str]:

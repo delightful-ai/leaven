@@ -27,6 +27,9 @@ def test_callback_receipts_extract_typed_lm_cost() -> None:
                     content=[LmContentPart(kind="text", text="ok")],
                 ),
                 receipt="lmrec_main",
+                graph_revision="rev_callback_lm",
+                data_classes=["public"],
+                replayability="boundary_managed",
                 cost=Cost(input_tokens=7, output_tokens=3),
             ),
             receipts=[
@@ -72,6 +75,9 @@ def test_callback_receipts_extract_typed_agent_blob_refs() -> None:
                         receipt="agentcmdrec_main",
                     )
                 ],
+                graph_revision="rev_callback_agent",
+                data_classes=["public", "transcript.raw"],
+                replayability="boundary_managed",
                 transcript_ref=BlobRef(
                     id="blob_transcript",
                     sha256="abc123",
@@ -124,6 +130,9 @@ def test_proposal_receipts_extract_typed_submitted_ids() -> None:
                 batch_id="batch_main",
                 proposal_ids=["proposal_1", "proposal_2"],
                 status="submitted",
+                graph_revision="rev_callback_proposal",
+                data_classes=["public"],
+                replayability="fully_managed",
                 receipt="proprec_main",
             ),
             receipts=[

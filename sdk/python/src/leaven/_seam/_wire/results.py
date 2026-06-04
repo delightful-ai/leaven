@@ -342,6 +342,9 @@ class LmResponsePrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_de
     kind: Literal["lm_response"]
     message: LmMessageRecord
     receipt: str
+    graph_revision: str
+    data_classes: list[str]
+    replayability: Replayability
     cost: Cost | UnsetType = UNSET
 
 
@@ -349,13 +352,19 @@ class AgentCommandRecord(Struct, frozen=True, forbid_unknown_fields=True, omit_d
     argv: list[str]
     status: str
     receipt: str | UnsetType = UNSET
+    stdout_ref: BlobRef | UnsetType = UNSET
+    stderr_ref: BlobRef | UnsetType = UNSET
+    files: dict[str, BlobRef] | UnsetType = UNSET
 
 
 class AgentSessionPrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
     kind: Literal["agent_session"]
     status: str
     receipt: str
+    graph_revision: str
     commands: list[AgentCommandRecord]
+    data_classes: list[str]
+    replayability: Replayability
     transcript_ref: BlobRef | UnsetType = UNSET
     cost: Cost | UnsetType = UNSET
 
@@ -379,6 +388,9 @@ class ProposalBatchPrimary(Struct, frozen=True, forbid_unknown_fields=True):
     batch_id: str
     proposal_ids: list[str]
     status: str
+    graph_revision: str
+    data_classes: list[str]
+    replayability: Replayability
     receipt: str
 
 

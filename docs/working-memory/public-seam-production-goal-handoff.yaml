@@ -1712,6 +1712,40 @@ acceptance:
           the command-worker stdin/stdout path. Remaining JSON-shaped leaves
           include public stage result rendering, config/capability JSON
           construction, and schema-owned arbitrary JSON fields.
+      - kind: python_generated_results_match_rust_primary_fields_and_runs_projection_uses_json_object
+        paths:
+          - sdk/python/codegen/result_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/results.py
+          - sdk/python/src/leaven/_runs/codec.py
+          - sdk/python/src/leaven/_runs/store.py
+          - sdk/python/src/leaven/runs.py
+          - sdk/python/tests/_runs/test_codec.py
+          - sdk/python/tests/_seam/_wire/test_results.py
+          - sdk/python/tests/_seam_worker/test_callbacks.py
+          - sdk/python/tests/test_stage_surface.py
+          - sdk/python/tests/test_proposer_worker.py
+          - sdk/python/tests/test_proposal_submission.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run ruff check src/leaven/_runs src/leaven/runs.py src/leaven/_seam/_wire/results.py codegen/result_codegen.py tests/_runs tests/_seam/_wire/test_results.py tests/_seam_worker/test_callbacks.py tests/test_stage_surface.py tests/test_proposer_worker.py tests/test_proposal_submission.py tests/test_run_inspection.py tests/test_run_receipt_inspection.py tests/test_reward_vector_inspection.py tests/test_optimize_public_seam_e2e.py tests/test_optimize_proposer_mechanics.py
+          - cd sdk/python && uv run ty check src/leaven/_runs src/leaven/runs.py src/leaven/_seam/_wire/results.py codegen/result_codegen.py tests/_runs tests/_seam/_wire/test_results.py tests/_seam_worker/test_callbacks.py tests/test_stage_surface.py tests/test_proposer_worker.py tests/test_proposal_submission.py tests/test_run_inspection.py tests/test_run_receipt_inspection.py tests/test_reward_vector_inspection.py tests/test_optimize_public_seam_e2e.py tests/test_optimize_proposer_mechanics.py
+          - cd sdk/python && uv run pytest tests/_runs tests/_seam/_wire/test_results.py tests/_seam_worker/test_callbacks.py tests/test_stage_surface.py tests/test_proposer_worker.py tests/test_proposal_submission.py tests/test_run_inspection.py tests/test_run_receipt_inspection.py tests/test_reward_vector_inspection.py tests/test_optimize_public_seam_e2e.py tests/test_optimize_proposer_mechanics.py -q
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          The generated Python result records now accept the Rust-produced
+          primary fields for LM, agent, and proposal-submit callback results:
+          `graph_revision`, `data_classes`, `replayability`, agent command
+          stdout/stderr/file blob refs, and proposal batch replayability facts.
+          This keeps strict `forbid_unknown_fields` viable after callback
+          responses moved to generated msgspec decoding. The Python
+          `optimized.json` projection codec no longer uses `typing.Any` or
+          `dict[str, Any]`; it validates the persisted JSON envelope as a
+          `JsonObject`, reconstructs prompt artifacts explicitly, and returns
+          `Optimized[object]` from `lv.runs.open(...)` to make the unknown
+          artifact type honest. This is not Rust-owned checkpoint readback
+          closeout: `lv.runs.open(...)` still reads the Python-written
+          projection until the durable Rust run/checkpoint export path owns
+          the reopen surface.
       - kind: typed_plan_expression_owner_foundation
         commits:
           - a0397e66

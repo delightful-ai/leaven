@@ -6,19 +6,18 @@ analysis, ablation reports, sharing run state with teammates.
 """
 
 from pathlib import Path
-from typing import Any
 
 from ._runs import list_run_dirs, load_rust_run_readback, open_optimized
 from .result import Optimized
 from .run_inspection import RunInspection, inspect_optimized
 
 
-def open(path: str | Path) -> Optimized[Any]:
+def open(path: str | Path) -> Optimized[object]:
     """Open a completed run from its run directory.
 
-    The artifact type is `Any` here because the run's artifact type is
-    determined at write time; callers can cast if they know the type.
-    A future API revision may make this generic over a passed artifact type.
+    The artifact type is `object` because the run's artifact type is
+    determined at write time; callers can narrow if they know the type. A
+    future API revision may make this generic over a passed artifact decoder.
     """
     return open_optimized(path)
 

@@ -64,6 +64,9 @@ def test_generated_lm_result_decodes_msgspec_payload() -> None:
                 "content": [{"kind": "text", "text": "ok"}],
             },
             "receipt": "lmrec_1",
+            "graph_revision": "rev_lm",
+            "data_classes": ["public"],
+            "replayability": "boundary_managed",
             "cost": {"usd_micro": 10, "input_tokens": 1, "output_tokens": 2},
         },
         "receipts": [
