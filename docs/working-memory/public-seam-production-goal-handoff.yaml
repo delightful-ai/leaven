@@ -102,6 +102,11 @@ designed_surface:
       read scope, not hardcoded worker payloads.
     - Workspace methods must be owned by workspace backends and scoped handles.
     - Blob refs without byte retrieval are not sufficient for inspection closeout.
+    - >-
+      Leaf JSON slots such as metadata/info refs, plan expressions,
+      preconditions, output values, PlanError details, stage case inputs, and
+      nested result fragments require typed owners. Do not treat "explicit
+      approval" as an available closeout path for those islands.
     - Python may decode and shape-check seam JSON, but it must not duplicate
       Rust's authority for method semantics, capability policy, receipt truth,
       or graph mutation.
@@ -788,10 +793,12 @@ acceptance:
           - fe4b0471
           - f692bb8a
           - 2dc4abe3
+          - 1e35b978
+          - 2a75e72c
         paths:
           - crates/leaven-seam-service/src/run_bound_service/mod.rs
           - crates/leaven-seam-service/src/run_bound_service/params.rs
-          - crates/leaven-seam-service/src/run_bound_service/extension_result.rs
+          - crates/leaven-seam-service/src/run_bound_service/extension_result/
           - crates/leaven-seam-service/src/run_bound_service/tests.rs
           - crates/leaven-acp-stage-bridge/src/graph_host.rs
         commands:
@@ -801,6 +808,7 @@ acceptance:
           - cargo test -p leaven-seam-service run_bound_service -- --nocapture
           - cargo check -p leaven-seam-service
           - cargo test -p leaven-acp-stage-bridge
+          - python3 scripts/lint-line-count.py
         note: >-
           The run-bound service and ACP stage-bridge graph host now parse
           worker callback params once into typed private records for
@@ -815,11 +823,15 @@ acceptance:
           parse graph-backed PlanResult primary values and write receipts into
           method-specific records, reject wrong primary kinds, missing matching
           receipts, and untyped nested assessment replayability rows, then
-          serialize the ACP extension result from typed records. This is not
-          row closure: ACP/runtime ingress still receives transport JSON,
-          nested host-domain payloads, ACP result payloads, event payloads, and
-          wider PlanResult/effect leaf slots remain explicit `Value` islands
-          that require typed-owner follow-up slices.
+          serialize the ACP extension result from typed records. The latest
+          service split keeps configured extension result projection in
+          `configured_extension.rs` and run-bound method projections in
+          method-specific child modules, with crate-private helpers rather than
+          public facade exports. This is not row closure: ACP/runtime ingress
+          still receives transport JSON, nested host-domain payloads, ACP
+          result payloads, event payloads, and wider PlanResult/effect leaf
+          slots remain explicit `Value` islands that require typed-owner
+          follow-up slices; there is no standing approval to keep them raw.
       - kind: typed_acp_stage_bridge_event_projection_foundation
         commits:
           - 7530355b
@@ -1137,9 +1149,37 @@ acceptance:
           foundation slice: JSON-RPC envelope Raw buffers, error data, and
           bounded leaf JSON slots such as metadata/info refs, plan expressions,
           preconditions, output values, stage payload case inputs, and nested
-          result fragments remain before this row can be marked done. Later
-          Rust slices type PlanError details and runner case-input facts, but
-          Python generation still needs to consume those owners.
+          result fragments remain blockers before this row can be marked done.
+          Later Rust slices type PlanError details and runner case-input facts,
+          but Python generation still needs to consume those owners. No
+          remaining leaf slot may close by approval-only exception.
+      - kind: typed_plan_expression_owner_foundation
+        commits:
+          - a0397e66
+        paths:
+          - crates/leaven-public-seam/src/plan.rs
+          - crates/leaven-public-seam/src/plan/expression.rs
+          - crates/leaven-public-seam/src/plan/model.rs
+          - crates/leaven-public-seam/src/plan/assessment.rs
+          - crates/leaven-public-seam/src/plan/dialect_usage.rs
+          - crates/leaven-public-seam/src/plan/parse.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_document.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_dialects.rs
+        commands:
+          - cargo fmt --check
+          - cargo check -p leaven-public-seam
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_document
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_dialects
+          - python3 scripts/lint-line-count.py
+        note: >-
+          Plan IR `let` expressions now parse into typed Rust owners:
+          `PlanExpression`, `PlanExpressionKind`, and
+          `PlanGraphQuerySource`. Since-revision event-source validation and
+          event-query counting are owned by typed graph-query source facts
+          instead of ad hoc JSON walking in `PlanDocument`. This removes
+          "plan expressions" from the approval-needed leaf list on the Rust
+          public-seam side, but Python generated records and remaining Plan
+          execution/result leaves still need typed-owner follow-up.
       - kind: typed_locked_method_identity_foundation
         paths:
           - crates/leaven-public-seam/src/acp_profile/methods.rs
@@ -1503,6 +1543,30 @@ acceptance:
           SDK quality row: public case/evidence/output/proposal/run-inspection
           payload models and remaining private optimize/run surfaces still need
           typed owners or explicit private classification.
+      - kind: public_core_json_surface_typing
+        commits:
+          - 023d85e3
+        paths:
+          - sdk/python/src/leaven/json_value.py
+          - sdk/python/src/leaven/output.py
+          - sdk/python/src/leaven/output_record.py
+          - sdk/python/src/leaven/proposal.py
+          - sdk/python/src/leaven/task.py
+          - sdk/python/src/leaven/stage_payloads.py
+        commands:
+          - cd sdk/python && uv run ruff format --check src/leaven/json_value.py src/leaven/output.py src/leaven/output_record.py src/leaven/proposal.py src/leaven/task.py src/leaven/stage_payloads.py
+          - cd sdk/python && uv run ruff check src/leaven/json_value.py src/leaven/output.py src/leaven/output_record.py src/leaven/proposal.py src/leaven/task.py src/leaven/stage_payloads.py
+          - cd sdk/python && uv run ty check src/leaven/json_value.py src/leaven/output.py src/leaven/output_record.py src/leaven/proposal.py src/leaven/task.py src/leaven/stage_payloads.py
+          - cd sdk/python && uv run pytest tests/test_product_surface_ring.py tests/test_stage_surface.py tests/test_proposal_submission.py tests/test_optimize_proposer_mechanics.py tests/test_proposer_worker.py -q
+          - rg -n "from typing import Any|\bAny\b|dict\[str, Any\]|Mapping\[str, Any\]|from __future__" sdk/python/src/leaven/json_value.py sdk/python/src/leaven/output.py sdk/python/src/leaven/output_record.py sdk/python/src/leaven/proposal.py sdk/python/src/leaven/task.py sdk/python/src/leaven/stage_payloads.py
+        note: >-
+          Core public SDK records now use `JsonValue`, `JsonObject`,
+          `JsonSchema`, and concrete model types instead of `typing.Any` on
+          output contracts, output records, proposal/task records, and stage
+          payload declarations. This narrows the public API JSON boundary but
+          does not close the row: case/evidence/run-inspection/builders,
+          generated wire consumption, and examples still need the same typed
+          owner treatment.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this
