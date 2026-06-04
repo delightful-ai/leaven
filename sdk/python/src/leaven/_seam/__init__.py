@@ -23,6 +23,7 @@ from .plans import (
     CaseLoadRequest,
     LmCompleteRequest,
     ProposalSubmitRequest,
+    SeamJsonRpcRequest,
     StageRunProposeRequest,
     StageRunRequest,
 )
@@ -42,6 +43,7 @@ __all__ = [
     "SeamClient",
     "SeamClientError",
     "SeamExecutionContext",
+    "SeamJsonRpcRequest",
     "SeamServiceConfig",
     "StageRunProposeRequest",
     "StageRunRequest",

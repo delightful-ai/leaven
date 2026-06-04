@@ -1198,6 +1198,37 @@ acceptance:
           does not yet expose method-specific result classes for every retained
           locked method and remaining Plan/body leaf records still need typed
           owners.
+      - kind: typed_private_client_request_cutover
+        paths:
+          - sdk/python/src/leaven/_seam/plans.py
+          - sdk/python/src/leaven/_seam/client.py
+          - sdk/python/src/leaven/_seam_worker/context.py
+          - sdk/python/src/leaven/_stage_runtime/protocols.py
+          - sdk/python/src/leaven/builders/agent.py
+          - sdk/python/src/leaven/builders/lm.py
+          - sdk/python/src/leaven/builders/proposals.py
+          - sdk/python/src/leaven/builders/case.py
+          - sdk/python/tests/_seam/test_client.py
+          - sdk/python/tests/test_stage_surface.py
+          - sdk/python/tests/test_proposal_submission.py
+          - sdk/python/tests/builders/test_case.py
+        commands:
+          - cd sdk/python && uv run ruff check src/leaven/_seam/plans.py src/leaven/_seam/client.py src/leaven/_seam/__init__.py src/leaven/builders/agent.py src/leaven/builders/lm.py src/leaven/builders/proposals.py src/leaven/builders/case.py src/leaven/_stage_runtime/protocols.py src/leaven/_seam_worker/context.py tests/_seam/test_client.py tests/builders/test_case.py tests/test_stage_surface.py tests/test_proposal_submission.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/plans.py src/leaven/_seam/client.py src/leaven/_seam/__init__.py src/leaven/builders/agent.py src/leaven/builders/lm.py src/leaven/builders/proposals.py src/leaven/builders/case.py src/leaven/_stage_runtime/protocols.py src/leaven/_seam_worker/context.py tests/_seam/test_client.py tests/builders/test_case.py tests/test_stage_surface.py tests/test_proposal_submission.py
+          - cd sdk/python && uv run pytest tests/_seam/test_client.py tests/builders/test_case.py tests/test_stage_surface.py tests/test_proposal_submission.py -q
+          - rg -n "def agent_run\\(self, request: (JsonObject|dict)|def lm_complete\\(self, request: (JsonObject|dict)|def proposal_submit\\(self, request: (JsonObject|dict)|def case_load\\(self, request: (JsonObject|dict)|self\\._client\\.(agent_run|lm_complete|proposal_submit|case_load)\\(request\\.to_json_rpc\\(\\)\\)|request_value\\[\\\"method\\\"\\]|request_value\\[\\\"params\\\"\\]" sdk/python/src/leaven sdk/python/tests -g '*.py'
+        note: >-
+          The private Python client no longer accepts caller-assembled
+          JSON-RPC dictionaries for the SDK-consumed locked methods. Request
+          records now own `method` and `to_params()`, the client codec lowers
+          those typed records into JSON-RPC envelopes, SDK builders pass typed
+          request records through their private protocols, and the callback
+          worker records receipts from the typed request method before
+          serializing only at the transport pipe. The focused grep is expected
+          to return no matches. This closes the suspicious compatibility point
+          in the private client, but does not close the row: every retained
+          locked method still needs generated request/result bindings and
+          remaining JSON leaf slots still need typed owners.
       - kind: typed_plan_expression_owner_foundation
         commits:
           - a0397e66

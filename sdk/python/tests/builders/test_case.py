@@ -2,6 +2,7 @@ from typing import Literal
 
 import pytest
 
+from leaven._seam import CaseLoadRequest
 from leaven._seam._wire.results import CaseLoadResult, CaseRecordPrimary
 from leaven.builders.case import CaseBuilder
 from leaven.json_value import JsonObject, JsonValue
@@ -30,8 +31,8 @@ async def test_load_uses_bound_public_seam_client() -> None:
         include=("input", "target", "metadata"),
     )
 
-    assert client.request_value["method"] == "leaven/case.load"
-    params = _json_object(client.request_value["params"])
+    assert client.request_value.method == "leaven/case.load"
+    params = client.request_value.to_params()
     assert params["plan_id"] == "plancasebuilder001"
     assert params["return"] == ["case_load"]
     assert params["commit"] == {"kind": "no_graph_writes"}
@@ -62,7 +63,7 @@ async def test_single_field_methods_use_locked_case_routes() -> None:
     await case_builder.load("case_target", include=("target",))
     await case_builder.load("case_metadata", include=("metadata",))
 
-    assert [request["method"] for request in client.requests] == [
+    assert [request.method for request in client.requests] == [
         "leaven/case.input",
         "leaven/case.target",
         "leaven/case.metadata",
@@ -83,22 +84,27 @@ async def test_target_denial_propagates_seam_error() -> None:
     with pytest.raises(PermissionError, match="case target denied"):
         await case_builder.load("case_hidden", include=("target",))
 
-    assert client.request_value["method"] == "leaven/case.target"
+    assert client.request_value.method == "leaven/case.target"
 
 
 class FakeCaseSeamClient:
     def __init__(self, *, deny_target: bool = False) -> None:
         self.deny_target = deny_target
-        self.request_value: JsonObject = {}
-        self.requests: list[JsonObject] = []
+        self.request_value = CaseLoadRequest(
+            request_id="unset",
+            plan_id="unset",
+            case_id="unset",
+            include=("input",),
+        )
+        self.requests: list[CaseLoadRequest] = []
 
-    def case_load(self, request: JsonObject) -> CaseLoadResult:
+    def case_load(self, request: CaseLoadRequest) -> CaseLoadResult:
         self.request_value = request
         self.requests.append(request)
-        method = _case_method(request["method"])
+        method = _case_method(request.method)
         if self.deny_target and method == "leaven/case.target":
             raise PermissionError("case target denied")
-        params = _json_object(request["params"])
+        params = request.to_params()
         ops = _json_array(params["ops"])
         op = _json_object(ops[0])
         expr = _json_object(op["expr"])
@@ -126,7 +132,7 @@ class FakeCaseSeamClient:
         )
 
 
-def _case_method(value: JsonValue) -> CaseMethod:
+def _case_method(value: str) -> CaseMethod:
     if value == "leaven/case.load":
         return "leaven/case.load"
     if value == "leaven/case.input":
@@ -148,8 +154,8 @@ def _json_array(value: JsonValue) -> list[JsonValue]:
     return value
 
 
-def _op_name(request: JsonObject) -> JsonValue:
-    params = _json_object(request["params"])
+def _op_name(request: CaseLoadRequest) -> JsonValue:
+    params = request.to_params()
     ops = _json_array(params["ops"])
     op = _json_object(ops[0])
     return op["name"]

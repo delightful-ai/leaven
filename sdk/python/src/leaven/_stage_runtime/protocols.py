@@ -3,14 +3,14 @@
 from collections.abc import Sequence
 from typing import Protocol
 
-from .._seam._wire import JsonObject
+from .._seam import AgentRunRequest, ProposalSubmitRequest
 from .._seam._wire.results import AgentRunResult, LmCompleteResult, ProposalSubmitResult
 
 
 class AgentRunCallback(Protocol):
     """Driver capability required by callback-backed `cx.agent.run`."""
 
-    def agent_run(self, request: JsonObject) -> AgentRunResult:
+    def agent_run(self, request: AgentRunRequest) -> AgentRunResult:
         """Send one `leaven/agent.run` request through the active stage seam."""
         ...
 
@@ -18,7 +18,7 @@ class AgentRunCallback(Protocol):
 class ProposalSubmitCallback(Protocol):
     """Driver capability required by callback-backed `cx.proposals.submit`."""
 
-    def proposal_submit(self, request: JsonObject) -> ProposalSubmitResult:
+    def proposal_submit(self, request: ProposalSubmitRequest) -> ProposalSubmitResult:
         """Send one `leaven/proposal.submit_batch` request through the active stage seam."""
         ...
 

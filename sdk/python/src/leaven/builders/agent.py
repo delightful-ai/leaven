@@ -61,7 +61,7 @@ class AgentSession(BaseModel):
 class _SeamRequester(Protocol):
     """Small private protocol AgentBuilder needs from the seam client."""
 
-    def agent_run(self, request: JsonObject) -> AgentRunResult: ...
+    def agent_run(self, request: AgentRunRequest) -> AgentRunResult: ...
 
 
 class AgentBuilder:
@@ -140,7 +140,7 @@ class AgentBuilder:
             allowed_commands=allowed_commands,
             input_classes=input_classes,
         )
-        result = await asyncio.to_thread(self._client.agent_run, request.to_json_rpc())
+        result = await asyncio.to_thread(self._client.agent_run, request)
         return _agent_session_from_result(result)
 
 

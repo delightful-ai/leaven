@@ -9,7 +9,9 @@ import leaven as lv
 from leaven._handles import WorkspaceHandle
 from leaven._receipts import CallReceipt
 from leaven._seam import (
+    AgentRunRequest,
     CommandRunnerStageConfig,
+    LmCompleteRequest,
     MockRunnerStageConfig,
     OpenAiLmRuntimeConfig,
     StageRunRequest,
@@ -33,6 +35,7 @@ from leaven.artifacts.prompt import PromptArtifact
 from leaven.assessment import RewardAssessment
 from leaven.builders.agent import AgentBuilder
 from leaven.builders.lm import LmBuilder
+from leaven.json_value import JsonObject, JsonValue
 from leaven.optimize import _to_optimized
 from leaven.run_status import UnsupportedRunFact, project_cost_usage
 
@@ -115,15 +118,22 @@ async def test_agent_builder_run_uses_bound_public_seam_client() -> None:
         allowed_commands=["codex"],
     )
 
-    assert client.request_value["method"] == "leaven/agent.run"
-    params = client.request_value["params"]
+    assert client.request_value.method == "leaven/agent.run"
+    params = client.request_value.to_params()
     assert params["plan_id"] == "planagentbuilder001"
-    assert params["ops"][0]["call"]["kind"] == "workspace_materialize"
-    assert params["ops"][1]["call"]["kind"] == "agent_run"
-    assert params["ops"][1]["call"]["workspace"] == "ws_agent_builder_materialized"
-    assert params["ops"][1]["call"]["instructions"]["task"] == "Return a short answer."
-    assert params["ops"][1]["call"]["tool_policy"]["allowed_commands"] == ["codex"]
-    assert params["ops"][1]["call"]["output"] == {"kind": "final_message", "max_bytes": 256}
+    ops = _json_array(params["ops"])
+    workspace_op = _json_object(ops[0])
+    agent_op = _json_object(ops[1])
+    workspace_call = _json_object(workspace_op["call"])
+    agent_call = _json_object(agent_op["call"])
+    instructions = _json_object(agent_call["instructions"])
+    tool_policy = _json_object(agent_call["tool_policy"])
+    assert workspace_call["kind"] == "workspace_materialize"
+    assert agent_call["kind"] == "agent_run"
+    assert agent_call["workspace"] == "ws_agent_builder_materialized"
+    assert instructions["task"] == "Return a short answer."
+    assert tool_policy["allowed_commands"] == ["codex"]
+    assert agent_call["output"] == {"kind": "final_message", "max_bytes": 256}
     assert session.transcript_ref == "blob_agent_builder_transcript"
     assert session.transcript is not None
     assert session.transcript.blob_id == "blob_agent_builder_transcript"
@@ -153,22 +163,28 @@ async def test_lm_builder_complete_uses_bound_public_seam_client() -> None:
         input_classes=["public"],
     )
 
-    assert client.request_value["method"] == "leaven/lm.complete"
-    params = client.request_value["params"]
+    assert client.request_value.method == "leaven/lm.complete"
+    params = client.request_value.to_params()
     assert params["plan_id"] == "planlmbuilder001"
     assert params["return"] == ["completion"]
-    op = params["ops"][0]
-    assert op["call"]["kind"] == "lm_complete"
-    assert op["call"]["purpose"] == "python.sdk"
-    assert op["call"]["model"] == "gpt-4.1-mini"
-    assert op["call"]["model_role"] == "reflector"
-    assert op["call"]["messages"][0]["content"][0]["text"] == "Say ok."
-    assert op["call"]["sampling"] == {
+    ops = _json_array(params["ops"])
+    op = _json_object(ops[0])
+    call = _json_object(op["call"])
+    messages = _json_array(call["messages"])
+    message = _json_object(messages[0])
+    content = _json_array(message["content"])
+    content_part = _json_object(content[0])
+    assert call["kind"] == "lm_complete"
+    assert call["purpose"] == "python.sdk"
+    assert call["model"] == "gpt-4.1-mini"
+    assert call["model_role"] == "reflector"
+    assert content_part["text"] == "Say ok."
+    assert call["sampling"] == {
         "temperature": 0.2,
         "max_output_tokens": 12,
         "stop": ["DONE"],
     }
-    assert op["call"]["input_classes"] == ["public"]
+    assert call["input_classes"] == ["public"]
     assert response.text == "ok"
     assert response.usage == {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}
     assert response.cost_usd == 0.000042
@@ -627,11 +643,28 @@ def test_optimized_result_exposes_assessments_rewards_and_lineage() -> None:
     ]
 
 
+def _json_object(value: JsonValue) -> JsonObject:
+    assert isinstance(value, dict)
+    return value
+
+
+def _json_array(value: JsonValue) -> list[JsonValue]:
+    assert isinstance(value, list)
+    return value
+
+
 class FakeSeamClient:
     def __init__(self) -> None:
-        self.request_value: dict = {}
+        self.request_value = AgentRunRequest(
+            request_id="unset",
+            plan_id="unset",
+            candidate="unset",
+            workspace="unset",
+            instructions={"task": "unset"},
+            idempotency_prefix="unset",
+        )
 
-    def agent_run(self, request: dict) -> AgentRunResult:
+    def agent_run(self, request: AgentRunRequest) -> AgentRunResult:
         self.request_value = request
         return AgentRunResult(
             method="leaven/agent.run",
@@ -664,9 +697,15 @@ class FakeSeamClient:
 
 class FakeLmSeamClient:
     def __init__(self) -> None:
-        self.request_value: dict = {}
+        self.request_value = LmCompleteRequest(
+            request_id="unset",
+            plan_id="unset",
+            idempotency_key="unset",
+            messages=[{"role": "user", "content": [{"kind": "text", "text": "unset"}]}],
+            model="unset",
+        )
 
-    def lm_complete(self, request: dict) -> LmCompleteResult:
+    def lm_complete(self, request: LmCompleteRequest) -> LmCompleteResult:
         self.request_value = request
         return LmCompleteResult(
             method="leaven/lm.complete",

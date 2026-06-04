@@ -130,14 +130,14 @@ class LmBuilder:
             input_classes=input_classes,
         )
         self._seq += 1
-        result = await asyncio.to_thread(self._client.lm_complete, request.to_json_rpc())
+        result = await asyncio.to_thread(self._client.lm_complete, request)
         return _lm_response_from_result(result, model=selected_model)
 
 
 class _SeamRequester(Protocol):
     """Small private protocol LmBuilder needs from the seam client."""
 
-    def lm_complete(self, request: JsonObject) -> LmCompleteResult: ...
+    def lm_complete(self, request: LmCompleteRequest) -> LmCompleteResult: ...
 
 
 def _messages_to_wire(

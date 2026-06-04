@@ -7,7 +7,6 @@ from typing import Literal, Protocol
 from msgspec import UNSET
 
 from .._seam import CaseLoadRequest
-from .._seam._wire import JsonObject as WireJsonObject
 from .._seam._wire.payloads import ReceiptRef
 from .._seam._wire.results import CaseLoadResult
 from ..case import Case
@@ -80,7 +79,7 @@ class CaseBuilder:
             run_id=self._run_id,
         )
         self._seq += 1
-        result = await asyncio.to_thread(self._client.case_load, request.to_json_rpc())
+        result = await asyncio.to_thread(self._client.case_load, request)
         return _case_from_result(result)
 
     async def load_batch(
@@ -96,7 +95,7 @@ class CaseBuilder:
 class _SeamRequester(Protocol):
     """Small private protocol CaseBuilder needs from the seam client."""
 
-    def case_load(self, request: WireJsonObject) -> CaseLoadResult: ...
+    def case_load(self, request: CaseLoadRequest) -> CaseLoadResult: ...
 
 
 def _case_from_result(result: CaseLoadResult) -> Case:

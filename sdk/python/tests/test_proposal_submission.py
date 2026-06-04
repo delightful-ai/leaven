@@ -1,8 +1,10 @@
 import pytest
 
 from leaven._receipts import CallReceipt, QueryReceipt
+from leaven._seam import ProposalSubmitRequest
 from leaven._seam._wire.results import ProposalBatchPrimary, ProposalSubmitResult
 from leaven.builders.proposals import ProposalsBuilder
+from leaven.json_value import JsonObject, JsonValue
 from leaven.proposal import ProposalBatch, ProposalEffect
 
 
@@ -31,15 +33,18 @@ async def test_proposals_builder_submits_agent_session_batch_through_seam() -> N
 
     submission = await proposals.submit(batch)
 
-    assert client.request_value["method"] == "leaven/proposal.submit_batch"
-    params = client.request_value["params"]
+    assert client.request_value.method == "leaven/proposal.submit_batch"
+    params = client.request_value.to_params()
     assert params["plan_id"] == "planproposalbuilder001"
     assert params["return"] == ["proposal_batch"]
-    op = params["ops"][0]
+    ops = _json_array(params["ops"])
+    op = _json_object(ops[0])
     assert op["kind"] == "write"
     assert op["idempotency_key"] == "proposal-builder-test-submit"
-    assert op["write"]["kind"] == "submit_proposal_batch"
-    proposal = op["write"]["proposals"][0]
+    write = _json_object(op["write"])
+    assert write["kind"] == "submit_proposal_batch"
+    proposals = _json_array(write["proposals"])
+    proposal = _json_object(proposals[0])
     assert proposal["effect"] == {
         "kind": "change_from_agent_session",
         "target": "cand_parent",
@@ -77,11 +82,26 @@ async def test_proposals_builder_requires_bound_seam_client() -> None:
         )
 
 
+def _json_object(value: JsonValue) -> JsonObject:
+    assert isinstance(value, dict)
+    return value
+
+
+def _json_array(value: JsonValue) -> list[JsonValue]:
+    assert isinstance(value, list)
+    return value
+
+
 class FakeProposalSeamClient:
     def __init__(self) -> None:
-        self.request_value: dict = {}
+        self.request_value = ProposalSubmitRequest(
+            request_id="unset",
+            plan_id="unset",
+            idempotency_key="unset",
+            proposals=[],
+        )
 
-    def proposal_submit(self, request: dict) -> ProposalSubmitResult:
+    def proposal_submit(self, request: ProposalSubmitRequest) -> ProposalSubmitResult:
         self.request_value = request
         return ProposalSubmitResult(
             method="leaven/proposal.submit_batch",

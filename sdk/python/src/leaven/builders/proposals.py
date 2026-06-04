@@ -26,7 +26,7 @@ class ProposalSubmission(BaseModel):
 class _SeamRequester(Protocol):
     """Small private protocol ProposalsBuilder needs from the seam client."""
 
-    def proposal_submit(self, request: JsonObject) -> ProposalSubmitResult: ...
+    def proposal_submit(self, request: ProposalSubmitRequest) -> ProposalSubmitResult: ...
 
 
 class ProposalsBuilder:
@@ -71,7 +71,7 @@ class ProposalsBuilder:
             idempotency_key=f"{self._idempotency_prefix}-submit",
             proposals=[_effect_to_wire(effect, batch) for effect in batch.effects],
         )
-        result = await asyncio.to_thread(self._client.proposal_submit, request.to_json_rpc())
+        result = await asyncio.to_thread(self._client.proposal_submit, request)
         return _proposal_submission_from_result(result)
 
     async def apply(self, submission: ProposalSubmission) -> WriteReceipt:

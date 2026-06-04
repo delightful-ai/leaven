@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 from msgspec import ValidationError, convert
 
-from .._seam import LmCompleteRequest
+from .._seam import AgentRunRequest, LmCompleteRequest, ProposalSubmitRequest, SeamJsonRpcRequest
 from .._seam._wire import JsonObject
 from .._seam._wire.json_value import json_object
 from .._seam._wire.results import AgentRunResult, LmCompleteResult, ProposalSubmitResult
@@ -21,9 +21,9 @@ class JsonRpcCallbackClient:
         self._lm_model = lm_model
         self._receipts = CallbackReceiptLog()
 
-    def _request_result(self, request: JsonObject) -> JsonObject:
+    def _request_result(self, request: SeamJsonRpcRequest) -> JsonObject:
         """Send one callback request and return the public-seam result object."""
-        print(json.dumps(request, sort_keys=True), flush=True)
+        print(json.dumps(request.to_json_rpc(), sort_keys=True), flush=True)
         line = sys.stdin.readline()
         if not line:
             raise RuntimeError("stage host closed before answering callback request")
@@ -31,12 +31,10 @@ class JsonRpcCallbackClient:
         if "error" in response:
             raise RuntimeError(f"stage callback failed: {response['error']}")
         result = json_object(response["result"])
-        method = request.get("method")
-        if isinstance(method, str):
-            self._receipts.record_result(method=method, result=result)
+        self._receipts.record_result(method=request.method, result=result)
         return result
 
-    def agent_run(self, request: JsonObject) -> AgentRunResult:
+    def agent_run(self, request: AgentRunRequest) -> AgentRunResult:
         """Send one `leaven/agent.run` callback and decode the typed result."""
         return _typed_callback_result(
             self._request_result(request),
@@ -44,7 +42,7 @@ class JsonRpcCallbackClient:
             method="leaven/agent.run",
         )
 
-    def proposal_submit(self, request: JsonObject) -> ProposalSubmitResult:
+    def proposal_submit(self, request: ProposalSubmitRequest) -> ProposalSubmitResult:
         """Send one `leaven/proposal.submit_batch` callback and decode the typed result."""
         return _typed_callback_result(
             self._request_result(request),
@@ -89,7 +87,7 @@ class JsonRpcCallbackClient:
             max_tokens=max_tokens,
             stop=stop,
             input_classes=input_classes or ["public"],
-        ).to_json_rpc()
+        )
         return _typed_callback_result(
             self._request_result(request),
             LmCompleteResult,
