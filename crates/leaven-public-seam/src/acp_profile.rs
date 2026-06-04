@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use serde_json::Value;
 
-use crate::PublicSeamError;
+use crate::{PlanDocument, PublicSeamError};
 
 mod extension_result;
 mod lifecycle;
@@ -261,12 +261,14 @@ impl AcpBackpressure {
 pub struct AcpJsonRpcRequestDocument {
     id: String,
     method: LockedMethod,
+    plan: PlanDocument,
 }
 
 impl AcpJsonRpcRequestDocument {
     pub(crate) fn from_plan_valid_value(
         profile: &AcpProfileDocument,
         value: &Value,
+        plan: PlanDocument,
     ) -> Result<Self, PublicSeamError> {
         let object = value
             .as_object()
@@ -297,7 +299,7 @@ impl AcpJsonRpcRequestDocument {
         object
             .get("params")
             .ok_or_else(|| invalid_acp("ACP JSON-RPC request must carry Plan IR params"))?;
-        Ok(Self { id, method })
+        Ok(Self { id, method, plan })
     }
 
     /// JSON-RPC request id, normalized to a string for request/response binding.
@@ -308,6 +310,11 @@ impl AcpJsonRpcRequestDocument {
     /// Leaven ACP extension method.
     pub const fn method(&self) -> LockedMethod {
         self.method
+    }
+
+    /// Validated Plan IR document carried by this request.
+    pub const fn plan_document(&self) -> &PlanDocument {
+        &self.plan
     }
 }
 

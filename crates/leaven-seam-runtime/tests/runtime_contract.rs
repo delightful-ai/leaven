@@ -45,6 +45,23 @@ fn runtime_rejects_unknown_methods_without_reaching_service() {
 }
 
 #[test]
+fn runtime_delivers_typed_plan_document_to_service() {
+    let service = PlanDocumentRecordingService::default();
+    let runtime = runtime(service.clone());
+
+    let response = runtime.handle_value(&request_for(0, "leaven/lm.complete"));
+
+    assert_eq!(
+        error_code(response.value()),
+        JsonRpcErrorCode::MethodUnavailable
+    );
+    assert_eq!(
+        service.plan_facts(),
+        vec![("leaven/lm.complete".to_owned(), "dry_run".to_owned(), 1)]
+    );
+}
+
+#[test]
 fn runtime_validates_stage_run_success_before_returning_jsonrpc_result() {
     let runtime = runtime(StageRunService::Valid);
 
@@ -143,6 +160,35 @@ impl SeamService for RecordingService {
             .lock()
             .unwrap()
             .push("leaven/stage.run".to_owned());
+        Err(SeamServiceError::unavailable("leaven/stage.run"))
+    }
+}
+
+#[derive(Clone, Default)]
+struct PlanDocumentRecordingService {
+    plan_facts: Arc<Mutex<Vec<(String, String, usize)>>>,
+}
+
+impl PlanDocumentRecordingService {
+    fn plan_facts(&self) -> Vec<(String, String, usize)> {
+        self.plan_facts.lock().unwrap().clone()
+    }
+}
+
+impl SeamService for PlanDocumentRecordingService {
+    fn handle_plan(&self, request: SeamPlanRequest<'_>) -> Result<Value, SeamServiceError> {
+        self.plan_facts.lock().unwrap().push((
+            request.method().as_str().to_owned(),
+            request.plan_document().mode_kind().to_owned(),
+            request.plan_document().return_names().len(),
+        ));
+        Err(SeamServiceError::unavailable(request.method().as_str()))
+    }
+
+    fn handle_stage_run(
+        &self,
+        _request: SeamStageRunRequest<'_>,
+    ) -> Result<Value, SeamServiceError> {
         Err(SeamServiceError::unavailable("leaven/stage.run"))
     }
 }

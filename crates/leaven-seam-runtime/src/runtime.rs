@@ -2,7 +2,7 @@ use std::path::Path;
 
 use leaven_public_seam::{
     AcpJsonRpcRequestDocument, AcpProfileDocument, AcpStageRunRequestDocument, LockedMethod,
-    PublicSeamError, PublicSeamPackage,
+    PlanDocument, PublicSeamError, PublicSeamPackage,
 };
 use serde_json::{Value, json};
 
@@ -240,6 +240,11 @@ impl<'a> SeamPlanRequest<'a> {
     /// Validated Plan IR params.
     pub const fn params(&self) -> &'a Value {
         self.params
+    }
+
+    /// Typed semantic Plan IR document validated from `params`.
+    pub const fn plan_document(&self) -> &PlanDocument {
+        self.document.plan_document()
     }
 }
 

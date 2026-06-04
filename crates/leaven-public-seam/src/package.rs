@@ -412,8 +412,8 @@ impl PublicSeamPackage {
             .ok_or_else(|| PublicSeamError::InvalidScope {
                 message: "ACP JSON-RPC request must carry Plan IR params".to_owned(),
             })?;
-        self.validate_plan_document(params)?;
-        crate::AcpJsonRpcRequestDocument::from_plan_valid_value(profile, value)
+        let plan = self.validate_plan_document(params)?;
+        crate::AcpJsonRpcRequestDocument::from_plan_valid_value(profile, value, plan)
     }
 
     /// Validates an ACP JSON-RPC response carrying a locked extension result.
