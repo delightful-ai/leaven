@@ -15,14 +15,17 @@ predict, no Leaven optimization at all. Use this when you want DSPy
 modules to benefit from Leaven's wire safety without restructuring.
 """
 
+import importlib
+from typing import Any, cast
+
 import leaven as lv
 
 # `dspy` is an optional dep. Install with `uv add dspy-ai` or
 # `pip install 'leaven[dspy]'` to run this example end-to-end.
 try:
-    import dspy
+    dspy = cast("Any", importlib.import_module("dspy"))
 except ImportError:
-    dspy = None  # type: ignore[assignment]
+    dspy = None
 
 
 def main() -> None:

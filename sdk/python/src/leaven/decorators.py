@@ -25,7 +25,7 @@ from typing import Any, Literal, overload
 
 from pydantic import BaseModel, ConfigDict
 
-from .case import Case
+from .case import InputCaseView
 from .contexts import (
     EvaluatorContext,
     JudgeContext,
@@ -62,7 +62,7 @@ class RegisteredStage[A, O](BaseModel):
 EvaluatorFunc = Callable[[EvaluationJob, EvaluatorContext], Awaitable[Any]]
 ReflectorFunc = Callable[[ReflectRequest, ReflectContext], Awaitable[ReflectionResult]]
 ProposerFunc = Callable[[ProposeRequest, ProposeContext], Awaitable[ProposalBatch]]
-RunnerFunc = Callable[[Any, Case, RolloutContext], Awaitable[Any]]
+RunnerFunc = Callable[[Any, InputCaseView, RolloutContext], Awaitable[Any]]
 JudgeFunc = Callable[[JudgeRequest, JudgeContext], Awaitable[Any]]
 
 

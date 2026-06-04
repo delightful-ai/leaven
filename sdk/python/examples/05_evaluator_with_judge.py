@@ -45,31 +45,31 @@ async def evaluate(job: EvaluationJob, cx: lv.EvaluatorContext) -> AssessmentSub
             lifetime="stage_call",
         )
 
-        # Three effects in one ACP round-trip via the batch context manager.
-        async with cx.batch() as b:
-            diff = b.workspace.git_diff(ws, against="parent")
-            tests = b.sandbox.exec(
-                workspace=ws,
-                argv=["pytest", "-q", "tests/", "--json-report"],
-                timeout_s=120,
-                output=lv.output.files(["report.json"], max_bytes=128_000),
-                input_classes=[lv.data_class.CASE_TARGET, lv.data_class.WORKSPACE_FILE],
-                forbidden_input_classes=[lv.data_class.WORKSPACE_SECRET],
-            )
-            judgment = b.agent.run(
-                workspace=ws,
-                instructions=lv.AgentInstructions(
-                    task=f"Judge the candidate's answer against the rubric.\n"
-                    f"Question: {case.input['question']}\n"
-                    f"Rubric: {(case.target or {}).get('rubric', 'exact match')}",
-                    system=lv.roles.JUDGE,
-                ),
-                output=lv.output.json_schema(JudgeResult),
-                input_classes=[lv.data_class.CASE_TARGET, lv.data_class.CANDIDATE_OUTPUT],
-                forbidden_input_classes=[lv.data_class.WORKSPACE_SECRET],
-            )
+        diff = await cx.workspace.git_diff(ws, against="parent")
+        tests = await cx.sandbox.exec(
+            workspace=ws,
+            argv=["pytest", "-q", "tests/", "--json-report"],
+            timeout_s=120,
+            output=lv.output.files(["report.json"], max_bytes=128_000),
+            input_classes=[lv.data_class.CASE_TARGET, lv.data_class.WORKSPACE_FILE],
+            forbidden_input_classes=[lv.data_class.WORKSPACE_SECRET],
+        )
+        judgment = await cx.agent.run(
+            workspace=ws,
+            instructions=lv.AgentInstructions(
+                task=f"Judge the candidate's answer against the rubric.\n"
+                f"Question: {case.input['question']}\n"
+                f"Rubric: {(case.target or {}).get('rubric', 'exact match')}",
+                system=lv.roles.JUDGE,
+            ),
+            output=lv.output.json_schema(JudgeResult),
+            input_classes=[lv.data_class.CASE_TARGET, lv.data_class.CANDIDATE_OUTPUT],
+            forbidden_input_classes=[lv.data_class.WORKSPACE_SECRET],
+        )
 
-        parsed: JudgeResult = judgment.parsed  # typed by json_schema(JudgeResult)
+        if not isinstance(judgment.parsed, JudgeResult):
+            raise TypeError("judge response did not match JudgeResult")
+        parsed = judgment.parsed
         composite = 0.7 * parsed.score + 0.3 * (1.0 if tests.exit_code == 0 else 0.0)
 
         assessments.append(

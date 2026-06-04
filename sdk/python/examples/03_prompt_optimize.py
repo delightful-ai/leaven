@@ -65,7 +65,7 @@ async def amain() -> None:
     seed = next(c for c in result.frontier if c.parent_id is None)
     print(f"seed score:  {seed.summary_score:.3f}")
     print(f"best score:  {result.best.summary_score:.3f}")
-    first = next(result.assessments())
+    first = next(iter(result.assessments()))
     print("reward vector:")
     for reward in first.rewards:
         print(f"  {reward.id}: {reward.value:.3f} (weight {reward.weight:g})")

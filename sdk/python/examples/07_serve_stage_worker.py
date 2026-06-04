@@ -60,7 +60,9 @@ async def judge(req: JudgeRequest, cx: lv.JudgeContext) -> AssessmentWrite:
         response_format=lv.output.json_schema(JudgeOutcome),
         model_role="judge",
     )
-    outcome: JudgeOutcome = response.parsed
+    if not isinstance(response.parsed, JudgeOutcome):
+        raise TypeError("judge response did not match JudgeOutcome")
+    outcome = response.parsed
 
     return AssessmentWrite.pairwise(
         candidates=req.candidates,

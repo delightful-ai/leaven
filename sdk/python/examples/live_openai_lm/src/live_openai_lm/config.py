@@ -18,7 +18,7 @@ class LiveOpenAiConfig:
     api_key_env: str
 
     @classmethod
-    def from_env(cls) -> LiveOpenAiConfig:
+    def from_env(cls) -> "LiveOpenAiConfig":
         """Read the live-proof settings from environment variables."""
         return cls(
             enabled=os.environ.get(LIVE_ENV) == "1",

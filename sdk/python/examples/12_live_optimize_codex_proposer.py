@@ -16,6 +16,7 @@ import os
 
 import leaven as lv
 from leaven.proposal import ProposalBatch, ProposalEffect
+from leaven.stage_payloads import ProposeRequest
 
 
 @lv.runner
@@ -33,7 +34,7 @@ async def exact(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> 
 
 
 @lv.proposer(stage_id="examples.live_codex_proposer.submit_agent_change")
-async def propose(req, cx):
+async def propose(req: ProposeRequest, cx: lv.ProposeContext) -> ProposalBatch:
     """Run Codex in the parent workspace and submit a receipt-bound proposal."""
     session = await cx.agent.run(
         workspace=cx.parent_workspace,
