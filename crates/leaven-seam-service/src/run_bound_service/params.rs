@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use super::RunBoundGraphEffectError;
 
-pub(crate) struct ProposalApplyParams<'a> {
+pub(super) struct ProposalApplyParams<'a> {
     pub(crate) plan_id: &'a str,
     pub(crate) write: ProposalApplyWrite,
 }
@@ -83,7 +83,7 @@ impl AssessmentSubmitParams<'_> {
     }
 }
 
-pub(crate) struct EventEmitParams<'a> {
+pub(super) struct EventEmitParams<'a> {
     pub(crate) plan_id: &'a str,
     pub(crate) write: EventEmitWrite<'a>,
     pub(crate) return_values: Option<&'a Value>,

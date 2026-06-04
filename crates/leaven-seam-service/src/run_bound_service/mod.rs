@@ -29,6 +29,7 @@ use extension_result::{
     proposal_apply_extension_result,
 };
 use params::{
+    AssessmentSubmitParams, EventEmitParams, EvaluationRequestParams, ProposalApplyParams,
     assessment_submit_params, evaluation_request_params, event_emit_params, proposal_apply_params,
 };
 
@@ -133,18 +134,22 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
         params: &Value,
     ) -> Result<Value, RunBoundGraphEffectError> {
         match method {
-            LockedMethod::ProposalApply => self.proposal_apply(params),
-            LockedMethod::EvaluationRequest => self.evaluation_request(params),
-            LockedMethod::AssessmentSubmit => self.assessment_submit(params),
-            LockedMethod::EventEmit => self.event_emit(params),
+            LockedMethod::ProposalApply => self.proposal_apply(proposal_apply_params(params)?),
+            LockedMethod::EvaluationRequest => {
+                self.evaluation_request(evaluation_request_params(params)?)
+            }
+            LockedMethod::AssessmentSubmit => self.assessment_submit(assessment_submit_params(params)?),
+            LockedMethod::EventEmit => self.event_emit(event_emit_params(params)?),
             other => Err(RunBoundGraphEffectError::UnsupportedMethod {
                 method: other.as_str().to_owned(),
             }),
         }
     }
 
-    fn proposal_apply(&self, params: &Value) -> Result<Value, RunBoundGraphEffectError> {
-        let params = proposal_apply_params(params)?;
+    fn proposal_apply(
+        &self,
+        params: ProposalApplyParams<'_>,
+    ) -> Result<Value, RunBoundGraphEffectError> {
         let batch_id = params.write.proposal_batch_id;
         let batch = self
             .batches
@@ -167,8 +172,10 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
         proposal_apply_extension_result(&plan_result)
     }
 
-    fn evaluation_request(&self, params: &Value) -> Result<Value, RunBoundGraphEffectError> {
-        let params = evaluation_request_params(params)?;
+    fn evaluation_request(
+        &self,
+        params: EvaluationRequestParams<'_>,
+    ) -> Result<Value, RunBoundGraphEffectError> {
         let requester = self
             .evaluation_requester
             .as_ref()
@@ -197,8 +204,10 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
         evaluation_request_extension_result(&plan_result)
     }
 
-    fn assessment_submit(&self, params: &Value) -> Result<Value, RunBoundGraphEffectError> {
-        let params = assessment_submit_params(params)?;
+    fn assessment_submit(
+        &self,
+        params: AssessmentSubmitParams<'_>,
+    ) -> Result<Value, RunBoundGraphEffectError> {
         let request_id = params.write.evaluation_request_id;
         let submitter = self
             .assessment_submitter
@@ -220,8 +229,7 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
         assessment_submit_extension_result(&plan_result)
     }
 
-    fn event_emit(&self, params: &Value) -> Result<Value, RunBoundGraphEffectError> {
-        let params = event_emit_params(params)?;
+    fn event_emit(&self, params: EventEmitParams<'_>) -> Result<Value, RunBoundGraphEffectError> {
         let event = &params.write;
         let event_id = format!("event_{}", event.name);
         self.context

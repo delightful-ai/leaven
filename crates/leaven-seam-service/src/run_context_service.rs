@@ -25,7 +25,8 @@ use leaven_store_inline::InlineEvidenceStore;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::service::{SeamExecutionContextConfig, extension_result_for_plan_report};
+use crate::configured_extension::extension_result_for_plan_report;
+use crate::service::SeamExecutionContextConfig;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
