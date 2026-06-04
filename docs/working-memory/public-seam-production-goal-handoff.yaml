@@ -1185,6 +1185,7 @@ acceptance:
           - 8a4ecdda
           - bc76cccc
           - 078e6d28
+          - a2093c55
         paths:
           - crates/leaven-public-seam/src/plan.rs
           - crates/leaven-public-seam/src/result.rs
@@ -1236,10 +1237,13 @@ acceptance:
           details now have typed Rust owners (`PlanErrorDocument`,
           `PlanErrorCode`, and `PlanErrorDetails`), and failed-call receipt
           validation compares typed PlanErrors instead of anonymous JSON
-          objects. This is still not full typed seam closeout: nested Plan IR
+          objects. Capability grant `resource`, `constraints`, and `limits`
+          now parse into closed Rust owners and delegation/permission checks
+          compare typed grant policy facts instead of raw maps. This is still
+          not full typed seam closeout: capability subjects, nested Plan IR
           operation bodies, nested Plan Result values/receipts, evidence, cost,
-          blob refs, capability resources, service execution payloads, and
-          generated Python Raw islands remain typed-seam blockers to eliminate.
+          blob refs, service execution payloads, and generated Python Raw
+          islands remain typed-seam blockers to eliminate.
       - kind: typed_internal_method_dispatch_foundation
         commits:
           - 56276ac0
