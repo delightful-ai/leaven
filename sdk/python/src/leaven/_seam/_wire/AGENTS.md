@@ -2,8 +2,9 @@
 
 `leaven._seam._wire` is the private typed wire-codec layer for the
 Leaven-owned public seam. It may parse generated public-seam method metadata,
-encode JSON-RPC envelopes, decode JSON-RPC envelopes with `msgspec`, and expose
-JSON value aliases used by `_seam` request builders.
+encode JSON-RPC envelopes, decode JSON-RPC envelopes with `msgspec`, expose
+top-level generated payload/result records, and expose JSON value aliases used
+by `_seam` request builders.
 
 It must not own transport, process execution, retries, request routing, service
 semantics, capability policy, or Rust graph truth. Those stay in neighboring

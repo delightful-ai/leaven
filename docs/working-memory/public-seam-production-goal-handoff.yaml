@@ -666,8 +666,11 @@ acceptance:
           envelopes, UNSET result/error handling, method-specific result
           decoding, batch routing by id, unknown-method rejection, null-id
           handling, and typed JSON-object coercion without public/wire `Any`.
-          This is still a foundation slice: full generated Plan IR and Plan
-          Result payload structs remain before this row can be marked done.
+          A follow-up slice added generated top-level msgspec payload/result
+          records for Plan IR, Plan Result, and Stage Run, with nested operation
+          and receipt bodies intentionally kept as msgspec Raw. This is still a
+          foundation slice: full generated nested Plan IR and Plan Result schema
+          branches remain before this row can be marked done.
     closeout_check: "Reading only `optimized.json` written by Python is a proxy."
 
   - id: python_wire_codegen_msgspec_boundary
