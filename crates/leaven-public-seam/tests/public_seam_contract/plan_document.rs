@@ -4,12 +4,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use leaven_lm::{MessageContentPart, OutputMode, Role};
 use leaven_public_seam::{
     AgentCommandOutputRefs, CapabilityDocument, PlanAgentRunOutcome, PlanAgentRunRequest,
-    PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest,
-    PlanExecutionContext, PlanExecutionHost, PlanGraphQueryOutcome, PlanGraphQueryRequest,
-    PlanGraphReadScope, PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanOperationKind,
-    PlanSandboxExecOutcome, PlanSandboxExecRequest, PlanWorkspaceMaterializeOutcome,
+    PlanCallKind, PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanCommitKind,
+    PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
+    PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope, PlanLmCompleteOutcome,
+    PlanLmCompleteRequest, PlanMode, PlanOperationKind, PlanQueryKind, PlanSandboxExecOutcome,
+    PlanSandboxExecRequest, PlanSchemaVersion, PlanWorkspaceMaterializeOutcome,
     PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest,
-    PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest, PublicSeamError, PublicSeamPackage,
+    PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest, PlanWriteKind, PublicSeamError,
+    PublicSeamPackage,
 };
 use serde_json::{Value, json};
 
@@ -19,6 +21,10 @@ fn plan_ir_family_accepts_typed_let_call_write_documents() {
     let plan = typed_let_call_write_plan();
     let document = package.validate_plan_document(&plan).unwrap();
 
+    assert_eq!(document.plan_id().as_str(), "plankind001");
+    assert_eq!(document.schema_version(), PlanSchemaVersion::V1);
+    assert_eq!(document.mode(), PlanMode::DryRun);
+    assert_eq!(document.commit(), PlanCommitKind::NoGraphWrites);
     assert_eq!(
         document.operation_kinds(),
         &[
@@ -28,9 +34,34 @@ fn plan_ir_family_accepts_typed_let_call_write_documents() {
         ]
     );
     assert_eq!(document.return_names(), &["status"]);
+    assert_eq!(document.return_bindings()[0].as_str(), "status");
     assert_eq!(document.consistency_kind(), "latest_at_start");
     assert_eq!(document.mode_kind(), "dry_run");
     assert_eq!(document.commit_kind(), "no_graph_writes");
+    let [let_op, call_op, write_op] = document.operations() else {
+        panic!("expected representative let/call/write plan");
+    };
+    assert_eq!(let_op.name(), "prompt");
+    assert_eq!(let_op.kind(), PlanOperationKind::Let);
+    assert_eq!(let_op.query_kind(), None);
+    assert_eq!(call_op.name(), "completion");
+    assert_eq!(call_op.kind(), PlanOperationKind::Call);
+    assert_eq!(call_op.call_kind(), Some(PlanCallKind::LmComplete));
+    assert_eq!(write_op.name(), "status");
+    assert_eq!(write_op.kind(), PlanOperationKind::Write);
+    assert_eq!(write_op.write_kind(), Some(PlanWriteKind::EmitRunEvent));
+}
+
+#[test]
+fn plan_ir_accessors_classify_direct_query_operation_identity() {
+    let package = package();
+    let plan = latest_at_start_graph_query_plan();
+    let document = package.validate_plan_document(&plan).unwrap();
+
+    let query_op = &document.operations()[0];
+    assert_eq!(query_op.name(), "events");
+    assert_eq!(query_op.kind(), PlanOperationKind::Let);
+    assert_eq!(query_op.query_kind(), Some(PlanQueryKind::GraphQuery));
 }
 
 #[test]

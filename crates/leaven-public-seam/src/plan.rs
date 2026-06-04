@@ -6,8 +6,12 @@ use crate::{PinnedDialectEvaluator, PublicSeamError};
 /// Schema-valid public-seam Plan IR document classified by core operation family.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanDocument {
+    plan_id: PlanId,
+    schema_version: PlanSchemaVersion,
     operation_kinds: Vec<PlanOperationKind>,
+    operations: Vec<PlanOperation>,
     return_names: Vec<String>,
+    return_bindings: Vec<PlanReturnBinding>,
     consistency_kind: String,
     at_revision: Option<String>,
     since_revision: Option<String>,
@@ -17,8 +21,8 @@ pub struct PlanDocument {
     pinned_jsonpath_count: usize,
     strict_template_count: usize,
     assessment_score_outputs: AssessmentScoreOutputUsage,
-    mode_kind: String,
-    commit_kind: String,
+    mode: PlanMode,
+    commit: PlanCommitKind,
 }
 
 impl PlanDocument {
@@ -30,7 +34,11 @@ impl PlanDocument {
             .get("ops")
             .and_then(Value::as_array)
             .ok_or_else(|| invalid_plan("plan ops must be an array"))?;
+        let plan_id = PlanId::parse(required_object_string(object, "plan_id")?)?;
+        let schema_version =
+            PlanSchemaVersion::parse(required_object_string(object, "schema_version")?)?;
         let mut operation_kinds = Vec::with_capacity(ops.len());
+        let mut operations = Vec::with_capacity(ops.len());
         let consistency = object
             .get("consistency")
             .and_then(Value::as_object)
@@ -53,9 +61,13 @@ impl PlanDocument {
         let mut assessment_score_outputs = AssessmentScoreOutputUsage::default();
         for op in ops {
             dialect_usage.inspect_value(op)?;
-            let kind = required_string(op, "kind")?;
-            let operation_kind = match kind {
-                "let" => {
+            let op_object = op
+                .as_object()
+                .ok_or_else(|| invalid_plan("plan op must be an object"))?;
+            let operation = PlanOperation::from_schema_valid_object(op_object)?;
+            let operation_kind = operation.kind;
+            match operation.detail {
+                PlanOperationDetail::Let { .. } => {
                     if let Some(expr) = op.as_object().and_then(|object| object.get("expr")) {
                         validate_events_revision_sources(
                             expr,
@@ -69,38 +81,32 @@ impl PlanDocument {
                             until_revision.as_deref(),
                         );
                     }
-                    PlanOperationKind::Let
                 }
-                "call" => {
-                    ensure_nested_kind(op, "call", "call")?;
-                    PlanOperationKind::Call
-                }
-                "write" => {
+                PlanOperationDetail::Call { .. } => {}
+                PlanOperationDetail::Write { .. } => {
                     let write = op
                         .get("write")
                         .ok_or_else(|| invalid_plan("write op is missing `write`"))?;
-                    if nested_kind(Some(write), "write")? == "submit_assessments" {
+                    if operation.write_kind() == Some(PlanWriteKind::SubmitAssessments) {
                         assessment_score_outputs.inspect_submit_assessments(write)?;
                     }
-                    PlanOperationKind::Write
-                }
-                "extension" => {
-                    return Err(invalid_plan(
-                        "top-level extension plan op is not part of the locked Let/Call/Write family",
-                    ));
-                }
-                other => {
-                    return Err(invalid_plan(format!(
-                        "unknown plan operation kind `{other}`"
-                    )));
                 }
             };
             operation_kinds.push(operation_kind);
+            operations.push(operation);
         }
+        let return_names = string_array(object.get("return"), "return")?;
 
         Ok(Self {
+            plan_id,
+            schema_version,
             operation_kinds,
-            return_names: string_array(object.get("return"), "return")?,
+            operations,
+            return_bindings: return_names
+                .iter()
+                .map(|name| PlanReturnBinding(name.clone()))
+                .collect(),
+            return_names,
             consistency_kind,
             at_revision,
             since_revision,
@@ -110,9 +116,19 @@ impl PlanDocument {
             pinned_jsonpath_count: dialect_usage.jsonpaths,
             strict_template_count: dialect_usage.templates,
             assessment_score_outputs,
-            mode_kind: nested_kind(object.get("mode"), "mode")?.to_owned(),
-            commit_kind: nested_kind(object.get("commit"), "commit")?.to_owned(),
+            mode: PlanMode::parse(nested_kind(object.get("mode"), "mode")?)?,
+            commit: PlanCommitKind::parse(nested_kind(object.get("commit"), "commit")?)?,
         })
+    }
+
+    /// Stable Plan IR identifier.
+    pub const fn plan_id(&self) -> &PlanId {
+        &self.plan_id
+    }
+
+    /// Locked Plan IR schema version.
+    pub const fn schema_version(&self) -> PlanSchemaVersion {
+        self.schema_version
     }
 
     /// Core operation family in document order.
@@ -120,9 +136,19 @@ impl PlanDocument {
         &self.operation_kinds
     }
 
+    /// Typed operation metadata in document order.
+    pub fn operations(&self) -> &[PlanOperation] {
+        &self.operations
+    }
+
     /// Return binding names in document order.
     pub fn return_names(&self) -> &[String] {
         &self.return_names
+    }
+
+    /// Typed return bindings in document order.
+    pub fn return_bindings(&self) -> &[PlanReturnBinding] {
+        &self.return_bindings
     }
 
     /// Consistency mode discriminator.
@@ -199,13 +225,226 @@ impl PlanDocument {
 
     /// Evaluation mode discriminator.
     pub fn mode_kind(&self) -> &str {
-        &self.mode_kind
+        self.mode.as_str()
+    }
+
+    /// Evaluation mode.
+    pub const fn mode(&self) -> PlanMode {
+        self.mode
     }
 
     /// Commit policy discriminator.
     pub fn commit_kind(&self) -> &str {
-        &self.commit_kind
+        self.commit.as_str()
     }
+
+    /// Commit policy.
+    pub const fn commit(&self) -> PlanCommitKind {
+        self.commit
+    }
+}
+
+/// Stable Plan IR identifier.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanId(String);
+
+impl PlanId {
+    fn parse(value: &str) -> Result<Self, PublicSeamError> {
+        if value.trim().is_empty() {
+            return Err(invalid_plan("plan_id must not be empty"));
+        }
+        Ok(Self(value.to_owned()))
+    }
+
+    /// String form carried on the wire.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// Locked Plan IR schema version.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PlanSchemaVersion {
+    /// `leaven.plan.v1`.
+    V1,
+}
+
+impl PlanSchemaVersion {
+    fn parse(value: &str) -> Result<Self, PublicSeamError> {
+        match value {
+            "leaven.plan.v1" => Ok(Self::V1),
+            other => Err(invalid_plan(format!(
+                "unknown Plan IR schema_version `{other}`"
+            ))),
+        }
+    }
+
+    /// String form carried on the wire.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::V1 => "leaven.plan.v1",
+        }
+    }
+}
+
+/// Plan execution mode.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PlanMode {
+    /// Execute live effects.
+    Execute,
+    /// Validate and return a no-effect result.
+    DryRun,
+    /// Resolve effect outputs from cache/replayable material only.
+    RequireCached,
+    /// Rebuild the result from supplied receipts.
+    Replay,
+}
+
+impl PlanMode {
+    fn parse(value: &str) -> Result<Self, PublicSeamError> {
+        match value {
+            "execute" => Ok(Self::Execute),
+            "dry_run" => Ok(Self::DryRun),
+            "require_cached" => Ok(Self::RequireCached),
+            "replay" => Ok(Self::Replay),
+            other => Err(invalid_plan(format!("unknown plan mode `{other}`"))),
+        }
+    }
+
+    /// String form carried on the wire.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Execute => "execute",
+            Self::DryRun => "dry_run",
+            Self::RequireCached => "require_cached",
+            Self::Replay => "replay",
+        }
+    }
+}
+
+/// Plan graph commit policy.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PlanCommitKind {
+    /// No graph writes are allowed.
+    NoGraphWrites,
+    /// Graph writes commit atomically or fail together.
+    GraphWritesAtomic,
+    /// Graph writes may commit sequentially.
+    GraphWritesSequential,
+}
+
+impl PlanCommitKind {
+    fn parse(value: &str) -> Result<Self, PublicSeamError> {
+        match value {
+            "no_graph_writes" => Ok(Self::NoGraphWrites),
+            "graph_writes_atomic" => Ok(Self::GraphWritesAtomic),
+            "graph_writes_sequential" => Ok(Self::GraphWritesSequential),
+            other => Err(invalid_plan(format!("unknown plan commit kind `{other}`"))),
+        }
+    }
+
+    /// String form carried on the wire.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::NoGraphWrites => "no_graph_writes",
+            Self::GraphWritesAtomic => "graph_writes_atomic",
+            Self::GraphWritesSequential => "graph_writes_sequential",
+        }
+    }
+}
+
+/// Binding requested by a Plan IR `return` entry.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanReturnBinding(String);
+
+impl PlanReturnBinding {
+    /// Binding name carried on the wire.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// Typed metadata for one top-level Plan IR operation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanOperation {
+    name: String,
+    kind: PlanOperationKind,
+    detail: PlanOperationDetail,
+}
+
+impl PlanOperation {
+    fn from_schema_valid_object(
+        object: &serde_json::Map<String, Value>,
+    ) -> Result<Self, PublicSeamError> {
+        let name = required_object_string(object, "name")?.to_owned();
+        let kind = PlanOperationKind::parse(required_object_string(object, "kind")?)?;
+        let detail = match kind {
+            PlanOperationKind::Let => PlanOperationDetail::Let {
+                query_kind: object
+                    .get("expr")
+                    .and_then(|expr| nested_kind(Some(expr), "expr").ok())
+                    .and_then(PlanQueryKind::parse),
+            },
+            PlanOperationKind::Call => {
+                let call = object
+                    .get("call")
+                    .ok_or_else(|| invalid_plan("call op is missing `call`"))?;
+                PlanOperationDetail::Call {
+                    call_kind: PlanCallKind::parse(nested_kind(Some(call), "call")?)?,
+                }
+            }
+            PlanOperationKind::Write => {
+                let write = object
+                    .get("write")
+                    .ok_or_else(|| invalid_plan("write op is missing `write`"))?;
+                PlanOperationDetail::Write {
+                    write_kind: PlanWriteKind::parse(nested_kind(Some(write), "write")?)?,
+                }
+            }
+        };
+        Ok(Self { name, kind, detail })
+    }
+
+    /// Operation binding name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Top-level operation family.
+    pub const fn kind(&self) -> PlanOperationKind {
+        self.kind
+    }
+
+    /// Call kind for `call` operations.
+    pub const fn call_kind(&self) -> Option<PlanCallKind> {
+        match self.detail {
+            PlanOperationDetail::Call { call_kind } => Some(call_kind),
+            _ => None,
+        }
+    }
+
+    /// Write kind for `write` operations.
+    pub const fn write_kind(&self) -> Option<PlanWriteKind> {
+        match self.detail {
+            PlanOperationDetail::Write { write_kind } => Some(write_kind),
+            _ => None,
+        }
+    }
+
+    /// Direct query expression kind for `let` operations.
+    pub const fn query_kind(&self) -> Option<PlanQueryKind> {
+        match self.detail {
+            PlanOperationDetail::Let { query_kind } => query_kind,
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PlanOperationDetail {
+    Let { query_kind: Option<PlanQueryKind> },
+    Call { call_kind: PlanCallKind },
+    Write { write_kind: PlanWriteKind },
 }
 
 /// Locked Plan IR core operation family.
@@ -217,6 +456,140 @@ pub enum PlanOperationKind {
     Call,
     /// Staged graph mutation intent.
     Write,
+}
+
+impl PlanOperationKind {
+    fn parse(value: &str) -> Result<Self, PublicSeamError> {
+        match value {
+            "let" => Ok(Self::Let),
+            "call" => Ok(Self::Call),
+            "write" => Ok(Self::Write),
+            "extension" => Err(invalid_plan(
+                "top-level extension plan op is not part of the locked Let/Call/Write family",
+            )),
+            other => Err(invalid_plan(format!(
+                "unknown plan operation kind `{other}`"
+            ))),
+        }
+    }
+
+    /// String form carried on the wire.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Let => "let",
+            Self::Call => "call",
+            Self::Write => "write",
+        }
+    }
+}
+
+/// Locked Plan IR call operation kind.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PlanCallKind {
+    /// Provider-neutral LM completion call.
+    LmComplete,
+    /// Agent runtime call.
+    AgentRun,
+    /// Sandbox command call.
+    SandboxExec,
+    /// Workspace materialization call.
+    WorkspaceMaterialize,
+    /// Workspace release call.
+    WorkspaceRelease,
+}
+
+impl PlanCallKind {
+    fn parse(value: &str) -> Result<Self, PublicSeamError> {
+        match value {
+            "lm_complete" => Ok(Self::LmComplete),
+            "agent_run" => Ok(Self::AgentRun),
+            "sandbox_exec" => Ok(Self::SandboxExec),
+            "workspace_materialize" => Ok(Self::WorkspaceMaterialize),
+            "workspace_release" => Ok(Self::WorkspaceRelease),
+            other => Err(invalid_plan(format!("unknown plan call kind `{other}`"))),
+        }
+    }
+
+    /// String form carried on the wire.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::LmComplete => "lm_complete",
+            Self::AgentRun => "agent_run",
+            Self::SandboxExec => "sandbox_exec",
+            Self::WorkspaceMaterialize => "workspace_materialize",
+            Self::WorkspaceRelease => "workspace_release",
+        }
+    }
+}
+
+/// Locked Plan IR write operation kind.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PlanWriteKind {
+    /// Submit proposal candidates.
+    SubmitProposalBatch,
+    /// Submit assessment records.
+    SubmitAssessments,
+    /// Request evaluator execution.
+    RequestEvaluation,
+    /// Apply proposal candidates.
+    ApplyProposalBatch,
+    /// Emit a run event.
+    EmitRunEvent,
+}
+
+impl PlanWriteKind {
+    fn parse(value: &str) -> Result<Self, PublicSeamError> {
+        match value {
+            "submit_proposal_batch" => Ok(Self::SubmitProposalBatch),
+            "submit_assessments" => Ok(Self::SubmitAssessments),
+            "request_evaluation" => Ok(Self::RequestEvaluation),
+            "apply_proposal_batch" => Ok(Self::ApplyProposalBatch),
+            "emit_run_event" => Ok(Self::EmitRunEvent),
+            other => Err(invalid_plan(format!("unknown plan write kind `{other}`"))),
+        }
+    }
+
+    /// String form carried on the wire.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::SubmitProposalBatch => "submit_proposal_batch",
+            Self::SubmitAssessments => "submit_assessments",
+            Self::RequestEvaluation => "request_evaluation",
+            Self::ApplyProposalBatch => "apply_proposal_batch",
+            Self::EmitRunEvent => "emit_run_event",
+        }
+    }
+}
+
+/// Direct query expression kind for top-level `let` operations.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PlanQueryKind {
+    /// Graph query expression.
+    GraphQuery,
+    /// Case query expression.
+    CaseQuery,
+    /// Workspace query expression.
+    WorkspaceQuery,
+}
+
+impl PlanQueryKind {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "graph_query" => Some(Self::GraphQuery),
+            "case_query" => Some(Self::CaseQuery),
+            "workspace_query" => Some(Self::WorkspaceQuery),
+            _ => None,
+        }
+    }
+
+    /// String form carried on the wire.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::GraphQuery => "graph_query",
+            Self::CaseQuery => "case_query",
+            Self::WorkspaceQuery => "workspace_query",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -630,17 +1003,6 @@ fn is_arbitrary_json_slot(key: &str) -> bool {
     )
 }
 
-fn ensure_nested_kind(value: &Value, field: &str, owner: &str) -> Result<(), PublicSeamError> {
-    let _ = value
-        .get(field)
-        .ok_or_else(|| invalid_plan(format!("{owner} op is missing `{field}`")))?
-        .as_object()
-        .and_then(|object| object.get("kind"))
-        .and_then(Value::as_str)
-        .ok_or_else(|| invalid_plan(format!("{owner} op `{field}` must carry a typed kind")))?;
-    Ok(())
-}
-
 fn nested_kind<'a>(value: Option<&'a Value>, field: &str) -> Result<&'a str, PublicSeamError> {
     value
         .and_then(Value::as_object)
@@ -649,12 +1011,14 @@ fn nested_kind<'a>(value: Option<&'a Value>, field: &str) -> Result<&'a str, Pub
         .ok_or_else(|| invalid_plan(format!("plan `{field}` must carry a kind")))
 }
 
-fn required_string<'a>(value: &'a Value, field: &str) -> Result<&'a str, PublicSeamError> {
-    value
-        .as_object()
-        .and_then(|object| object.get(field))
+fn required_object_string<'a>(
+    object: &'a serde_json::Map<String, Value>,
+    field: &str,
+) -> Result<&'a str, PublicSeamError> {
+    object
+        .get(field)
         .and_then(Value::as_str)
-        .ok_or_else(|| invalid_plan(format!("plan op must carry string `{field}`")))
+        .ok_or_else(|| invalid_plan(format!("plan object must carry string `{field}`")))
 }
 
 fn string_array(value: Option<&Value>, field: &str) -> Result<Vec<String>, PublicSeamError> {

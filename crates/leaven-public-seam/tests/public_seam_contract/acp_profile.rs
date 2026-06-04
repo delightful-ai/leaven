@@ -5,7 +5,8 @@ use leaven_public_seam::{
     AcpAuthenticateRequest, AcpBackpressure, AcpPermissionRequest, AcpProgressDisposition,
     AcpProgressPriority, AcpSessionLifecycle, AcpSessionState, AcpStdioWorkerLaunch,
     AcpWorkerSession, CapabilityDocument, CapabilityRegistry, LockedMethod, MethodAction,
-    MethodPrimaryKind, MethodReceiptExpectation, MethodSchema, PublicSeamError, PublicSeamPackage,
+    MethodPrimaryKind, MethodReceiptExpectation, MethodSchema, PlanResultReceiptKind,
+    PublicSeamError, PublicSeamPackage,
 };
 use serde_json::{Value, json};
 
@@ -1115,6 +1116,14 @@ fn acp_extension_results_require_receipts_capability_fingerprint_and_data_classe
 
     assert_eq!(result.method(), LockedMethod::LmComplete);
     assert_eq!(result.primary_kind(), MethodPrimaryKind::LmResponse);
+    assert_eq!(result.primary().kind(), MethodPrimaryKind::LmResponse);
+    assert_eq!(result.primary().receipt(), Some("lmrec_acp"));
+    assert_eq!(result.expected_receipt().receipt(), "lmrec_acp");
+    assert_eq!(
+        result.expected_receipt().kind(),
+        PlanResultReceiptKind::Call
+    );
+    assert_eq!(result.expected_receipt().call_kind(), Some("lm_complete"));
     assert_eq!(result.capability_fingerprint(), "fp_cap_sha256_acp");
     assert_eq!(result.receipt_count(), 1);
     assert_eq!(result.data_classes(), &["completion.raw".to_owned()]);
@@ -1198,6 +1207,11 @@ fn acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts() {
             .unwrap();
 
         assert_eq!(result.method(), LockedMethod::parse(method).unwrap());
+        assert_eq!(result.primary().kind(), result.primary_kind());
+        assert_eq!(
+            result.expected_receipt().receipt(),
+            receipt["receipt"].as_str().unwrap()
+        );
         assert_eq!(result.receipt_count(), 1);
     }
 }
@@ -1772,7 +1786,7 @@ fn acp_extension_results_reject_forged_result_hashes_for_extension_and_receiptle
             package
                 .validate_acp_extension_result_document(&forged_receiptless_primary)
                 .unwrap_err(),
-            PublicSeamError::InvalidScope { .. }
+            PublicSeamError::InvalidScope { .. } | PublicSeamError::InvalidPlanResult { .. }
         ));
     }
 }

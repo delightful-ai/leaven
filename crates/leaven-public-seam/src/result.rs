@@ -28,6 +28,8 @@ pub struct PlanResultDocument {
     base_revision: String,
     final_revision: String,
     replayability_summary: Replayability,
+    values: Vec<PlanResultValueFact>,
+    receipts: Vec<PlanResultReceiptFact>,
     value_kinds: Vec<String>,
     receipt_kinds: Vec<String>,
     value_data_classes: Vec<(String, Vec<String>)>,
@@ -73,8 +75,13 @@ impl PlanResultDocument {
             base_revision: parts.base_revision.to_owned(),
             final_revision: parts.final_revision.to_owned(),
             replayability_summary,
+            values: value_audit.values,
+            receipts: receipt_facts(&receipt_kinds),
             value_kinds: value_audit.value_kinds,
-            receipt_kinds,
+            receipt_kinds: receipt_kinds
+                .iter()
+                .map(|kind| kind.as_str().to_owned())
+                .collect(),
             value_data_classes: value_audit.value_data_classes,
             error_count: parts.error_count,
             charge_count: parts.charge_count,
@@ -104,12 +111,12 @@ impl PlanResultDocument {
 
     /// Number of typed result values.
     pub fn value_count(&self) -> usize {
-        self.value_kinds.len()
+        self.values.len()
     }
 
     /// Number of operation receipts.
     pub fn receipt_count(&self) -> usize {
-        self.receipt_kinds.len()
+        self.receipts.len()
     }
 
     /// Number of typed plan errors.
@@ -132,6 +139,30 @@ impl PlanResultDocument {
         &self.receipt_kinds
     }
 
+    /// Typed top-level result values present in the result envelope.
+    pub fn values(&self) -> &[PlanResultValueFact] {
+        &self.values
+    }
+
+    /// Typed operation receipts present in the result envelope.
+    pub fn receipts(&self) -> &[PlanResultReceiptFact] {
+        &self.receipts
+    }
+
+    /// Typed top-level charge section facts.
+    pub const fn charges(&self) -> PlanResultChargeFacts {
+        PlanResultChargeFacts {
+            count: self.charge_count,
+        }
+    }
+
+    /// Typed top-level error section facts.
+    pub const fn errors(&self) -> PlanResultErrorFacts {
+        PlanResultErrorFacts {
+            count: self.error_count,
+        }
+    }
+
     /// Data classes carried by each typed result value.
     pub fn value_data_classes(&self) -> &[(String, Vec<String>)] {
         &self.value_data_classes
@@ -140,6 +171,192 @@ impl PlanResultDocument {
     /// Per-assessment replayability carried by assessment batch result values.
     pub fn assessment_batch_replayability(&self) -> &[(String, Replayability)] {
         &self.assessment_batch_replayability
+    }
+}
+
+fn receipt_facts(receipt_kinds: &[PlanResultReceiptKind]) -> Vec<PlanResultReceiptFact> {
+    receipt_kinds
+        .iter()
+        .copied()
+        .map(PlanResultReceiptFact::new)
+        .collect()
+}
+
+/// Typed facts for one top-level Plan Result value.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanResultValueFact {
+    name: String,
+    kind: PlanResultValueKind,
+    data_classes: Vec<String>,
+}
+
+impl PlanResultValueFact {
+    fn new(name: impl Into<String>, kind: PlanResultValueKind, data_classes: Vec<String>) -> Self {
+        Self {
+            name: name.into(),
+            kind,
+            data_classes,
+        }
+    }
+
+    /// Result value binding name in the top-level `values` map.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Typed result value kind.
+    pub const fn kind(&self) -> PlanResultValueKind {
+        self.kind
+    }
+
+    /// Data classes carried by this value.
+    pub fn data_classes(&self) -> &[String] {
+        &self.data_classes
+    }
+}
+
+/// Locked top-level Plan Result value kinds currently accepted by the public seam.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum PlanResultValueKind {
+    GraphSet,
+    CaseRecord,
+    WorkspaceFile,
+    WorkspaceDiff,
+    WorkspaceListing,
+    WorkspaceSnapshot,
+    WorkspaceHandle,
+    LmResponse,
+    AgentSession,
+    SandboxExec,
+    ProposalBatchReceipt,
+    AssessmentBatchReceipt,
+    EvaluationRequestReceipt,
+    EmitRunEvent,
+    ApplyReceipt,
+}
+
+impl PlanResultValueKind {
+    pub(crate) fn parse(value: &str) -> Option<Self> {
+        Some(match value {
+            "graph_set" => Self::GraphSet,
+            "case_record" => Self::CaseRecord,
+            "workspace_file" => Self::WorkspaceFile,
+            "workspace_diff" => Self::WorkspaceDiff,
+            "workspace_listing" => Self::WorkspaceListing,
+            "workspace_snapshot" => Self::WorkspaceSnapshot,
+            "workspace_handle" => Self::WorkspaceHandle,
+            "lm_response" => Self::LmResponse,
+            "agent_session" => Self::AgentSession,
+            "sandbox_exec" => Self::SandboxExec,
+            "proposal_batch_receipt" => Self::ProposalBatchReceipt,
+            "assessment_batch_receipt" => Self::AssessmentBatchReceipt,
+            "evaluation_request_receipt" => Self::EvaluationRequestReceipt,
+            "emit_run_event" => Self::EmitRunEvent,
+            "apply_receipt" => Self::ApplyReceipt,
+            _ => return None,
+        })
+    }
+
+    /// Wire spelling for this value kind.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::GraphSet => "graph_set",
+            Self::CaseRecord => "case_record",
+            Self::WorkspaceFile => "workspace_file",
+            Self::WorkspaceDiff => "workspace_diff",
+            Self::WorkspaceListing => "workspace_listing",
+            Self::WorkspaceSnapshot => "workspace_snapshot",
+            Self::WorkspaceHandle => "workspace_handle",
+            Self::LmResponse => "lm_response",
+            Self::AgentSession => "agent_session",
+            Self::SandboxExec => "sandbox_exec",
+            Self::ProposalBatchReceipt => "proposal_batch_receipt",
+            Self::AssessmentBatchReceipt => "assessment_batch_receipt",
+            Self::EvaluationRequestReceipt => "evaluation_request_receipt",
+            Self::EmitRunEvent => "emit_run_event",
+            Self::ApplyReceipt => "apply_receipt",
+        }
+    }
+}
+
+/// Typed facts for one top-level operation receipt.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PlanResultReceiptFact {
+    kind: PlanResultReceiptKind,
+}
+
+impl PlanResultReceiptFact {
+    pub(crate) const fn new(kind: PlanResultReceiptKind) -> Self {
+        Self { kind }
+    }
+
+    /// Typed operation receipt kind.
+    pub const fn kind(self) -> PlanResultReceiptKind {
+        self.kind
+    }
+}
+
+/// Locked operation receipt kinds accepted by Plan Result validation.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum PlanResultReceiptKind {
+    Query,
+    Call,
+    Write,
+}
+
+impl PlanResultReceiptKind {
+    pub(crate) fn parse(value: &str) -> Option<Self> {
+        Some(match value {
+            "query" => Self::Query,
+            "call" => Self::Call,
+            "write" => Self::Write,
+            _ => return None,
+        })
+    }
+
+    /// Wire spelling for this receipt kind.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Query => "query",
+            Self::Call => "call",
+            Self::Write => "write",
+        }
+    }
+}
+
+/// Typed facts for the top-level Plan Result charge section.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PlanResultChargeFacts {
+    count: usize,
+}
+
+impl PlanResultChargeFacts {
+    /// Number of charge receipts carried by the result.
+    pub const fn count(self) -> usize {
+        self.count
+    }
+
+    /// Whether the result has no charge receipts.
+    pub const fn is_empty(self) -> bool {
+        self.count == 0
+    }
+}
+
+/// Typed facts for the top-level Plan Result error section.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PlanResultErrorFacts {
+    count: usize,
+}
+
+impl PlanResultErrorFacts {
+    /// Number of typed plan errors carried by the result.
+    pub const fn count(self) -> usize {
+        self.count
+    }
+
+    /// Whether the result has no typed plan errors.
+    pub const fn is_empty(self) -> bool {
+        self.count == 0
     }
 }
 
@@ -187,6 +404,7 @@ impl<'a> PlanResultParts<'a> {
 }
 
 struct ValueAudit {
+    values: Vec<PlanResultValueFact>,
     value_kinds: Vec<String>,
     value_data_classes: Vec<(String, Vec<String>)>,
     assessment_batch_replayability: Vec<(String, Replayability)>,
@@ -198,6 +416,7 @@ fn inspect_values(
     receipt_index: &BTreeMap<String, ReceiptAudit>,
     replayability_summary: Replayability,
 ) -> Result<ValueAudit, PublicSeamError> {
+    let mut value_facts = Vec::with_capacity(values.len());
     let mut value_kinds = Vec::with_capacity(values.len());
     let mut value_data_classes = Vec::with_capacity(values.len());
     let mut value_replayability = Vec::with_capacity(values.len());
@@ -208,11 +427,20 @@ fn inspect_values(
             .as_object()
             .ok_or_else(|| invalid_result("plan result value must be an object"))?;
         let value_kind = inspect_value_receipt(value_object, receipt_index)?;
+        let typed_value_kind = PlanResultValueKind::parse(value_kind).ok_or_else(|| {
+            invalid_result(format!("unknown plan result value kind `{value_kind}`"))
+        })?;
         let data_classes = optional_string_set(value_object.get("data_classes"), "data_classes")?;
         validate_value_visibility(name, value_object, &data_classes, receipt_index)?;
         validate_graph_set_assessment_summaries(value_object, receipt_index)?;
+        let data_classes = data_classes.into_iter().collect::<Vec<_>>();
+        value_facts.push(PlanResultValueFact::new(
+            name.to_owned(),
+            typed_value_kind,
+            data_classes.clone(),
+        ));
         value_kinds.push(value_kind.to_owned());
-        value_data_classes.push((name.to_owned(), data_classes.into_iter().collect()));
+        value_data_classes.push((name.to_owned(), data_classes));
         value_replayability.push(required_replayability(value_object.get("replayability"))?);
         if value_kind == "assessment_batch_receipt" {
             inspect_assessment_batch_value(
@@ -228,6 +456,7 @@ fn inspect_values(
         &assessment_batch_replayability,
     )?;
     Ok(ValueAudit {
+        values: value_facts,
         value_kinds,
         value_data_classes,
         assessment_batch_replayability,

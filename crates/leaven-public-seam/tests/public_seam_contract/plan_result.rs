@@ -1,5 +1,5 @@
 use crate::support::{bind_plan_result_hashes, fixture_blob_ref, package};
-use leaven_public_seam::PublicSeamError;
+use leaven_public_seam::{PlanResultReceiptKind, PlanResultValueKind, PublicSeamError};
 use serde_json::{Value, json};
 
 #[test]
@@ -16,8 +16,11 @@ fn plan_result_accepts_typed_success_and_failure_envelopes() {
     assert_eq!(success.receipt_count(), 1);
     assert_eq!(success.error_count(), 0);
     assert_eq!(success.charge_count(), 0);
-    assert_eq!(success.value_kinds(), &["graph_set"]);
-    assert_eq!(success.receipt_kinds(), &["query"]);
+    assert_eq!(success.values()[0].name(), "rows");
+    assert_eq!(success.values()[0].kind(), PlanResultValueKind::GraphSet);
+    assert_eq!(success.receipts()[0].kind(), PlanResultReceiptKind::Query);
+    assert!(success.errors().is_empty());
+    assert!(success.charges().is_empty());
 
     let failure = package
         .validate_plan_result_document(&typed_failure_result())
@@ -27,7 +30,9 @@ fn plan_result_accepts_typed_success_and_failure_envelopes() {
     assert_eq!(failure.receipt_count(), 1);
     assert_eq!(failure.error_count(), 1);
     assert_eq!(failure.charge_count(), 1);
-    assert_eq!(failure.receipt_kinds(), &["call"]);
+    assert_eq!(failure.receipts()[0].kind(), PlanResultReceiptKind::Call);
+    assert_eq!(failure.errors().count(), 1);
+    assert_eq!(failure.charges().count(), 1);
 }
 
 #[test]
@@ -39,10 +44,36 @@ fn plan_result_accepts_query_call_and_write_receipts_as_audit_currency() {
         .unwrap();
 
     assert_eq!(result.receipt_count(), 3);
-    assert_eq!(result.receipt_kinds(), &["query", "call", "write"]);
-    assert!(result.value_kinds().contains(&"graph_set".to_owned()));
-    assert!(result.value_kinds().contains(&"agent_session".to_owned()));
-    assert!(result.value_kinds().contains(&"apply_receipt".to_owned()));
+    assert_eq!(
+        result
+            .receipts()
+            .iter()
+            .map(|receipt| receipt.kind())
+            .collect::<Vec<_>>(),
+        vec![
+            PlanResultReceiptKind::Query,
+            PlanResultReceiptKind::Call,
+            PlanResultReceiptKind::Write
+        ]
+    );
+    assert!(
+        result
+            .values()
+            .iter()
+            .any(|value| value.kind() == PlanResultValueKind::GraphSet)
+    );
+    assert!(
+        result
+            .values()
+            .iter()
+            .any(|value| value.kind() == PlanResultValueKind::AgentSession)
+    );
+    assert!(
+        result
+            .values()
+            .iter()
+            .any(|value| value.kind() == PlanResultValueKind::ApplyReceipt)
+    );
 }
 
 #[test]
@@ -53,7 +84,11 @@ fn plan_result_accepts_assessment_summary_with_score_output_and_evidence_envelop
         .validate_plan_result_document(&assessment_summary_result())
         .unwrap();
 
-    assert_eq!(result.value_kinds(), &["graph_set"]);
+    assert_eq!(result.values()[0].kind(), PlanResultValueKind::GraphSet);
+    assert_eq!(
+        result.values()[0].data_classes(),
+        &["candidate.output".to_owned(), "public".to_owned()]
+    );
     assert_eq!(
         result.value_data_classes(),
         &[(

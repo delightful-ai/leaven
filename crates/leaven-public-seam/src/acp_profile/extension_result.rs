@@ -5,13 +5,15 @@ use super::{
     required_array, required_string, string_array,
 };
 use crate::{
-    PublicSeamError,
+    PlanResultReceiptKind, PublicSeamError,
     plan_execution::{validate_agent_session_value, validate_sandbox_exec_value},
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AcpExtensionResultDocument {
     method: LockedMethod,
+    primary: AcpExtensionPrimaryFact,
+    expected_receipt: AcpExtensionReceiptFact,
     primary_kind: MethodPrimaryKind,
     capability_fingerprint: String,
     receipt_count: usize,
@@ -69,13 +71,20 @@ impl AcpExtensionResultDocument {
         validate_receipts_for_method(method, receipts)?;
         validate_primary_result_hash(method, primary_value, receipts)?;
         let expected_receipt = expected_receipt_for_method(method, receipts)?;
+        let expected_receipt_fact = AcpExtensionReceiptFact::from_receipt(expected_receipt)?;
         validate_extension_primary_op(method, primary)?;
         validate_effect_primary_audit(method, primary, expected_receipt)?;
-        if let Some(primary_receipt) = primary.get("receipt").and_then(Value::as_str) {
+        let primary_receipt = primary.get("receipt").and_then(Value::as_str);
+        if let Some(primary_receipt) = primary_receipt {
             ensure_primary_receipt_is_carried(primary_receipt, receipts)?;
         }
         Ok(Self {
             method,
+            primary: AcpExtensionPrimaryFact {
+                kind: primary_kind,
+                receipt: primary_receipt.map(ToOwned::to_owned),
+            },
+            expected_receipt: expected_receipt_fact,
             primary_kind,
             capability_fingerprint: required_string(
                 object.get("capability_fingerprint"),
@@ -144,6 +153,16 @@ impl AcpExtensionResultDocument {
         self.primary_kind
     }
 
+    /// Typed primary result facts validated against the locked method.
+    pub const fn primary(&self) -> &AcpExtensionPrimaryFact {
+        &self.primary
+    }
+
+    /// Typed receipt facts for the method-specific receipt that binds the primary value.
+    pub const fn expected_receipt(&self) -> &AcpExtensionReceiptFact {
+        &self.expected_receipt
+    }
+
     /// Capability fingerprint attached to the result.
     pub fn capability_fingerprint(&self) -> &str {
         &self.capability_fingerprint
@@ -162,6 +181,75 @@ impl AcpExtensionResultDocument {
     /// Data classes carried by the result.
     pub fn data_classes(&self) -> &[String] {
         &self.data_classes
+    }
+}
+
+/// Typed primary result facts for an ACP extension result.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AcpExtensionPrimaryFact {
+    kind: MethodPrimaryKind,
+    receipt: Option<String>,
+}
+
+impl AcpExtensionPrimaryFact {
+    /// Primary result value kind.
+    pub const fn kind(&self) -> MethodPrimaryKind {
+        self.kind
+    }
+
+    /// Receipt id carried by effect/write primaries, when the primary schema has one.
+    pub fn receipt(&self) -> Option<&str> {
+        self.receipt.as_deref()
+    }
+}
+
+/// Typed receipt facts for the ACP extension receipt that binds the primary value.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AcpExtensionReceiptFact {
+    receipt: String,
+    kind: PlanResultReceiptKind,
+    call_kind: Option<String>,
+    write_kind: Option<String>,
+}
+
+impl AcpExtensionReceiptFact {
+    fn from_receipt(receipt: &serde_json::Map<String, Value>) -> Result<Self, PublicSeamError> {
+        let receipt_id = required_string(receipt.get("receipt"), "receipt.receipt")?.to_owned();
+        let kind_name = required_string(receipt.get("kind"), "receipt.kind")?;
+        let kind = PlanResultReceiptKind::parse(kind_name)
+            .ok_or_else(|| invalid_acp(format!("unknown receipt kind `{kind_name}`")))?;
+        Ok(Self {
+            receipt: receipt_id,
+            kind,
+            call_kind: receipt
+                .get("call_kind")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+            write_kind: receipt
+                .get("write_kind")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+        })
+    }
+
+    /// Receipt id.
+    pub fn receipt(&self) -> &str {
+        &self.receipt
+    }
+
+    /// Operation receipt kind.
+    pub const fn kind(&self) -> PlanResultReceiptKind {
+        self.kind
+    }
+
+    /// Call kind for call receipts.
+    pub fn call_kind(&self) -> Option<&str> {
+        self.call_kind.as_deref()
+    }
+
+    /// Write kind for write receipts.
+    pub fn write_kind(&self) -> Option<&str> {
+        self.write_kind.as_deref()
     }
 }
 

@@ -7,7 +7,9 @@ use crate::PublicSeamError;
 use super::helpers::{
     invalid_result, prefixed_jcs_hash, required_replayability, required_string, required_string_set,
 };
-use super::{RequestEvaluationReceiptPolicy, collect_trace_ref_data_classes};
+use super::{
+    PlanResultReceiptKind, RequestEvaluationReceiptPolicy, collect_trace_ref_data_classes,
+};
 
 pub(super) fn inspect_assessment_batch_value(
     batch: &serde_json::Map<String, Value>,
@@ -45,14 +47,18 @@ pub(super) fn validate_replayability_rollups(
     Ok(())
 }
 
-pub(super) fn inspect_receipts(receipts: &[Value]) -> Result<Vec<String>, PublicSeamError> {
+pub(super) fn inspect_receipts(
+    receipts: &[Value],
+) -> Result<Vec<PlanResultReceiptKind>, PublicSeamError> {
     let mut receipt_kinds = Vec::with_capacity(receipts.len());
     for receipt in receipts {
         let receipt = receipt
             .as_object()
             .ok_or_else(|| invalid_result("plan result receipt must be an object"))?;
         let kind = required_string(receipt.get("kind"), "receipt.kind")?;
-        receipt_kinds.push(kind.to_owned());
+        let kind = PlanResultReceiptKind::parse(kind)
+            .ok_or_else(|| invalid_result(format!("unknown receipt kind `{kind}`")))?;
+        receipt_kinds.push(kind);
         required_string(receipt.get("started_at"), "receipt.started_at")?;
         required_string(receipt.get("completed_at"), "receipt.completed_at")?;
         validate_audit_currency_receipt(kind, receipt)?;
@@ -61,23 +67,23 @@ pub(super) fn inspect_receipts(receipts: &[Value]) -> Result<Vec<String>, Public
 }
 
 fn validate_audit_currency_receipt(
-    kind: &str,
+    kind: PlanResultReceiptKind,
     receipt: &serde_json::Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
     match kind {
-        "query" => {
+        PlanResultReceiptKind::Query => {
             required_hash_with_prefix(receipt, "op_hash", "fp_query_sha256_")?;
             required_hash_with_prefix(receipt, "result_hash", "fp_result_sha256_")?;
             required_string(receipt.get("graph_revision"), "receipt.graph_revision")?;
             required_hash_with_prefix(receipt, "read_scope_fingerprint", "fp_scope_sha256_")?;
             required_hash_with_prefix(receipt, "projection_fingerprint", "fp_projection_sha256_")?;
         }
-        "call" => {
+        PlanResultReceiptKind::Call => {
             required_hash_with_prefix(receipt, "request_hash", "fp_request_sha256_")?;
             required_hash_with_prefix(receipt, "result_hash", "fp_result_sha256_")?;
             required_hash_with_prefix(receipt, "runtime_fingerprint", "fp_runtime_sha256_")?;
         }
-        "write" => {
+        PlanResultReceiptKind::Write => {
             required_hash_with_prefix(receipt, "request_hash", "fp_request_sha256_")?;
             required_hash_with_prefix(receipt, "result_hash", "fp_result_sha256_")?;
             required_string(receipt.get("base_revision"), "receipt.base_revision")?;
@@ -85,7 +91,6 @@ fn validate_audit_currency_receipt(
                 validate_submit_assessments_request_hash(receipt)?;
             }
         }
-        other => return Err(invalid_result(format!("unknown receipt kind `{other}`"))),
     }
     Ok(())
 }
@@ -476,9 +481,8 @@ fn receipt_id(value: &Value) -> Result<&str, PublicSeamError> {
 
 fn expected_receipt_kind(value_kind: &str) -> Option<&'static str> {
     match value_kind {
-        "graph_set" | "case_record" | "workspace_file" | "workspace_diff" | "workspace_listing" => {
-            Some("query")
-        }
+        "graph_set" | "case_record" | "workspace_file" | "workspace_diff" | "workspace_listing"
+        | "workspace_snapshot" => Some("query"),
         "workspace_handle" | "lm_response" | "agent_session" | "sandbox_exec" => Some("call"),
         "proposal_batch_receipt"
         | "assessment_batch_receipt"

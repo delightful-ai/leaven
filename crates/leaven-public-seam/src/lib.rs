@@ -23,12 +23,13 @@ mod watch;
 
 pub use acp_profile::{
     AcpAuthenticateRequest, AcpAuthenticatedSession, AcpBackpressure, AcpExtensionMethod,
-    AcpExtensionResultDocument, AcpJsonRpcRequestDocument, AcpJsonRpcResponseDocument,
-    AcpPermissionDecision, AcpPermissionRequest, AcpProfileDocument, AcpProgressDisposition,
-    AcpProgressPriority, AcpSessionCancellation, AcpSessionLifecycle, AcpSessionState,
-    AcpSessionUpdate, AcpStageRunRequestDocument, AcpStageRunResponseDocument,
-    AcpStdioWorkerLaunch, AcpWorkerSession, LockedMethod, MethodAction, MethodPrimaryKind,
-    MethodReceiptExpectation, MethodSchema,
+    AcpExtensionPrimaryFact, AcpExtensionReceiptFact, AcpExtensionResultDocument,
+    AcpJsonRpcRequestDocument, AcpJsonRpcResponseDocument, AcpPermissionDecision,
+    AcpPermissionRequest, AcpProfileDocument, AcpProgressDisposition, AcpProgressPriority,
+    AcpSessionCancellation, AcpSessionLifecycle, AcpSessionState, AcpSessionUpdate,
+    AcpStageRunRequestDocument, AcpStageRunResponseDocument, AcpStdioWorkerLaunch,
+    AcpWorkerSession, LockedMethod, MethodAction, MethodPrimaryKind, MethodReceiptExpectation,
+    MethodSchema,
 };
 pub use call_authority::{
     CallAuthorityDenial, CallAuthorityDenialKind, CallAuthorityError, CallAuthorityReport,
@@ -53,7 +54,10 @@ pub use package::{
     ConformanceTestKind, ContractInventory, PublicSeamPackage, V1Scope, ValidatedExample,
     ValidationReport, WorkerTransportKind, WorkerTransportRequest,
 };
-pub use plan::{PlanDocument, PlanOperationKind};
+pub use plan::{
+    PlanCallKind, PlanCommitKind, PlanDocument, PlanId, PlanMode, PlanOperation, PlanOperationKind,
+    PlanQueryKind, PlanReturnBinding, PlanSchemaVersion, PlanWriteKind,
+};
 pub use plan_execution::{
     AgentCommandOutputRefs, PlanAgentRunOutcome, PlanAgentRunRequest,
     PlanApplyProposalBatchOutcome, PlanApplyProposalBatchRequest, PlanCaseQueryOutcome,
@@ -66,7 +70,10 @@ pub use plan_execution::{
     PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
 };
 pub use proposal_authority::ProposalAuthorityReport;
-pub use result::{PlanResultDocument, Replayability};
+pub use result::{
+    PlanResultChargeFacts, PlanResultDocument, PlanResultErrorFacts, PlanResultReceiptFact,
+    PlanResultReceiptKind, PlanResultValueFact, PlanResultValueKind, Replayability,
+};
 pub use stage_payload::{
     ReflectProposeHandoffDocument, ReflectProposeSubmissionDocument, StagePayloadDocument,
     StagePayloadRole, StageProposalEffect,
