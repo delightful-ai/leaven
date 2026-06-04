@@ -6,12 +6,13 @@ from msgspec import UNSET, Raw, Struct, UnsetType
 
 from .errors import JsonRpcError
 from .json_value import JsonRpcId
+from .methods import LockedMethod
 
 
 class JsonRpcRequestEnvelope(Struct, frozen=True):
     """A JSON-RPC request or notification envelope."""
 
-    method: str
+    method: LockedMethod
     jsonrpc: Literal["2.0"] = "2.0"
     params: Raw | UnsetType = UNSET
     id: JsonRpcId | UnsetType = UNSET

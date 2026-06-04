@@ -3,7 +3,13 @@
 from .codec import decode_batch_responses, decode_response, decode_response_object, encode_request
 from .errors import JsonRpcError, JsonRpcProtocolError, JsonRpcRemoteError
 from .json_value import JsonArray, JsonObject, JsonRpcId, JsonScalar, JsonValue
-from .methods import LOCKED_METHODS, METHOD_BINDINGS, LockedMethod, LockedMethodBinding
+from .methods import (
+    LOCKED_METHODS,
+    METHOD_BINDINGS,
+    LockedMethod,
+    LockedMethodBinding,
+    require_locked_method,
+)
 from .payloads import (
     PLAN_RESULT_SCHEMA_FINGERPRINT,
     PLAN_SCHEMA_FINGERPRINT,
@@ -40,4 +46,5 @@ __all__ = [
     "decode_response",
     "decode_response_object",
     "encode_request",
+    "require_locked_method",
 ]

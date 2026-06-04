@@ -10,7 +10,7 @@ from msgspec import UNSET, Raw, UnsetType
 from .errors import JsonRpcProtocolError, JsonRpcRemoteError
 from .json_value import JsonObject, JsonRpcId, JsonValue, json_object
 from .jsonrpc import JsonRpcRequestEnvelope, JsonRpcResponseEnvelope
-from .methods import require_locked_method
+from .methods import LockedMethod, require_locked_method
 
 _ENCODER = msgspec.json.Encoder()
 _RESPONSE_DECODER = msgspec.json.Decoder(JsonRpcResponseEnvelope)
@@ -19,7 +19,7 @@ _BATCH_RESPONSE_DECODER = msgspec.json.Decoder(list[JsonRpcResponseEnvelope])
 
 def encode_request(
     *,
-    method: str,
+    method: LockedMethod,
     request_id: JsonRpcId | UnsetType,
     params: JsonValue | Raw | UnsetType = UNSET,
 ) -> bytes:

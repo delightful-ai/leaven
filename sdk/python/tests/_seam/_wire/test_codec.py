@@ -1,6 +1,7 @@
 """Tests for `leaven._seam._wire.codec`."""
 
 import json
+from typing import cast
 
 import msgspec
 import pytest
@@ -9,6 +10,7 @@ from leaven._seam._wire import (
     JsonObject,
     JsonRpcProtocolError,
     JsonRpcRemoteError,
+    LockedMethod,
     decode_batch_responses,
     decode_response,
     encode_request,
@@ -53,8 +55,9 @@ def test_encode_request_omits_notification_id() -> None:
 
 
 def test_encode_request_rejects_unknown_method() -> None:
+    method = cast("LockedMethod", "leaven/human.review")
     with pytest.raises(ValueError, match="unknown locked Leaven public-seam method"):
-        encode_request(method="leaven/human.review", request_id="req_1", params={})
+        encode_request(method=method, request_id="req_1", params={})
 
 
 def test_decode_response_decodes_method_specific_raw_result() -> None:

@@ -7,7 +7,13 @@ from pathlib import Path
 
 from msgspec import UNSET, UnsetType
 
-from ._wire import JsonObject, JsonRpcId, JsonRpcProtocolError, JsonRpcRemoteError
+from ._wire import (
+    JsonObject,
+    JsonRpcId,
+    JsonRpcProtocolError,
+    JsonRpcRemoteError,
+    require_locked_method,
+)
 from ._wire.codec import decode_response_object, encode_request
 from .config import SeamServiceConfig
 from .errors import SeamClientError
@@ -60,9 +66,13 @@ class SeamClient:
         method = request.get("method")
         if not isinstance(method, str):
             raise SeamClientError("seam request must carry a string method")
+        try:
+            locked_method = require_locked_method(method)
+        except ValueError as error:
+            raise SeamClientError(str(error)) from error
         request_id = _request_id(request)
         params = request.get("params", UNSET)
-        line = encode_request(method=method, request_id=request_id, params=params).decode()
+        line = encode_request(method=locked_method, request_id=request_id, params=params).decode()
         return subprocess.run(
             [
                 str(self._leaven_bin),
