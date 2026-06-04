@@ -71,7 +71,7 @@ class AgentBuilder:
         candidate_id: str,
         idempotency_prefix: str = "agent-builder",
         plan_id: str = "planpythonagentbuilder001",
-    ) -> AgentBuilder:
+    ) -> "AgentBuilder":
         """Bind this builder to the private public-seam process client."""
         return cls(
             _client=client,

@@ -325,7 +325,7 @@ acceptance:
 
   - id: graph_and_case_reads_execute
     claim: Graph and case read methods execute against real run/case state.
-    status: pending
+    status: done
     proof_required:
       kind: seam_service_tests_and_sdk_callback_test
       must_exercise:
@@ -351,7 +351,22 @@ acceptance:
           - crates/leaven-seam-service/src/service.rs
           - crates/leaven-cli/tests/seam_stdio_server.rs
           - crates/leaven-public-seam/tests/public_seam_contract/acp_profile.rs
-        note: Configured service reads graph/case records through Plan IR, filters case_record fields by requested include set, denies missing case-read authority, and proves all five methods through the CLI stdio server. SDK callback coverage remains to close this row.
+        note: Configured service reads graph/case records through Plan IR, filters case_record fields by requested include set, denies missing case-read authority, and proves all five methods through the CLI stdio server.
+      - kind: python_sdk_callback_coverage
+        methods:
+          - "`leaven/case.load`"
+          - "`leaven/case.input`"
+          - "`leaven/case.target`"
+          - "`leaven/case.metadata`"
+        commands:
+          - uv run pytest tests/builders/test_case.py tests/_seam/test_plans.py -q
+          - uv run ruff check src/leaven/builders/case.py src/leaven/builders/agent.py src/leaven/builders/lm.py src/leaven/builders/proposals.py src/leaven/builders/batch.py src/leaven/evidence.py src/leaven/assessment.py src/leaven/proposal.py src/leaven/output_record.py src/leaven/stages.py src/leaven/run_inspection.py src/leaven/optimize.py src/leaven/_seam/plans.py src/leaven/_seam/__init__.py tests/builders/test_case.py tests/_seam/test_plans.py tests/test_stage_surface.py
+        paths:
+          - sdk/python/src/leaven/_seam/plans.py
+          - sdk/python/src/leaven/builders/case.py
+          - sdk/python/tests/_seam/test_plans.py
+          - sdk/python/tests/builders/test_case.py
+        note: Private Python SDK `CaseBuilder._for_seam(...)` now emits the locked case read Plan IR methods, maps typed `case_record` primaries into `Case`, and propagates target-denial errors instead of fabricating empty cases. This proves SDK callback routing, not durable Rust checkpoint inspection.
     closeout_check: Hardcoded payload echoes are not graph/case read execution.
 
   - id: workspace_lifecycle_executes
@@ -619,6 +634,7 @@ acceptance:
         - Ruff enabled for maintainability families including ANN, ARG, C4, PIE, PL, PT, RET, TCH, TRY, PTH, PERF, and ANN401
         - "`uv run ty check ...`"
         - no checked-in non-generated Python file over 650 LOC
+        - Python unit/example/law tests mirror source module paths outside `src`, with integration/scenario tests and shared fixtures split into explicit support locations
     evidence: []
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,

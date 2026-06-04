@@ -44,7 +44,7 @@ class OutputRecord(BaseModel):
         summary: str,
         visibility: Visibility = "public",
         data_classes: list[str] | None = None,
-    ) -> OutputRecord:
+    ) -> "OutputRecord":
         """Inline text output. Summary IS the content."""
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
@@ -56,7 +56,7 @@ class OutputRecord(BaseModel):
         value: dict[str, Any],
         visibility: Visibility = "public",
         data_classes: list[str] | None = None,
-    ) -> OutputRecord:
+    ) -> "OutputRecord":
         """Inline structured output (JSON-shaped). Summary is a human-readable label."""
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
@@ -65,10 +65,10 @@ class OutputRecord(BaseModel):
         cls,
         *,
         summary: str,
-        value: Any,
+        value: object,
         visibility: Visibility = "public",
         data_classes: list[str] | None = None,
-    ) -> OutputRecord:
+    ) -> "OutputRecord":
         """Inline JSON-shaped output."""
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
@@ -80,7 +80,7 @@ class OutputRecord(BaseModel):
         blob_ref: str,
         visibility: Visibility = "public",
         data_classes: list[str] | None = None,
-    ) -> OutputRecord:
+    ) -> "OutputRecord":
         """Blob-referenced output. The blob_ref is engine-minted."""
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 

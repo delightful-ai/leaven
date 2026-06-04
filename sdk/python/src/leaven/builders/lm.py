@@ -45,7 +45,7 @@ class LmBuilder:
     def __init__(
         self,
         *,
-        _client: _SeamRequester | None = None,
+        _client: "_SeamRequester | None" = None,
         _idempotency_prefix: str = "lm-builder",
         _plan_id: str = "planpythonlmbuilder001",
         _model: str = "gpt-4.1-mini",
@@ -59,12 +59,12 @@ class LmBuilder:
     @classmethod
     def _for_seam(
         cls,
-        client: _SeamRequester,
+        client: "_SeamRequester",
         *,
         idempotency_prefix: str = "lm-builder",
         plan_id: str = "planpythonlmbuilder001",
         model: str = "gpt-4.1-mini",
-    ) -> LmBuilder:
+    ) -> "LmBuilder":
         """Bind this builder to the private public-seam process client."""
         return cls(
             _client=client,
@@ -83,7 +83,7 @@ class LmBuilder:
         temperature: float | None = None,
         max_tokens: int | None = None,
         stop: Sequence[str] | None = None,
-        response_format: Any | None = None,
+        response_format: object | None = None,
         tools: Sequence[dict[str, Any]] | None = None,
         input_classes: Sequence[str] | None = None,
         forbidden_input_classes: Sequence[str] | None = None,

@@ -39,7 +39,7 @@ class ProposalEffect(BaseModel):
         surface: str,
         change_schema: str,
         change: dict[str, Any],
-    ) -> ProposalEffect:
+    ) -> "ProposalEffect":
         """Build a lineage-bearing change proposal effect."""
         return cls(
             kind="change",
@@ -57,7 +57,7 @@ class ProposalEffect(BaseModel):
         change_schema: str,
         parser: str,
         agent_session_receipt: CallReceipt,
-    ) -> ProposalEffect:
+    ) -> "ProposalEffect":
         """Build a proposal effect bound to a prior `cx.agent.run` receipt."""
         return cls(
             kind="change_from_agent_session",
@@ -78,7 +78,7 @@ class ProposalBatch(BaseModel):
     effect_receipts: list[CallReceipt] = Field(default_factory=list)
 
     @classmethod
-    def from_skill_proposal(cls, parsed: Any) -> ProposalBatch:
+    def from_skill_proposal(cls, parsed: object) -> "ProposalBatch":
         """Convenience: lower a parsed skill proposer output into a batch.
 
         Used by the `@lv.proposer` skill-builder convention; equivalent to

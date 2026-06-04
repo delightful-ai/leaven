@@ -20,6 +20,7 @@ from .config import (
 from .errors import SeamClientError
 from .plans import (
     AgentRunRequest,
+    CaseLoadRequest,
     LmCompleteRequest,
     ProposalSubmitRequest,
     StageRunProposeRequest,
@@ -29,6 +30,7 @@ from .resolve import resolve_codex_binary, resolve_leaven_binary, resolve_repo_r
 
 __all__ = [
     "AgentRunRequest",
+    "CaseLoadRequest",
     "CodexCliRuntimeConfig",
     "CommandRunnerStageConfig",
     "LmCompleteRequest",

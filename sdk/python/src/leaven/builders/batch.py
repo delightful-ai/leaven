@@ -43,7 +43,7 @@ class BatchBuilder:
     agent: AgentBuilder
     sandbox: SandboxBuilder
 
-    async def __aenter__(self) -> BatchBuilder:
+    async def __aenter__(self) -> "BatchBuilder":
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
     async def __aexit__(
@@ -55,7 +55,7 @@ class BatchBuilder:
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
 
-def batch() -> BatchBuilder:
+def batch() -> "BatchBuilder":
     """Construct a fresh batch builder; usually accessed as `cx.batch()`."""
     raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 

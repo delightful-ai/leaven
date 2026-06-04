@@ -37,7 +37,7 @@ class Rollout(BaseModel):
         stage: RegisteredStage[Any, Any],
         *,
         layout: WorkspaceLayout | None = None,
-    ) -> Rollout:
+    ) -> "Rollout":
         """Use a registered `@lv.runner` stage as the rollout."""
         return cls(kind="function", stage=stage, layout=layout or case_workspace())
 
@@ -48,7 +48,7 @@ class Rollout(BaseModel):
         argv: Sequence[str],
         layout: WorkspaceLayout | None = None,
         output: OutputContract | None = None,
-    ) -> Rollout:
+    ) -> "Rollout":
         """Run a command inside the stage workspace."""
         return cls(
             kind="command", argv=list(argv), layout=layout or case_workspace(), output=output
@@ -62,7 +62,7 @@ class Rollout(BaseModel):
         instructions: str | None = None,
         layout: WorkspaceLayout | None = None,
         output: OutputContract | None = None,
-    ) -> Rollout:
+    ) -> "Rollout":
         """Run an agent inside the stage workspace.
 
         Codex-native default: with no `agent`, the runtime's configured agent
@@ -87,12 +87,12 @@ class Reflect(BaseModel):
     stage: RegisteredStage[Any, Any] | None = None
 
     @classmethod
-    def fn(cls, stage: RegisteredStage[Any, Any]) -> Reflect:
+    def fn(cls, stage: RegisteredStage[Any, Any]) -> "Reflect":
         """Use a registered `@lv.reflector` stage."""
         return cls(kind="function", stage=stage)
 
     @classmethod
-    def default_gepa(cls) -> Reflect:
+    def default_gepa(cls) -> "Reflect":
         """Use the optimizer's default GEPA reflection stage."""
         return cls(kind="default_gepa")
 
@@ -108,7 +108,7 @@ class Propose(BaseModel):
     layout: WorkspaceLayout = Field(default_factory=edit_artifact)
 
     @classmethod
-    def fn(cls, stage: RegisteredStage[Any, Any]) -> Propose:
+    def fn(cls, stage: RegisteredStage[Any, Any]) -> "Propose":
         """Use a registered `@lv.proposer` stage."""
         return cls(kind="function", stage=stage)
 
@@ -118,7 +118,7 @@ class Propose(BaseModel):
         *,
         agent: AgentConfig,
         layout: WorkspaceLayout | None = None,
-    ) -> Propose:
+    ) -> "Propose":
         """Let an agent edit the artifact projection under the mutable root."""
         return cls(kind="agent_edit", agent_config=agent, layout=layout or edit_artifact())
 

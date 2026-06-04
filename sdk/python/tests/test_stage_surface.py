@@ -1,6 +1,9 @@
 import json
 import subprocess
 import sys
+from pathlib import Path
+
+from _pytest.monkeypatch import MonkeyPatch
 
 import leaven as lv
 from leaven._handles import WorkspaceHandle
@@ -227,7 +230,7 @@ def test_openai_runtime_lowers_to_private_seam_service_config() -> None:
     }
 
 
-def test_checked_in_stage_worker_dispatches_registered_runner(tmp_path) -> None:
+def test_checked_in_stage_worker_dispatches_registered_runner(tmp_path: Path) -> None:
     """Scenario: command worker imports a registered runner and returns stage result."""
 
     module = tmp_path / "worker_stage.py"
@@ -313,7 +316,7 @@ async def run(prompt, case, cx):
     assert response["result"]["output"]["value"] == "2 + 2 => 4 / 5"
 
 
-def test_checked_in_stage_worker_can_callback_agent_run(tmp_path) -> None:
+def test_checked_in_stage_worker_can_callback_agent_run(tmp_path: Path) -> None:
     """Scenario: registered runner can call `cx.agent.run` over the active seam."""
 
     module = tmp_path / "agent_stage.py"
@@ -425,7 +428,7 @@ async def run(prompt, case, cx):
     ]
 
 
-def test_optimize_runtime_codex_agent_config_lowers_to_seam(monkeypatch) -> None:
+def test_optimize_runtime_codex_agent_config_lowers_to_seam(monkeypatch: MonkeyPatch) -> None:
     """Example: Python runtime agent config becomes service Codex CLI config."""
 
     monkeypatch.setenv("LEAVEN_TEST_CODEX_BIN", "/tmp/leaven-test-codex")

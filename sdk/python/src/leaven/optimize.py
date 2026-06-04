@@ -23,6 +23,7 @@ from ._seam_optimize import SeamOptimizeReport, run_prompt_mechanics
 from .artifacts.prompt import PromptArtifact
 from .assessment import Assessment
 from .case import Case
+from .decorators import RegisteredStage
 from .environment import Environment
 from .evidence import EvidenceEnvelope, EvidencePublic
 from .optimizers.config import OptimizerConfig
@@ -65,7 +66,7 @@ class OptimizeBuilder[A]:
         )
         return cast("Optimized[A]", _to_optimized(seed, report, run_id, started_at, len(cases)))
 
-    def dry_run(self) -> OptimizeBuilder[A]:
+    def dry_run(self) -> "OptimizeBuilder[A]":
         """Mark the run as dry-run: validates configuration without executing.
 
         Returns self for chaining. Calling `.run()` afterward returns an
@@ -80,7 +81,7 @@ class OptimizeBuilder[A]:
             )
         return self.seed
 
-    def _runner_stage(self) -> Any:
+    def _runner_stage(self) -> RegisteredStage[Any, Any]:
         rollout = self.environment.rollout
         if rollout.kind != "function" or rollout.stage is None:
             raise NotImplementedError(

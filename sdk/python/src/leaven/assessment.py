@@ -57,7 +57,7 @@ class AssessmentWrite(BaseModel):
         read_receipts: list[QueryReceipt] | None = None,
         effect_receipts: list[CallReceipt] | None = None,
         replayability: Replayability = "boundary_managed",
-    ) -> AssessmentWrite:
+    ) -> "AssessmentWrite":
         """Single-candidate-per-case assessment (the most common shape)."""
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
@@ -72,7 +72,7 @@ class AssessmentWrite(BaseModel):
         read_receipts: list[QueryReceipt] | None = None,
         effect_receipts: list[CallReceipt] | None = None,
         replayability: Replayability = "boundary_managed",
-    ) -> AssessmentWrite:
+    ) -> "AssessmentWrite":
         """Pairwise preference assessment (two candidates, one preferred)."""
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
@@ -87,7 +87,7 @@ class AssessmentWrite(BaseModel):
         read_receipts: list[QueryReceipt] | None = None,
         effect_receipts: list[CallReceipt] | None = None,
         replayability: Replayability = "boundary_managed",
-    ) -> AssessmentWrite:
+    ) -> "AssessmentWrite":
         """Listwise ranking assessment over N candidates."""
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 

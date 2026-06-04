@@ -50,7 +50,7 @@ class EvidenceEnvelope(BaseModel):
         public: dict[str, Any],
         private: dict[str, Any],
         target_derived: bool = False,
-    ) -> EvidenceEnvelope:
+    ) -> "EvidenceEnvelope":
         """Build an envelope with both visibility projections.
 
         Public dict must include a `data_classes` key listing all public classes.
@@ -65,7 +65,7 @@ class EvidenceEnvelope(BaseModel):
         *,
         payload: dict[str, Any],
         data_classes: list[str],
-    ) -> EvidenceEnvelope:
+    ) -> "EvidenceEnvelope":
         """Public evidence with no private payload."""
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 

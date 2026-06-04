@@ -31,7 +31,7 @@ class ProposalsBuilder:
     def __init__(
         self,
         *,
-        _client: _SeamRequester | None = None,
+        _client: "_SeamRequester | None" = None,
         _idempotency_prefix: str = "proposal-builder",
         _plan_id: str = "planpythonproposalbuilder001",
     ) -> None:
@@ -42,11 +42,11 @@ class ProposalsBuilder:
     @classmethod
     def _for_seam(
         cls,
-        client: _SeamRequester,
+        client: "_SeamRequester",
         *,
         idempotency_prefix: str = "proposal-builder",
         plan_id: str = "planpythonproposalbuilder001",
-    ) -> ProposalsBuilder:
+    ) -> "ProposalsBuilder":
         """Bind this builder to the private public-seam process client."""
         return cls(
             _client=client,
@@ -143,14 +143,14 @@ def _receipt_ids(batch: ProposalBatch) -> list[str]:
     ]
 
 
-def _literal_expr(value: Any) -> dict[str, Any]:
+def _literal_expr(value: object) -> dict[str, object]:
     return {"kind": "literal", "value": value}
 
 
 def _required_payload_string(effect: ProposalEffect, key: str) -> str:
     value = effect.payload.get(key)
     if not isinstance(value, str):
-        raise ValueError(f"{effect.kind} proposal payload requires string `{key}`")
+        raise TypeError(f"{effect.kind} proposal payload requires string `{key}`")
     return value
 
 

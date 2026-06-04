@@ -175,6 +175,20 @@ Use the narrowest layer that proves the claim.
 
 ## Layout
 
+- Unit/example/law tests default to 1:1 placement with the production file or
+  module they prove. For Rust, put private claims in that source file's
+  `#[cfg(test)] mod tests` and public module claims in the nearest crate
+  integration test file named for that module or contract. For Python, do not
+  put tests under `src/`; use mirrored test module paths such as
+  `tests/builders/test_case.py` for `src/leaven/builders/case.py`.
+- Integration and scenario tests live in an explicit integration/scenario
+  folder or crate-level contract file named for the flow, not mixed into
+  source-local unit test files.
+- Shared fixtures, fake services, process harnesses, and assertion helpers live
+  in centralized support modules once two or more tests need them. Keep fixtures
+  boring and typed; tests should read as claims, not setup archaeology.
+- Do not add broad grab-bag test files. If a file tests multiple unrelated
+  production modules, split it until ownership is obvious from the path.
 - Private helper and invariant tests live beside the production code under
   `#[cfg(test)] mod tests` when they need private implementation access.
 - Public crate behavior lives in integration tests under

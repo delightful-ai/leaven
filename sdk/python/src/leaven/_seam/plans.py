@@ -2,7 +2,68 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
+
+CaseField = Literal["input", "target", "metadata", "files", "setup", "sandbox", "split"]
+
+
+_SINGLE_CASE_METHODS: dict[tuple[CaseField, ...], tuple[str, str]] = {
+    ("input",): ("leaven/case.input", "case_input"),
+    ("target",): ("leaven/case.target", "case_target"),
+    ("metadata",): ("leaven/case.metadata", "case_metadata"),
+}
+
+
+@dataclass(frozen=True)
+class CaseLoadRequest:
+    """A single public-seam case read Plan request."""
+
+    request_id: str
+    plan_id: str
+    case_id: str
+    include: Sequence[CaseField]
+    run_id: str = "run_python_case_builder"
+
+    def to_json_rpc(self) -> dict[str, Any]:
+        """Return a JSON-RPC request for the locked case read route."""
+        method, op_name = _case_route(self.include)
+        return {
+            "jsonrpc": "2.0",
+            "id": self.request_id,
+            "method": method,
+            "params": {
+                "schema_version": "leaven.plan.v1",
+                "plan_id": self.plan_id,
+                "consistency": {"kind": "latest_at_start"},
+                "mode": {"kind": "execute"},
+                "ops": [self._case_query(op_name)],
+                "return": [op_name],
+                "commit": {"kind": "no_graph_writes"},
+            },
+        }
+
+    def _case_query(self, op_name: str) -> dict[str, Any]:
+        return {
+            "kind": "let",
+            "name": op_name,
+            "expr": {
+                "kind": "case_query",
+                "query": {
+                    "kind": "load",
+                    "case": {
+                        "kind": "case",
+                        "run": self.run_id,
+                        "id": self.case_id,
+                    },
+                    "include": list(self.include),
+                    "projection_schema": "fp_schema_sha256_python_case_projection",
+                },
+            },
+        }
+
+
+def _case_route(include: Sequence[CaseField]) -> tuple[str, str]:
+    return _SINGLE_CASE_METHODS.get(tuple(include), ("leaven/case.load", "case_load"))
 
 
 @dataclass(frozen=True)
@@ -282,6 +343,7 @@ class ProposalSubmitRequest:
 
 __all__ = [
     "AgentRunRequest",
+    "CaseLoadRequest",
     "LmCompleteRequest",
     "ProposalSubmitRequest",
     "StageRunProposeRequest",

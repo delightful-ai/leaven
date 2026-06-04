@@ -37,7 +37,7 @@ class EvidenceSummary(BaseModel):
     data_classes: list[str] = Field(default_factory=list)
     payload: dict[str, Any] = Field(default_factory=dict)
     target_derived: bool
-    rewards: list[RewardDimensionSummary] = Field(default_factory=list)
+    rewards: list["RewardDimensionSummary"] = Field(default_factory=list)
 
 
 class RewardDimensionSummary(BaseModel):
