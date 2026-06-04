@@ -1010,6 +1010,33 @@ acceptance:
           bodies, nested Plan Result values/receipts, evidence, cost, blob refs,
           capability resources, service execution payloads, and generated
           Python Raw islands remain to be typed or explicitly justified.
+      - kind: typed_internal_method_dispatch_foundation
+        commits:
+          - 56276ac0
+          - 88d47081
+        paths:
+          - crates/leaven-seam-service/src/service.rs
+          - crates/leaven-seam-service/src/run_context_service.rs
+          - crates/leaven-seam-service/src/run_bound_service/mod.rs
+          - crates/leaven-seam-service/src/run_bound_service/tests.rs
+          - crates/leaven-acp/src/stdio.rs
+        commands:
+          - cargo check -p leaven-seam-service
+          - cargo test -p leaven-seam-service
+          - cargo check -p leaven-acp
+          - cargo test -p leaven-acp --test stdio_session_contract
+          - cargo fmt --check
+        note: >-
+          Configured seam service dispatch, run-context graph-write fast paths,
+          run-bound graph-effect dispatch, extension-result projection, and ACP
+          worker-callback host dispatch now carry LockedMethod after validation
+          instead of re-matching arbitrary method strings internally. Stage
+          worker callbacks and ACP worker-initiated requests still enter as wire
+          strings at transport/process boundaries, but those strings are parsed
+          before internal service dispatch. This is method-identity evidence
+          only: service params, run-context lowerers, ACP result payloads,
+          costs, blob refs, and nested Plan IR/Result bodies remain raw JSON
+          islands.
     closeout_check: >-
       Handwritten Python schema mirrors, pydantic-only wire models, untyped
       dict payloads, response-order batch routing, or msgspec used as a
