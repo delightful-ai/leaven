@@ -33,6 +33,14 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
                     }],
                     "data_classes": ["public"]
                 },
+                "run_context": {
+                    "enabled": true,
+                    "seed_value": 1,
+                    "proposal_delta": 41,
+                    "proposal_batch_alias": "pb_cli_run_context",
+                    "final_revision": "rev_cli_run_context_applied",
+                    "readback_plan_id": "runcontextgraphreadbackcli001"
+                },
                 "cases": {
                     "case_1": {
                         "case": "case_1",
@@ -96,6 +104,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
             write_json_line(&mut stdin, request);
         }
         write_json_line(&mut stdin, &proposal_apply_request());
+        write_json_line(&mut stdin, &run_context_graph_readback_request());
         write_json_line(&mut stdin, &assessment_submit_request());
         write_json_line(&mut stdin, &evaluation_request_request());
         write_json_line(&mut stdin, &event_emit_request());
@@ -123,7 +132,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
     let responses = response_lines(&output.stdout);
     assert_eq!(
         responses.len(),
-        12 + workspace_queries.len() + graph_case_queries.len(),
+        13 + workspace_queries.len() + graph_case_queries.len(),
         "one response per request line"
     );
 
@@ -266,12 +275,56 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         responses[proposal_apply_index]["result"]["primary"]["kind"],
         "apply_receipt"
     );
+    assert!(
+        responses[proposal_apply_index]["result"]["receipts"]
+            .as_array()
+            .expect("proposal apply carries receipts")
+            .iter()
+            .any(|receipt| receipt["write_kind"].as_str() == Some("apply_proposal_batch")),
+        "proposal apply response must carry an apply_proposal_batch receipt: {:?}",
+        responses[proposal_apply_index]
+    );
     assert_eq!(
-        responses[proposal_apply_index]["result"]["receipts"][0]["write_kind"],
-        "apply_proposal_batch"
+        responses[proposal_apply_index]["result"]["primary"]["graph_revision"],
+        "rev_cli_run_context_applied"
+    );
+    let run_context_created =
+        responses[proposal_apply_index]["result"]["primary"]["created_candidates"]
+            .as_array()
+            .expect("RunContext apply returns created candidates");
+    assert_eq!(run_context_created.len(), 1);
+    assert_ne!(
+        run_context_created[0],
+        json!("cand_pb_cli_run_context_applied"),
+        "created candidate must come from RunContext projection, not configured string synthesis"
     );
 
-    let assessment_submit_index = proposal_apply_index + 1;
+    let run_context_readback_index = proposal_apply_index + 1;
+    assert_eq!(
+        responses[run_context_readback_index]["id"],
+        json!("run-context-graph-readback-cli")
+    );
+    assert!(
+        responses[run_context_readback_index].get("error").is_none(),
+        "unexpected RunContext readback response: {:?}",
+        responses[run_context_readback_index]
+    );
+    let run_context_summary =
+        &responses[run_context_readback_index]["result"]["primary"]["items"][0];
+    assert_eq!(run_context_summary["kind"], "event_summary");
+    assert_eq!(run_context_summary["event_kind"], "proposal.apply");
+    assert_eq!(
+        run_context_summary["payload"]["source"],
+        "leaven-seam-service-run-context"
+    );
+    assert_eq!(run_context_summary["payload"]["applied"], true);
+    assert_eq!(run_context_summary["payload"]["candidate_count"], 2);
+    assert_eq!(
+        run_context_summary["payload"]["created_candidates"][0],
+        run_context_created[0]
+    );
+
+    let assessment_submit_index = run_context_readback_index + 1;
     assert_eq!(
         responses[assessment_submit_index]["id"],
         json!("assessment-submit-cli")
@@ -335,12 +388,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
     let readback_items = responses[readback_index]["result"]["primary"]["items"]
         .as_array()
         .expect("graph readback returns items");
-    for expected_event_kind in [
-        "proposal.apply",
-        "assessment.submit",
-        "evaluation.request",
-        "cli.checked",
-    ] {
+    for expected_event_kind in ["assessment.submit", "evaluation.request", "cli.checked"] {
         assert!(
             readback_items
                 .iter()
@@ -781,6 +829,47 @@ fn graph_write_readback_request() -> Value {
     })
 }
 
+fn run_context_graph_readback_request() -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": "run-context-graph-readback-cli",
+        "method": "leaven/graph.query",
+        "params": {
+            "schema_version": "leaven.plan.v1",
+            "plan_id": "runcontextgraphreadbackcli001",
+            "consistency": {
+                "kind": "latest_at_start"
+            },
+            "mode": {
+                "kind": "execute"
+            },
+            "ops": [{
+                "kind": "let",
+                "name": "run_context_graph",
+                "expr": {
+                    "kind": "graph_query",
+                    "source": {
+                        "kind": "events",
+                        "filter": {
+                            "kind": "run_context"
+                        }
+                    },
+                    "projection": {
+                        "kind": "ids"
+                    },
+                    "page": {
+                        "limit": 100
+                    }
+                }
+            }],
+            "return": ["run_context_graph"],
+            "commit": {
+                "kind": "no_graph_writes"
+            }
+        }
+    })
+}
+
 fn case_query_request(method: &str, id: &str, name: &str, include: &[&str]) -> Value {
     json!({
         "jsonrpc": "2.0",
@@ -836,15 +925,15 @@ fn proposal_apply_request() -> Value {
             },
             "ops": [{
                 "kind": "write",
-                "name": "applied",
+                "name": "apply",
                 "idempotency_key": "proposal-apply-cli-0001",
                 "write": {
                     "kind": "apply_proposal_batch",
-                    "proposal_batch": "pb_cli_apply",
+                    "proposal_batch": "pb_cli_run_context",
                     "policy": "apply_first_valid"
                 }
             }],
-            "return": ["applied"],
+            "return": ["apply"],
             "commit": {
                 "kind": "graph_writes_atomic",
                 "on_stale": "reject"

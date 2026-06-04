@@ -3,6 +3,7 @@
 mod git_workspace;
 mod graph_state;
 mod lm;
+mod run_context_service;
 mod service;
 mod stage;
 

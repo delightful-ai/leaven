@@ -8,6 +8,9 @@ use crate::git_workspace::{
 };
 use crate::graph_state::SeamGraphState;
 use crate::lm::{ConfiguredLmError, ConfiguredLmRuntime, SeamLmConfig};
+use crate::run_context_service::{
+    RunContextProposalApplyState, SeamRunContextConfig, requested_proposal_batch,
+};
 use crate::stage::SeamStageConfig;
 use leaven_agent::{AgentRunContext, AgentRuntime};
 use leaven_agent_codex_cli::{CodexCliApproval, CodexCliConfig, CodexCliRuntime, CodexCliSandbox};
@@ -38,6 +41,7 @@ pub struct ConfiguredSeamService {
     config: SeamServiceConfig,
     capability: Option<CapabilityDocument>,
     graph_state: Arc<Mutex<SeamGraphState>>,
+    run_context_state: Option<Arc<Mutex<RunContextProposalApplyState>>>,
 }
 
 impl ConfiguredSeamService {
@@ -61,9 +65,17 @@ impl ConfiguredSeamService {
             .clone()
             .map(CapabilityDocument::from_value)
             .transpose()?;
+        let run_context_state = if config.run_context.enabled {
+            Some(Arc::new(Mutex::new(RunContextProposalApplyState::new(
+                config.run_context.clone(),
+            )?)))
+        } else {
+            None
+        };
         Ok(Self {
             package,
             graph_state: Arc::new(Mutex::new(SeamGraphState::new(&config.graph))),
+            run_context_state,
             config,
             capability,
         })
@@ -95,6 +107,23 @@ impl SeamService for ConfiguredSeamService {
 
 impl ConfiguredSeamService {
     fn execute_plan_method(&self, method: &str, params: &Value) -> Result<Value, PublicSeamError> {
+        if method == "leaven/proposal.apply"
+            && let Some(state) = &self.run_context_state
+        {
+            self.package.validate_plan_document(params)?;
+            let mut state = state.lock().map_err(|_| PublicSeamError::InvalidPlan {
+                message: "RunContext seam service state lock poisoned".to_owned(),
+            })?;
+            if state.accepts_proposal_apply(params) {
+                return state
+                    .apply_proposal_batch(method, params, &self.config.context)
+                    .and_then(|result| {
+                        self.package
+                            .validate_acp_extension_result_document(&result)?;
+                        Ok(result)
+                    });
+            }
+        }
         if method == "leaven/evaluation.request" {
             return self.execute_evaluation_request_method(method, params);
         }
@@ -110,6 +139,7 @@ impl ConfiguredSeamService {
                 workspace_factory: self.config.workspace.to_factory(),
                 agent: self.config.agent.to_codex_runtime(),
                 graph_state: Arc::clone(&self.graph_state),
+                run_context_state: self.run_context_state.clone(),
                 cases: self.config.cases.clone(),
                 graph_revision: self.config.context.base_revision.clone(),
                 workspaces: BTreeMap::new(),
@@ -155,7 +185,7 @@ impl ConfiguredSeamService {
     }
 }
 
-fn extension_result_for_plan_report(
+pub(crate) fn extension_result_for_plan_report(
     method: &str,
     plan: &Value,
     result: &Value,
@@ -513,7 +543,7 @@ fn event_emit_result_for_plan_report(
     }))
 }
 
-fn method_primary_kind(method: &str) -> &'static str {
+pub(crate) fn method_primary_kind(method: &str) -> &'static str {
     match method {
         "leaven/lm.complete" => "lm_response",
         "leaven/agent.run" => "agent_session",
@@ -559,6 +589,8 @@ pub struct SeamServiceConfig {
     pub stage: SeamStageConfig,
     /// Configured graph read state.
     pub graph: SeamGraphConfig,
+    /// Optional RunContext-backed graph-write proof path.
+    pub run_context: SeamRunContextConfig,
     /// Configured case records by case id.
     pub cases: BTreeMap<String, SeamCaseRecordConfig>,
 }
@@ -573,6 +605,7 @@ impl Default for SeamServiceConfig {
             lm: SeamLmConfig::default(),
             stage: SeamStageConfig::default(),
             graph: SeamGraphConfig::default(),
+            run_context: SeamRunContextConfig::default(),
             cases: BTreeMap::new(),
         }
     }
@@ -776,6 +809,7 @@ struct ConfiguredPlanHost {
     workspace_factory: LocalWorkspaceFactory,
     agent: Option<CodexCliRuntime>,
     graph_state: Arc<Mutex<SeamGraphState>>,
+    run_context_state: Option<Arc<Mutex<RunContextProposalApplyState>>>,
     cases: BTreeMap<String, SeamCaseRecordConfig>,
     graph_revision: String,
     workspaces: BTreeMap<String, Workspace>,
@@ -786,6 +820,14 @@ impl PlanExecutionHost for ConfiguredPlanHost {
         &mut self,
         request: PlanGraphQueryRequest<'_>,
     ) -> Result<PlanGraphQueryOutcome, PublicSeamError> {
+        if let Some(state) = &self.run_context_state {
+            let state = state.lock().map_err(|_| PublicSeamError::InvalidPlan {
+                message: "RunContext seam service state lock poisoned".to_owned(),
+            })?;
+            if state.accepts_graph_query_plan_id(request.expr()) {
+                return Ok(state.graph_query(request));
+            }
+        }
         Ok(self
             .graph_state
             .lock()
@@ -901,6 +943,18 @@ impl PlanExecutionHost for ConfiguredPlanHost {
         &mut self,
         request: PlanApplyProposalBatchRequest<'_>,
     ) -> Result<PlanApplyProposalBatchOutcome, PublicSeamError> {
+        if let Some(state) = &self.run_context_state {
+            let state = state.lock().map_err(|_| PublicSeamError::InvalidPlan {
+                message: "RunContext seam service state lock poisoned".to_owned(),
+            })?;
+            let batch_ref = requested_proposal_batch(&request)?;
+            if state.accepts_proposal_batch_ref(batch_ref) {
+                return Err(PublicSeamError::InvalidPlan {
+                    message: "RunContext proposal.apply must be executed by the service dispatcher"
+                        .to_owned(),
+                });
+            }
+        }
         self.graph_state
             .lock()
             .map_err(|_| PublicSeamError::InvalidPlan {

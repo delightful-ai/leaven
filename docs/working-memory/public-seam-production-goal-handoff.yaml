@@ -511,7 +511,19 @@ acceptance:
           - crates/leaven-acp-stage-bridge/tests/dispatch_contract.rs
           - crates/leaven-acp-stage-bridge/AGENTS.md
           - crates/leaven/tests/topology_contract.rs
-        note: The bidirectional stdio stage bridge now services a worker-initiated `leaven/proposal.apply` callback by calling `RunContext::apply_batch`, projecting the graph-backed report through leaven-run public-seam receipts, returning a validated extension result, and proving the graph gains the child candidate. This closes the stdio callback leg for proposal.apply, but the durable `leaven seam serve --stdio` SDK service still uses configured receipt plumbing.
+        note: The bidirectional stdio stage bridge now services a worker-initiated `leaven/proposal.apply` callback by calling `RunContext::apply_batch`, projecting the graph-backed report through leaven-run public-seam receipts, returning a validated extension result, and proving the graph gains the child candidate. The durable SDK service leg is now covered by `durable_stdio_runcontext_proposal_apply`.
+      - kind: durable_stdio_runcontext_proposal_apply
+        methods:
+          - "`leaven/proposal.apply`"
+          - "`leaven/graph.query`"
+        commands:
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-cli --test seam_stdio_server
+        paths:
+          - crates/leaven-seam-service/src/run_context_service.rs
+          - crates/leaven-seam-service/src/service.rs
+          - crates/leaven-cli/tests/seam_stdio_server.rs
+        note: The durable `leaven seam serve --stdio` service can now configure a RunContext-backed proposal batch, route matching `leaven/proposal.apply` requests through `RunContext::apply_batch`, project the graph-backed apply report through leaven-run public-seam receipts, validate the extension result, and read back a schema-valid graph event summary proving candidate_count advanced from seed to child. The row remains pending until `assessment.submit`, `evaluation.request`, and `event.emit` also execute through the durable RunContext service route.
       - kind: stdio_runcontext_assessment_submit_callback
         methods:
           - "`leaven/assessment.submit`"
