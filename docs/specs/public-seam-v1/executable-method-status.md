@@ -46,6 +46,15 @@ Codex/agentic public-seam readiness.
 | `leaven/evaluation.request` | RunContext-backed configured local graph write | `leaven-seam-service::run_context_service` | `leaven seam serve --stdio` can route an explicitly configured evaluation request through `RunContext::request_evaluation`, using service-owned typed request lowering and a concrete case set, then project the graph-backed job/receipt through `leaven-run` and read back the real `evalreq_<uuid>` used by later assessment submission. |
 | `leaven/event.emit` | RunContext-backed configured local graph write | `leaven-seam-service::run_context_service` | `leaven seam serve --stdio` can route an explicit `run_context.checked` event through `RunContext::emit(RunEvent::ExternalEventEmitted { ... })`, return a receipt-bound extension result, and read back the emitted event metadata plus engine event count from the service-owned RunContext graph state. |
 
+The RunContext-backed configured local graph-write rows above prove that the
+locked backbone method names no longer stop at validation or configured receipt
+plumbing. They do not, by themselves, prove the long-term SDK worker service
+shape: a serve process bound to a real optimizer/run/stage lifecycle, real
+problem-specific lowering, durable run/checkpoint stores, and checkpoint
+readback of the mutated run. That generalized service proof is tracked in the
+production goal ledger and must not be replaced by the configured
+`SeamTextProblem` path.
+
 ## Validated But Not Executed By The Current Service
 
 The runtime dispatcher exposes every locked worker-profile method and validates

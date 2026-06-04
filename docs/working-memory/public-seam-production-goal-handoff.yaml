@@ -148,6 +148,14 @@ misleading_proxy_proofs:
       agentic reflection, typed proposal readback, RunContext-owned proposal
       application, or that the changed artifact is what the next Codex stage saw.
     forbidden_as_completion_evidence: true
+  - proxy: "`leaven seam serve --stdio` mutates the configured `SeamTextProblem` proof graph."
+    why_insufficient: >-
+      The configured RunContext service proves locked method names can cross the
+      CLI/runtime/service boundary into engine mutation. It does not prove a
+      generalized SDK worker service bound to a real optimizer run, real
+      problem-specific lowering, durable run/checkpoint stores, or checkpoint
+      readback of the mutated run.
+    forbidden_as_completion_evidence: true
 
 spec_revisions_before_goal:
   - update: >-
@@ -449,8 +457,8 @@ acceptance:
     closeout_check: Materialize-only workspace support cannot close this row.
 
   - id: effects_and_graph_writes_execute
-    claim: Remaining backbone effect/write methods execute with real side effects, receipts, and graph/run integration.
-    status: done
+    claim: Remaining backbone effect/write methods execute through `leaven seam serve --stdio` with configured local side effects, receipts, and RunContext-backed graph mutation where graph state changes.
+    status: proven
     proof_required:
       kind: engine_integrated_stdio_tests
       must_exercise:
@@ -459,7 +467,7 @@ acceptance:
         - "`leaven/assessment.submit`"
         - "`leaven/evaluation.request`"
         - "`leaven/event.emit` if retained in locked V1"
-        - receipt binding and RunContext-owned mutation where graph state changes
+        - receipt binding and RunContext-owned mutation where configured graph state changes
     evidence:
       - kind: partial_event_emit_execution
         methods:
@@ -523,7 +531,7 @@ acceptance:
           - crates/leaven-seam-service/src/run_context_service.rs
           - crates/leaven-seam-service/src/service.rs
           - crates/leaven-cli/tests/seam_stdio_server.rs
-        note: The durable `leaven seam serve --stdio` service can now configure a RunContext-backed proposal batch, route matching `leaven/proposal.apply` requests through `RunContext::apply_batch`, project the graph-backed apply report through leaven-run public-seam receipts, validate the extension result, and read back a schema-valid graph event summary proving candidate_count advanced from seed to child. The row remains pending until `assessment.submit`, `evaluation.request`, and `event.emit` also execute through the durable RunContext service route.
+        note: The durable `leaven seam serve --stdio` service can now configure a RunContext-backed proposal batch, route matching `leaven/proposal.apply` requests through `RunContext::apply_batch`, project the graph-backed apply report through leaven-run public-seam receipts, validate the extension result, and read back a schema-valid graph event summary proving candidate_count advanced from seed to child. This is configured local service proof, not generalized run-bound SDK worker proof.
       - kind: stdio_runcontext_assessment_submit_callback
         methods:
           - "`leaven/assessment.submit`"
@@ -536,7 +544,7 @@ acceptance:
           - crates/leaven-acp-stage-bridge/src/graph_host.rs
           - crates/leaven-acp-stage-bridge/tests/graph_effect_contract.rs
           - docs/specs/public-seam-v1/executable-method-status.md
-        note: The engine now exposes `RunContext::submit_assessments` for externally supplied typed `Assessment<P>` values against an existing evaluation request; it charges cost, stores typed evidence, records assessments, emits `EvaluationCompleted`, and refuses unknown request ids without mutation. The bidirectional stdio stage bridge now services a worker-initiated `leaven/assessment.submit` callback by parsing locked Plan IR, using a host-owned typed lowerer for `P::Evidence`, calling `RunContext::submit_assessments`, returning a receipt-bound extension result, and proving graph/evidence persistence. The durable `leaven seam serve --stdio` SDK service still uses configured receipt plumbing.
+        note: The engine now exposes `RunContext::submit_assessments` for externally supplied typed `Assessment<P>` values against an existing evaluation request; it charges cost, stores typed evidence, records assessments, emits `EvaluationCompleted`, and refuses unknown request ids without mutation. The bidirectional stdio stage bridge now services a worker-initiated `leaven/assessment.submit` callback by parsing locked Plan IR, using a host-owned typed lowerer for `P::Evidence`, calling `RunContext::submit_assessments`, returning a receipt-bound extension result, and proving graph/evidence persistence. The generalized run-bound SDK service remains tracked by `run_bound_durable_runcontext_service`.
       - kind: stdio_runcontext_event_emit_callback
         methods:
           - "`leaven/event.emit`"
@@ -602,7 +610,7 @@ acceptance:
           - crates/leaven-acp-stage-bridge/src/graph_host.rs
           - crates/leaven-acp-stage-bridge/tests/graph_effect_contract.rs
           - docs/specs/public-seam-v1/executable-method-status.md
-        note: The engine exposes `RunContext::request_evaluation` for externally supplied typed evaluation requests; it trust-checks, resolves, records evaluator identity, emits `EvaluationRequested`, and refuses hidden optimizer partitions without mutation. The bidirectional stdio stage bridge now services a worker-initiated `leaven/evaluation.request` callback by parsing locked Plan IR, using a host-owned typed lowerer for `EvaluationRequest`, calling `RunContext::request_evaluation`, returning a receipt-bound extension result, and proving graph persistence. The durable `leaven seam serve --stdio` SDK service still uses configured receipt plumbing.
+        note: The engine exposes `RunContext::request_evaluation` for externally supplied typed evaluation requests; it trust-checks, resolves, records evaluator identity, emits `EvaluationRequested`, and refuses hidden optimizer partitions without mutation. The bidirectional stdio stage bridge now services a worker-initiated `leaven/evaluation.request` callback by parsing locked Plan IR, using a host-owned typed lowerer for `EvaluationRequest`, calling `RunContext::request_evaluation`, returning a receipt-bound extension result, and proving graph persistence. The generalized run-bound SDK service remains tracked by `run_bound_durable_runcontext_service`.
       - kind: configured_stdio_graph_write_readback
         methods:
           - "`leaven/proposal.apply`"
@@ -627,7 +635,37 @@ acceptance:
           - cargo test -p leaven-cli --test seam_stdio_server
           - cargo test -p leaven-public-seam --test public_seam_contract
         note: Public-seam configured service now authorizes evaluation.request, builds a validated EvaluationJobDocument, validates the context-bound request-evaluation receipt, and returns an evaluation_request_receipt through stdio. This is still configured receipt plumbing, not durable RunContext mutation.
-    closeout_check: "`proposal.submit_batch` alone is not proposal application."
+    closeout_check: >-
+      `proposal.submit_batch` alone is not proposal application. This row proves
+      configured local method execution and cannot close generalized SDK
+      worker/run durability.
+
+  - id: run_bound_durable_runcontext_service
+    claim: >-
+      The public SDK server route can bind external-language worker callbacks to
+      a real optimizer/run/stage lifecycle, mutate that run only through
+      `RunContext`, persist the mutated graph through the durable run store, and
+      read it back from checkpoint state.
+    status: pending
+    proof_required:
+      kind: run_bound_service_checkpoint_scenario
+      must_exercise:
+        - "`leaven seam serve --stdio` or the successor public SDK server route"
+        - a real run/stage lifecycle, not only `SeamTextProblem` service configuration
+        - host-owned typed lowering from public Plan IR into concrete problem/evidence/request types
+        - "`leaven/proposal.apply` through `RunContext::apply_batch`"
+        - "`leaven/evaluation.request` through `RunContext::request_evaluation`"
+        - "`leaven/assessment.submit` through `RunContext::submit_assessments` with a real evidence store"
+        - "`leaven/event.emit` through `RunContext::emit`"
+        - durable checkpoint write after mutation
+        - Rust-owned checkpoint/graph/blob readback proving the same candidate, evaluation request, assessment, event, receipts, lineage, and cost/usage facts
+        - negative proof that fallback `SeamGraphState` or configured receipt synthesis cannot satisfy the route
+    evidence: []
+    closeout_check: >-
+      The configured `SeamTextProblem` proof path, `leaven-acp-stage-bridge`
+      callback tests, public-seam receipt projection tests, and Python
+      `optimized.json` inspection are prerequisite evidence only; none can close
+      this row without a run-bound durable checkpoint/readback scenario.
 
   - id: rust_owned_run_readback_powers_python_inspection
     claim: Python run inspection reads Rust-owned durable run/checkpoint state or a Rust-owned exported artifact.
