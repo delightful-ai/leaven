@@ -1394,6 +1394,31 @@ acceptance:
           Tests narrow recursive JSON values before deep assertions. This is a
           scoped Python private-boundary cleanup, not full generated typed Plan
           IR or public SDK API closeout.
+      - kind: private_worker_json_boundary_branding
+        commits:
+          - 4610c62a
+        paths:
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/src/leaven/_seam_worker/
+          - sdk/python/tests/_seam_worker/test_callbacks.py
+          - sdk/python/tests/_seam_worker/test_protocol.py
+        commands:
+          - cd sdk/python && uv run pytest tests/_seam_worker tests/test_proposer_worker.py tests/test_stage_surface.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_seam_worker tests/_seam_worker tests/test_proposer_worker.py tests/test_stage_surface.py
+          - cd sdk/python && uv run ruff format --check src/leaven/_seam_worker tests/_seam_worker scripts/check_quality_contract.py
+          - cd sdk/python && uv run ty check src/leaven/_seam_worker tests/_seam_worker
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - rg -n "from typing import Any|\bAny\b|dict\[str, Any\]|Mapping\[str, Any\]" sdk/python/src/leaven/_seam_worker -g '*.py'
+        note: >-
+          Private command-worker stdio requests, callback responses, receipt
+          fragments, runner/proposer payloads, and JSON-RPC ids now parse or
+          narrow through shared `JsonObject`/`JsonValue` aliases instead of
+          carrying local `typing.Any`/`dict[str, Any]` annotations. The SDK
+          quality contract now scans `_seam_worker` alongside `_seam/_wire` for
+          typed-boundary `Any`, and mirrored tests cover callback receipt and
+          protocol read/write helpers. This is still a private worker-boundary
+          slice: public decorator callable typing and remaining leaf schema
+          owners still need typed follow-up cuts.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this
