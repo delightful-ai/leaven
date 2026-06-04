@@ -886,6 +886,19 @@ acceptance:
         - transport separation: stdio/http/client routing is outside the msgspec codec layer
         - generated-code line-count split policy under the 650 LOC Python gate
     evidence:
+      - kind: typed_seam_migration_design
+        paths:
+          - docs/plans/2026-06-04-typed-public-seam-migration.md
+        note: >-
+          The typed public-seam migration design records the corrected
+          denominator: JSON remains only a transport encoding, while method
+          semantics must flow through Rust-owned typed method, request, result,
+          receipt, capability, runtime, service, Python msgspec, and worker
+          records. It names the few allowed raw JSON islands and requires each
+          to have an owning type, tests, and quality-gate allowlist entry. This
+          is planning evidence only; it explicitly says schema validation over
+          raw JSON, outer-envelope-only Python msgspec records, and the
+          provisional Value-based run route cannot close this row.
       - kind: rust_export_backed_msgspec_codec_foundation
         paths:
           - crates/leaven-cli/src/main.rs
