@@ -40,7 +40,7 @@ pub struct CapabilityDocument {
     #[serde(default)]
     parent_capability_fingerprint: Option<String>,
     issuer: Issuer,
-    subject: Value,
+    subject: CapabilitySubject,
     audience: Vec<String>,
     issued_at: String,
     token_binding: TokenBinding,
@@ -161,11 +161,10 @@ impl CapabilityDocument {
     }
 
     pub(crate) fn subject_stage_role(&self) -> Option<&str> {
-        self.subject
-            .as_object()
-            .filter(|subject| subject.get("kind").and_then(Value::as_str) == Some("stage_call"))
-            .and_then(|subject| subject.get("role"))
-            .and_then(Value::as_str)
+        match &self.subject {
+            CapabilitySubject::StageCall { role, .. } => Some(role.as_str()),
+            _ => None,
+        }
     }
 
     /// Execution policy profile.
@@ -312,31 +311,17 @@ impl CapabilityDocument {
     }
 
     fn validate_subject_grant_invariants(&self) -> Result<(), CapabilityError> {
-        let subject = self.subject.as_object().ok_or_else(|| {
-            invalid_document("capability subject must be a locked subject object")
-        })?;
-        match subject.get("kind").and_then(Value::as_str) {
-            Some("stage_call") => match subject.get("role").and_then(Value::as_str) {
-                Some("runner") => self.ensure_stage_role_cannot_receive_target("runner"),
-                Some("reflector") => self.ensure_stage_role_cannot_receive_target("reflector"),
+        match &self.subject {
+            CapabilitySubject::StageCall { role, .. } => match role.as_str() {
+                "runner" => self.ensure_stage_role_cannot_receive_target("runner"),
+                "reflector" => self.ensure_stage_role_cannot_receive_target("reflector"),
                 _ => Ok(()),
             },
-            Some("evaluation_stage_call") => {
-                let evaluation_request_id = subject
-                    .get("evaluation_request_id")
-                    .and_then(Value::as_str)
-                    .ok_or_else(|| {
-                        invalid_document(
-                            "evaluation_stage_call subject must carry evaluation_request_id",
-                        )
-                    })?;
-                self.ensure_assessment_submit_matches_evaluation_request(evaluation_request_id)
-            }
-            Some("operator") => Ok(()),
-            Some(other) => Err(invalid_document(format!(
-                "capability subject kind `{other}` is not in the locked V1 subject set"
-            ))),
-            None => Err(invalid_document("capability subject must carry kind")),
+            CapabilitySubject::EvaluationStageCall {
+                evaluation_request_id,
+                ..
+            } => self.ensure_assessment_submit_matches_evaluation_request(evaluation_request_id),
+            CapabilitySubject::Operator { .. } => Ok(()),
         }
     }
 
@@ -436,6 +421,27 @@ enum ExpiryBehavior {
     DrainInflightNoNewOps,
     CancelInflight,
     RenewRequiredBeforeLongCall,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum CapabilitySubject {
+    StageCall {
+        run: String,
+        stage_call_id: String,
+        role: String,
+    },
+    EvaluationStageCall {
+        run: String,
+        stage_call_id: String,
+        evaluation_request_id: String,
+        #[serde(default)]
+        evaluator: Option<String>,
+    },
+    Operator {
+        principal: String,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize)]
