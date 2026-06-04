@@ -9,7 +9,7 @@ from msgspec import ValidationError, convert
 from .._seam import LmCompleteRequest
 from .._seam._wire import JsonObject
 from .._seam._wire.json_value import json_object
-from .._seam.results import AgentRunResult, LmCompleteResult, ProposalSubmitResult
+from .._seam._wire.results import AgentRunResult, LmCompleteResult, ProposalSubmitResult
 from .._stage_runtime import CallbackProposeContext, CallbackRolloutContext
 from .callbacks import CallbackReceiptLog
 

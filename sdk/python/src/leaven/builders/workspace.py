@@ -6,12 +6,12 @@ writes and is granted only to privileged roles (proposer, evaluator).
 """
 
 from collections.abc import Sequence
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
 from .._handles import WorkspaceHandle, WorkspaceLifetime, WorkspaceSurface
 from .._receipts import CallReceipt, QueryReceipt
+from ..json_value import JsonObject
 
 
 class WorkspaceFile(BaseModel):
@@ -39,7 +39,7 @@ class WorkspaceStatus(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    entries: list[dict[str, Any]]
+    entries: list[JsonObject]
     """Per-file status entries (porcelain v2 shape)."""
     receipt: QueryReceipt
 
@@ -49,7 +49,7 @@ class WorkspaceListing(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    entries: list[dict[str, Any]]
+    entries: list[JsonObject]
     receipt: QueryReceipt
 
 

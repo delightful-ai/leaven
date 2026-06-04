@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use leaven_public_seam::{MethodSchema, PublicSeamPackage, SchemaFingerprint};
+use leaven_public_seam::{
+    MethodReceiptExpectation, MethodSchema, PublicSeamPackage, SchemaFingerprint,
+};
 use leaven_seam_runtime::{SeamRuntime, SeamRuntimeError};
 use leaven_seam_service::{ConfiguredSeamService, ConfiguredSeamServiceError, SeamServiceConfig};
 use leaven_seam_stdio::{SeamStdioError, serve_inherited_stdio};
@@ -26,6 +28,15 @@ impl SeamProfileCommand {
                     "params_schema": method.params_schema().schema_file(),
                     "result_schema": method.result_schema().schema_file(),
                     "required_action": method.required_action().as_str(),
+                    "primary_kinds": method
+                        .method()
+                        .primary_kinds()
+                        .iter()
+                        .map(|kind| kind.as_str())
+                        .collect::<Vec<_>>(),
+                    "receipt_expectation": receipt_expectation_value(
+                        method.method().receipt_expectation()
+                    ),
                     "params_schema_fingerprint": params_fingerprint,
                     "result_schema_fingerprint": result_fingerprint,
                     "produces_receipt": method.produces_receipt()
@@ -42,6 +53,21 @@ impl SeamProfileCommand {
             output
         })
         .map_err(SeamCommandError::from)
+    }
+}
+
+fn receipt_expectation_value(expectation: MethodReceiptExpectation) -> Value {
+    match expectation {
+        MethodReceiptExpectation::StageRun => json!({"kind": "stage_run"}),
+        MethodReceiptExpectation::Query => json!({"kind": "query"}),
+        MethodReceiptExpectation::Call(call_kind) => json!({
+            "kind": "call",
+            "call_kind": call_kind,
+        }),
+        MethodReceiptExpectation::Write(write_kind) => json!({
+            "kind": "write",
+            "write_kind": write_kind,
+        }),
     }
 }
 
@@ -88,4 +114,52 @@ pub enum SeamCommandError {
     Json(#[from] serde_json::Error),
     #[error(transparent)]
     Stdio(#[from] SeamStdioError),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn seam_profile_exports_typed_method_result_facts() {
+        let output = SeamProfileCommand {
+            root: workspace_root(),
+        }
+        .run()
+        .expect("profile export succeeds");
+        let profile: Value = serde_json::from_str(&output).expect("profile export is JSON");
+        let methods = profile["extension_methods"]
+            .as_array()
+            .expect("profile carries extension methods");
+
+        let agent = method(methods, "leaven/agent.run");
+        assert_eq!(agent["primary_kinds"], json!(["agent_session"]));
+        assert_eq!(
+            agent["receipt_expectation"],
+            json!({"kind": "call", "call_kind": "agent_run"})
+        );
+
+        let apply = method(methods, "leaven/proposal.apply");
+        assert_eq!(apply["primary_kinds"], json!(["apply_receipt"]));
+        assert_eq!(
+            apply["receipt_expectation"],
+            json!({"kind": "write", "write_kind": "apply_proposal_batch"})
+        );
+    }
+
+    fn method<'a>(methods: &'a [Value], name: &str) -> &'a Value {
+        methods
+            .iter()
+            .find(|method| method["method"] == name)
+            .expect("locked method is exported")
+    }
+
+    fn workspace_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("crate has crates parent")
+            .parent()
+            .expect("workspace root exists")
+            .to_path_buf()
+    }
 }

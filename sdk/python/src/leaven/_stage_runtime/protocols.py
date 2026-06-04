@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from .._seam._wire import JsonObject
-from .._seam.results import AgentRunResult, LmCompleteResult, ProposalSubmitResult
+from .._seam._wire.results import AgentRunResult, LmCompleteResult, ProposalSubmitResult
 
 
 class AgentRunCallback(Protocol):

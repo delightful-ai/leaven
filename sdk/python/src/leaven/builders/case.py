@@ -9,7 +9,7 @@ from msgspec import UNSET
 from .._seam import CaseLoadRequest
 from .._seam._wire import JsonObject as WireJsonObject
 from .._seam._wire.payloads import ReceiptRef
-from .._seam.results import CaseLoadResult
+from .._seam._wire.results import CaseLoadResult
 from ..case import Case
 
 CaseField = Literal["input", "target", "metadata", "files", "setup", "sandbox", "split"]

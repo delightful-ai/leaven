@@ -12,7 +12,7 @@ from .._seam import LmCompleteRequest
 from .._seam._wire import JsonObject
 from .._seam._wire.json_value import json_object
 from .._seam._wire.payloads import Cost
-from .._seam.results import LmCompleteResult
+from .._seam._wire.results import LmCompleteResult
 from ..json_value import JsonValue
 
 LmMessageRole = Literal["system", "developer", "user", "assistant", "tool"]

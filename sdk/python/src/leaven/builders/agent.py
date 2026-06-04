@@ -15,7 +15,7 @@ from .._seam._wire import JsonObject
 from .._seam._wire.json_value import json_object
 from .._seam._wire.payloads import BlobRef as WireBlobRef
 from .._seam._wire.payloads import Cost
-from .._seam.results import AgentRunResult
+from .._seam._wire.results import AgentRunResult
 from ..agent_instructions import AgentInstructions
 from ..blob_ref import BlobRef
 from ..json_value import JsonValue

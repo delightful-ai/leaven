@@ -1153,39 +1153,51 @@ acceptance:
           Later Rust slices type PlanError details and runner case-input facts,
           but Python generation still needs to consume those owners. No
           remaining leaf slot may close by approval-only exception.
-      - kind: private_client_builder_result_typing
+      - kind: rust_profile_generated_client_result_typing
         paths:
+          - crates/leaven-cli/src/seam.rs
+          - sdk/python/codegen/generate_seam_wire.py
+          - sdk/python/codegen/method_codegen.py
+          - sdk/python/codegen/result_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/results.py
           - sdk/python/src/leaven/_seam/client.py
-          - sdk/python/src/leaven/_seam/results.py
           - sdk/python/src/leaven/builders/agent.py
           - sdk/python/src/leaven/builders/lm.py
           - sdk/python/src/leaven/builders/proposals.py
           - sdk/python/src/leaven/builders/case.py
+          - sdk/python/src/leaven/builders/workspace.py
           - sdk/python/src/leaven/_seam_worker/context.py
           - sdk/python/src/leaven/_stage_runtime/protocols.py
           - sdk/python/src/leaven/_stage_runtime/lm.py
+          - sdk/python/tests/_seam/_wire/test_results.py
           - sdk/python/tests/_seam/test_client.py
           - sdk/python/tests/test_stage_surface.py
           - sdk/python/tests/test_proposal_submission.py
           - sdk/python/tests/builders/test_case.py
         commands:
-          - cd sdk/python && uv run ruff check src/leaven/_seam/client.py src/leaven/_seam/results.py src/leaven/builders/agent.py src/leaven/builders/lm.py src/leaven/builders/proposals.py src/leaven/builders/case.py src/leaven/_seam_worker/context.py src/leaven/_stage_runtime/protocols.py src/leaven/_stage_runtime/lm.py tests/_seam/test_client.py tests/test_stage_surface.py tests/test_proposal_submission.py tests/builders/test_case.py
-          - cd sdk/python && uv run ty check src/leaven/_seam/client.py src/leaven/_seam/results.py src/leaven/builders/agent.py src/leaven/builders/lm.py src/leaven/builders/proposals.py src/leaven/builders/case.py src/leaven/_seam_worker/context.py src/leaven/_stage_runtime/protocols.py src/leaven/_stage_runtime/lm.py tests/_seam/test_client.py tests/test_stage_surface.py tests/test_proposal_submission.py tests/builders/test_case.py
-          - cd sdk/python && uv run pytest tests/_seam/test_client.py tests/test_stage_surface.py tests/test_proposal_submission.py tests/builders/test_case.py -q
-          - python3 scripts/lint-line-count.py --root sdk/python/src/leaven
-          - rg -n "Any|hasattr|def request\\(|\\.request\\(" sdk/python/src/leaven/_seam/client.py sdk/python/src/leaven/_seam/results.py sdk/python/src/leaven/builders/agent.py sdk/python/src/leaven/builders/lm.py sdk/python/src/leaven/builders/proposals.py sdk/python/src/leaven/builders/case.py sdk/python/src/leaven/_seam_worker/context.py sdk/python/src/leaven/_stage_runtime/protocols.py sdk/python/src/leaven/_stage_runtime/lm.py sdk/python/tests/_seam/test_client.py sdk/python/tests/test_stage_surface.py sdk/python/tests/test_proposal_submission.py sdk/python/tests/builders/test_case.py
+          - cargo check -p leaven-cli
+          - cargo test -p leaven-cli seam::tests::seam_profile_exports_typed_method_result_facts -- --exact
+          - cargo fmt --check
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run ruff check codegen/generate_seam_wire.py codegen/method_codegen.py codegen/result_codegen.py src/leaven/_seam/_wire src/leaven/_seam/client.py src/leaven/_seam_worker/context.py src/leaven/_stage_runtime/protocols.py src/leaven/_stage_runtime/lm.py src/leaven/builders/agent.py src/leaven/builders/lm.py src/leaven/builders/proposals.py src/leaven/builders/case.py src/leaven/builders/workspace.py tests/_seam/_wire tests/_seam/test_client.py tests/test_stage_surface.py tests/test_proposal_submission.py tests/builders/test_case.py
+          - cd sdk/python && uv run ty check codegen/generate_seam_wire.py codegen/method_codegen.py codegen/result_codegen.py src/leaven/_seam/_wire src/leaven/_seam/client.py src/leaven/_seam_worker/context.py src/leaven/_stage_runtime/protocols.py src/leaven/_stage_runtime/lm.py src/leaven/builders/agent.py src/leaven/builders/lm.py src/leaven/builders/proposals.py src/leaven/builders/case.py src/leaven/builders/workspace.py tests/_seam/_wire tests/_seam/test_client.py tests/test_stage_surface.py tests/test_proposal_submission.py tests/builders/test_case.py
+          - cd sdk/python && uv run pytest tests/_seam/_wire tests/_seam/test_client.py tests/test_stage_surface.py tests/test_proposal_submission.py tests/builders/test_case.py -q
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - rg -n "_seam\\.results|from \\.results|def request\\(|\\.request\\(|\\bAny\\b|typing\\.Any|dict\\[str, Any\\]|from __future__" sdk/python/codegen/generate_seam_wire.py sdk/python/codegen/method_codegen.py sdk/python/codegen/result_codegen.py sdk/python/src/leaven/_seam sdk/python/src/leaven/builders sdk/python/src/leaven/_seam_worker/context.py sdk/python/src/leaven/_stage_runtime/protocols.py sdk/python/src/leaven/_stage_runtime/lm.py sdk/python/tests/_seam sdk/python/tests/test_stage_surface.py sdk/python/tests/test_proposal_submission.py sdk/python/tests/builders/test_case.py -g '*.py'
         note: >-
-          The private process client no longer exposes a generic raw
-          `request(...) -> JsonObject` success path; builder-owned methods now
-          call method-specific typed client methods and decode msgspec result
+          The Rust `leaven seam profile` export now carries primary-kind and
+          receipt-expectation facts from the locked method table. Python codegen
+          renders those facts into `_seam._wire.results`, and the hand-written
+          `_seam/results.py` module was removed. The private process client and
+          callback-backed worker builders now import generated msgspec result
           records for agent.run, lm.complete, proposal.submit_batch, and case
-          reads. Worker callbacks now return the same typed result records to
-          callback-backed builders, and tests use typed result fixtures rather
-          than arbitrary dict-shaped success values. This removes the immediate
-          Python builder/client result-erasure point, but it does not close the
-          row: the method result projections in `_seam/results.py` are still
-          hand-authored and must be generated from Rust-owned public-seam truth
-          before this claim can be marked done.
+          reads; tests use generated result fixtures rather than arbitrary
+          dict-shaped success values. This removes the immediate Python
+          builder/client result-erasure point and the hand-authored result
+          mirror. The row remains pending because the generated result module
+          does not yet expose method-specific result classes for every retained
+          locked method and remaining Plan/body leaf records still need typed
+          owners.
       - kind: typed_plan_expression_owner_foundation
         commits:
           - a0397e66

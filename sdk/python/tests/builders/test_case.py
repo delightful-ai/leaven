@@ -2,7 +2,7 @@ from typing import Literal
 
 import pytest
 
-from leaven._seam.results import CaseLoadResult, CaseRecordPrimary
+from leaven._seam._wire.results import CaseLoadResult, CaseRecordPrimary
 from leaven.builders.case import CaseBuilder
 from leaven.json_value import JsonObject, JsonValue
 

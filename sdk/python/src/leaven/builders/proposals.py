@@ -9,7 +9,7 @@ from .._receipts import WriteReceipt
 from .._seam import ProposalSubmitRequest
 from .._seam._wire import JsonObject
 from .._seam._wire.json_value import json_object
-from .._seam.results import ProposalSubmitResult
+from .._seam._wire.results import ProposalSubmitResult
 from ..json_value import JsonValue
 from ..proposal import ProposalBatch, ProposalEffect
 

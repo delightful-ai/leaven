@@ -15,10 +15,10 @@ from ._wire import (
     require_locked_method,
 )
 from ._wire.codec import decode_response, encode_request
+from ._wire.results import AgentRunResult, CaseLoadResult, LmCompleteResult, ProposalSubmitResult
 from .config import SeamServiceConfig
 from .errors import SeamClientError
 from .resolve import resolve_leaven_binary, resolve_repo_root
-from .results import AgentRunResult, CaseLoadResult, LmCompleteResult, ProposalSubmitResult
 
 
 class SeamClient:

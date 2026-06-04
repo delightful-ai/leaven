@@ -1,7 +1,7 @@
 import pytest
 
 from leaven._receipts import CallReceipt, QueryReceipt
-from leaven._seam.results import ProposalBatchPrimary, ProposalSubmitResult
+from leaven._seam._wire.results import ProposalBatchPrimary, ProposalSubmitResult
 from leaven.builders.proposals import ProposalsBuilder
 from leaven.proposal import ProposalBatch, ProposalEffect
 

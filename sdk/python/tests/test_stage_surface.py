@@ -16,7 +16,7 @@ from leaven._seam import (
 )
 from leaven._seam._wire.payloads import BlobRef as WireBlobRef
 from leaven._seam._wire.payloads import Cost
-from leaven._seam.results import (
+from leaven._seam._wire.results import (
     AgentCommandRecord,
     AgentRunResult,
     AgentSessionPrimary,
