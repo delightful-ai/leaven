@@ -7,7 +7,10 @@ use std::process::Command;
 
 use futures::executor::block_on;
 use leaven_acp::{AcpProcessCommand, AcpStdioProcessSession};
-use leaven_acp_stage_bridge::{ExternalEvaluationRequest, RunContextGraphEffectHost};
+use leaven_acp_stage_bridge::{
+    AssessmentSubmitParams, EvaluationRequestParams, ExternalEvaluationRequest,
+    RunContextGraphEffectHost,
+};
 use leaven_core::{
     Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget,
     EvaluationPurpose, EvaluationRequest, EvaluationSet, Evidence, OptimizationProblem,
@@ -322,14 +325,17 @@ print(json.dumps({{
 }
 
 fn lower_bridge_assessment(
-    params: &Value,
+    params: &AssessmentSubmitParams<'_>,
     expected_candidate: CandidateId,
 ) -> Result<Metered<Vec<Assessment<BridgeProblem>>>, String> {
-    let write = params["ops"]
-        .as_array()
-        .and_then(|ops| ops.iter().find_map(|op| op.get("write")))
-        .ok_or_else(|| "missing write".to_owned())?;
-    let assessment = write["assessments"]
+    if params.plan_id() != "plan_runner_assessment_submit" {
+        return Err("unexpected assessment plan id".to_owned());
+    }
+    if params.op_name() != "assessment_batch" {
+        return Err("unexpected assessment op name".to_owned());
+    }
+    let assessment = params
+        .assessments_payload()
         .as_array()
         .and_then(|assessments| assessments.first())
         .ok_or_else(|| "missing assessment".to_owned())?;
@@ -357,14 +363,16 @@ fn lower_bridge_assessment(
 }
 
 fn lower_bridge_evaluation_request(
-    params: &Value,
+    params: &EvaluationRequestParams<'_>,
     expected_candidate: CandidateId,
 ) -> Result<ExternalEvaluationRequest, String> {
-    let request = params["ops"]
-        .as_array()
-        .and_then(|ops| ops.iter().find_map(|op| op.get("write")))
-        .and_then(|write| write.get("request"))
-        .ok_or_else(|| "missing request_evaluation.request".to_owned())?;
+    if params.plan_id() != "plan_runner_evaluation_request" {
+        return Err("unexpected evaluation plan id".to_owned());
+    }
+    if params.op_name() != "evaluation_request" {
+        return Err("unexpected evaluation op name".to_owned());
+    }
+    let request = params.request_payload();
     let candidate = request["candidates"]
         .as_array()
         .and_then(|candidates| candidates.first())

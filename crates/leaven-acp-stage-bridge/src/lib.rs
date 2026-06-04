@@ -23,7 +23,8 @@ mod runner;
 pub use artifact::PromptArtifact;
 pub use error::StageBridgeError;
 pub use graph_host::{
-    ExternalEvaluationRequest, RunContextGraphEffectHost, RunContextGraphEffectHostError,
+    AssessmentSubmitParams, EvaluationRequestParams, ExternalEvaluationRequest,
+    RunContextGraphEffectHost, RunContextGraphEffectHostError,
 };
 pub use host::{HostLm, LmCompletionRequest, MockArithmeticLm, StageRunEffectHost};
 pub use loop_::{

@@ -867,8 +867,33 @@ acceptance:
           and untyped nested assessment replayability rows, and recomputes the
           evaluation-request result hash from the typed primary record. This is
           still foundation evidence only: callback ingress JSON, host-domain
-          assessment/evaluation payload lowering, event payloads, and wider
+          assessment/evaluation payload bodies, event payloads, and wider
           PlanResult/effect leaf slots remain typed-seam blockers.
+      - kind: typed_acp_stage_bridge_lowerer_params_foundation
+        commits:
+          - pending-current-run
+        paths:
+          - crates/leaven-acp-stage-bridge/src/lib.rs
+          - crates/leaven-acp-stage-bridge/src/graph_host.rs
+          - crates/leaven-acp-stage-bridge/tests/graph_effect_contract.rs
+          - crates/leaven/tests/topology_contract.rs
+        commands:
+          - cargo test -p leaven-acp-stage-bridge
+          - cargo check -p leaven-acp-stage-bridge
+          - cargo test -p leaven --test topology_contract
+          - 'rg -n "Fn\\(&Value\\)|submitter\\(params\\)|requester\\(params\\)|lower_bridge_assessment\\(\\s*params: &Value|lower_bridge_evaluation_request\\(\\s*params: &Value" crates/leaven-acp-stage-bridge/src crates/leaven-acp-stage-bridge/tests -g ''*.rs'''
+        note: >-
+          ACP stage-bridge assessment and evaluation request lowerers no longer
+          receive the full raw callback JSON. `RunContextGraphEffectHost` now
+          parses worker callback params into exported typed views:
+          `AssessmentSubmitParams` exposes plan id, op name, typed
+          `EvaluationRequestId`, and the borrowed assessments payload leaf;
+          `EvaluationRequestParams` exposes plan id, op name, and the borrowed
+          request payload leaf. The graph-effect contract tests assert these
+          typed facts before lowering payload bodies into engine assessments or
+          evaluation requests. This is not row closure: the assessment/request
+          payload bodies themselves remain host-domain JSON leaves that still
+          need typed owners.
       - kind: product_route_topology_decision
         paths:
           - docs/working-memory/run-bound-durable-runcontext-service.md

@@ -42,10 +42,10 @@ pub struct RunContextGraphEffectHost<'context, 'run, P: OptimizationProblem> {
     completed_at: String,
 }
 
-type AssessmentSubmitter<'context, P> =
-    dyn Fn(&Value) -> Result<Metered<Vec<Assessment<P>>>, String> + 'context;
-type EvaluationRequester<'context> =
-    dyn Fn(&Value) -> Result<ExternalEvaluationRequest, String> + 'context;
+type AssessmentSubmitter<'context, P> = dyn for<'params> Fn(&AssessmentSubmitParams<'params>) -> Result<Metered<Vec<Assessment<P>>>, String>
+    + 'context;
+type EvaluationRequester<'context> = dyn for<'params> Fn(&EvaluationRequestParams<'params>) -> Result<ExternalEvaluationRequest, String>
+    + 'context;
 
 /// Typed evaluation request produced by a host-owned public payload lowerer.
 pub struct ExternalEvaluationRequest {
@@ -92,7 +92,10 @@ impl<'context, 'run, P: OptimizationProblem> RunContextGraphEffectHost<'context,
     #[must_use]
     pub fn with_assessment_submitter(
         mut self,
-        submitter: impl Fn(&Value) -> Result<Metered<Vec<Assessment<P>>>, String> + 'context,
+        submitter: impl for<'params> Fn(
+            &AssessmentSubmitParams<'params>,
+        ) -> Result<Metered<Vec<Assessment<P>>>, String>
+        + 'context,
     ) -> Self {
         self.assessment_submitter = Some(Box::new(submitter));
         self
@@ -105,7 +108,10 @@ impl<'context, 'run, P: OptimizationProblem> RunContextGraphEffectHost<'context,
     #[must_use]
     pub fn with_evaluation_requester(
         mut self,
-        requester: impl Fn(&Value) -> Result<ExternalEvaluationRequest, String> + 'context,
+        requester: impl for<'params> Fn(
+            &EvaluationRequestParams<'params>,
+        ) -> Result<ExternalEvaluationRequest, String>
+        + 'context,
     ) -> Self {
         self.evaluation_requester = Some(Box::new(requester));
         self
@@ -166,13 +172,13 @@ impl<'context, 'run, P: OptimizationProblem> RunContextGraphEffectHost<'context,
     }
 
     fn assessment_submit(&self, params: &Value) -> Result<Value, RunContextGraphEffectHostError> {
-        let callback = AssessmentSubmitCallback::parse(params)?;
+        let callback = AssessmentSubmitParams::parse(params)?;
         let submitter = self
             .assessment_submitter
             .as_ref()
             .ok_or(RunContextGraphEffectHostError::MissingAssessmentSubmitter)?;
         let metered =
-            submitter(params).map_err(RunContextGraphEffectHostError::AssessmentSubmit)?;
+            submitter(&callback).map_err(RunContextGraphEffectHostError::AssessmentSubmit)?;
         let mut context = self.context.borrow_mut();
         let report = context.submit_assessments(callback.write.request_id, metered)?;
         let graph = context.graph();
@@ -189,13 +195,13 @@ impl<'context, 'run, P: OptimizationProblem> RunContextGraphEffectHost<'context,
     }
 
     fn evaluation_request(&self, params: &Value) -> Result<Value, RunContextGraphEffectHostError> {
-        let _callback = EvaluationRequestCallback::parse(params)?;
+        let callback = EvaluationRequestParams::parse(params)?;
         let requester = self
             .evaluation_requester
             .as_ref()
             .ok_or(RunContextGraphEffectHostError::MissingEvaluationRequester)?;
         let external =
-            requester(params).map_err(RunContextGraphEffectHostError::EvaluationRequest)?;
+            requester(&callback).map_err(RunContextGraphEffectHostError::EvaluationRequest)?;
         let mut context = self.context.borrow_mut();
         let request_id = context.request_evaluation(
             external.evaluator,
@@ -340,44 +346,112 @@ impl<'a> ProposalApplyCallback<'a> {
     }
 }
 
-struct AssessmentSubmitCallback<'a> {
+/// Parsed `leaven/assessment.submit` callback params for host-owned lowering.
+pub struct AssessmentSubmitParams<'a> {
     plan_id: &'a str,
-    write: AssessmentSubmitWrite,
+    write: AssessmentSubmitWrite<'a>,
 }
 
-struct AssessmentSubmitWrite {
+struct AssessmentSubmitWrite<'a> {
+    name: &'a str,
     request_id: EvaluationRequestId,
+    assessments: &'a Value,
 }
 
-impl<'a> AssessmentSubmitCallback<'a> {
+impl AssessmentSubmitParams<'_> {
+    /// Plan identity carried by the public-seam callback.
+    #[must_use]
+    pub fn plan_id(&self) -> &str {
+        self.plan_id
+    }
+
+    /// Operation name for the assessment submit write.
+    #[must_use]
+    pub fn op_name(&self) -> &str {
+        self.write.name
+    }
+
+    /// Typed evaluation request identity receiving the assessments.
+    #[must_use]
+    pub fn evaluation_request_id(&self) -> EvaluationRequestId {
+        self.write.request_id
+    }
+
+    /// Host-domain assessment payloads for the owning lowerer to parse.
+    #[must_use]
+    pub fn assessments_payload(&self) -> &Value {
+        self.write.assessments
+    }
+}
+
+impl<'a> AssessmentSubmitParams<'a> {
     fn parse(params: &'a Value) -> Result<Self, RunContextGraphEffectHostError> {
         let op = plan_write_op(params, "submit_assessments", || {
             RunContextGraphEffectHostError::MissingAssessmentWrite
         })?;
+        let assessments =
+            op.write
+                .get("assessments")
+                .ok_or(RunContextGraphEffectHostError::MissingValue {
+                    field: "assessments",
+                })?;
         Ok(Self {
             plan_id: op.plan_id,
             write: AssessmentSubmitWrite {
+                name: op.name,
                 request_id: evaluation_request_id(op.write)?,
+                assessments,
             },
         })
     }
 }
 
-struct EvaluationRequestCallback<'a> {
-    _plan_id: &'a str,
-    _write: EvaluationRequestWrite,
+/// Parsed `leaven/evaluation.request` callback params for host-owned lowering.
+pub struct EvaluationRequestParams<'a> {
+    plan_id: &'a str,
+    write: EvaluationRequestWrite<'a>,
 }
 
-struct EvaluationRequestWrite;
+struct EvaluationRequestWrite<'a> {
+    name: &'a str,
+    request: &'a Value,
+}
 
-impl<'a> EvaluationRequestCallback<'a> {
+impl EvaluationRequestParams<'_> {
+    /// Plan identity carried by the public-seam callback.
+    #[must_use]
+    pub fn plan_id(&self) -> &str {
+        self.plan_id
+    }
+
+    /// Operation name for the evaluation request write.
+    #[must_use]
+    pub fn op_name(&self) -> &str {
+        self.write.name
+    }
+
+    /// Host-domain evaluation request payload for the owning lowerer to parse.
+    #[must_use]
+    pub fn request_payload(&self) -> &Value {
+        self.write.request
+    }
+}
+
+impl<'a> EvaluationRequestParams<'a> {
     fn parse(params: &'a Value) -> Result<Self, RunContextGraphEffectHostError> {
         let op = plan_write_op(params, "request_evaluation", || {
             RunContextGraphEffectHostError::MissingEvaluationRequestWrite
         })?;
+        let request = op
+            .write
+            .get("request")
+            .ok_or(RunContextGraphEffectHostError::MissingValue { field: "request" })?;
         Ok(Self {
-            _plan_id: op.plan_id,
-            _write: EvaluationRequestWrite,
+            plan_id: op.plan_id,
+            write: EvaluationRequestWrite {
+                name: op.name,
+                request,
+            },
         })
     }
 }
