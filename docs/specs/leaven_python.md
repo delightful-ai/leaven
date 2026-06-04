@@ -481,9 +481,12 @@ print(audit.cost_status, audit.unsupported)
 `lv.runs.inspect(...)` is a flattened read-only projection over the persisted
 `Optimized` result. It names the best lineage, visible receipts, public
 assessment evidence, per-assessment reward-vector dimensions, cost/usage
-status, and unsupported dependency facts in one typed `RunInspection`. It does
-not claim Rust graph checkpoint readback or blob store transcript fetch until
-those owning layers persist and expose those artifacts.
+status, unsupported dependency facts, and when a local Rust checkpoint exists,
+Rust-owned checkpoint/graph readback from `leaven run inspect --run-dir ...` in
+one typed `RunInspection`. The current readback proves checkpoint and graph
+blob retrieval; it does not yet claim full transcript/artifact blob byte fetch
+or that `lv.runs.open(...)` is independent of the Python `optimized.json`
+projection.
 
 The same package serves three purposes: compose + configure + run; author
 a stage; inspect after the fact. One install, one mental model.

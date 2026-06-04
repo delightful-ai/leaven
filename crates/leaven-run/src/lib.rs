@@ -5,6 +5,7 @@ pub(crate) mod compatibility;
 mod error;
 mod evaluator;
 mod evidence;
+mod inspection;
 mod public_seam;
 mod result;
 pub(crate) mod run_report;
@@ -23,6 +24,10 @@ pub use evaluator::{JudgeCandidateOutput, JudgeScoreContext, JudgingEvaluator, S
 pub use evidence::{
     IntoRunResult, ReportableOutput, RunCase, RunError, RunOutput, Score, ScoreCase, ScoreContext,
     ScoreError, artifact_identity_output,
+};
+pub use inspection::{
+    RUN_INSPECTION_EXPORT_SCHEMA, RunInspectionExportError, RustRunInspectionExport,
+    export_local_run_inspection,
 };
 pub use leaven_engine::CachePolicy;
 pub use public_seam::{

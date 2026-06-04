@@ -12,6 +12,61 @@ from .run_status import RunCostStatus, RunUsageStatus, UnsupportedRunFact
 ReceiptKind = Literal["query", "call", "write"]
 
 
+class BlobReadbackSummary(BaseModel):
+    """One blob ref resolved through a Rust-owned run store export."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    store: str
+    key: str
+    schema_fingerprint: str = Field(alias="schema")
+    format: str
+
+
+class CheckpointReadbackSummary(BaseModel):
+    """Checkpoint-envelope facts read by Rust from the local run store."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    format_version: int
+    graph_snapshot: BlobReadbackSummary
+    artifact_ref_count: int
+    evidence_ref_count: int
+    stage_journal_ref_count: int
+    workspace_journal_ref_count: int
+    has_optimizer_state: bool
+    has_cache_index: bool
+
+
+class GraphReadbackSummary(BaseModel):
+    """Graph snapshot facts read by Rust from the checkpoint graph blob."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    blob: BlobReadbackSummary
+    bytes: int
+    run_id: str | None
+    candidate_count: int
+    proposal_batch_count: int
+    proposal_count: int
+    apply_attempt_count: int
+    evaluation_request_count: int
+    assessment_count: int
+    event_count: int
+
+
+class RustRunReadback(BaseModel):
+    """Rust-owned checkpoint and graph readback attached to run inspection."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: Literal["leaven.run_inspection_export.v1"]
+    run_id: str
+    latest_checkpoint: str
+    checkpoint: CheckpointReadbackSummary
+    graph: GraphReadbackSummary
+
+
 class ReceiptSummary(BaseModel):
     """One opaque receipt visible from a completed run."""
 
@@ -66,6 +121,7 @@ class RunInspection(BaseModel):
     cost_status: RunCostStatus
     total_lm_tokens: int | None
     usage_status: RunUsageStatus
+    rust_readback: RustRunReadback | None = None
     unsupported: tuple[UnsupportedRunFact, ...] = ()
 
     def receipt_ids(self, *, kind: ReceiptKind | None = None) -> list[str]:
@@ -75,7 +131,11 @@ class RunInspection(BaseModel):
         ]
 
 
-def inspect_optimized(result: Optimized[Any]) -> RunInspection:
+def inspect_optimized(
+    result: Optimized[Any],
+    *,
+    rust_readback: RustRunReadback | None = None,
+) -> RunInspection:
     """Build a flattened inspection projection from an optimized result."""
     return RunInspection(
         run_id=result.run_id,
@@ -88,6 +148,7 @@ def inspect_optimized(result: Optimized[Any]) -> RunInspection:
         cost_status=result.summary.cost_status,
         total_lm_tokens=result.summary.total_lm_tokens,
         usage_status=result.summary.usage_status,
+        rust_readback=rust_readback,
         unsupported=result.summary.unsupported,
     )
 
@@ -154,10 +215,14 @@ def _evidence_summary(assessment: Assessment) -> EvidenceSummary:
 
 
 __all__ = [
+    "BlobReadbackSummary",
+    "CheckpointReadbackSummary",
     "EvidenceSummary",
+    "GraphReadbackSummary",
     "ReceiptKind",
     "ReceiptSummary",
     "RewardDimensionSummary",
     "RunInspection",
+    "RustRunReadback",
     "inspect_optimized",
 ]

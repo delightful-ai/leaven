@@ -642,6 +642,56 @@ acceptance:
         - receipts, lineage, evidence, cost/usage, unsupported facts
         - blob byte retrieval for transcript/artifact refs
     evidence:
+      - kind: rust_checkpoint_graph_readback_export_foundation
+        paths:
+          - crates/leaven-run/src/inspection.rs
+          - crates/leaven-run/src/lib.rs
+          - crates/leaven-cli/src/main.rs
+          - sdk/python/src/leaven/_runs/rust_export.py
+          - sdk/python/src/leaven/run_inspection.py
+          - sdk/python/src/leaven/runs.py
+          - sdk/python/tests/_runs/test_rust_export.py
+          - docs/specs/leaven_python.md
+        commands:
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-run inspection
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-cli run_inspect
+          - cargo test -p leaven --test topology_contract
+          - cd sdk/python && uv run pytest tests/_runs/test_rust_export.py tests/test_run_inspection.py -q
+          - cd sdk/python && uv run ruff check src/leaven/run_inspection.py src/leaven/runs.py src/leaven/_runs tests/_runs/test_rust_export.py
+          - cd sdk/python && uv run ty check src/leaven/run_inspection.py src/leaven/runs.py src/leaven/_runs tests/_runs/test_rust_export.py
+        note: >-
+          `leaven-run` now exports a Rust-owned
+          `leaven.run_inspection_export.v1` artifact from a local run directory
+          by reading the latest checkpoint through FileStore, resolving the
+          graph snapshot blob through Rust BlobStore, and reporting checkpoint,
+          graph-count, and graph-blob byte facts. `leaven run inspect --run-dir`
+          exposes that artifact, and Python `lv.runs.inspect(...)` attaches it
+          as typed `rust_readback` when a checkpoint exists. This is still a
+          foundation slice: `lv.runs.open(...)` still depends on the
+          Python-written `optimized.json`, and transcript/artifact blob byte
+          retrieval is not complete.
+    closeout_check: "Reading only `optimized.json` written by Python is a proxy."
+
+  - id: python_wire_codegen_msgspec_boundary
+    claim: >-
+      Python public-seam wire records and JSON-RPC codecs are generated from
+      Rust-owned public-seam truth and use msgspec as the boundary schema/codec
+      layer.
+    status: pending
+    proof_required:
+      kind: rust_schema_codegen_and_python_codec_tests
+      must_exercise:
+        - Rust-owned source of truth for locked methods, params, results, errors, and schema fingerprints
+        - deterministic codegen into split Python modules, not one giant file
+        - "msgspec `Struct` records for JSON-RPC envelopes and method payload/result types"
+        - "explicit `JsonValue`/extension aliases instead of `typing.Any` on public or wire boundaries"
+        - "`UNSET`-style missing-vs-null handling for JSON-RPC result/error fields"
+        - method-specific result decoding from raw payload bytes after the outer envelope is parsed
+        - batch response routing by `id`, never by response order
+        - codec tests for malformed envelopes, both result+error, neither result nor error, unknown methods, null ids, notifications, and typed method payload failures
+        - transport separation: stdio/http/client routing is outside the msgspec codec layer
+        - generated-code line-count split policy under the 650 LOC Python gate
+    evidence:
       - kind: rust_export_backed_msgspec_codec_foundation
         paths:
           - crates/leaven-cli/src/main.rs
@@ -671,50 +721,6 @@ acceptance:
           and receipt bodies intentionally kept as msgspec Raw. This is still a
           foundation slice: full generated nested Plan IR and Plan Result schema
           branches remain before this row can be marked done.
-    closeout_check: "Reading only `optimized.json` written by Python is a proxy."
-
-  - id: python_wire_codegen_msgspec_boundary
-    claim: >-
-      Python public-seam wire records and JSON-RPC codecs are generated from
-      Rust-owned public-seam truth and use msgspec as the boundary schema/codec
-      layer.
-    status: pending
-    proof_required:
-      kind: rust_schema_codegen_and_python_codec_tests
-      must_exercise:
-        - Rust-owned source of truth for locked methods, params, results, errors, and schema fingerprints
-        - deterministic codegen into split Python modules, not one giant file
-        - "msgspec `Struct` records for JSON-RPC envelopes and method payload/result types"
-        - "explicit `JsonValue`/extension aliases instead of `typing.Any` on public or wire boundaries"
-        - "`UNSET`-style missing-vs-null handling for JSON-RPC result/error fields"
-        - method-specific result decoding from raw payload bytes after the outer envelope is parsed
-        - batch response routing by `id`, never by response order
-        - codec tests for malformed envelopes, both result+error, neither result nor error, unknown methods, null ids, notifications, and typed method payload failures
-        - transport separation: stdio/http/client routing is outside the msgspec codec layer
-        - generated-code line-count split policy under the 650 LOC Python gate
-    evidence:
-      - kind: focused_sdk_quality_foundation
-        paths:
-          - sdk/python/pyproject.toml
-          - sdk/python/AGENTS.md
-          - sdk/python/src/leaven/_seam/AGENTS.md
-          - sdk/python/src/leaven/_seam/client.py
-          - sdk/python/src/leaven/_seam/_wire/
-          - sdk/python/tests/AGENTS.md
-          - sdk/python/tests/_seam/_wire/
-        commands:
-          - cd sdk/python && uv lock
-          - cd sdk/python && uv run pytest tests/test_stage_surface.py tests/_seam -q
-          - cd sdk/python && uv run python -c "import leaven; print('import ok', 'SeamClient' not in dir(leaven))"
-          - wc -l $(rg --files sdk/python/src sdk/python/tests sdk/python/codegen -g '*.py') | sort -nr | head -12
-        note: >-
-          msgspec is declared as a runtime dependency for the private generated
-          seam wire codec, `_seam.client` now consumes that codec instead of
-          raw JSON-RPC loads/dumps, test placement mirrors `_seam._wire`, and
-          the checked-in Python file-count scan now shows the largest file at
-          exactly 650 lines. The broader project-quality row remains pending
-          until all public SDK/wire `Any` and public backbone scaffolds are
-          audited and removed or explicitly kept private.
     closeout_check: >-
       Handwritten Python schema mirrors, pydantic-only wire models, untyped
       dict payloads, response-order batch routing, or msgspec used as a
@@ -740,7 +746,29 @@ acceptance:
         - "`uv run ty check ...`"
         - no checked-in non-generated Python file over 650 LOC
         - Python unit/example/law tests mirror source module paths outside `src`, with integration/scenario tests and shared fixtures split into explicit support locations
-    evidence: []
+    evidence:
+      - kind: focused_sdk_quality_foundation
+        paths:
+          - sdk/python/pyproject.toml
+          - sdk/python/AGENTS.md
+          - sdk/python/src/leaven/_seam/AGENTS.md
+          - sdk/python/src/leaven/_seam/client.py
+          - sdk/python/src/leaven/_seam/_wire/
+          - sdk/python/tests/AGENTS.md
+          - sdk/python/tests/_seam/_wire/
+        commands:
+          - cd sdk/python && uv lock
+          - cd sdk/python && uv run pytest tests/test_stage_surface.py tests/_seam -q
+          - cd sdk/python && uv run python -c "import leaven; print('import ok', 'SeamClient' not in dir(leaven))"
+          - wc -l $(rg --files sdk/python/src sdk/python/tests sdk/python/codegen -g '*.py') | sort -nr | head -12
+        note: >-
+          msgspec is declared as a runtime dependency for the private generated
+          seam wire codec, `_seam.client` now consumes that codec instead of
+          raw JSON-RPC loads/dumps, test placement mirrors `_seam._wire`, and
+          the checked-in Python file-count scan now shows the largest file at
+          exactly 650 lines. The broader project-quality row remains pending
+          until all public SDK/wire `Any` and public backbone scaffolds are
+          audited and removed or explicitly kept private.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this

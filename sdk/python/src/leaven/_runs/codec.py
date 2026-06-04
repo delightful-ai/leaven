@@ -26,12 +26,12 @@ def decode_optimized(envelope: dict[str, Any]) -> Optimized[Any]:
     kind = cast("ArtifactKind", envelope.get("artifact_kind"))
     raw = envelope.get("optimized")
     if not isinstance(raw, dict):
-        raise ValueError("persisted run result is missing optimized object")
+        raise TypeError("persisted run result is missing optimized object")
     decoded = _decode_artifacts(raw, kind)
     return Optimized[Any].model_validate(decoded)
 
 
-def _artifact_kind(artifact: Any) -> ArtifactKind:
+def _artifact_kind(artifact: object) -> ArtifactKind:
     if isinstance(artifact, PromptArtifact):
         return "prompt"
     raise TypeError(f"unsupported persisted artifact type: {type(artifact).__name__}")
@@ -48,7 +48,7 @@ def _decode_artifacts(raw: dict[str, Any], kind: ArtifactKind) -> dict[str, Any]
 
 def _decode_candidate(candidate: object, kind: ArtifactKind) -> dict[str, Any]:
     if not isinstance(candidate, dict):
-        raise ValueError("persisted candidate must be an object")
+        raise TypeError("persisted candidate must be an object")
     decoded = dict(candidate)
     artifact = decoded.get("artifact")
     if kind == "prompt":

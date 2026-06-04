@@ -39,6 +39,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<String, CliError> {
     match cli.command {
         None => Ok(DoctorCommand::Summary.run()?),
         Some(TopCommand::Doctor { command }) => Ok(doctor_command(command).run()?),
+        Some(TopCommand::Run { command }) => run_command(command),
         Some(TopCommand::Seam { command }) => seam_command(command),
         Some(TopCommand::Serve(args)) => Ok(args.into_command().run()?),
     }
@@ -63,6 +64,11 @@ enum TopCommand {
         #[command(subcommand)]
         command: SeamSubcommand,
     },
+    /// Inspect completed Leaven runs.
+    Run {
+        #[command(subcommand)]
+        command: RunSubcommand,
+    },
     /// Run the engine as the ACP client over inherited stdio (the wire the SDK spawns).
     Serve(ServeArgs),
 }
@@ -73,6 +79,19 @@ enum SeamSubcommand {
     Profile(SeamProfileArgs),
     /// Serve the locked Leaven public seam over inherited stdio.
     Serve(SeamServeArgs),
+}
+
+#[derive(Debug, Subcommand)]
+enum RunSubcommand {
+    /// Export Rust-owned inspection JSON from a local run directory.
+    Inspect(RunInspectArgs),
+}
+
+#[derive(Debug, Args)]
+struct RunInspectArgs {
+    /// Local Leaven run directory to inspect.
+    #[arg(long)]
+    run_dir: PathBuf,
 }
 
 #[derive(Debug, Args)]
@@ -201,6 +220,20 @@ fn seam_command(command: SeamSubcommand) -> Result<String, CliError> {
     }
 }
 
+fn run_command(command: RunSubcommand) -> Result<String, CliError> {
+    match command {
+        RunSubcommand::Inspect(args) => {
+            let export = leaven_run::export_local_run_inspection(args.run_dir)?;
+            serde_json::to_string_pretty(&export)
+                .map(|mut output| {
+                    output.push('\n');
+                    output
+                })
+                .map_err(CliError::from)
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 enum CliError {
     #[error("{0}")]
@@ -210,7 +243,11 @@ enum CliError {
     #[error(transparent)]
     Seam(#[from] seam::SeamCommandError),
     #[error(transparent)]
+    RunInspection(#[from] leaven_run::RunInspectionExportError),
+    #[error(transparent)]
     Serve(#[from] serve::ServeError),
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
 }
 
 #[cfg(test)]
@@ -218,8 +255,13 @@ mod tests {
     use std::collections::BTreeMap;
     use std::path::PathBuf;
 
+    use bytes::Bytes;
     use leaven_artifact_skill::{SkillBank, SkillFile, SkillFolder, SkillName, SkillPath};
+    use leaven_engine::{GraphSnapshotRef, RunCheckpoint, StateFormat};
     use leaven_gepa_agentic_skill::SkillBankReflectionInput;
+    use leaven_kernel::{BudgetSnapshot, Fingerprint, now};
+    use leaven_store::{BlobStore, BlobWrite, CheckpointBytes, CheckpointStore};
+    use leaven_store_file::FileStore;
 
     use super::run;
 
@@ -361,6 +403,56 @@ mod tests {
         .to_string();
 
         assert!(error.contains("cannot be used with"));
+    }
+
+    #[test]
+    fn run_inspect_exports_rust_owned_checkpoint_and_graph_blob_readback() {
+        let run_dir =
+            std::env::temp_dir().join(format!("leaven-cli-run-inspect-{}", uuid::Uuid::new_v4()));
+        let store = FileStore::open(&run_dir).unwrap();
+        let graph_blob = BlobStore::put(
+            &store,
+            BlobWrite {
+                bytes: Bytes::from_static(
+                    br#"{"run_id":"run_cli","candidates":[{}],"proposal_batches":[],"proposals":[],"apply_attempts":[],"evaluation_requests":[],"assessments":[],"events":[{}]}"#,
+                ),
+                content_type: Some("application/json".to_owned()),
+            },
+        )
+        .unwrap();
+        let checkpoint = RunCheckpoint::new(
+            leaven_kernel::RunId::new(),
+            now(),
+            GraphSnapshotRef {
+                schema: Fingerprint::from_bytes([6; 32]),
+                format: StateFormat::Json,
+                bytes: graph_blob,
+            },
+            BudgetSnapshot::default(),
+        );
+        let checkpoint_id = CheckpointStore::put(
+            &store,
+            CheckpointBytes(Bytes::from(serde_json::to_vec(&checkpoint).unwrap())),
+        )
+        .unwrap();
+        CheckpointStore::mark_latest(&store, checkpoint_id).unwrap();
+
+        let output = run([
+            "run".to_owned(),
+            "inspect".to_owned(),
+            "--run-dir".to_owned(),
+            run_dir.display().to_string(),
+        ])
+        .unwrap();
+        let _ = std::fs::remove_dir_all(&run_dir);
+        let value: serde_json::Value = serde_json::from_str(&output).unwrap();
+
+        assert_eq!(value["schema_version"], "leaven.run_inspection_export.v1");
+        assert_eq!(value["latest_checkpoint"], checkpoint_id.to_string());
+        assert_eq!(value["graph"]["run_id"], "run_cli");
+        assert_eq!(value["graph"]["candidate_count"], 1);
+        assert_eq!(value["graph"]["event_count"], 1);
+        assert!(value["graph"]["bytes"].as_u64().unwrap() > 0);
     }
 
     fn write_input_json(input: &SkillBankReflectionInput<String>) -> PathBuf {

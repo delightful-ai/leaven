@@ -3362,6 +3362,7 @@ dependencies = [
 name = "leaven-cli"
 version = "0.0.0"
 dependencies = [
+ "bytes",
  "clap",
  "futures",
  "leaven-acp",
@@ -3376,9 +3377,12 @@ dependencies = [
  "leaven-gepa-agentic-skill",
  "leaven-kernel",
  "leaven-public-seam",
+ "leaven-run",
  "leaven-seam-runtime",
  "leaven-seam-service",
  "leaven-seam-stdio",
+ "leaven-store",
+ "leaven-store-file",
  "leaven-workspace",
  "leaven-workspace-local",
  "serde",
@@ -3652,6 +3656,7 @@ dependencies = [
 name = "leaven-run"
 version = "0.0.0"
 dependencies = [
+ "bytes",
  "futures",
  "jcs-canonicalize",
  "leaven-core",
