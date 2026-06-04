@@ -304,7 +304,11 @@ print(json.dumps({
     assert_eq!(event_id, "event_status");
     assert_eq!(event_kind, "stage.bridge.checked");
     assert_eq!(payload_schema, "fp_schema_sha256_stage_bridge_event");
-    assert_eq!(payload["ok"], true);
+    assert!(payload.ok);
+    assert_eq!(
+        payload.stage_call_id.as_deref(),
+        Some("sc_dispatch_contract")
+    );
     assert_eq!(visibility, "public");
     forget(script);
 }

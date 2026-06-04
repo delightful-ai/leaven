@@ -42,6 +42,9 @@ pub enum RunBoundGraphEffectError {
     /// The callback did not carry an event write.
     #[error("leaven/event.emit callback must carry an emit_run_event write")]
     MissingEventWrite,
+    /// The event payload did not match the engine-owned external event payload.
+    #[error("leaven/event.emit callback payload is not typed: {0}")]
+    InvalidEventPayload(String),
     /// The host has no typed assessment lowerer installed.
     #[error("leaven/assessment.submit callback requires a typed host assessment lowerer")]
     MissingAssessmentSubmitter,

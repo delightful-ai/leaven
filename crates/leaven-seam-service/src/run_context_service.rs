@@ -6,7 +6,8 @@ use leaven_core::{
     ProposalBatch, ProposalBatchSemantics,
 };
 use leaven_engine::{
-    ApplyOutcome, BudgetLedger, CaseSet, ProposalBatchReport, RunContext, RunEvent, RunGraph,
+    ApplyOutcome, BudgetLedger, CaseSet, ExternalEventPayload, ProposalBatchReport, RunContext,
+    RunEvent, RunGraph,
 };
 use leaven_kernel::{
     Budget, CandidateId, ContentId, Cost, EvaluationRequestId, EvaluatorId, Fingerprint,
@@ -351,15 +352,11 @@ impl RunContextProposalApplyState {
         let event = event_emit_write(params)?;
         let event_id = format!("event_{}", event.name);
         let mut run_context = RunContext::<SeamTextProblem>::new(&mut self.graph, &mut self.budget);
-        let event_payload_value =
-            serde_json::to_value(&event.payload).map_err(|error| PublicSeamError::InvalidPlan {
-                message: format!("run_context.checked payload serialization failed: {error}"),
-            })?;
         run_context.emit(RunEvent::ExternalEventEmitted {
             event_id: event_id.clone(),
             event_kind: event.event_kind.to_owned(),
             payload_schema: event.payload_schema.to_owned(),
-            payload: event_payload_value,
+            payload: event.payload.clone(),
             visibility: event.visibility.to_owned(),
         });
         self.event_count = run_context.graph().events().count();
@@ -485,7 +482,7 @@ struct EventEmitWrite<'a> {
     name: &'a str,
     event_kind: &'a str,
     payload_schema: &'a str,
-    payload: RunContextEventPayload,
+    payload: ExternalEventPayload,
     visibility: &'a str,
 }
 
@@ -515,18 +512,12 @@ fn event_emit_write(params: &Value) -> Result<EventEmitWrite<'_>, PublicSeamErro
     ))
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RunContextEventPayload {
-    ok: bool,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 struct RunContextEventSummary {
     event_id: String,
     event_kind: String,
     payload_schema: String,
-    payload: RunContextEventPayload,
+    payload: ExternalEventPayload,
     visibility: String,
 }
 
@@ -551,7 +542,7 @@ struct RunContextGraphQueryPayload<'a> {
     applied: bool,
 }
 
-fn run_context_event_payload(value: &Value) -> Result<RunContextEventPayload, PublicSeamError> {
+fn run_context_event_payload(value: &Value) -> Result<ExternalEventPayload, PublicSeamError> {
     serde_json::from_value(value.clone()).map_err(|error| PublicSeamError::InvalidPlan {
         message: format!("run_context.checked payload is not typed: {error}"),
     })
@@ -609,7 +600,7 @@ struct EventEmitWriteProjection<'a> {
     kind: &'static str,
     event_kind: &'a str,
     payload_schema: &'a str,
-    payload: &'a RunContextEventPayload,
+    payload: &'a ExternalEventPayload,
     visibility: &'a str,
 }
 
@@ -738,7 +729,13 @@ mod tests {
 
         assert_eq!(event.name, "run_context_status");
         assert_eq!(event.event_kind, "run_context.checked");
-        assert_eq!(event.payload, RunContextEventPayload { ok: true });
+        assert_eq!(
+            event.payload,
+            ExternalEventPayload {
+                ok: true,
+                stage_call_id: None
+            }
+        );
     }
 
     #[test]

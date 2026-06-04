@@ -1,3 +1,4 @@
+use leaven_engine::ExternalEventPayload;
 use serde::Serialize;
 use serde_json::Value;
 
@@ -8,7 +9,7 @@ pub(super) struct EventEmitExtensionContext<'a> {
     pub(super) name: &'a str,
     pub(super) event_kind: &'a str,
     pub(super) payload_schema: &'a str,
-    pub(super) payload: &'a Value,
+    pub(super) payload: &'a ExternalEventPayload,
     pub(super) visibility: &'a str,
     pub(super) event_id: &'a str,
     pub(super) base_revision: &'a str,
@@ -483,7 +484,7 @@ struct EventEmitWriteProjection<'a> {
     kind: &'static str,
     event_kind: &'a str,
     payload_schema: &'a str,
-    payload: &'a Value,
+    payload: &'a ExternalEventPayload,
     visibility: &'a str,
 }
 

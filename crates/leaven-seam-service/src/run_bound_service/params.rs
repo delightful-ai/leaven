@@ -1,3 +1,4 @@
+use leaven_engine::ExternalEventPayload;
 use leaven_kernel::{EvaluationRequestId, ProposalBatchId};
 use serde_json::Value;
 use uuid::Uuid;
@@ -92,7 +93,7 @@ pub(crate) struct EventEmitWrite<'a> {
     pub(crate) name: &'a str,
     pub(crate) event_kind: &'a str,
     pub(crate) payload_schema: &'a str,
-    pub(crate) payload: &'a Value,
+    pub(crate) payload: ExternalEventPayload,
     pub(crate) visibility: &'a str,
 }
 
@@ -185,14 +186,20 @@ pub(super) fn event_emit_params(
             name: op.name,
             event_kind: string_field(op.write, "event_kind")?,
             payload_schema: string_field(op.write, "payload_schema")?,
-            payload: op
-                .write
-                .get("payload")
-                .ok_or(RunBoundGraphEffectError::MissingValue { field: "payload" })?,
+            payload: external_event_payload(
+                op.write
+                    .get("payload")
+                    .ok_or(RunBoundGraphEffectError::MissingValue { field: "payload" })?,
+            )?,
             visibility: string_field(op.write, "visibility")?,
         },
         return_values: params.get("return"),
     })
+}
+
+fn external_event_payload(value: &Value) -> Result<ExternalEventPayload, RunBoundGraphEffectError> {
+    serde_json::from_value(value.clone())
+        .map_err(|error| RunBoundGraphEffectError::InvalidEventPayload(error.to_string()))
 }
 
 struct WriteOp<'a> {

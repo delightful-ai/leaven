@@ -36,6 +36,14 @@ pub struct EvaluationRequestSummary {
     pub candidate_count: usize,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExternalEventPayload {
+    pub ok: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage_call_id: Option<String>,
+}
+
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum RunEvent {
     OptimizationStarted {
@@ -98,7 +106,7 @@ pub enum RunEvent {
         event_id: String,
         event_kind: String,
         payload_schema: String,
-        payload: serde_json::Value,
+        payload: ExternalEventPayload,
         visibility: String,
     },
     PopulationUpdated {

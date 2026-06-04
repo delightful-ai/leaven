@@ -238,7 +238,7 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
             name: event.name,
             event_kind: event.event_kind,
             payload_schema: event.payload_schema,
-            payload: event.payload,
+            payload: &event.payload,
             visibility: event.visibility,
             event_id: &event_id,
             base_revision: &self.base_revision,

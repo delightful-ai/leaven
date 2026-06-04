@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 
 use leaven_acp::{AcpEffectHost, AcpTransportError, AcpTransportResult};
 use leaven_core::{Assessment, EvaluationRequest, OptimizationProblem};
-use leaven_engine::{ProposalBatchReport, RunContext, RunEvent};
+use leaven_engine::{ExternalEventPayload, ProposalBatchReport, RunContext, RunEvent};
 use leaven_kernel::{EvaluationRequestId, EvaluatorId, Fingerprint, Metered, ProposalBatchId};
 use leaven_public_seam::LockedMethod;
 use leaven_run::{
@@ -158,7 +158,7 @@ impl<'context, 'run, P: OptimizationProblem> RunContextGraphEffectHost<'context,
             name: callback.write.name,
             event_kind: callback.write.event_kind,
             payload_schema: callback.write.payload_schema,
-            payload: callback.write.payload,
+            payload: &callback.write.payload,
             visibility: callback.write.visibility,
             event_id: &event_id,
             base_revision: &self.base_revision,
@@ -262,6 +262,9 @@ pub enum RunContextGraphEffectHostError {
     /// The callback did not carry an event write.
     #[error("leaven/event.emit callback must carry an emit_run_event write")]
     MissingEventWrite,
+    /// The event payload did not match the engine-owned external event payload.
+    #[error("leaven/event.emit callback payload is not typed: {0}")]
+    InvalidEventPayload(String),
     /// The callback did not carry an assessment write.
     #[error("leaven/assessment.submit callback must carry a submit_assessments write")]
     MissingAssessmentWrite,
@@ -525,7 +528,7 @@ struct EventEmitWrite<'a> {
     name: &'a str,
     event_kind: &'a str,
     payload_schema: &'a str,
-    payload: &'a Value,
+    payload: ExternalEventPayload,
     visibility: &'a str,
 }
 
@@ -534,7 +537,7 @@ struct EventEmitExtensionContext<'a> {
     name: &'a str,
     event_kind: &'a str,
     payload_schema: &'a str,
-    payload: &'a Value,
+    payload: &'a ExternalEventPayload,
     visibility: &'a str,
     event_id: &'a str,
     base_revision: &'a str,
@@ -557,15 +560,23 @@ impl<'a> EventEmitCallback<'a> {
                 name: op.name,
                 event_kind: string_field(op.write, "event_kind")?,
                 payload_schema: string_field(op.write, "payload_schema")?,
-                payload: op
-                    .write
-                    .get("payload")
-                    .ok_or(RunContextGraphEffectHostError::MissingValue { field: "payload" })?,
+                payload: external_event_payload(
+                    op.write
+                        .get("payload")
+                        .ok_or(RunContextGraphEffectHostError::MissingValue { field: "payload" })?,
+                )?,
                 visibility: string_field(op.write, "visibility")?,
             },
             returned: op.returned,
         })
     }
+}
+
+fn external_event_payload(
+    value: &Value,
+) -> Result<ExternalEventPayload, RunContextGraphEffectHostError> {
+    serde_json::from_value(value.clone())
+        .map_err(|error| RunContextGraphEffectHostError::InvalidEventPayload(error.to_string()))
 }
 
 fn event_emit_extension_result(
@@ -652,7 +663,7 @@ struct EventEmitWriteProjection<'a> {
     kind: &'static str,
     event_kind: &'a str,
     payload_schema: &'a str,
-    payload: &'a Value,
+    payload: &'a ExternalEventPayload,
     visibility: &'a str,
 }
 
