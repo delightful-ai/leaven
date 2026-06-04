@@ -8,7 +8,8 @@
 //! fingerprint and writes the reply back to the worker.
 
 use leaven_acp::{AcpEffectHost, AcpTransportError, AcpTransportResult};
-use serde_json::{Value, json};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 /// One LM completion request lowered from a worker `leaven/lm.complete` callback.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -68,7 +69,37 @@ impl<L: HostLm> AcpEffectHost for StageRunEffectHost<'_, L> {
     fn lm_complete(&self, params: &Value) -> AcpTransportResult<Value> {
         let request = lower_lm_request(params)?;
         let completion = self.lm.complete(&request);
-        Ok(lm_response_result(&completion))
+        lm_response_result(&completion)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct LmCompleteParams {
+    ops: Vec<LmCompleteOp>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LmCompleteOp {
+    name: String,
+    expr: LmCompleteExpr,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum LmCompleteExpr {
+    Literal { value: String },
+}
+
+impl LmCompleteParams {
+    fn prompt_binding(&self) -> Option<&str> {
+        self.ops.iter().find_map(|op| {
+            if op.name == "prompt" {
+                let LmCompleteExpr::Literal { value } = &op.expr;
+                Some(value.as_str())
+            } else {
+                None
+            }
+        })
     }
 }
 
@@ -77,68 +108,137 @@ impl<L: HostLm> AcpEffectHost for StageRunEffectHost<'_, L> {
 /// The worker binds the rendered prompt as a `literal` op named `prompt`; the
 /// host reads that binding rather than guessing op order.
 fn lower_lm_request(params: &Value) -> AcpTransportResult<LmCompletionRequest> {
-    let ops = params
-        .get("ops")
-        .and_then(Value::as_array)
-        .ok_or_else(|| protocol("leaven/lm.complete params must carry ops"))?;
-    let prompt = ops
-        .iter()
-        .find(|op| op.get("name").and_then(Value::as_str) == Some("prompt"))
-        .and_then(|op| op.pointer("/expr/value"))
-        .and_then(Value::as_str)
+    let params: LmCompleteParams = serde_json::from_value(params.clone())
+        .map_err(|_| protocol("leaven/lm.complete params must be typed Plan IR with ops"))?;
+    let prompt = params
+        .prompt_binding()
         .ok_or_else(|| protocol("leaven/lm.complete must bind a `prompt` literal op"))?;
     Ok(LmCompletionRequest {
         prompt: prompt.to_owned(),
     })
 }
 
+#[derive(Debug, Serialize)]
+struct LmResponseResult<'a> {
+    method: &'static str,
+    redactions: Vec<&'static str>,
+    data_classes: Vec<&'static str>,
+    primary: LmResponsePrimary<'a>,
+    receipts: Vec<LmResponseReceipt>,
+}
+
+#[derive(Debug, Serialize)]
+struct LmResponsePrimary<'a> {
+    kind: &'static str,
+    message: LmResponseMessage<'a>,
+    graph_revision: &'static str,
+    cost: LmResponseCost,
+    data_classes: Vec<&'static str>,
+    replayability: &'static str,
+    receipt: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct LmResponseMessage<'a> {
+    role: &'static str,
+    content: Vec<LmResponseTextPart<'a>>,
+}
+
+#[derive(Debug, Serialize)]
+struct LmResponseTextPart<'a> {
+    kind: &'static str,
+    text: &'a str,
+}
+
+#[derive(Clone, Copy, Debug, Serialize)]
+struct LmResponseCost {
+    usd_micro: u64,
+    lm_calls: u64,
+}
+
+#[derive(Debug, Serialize)]
+struct LmResponseReceipt {
+    kind: &'static str,
+    receipt: &'static str,
+    op_var: &'static str,
+    started_at: &'static str,
+    completed_at: &'static str,
+    call_kind: &'static str,
+    request_hash: &'static str,
+    result_hash: String,
+    runtime_fingerprint: &'static str,
+    status: &'static str,
+    cost: LmResponseCost,
+}
+
+#[derive(Debug, Serialize)]
+struct LmResponseResultHashPreimage<'a> {
+    schema_version: &'static str,
+    name: &'static str,
+    value: &'a LmResponsePrimary<'a>,
+}
+
 /// Builds a locked `lm_response` extension result for one completion.
 ///
 /// The capability fingerprint is intentionally omitted so the transport stamps
 /// the launched session fingerprint on the reply (it refuses a foreign one).
-fn lm_response_result(completion: &str) -> Value {
-    let primary = json!({
-        "kind": "lm_response",
-        "message": {
-            "role": "assistant",
-            "content": [{"kind": "text", "text": completion}]
+fn lm_response_result(completion: &str) -> AcpTransportResult<Value> {
+    let primary = LmResponsePrimary {
+        kind: "lm_response",
+        message: LmResponseMessage {
+            role: "assistant",
+            content: vec![LmResponseTextPart {
+                kind: "text",
+                text: completion,
+            }],
         },
-        "graph_revision": "rev_stage_bridge",
-        "cost": {"usd_micro": 0, "lm_calls": 1},
-        "data_classes": ["completion.raw"],
-        "replayability": "fully_managed",
-        "receipt": "lmrec_stage_bridge"
-    });
-    let receipt = json!({
-        "kind": "call",
-        "receipt": "lmrec_stage_bridge",
-        "op_var": "worker_call",
-        "started_at": "2026-06-01T00:00:00Z",
-        "completed_at": "2026-06-01T00:00:01Z",
-        "call_kind": "lm_complete",
-        "request_hash": "fp_request_sha256_stage_bridge",
-        "result_hash": result_hash(&primary),
-        "runtime_fingerprint": "fp_runtime_sha256_stage_bridge",
-        "status": "succeeded",
-        "cost": {"usd_micro": 0, "lm_calls": 1}
-    });
-    json!({
-        "method": "leaven/lm.complete",
-        "redactions": [],
-        "data_classes": ["completion.raw"],
-        "primary": primary,
-        "receipts": [receipt]
+        graph_revision: "rev_stage_bridge",
+        cost: LmResponseCost {
+            usd_micro: 0,
+            lm_calls: 1,
+        },
+        data_classes: vec!["completion.raw"],
+        replayability: "fully_managed",
+        receipt: "lmrec_stage_bridge",
+    };
+    let receipt = LmResponseReceipt {
+        kind: "call",
+        receipt: "lmrec_stage_bridge",
+        op_var: "worker_call",
+        started_at: "2026-06-01T00:00:00Z",
+        completed_at: "2026-06-01T00:00:01Z",
+        call_kind: "lm_complete",
+        request_hash: "fp_request_sha256_stage_bridge",
+        result_hash: result_hash(&primary),
+        runtime_fingerprint: "fp_runtime_sha256_stage_bridge",
+        status: "succeeded",
+        cost: LmResponseCost {
+            usd_micro: 0,
+            lm_calls: 1,
+        },
+    };
+    serde_json::to_value(LmResponseResult {
+        method: "leaven/lm.complete",
+        redactions: Vec::new(),
+        data_classes: vec!["completion.raw"],
+        primary,
+        receipts: vec![receipt],
+    })
+    .map_err(|error| {
+        protocol(&format!(
+            "leaven/lm.complete result serialization failed: {error}"
+        ))
     })
 }
 
 /// Computes the receipt `result_hash` that binds the primary value, matching the
 /// public-seam extension-result validator's `fp_result_sha256_` JCS hash.
-fn result_hash(primary: &Value) -> String {
-    let preimage = json!({
-        "schema_version": "leaven.plan_call_result.v1",
-        "name": "worker_call",
-        "value": primary
-    });
+fn result_hash(primary: &LmResponsePrimary<'_>) -> String {
+    let preimage = LmResponseResultHashPreimage {
+        schema_version: "leaven.plan_call_result.v1",
+        name: "worker_call",
+        value: primary,
+    };
     format!(
         "fp_result_sha256_{}",
         jcs_canonicalize::sha256_jcs_hex(&preimage)
@@ -282,6 +382,7 @@ fn protocol(message: &str) -> AcpTransportError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn mock_lm_evaluates_arithmetic_surfaced_in_the_prompt() {
@@ -324,5 +425,31 @@ mod tests {
     fn lower_lm_request_rejects_missing_prompt_binding() {
         let params = json!({"ops": [{"kind": "let", "name": "other", "expr": {}}]});
         assert!(lower_lm_request(&params).is_err());
+    }
+
+    #[test]
+    fn lower_lm_request_rejects_untyped_prompt_expression() {
+        let params = json!({
+            "ops": [{
+                "kind": "let",
+                "name": "prompt",
+                "expr": {"value": "Expression: 1 + 1"}
+            }]
+        });
+        assert!(lower_lm_request(&params).is_err());
+    }
+
+    #[test]
+    fn lm_response_result_projects_locked_result_shape() {
+        let result = lm_response_result("42").unwrap();
+        assert_eq!(result["method"], "leaven/lm.complete");
+        assert_eq!(result["primary"]["kind"], "lm_response");
+        assert_eq!(result["primary"]["message"]["content"][0]["text"], "42");
+        assert!(
+            result["receipts"][0]["result_hash"]
+                .as_str()
+                .unwrap()
+                .starts_with("fp_result_sha256_")
+        );
     }
 }
