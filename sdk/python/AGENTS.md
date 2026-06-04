@@ -123,6 +123,15 @@ ruff's `RUF022` (sorted `__all__`) is on. No current ruff rule for
   private generated public-seam wire codec layer. Dataclasses remain fine for
   internal config shapes. Leaven targets Python 3.12+; use native annotation
   syntax and do not add `from __future__ import annotations`.
+- Do not hide type failures with defensive coercion. No public example,
+  callback, reward, runner, seam request/response path, internal helper, or
+  typed SDK model may widen a domain value to `object`, stringify unknown values
+  with `str(...)`, branch on `isinstance(...)`, or probe arbitrary objects with
+  `.get(...)` / `getattr(...)` to paper over a bad type unless the governing
+  spec names that exact sum type. Parse and validate at the boundary, keep the
+  owned domain type through the call graph, and let wrong shapes fail loudly.
+  `.get(...)` is only appropriate on declared mapping fields after the container
+  type has already been parsed.
 - Top-level `lv.*` imports are the public surface; submodule paths
   (`lv.optimizers.gepa`, `lv.lm.anthropic`) are also part of the public
   surface where the spec names them.
