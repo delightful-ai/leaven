@@ -170,7 +170,7 @@ spec_revisions_before_goal:
       capability examples, method-status docs, and tests. It is not part of the
       intended external-language SDK backbone.
     rationale: Avoid implementing a mystery method just because it was locked too early.
-    status: pending
+    status: done
   - update: >-
       Update example maturity labels so product-proof examples and shape-only
       scaffolds are not mixed under "runnable examples" language.
