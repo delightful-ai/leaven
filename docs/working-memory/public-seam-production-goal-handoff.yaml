@@ -1517,6 +1517,31 @@ acceptance:
           unknown effect kinds are rejected. Assessment/evaluation/event write
           internals still use JSON-shaped leaves where this slice did not add
           full owners, so those remain separate typed-owner work.
+      - kind: generated_non_proposal_graph_writes_are_typed_records
+        paths:
+          - sdk/python/codegen/write_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/writes.py
+          - sdk/python/tests/_seam/_wire/test_graph_writes.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run ruff check codegen/write_codegen.py src/leaven/_seam/_wire/writes.py tests/_seam/_wire/test_graph_writes.py
+          - cd sdk/python && uv run ty check codegen/write_codegen.py src/leaven/_seam/_wire/writes.py tests/_seam/_wire/test_graph_writes.py
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_graph_writes.py -q
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Generated Python Plan graph-write records now give retained
+          non-proposal write families typed owner records instead of whole
+          `WireJsonObject` bodies. `submit_assessments` now carries typed
+          assessment rows with typed score/output, replayability,
+          receipt lists, and cost attribution; `request_evaluation` carries a
+          typed request record for shape, candidates, granularity, purpose,
+          evaluator, and metadata; `event.emit` carries typed event kind,
+          payload schema, payload field, and visibility enum. Focused tests
+          prove the three retained write methods decode into their concrete
+          records and reject unknown assessment kinds and invalid event
+          visibility. Evidence envelope, target/preference/ranking,
+          recursive evaluation-set algebra, blob/trace output refs, and event
+          payload contents remain explicit JSON-shaped leaf-owner follow-up.
       - kind: typed_plan_expression_owner_foundation
         commits:
           - a0397e66

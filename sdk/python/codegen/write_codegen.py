@@ -1,9 +1,11 @@
 """Render generated Plan graph-write records for public-seam payloads."""
 
 WRITE_EXPORTS = (
-    "ApplyProposalBatchWrite EmitRunEventWrite GraphWrite ProposalEffectAgentSession "
-    "ProposalEffectChange ProposalEffectCreate ProposalEffectWorkspaceDiff ProposalEffectWrite "
-    "ProposalWriteRecord RequestEvaluationWrite SubmitAssessmentsWrite SubmitProposalBatchWrite"
+    "ApplyProposalBatchWrite AttributionCost CostAttribution EmitRunEventWrite "
+    "EvaluationRequestWriteRecord GraphWrite ProposalEffectAgentSession ProposalEffectChange "
+    "ProposalEffectCreate ProposalEffectWorkspaceDiff ProposalEffectWrite ProposalWriteRecord "
+    "RequestEvaluationWrite SubmitAssessmentRecord SubmitAssessmentsWrite SubmitProposalBatchWrite "
+    "WriteOutputRecord WriteScore"
 )
 
 
@@ -21,6 +23,7 @@ from msgspec import UNSET, Struct, UnsetType
 from .expressions import PlanExpression, ValueExpr
 from .refs import (
     CandidateRef,
+    DataClassSet,
     MetadataBag,
     ProposalBatchRef,
     ReceiptRef,
@@ -28,6 +31,24 @@ from .refs import (
     WireJsonObject,
     WorkspaceRef,
 )
+
+type Replayability = Literal[
+    "pure_read",
+    "fully_managed",
+    "boundary_managed",
+    "has_declared_external_effects",
+    "has_untracked_external_effects",
+]
+
+type VisibilityClass = Literal[
+    "public",
+    "optimizer_visible",
+    "reflector_visible",
+    "evaluator_only",
+    "operator_only",
+    "private",
+    "redacted",
+]
 
 
 class ProposalEffectCreate(Struct, frozen=True, forbid_unknown_fields=True, tag="create", tag_field="kind"):
@@ -83,13 +104,72 @@ class SubmitProposalBatchWrite(Struct, frozen=True, forbid_unknown_fields=True, 
     proposals: list[ProposalWriteRecord]
 
 
+class WriteOutputRecord(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    kind: Literal["text", "json", "blob_ref", "structured", "agent_session", "workspace_diff"]
+    visibility: VisibilityClass
+    data_classes: DataClassSet
+    summary: str | UnsetType = UNSET
+    value: WireJsonField | UnsetType = UNSET
+    blob_ref: WireJsonObject | UnsetType = UNSET
+    trace_refs: list[WireJsonObject] | UnsetType = UNSET
+
+
+class WriteScore(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    value: float
+    output: WriteOutputRecord
+    metrics: dict[str, float] | UnsetType = UNSET
+    uncertainty: float | UnsetType = UNSET
+    metadata: MetadataBag | UnsetType = UNSET
+
+
+class AttributionCost(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    usd_micro: int | UnsetType = UNSET
+    input_tokens: int | UnsetType = UNSET
+    output_tokens: int | UnsetType = UNSET
+    lm_calls: int | UnsetType = UNSET
+    agent_calls: int | UnsetType = UNSET
+    sandbox_calls: int | UnsetType = UNSET
+    metric_calls: int | UnsetType = UNSET
+    wall_ms: int | UnsetType = UNSET
+
+
+class CostAttribution(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    kind: Literal["sum_effect_receipts", "explicit", "none"]
+    cost: AttributionCost | UnsetType = UNSET
+
+
+class SubmitAssessmentRecord(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    kind: Literal["independent", "pairwise", "listwise"]
+    score: WriteScore
+    evidence: WireJsonObject
+    replayability: Replayability
+    candidate: CandidateRef | UnsetType = UNSET
+    candidates: list[CandidateRef] | UnsetType = UNSET
+    target: WireJsonField | UnsetType = UNSET
+    preference: WireJsonField | UnsetType = UNSET
+    ranking: WireJsonField | UnsetType = UNSET
+    read_receipts: list[ReceiptRef] | UnsetType = UNSET
+    effect_receipts: list[ReceiptRef] | UnsetType = UNSET
+    cost_attribution: CostAttribution | UnsetType = UNSET
+
+
 class SubmitAssessmentsWrite(Struct, frozen=True, forbid_unknown_fields=True, tag="submit_assessments", tag_field="kind"):
     evaluation_request_id: str
-    assessments: list[WireJsonObject]
+    assessments: list[SubmitAssessmentRecord]
+
+
+class EvaluationRequestWriteRecord(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    shape: Literal["independent", "pairwise", "listwise"]
+    candidates: list[CandidateRef]
+    set: WireJsonObject
+    granularity: Literal["aggregate", "per_case"]
+    purpose: Literal["train", "validation", "test", "diagnostic", "custom"]
+    evaluator: str | UnsetType = UNSET
+    metadata: MetadataBag | UnsetType = UNSET
 
 
 class RequestEvaluationWrite(Struct, frozen=True, forbid_unknown_fields=True, tag="request_evaluation", tag_field="kind"):
-    request: WireJsonObject
+    request: EvaluationRequestWriteRecord
 
 
 class ApplyProposalBatchWrite(Struct, frozen=True, forbid_unknown_fields=True, tag="apply_proposal_batch", tag_field="kind"):
@@ -101,7 +181,7 @@ class EmitRunEventWrite(Struct, frozen=True, forbid_unknown_fields=True, tag="em
     event_kind: str
     payload_schema: str
     payload: WireJsonField
-    visibility: str
+    visibility: VisibilityClass
 
 
 type GraphWrite = (
