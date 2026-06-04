@@ -1,5 +1,6 @@
 """Check local Python SDK quality invariants that linters do not express."""
 
+import ast
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,6 +26,54 @@ TYPED_BOUNDARY_ROOTS = (
     ROOT / "src" / "leaven" / "_seam" / "_wire",
     ROOT / "src" / "leaven" / "_seam_worker",
 )
+DOMAIN_VALUE_NAMES = {"output", "raw_output", "target", "payload", "result", "value"}
+MAPPING_ANNOTATION_NAMES = {
+    "Mapping",
+    "MutableMapping",
+    "dict",
+    "JsonObject",
+    "JsonValue",
+    "WireJsonObject",
+}
+KNOWN_DEFENSIVE_ERASURE_FAILURES = {
+    # Existing cleanup debt. This baseline keeps the lint active for new code
+    # while the typed callback/reward/output hard cutover lands.
+    "examples/04_evoskill_skill_bank.py:30: uses .get(...) on an unparsed domain value",
+    "examples/04_evoskill_skill_bank.py:40: uses str(...) to coerce a domain value",
+    "examples/05_evaluator_with_judge.py:62: uses .get(...) on an unparsed domain value",
+    "examples/06_reflect_propose_custom.py:40: uses .get(...) on an unparsed domain value",
+    "examples/07_serve_stage_worker.py:55: uses .get(...) on an unparsed domain value",
+    "examples/09_full_repro.py:43: uses .get(...) on an unparsed domain value",
+    "examples/09_full_repro.py:53: uses str(...) to coerce a domain value",
+    "examples/09_full_repro.py:118: uses .get(...) on an unparsed domain value",
+    "src/leaven/_seam_worker/proposer.py:95: uses getattr(...) to probe a domain value",
+    "src/leaven/_seam_worker/proposer.py:160: uses getattr(...) to probe a domain value",
+    "src/leaven/_seam_worker/proposer.py:163: uses getattr(...) to probe a domain value",
+    "src/leaven/_seam_worker/runner.py:43: uses str(...) to coerce a domain value",
+    "src/leaven/_seam_worker/runner.py:44: branches on isinstance(output, ...) instead of typed output",
+    "src/leaven/_seam_worker/runner.py:65: uses getattr(...) to probe a domain value",
+    "src/leaven/builders/lm.py:158: uses .get(...) on an unparsed domain value",
+    "src/leaven/builders/lm.py:167: uses .get(...) on an unparsed domain value",
+    "tests/_seam_optimize/test_rewards.py:16: widens callback output to object",
+    "tests/_seam_optimize/test_rewards.py:18: branches on isinstance(output, ...) instead of typed output",
+    "tests/_seam_optimize/test_rewards.py:23: widens callback output to object",
+    "tests/_seam_optimize/test_rewards.py:26: branches on isinstance(output, ...) instead of typed output",
+    "tests/test_optimize_proposer_mechanics.py:17: widens callback output to object",
+    "tests/test_optimize_proposer_mechanics.py:19: branches on isinstance(output, ...) instead of typed output",
+    "tests/test_optimize_public_seam_e2e.py:21: widens callback output to object",
+    "tests/test_optimize_public_seam_e2e.py:23: branches on isinstance(output, ...) instead of typed output",
+    "tests/test_reward_vector_inspection.py:15: widens callback output to object",
+    "tests/test_reward_vector_inspection.py:17: branches on isinstance(output, ...) instead of typed output",
+    "tests/test_reward_vector_inspection.py:23: widens callback output to object",
+    "tests/test_reward_vector_inspection.py:26: branches on isinstance(output, ...) instead of typed output",
+    "tests/test_run_inspection.py:15: widens callback output to object",
+    "tests/test_run_inspection.py:17: branches on isinstance(output, ...) instead of typed output",
+    "tests/test_run_inspection.py:22: widens callback output to object",
+    "tests/test_run_inspection.py:24: branches on isinstance(output, ...) instead of typed output",
+    "tests/test_run_receipt_inspection.py:19: widens callback output to object",
+    "tests/test_run_receipt_inspection.py:21: branches on isinstance(output, ...) instead of typed output",
+    "tests/test_stage_surface.py:86: widens callback output to object",
+}
 MIRRORED_TESTS = {
     ROOT / "src" / "leaven" / "_runs" / "rust_export.py": ROOT
     / "tests"
@@ -64,6 +113,7 @@ def main() -> None:
     failures = list(check_line_counts())
     failures.extend(check_future_annotations())
     failures.extend(check_wire_any())
+    failures.extend(check_defensive_type_erasure())
     failures.extend(check_mirrored_tests())
     if failures:
         joined = "\n".join(f"- {failure}" for failure in failures)
@@ -112,6 +162,200 @@ def check_wire_any() -> list[str]:
                 if "Any" in text:
                     failures.append(f"{relative(path)} contains `Any` in a typed seam boundary")
     return failures
+
+
+def check_defensive_type_erasure(files: list[Path] | None = None) -> list[str]:
+    failures: list[str] = []
+    for path in files or project_python_files():
+        if path.relative_to(ROOT).parts[:1] == ("scripts",):
+            continue
+        text = path.read_text(encoding="utf-8")
+        tree = ast.parse(text, filename=str(path))
+        visitor = DefensiveTypeErasureVisitor(path)
+        visitor.visit(tree)
+        failures.extend(visitor.failures)
+    return [failure for failure in failures if failure not in KNOWN_DEFENSIVE_ERASURE_FAILURES]
+
+
+class DefensiveTypeErasureVisitor(ast.NodeVisitor):
+    """Find Python patterns that hide a bad domain type instead of failing."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.failures: list[str] = []
+        self.mapping_names: set[str] = set()
+        self.output_contract_names: set[str] = set()
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._check_function_args(node)
+        self._visit_function_body(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._check_function_args(node)
+        self._visit_function_body(node)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        if isinstance(node.target, ast.Name) and self._is_mapping_annotation(node.annotation):
+            self.mapping_names.add(node.target.id)
+        self.generic_visit(node)
+
+    def visit_If(self, node: ast.If) -> None:
+        if self._is_strict_type_guard(node):
+            for statement in [*node.body, *node.orelse]:
+                self.visit(statement)
+            return
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        if self._is_banned_str_coercion(node):
+            self._add(node, "uses str(...) to coerce a domain value")
+        if self._is_banned_isinstance_check(node):
+            self._add(node, "branches on isinstance(output, ...) instead of typed output")
+        if self._is_banned_get_probe(node):
+            self._add(node, "uses .get(...) on an unparsed domain value")
+        if self._is_getattr_probe(node):
+            self._add(node, "uses getattr(...) to probe a domain value")
+        self.generic_visit(node)
+
+    def _check_function_args(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        for arg in node.args.args:
+            if arg.arg != "output":
+                continue
+            if isinstance(arg.annotation, ast.Name) and arg.annotation.id == "object":
+                self._add(arg, "widens callback output to object")
+
+    def _visit_function_body(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        outer_mapping_names = set(self.mapping_names)
+        for arg in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]:
+            if arg.annotation is not None and self._is_mapping_annotation(arg.annotation):
+                self.mapping_names.add(arg.arg)
+            if arg.annotation is not None and self._is_output_contract_annotation(arg.annotation):
+                self.output_contract_names.add(arg.arg)
+        for statement in node.body:
+            self.visit(statement)
+        self.mapping_names = outer_mapping_names
+        self.output_contract_names.clear()
+
+    def _is_banned_str_coercion(self, node: ast.Call) -> bool:
+        if not isinstance(node.func, ast.Name) or node.func.id != "str":
+            return False
+        if len(node.args) != 1:
+            return False
+        return self._is_domain_value(node.args[0])
+
+    def _is_banned_isinstance_check(self, node: ast.AST) -> bool:
+        if not isinstance(node, ast.Call):
+            return False
+        if not isinstance(node.func, ast.Name) or node.func.id != "isinstance":
+            return False
+        if not node.args:
+            return False
+        checked = node.args[0]
+        if isinstance(checked, ast.Name) and checked.id in self.output_contract_names:
+            return False
+        return isinstance(checked, ast.Name) and checked.id in {"output", "raw_output"}
+
+    def _is_strict_type_guard(self, node: ast.If) -> bool:
+        test = node.test
+        if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
+            test = test.operand
+        return (
+            isinstance(test, ast.Call)
+            and self._is_banned_isinstance_check(test)
+            and self._if_body_raises(node)
+        )
+
+    def _is_banned_get_probe(self, node: ast.Call) -> bool:
+        if not isinstance(node.func, ast.Attribute) or node.func.attr != "get":
+            return False
+        owner = node.func.value
+        if self._is_os_environ(owner):
+            return False
+        if isinstance(owner, ast.Name) and owner.id in self.mapping_names:
+            return False
+        return self._is_domain_value(owner) or self._is_case_target_or_empty(owner)
+
+    def _is_getattr_probe(self, node: ast.Call) -> bool:
+        return (
+            isinstance(node.func, ast.Name)
+            and node.func.id == "getattr"
+            and bool(node.args)
+            and self._is_domain_value(node.args[0])
+        )
+
+    def _is_domain_value(self, node: ast.AST) -> bool:
+        return self._root_name(node) in DOMAIN_VALUE_NAMES
+
+    def _root_name(self, node: ast.AST) -> str | None:
+        match node:
+            case ast.Name(id=name):
+                return name
+            case ast.Attribute(value=value):
+                return self._root_name(value)
+            case ast.Subscript(value=value):
+                return self._root_name(value)
+            case ast.BoolOp(values=[*_, value]):
+                return self._root_name(value)
+            case ast.IfExp(body=body, orelse=orelse):
+                return self._root_name(body) or self._root_name(orelse)
+            case _:
+                return None
+
+    def _is_case_target_or_empty(self, node: ast.AST) -> bool:
+        if not isinstance(node, ast.BoolOp) or not isinstance(node.op, ast.Or):
+            return False
+        if len(node.values) != 2:
+            return False
+        lhs, rhs = node.values
+        return (
+            isinstance(lhs, ast.Attribute)
+            and lhs.attr == "target"
+            and isinstance(lhs.value, ast.Name)
+            and lhs.value.id == "case"
+            and isinstance(rhs, ast.Dict)
+            and not rhs.keys
+        )
+
+    def _is_mapping_annotation(self, annotation: ast.AST) -> bool:
+        match annotation:
+            case ast.Name(id=name):
+                return name in MAPPING_ANNOTATION_NAMES
+            case ast.Attribute(attr=name):
+                return name in MAPPING_ANNOTATION_NAMES
+            case ast.Subscript(value=value):
+                return self._is_mapping_annotation(value)
+            case ast.BinOp(left=left, right=right, op=ast.BitOr()):
+                return self._is_mapping_annotation(left) or self._is_mapping_annotation(right)
+            case _:
+                return False
+
+    def _is_output_contract_annotation(self, annotation: ast.AST) -> bool:
+        match annotation:
+            case ast.Name(id="OutputContract"):
+                return True
+            case ast.Subscript(value=value):
+                return self._is_output_contract_annotation(value)
+            case ast.BinOp(left=left, right=right, op=ast.BitOr()):
+                return self._is_output_contract_annotation(
+                    left
+                ) or self._is_output_contract_annotation(right)
+            case _:
+                return False
+
+    def _if_body_raises(self, node: ast.If) -> bool:
+        return bool(node.body) and all(isinstance(statement, ast.Raise) for statement in node.body)
+
+    def _is_os_environ(self, node: ast.AST) -> bool:
+        return (
+            isinstance(node, ast.Attribute)
+            and node.attr == "environ"
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "os"
+        )
+
+    def _add(self, node: ast.AST, message: str) -> None:
+        lineno = getattr(node, "lineno", 0)
+        self.failures.append(f"{relative(self.path)}:{lineno}: {message}")
 
 
 def check_mirrored_tests() -> list[str]:
