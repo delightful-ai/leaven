@@ -1015,11 +1015,13 @@ acceptance:
           - 56276ac0
           - 88d47081
           - 2eafaf05
+          - 1efc043e
         paths:
           - crates/leaven-seam-service/src/service.rs
           - crates/leaven-seam-service/src/run_context_service.rs
           - crates/leaven-seam-service/src/run_bound_service/mod.rs
           - crates/leaven-seam-service/src/run_bound_service/tests.rs
+          - crates/leaven-seam-service/src/stage.rs
           - crates/leaven-acp/src/stdio.rs
           - crates/leaven-acp/tests/stdio_session_contract.rs
         commands:
@@ -1038,9 +1040,12 @@ acceptance:
           before internal service dispatch. ACP host-to-worker `call_extension`
           now requires LockedMethod too, so private/MCP names are unconstructible
           through that public transport helper and are not preserved by a raw
-          call test hole. This is method-identity evidence only: service params,
-          run-context lowerers, ACP result payloads, costs, blob refs, and
-          nested Plan IR/Result bodies remain raw JSON islands.
+          call test hole. Configured stage-run command workers now parse
+          worker-initiated callback method names at JSON-RPC ingress and pass
+          LockedMethod into service effect execution. This is method-identity
+          evidence only: service params, run-context lowerers, ACP result
+          payloads, costs, blob refs, and nested Plan IR/Result bodies remain
+          raw JSON islands.
     closeout_check: >-
       Handwritten Python schema mirrors, pydantic-only wire models, untyped
       dict payloads, response-order batch routing, or msgspec used as a
