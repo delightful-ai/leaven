@@ -22,7 +22,7 @@ use leaven_run::{
 };
 use leaven_store_inline::InlineEvidenceStore;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::service::{SeamExecutionContextConfig, extension_result_for_plan_report};
 
@@ -69,7 +69,7 @@ pub(crate) struct RunContextProposalApplyState {
     evaluation_request: Option<EvaluationRequestId>,
     evaluation_request_ref: Option<String>,
     assessment_ids: Vec<String>,
-    emitted_events: Vec<Value>,
+    emitted_events: Vec<RunContextEventSummary>,
     event_count: usize,
     candidate_count: usize,
     applied: bool,
@@ -351,42 +351,48 @@ impl RunContextProposalApplyState {
         let event = event_emit_write(params)?;
         let event_id = format!("event_{}", event.name);
         let mut run_context = RunContext::<SeamTextProblem>::new(&mut self.graph, &mut self.budget);
+        let event_payload_value =
+            serde_json::to_value(&event.payload).map_err(|error| PublicSeamError::InvalidPlan {
+                message: format!("run_context.checked payload serialization failed: {error}"),
+            })?;
         run_context.emit(RunEvent::ExternalEventEmitted {
             event_id: event_id.clone(),
+            event_kind: event.event_kind.to_owned(),
+            payload_schema: event.payload_schema.to_owned(),
+            payload: event_payload_value,
+            visibility: event.visibility.to_owned(),
+        });
+        self.event_count = run_context.graph().events().count();
+        self.emitted_events.push(RunContextEventSummary {
+            event_id,
             event_kind: event.event_kind.to_owned(),
             payload_schema: event.payload_schema.to_owned(),
             payload: event.payload.clone(),
             visibility: event.visibility.to_owned(),
         });
-        self.event_count = run_context.graph().events().count();
-        self.emitted_events.push(json!({
-            "event_id": event_id,
-            "event_kind": event.event_kind,
-            "payload_schema": event.payload_schema,
-            "payload": event.payload,
-            "visibility": event.visibility
-        }));
         run_context_event_emit_extension_result(method, event, context)
     }
 
     pub(crate) fn graph_query(&self, request: PlanGraphQueryRequest<'_>) -> PlanGraphQueryOutcome {
+        let summary = RunContextGraphQueryItem {
+            kind: "event_summary",
+            event_kind: "proposal.apply",
+            revision: &self.config.final_revision,
+            payload: RunContextGraphQueryPayload {
+                source: "leaven-seam-service-run-context",
+                candidate_count: self.candidate_count,
+                proposal_batch: &self.config.proposal_batch_alias,
+                created_candidates: &self.created_candidates,
+                event_count: self.event_count,
+                emitted_events: &self.emitted_events,
+                evaluation_request_id: self.evaluation_request_ref.as_deref(),
+                assessment_ids: &self.assessment_ids,
+                applied: self.applied,
+            },
+        };
         PlanGraphQueryOutcome::new(
-            [json!({
-                "kind": "event_summary",
-                "event_kind": "proposal.apply",
-                "revision": self.config.final_revision,
-                "payload": {
-                    "source": "leaven-seam-service-run-context",
-                    "candidate_count": self.candidate_count,
-                    "proposal_batch": self.config.proposal_batch_alias,
-                    "created_candidates": self.created_candidates,
-                    "event_count": self.event_count,
-                    "emitted_events": self.emitted_events,
-                    "evaluation_request_id": self.evaluation_request_ref,
-                    "assessment_ids": self.assessment_ids,
-                    "applied": self.applied
-                }
-            })],
+            [serde_json::to_value(summary)
+                .expect("RunContext graph query summary is serializable")],
             graph_query_revision(request, &self.config.final_revision),
         )
     }
@@ -474,12 +480,12 @@ fn submit_assessments_write(params: &Value) -> Result<SubmitAssessmentsWrite<'_>
     ))
 }
 
+#[derive(Debug)]
 struct EventEmitWrite<'a> {
     name: &'a str,
-    write: &'a Value,
     event_kind: &'a str,
     payload_schema: &'a str,
-    payload: &'a Value,
+    payload: RunContextEventPayload,
     visibility: &'a str,
 }
 
@@ -495,12 +501,11 @@ fn event_emit_write(params: &Value) -> Result<EventEmitWrite<'_>, PublicSeamErro
         if write.get("kind").and_then(Value::as_str) == Some("emit_run_event") {
             return Ok(EventEmitWrite {
                 name: string_field(op, "name")?,
-                write,
                 event_kind: string_field(write, "event_kind")?,
                 payload_schema: string_field(write, "payload_schema")?,
-                payload: write
-                    .get("payload")
-                    .ok_or_else(|| invalid_plan("emit_run_event must carry payload"))?,
+                payload: run_context_event_payload(write.get("payload").ok_or_else(|| {
+                    invalid_plan("emit_run_event must carry run_context.checked payload")
+                })?)?,
                 visibility: string_field(write, "visibility")?,
             });
         }
@@ -509,6 +514,114 @@ fn event_emit_write(params: &Value) -> Result<EventEmitWrite<'_>, PublicSeamErro
         "event.emit method must carry an emit_run_event write",
     ))
 }
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RunContextEventPayload {
+    ok: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct RunContextEventSummary {
+    event_id: String,
+    event_kind: String,
+    payload_schema: String,
+    payload: RunContextEventPayload,
+    visibility: String,
+}
+
+#[derive(Debug, Serialize)]
+struct RunContextGraphQueryItem<'a> {
+    kind: &'static str,
+    event_kind: &'static str,
+    revision: &'a str,
+    payload: RunContextGraphQueryPayload<'a>,
+}
+
+#[derive(Debug, Serialize)]
+struct RunContextGraphQueryPayload<'a> {
+    source: &'static str,
+    candidate_count: usize,
+    proposal_batch: &'a str,
+    created_candidates: &'a [String],
+    event_count: usize,
+    emitted_events: &'a [RunContextEventSummary],
+    evaluation_request_id: Option<&'a str>,
+    assessment_ids: &'a [String],
+    applied: bool,
+}
+
+fn run_context_event_payload(value: &Value) -> Result<RunContextEventPayload, PublicSeamError> {
+    serde_json::from_value(value.clone()).map_err(|error| PublicSeamError::InvalidPlan {
+        message: format!("run_context.checked payload is not typed: {error}"),
+    })
+}
+
+#[derive(Debug, Serialize)]
+struct EventEmitExtensionResult<'a> {
+    method: &'a str,
+    primary: EventEmitPrimary<'a>,
+    receipts: Vec<EventEmitReceipt<'a>>,
+    redactions: Vec<EmptyObject>,
+    capability_fingerprint: &'a str,
+    policy_fingerprint: &'a str,
+    data_classes: &'static [&'static str],
+}
+
+#[derive(Debug, Serialize)]
+struct EventEmitPrimary<'a> {
+    kind: &'static str,
+    event_id: &'a str,
+    receipt: &'a str,
+    data_classes: &'static [&'static str],
+    replayability: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct EventEmitReceipt<'a> {
+    kind: &'static str,
+    receipt: &'a str,
+    op_var: &'a str,
+    started_at: &'a str,
+    completed_at: &'a str,
+    write_kind: &'static str,
+    request_hash: &'a str,
+    result_hash: &'a str,
+    base_revision: &'a str,
+    committed_revision: &'a str,
+    status: &'static str,
+    event_id: &'a str,
+}
+
+#[derive(Debug, Serialize)]
+struct EventEmitRequestPreimage<'a> {
+    schema_version: &'static str,
+    name: &'a str,
+    kind: &'static str,
+    write: EventEmitWriteProjection<'a>,
+    deps: EmptyObject,
+    dependency_data_classes: &'static [&'static str],
+    base_revision: &'a str,
+}
+
+#[derive(Debug, Serialize)]
+struct EventEmitWriteProjection<'a> {
+    kind: &'static str,
+    event_kind: &'a str,
+    payload_schema: &'a str,
+    payload: &'a RunContextEventPayload,
+    visibility: &'a str,
+}
+
+#[derive(Debug, Serialize)]
+struct EventEmitResultPreimage<'a> {
+    schema_version: &'static str,
+    name: &'a str,
+    value: &'a EventEmitPrimary<'a>,
+}
+
+#[derive(Debug, Serialize)]
+struct EmptyObject {}
 
 fn run_context_event_emit_extension_result(
     method: LockedMethod,
@@ -519,53 +632,60 @@ fn run_context_event_emit_extension_result(
     let receipt_id = format!("wrec_{}", event.name);
     let request_hash = prefixed_jcs_hash(
         "fp_request_sha256_",
-        &json!({
-            "schema_version": "leaven.plan_write_request.v1",
-            "name": event.name,
-            "kind": "emit_run_event",
-            "write": event.write,
-            "deps": {},
-            "dependency_data_classes": [],
-            "base_revision": context.base_revision
-        }),
+        &EventEmitRequestPreimage {
+            schema_version: "leaven.plan_write_request.v1",
+            name: event.name,
+            kind: "emit_run_event",
+            write: EventEmitWriteProjection {
+                kind: "emit_run_event",
+                event_kind: event.event_kind,
+                payload_schema: event.payload_schema,
+                payload: &event.payload,
+                visibility: event.visibility,
+            },
+            deps: EmptyObject {},
+            dependency_data_classes: &[],
+            base_revision: &context.base_revision,
+        },
     )?;
-    let primary = json!({
-        "kind": "emit_run_event",
-        "event_id": event_id,
-        "receipt": receipt_id,
-        "data_classes": ["public"],
-        "replayability": "fully_managed"
-    });
+    let primary = EventEmitPrimary {
+        kind: "emit_run_event",
+        event_id: &event_id,
+        receipt: &receipt_id,
+        data_classes: &["public"],
+        replayability: "fully_managed",
+    };
     let result_hash = prefixed_jcs_hash(
         "fp_result_sha256_",
-        &json!({
-            "schema_version": "leaven.plan_write_result.v1",
-            "name": event.name,
-            "value": primary
-        }),
+        &EventEmitResultPreimage {
+            schema_version: "leaven.plan_write_result.v1",
+            name: event.name,
+            value: &primary,
+        },
     )?;
-    Ok(json!({
-        "method": method.as_str(),
-        "primary": primary,
-        "receipts": [{
-            "kind": "write",
-            "receipt": primary["receipt"],
-            "op_var": event.name,
-            "started_at": context.started_at,
-            "completed_at": context.completed_at,
-            "write_kind": "emit_run_event",
-            "request_hash": request_hash,
-            "result_hash": result_hash,
-            "base_revision": context.base_revision,
-            "committed_revision": context.base_revision,
-            "status": "succeeded",
-            "event_id": primary["event_id"]
+    serde_json::to_value(EventEmitExtensionResult {
+        method: method.as_str(),
+        primary,
+        receipts: vec![EventEmitReceipt {
+            kind: "write",
+            receipt: &receipt_id,
+            op_var: event.name,
+            started_at: &context.started_at,
+            completed_at: &context.completed_at,
+            write_kind: "emit_run_event",
+            request_hash: &request_hash,
+            result_hash: &result_hash,
+            base_revision: &context.base_revision,
+            committed_revision: &context.base_revision,
+            status: "succeeded",
+            event_id: &event_id,
         }],
-        "redactions": [],
-        "capability_fingerprint": context.capability_fingerprint,
-        "policy_fingerprint": context.policy_fingerprint,
-        "data_classes": ["public"]
-    }))
+        redactions: Vec::new(),
+        capability_fingerprint: &context.capability_fingerprint,
+        policy_fingerprint: &context.policy_fingerprint,
+        data_classes: &["public"],
+    })
+    .map_err(|error| invalid_plan(format!("RunContext event.emit projection failed: {error}")))
 }
 
 fn string_field<'a>(value: &'a Value, field: &'static str) -> Result<&'a str, PublicSeamError> {
@@ -597,12 +717,82 @@ fn invalid_plan(message: impl Into<String>) -> PublicSeamError {
     }
 }
 
-fn prefixed_jcs_hash(prefix: &str, value: &Value) -> Result<String, PublicSeamError> {
+fn prefixed_jcs_hash<T: Serialize>(prefix: &str, value: &T) -> Result<String, PublicSeamError> {
     let digest =
         jcs_canonicalize::sha256_jcs_hex(value).map_err(|error| PublicSeamError::InvalidPlan {
             message: format!("RunContext event.emit receipt hash failed: {error}"),
         })?;
     Ok(format!("{prefix}{digest}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn event_emit_write_accepts_typed_run_context_payload() {
+        let params = run_context_event_params(json!({"ok": true}));
+
+        let event = event_emit_write(&params).unwrap();
+
+        assert_eq!(event.name, "run_context_status");
+        assert_eq!(event.event_kind, "run_context.checked");
+        assert_eq!(event.payload, RunContextEventPayload { ok: true });
+    }
+
+    #[test]
+    fn event_emit_write_rejects_untyped_run_context_payload() {
+        let params = run_context_event_params(json!({"ok": true, "extra": "raw"}));
+
+        let error = event_emit_write(&params).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("run_context.checked payload is not typed"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn event_emit_extension_result_uses_typed_projection_records() {
+        let params = run_context_event_params(json!({"ok": true}));
+        let event = event_emit_write(&params).unwrap();
+        let context = SeamExecutionContextConfig::default();
+
+        let result =
+            run_context_event_emit_extension_result(LockedMethod::EventEmit, event, &context)
+                .unwrap();
+
+        assert_eq!(result["method"], "leaven/event.emit");
+        assert_eq!(result["primary"]["kind"], "emit_run_event");
+        assert_eq!(result["receipts"][0]["write_kind"], "emit_run_event");
+        assert!(
+            result["receipts"][0]["request_hash"]
+                .as_str()
+                .unwrap()
+                .starts_with("fp_request_sha256_")
+        );
+    }
+
+    fn run_context_event_params(payload: Value) -> Value {
+        json!({
+            "schema_version": "leaven.plan.v1",
+            "plan_id": "plan_run_context_event",
+            "ops": [{
+                "kind": "write",
+                "name": "run_context_status",
+                "write": {
+                    "kind": "emit_run_event",
+                    "event_kind": "run_context.checked",
+                    "payload_schema": "fp_schema_sha256_run_context_event",
+                    "payload": payload,
+                    "visibility": "public"
+                }
+            }]
+        })
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
