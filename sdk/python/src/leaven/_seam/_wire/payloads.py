@@ -25,17 +25,7 @@ type WireJsonField = WireJsonScalar | WireJsonLeafArray | WireJsonLeafObject
 type WireJsonObject = dict[str, WireJsonField]
 
 type DataClassSet = list[str]
-type InfoRef = str | WireJsonObject
-type MetadataBag = WireJsonObject
-type ReceiptRef = str | WireJsonObject
-type Replayability = Literal[
-    "pure_read",
-    "fully_managed",
-    "boundary_managed",
-    "has_declared_external_effects",
-    "has_untracked_external_effects",
-]
-type TraceRef = WireJsonObject
+type TraceVisibility = Literal["public", "optimizer_visible", "host_private", "external_private"]
 
 
 class CandidateRefRecord(Struct, frozen=True, forbid_unknown_fields=True, tag="candidate", tag_field="kind"):
@@ -58,10 +48,65 @@ class AssessmentRefRecord(Struct, frozen=True, forbid_unknown_fields=True, tag="
     run: str | UnsetType = UNSET
 
 
+class EvaluationRequestRefRecord(Struct, frozen=True, forbid_unknown_fields=True, tag="evaluation_request", tag_field="kind"):
+    id: str
+    run: str | UnsetType = UNSET
+
+
+class EvaluationAttemptRefRecord(Struct, frozen=True, forbid_unknown_fields=True, tag="evaluation_attempt", tag_field="kind"):
+    id: str
+    run: str | UnsetType = UNSET
+
+
+class ExternalInfoRefRecord(Struct, frozen=True, forbid_unknown_fields=True, tag="external", tag_field="kind"):
+    namespace: str
+    id: str
+    schema_fingerprint: str | UnsetType = UNSET
+
+
+class ReceiptRefRecord(Struct, frozen=True, forbid_unknown_fields=True, tag="receipt", tag_field="kind"):
+    id: str
+    fingerprint: str | UnsetType = UNSET
+
+
+type ReceiptRef = str | ReceiptRefRecord
+
+
+class TraceRefRecord(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    kind: str
+    id: str
+    visibility: TraceVisibility
+    data_classes: DataClassSet | UnsetType = UNSET
+    receipt: ReceiptRef | UnsetType = UNSET
+
+
 type CandidateRef = str | CandidateRefRecord
 type ProposalRef = str | ProposalRefRecord
 type ProposalBatchRef = str | ProposalBatchRefRecord
 type AssessmentRef = str | AssessmentRefRecord
+type EvaluationRequestRef = str | EvaluationRequestRefRecord
+type EvaluationAttemptRef = str | EvaluationAttemptRefRecord
+type InfoRef = (
+    str
+    | CandidateRefRecord
+    | ProposalRefRecord
+    | ProposalBatchRefRecord
+    | AssessmentRefRecord
+    | EvaluationRequestRefRecord
+    | EvaluationAttemptRefRecord
+    | ExternalInfoRefRecord
+)
+type MetadataBag = WireJsonObject
+type TraceRef = TraceRefRecord
+
+
+type Replayability = Literal[
+    "pure_read",
+    "fully_managed",
+    "boundary_managed",
+    "has_declared_external_effects",
+    "has_untracked_external_effects",
+]
 
 
 class ConsistencyLatestAtStart(
@@ -584,7 +629,8 @@ class StageRunResult(Struct, frozen=True, forbid_unknown_fields=True, omit_defau
 
 __all__ = (  # noqa: PLE0605, SIM905
     "PLAN_RESULT_SCHEMA_FINGERPRINT PLAN_SCHEMA_FINGERPRINT STAGE_RUN_SCHEMA_FINGERPRINT "
-    "AssessmentRef AssessmentRefRecord AssessmentSummaryGraphRow BlobRef CandidateRef CandidateRefRecord "
+    "AssessmentRef AssessmentRefRecord CandidateRef CandidateRefRecord EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestRef EvaluationRequestRefRecord ExternalInfoRefRecord InfoRef ProposalBatchRef ProposalBatchRefRecord ProposalRef ProposalRefRecord ReceiptRef ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility "
+    "AssessmentSummaryGraphRow BlobRef "
     "CandidateSummaryGraphRow CapabilityCall ChargeReceipt CommitPolicy CommitPolicyGraphWritesAtomic "
     "CommitPolicyGraphWritesSequential CommitPolicyNoGraphWrites Consistency ConsistencyAtRevision "
     "ConsistencyLatestAtStart ConsistencySinceRevision Cost DataClassSet EvalMode EvalModeDryRun "

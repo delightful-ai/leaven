@@ -1216,7 +1216,8 @@ acceptance:
           - cd sdk/python && uv run ruff check src/leaven/_seam/plans.py src/leaven/_seam/client.py src/leaven/_seam/__init__.py src/leaven/builders/agent.py src/leaven/builders/lm.py src/leaven/builders/proposals.py src/leaven/builders/case.py src/leaven/_stage_runtime/protocols.py src/leaven/_seam_worker/context.py tests/_seam/test_client.py tests/builders/test_case.py tests/test_stage_surface.py tests/test_proposal_submission.py
           - cd sdk/python && uv run ty check src/leaven/_seam/plans.py src/leaven/_seam/client.py src/leaven/_seam/__init__.py src/leaven/builders/agent.py src/leaven/builders/lm.py src/leaven/builders/proposals.py src/leaven/builders/case.py src/leaven/_stage_runtime/protocols.py src/leaven/_seam_worker/context.py tests/_seam/test_client.py tests/builders/test_case.py tests/test_stage_surface.py tests/test_proposal_submission.py
           - cd sdk/python && uv run pytest tests/_seam/test_client.py tests/builders/test_case.py tests/test_stage_surface.py tests/test_proposal_submission.py -q
-          - rg -n "def agent_run\\(self, request: (JsonObject|dict)|def lm_complete\\(self, request: (JsonObject|dict)|def proposal_submit\\(self, request: (JsonObject|dict)|def case_load\\(self, request: (JsonObject|dict)|self\\._client\\.(agent_run|lm_complete|proposal_submit|case_load)\\(request\\.to_json_rpc\\(\\)\\)|request_value\\[\\\"method\\\"\\]|request_value\\[\\\"params\\\"\\]" sdk/python/src/leaven sdk/python/tests -g '*.py'
+          - >-
+            rg -n "def agent_run\\(self, request: (JsonObject|dict)|def lm_complete\\(self, request: (JsonObject|dict)|def proposal_submit\\(self, request: (JsonObject|dict)|def case_load\\(self, request: (JsonObject|dict)|self\\._client\\.(agent_run|lm_complete|proposal_submit|case_load)\\(request\\.to_json_rpc\\(\\)\\)|request_value\\[\\\"method\\\"\\]|request_value\\[\\\"params\\\"]" sdk/python/src/leaven sdk/python/tests -g '*.py'
         note: >-
           The private Python client no longer accepts caller-assembled
           JSON-RPC dictionaries for the SDK-consumed locked methods. Request
@@ -1276,6 +1277,29 @@ acceptance:
           erasure, but the inner row payload leaves `scores`, `artifact`,
           `effect`, `evidence`, and extension `payload` still need deeper
           owners before the row can close.
+      - kind: generated_ref_leaves_are_typed_records
+        paths:
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/tests/_seam/_wire/test_payloads.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run ruff check codegen/payload_codegen.py codegen/ref_codegen.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_payloads.py
+          - cd sdk/python && uv run ty check codegen/payload_codegen.py codegen/ref_codegen.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_payloads.py
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_results.py -q
+          - wc -l sdk/python/codegen/payload_codegen.py sdk/python/codegen/ref_codegen.py sdk/python/src/leaven/_seam/_wire/payloads.py sdk/python/tests/_seam/_wire/test_payloads.py
+        note: >-
+          Python generated payload records now give schema-owned object-form
+          `InfoRef`, `ReceiptRef`, and `TraceRef` leaves concrete msgspec
+          records instead of accepting arbitrary `WireJsonObject` values.
+          Focused tests prove receipt refs preserve object identity, external
+          info refs decode as tagged records, string info refs remain accepted,
+          unknown object-form info refs are rejected, and trace refs must carry
+          required visibility. `MetadataBag` remains an open JSON object because
+          the public schema defines it as open metadata; Plan expressions,
+          preconditions, validation receipts, and several result payload leaves
+          still need typed Python owners before this acceptance row can close.
       - kind: typed_plan_expression_owner_foundation
         commits:
           - a0397e66

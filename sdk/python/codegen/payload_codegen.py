@@ -3,6 +3,8 @@
 from collections.abc import Sequence
 from typing import TypedDict
 
+from ref_codegen import REF_EXPORTS, REF_RECORDS
+
 
 class PayloadMethodRow(TypedDict):
     """One exported locked public-seam method row used for payload rendering."""
@@ -42,10 +44,8 @@ type WireJsonLeafObject = dict[str, WireJsonScalar | WireJsonLeafArray]
 type WireJsonField = WireJsonScalar | WireJsonLeafArray | WireJsonLeafObject
 type WireJsonObject = dict[str, WireJsonField]
 
-type DataClassSet = list[str]
-type InfoRef = str | WireJsonObject
-type MetadataBag = WireJsonObject
-type ReceiptRef = str | WireJsonObject
+{REF_RECORDS}
+
 type Replayability = Literal[
     "pure_read",
     "fully_managed",
@@ -53,33 +53,6 @@ type Replayability = Literal[
     "has_declared_external_effects",
     "has_untracked_external_effects",
 ]
-type TraceRef = WireJsonObject
-
-
-class CandidateRefRecord(Struct, frozen=True, forbid_unknown_fields=True, tag="candidate", tag_field="kind"):
-    id: str
-    run: str | UnsetType = UNSET
-
-
-class ProposalRefRecord(Struct, frozen=True, forbid_unknown_fields=True, tag="proposal", tag_field="kind"):
-    id: str
-    run: str | UnsetType = UNSET
-
-
-class ProposalBatchRefRecord(Struct, frozen=True, forbid_unknown_fields=True, tag="proposal_batch", tag_field="kind"):
-    id: str
-    run: str | UnsetType = UNSET
-
-
-class AssessmentRefRecord(Struct, frozen=True, forbid_unknown_fields=True, tag="assessment", tag_field="kind"):
-    id: str
-    run: str | UnsetType = UNSET
-
-
-type CandidateRef = str | CandidateRefRecord
-type ProposalRef = str | ProposalRefRecord
-type ProposalBatchRef = str | ProposalBatchRefRecord
-type AssessmentRef = str | AssessmentRefRecord
 
 
 class ConsistencyLatestAtStart(
@@ -602,7 +575,8 @@ class StageRunResult(Struct, frozen=True, forbid_unknown_fields=True, omit_defau
 
 __all__ = (  # noqa: PLE0605, SIM905
     "PLAN_RESULT_SCHEMA_FINGERPRINT PLAN_SCHEMA_FINGERPRINT STAGE_RUN_SCHEMA_FINGERPRINT "
-    "AssessmentRef AssessmentRefRecord AssessmentSummaryGraphRow BlobRef CandidateRef CandidateRefRecord "
+    "{REF_EXPORTS} "
+    "AssessmentSummaryGraphRow BlobRef "
     "CandidateSummaryGraphRow CapabilityCall ChargeReceipt CommitPolicy CommitPolicyGraphWritesAtomic "
     "CommitPolicyGraphWritesSequential CommitPolicyNoGraphWrites Consistency ConsistencyAtRevision "
     "ConsistencyLatestAtStart ConsistencySinceRevision Cost DataClassSet EvalMode EvalModeDryRun "

@@ -14,14 +14,17 @@ from leaven._seam._wire.payloads import (
     ConsistencyLatestAtStart,
     EvalModeExecute,
     EventSummaryGraphRow,
+    ExternalInfoRefRecord,
     GraphWrite,
     LeavenValue,
     OperationReceipt,
     PlanDocument,
     PlanResultDocument,
+    ReceiptRefRecord,
     RunnerRequest,
     StageRunRequest,
     StageRunResult,
+    TraceRefRecord,
 )
 
 
@@ -159,6 +162,91 @@ def test_plan_result_decodes_typed_values_and_receipts() -> None:
     assert value.event_id == "event_1"
     assert receipt.kind == "write"
     assert receipt.write_kind == "emit_run_event"
+
+
+def test_plan_result_decodes_typed_info_receipt_and_trace_refs() -> None:
+    """Scenario: ref leaves keep their schema-owned object identities."""
+
+    body = (
+        b'{"jsonrpc":"2.0","id":"req_1","result":{'
+        b'"schema_version":"leaven.plan_result.v1","plan_id":"plan_1",'
+        b'"capability_fingerprint":"fp_cap_sha256_test",'
+        b'"policy_fingerprint":"fp_policy_sha256_test",'
+        b'"base_revision":"rev_base","final_revision":"rev_final",'
+        b'"replayability_summary":"fully_managed",'
+        b'"values":{"evt":{"kind":"emit_run_event","event_id":"event_1",'
+        b'"receipt":{"kind":"receipt","id":"wrec_value","fingerprint":"fp_receipt_sha256_value"},'
+        b'"graph_revision":"rev_final","data_classes":["public"],'
+        b'"replayability":"fully_managed",'
+        b'"trace_refs":[{"kind":"agent.trace","id":"trace_1","visibility":"public",'
+        b'"receipt":{"kind":"receipt","id":"wrec_trace"}}]}},'
+        b'"receipts":[{"kind":"write","receipt":{"kind":"receipt","id":"wrec_1"},'
+        b'"status":"succeeded","write_kind":"emit_run_event",'
+        b'"source_refs":[{"kind":"external","namespace":"bench","id":"row_1"},'
+        b'"cand_string_ref"],'
+        b'"trace_refs":[{"kind":"agent.trace","id":"trace_2","visibility":"public"}],'
+        b'"result_hash":"fp_result_sha256_test","base_revision":"rev_base",'
+        b'"event_id":"event_1"}],'
+        b'"redactions":[],"charges":[],"errors":[]}}'
+    )
+
+    decoded = decode_response(body, PlanResultDocument)
+    value = decoded.values["evt"]
+    receipt = decoded.receipts[0]
+
+    assert isinstance(value.receipt, ReceiptRefRecord)
+    assert isinstance(receipt.receipt, ReceiptRefRecord)
+    assert value.trace_refs is not UNSET
+    assert isinstance(value.trace_refs[0], TraceRefRecord)
+    assert isinstance(value.trace_refs[0].receipt, ReceiptRefRecord)
+    assert receipt.source_refs is not UNSET
+    assert isinstance(receipt.source_refs[0], ExternalInfoRefRecord)
+    assert receipt.source_refs[1] == "cand_string_ref"
+    assert receipt.trace_refs is not UNSET
+    assert isinstance(receipt.trace_refs[0], TraceRefRecord)
+
+
+def test_plan_result_rejects_arbitrary_info_ref_object() -> None:
+    """Regression: object-form InfoRef is a tagged record, not arbitrary JSON."""
+
+    body = (
+        b'{"jsonrpc":"2.0","id":"req_1","result":{'
+        b'"schema_version":"leaven.plan_result.v1","plan_id":"plan_1",'
+        b'"capability_fingerprint":"fp_cap_sha256_test",'
+        b'"policy_fingerprint":"fp_policy_sha256_test",'
+        b'"base_revision":"rev_base","final_revision":"rev_final",'
+        b'"replayability_summary":"fully_managed",'
+        b'"values":{},'
+        b'"receipts":[{"kind":"write","receipt":"wrec_1","status":"succeeded",'
+        b'"write_kind":"emit_run_event","source_refs":[{"kind":"private_row","id":"x"}],'
+        b'"result_hash":"fp_result_sha256_test","base_revision":"rev_base",'
+        b'"event_id":"event_1"}],'
+        b'"redactions":[],"charges":[],"errors":[]}}'
+    )
+
+    with pytest.raises(JsonRpcProtocolError):
+        decode_response(body, PlanResultDocument)
+
+
+def test_plan_result_rejects_arbitrary_trace_ref_object() -> None:
+    """Regression: trace refs must carry required trace visibility."""
+
+    body = (
+        b'{"jsonrpc":"2.0","id":"req_1","result":{'
+        b'"schema_version":"leaven.plan_result.v1","plan_id":"plan_1",'
+        b'"capability_fingerprint":"fp_cap_sha256_test",'
+        b'"policy_fingerprint":"fp_policy_sha256_test",'
+        b'"base_revision":"rev_base","final_revision":"rev_final",'
+        b'"replayability_summary":"fully_managed",'
+        b'"values":{"evt":{"kind":"emit_run_event","event_id":"event_1",'
+        b'"receipt":"wrec_value","graph_revision":"rev_final",'
+        b'"data_classes":["public"],"replayability":"fully_managed",'
+        b'"trace_refs":[{"kind":"agent.trace","id":"trace_1"}]}},'
+        b'"receipts":[],"redactions":[],"charges":[],"errors":[]}}'
+    )
+
+    with pytest.raises(JsonRpcProtocolError):
+        decode_response(body, PlanResultDocument)
 
 
 def test_plan_result_decodes_graph_rows_as_tagged_records() -> None:
