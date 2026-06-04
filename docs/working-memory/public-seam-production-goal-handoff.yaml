@@ -1136,9 +1136,10 @@ acceptance:
           payload module remain under the 650 LOC file cap. This is still a
           foundation slice: JSON-RPC envelope Raw buffers, error data, and
           bounded leaf JSON slots such as metadata/info refs, plan expressions,
-          preconditions, output values, PlanError details, stage payload case
-          inputs, and nested result fragments remain before this row can be
-          marked done.
+          preconditions, output values, stage payload case inputs, and nested
+          result fragments remain before this row can be marked done. Later
+          Rust slices type PlanError details and runner case-input facts, but
+          Python generation still needs to consume those owners.
       - kind: typed_locked_method_identity_foundation
         paths:
           - crates/leaven-public-seam/src/acp_profile/methods.rs
@@ -1183,6 +1184,7 @@ acceptance:
           - 25dc6105
           - 8a4ecdda
           - bc76cccc
+          - 078e6d28
         paths:
           - crates/leaven-public-seam/src/plan.rs
           - crates/leaven-public-seam/src/result.rs
@@ -1230,11 +1232,14 @@ acceptance:
           `case_input` a typed Rust owner: `RunnerCaseInputDocument` exposes the
           candidate id, case id, sorted input keys, and JCS fingerprint of the
           exact input object, so downstream code no longer has to re-walk raw
-          runner case-input JSON to prove what the worker saw. This
-          is still not full typed seam closeout: nested Plan IR operation
-          bodies, nested Plan Result values/receipts, evidence, cost, blob refs,
-          capability resources, service execution payloads, and generated
-          Python Raw islands remain typed-seam blockers to eliminate.
+          runner case-input JSON to prove what the worker saw. PlanError
+          details now have typed Rust owners (`PlanErrorDocument`,
+          `PlanErrorCode`, and `PlanErrorDetails`), and failed-call receipt
+          validation compares typed PlanErrors instead of anonymous JSON
+          objects. This is still not full typed seam closeout: nested Plan IR
+          operation bodies, nested Plan Result values/receipts, evidence, cost,
+          blob refs, capability resources, service execution payloads, and
+          generated Python Raw islands remain typed-seam blockers to eliminate.
       - kind: typed_internal_method_dispatch_foundation
         commits:
           - 56276ac0
@@ -1295,8 +1300,8 @@ acceptance:
           `AcpClosedPlanError` facts while retaining the original JSON only for
           transport projection. This is still foundation evidence only:
           transport ingress, nested domain payloads, ACP result payloads,
-          event payloads, costs, blob refs, PlanError details,
-          metadata/info refs, stage case inputs, and nested Plan Result bodies
+          event payloads, costs, blob refs, metadata/info refs, stage case
+          inputs outside the runner facts owner, and nested Plan Result bodies
           remain raw JSON islands that must be eliminated before typed-seam
           closeout; there is no standing approval for those internal islands.
     closeout_check: >-
@@ -1425,6 +1430,25 @@ acceptance:
           protocol read/write helpers. This is still a private worker-boundary
           slice: public decorator callable typing and remaining leaf schema
           owners still need typed follow-up cuts.
+      - kind: public_decorator_stage_surface_typing
+        commits:
+          - fc8b5a73
+        paths:
+          - sdk/python/src/leaven/decorators.py
+        commands:
+          - cd sdk/python && uv run ruff check src/leaven/decorators.py src/leaven/_seam_worker src/leaven/stages.py src/leaven/optimize.py
+          - cd sdk/python && uv run ruff format --check src/leaven/decorators.py
+          - cd sdk/python && uv run ty check src/leaven/decorators.py src/leaven/_seam_worker src/leaven/stages.py src/leaven/optimize.py
+          - cd sdk/python && uv run pytest tests/test_product_surface_ring.py tests/test_stage_surface.py tests/test_proposer_worker.py tests/test_optimize_proposer_mechanics.py -q
+        note: >-
+          The public stage decorator surface no longer imports or exposes
+          `typing.Any`: `RegisteredStage.func` is typed as an async callable,
+          evaluator/runner/judge decorators preserve result generics, and
+          reflector/proposer decorators expose their concrete stage result
+          types. This closes the decorator-specific `Any` leak, not the wider
+          SDK quality row: public case/evidence/output/proposal/run-inspection
+          payload models and remaining private optimize/run surfaces still need
+          typed owners or explicit private classification.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this
