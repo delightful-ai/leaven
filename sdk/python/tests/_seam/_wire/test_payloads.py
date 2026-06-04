@@ -5,6 +5,11 @@ import pytest
 from msgspec import UNSET
 
 from leaven._seam._wire import JsonRpcProtocolError, decode_response
+from leaven._seam._wire.expressions import (
+    GraphSourceByCandidate,
+    PlanExpressionGraphQuery,
+    PlanExpressionLiteral,
+)
 from leaven._seam._wire.payloads import (
     PLAN_RESULT_SCHEMA_FINGERPRINT,
     PLAN_SCHEMA_FINGERPRINT,
@@ -67,9 +72,44 @@ def test_plan_document_decodes_typed_operation_kinds() -> None:
     write = decoded.ops[2].write
     assert isinstance(call, CapabilityCall)
     assert isinstance(write, GraphWrite)
+    assert isinstance(decoded.ops[0].expr, PlanExpressionLiteral)
     assert decoded.ops[0].kind == "let"
     assert call.kind == "lm_complete"
     assert write.kind == "emit_run_event"
+
+
+def test_plan_document_decodes_typed_plan_expression_source_refs() -> None:
+    """Example: let expressions carry typed Plan expression and graph-source records."""
+
+    body = (
+        b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
+        b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
+        b'"ops":[{"kind":"let","name":"rows","expr":{"kind":"graph_query",'
+        b'"source":{"kind":"by_candidate","candidate":{"kind":"candidate","id":"cand_1"}},'
+        b'"projection":{"kind":"summary"}}}],'
+        b'"return":["rows"],"commit":{"kind":"no_graph_writes"}}'
+    )
+
+    decoded = msgspec.json.decode(body, type=PlanDocument)
+    expr = decoded.ops[0].expr
+
+    assert isinstance(expr, PlanExpressionGraphQuery)
+    assert isinstance(expr.source, GraphSourceByCandidate)
+    assert isinstance(expr.source.candidate, CandidateRefRecord)
+
+
+def test_plan_document_rejects_unknown_expression_kind() -> None:
+    """Regression: let expressions are no longer arbitrary JSON objects."""
+
+    body = (
+        b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
+        b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
+        b'"ops":[{"kind":"let","name":"x","expr":{"kind":"private_expr","value":"ok"}}],'
+        b'"return":["x"],"commit":{"kind":"no_graph_writes"}}'
+    )
+
+    with pytest.raises(msgspec.ValidationError):
+        msgspec.json.decode(body, type=PlanDocument)
 
 
 def test_plan_document_rejects_unknown_operation_payload_kind() -> None:

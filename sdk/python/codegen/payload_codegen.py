@@ -37,6 +37,7 @@ from typing import Literal
 
 from msgspec import UNSET, Struct, UnsetType, field
 
+from .expressions import PlanExpression
 from .refs import (
 {ref_imports}
 )
@@ -183,7 +184,7 @@ class GraphWrite(Struct, frozen=True, omit_defaults=True, kw_only=True):
 class PlanOp(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, kw_only=True):
     kind: PlanOpKind
     name: str
-    expr: WireJsonObject | UnsetType = UNSET
+    expr: PlanExpression | UnsetType = UNSET
     call: CapabilityCall | UnsetType = UNSET
     write: GraphWrite | UnsetType = UNSET
     idempotency_key: str | UnsetType = UNSET
@@ -587,7 +588,7 @@ __all__ = (  # noqa: PLE0605, SIM905
     "CommitPolicyGraphWritesSequential CommitPolicyNoGraphWrites Consistency ConsistencyAtRevision "
     "ConsistencyLatestAtStart ConsistencySinceRevision Cost DataClassSet EvalMode EvalModeDryRun "
     "EvalModeExecute EvalModeReplay EvalModeRequireCached EventSummaryGraphRow ExtensionGraphRow FailureMode "
-    "GraphRow GraphWrite InfoRef LeavenValue MetadataBag OperationReceipt OutputRecord PlanDocument "
+    "GraphRow GraphWrite InfoRef LeavenValue MetadataBag OperationReceipt OutputRecord PlanDocument PlanExpression "
     "PlanError PlanOp PlanResultDocument ProposalBatchRef ProposalBatchRefRecord ProposalEffect ProposeRequest "
     "ProposalRef ProposalRefRecord ProposalSummaryGraphRow ReceiptRef Redaction ReflectionResult Replayability "
     "RunnerRequest Score "

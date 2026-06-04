@@ -1368,6 +1368,33 @@ acceptance:
           without violating the Python 650 LOC ceiling. This is dependency
           cleanup for typed Python wire closure, not a standalone product
           behavior proof.
+      - kind: generated_plan_expressions_are_typed_records
+        paths:
+          - sdk/python/codegen/generate_seam_wire.py
+          - sdk/python/codegen/expression_codegen.py
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/expressions.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/src/leaven/_seam/_wire/refs.py
+          - sdk/python/tests/_seam/_wire/test_payloads.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run ruff check codegen/generate_seam_wire.py codegen/expression_codegen.py codegen/ref_codegen.py codegen/payload_codegen.py src/leaven/_seam/_wire/expressions.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_results.py
+          - cd sdk/python && uv run ty check codegen/generate_seam_wire.py codegen/expression_codegen.py codegen/ref_codegen.py codegen/payload_codegen.py src/leaven/_seam/_wire/expressions.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_results.py
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_results.py -q
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Generated Python Plan documents now decode `PlanOp.expr` through
+          tagged msgspec Plan expression records instead of arbitrary
+          `WireJsonObject` values. The generated expression module covers the
+          locked top-level expression variants and typed graph-source refs, and
+          focused tests prove graph-query source refs preserve `CandidateRef`
+          identity while unknown expression kinds are rejected. Nested
+          projection, predicate, case-query, workspace-query, and recursive
+          expression input/vars still remain JSON-shaped leaves until their
+          own generated owner slices; this evidence removes the top-level
+          expression hole but does not close all Plan IR typing.
       - kind: typed_plan_expression_owner_foundation
         commits:
           - a0397e66

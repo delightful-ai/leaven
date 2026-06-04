@@ -11,6 +11,7 @@ type WireJsonScalar = str | int | float | bool | None
 type WireJsonLeafArray = list[WireJsonScalar]
 type WireJsonLeafObject = dict[str, WireJsonScalar | WireJsonLeafArray]
 type WireJsonField = WireJsonScalar | WireJsonLeafArray | WireJsonLeafObject
+type WireJsonValue = WireJsonScalar | list[WireJsonValue] | dict[str, WireJsonValue]
 type WireJsonObject = dict[str, WireJsonField]
 type DataClassSet = list[str]
 type TraceVisibility = Literal["public", "optimizer_visible", "host_private", "external_private"]
@@ -60,6 +61,12 @@ class CaseRefRecord(Struct, frozen=True, forbid_unknown_fields=True, tag="case",
     run: str | UnsetType = UNSET
 
 
+class WorkspaceRefRecord(Struct, frozen=True, forbid_unknown_fields=True, tag="workspace", tag_field="kind"):
+    id: str
+    run: str | UnsetType = UNSET
+    snapshot_fingerprint: str | UnsetType = UNSET
+
+
 class TraceRefRecord(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
     kind: str
     id: str
@@ -73,6 +80,7 @@ type ProposalRef = str | ProposalRefRecord
 type ProposalBatchRef = str | ProposalBatchRefRecord
 type AssessmentRef = str | AssessmentRefRecord
 type CaseRef = str | CaseRefRecord
+type WorkspaceRef = str | WorkspaceRefRecord
 type EvaluationRequestRef = str | EvaluationRequestRefRecord
 type EvaluationAttemptRef = str | EvaluationAttemptRefRecord
 type InfoRef = (
@@ -90,6 +98,6 @@ type TraceRef = TraceRefRecord
 
 
 __all__ = (  # noqa: PLE0605, SIM905
-    "AssessmentRef AssessmentRefRecord CandidateRef CandidateRefRecord CaseRef CaseRefRecord EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestRef EvaluationRequestRefRecord ExternalInfoRefRecord InfoRef ProposalBatchRef ProposalBatchRefRecord ProposalRef ProposalRefRecord ReceiptRef ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility "
-    "DataClassSet MetadataBag WireJsonField WireJsonLeafArray WireJsonLeafObject WireJsonObject WireJsonScalar"
+    "AssessmentRef AssessmentRefRecord CandidateRef CandidateRefRecord CaseRef CaseRefRecord EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestRef EvaluationRequestRefRecord ExternalInfoRefRecord InfoRef ProposalBatchRef ProposalBatchRefRecord ProposalRef ProposalRefRecord ReceiptRef ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility WorkspaceRef WorkspaceRefRecord "
+    "DataClassSet MetadataBag WireJsonField WireJsonLeafArray WireJsonLeafObject WireJsonObject WireJsonScalar WireJsonValue"
 ).split()
