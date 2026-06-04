@@ -8,10 +8,11 @@ use leaven_core::{
     ProposalBatch, ProposalBatchSemantics,
 };
 use leaven_engine::{
-    BudgetLedger, CaseSet, OptimizerStateWrite, RunContext, RunEvent, StoreRunPersistence,
+    BudgetLedger, CaseSet, Optimizer, OptimizerError, OptimizerStateWrite, RunContext, RunEvent,
+    StepStatus, StoreRunPersistence,
 };
 use leaven_kernel::{
-    Budget, ContentId, Cost, EvaluatorId, Fingerprint, MetadataBag, Metered, StageId,
+    Budget, CandidateId, ContentId, Cost, EvaluatorId, Fingerprint, MetadataBag, Metered, StageId,
 };
 use leaven_seam_runtime::SeamRuntime;
 use leaven_seam_stdio::serve_reader_writer;
@@ -364,6 +365,48 @@ fn run_bound_service_routes_graph_writes_through_runtime_and_stdio() {
     )));
 }
 
+#[test]
+fn engine_lifecycle_mounts_run_bound_service_and_checkpoint_readback_sees_graph_truth() {
+    let temp = TempDir::new().unwrap();
+    let store = FileStore::open(temp.path()).unwrap();
+    let persistence = StoreRunPersistence::new(store);
+    let evidence_store = InlineEvidenceStore::<RunBoundEvidence>::new("run-bound");
+    let case_set = CaseSet::new(vec![RunBoundCase]);
+    let mut engine = leaven_engine::Engine::<RunBoundProblem>::builder()
+        .budget(Budget::unlimited())
+        .persistence(persistence.clone())
+        .build();
+    let seed = engine.insert_seed(RunBoundArtifact(1), 0).unwrap();
+
+    let mut optimizer = SeamMountedOptimizer {
+        seed,
+        mounted: false,
+    };
+    futures::executor::block_on(engine.run(&mut optimizer, &case_set, &evidence_store)).unwrap();
+
+    assert!(
+        optimizer.mounted,
+        "optimizer step should mount seam service"
+    );
+    let restored = persistence
+        .latest_checkpoint::<RunBoundProblem>()
+        .unwrap()
+        .expect("engine lifecycle should advance latest checkpoint");
+    let mut restored_graph = restored.graph;
+    let mut restored_budget = restored.budget;
+    let restored_ctx =
+        RunContext::<RunBoundProblem>::new(&mut restored_graph, &mut restored_budget);
+    let graph = restored_ctx.graph();
+    assert_eq!(graph.candidate_count(), 2);
+    assert_eq!(graph.evaluation_request_count(), 1);
+    assert_eq!(graph.assessment_count(), 1);
+    assert!(graph.events().any(|event| matches!(
+        event,
+        RunEvent::ExternalEventEmitted { event_kind, .. }
+            if event_kind == "run_bound.checked"
+    )));
+}
+
 fn jsonrpc_request(id: &str, method: &str, params: Value) -> Value {
     json!({
         "jsonrpc": "2.0",
@@ -587,6 +630,143 @@ impl fmt::Display for RunBoundApplyError {
 }
 
 impl Error for RunBoundApplyError {}
+
+struct SeamMountedOptimizer {
+    seed: CandidateId,
+    mounted: bool,
+}
+
+impl Optimizer<RunBoundProblem> for SeamMountedOptimizer {
+    async fn step(
+        &mut self,
+        ctx: &mut RunContext<'_, RunBoundProblem>,
+    ) -> Result<StepStatus, OptimizerError> {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(workspace_root())
+            .map_err(|source| OptimizerError::with_source("load public seam package", source))?;
+        let seed = self.seed;
+        let batch = ctx
+            .record_proposal_batch(
+                StageId::custom("engine-mounted-run-bound-proposer"),
+                ProposalBatch {
+                    proposals: vec![Proposal::mutate(seed, 17).build()],
+                    semantics: ProposalBatchSemantics::Alternatives,
+                    metadata: MetadataBag::new(),
+                },
+                Cost::zero(),
+            )
+            .map_err(|source| OptimizerError::with_source("record proposal batch", source))?;
+        let batch_ref = format!("pb_{}", batch.batch_id.as_uuid());
+        {
+            let service = RunBoundGraphEffectService::new(
+                ctx,
+                [batch],
+                "fp_cap_sha256_engine_mounted",
+                "fp_policy_sha256_engine_mounted",
+                "rev_engine_mounted_base",
+                "rev_engine_mounted_final",
+            )
+            .with_evaluation_requester({
+                move |_params| {
+                    Ok(RunBoundEvaluationRequest {
+                        evaluator: EvaluatorId::from("eval_engine_mounted"),
+                        evaluator_fingerprint: Fingerprint::from_bytes([38; 32]),
+                        request: EvaluationRequest::Independent {
+                            candidates: vec![seed],
+                            set: EvaluationSet::All,
+                            granularity: AssessmentGranularity::PerCase,
+                            purpose: EvaluationPurpose::Validation,
+                        },
+                    })
+                }
+            })
+            .with_assessment_submitter({
+                move |_params| {
+                    Ok(Metered::new(
+                        vec![Assessment::Independent {
+                            candidate: seed,
+                            target: AssessmentTarget::Unscoped,
+                            evidence: RunBoundEvidence,
+                            cost: Cost::zero(),
+                            metadata: MetadataBag::new(),
+                        }],
+                        Cost::zero(),
+                    ))
+                }
+            });
+            let runtime = SeamRuntime::from_package(package, service)
+                .map_err(|source| OptimizerError::with_source("build seam runtime", source))?;
+            let first_lines = serve_jsonrpc_lines(
+                &runtime,
+                [
+                    jsonrpc_request(
+                        "engine-mounted-apply",
+                        "leaven/proposal.apply",
+                        proposal_apply_request(&batch_ref),
+                    ),
+                    jsonrpc_request(
+                        "engine-mounted-evaluation",
+                        "leaven/evaluation.request",
+                        evaluation_request_request(),
+                    ),
+                ],
+            )?;
+            let evaluation_ref = first_lines[1]["result"]["primary"]["evaluation_request_id"]
+                .as_str()
+                .ok_or_else(|| {
+                    OptimizerError::Message(
+                        "engine-mounted evaluation response missing request id".to_owned(),
+                    )
+                })?
+                .to_owned();
+            serve_jsonrpc_lines(
+                &runtime,
+                [
+                    jsonrpc_request(
+                        "engine-mounted-assessment",
+                        "leaven/assessment.submit",
+                        assessment_submit_request(&evaluation_ref),
+                    ),
+                    jsonrpc_request(
+                        "engine-mounted-event",
+                        "leaven/event.emit",
+                        event_emit_request(),
+                    ),
+                ],
+            )?;
+        }
+        self.mounted = true;
+        Ok(StepStatus::Done)
+    }
+
+    fn best_candidate(
+        &self,
+        _graph: leaven_engine::RunGraphView<'_, RunBoundProblem>,
+    ) -> Option<CandidateId> {
+        None
+    }
+}
+
+fn serve_jsonrpc_lines<const N: usize>(
+    runtime: &SeamRuntime<impl leaven_seam_runtime::SeamService>,
+    requests: [Value; N],
+) -> Result<Vec<Value>, OptimizerError> {
+    let input = requests
+        .into_iter()
+        .map(|request| request.to_string())
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    let mut output = Vec::new();
+    serve_reader_writer(runtime, Cursor::new(input), &mut output)
+        .map_err(|source| OptimizerError::with_source("serve run-bound stdio lines", source))?;
+    let lines = response_lines(output);
+    if lines.iter().any(|line| line.get("error").is_some()) {
+        return Err(OptimizerError::Message(format!(
+            "run-bound stdio returned errors: {lines:?}"
+        )));
+    }
+    Ok(lines)
+}
 
 fn workspace_root() -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

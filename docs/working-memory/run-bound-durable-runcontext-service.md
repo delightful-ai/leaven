@@ -1,7 +1,7 @@
 # Run-Bound Durable RunContext Service
 
 Status: implementation foundation in progress
-Updated: 2026-06-04T01:35:31Z
+Updated: 2026-06-04T02:10:00Z
 
 ## Intent
 
@@ -46,6 +46,13 @@ of the same mutated facts.
   Its stdio-focused test routes all four graph-write methods through
   `SeamRuntime` and `leaven-seam-stdio::serve_reader_writer`, so the proof no
   longer stops at direct module calls.
+- `engine_lifecycle_mounts_run_bound_service_and_checkpoint_readback_sees_graph_truth`
+  mounts `RunBoundGraphEffectService` from inside an actual
+  `Optimizer::step` where the engine has installed case set, evidence store,
+  callbacks, trust policy, and persistence on the live `RunContext`. The test
+  sends all four graph-write methods through `SeamRuntime` plus stdio framing,
+  lets the engine finish and advance latest checkpoint state, and restores the
+  checkpoint to assert graph truth survived.
 
 ## Why This Is Not Done
 
@@ -54,10 +61,18 @@ aliases such as `pb_configured_run_context`, `eval_run_context`, and
 `run_context.checked`. It is mechanics proof for the public server route, not
 the generalized SDK service.
 
-The remaining missing proof is wiring this service shape into the public SDK
-server route during a real optimizer run/stage lifecycle. The current module
-proves the generic service, runtime/stdio delivery, and durable checkpoint
-mechanics, but not a run-owned server mounted by an optimizer/stage lifecycle.
+The remaining missing proof is wiring this service shape into a product public
+SDK server route. The current module proves the generic service, runtime/stdio
+delivery, durable checkpoint mechanics, and engine optimizer-lifecycle mounting,
+but not a product API/CLI route that external-language SDK workers can launch
+for an ordinary run.
+
+The important topology consequence is that the next row-closing change is not a
+larger `ConfiguredSeamService` patch. The run/stage owner must hold the live
+`RunContext`, case set, evidence store, persistence, optimizer checkpoint state,
+and typed problem-specific lowerers. `leaven-seam-service` may provide the
+adapter that implements `SeamService`, but it must be constructed by the
+run/stage owner while that run is active.
 
 Do not close `run_bound_durable_runcontext_service` with:
 
@@ -74,8 +89,12 @@ Ownership stays split:
 - `leaven-engine`: `RunContext`, `RunGraph`, mutation, checkpoint request
   construction, and `RunPersistence` capability.
 - `leaven-run`: user-facing durable run setup, `LocalOptimizeStore`,
-  `StoreRunPersistence`, evidence stores, and public-seam receipt projection
-  over engine-backed reports.
+  `StoreRunPersistence`, evidence stores, optimizer lifecycle composition, and
+  public-seam receipt projection over engine-backed reports. It already prepares
+  the durable run store, starts/resumes the engine, installs persistence, runs
+  the optimizer, advances latest checkpoints, and writes public run reports.
+  It must not directly depend on `leaven-seam-service`, because
+  `leaven-seam-service` already depends on `leaven-run` for receipt projection.
 - `leaven-seam-service`: configured executable service composition. It may host
   a run-bound service adapter when a public SDK server needs to service worker
   callbacks for a specific run, but it must not inspect graph internals or
@@ -99,18 +118,51 @@ engine values, and graph mutations route through `RunContext` finalizers.
 2. Reuse or move the host-effect lowering pattern from
    `leaven-acp-stage-bridge::RunContextGraphEffectHost` without making
    `leaven-acp-stage-bridge` a dependency of the durable server route.
-3. Add an explicit public seam service entrypoint for worker callbacks during a
-   real run/stage, not a free-floating configured proof graph.
+3. Add an explicit run-lifecycle mount point for worker callbacks during a real
+   run/stage, not a free-floating configured proof graph. The implementation
+   must respect the existing dependency direction: `leaven-run` owns the product
+   lifecycle facts, while `leaven-seam-service` owns the service adapter and
+   already depends on `leaven-run`. That means the first proof should either:
+   - mount `RunBoundGraphEffectService` from an optimizer/stage-owned
+     `RunContext` in `leaven-seam-service` tests, proving the adapter works
+     inside a real engine lifecycle; or
+   - introduce a behavior-bearing composition crate above both `leaven-run` and
+     `leaven-seam-service` if a durable product route needs to own both builder
+     lifecycle and seam serving without creating a dependency cycle.
 4. After each graph-write callback, rely on `RunContext` checkpointing through
    `.with_persistence(...)`; where optimizer-private state must advance latest,
    call `checkpoint_with_optimizer_state(...)` from the optimizer owner.
-5. Add a focused scenario that runs a real small `RunProblem`, services
-   proposal/evaluation/assessment/event callbacks, then reads back the latest
-   checkpoint through Rust-owned inspection and asserts the same child
-   candidate, evaluation request, assessment ids, emitted event, receipts,
-   lineage, and cost facts.
+5. Add a focused scenario that runs a real small problem through the
+   engine/optimizer lifecycle, mounts the run-bound public-seam service while
+   the run is active, services proposal/evaluation/assessment/event callbacks
+   through the runtime/stdio path, then reads back the latest checkpoint through
+   Rust-owned inspection and asserts the same child candidate, evaluation
+   request, assessment ids, emitted event, receipts, lineage, and cost facts.
+   **Done as engine-lifecycle proof in `run_bound_service/tests.rs`; still needs
+   product-route/API proof for external-language SDK workers.**
 6. Add a negative proving that a fallback configured receipt or `SeamGraphState`
    summary cannot satisfy the run-bound route.
+
+## Research Result
+
+The next implementation should preserve this dependency direction:
+
+- `leaven-run` constructs or owns the real lifecycle scenario because it already
+  prepares `PreparedStore`, durable run dirs, `StoreRunPersistence`, engine
+  start/resume, optimizer execution, final checkpoint advancement, and report
+  readback. It cannot directly import `leaven-seam-service` under the current
+  topology.
+- `leaven-seam-service::run_bound_service` remains a reusable adapter over a
+  borrowed live `RunContext<P>` plus host-owned typed lowerers.
+- A future behavior-bearing composition crate above `leaven-run` and
+  `leaven-seam-service` is preferable to reversing the existing dependency if
+  the product route must own both ordinary run builder lifecycle and seam server
+  mounting.
+- `leaven-cli::seam serve --stdio` remains the configured operator server; it
+  cannot by itself own an optimizer/run/stage lifecycle without becoming a
+  product-run implementation bucket.
+- `leaven-acp-stage-bridge` remains bridge evidence and reusable design input,
+  not a dependency of the durable public SDK server route.
 
 ## Focused Verification Target
 

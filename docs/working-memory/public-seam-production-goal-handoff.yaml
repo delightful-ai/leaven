@@ -727,6 +727,61 @@ acceptance:
           removes the direct-module-only proof gap, but the row remains pending
           until an optimizer/stage owner mounts the service during a real run
           lifecycle.
+      - kind: run_lifecycle_owner_research
+        paths:
+          - docs/working-memory/run-bound-durable-runcontext-service.md
+          - crates/leaven-run/AGENTS.md
+          - crates/leaven-run/src/builder.rs
+          - crates/leaven-run/src/builder/engine.rs
+          - crates/leaven-run/src/run_store.rs
+          - crates/leaven-seam-service/AGENTS.md
+          - crates/leaven-seam-service/src/run_bound_service/mod.rs
+          - crates/leaven-cli/AGENTS.md
+          - crates/leaven-cli/src/seam.rs
+        commands:
+          - rg -n "RunContext|run-bound|durable|leaven-seam-service|seam service|public seam|assessment.submit|event.emit|evaluation.request|proposal.apply" docs crates AGENTS.md sdk/python/AGENTS.md sdk/python/tests/AGENTS.md
+          - morph codebase_search "Where does leaven-run create durable run directories, bind RunContext persistence/checkpointing, execute optimizer/stage lifecycle, and expose public seam inspection or server hooks?"
+        note: >-
+          Research confirms the next row-closing change must be a real
+          run-lifecycle mount, not a larger configured-service patch.
+          `leaven-run` owns the ordinary product lifecycle facts but cannot
+          directly depend on `leaven-seam-service` because `leaven-seam-service`
+          already depends on `leaven-run` for receipt projection. The next proof
+          should either mount `RunBoundGraphEffectService` from an
+          optimizer/stage-owned `RunContext` in `leaven-seam-service` tests, or
+          introduce a behavior-bearing composition crate above both crates if the
+          product route must own builder lifecycle and seam serving together.
+          `leaven-cli seam serve --stdio` remains the configured operator
+          server, and `leaven-acp-stage-bridge` remains bridge evidence, not a
+          dependency of the durable SDK route. This is planning evidence only;
+          the row remains pending until the lifecycle scenario executes through
+          runtime/stdio and Rust checkpoint readback.
+      - kind: engine_lifecycle_run_bound_stdio_mount
+        paths:
+          - crates/leaven-seam-service/src/run_bound_service/tests.rs
+          - docs/working-memory/run-bound-durable-runcontext-service.md
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service engine_lifecycle_mounts_run_bound_service_and_checkpoint_readback_sees_graph_truth
+          - cargo fmt --check
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service run_bound_service
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-run inspection
+          - cargo test -p leaven --test topology_contract
+          - uv run --with pyyaml python - <<'PY' ...
+        note: >-
+          `RunBoundGraphEffectService` is now mounted from inside an actual
+          `Optimizer::step`, where the engine has installed the case set,
+          evidence store, trust policy, callbacks, and persistence on the live
+          `RunContext`. The test sends `proposal.apply`,
+          `evaluation.request`, `assessment.submit`, and `event.emit` as
+          JSON-RPC lines through `SeamRuntime` and `leaven-seam-stdio`, lets the
+          engine finish and advance the latest checkpoint, then restores that
+          checkpoint to assert candidate/evaluation/assessment/event graph
+          truth. This upgrades the foundation from direct/runtime-only service
+          proof to engine lifecycle proof, but the row remains pending until a
+          product public SDK server/API route exposes this mount to
+          external-language workers.
     closeout_check: >-
       The configured `SeamTextProblem` proof path, `leaven-acp-stage-bridge`
       callback tests, public-seam receipt projection tests, and Python
