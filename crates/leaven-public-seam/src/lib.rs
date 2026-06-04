@@ -58,6 +58,7 @@ pub use plan::{
     PlanCallKind, PlanCommitKind, PlanDocument, PlanId, PlanMode, PlanOperation, PlanOperationKind,
     PlanQueryKind, PlanReturnBinding, PlanSchemaVersion, PlanWriteKind,
 };
+pub use plan_error::{PlanErrorCode, PlanErrorDetails, PlanErrorDocument};
 pub use plan_execution::{
     AgentCommandOutputRefs, PlanAgentRunOutcome, PlanAgentRunRequest,
     PlanApplyProposalBatchOutcome, PlanApplyProposalBatchRequest, PlanCaseQueryOutcome,

@@ -1,5 +1,7 @@
 use crate::support::{bind_plan_result_hashes, fixture_blob_ref, package};
-use leaven_public_seam::{PlanResultReceiptKind, PlanResultValueKind, PublicSeamError};
+use leaven_public_seam::{
+    PlanErrorCode, PlanResultReceiptKind, PlanResultValueKind, PublicSeamError,
+};
 use serde_json::{Value, json};
 
 #[test]
@@ -33,6 +35,13 @@ fn plan_result_accepts_typed_success_and_failure_envelopes() {
     assert_eq!(failure.receipts()[0].kind(), PlanResultReceiptKind::Call);
     assert_eq!(failure.errors().count(), 1);
     assert_eq!(failure.charges().count(), 1);
+    assert_eq!(
+        failure.plan_errors()[0].code(),
+        PlanErrorCode::ProviderError
+    );
+    assert_eq!(failure.plan_errors()[0].message(), "provider failed");
+    assert_eq!(failure.plan_errors()[0].receipt(), "lmrec_failed");
+    assert_eq!(failure.plan_errors()[0].retryable(), Some(true));
 }
 
 #[test]
@@ -185,6 +194,53 @@ fn plan_result_rejects_generic_or_untyped_result_payloads() {
             .unwrap_err(),
         PublicSeamError::ExampleValidation { .. }
     ));
+}
+
+#[test]
+fn plan_result_parses_plan_error_details_as_typed_public_fields() {
+    let package = package();
+
+    let mut detailed = typed_failure_result();
+    detailed["receipts"][0]["error"]["details"] = json!({
+        "summary": "provider overloaded",
+        "reason": "upstream_503",
+        "retry_after_ms": 250
+    });
+    detailed["errors"][0]["details"] = json!({
+        "summary": "provider overloaded",
+        "reason": "upstream_503",
+        "retry_after_ms": 250
+    });
+
+    let result = package.validate_plan_result_document(&detailed).unwrap();
+    let details = result.plan_errors()[0].details().unwrap();
+    assert_eq!(details.summary(), Some("provider overloaded"));
+    assert_eq!(details.reason(), Some("upstream_503"));
+    assert_eq!(details.retry_after_ms(), Some(250));
+}
+
+#[test]
+fn plan_result_rejects_unowned_plan_error_details_payloads() {
+    let package = package();
+
+    let mut nested = typed_failure_result();
+    nested["receipts"][0]["error"]["details"] = json!({
+        "provider": {
+            "raw": "unowned"
+        }
+    });
+    nested["errors"][0]["details"] = json!({
+        "provider": {
+            "raw": "unowned"
+        }
+    });
+    let error = package.validate_plan_result_document(&nested).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("PlanError.details carries unknown field `provider`"),
+        "{error}"
+    );
 }
 
 #[test]

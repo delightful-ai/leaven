@@ -4,6 +4,7 @@ use serde_json::Value;
 
 use crate::PublicSeamError;
 use crate::evidence::{EvidenceEnvelopeDocument, EvidenceReceiptRef};
+use crate::plan_error::{self, PlanErrorDocument};
 
 mod audit;
 mod helpers;
@@ -33,7 +34,7 @@ pub struct PlanResultDocument {
     value_kinds: Vec<String>,
     receipt_kinds: Vec<String>,
     value_data_classes: Vec<(String, Vec<String>)>,
-    error_count: usize,
+    errors: Vec<PlanErrorDocument>,
     charge_count: usize,
     assessment_batch_replayability: Vec<(String, Replayability)>,
 }
@@ -83,7 +84,7 @@ impl PlanResultDocument {
                 .map(|kind| kind.as_str().to_owned())
                 .collect(),
             value_data_classes: value_audit.value_data_classes,
-            error_count: parts.error_count,
+            errors: parts.errors,
             charge_count: parts.charge_count,
             assessment_batch_replayability: value_audit.assessment_batch_replayability,
         })
@@ -121,7 +122,7 @@ impl PlanResultDocument {
 
     /// Number of typed plan errors.
     pub fn error_count(&self) -> usize {
-        self.error_count
+        self.errors.len()
     }
 
     /// Number of charge receipts.
@@ -157,10 +158,15 @@ impl PlanResultDocument {
     }
 
     /// Typed top-level error section facts.
-    pub const fn errors(&self) -> PlanResultErrorFacts {
+    pub fn errors(&self) -> PlanResultErrorFacts {
         PlanResultErrorFacts {
-            count: self.error_count,
+            count: self.errors.len(),
         }
+    }
+
+    /// Typed PlanErrors carried by the top-level result error section.
+    pub fn plan_errors(&self) -> &[PlanErrorDocument] {
+        &self.errors
     }
 
     /// Data classes carried by each typed result value.
@@ -373,7 +379,7 @@ struct PlanResultParts<'a> {
     values: &'a serde_json::Map<String, Value>,
     receipts: &'a [Value],
     charges: &'a [Value],
-    error_count: usize,
+    errors: Vec<PlanErrorDocument>,
     charge_count: usize,
 }
 
@@ -397,10 +403,21 @@ impl<'a> PlanResultParts<'a> {
                 .and_then(Value::as_array)
                 .map(Vec::as_slice)
                 .ok_or_else(|| invalid_result("plan result charges must be an array"))?,
-            error_count: array_len(object, "errors")?,
+            errors: plan_errors_from_object(object)?,
             charge_count: array_len(object, "charges")?,
         })
     }
+}
+
+fn plan_errors_from_object(
+    object: &serde_json::Map<String, Value>,
+) -> Result<Vec<PlanErrorDocument>, PublicSeamError> {
+    let errors = object
+        .get("errors")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .ok_or_else(|| invalid_result("plan result errors must be an array"))?;
+    plan_error::closed_plan_errors(errors, "plan result error").map_err(invalid_result)
 }
 
 struct ValueAudit {

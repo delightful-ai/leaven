@@ -329,26 +329,19 @@ fn validate_failed_call_receipt(
     state: &ReceiptValidationState,
 ) -> Result<(), PublicSeamError> {
     let receipt_id = required_string(receipt.get("receipt"), "receipt.receipt")?;
-    let error = receipt
-        .get("error")
-        .and_then(Value::as_object)
-        .ok_or_else(|| {
-            invalid_plan(format!(
-                "failed call receipt for `{name}` must carry typed PlanError"
-            ))
-        })?;
-    plan_error::validate_closed_plan_error(error).map_err(invalid_plan)?;
-    let error_receipt = plan_error::plan_error_receipt_id(error).map_err(invalid_plan)?;
-    if error_receipt != receipt_id {
+    let error = receipt.get("error").ok_or_else(|| {
+        invalid_plan(format!(
+            "failed call receipt for `{name}` must carry typed PlanError"
+        ))
+    })?;
+    let error =
+        plan_error::closed_plan_error(error, "failed call receipt error").map_err(invalid_plan)?;
+    if error.receipt() != receipt_id {
         return Err(invalid_plan(
             "failed call PlanError receipt must match call receipt",
         ));
     }
-    if !state
-        .errors
-        .iter()
-        .any(|value| value.as_object() == Some(error))
-    {
+    if !state.errors.iter().any(|top_level| top_level == &error) {
         return Err(invalid_plan(format!(
             "failed call receipt for `{name}` PlanError must appear in top-level errors"
         )));

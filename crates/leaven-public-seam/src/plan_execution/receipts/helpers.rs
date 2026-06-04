@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{Map, Value};
 
 use super::{LiveWorkspaceHandle, require_live_workspace_ref, workspace_ref_facts};
-use crate::PublicSeamError;
+use crate::{PlanErrorDocument, PublicSeamError, plan_error};
 
 use crate::plan_execution::{invalid_plan, object, required_string};
 
@@ -12,7 +12,7 @@ pub(super) struct ReceiptValidationState {
     pub(super) binding_data_classes: BTreeMap<String, BTreeSet<String>>,
     pub(super) live_workspaces: BTreeMap<String, LiveWorkspaceHandle>,
     pub(super) charges_by_receipt: BTreeMap<String, Value>,
-    pub(super) errors: Vec<Value>,
+    pub(super) errors: Vec<PlanErrorDocument>,
 }
 
 impl ReceiptValidationState {
@@ -35,7 +35,8 @@ impl ReceiptValidationState {
             binding_data_classes: BTreeMap::new(),
             live_workspaces: BTreeMap::new(),
             charges_by_receipt,
-            errors: errors.to_vec(),
+            errors: plan_error::closed_plan_errors(errors, "plan result error")
+                .map_err(invalid_plan)?,
         })
     }
 }
