@@ -64,7 +64,10 @@ fn run_bound_service_mutates_real_context_and_checkpoint_readback_sees_graph_tru
             "rev_run_bound_final",
         )
         .with_evaluation_requester({
-            move |_params| {
+            move |params| {
+                assert_eq!(params.plan_id(), "plan_run_bound_evaluation");
+                assert_eq!(params.op_name(), "evaluation_request");
+                assert_eq!(params.request_payload()["shape"], "independent");
                 Ok(RunBoundEvaluationRequest {
                     evaluator: EvaluatorId::from("eval_run_bound"),
                     evaluator_fingerprint: Fingerprint::from_bytes([37; 32]),
@@ -78,7 +81,10 @@ fn run_bound_service_mutates_real_context_and_checkpoint_readback_sees_graph_tru
             }
         })
         .with_assessment_submitter({
-            move |_params| {
+            move |params| {
+                assert_eq!(params.plan_id(), "plan_run_bound_assessment");
+                assert_eq!(params.op_name(), "assessment_batch");
+                assert_eq!(params.assessments_payload()[0]["kind"], "independent");
                 Ok(Metered::new(
                     vec![Assessment::Independent {
                         candidate: seed,

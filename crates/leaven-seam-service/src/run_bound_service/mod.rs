@@ -21,6 +21,7 @@ mod extension_result;
 mod params;
 
 pub use error::RunBoundGraphEffectError;
+pub use params::{AssessmentSubmitParams, EvaluationRequestParams};
 
 use extension_result::{
     EventEmitExtensionContext, assessment_submit_extension_result,
@@ -28,13 +29,13 @@ use extension_result::{
     proposal_apply_extension_result,
 };
 use params::{
-    evaluation_request_id, event_emit_write, proposal_batch_id, request_evaluation_write,
+    assessment_submit_params, evaluation_request_params, event_emit_params, proposal_apply_params,
 };
 
-type AssessmentSubmitter<'service, P> =
-    dyn Fn(&Value) -> Result<Metered<Vec<Assessment<P>>>, String> + 'service;
-type EvaluationRequester<'service> =
-    dyn Fn(&Value) -> Result<RunBoundEvaluationRequest, String> + 'service;
+type AssessmentSubmitter<'service, P> = dyn for<'params> Fn(&AssessmentSubmitParams<'params>) -> Result<Metered<Vec<Assessment<P>>>, String>
+    + 'service;
+type EvaluationRequester<'service> = dyn for<'params> Fn(&EvaluationRequestParams<'params>) -> Result<RunBoundEvaluationRequest, String>
+    + 'service;
 
 /// Typed evaluation request produced by a host-owned public payload lowerer.
 pub struct RunBoundEvaluationRequest {
@@ -103,7 +104,10 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
     #[must_use]
     pub fn with_assessment_submitter(
         mut self,
-        submitter: impl Fn(&Value) -> Result<Metered<Vec<Assessment<P>>>, String> + 'service,
+        submitter: impl for<'params> Fn(
+            &AssessmentSubmitParams<'params>,
+        ) -> Result<Metered<Vec<Assessment<P>>>, String>
+        + 'service,
     ) -> Self {
         self.assessment_submitter = Some(Box::new(submitter));
         self
@@ -113,7 +117,10 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
     #[must_use]
     pub fn with_evaluation_requester(
         mut self,
-        requester: impl Fn(&Value) -> Result<RunBoundEvaluationRequest, String> + 'service,
+        requester: impl for<'params> Fn(
+            &EvaluationRequestParams<'params>,
+        ) -> Result<RunBoundEvaluationRequest, String>
+        + 'service,
     ) -> Self {
         self.evaluation_requester = Some(Box::new(requester));
         self
@@ -137,8 +144,8 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
     }
 
     fn proposal_apply(&self, params: &Value) -> Result<Value, RunBoundGraphEffectError> {
-        let plan_id = params::string_field(params, "plan_id")?;
-        let batch_id = proposal_batch_id(params)?;
+        let params = proposal_apply_params(params)?;
+        let batch_id = params.write.proposal_batch_id;
         let batch = self
             .batches
             .get(&batch_id)
@@ -148,7 +155,7 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
         let apply = context.apply_batch(batch_id)?;
         let graph = context.graph();
         let plan_result = leaven_run::PublicProposalWriteReceiptContext::new(
-            plan_id,
+            params.plan_id,
             &self.base_revision,
             &self.final_revision,
             &self.capability_fingerprint,
@@ -161,12 +168,12 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
     }
 
     fn evaluation_request(&self, params: &Value) -> Result<Value, RunBoundGraphEffectError> {
-        request_evaluation_write(params)?;
+        let params = evaluation_request_params(params)?;
         let requester = self
             .evaluation_requester
             .as_ref()
             .ok_or(RunBoundGraphEffectError::MissingEvaluationRequester)?;
-        let request = requester(params).map_err(RunBoundGraphEffectError::EvaluationRequest)?;
+        let request = requester(&params).map_err(RunBoundGraphEffectError::EvaluationRequest)?;
         let mut context = self.context.borrow_mut();
         let request_id = context.request_evaluation(
             request.evaluator,
@@ -191,18 +198,18 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
     }
 
     fn assessment_submit(&self, params: &Value) -> Result<Value, RunBoundGraphEffectError> {
-        let plan_id = params::string_field(params, "plan_id")?;
-        let request_id = evaluation_request_id(params)?;
+        let params = assessment_submit_params(params)?;
+        let request_id = params.write.evaluation_request_id;
         let submitter = self
             .assessment_submitter
             .as_ref()
             .ok_or(RunBoundGraphEffectError::MissingAssessmentSubmitter)?;
-        let assessments = submitter(params).map_err(RunBoundGraphEffectError::AssessmentSubmit)?;
+        let assessments = submitter(&params).map_err(RunBoundGraphEffectError::AssessmentSubmit)?;
         let mut context = self.context.borrow_mut();
         let report = context.submit_assessments(request_id, assessments)?;
         let graph = context.graph();
         let plan_result = leaven_run::PublicAssessmentWriteReceiptContext::new(
-            plan_id,
+            params.plan_id,
             &self.base_revision,
             &self.final_revision,
             &self.capability_fingerprint,
@@ -214,8 +221,8 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
     }
 
     fn event_emit(&self, params: &Value) -> Result<Value, RunBoundGraphEffectError> {
-        let plan_id = params::string_field(params, "plan_id")?;
-        let event = event_emit_write(params)?;
+        let params = event_emit_params(params)?;
+        let event = &params.write;
         let event_id = format!("event_{}", event.name);
         self.context
             .borrow_mut()
@@ -226,21 +233,19 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
                 payload: event.payload.clone(),
                 visibility: event.visibility.to_owned(),
             });
-        event_emit_extension_result(
-            EventEmitExtensionContext {
-                plan_id,
-                name: event.name,
-                write: event.write,
-                event_id: &event_id,
-                base_revision: &self.base_revision,
-                final_revision: &self.final_revision,
-                capability_fingerprint: &self.capability_fingerprint,
-                policy_fingerprint: &self.policy_fingerprint,
-                started_at: &self.started_at,
-                completed_at: &self.completed_at,
-            },
-            params,
-        )
+        event_emit_extension_result(EventEmitExtensionContext {
+            plan_id: params.plan_id,
+            name: event.name,
+            write: event.raw,
+            event_id: &event_id,
+            base_revision: &self.base_revision,
+            final_revision: &self.final_revision,
+            capability_fingerprint: &self.capability_fingerprint,
+            policy_fingerprint: &self.policy_fingerprint,
+            started_at: &self.started_at,
+            completed_at: &self.completed_at,
+            return_values: params.return_values,
+        })
     }
 }
 

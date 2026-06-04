@@ -13,6 +13,7 @@ pub(super) struct EventEmitExtensionContext<'a> {
     pub(super) policy_fingerprint: &'a str,
     pub(super) started_at: &'a str,
     pub(super) completed_at: &'a str,
+    pub(super) return_values: Option<&'a Value>,
 }
 
 pub(super) fn proposal_apply_extension_result(
@@ -115,7 +116,6 @@ pub(super) fn assessment_submit_extension_result(
 
 pub(super) fn event_emit_extension_result(
     context: EventEmitExtensionContext<'_>,
-    params: &Value,
 ) -> Result<Value, RunBoundGraphEffectError> {
     let receipt_id = format!("wrec_{}", context.name);
     let request_hash = prefixed_jcs_hash(
@@ -168,7 +168,7 @@ pub(super) fn event_emit_extension_result(
         "policy_fingerprint": context.policy_fingerprint,
         "data_classes": ["public"],
         "plan_id": context.plan_id,
-        "return": params.get("return").cloned().unwrap_or_else(|| json!([]))
+        "return": context.return_values.cloned().unwrap_or_else(|| json!([]))
     }))
 }
 
