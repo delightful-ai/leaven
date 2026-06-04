@@ -231,7 +231,7 @@ acceptance:
     claim: >-
       Every method advertised by the locked V1 worker profile executes through
       `leaven seam serve --stdio`, or is removed from that locked V1 profile.
-    status: pending
+    status: done
     proof_required:
       kind: method_matrix_and_stdio_contract
       must_exercise:
@@ -321,6 +321,20 @@ acceptance:
           - crates/leaven-cli/tests/seam_stdio_server.rs
           - docs/specs/public-seam-v1/executable-method-status.md
         note: Evaluation request moved from validated-only to configured local write execution through service and stdio. The service validates a constructed EvaluationJobDocument and context-bound request-evaluation receipt before projecting the ACP-facing primary receipt; later configured-service evidence proves same-process schema-valid graph.query readback, while durable RunContext evaluation-job persistence still belongs to effects_and_graph_writes_execute.
+      - kind: method_matrix_all_clear
+        commands:
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-runtime -p leaven-seam-stdio -p leaven-seam-service
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-cli --test seam_stdio_server
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-public-seam --test public_seam_contract
+          - rg -n "Validated-only|Unsupported in service|unsupported in service|validated-only" docs/specs/public-seam-v1/executable-method-status.md crates/leaven-public-seam crates/leaven-seam-service crates/leaven-seam-runtime crates/leaven-cli/tests/seam_stdio_server.rs
+        paths:
+          - docs/specs/public-seam-v1/executable-method-status.md
+          - crates/leaven-seam-runtime/tests/runtime_contract.rs
+          - crates/leaven-seam-stdio/tests/stdio_contract.rs
+          - crates/leaven-seam-service/src/service.rs
+          - crates/leaven-cli/tests/seam_stdio_server.rs
+          - crates/leaven-public-seam/tests/public_seam_contract.rs
+        note: Runtime dispatch proves every locked profile method reaches validation/service routing; configured service and `leaven seam serve --stdio` tests prove retained method families execute through the durable SDK route. The method-status doc now says no locked V1 worker-profile method remains validated-only in the configured service; the remaining string matches are status-class definitions and that explicit all-clear sentence.
     closeout_check: No row may remain "validated-only" or "unsupported in service" for locked V1.
 
   - id: graph_and_case_reads_execute
