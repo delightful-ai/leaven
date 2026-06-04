@@ -1182,6 +1182,7 @@ acceptance:
           - 7430e380
           - 25dc6105
           - 8a4ecdda
+          - bc76cccc
         paths:
           - crates/leaven-public-seam/src/plan.rs
           - crates/leaven-public-seam/src/result.rs
@@ -1225,6 +1226,11 @@ acceptance:
           Python JSON-RPC request envelopes now require the generated
           LockedMethod type, and SeamClient rejects unknown methods such as
           `leaven/human.review` before spawning or writing to the service. This
+          was followed by a runner stage-payload slice that gives target-free
+          `case_input` a typed Rust owner: `RunnerCaseInputDocument` exposes the
+          candidate id, case id, sorted input keys, and JCS fingerprint of the
+          exact input object, so downstream code no longer has to re-walk raw
+          runner case-input JSON to prove what the worker saw. This
           is still not full typed seam closeout: nested Plan IR operation
           bodies, nested Plan Result values/receipts, evidence, cost, blob refs,
           capability resources, service execution payloads, and generated
