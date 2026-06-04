@@ -15,8 +15,8 @@ pub use extension_result::{
     AcpExtensionPrimaryFact, AcpExtensionReceiptFact, AcpExtensionResultDocument,
 };
 pub use lifecycle::{
-    AcpProgressDisposition, AcpProgressPriority, AcpSessionCancellation, AcpSessionLifecycle,
-    AcpSessionState, AcpSessionUpdate,
+    AcpClosedPlanError, AcpProgressDisposition, AcpProgressPriority, AcpSessionCancellation,
+    AcpSessionLifecycle, AcpSessionState, AcpSessionUpdate,
 };
 pub use methods::{
     LockedMethod, MethodAction, MethodPrimaryKind, MethodReceiptExpectation, MethodSchema,

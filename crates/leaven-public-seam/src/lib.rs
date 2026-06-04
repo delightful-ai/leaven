@@ -22,14 +22,14 @@ mod stage_run;
 mod watch;
 
 pub use acp_profile::{
-    AcpAuthenticateRequest, AcpAuthenticatedSession, AcpBackpressure, AcpExtensionMethod,
-    AcpExtensionPrimaryFact, AcpExtensionReceiptFact, AcpExtensionResultDocument,
-    AcpJsonRpcRequestDocument, AcpJsonRpcResponseDocument, AcpPermissionDecision,
-    AcpPermissionRequest, AcpProfileDocument, AcpProgressDisposition, AcpProgressPriority,
-    AcpSessionCancellation, AcpSessionLifecycle, AcpSessionState, AcpSessionUpdate,
-    AcpStageRunRequestDocument, AcpStageRunResponseDocument, AcpStdioWorkerLaunch,
-    AcpWorkerSession, LockedMethod, MethodAction, MethodPrimaryKind, MethodReceiptExpectation,
-    MethodSchema,
+    AcpAuthenticateRequest, AcpAuthenticatedSession, AcpBackpressure, AcpClosedPlanError,
+    AcpExtensionMethod, AcpExtensionPrimaryFact, AcpExtensionReceiptFact,
+    AcpExtensionResultDocument, AcpJsonRpcRequestDocument, AcpJsonRpcResponseDocument,
+    AcpPermissionDecision, AcpPermissionRequest, AcpProfileDocument, AcpProgressDisposition,
+    AcpProgressPriority, AcpSessionCancellation, AcpSessionLifecycle, AcpSessionState,
+    AcpSessionUpdate, AcpStageRunRequestDocument, AcpStageRunResponseDocument,
+    AcpStdioWorkerLaunch, AcpWorkerSession, LockedMethod, MethodAction, MethodPrimaryKind,
+    MethodReceiptExpectation, MethodSchema,
 };
 pub use call_authority::{
     CallAuthorityDenial, CallAuthorityDenialKind, CallAuthorityError, CallAuthorityReport,

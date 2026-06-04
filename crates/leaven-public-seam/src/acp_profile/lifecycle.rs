@@ -2,10 +2,10 @@ use std::collections::VecDeque;
 
 use serde_json::{Value, json};
 
-use super::{AcpBackpressure, AcpProfileDocument, invalid_acp, required_string};
+use super::{AcpBackpressure, AcpProfileDocument, invalid_acp};
 use crate::{
     PublicSeamError,
-    plan_error::{is_closed_plan_error_code, receipt_ref_id},
+    plan_error::{plan_error_receipt_id, validate_closed_plan_error},
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -153,7 +153,10 @@ impl AcpSessionLifecycle {
     ) -> Result<&AcpSessionCancellation, PublicSeamError> {
         if self.cancellation.is_none() {
             let receipt = receipt.into();
-            validate_cancellation_error(&receipt, &error)?;
+            if receipt.trim().is_empty() {
+                return Err(invalid_acp("ACP cancellation receipt must be non-empty"));
+            }
+            let error = AcpClosedPlanError::from_value_for_receipt(&receipt, error)?;
             self.cancellation = Some(AcpSessionCancellation {
                 reason: reason.into(),
                 receipt,
@@ -221,7 +224,7 @@ impl AcpSessionUpdate {
 pub struct AcpSessionCancellation {
     reason: String,
     receipt: String,
-    error: Value,
+    error: AcpClosedPlanError,
 }
 
 impl AcpSessionCancellation {
@@ -236,8 +239,73 @@ impl AcpSessionCancellation {
     }
 
     /// Closed `PlanError` associated with the ACP session cancellation.
-    pub const fn error(&self) -> &Value {
+    pub const fn error(&self) -> &AcpClosedPlanError {
         &self.error
+    }
+}
+
+/// Typed closed `PlanError` carried by ACP session cancellation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AcpClosedPlanError {
+    value: Value,
+    code: String,
+    message: String,
+    receipt: String,
+}
+
+impl AcpClosedPlanError {
+    fn from_value_for_receipt(
+        expected_receipt: &str,
+        value: Value,
+    ) -> Result<Self, PublicSeamError> {
+        let object = value
+            .as_object()
+            .ok_or_else(|| invalid_acp("ACP cancellation error must be a PlanError object"))?;
+        validate_closed_plan_error(object).map_err(invalid_acp)?;
+        let receipt = plan_error_receipt_id(object)
+            .map_err(invalid_acp)?
+            .to_owned();
+        if receipt != expected_receipt {
+            return Err(invalid_acp(
+                "ACP cancellation error receipt must match cancellation receipt",
+            ));
+        }
+        let code = object
+            .get("code")
+            .and_then(Value::as_str)
+            .expect("validated PlanError carries code")
+            .to_owned();
+        let message = object
+            .get("message")
+            .and_then(Value::as_str)
+            .expect("validated PlanError carries message")
+            .to_owned();
+        Ok(Self {
+            value,
+            code,
+            message,
+            receipt,
+        })
+    }
+
+    /// Closed public-seam error code.
+    pub fn code(&self) -> &str {
+        &self.code
+    }
+
+    /// Human-readable error message.
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+
+    /// Receipt id carried by the error.
+    pub fn receipt(&self) -> &str {
+        &self.receipt
+    }
+
+    /// Original JSON value for stdio transport projection.
+    pub const fn value(&self) -> &Value {
+        &self.value
     }
 }
 
@@ -247,50 +315,4 @@ fn cancellation_plan_error(receipt: &str, code: &str, message: &str) -> Value {
         "message": message,
         "receipt": receipt
     })
-}
-
-fn validate_cancellation_error(receipt: &str, error: &Value) -> Result<(), PublicSeamError> {
-    if receipt.trim().is_empty() {
-        return Err(invalid_acp("ACP cancellation receipt must be non-empty"));
-    }
-    let object = error
-        .as_object()
-        .ok_or_else(|| invalid_acp("ACP cancellation error must be a PlanError object"))?;
-    for key in object.keys() {
-        if !matches!(
-            key.as_str(),
-            "code" | "message" | "op" | "path" | "receipt" | "retryable" | "details"
-        ) {
-            return Err(invalid_acp(format!(
-                "ACP cancellation error carries unknown PlanError field `{key}`"
-            )));
-        }
-    }
-    let code = required_string(object.get("code"), "cancellation error code")?;
-    if !is_closed_plan_error_code(code) {
-        return Err(invalid_acp(
-            "ACP cancellation error code must be a closed PlanError code",
-        ));
-    }
-    let message = object
-        .get("message")
-        .and_then(Value::as_str)
-        .ok_or_else(|| invalid_acp("ACP cancellation error must carry message"))?;
-    if message.trim().is_empty() {
-        return Err(invalid_acp(
-            "ACP cancellation error must carry non-empty message",
-        ));
-    }
-    let error_receipt = object
-        .get("receipt")
-        .ok_or_else(|| invalid_acp("ACP cancellation error receipt must be present"))
-        .and_then(|receipt| {
-            receipt_ref_id(receipt, "ACP cancellation error receipt").map_err(invalid_acp)
-        })?;
-    if error_receipt != receipt {
-        return Err(invalid_acp(
-            "ACP cancellation error receipt must match cancellation receipt",
-        ));
-    }
-    Ok(())
 }

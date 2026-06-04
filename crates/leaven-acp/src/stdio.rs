@@ -623,7 +623,7 @@ fn cancellation_parts(
     CancellationParts {
         reason: cancellation.reason().to_owned(),
         receipt: cancellation.receipt().to_owned(),
-        error: cancellation.error().clone(),
+        error: cancellation.error().value().clone(),
     }
 }
 
