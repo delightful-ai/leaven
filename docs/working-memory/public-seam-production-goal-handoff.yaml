@@ -1246,6 +1246,54 @@ acceptance:
           Plan Result values/receipts, evidence, cost, blob refs, service
           execution payloads, and generated Python Raw islands remain
           typed-seam blockers to eliminate.
+      - kind: typed_capability_owner_split_foundation
+        commits:
+          - 409706ca
+        paths:
+          - crates/leaven-public-seam/src/capability.rs
+          - crates/leaven-public-seam/src/capability/grant_policy.rs
+          - crates/leaven-public-seam/src/capability/subject.rs
+          - crates/leaven-public-seam/src/proposal_authority.rs
+        commands:
+          - cargo fmt --check
+          - cargo check -p leaven-public-seam
+          - cargo test -p leaven-public-seam --test public_seam_contract capability_document
+          - cargo test -p leaven-public-seam --test public_seam_contract acp_profile
+        note: >-
+          The capability typed-owner work no longer leaves the closed
+          grant-resource/constraint/limit policy and subject union embedded in
+          the top-level capability module. `capability.rs` is back to a map and
+          validator surface, while `capability/grant_policy.rs` owns typed
+          grant policy records and `capability/subject.rs` owns the tagged
+          subject union. Proposal authority now reads policy facts through
+          `Grant` accessors instead of reaching across module internals. This
+          is topology/maintainability evidence for the typed seam, not closure:
+          capability document JSON still enters at the schema boundary and
+          broader Plan/Result/service payload families remain typed blockers.
+      - kind: typed_jsonrpc_id_runtime_foundation
+        commits:
+          - 1b88033a
+        paths:
+          - crates/leaven-seam-runtime/src/runtime.rs
+          - crates/leaven-seam-runtime/src/lib.rs
+          - crates/leaven-seam-runtime/tests/runtime_contract.rs
+          - crates/leaven-seam-stdio/src/stdio.rs
+          - crates/leaven-seam-stdio/tests/stdio_contract.rs
+        commands:
+          - cargo fmt --check
+          - cargo check -p leaven-seam-runtime -p leaven-seam-stdio
+          - cargo test -p leaven-seam-runtime --test runtime_contract
+          - cargo test -p leaven-seam-stdio --test stdio_contract
+        note: >-
+          `leaven-seam-runtime` no longer carries JSON-RPC response ids as
+          arbitrary `serde_json::Value` through success and error response
+          construction. A `JsonRpcId` enum owns string, number, and null ids,
+          the stdio parse-error path uses that typed carrier, and the runtime
+          contract proves numeric ids remain numeric on successful stage-run
+          responses. This is a narrow transport-envelope owner, not full typed
+          runtime closure: request params and service results still include
+          validated public-seam JSON that must be consumed by typed method
+          request/result owners.
       - kind: typed_internal_method_dispatch_foundation
         commits:
           - 56276ac0
