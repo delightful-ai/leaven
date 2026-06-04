@@ -817,9 +817,9 @@ acceptance:
           receipts, and untyped nested assessment replayability rows, then
           serialize the ACP extension result from typed records. This is not
           row closure: ACP/runtime ingress still receives transport JSON,
-          nested host-domain payloads, ACP result payloads, ACP stage-bridge
-          event/result projection, and wider PlanResult/effect leaf slots remain
-          explicit `Value` islands that require typed-owner follow-up slices.
+          nested host-domain payloads, ACP result payloads, event payloads, and
+          wider PlanResult/effect leaf slots remain explicit `Value` islands
+          that require typed-owner follow-up slices.
       - kind: typed_acp_stage_bridge_event_projection_foundation
         commits:
           - 7530355b
@@ -1182,11 +1182,10 @@ acceptance:
           `AcpClosedPlanError` facts while retaining the original JSON only for
           transport projection. This is still foundation evidence only:
           transport ingress, nested domain payloads, ACP result payloads,
-          ACP stage-bridge extension-result projection, costs, blob refs,
-          PlanError details, metadata/info refs, stage case inputs, and nested
-          Plan Result bodies remain raw JSON islands that must be eliminated
-          before typed-seam closeout; there is no standing approval for those
-          internal islands.
+          event payloads, costs, blob refs, PlanError details,
+          metadata/info refs, stage case inputs, and nested Plan Result bodies
+          remain raw JSON islands that must be eliminated before typed-seam
+          closeout; there is no standing approval for those internal islands.
     closeout_check: >-
       Handwritten Python schema mirrors, pydantic-only wire models, untyped
       dict payloads, response-order batch routing, or msgspec used as a
