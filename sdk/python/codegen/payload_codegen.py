@@ -37,7 +37,7 @@ from typing import Literal
 
 from msgspec import UNSET, Struct, UnsetType, field
 
-from .expressions import PlanExpression, Precondition
+from .expressions import PlanExpression, Precondition, ValidationReceipt
 from .refs import (
 {ref_imports}
 )
@@ -521,8 +521,8 @@ class OperationReceipt(Struct, frozen=True, omit_defaults=True, kw_only=True):
     assessment_ids: list[str] | UnsetType = UNSET
     created_candidates: list[ReceiptRef] | UnsetType = UNSET
     event_id: str | UnsetType = UNSET
-    preconditions: list[WireJsonObject] | UnsetType = UNSET
-    validation_receipts: list[WireJsonObject] | UnsetType = UNSET
+    preconditions: list[Precondition] | UnsetType = UNSET
+    validation_receipts: list[ValidationReceipt] | UnsetType = UNSET
 
 
 class ChargeReceipt(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
@@ -593,7 +593,7 @@ __all__ = (  # noqa: PLE0605, SIM905
     "ProposalRef ProposalRefRecord ProposalSummaryGraphRow ReceiptRef Redaction ReflectionResult Replayability "
     "RunnerRequest Score "
     "StageEffectReceipt StageProposalReceipt StageRunKind StageRunPayload StageRunRequest StageRunResult "
-    "StaleWritePolicy SurfaceSuggestion TraceRef VisibilityClass WireJsonField WireJsonLeafArray "
+    "StaleWritePolicy SurfaceSuggestion TraceRef ValidationReceipt VisibilityClass WireJsonField WireJsonLeafArray "
     "WireJsonLeafObject WireJsonObject WireJsonScalar"
 ).split()
 '''

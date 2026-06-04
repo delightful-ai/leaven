@@ -216,6 +216,18 @@ type Precondition = (
 )
 
 
+class ValidationErrorItem(Struct, frozen=True, forbid_unknown_fields=True):
+    path: str
+    message: str
+
+
+class ValidationReceipt(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    receipt: ReceiptRef
+    status: Literal["passed", "failed"]
+    schema_fingerprint: str | UnsetType = UNSET
+    errors: list[ValidationErrorItem] | UnsetType = UNSET
+
+
 __all__ = (  # noqa: PLE0605, SIM905
-    "ExtensionObjectExpression GraphSource GraphSourceAssessmentSet GraphSourceByCandidate GraphSourceByProposal GraphSourceByProposalBatch GraphSourceCandidateSet GraphSourceCandidateTree GraphSourceCosts GraphSourceEvents GraphSourceExtension GraphSourceRecentFailures PageRequest PlanExpression PlanExpressionCaseQuery PlanExpressionExtract PlanExpressionFilter PlanExpressionGraphQuery PlanExpressionLimit PlanExpressionLiteral PlanExpressionProject PlanExpressionRefsFromResult PlanExpressionSort PlanExpressionTemplate PlanExpressionVar PlanExpressionWorkspaceQuery Precondition PreconditionAssessmentExists PreconditionCandidateExists PreconditionCandidateIdentity PreconditionGraphRevisionAtLeast PreconditionGraphRevisionEquals PreconditionReceiptExists PreconditionSchemaValid SortKey"
+    "ExtensionObjectExpression GraphSource GraphSourceAssessmentSet GraphSourceByCandidate GraphSourceByProposal GraphSourceByProposalBatch GraphSourceCandidateSet GraphSourceCandidateTree GraphSourceCosts GraphSourceEvents GraphSourceExtension GraphSourceRecentFailures PageRequest PlanExpression PlanExpressionCaseQuery PlanExpressionExtract PlanExpressionFilter PlanExpressionGraphQuery PlanExpressionLimit PlanExpressionLiteral PlanExpressionProject PlanExpressionRefsFromResult PlanExpressionSort PlanExpressionTemplate PlanExpressionVar PlanExpressionWorkspaceQuery Precondition PreconditionAssessmentExists PreconditionCandidateExists PreconditionCandidateIdentity PreconditionGraphRevisionAtLeast PreconditionGraphRevisionEquals PreconditionReceiptExists PreconditionSchemaValid SortKey ValidationErrorItem ValidationReceipt"
 ).split()

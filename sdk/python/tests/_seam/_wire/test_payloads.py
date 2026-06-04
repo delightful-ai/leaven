@@ -10,6 +10,7 @@ from leaven._seam._wire.expressions import (
     PlanExpressionGraphQuery,
     PlanExpressionLiteral,
     PreconditionCandidateExists,
+    ValidationReceipt,
 )
 from leaven._seam._wire.payloads import (
     PLAN_RESULT_SCHEMA_FINGERPRINT,
@@ -326,6 +327,78 @@ def test_plan_result_decodes_typed_info_receipt_and_trace_refs() -> None:
     assert receipt.source_refs[1] == "cand_string_ref"
     assert receipt.trace_refs is not UNSET
     assert isinstance(receipt.trace_refs[0], TraceRefRecord)
+
+
+def test_plan_result_decodes_typed_receipt_preconditions_and_validations() -> None:
+    """Example: result receipts keep typed precondition and validation records."""
+
+    body = (
+        b'{"jsonrpc":"2.0","id":"req_1","result":{'
+        b'"schema_version":"leaven.plan_result.v1","plan_id":"plan_1",'
+        b'"capability_fingerprint":"fp_cap_sha256_test",'
+        b'"policy_fingerprint":"fp_policy_sha256_test",'
+        b'"base_revision":"rev_base","final_revision":"rev_final",'
+        b'"replayability_summary":"fully_managed","values":{},'
+        b'"receipts":[{"kind":"write","receipt":"wrec_1","status":"succeeded",'
+        b'"write_kind":"emit_run_event","request_hash":"fp_request_sha256_test",'
+        b'"result_hash":"fp_result_sha256_test","base_revision":"rev_base",'
+        b'"event_id":"event_1",'
+        b'"preconditions":[{"kind":"candidate_exists",'
+        b'"candidate":{"kind":"candidate","id":"cand_1"}}],'
+        b'"validation_receipts":[{"receipt":{"kind":"receipt","id":"vrec_1"},'
+        b'"status":"passed","schema_fingerprint":"fp_schema_sha256_test"}]}],'
+        b'"redactions":[],"charges":[],"errors":[]}}'
+    )
+
+    decoded = decode_response(body, PlanResultDocument)
+    receipt = decoded.receipts[0]
+
+    assert receipt.preconditions is not UNSET
+    assert isinstance(receipt.preconditions[0], PreconditionCandidateExists)
+    assert receipt.validation_receipts is not UNSET
+    assert isinstance(receipt.validation_receipts[0], ValidationReceipt)
+    assert isinstance(receipt.validation_receipts[0].receipt, ReceiptRefRecord)
+
+
+def test_plan_result_rejects_unknown_receipt_precondition_kind() -> None:
+    """Regression: result receipt preconditions are no longer arbitrary objects."""
+
+    body = (
+        b'{"jsonrpc":"2.0","id":"req_1","result":{'
+        b'"schema_version":"leaven.plan_result.v1","plan_id":"plan_1",'
+        b'"capability_fingerprint":"fp_cap_sha256_test",'
+        b'"policy_fingerprint":"fp_policy_sha256_test",'
+        b'"base_revision":"rev_base","final_revision":"rev_final",'
+        b'"replayability_summary":"fully_managed","values":{},'
+        b'"receipts":[{"kind":"write","receipt":"wrec_1","status":"succeeded",'
+        b'"result_hash":"fp_result_sha256_test",'
+        b'"preconditions":[{"kind":"private_condition","candidate":"cand_1"}]}],'
+        b'"redactions":[],"charges":[],"errors":[]}}'
+    )
+
+    with pytest.raises(JsonRpcProtocolError):
+        decode_response(body, PlanResultDocument)
+
+
+def test_plan_result_rejects_unknown_validation_receipt_field() -> None:
+    """Regression: validation receipts have their own closed schema."""
+
+    body = (
+        b'{"jsonrpc":"2.0","id":"req_1","result":{'
+        b'"schema_version":"leaven.plan_result.v1","plan_id":"plan_1",'
+        b'"capability_fingerprint":"fp_cap_sha256_test",'
+        b'"policy_fingerprint":"fp_policy_sha256_test",'
+        b'"base_revision":"rev_base","final_revision":"rev_final",'
+        b'"replayability_summary":"fully_managed","values":{},'
+        b'"receipts":[{"kind":"write","receipt":"wrec_1","status":"succeeded",'
+        b'"result_hash":"fp_result_sha256_test",'
+        b'"validation_receipts":[{"receipt":"vrec_1","status":"passed",'
+        b'"unchecked":true}]}],'
+        b'"redactions":[],"charges":[],"errors":[]}}'
+    )
+
+    with pytest.raises(JsonRpcProtocolError):
+        decode_response(body, PlanResultDocument)
 
 
 def test_plan_result_rejects_arbitrary_info_ref_object() -> None:

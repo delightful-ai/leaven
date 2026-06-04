@@ -10,7 +10,7 @@ EXPRESSION_EXPORTS = (
     "PlanExpressionSort PlanExpressionTemplate PlanExpressionVar PlanExpressionWorkspaceQuery Precondition "
     "PreconditionAssessmentExists PreconditionCandidateExists PreconditionCandidateIdentity "
     "PreconditionGraphRevisionAtLeast PreconditionGraphRevisionEquals PreconditionReceiptExists "
-    "PreconditionSchemaValid SortKey"
+    "PreconditionSchemaValid SortKey ValidationErrorItem ValidationReceipt"
 )
 
 
@@ -232,6 +232,18 @@ type Precondition = (
     | PreconditionReceiptExists
     | PreconditionSchemaValid
 )
+
+
+class ValidationErrorItem(Struct, frozen=True, forbid_unknown_fields=True):
+    path: str
+    message: str
+
+
+class ValidationReceipt(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    receipt: ReceiptRef
+    status: Literal["passed", "failed"]
+    schema_fingerprint: str | UnsetType = UNSET
+    errors: list[ValidationErrorItem] | UnsetType = UNSET
 
 
 __all__ = (  # noqa: PLE0605, SIM905

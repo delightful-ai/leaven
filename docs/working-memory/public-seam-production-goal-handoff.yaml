@@ -1419,6 +1419,30 @@ acceptance:
           precondition kinds are rejected. `schema_valid.value` still carries a
           JSON-shaped `ValueExpr` leaf until that expression family gets its
           own generated owner.
+      - kind: generated_result_receipt_preconditions_are_typed_records
+        paths:
+          - sdk/python/codegen/expression_codegen.py
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/expressions.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/tests/_seam/_wire/test_payloads.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run ruff check codegen/expression_codegen.py codegen/payload_codegen.py src/leaven/_seam/_wire/expressions.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_results.py
+          - cd sdk/python && uv run ty check codegen/expression_codegen.py codegen/payload_codegen.py src/leaven/_seam/_wire/expressions.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_results.py
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_results.py -q
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Generated Python Plan Result receipts now decode
+          `OperationReceipt.preconditions` as typed `Precondition` records and
+          `OperationReceipt.validation_receipts` as typed validation receipt
+          records instead of arbitrary `WireJsonObject` values. Focused tests
+          prove result receipt preconditions preserve `CandidateRef` identity,
+          validation receipts preserve object-form `ReceiptRef` identity, and
+          unknown/private precondition kinds or extra validation receipt fields
+          are rejected. This closes the result-side precondition and validation
+          receipt shape holes; deeper `ValueExpr`/validation error semantics
+          remain separate owner work.
       - kind: typed_plan_expression_owner_foundation
         commits:
           - a0397e66
