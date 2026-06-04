@@ -29,8 +29,8 @@ use extension_result::{
     proposal_apply_extension_result,
 };
 use params::{
-    AssessmentSubmitParams, EventEmitParams, EvaluationRequestParams, ProposalApplyParams,
-    assessment_submit_params, evaluation_request_params, event_emit_params, proposal_apply_params,
+    EventEmitParams, ProposalApplyParams, assessment_submit_params, evaluation_request_params,
+    event_emit_params, proposal_apply_params,
 };
 
 type AssessmentSubmitter<'service, P> = dyn for<'params> Fn(&AssessmentSubmitParams<'params>) -> Result<Metered<Vec<Assessment<P>>>, String>
@@ -138,7 +138,9 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
             LockedMethod::EvaluationRequest => {
                 self.evaluation_request(evaluation_request_params(params)?)
             }
-            LockedMethod::AssessmentSubmit => self.assessment_submit(assessment_submit_params(params)?),
+            LockedMethod::AssessmentSubmit => {
+                self.assessment_submit(assessment_submit_params(params)?)
+            }
             LockedMethod::EventEmit => self.event_emit(event_emit_params(params)?),
             other => Err(RunBoundGraphEffectError::UnsupportedMethod {
                 method: other.as_str().to_owned(),
