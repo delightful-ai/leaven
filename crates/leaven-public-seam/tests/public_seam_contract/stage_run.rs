@@ -56,11 +56,22 @@ fn stage_run_result_preserves_worker_effect_receipts() {
     assert_eq!(receipts[0].method().as_str(), "leaven/lm.complete");
     assert_eq!(receipts[0].receipt(), "lmrec_completion");
     assert_eq!(receipts[0].call_kind(), Some("lm_complete"));
-    assert_eq!(receipts[0].cost().unwrap()["input_tokens"], json!(3));
+    let cost = receipts[0].cost().unwrap();
+    assert_eq!(cost.usd_micro(), Some(42));
+    assert_eq!(cost.input_tokens(), Some(3));
+    assert_eq!(cost.output_tokens(), Some(2));
+    assert_eq!(cost.lm_calls(), None);
+
+    let blob_ref = &receipts[0].blob_refs()[0];
+    assert_eq!(blob_ref.id(), "blob_stage_effect_transcript");
     assert_eq!(
-        receipts[0].blob_refs()[0]["id"],
-        json!("blob_stage_effect_transcript")
+        blob_ref.sha256(),
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     );
+    assert_eq!(blob_ref.bytes(), 12);
+    assert_eq!(blob_ref.media_type(), None);
+    assert_eq!(blob_ref.uri(), None);
+    assert_eq!(blob_ref.data_classes(), &["transcript.raw".to_owned()]);
 }
 
 #[test]

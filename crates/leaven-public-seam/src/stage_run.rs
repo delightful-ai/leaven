@@ -104,14 +104,137 @@ pub struct StageRunResultDocument {
     proposal_receipts: Vec<StageProposalReceipt>,
 }
 
-/// Opaque effect receipt reported by a worker while producing a stage result.
+/// Effect receipt reported by a worker while producing a stage result.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StageEffectReceipt {
     method: LockedMethod,
     receipt: String,
     call_kind: Option<String>,
-    cost: Option<Value>,
-    blob_refs: Vec<Value>,
+    cost: Option<StageEffectCostFact>,
+    blob_refs: Vec<StageEffectBlobRefFact>,
+}
+
+/// Metered cost counters reported by a stage effect callback.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StageEffectCostFact {
+    usd_micro: Option<u64>,
+    input_tokens: Option<u64>,
+    output_tokens: Option<u64>,
+    lm_calls: Option<u64>,
+}
+
+impl StageEffectCostFact {
+    fn from_schema_valid_value(value: &Value, field: &str) -> Result<Self, PublicSeamError> {
+        let object = value.as_object().ok_or_else(|| {
+            invalid_stage_run(format!("stage run field `{field}` must be an object"))
+        })?;
+        Ok(Self {
+            usd_micro: optional_u64(object.get("usd_micro"), "effect_receipts.cost.usd_micro")?,
+            input_tokens: optional_u64(
+                object.get("input_tokens"),
+                "effect_receipts.cost.input_tokens",
+            )?,
+            output_tokens: optional_u64(
+                object.get("output_tokens"),
+                "effect_receipts.cost.output_tokens",
+            )?,
+            lm_calls: optional_u64(object.get("lm_calls"), "effect_receipts.cost.lm_calls")?,
+        })
+    }
+
+    /// USD-denominated cost in millionths of a dollar, if reported.
+    pub const fn usd_micro(&self) -> Option<u64> {
+        self.usd_micro
+    }
+
+    /// Prompt/input token count, if reported.
+    pub const fn input_tokens(&self) -> Option<u64> {
+        self.input_tokens
+    }
+
+    /// Completion/output token count, if reported.
+    pub const fn output_tokens(&self) -> Option<u64> {
+        self.output_tokens
+    }
+
+    /// Number of LM calls charged by this effect, if reported.
+    pub const fn lm_calls(&self) -> Option<u64> {
+        self.lm_calls
+    }
+}
+
+/// Blob reference audit metadata reported by a stage effect callback.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StageEffectBlobRefFact {
+    id: String,
+    sha256: String,
+    bytes: u64,
+    media_type: Option<String>,
+    uri: Option<String>,
+    data_classes: Vec<String>,
+}
+
+impl StageEffectBlobRefFact {
+    fn from_schema_valid_value(value: &Value, field: &str) -> Result<Self, PublicSeamError> {
+        let object = value.as_object().ok_or_else(|| {
+            invalid_stage_run(format!("stage run field `{field}` must be an object"))
+        })?;
+        match required_str(object.get("kind"), "effect_receipts.blob_refs.kind")? {
+            "blob_ref" => {}
+            other => {
+                return Err(invalid_stage_run(format!(
+                    "effect_receipts.blob_refs.kind must be `blob_ref`, got `{other}`"
+                )));
+            }
+        }
+        Ok(Self {
+            id: required_str(object.get("id"), "effect_receipts.blob_refs.id")?.to_owned(),
+            sha256: required_str(object.get("sha256"), "effect_receipts.blob_refs.sha256")?
+                .to_owned(),
+            bytes: required_u64(object.get("bytes"), "effect_receipts.blob_refs.bytes")?,
+            media_type: optional_str(
+                object.get("media_type"),
+                "effect_receipts.blob_refs.media_type",
+            )?
+            .map(ToOwned::to_owned),
+            uri: optional_str(object.get("uri"), "effect_receipts.blob_refs.uri")?
+                .map(ToOwned::to_owned),
+            data_classes: required_string_array(
+                object.get("data_classes"),
+                "effect_receipts.blob_refs.data_classes",
+            )?,
+        })
+    }
+
+    /// Public blob id.
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    /// Lowercase SHA-256 digest for the referenced bytes.
+    pub fn sha256(&self) -> &str {
+        &self.sha256
+    }
+
+    /// Referenced byte length.
+    pub const fn bytes(&self) -> u64 {
+        self.bytes
+    }
+
+    /// Optional media type metadata.
+    pub fn media_type(&self) -> Option<&str> {
+        self.media_type.as_deref()
+    }
+
+    /// Optional retrievable URI.
+    pub fn uri(&self) -> Option<&str> {
+        self.uri.as_deref()
+    }
+
+    /// Data classes carried by the referenced blob.
+    pub fn data_classes(&self) -> &[String] {
+        &self.data_classes
+    }
 }
 
 impl StageEffectReceipt {
@@ -127,8 +250,8 @@ impl StageEffectReceipt {
         })?;
         let receipt = required_str(object.get("receipt"), "effect_receipts.receipt")?.to_owned();
         let call_kind = optional_str(object.get("call_kind"), "effect_receipts.call_kind")?;
-        let cost = optional_object_value(object.get("cost"), "effect_receipts.cost")?;
-        let blob_refs = value_array(object.get("blob_refs"), "effect_receipts.blob_refs")?;
+        let cost = optional_cost_fact(object.get("cost"), "effect_receipts.cost")?;
+        let blob_refs = blob_ref_facts(object.get("blob_refs"), "effect_receipts.blob_refs")?;
         validate_effect_receipt_binding(method, &receipt, call_kind)?;
         Ok(Self {
             method,
@@ -155,12 +278,12 @@ impl StageEffectReceipt {
     }
 
     /// Optional metered cost reported by the callback primary value.
-    pub fn cost(&self) -> Option<&Value> {
+    pub fn cost(&self) -> Option<&StageEffectCostFact> {
         self.cost.as_ref()
     }
 
     /// Blob references reported by the callback primary value.
-    pub fn blob_refs(&self) -> &[Value] {
+    pub fn blob_refs(&self) -> &[StageEffectBlobRefFact] {
         &self.blob_refs
     }
 }
@@ -301,31 +424,29 @@ fn optional_str<'a>(
         .transpose()
 }
 
-fn optional_object_value(
+fn optional_cost_fact(
     value: Option<&Value>,
     field: &str,
-) -> Result<Option<Value>, PublicSeamError> {
+) -> Result<Option<StageEffectCostFact>, PublicSeamError> {
     value
-        .map(|value| {
-            if value.is_object() {
-                Ok(value.clone())
-            } else {
-                Err(invalid_stage_run(format!(
-                    "stage run field `{field}` must be an object"
-                )))
-            }
-        })
+        .map(|value| StageEffectCostFact::from_schema_valid_value(value, field))
         .transpose()
 }
 
-fn value_array(value: Option<&Value>, field: &str) -> Result<Vec<Value>, PublicSeamError> {
+fn blob_ref_facts(
+    value: Option<&Value>,
+    field: &str,
+) -> Result<Vec<StageEffectBlobRefFact>, PublicSeamError> {
     let Some(value) = value else {
         return Ok(Vec::new());
     };
     let values = value
         .as_array()
         .ok_or_else(|| invalid_stage_run(format!("stage run field `{field}` must be an array")))?;
-    Ok(values.clone())
+    values
+        .iter()
+        .map(|value| StageEffectBlobRefFact::from_schema_valid_value(value, field))
+        .collect()
 }
 
 fn required_receipt_id(value: Option<&Value>, field: &str) -> Result<String, PublicSeamError> {
@@ -336,6 +457,43 @@ fn required_receipt_id(value: Option<&Value>, field: &str) -> Result<String, Pub
             "stage run field `{field}` must be a receipt ref"
         ))),
     }
+}
+
+fn required_u64(value: Option<&Value>, field: &str) -> Result<u64, PublicSeamError> {
+    value
+        .and_then(Value::as_u64)
+        .ok_or_else(|| invalid_stage_run(format!("stage run field `{field}` must be a u64")))
+}
+
+fn optional_u64(value: Option<&Value>, field: &str) -> Result<Option<u64>, PublicSeamError> {
+    value
+        .map(|value| {
+            value.as_u64().ok_or_else(|| {
+                invalid_stage_run(format!("stage run field `{field}` must be a u64"))
+            })
+        })
+        .transpose()
+}
+
+fn required_string_array(
+    value: Option<&Value>,
+    field: &str,
+) -> Result<Vec<String>, PublicSeamError> {
+    let value = value
+        .ok_or_else(|| invalid_stage_run(format!("stage run field `{field}` must be an array")))?;
+    let values = value
+        .as_array()
+        .ok_or_else(|| invalid_stage_run(format!("stage run field `{field}` must be an array")))?;
+    values
+        .iter()
+        .map(|value| {
+            value.as_str().map(ToOwned::to_owned).ok_or_else(|| {
+                invalid_stage_run(format!(
+                    "stage run field `{field}` must contain only strings"
+                ))
+            })
+        })
+        .collect()
 }
 
 fn effect_receipts(value: Option<&Value>) -> Result<Vec<StageEffectReceipt>, PublicSeamError> {
