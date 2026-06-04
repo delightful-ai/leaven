@@ -5,11 +5,12 @@ Constructors are explicit: `text(...)`, `json_value(...)`, `blob(...)`,
 `structured(...)`.
 """
 
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .data_class import PUBLIC
+from .json_value import JsonObject, JsonValue
 
 Visibility = Literal[
     "public",
@@ -32,7 +33,7 @@ class OutputRecord(BaseModel):
     visibility: Visibility = "public"
     data_classes: list[str] = Field(default_factory=lambda: [PUBLIC])
     summary: str | None = None
-    value: Any | None = None
+    value: JsonValue | None = None
     """Inline value for text/json/structured outputs; None for blob refs."""
     blob_ref: str | None = None
     """Opaque blob reference for blob-backed outputs; None for inline."""
@@ -53,7 +54,7 @@ class OutputRecord(BaseModel):
         cls,
         *,
         summary: str,
-        value: dict[str, Any],
+        value: JsonObject,
         visibility: Visibility = "public",
         data_classes: list[str] | None = None,
     ) -> "OutputRecord":

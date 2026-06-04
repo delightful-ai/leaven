@@ -4,11 +4,12 @@ ProposalBatch carries one or more typed changes against typed artifact
 surfaces. Effect kinds are `create` (fresh) and `change` (lineage-bearing).
 """
 
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ._receipts import CallReceipt, QueryReceipt
+from .json_value import JsonObject
 
 
 class ProposalEffect(BaseModel):
@@ -26,7 +27,7 @@ class ProposalEffect(BaseModel):
     """Required for 'change' and 'change_from_agent_session'."""
     surface: str
     """Locked surface fingerprint the change applies to."""
-    payload: dict[str, Any]
+    payload: JsonObject
     """Typed change payload (e.g. SkillBankChange JSON)."""
     agent_session_receipt: CallReceipt | None = None
     """Required for 'change_from_agent_session'."""
@@ -38,7 +39,7 @@ class ProposalEffect(BaseModel):
         parent_candidate_id: str,
         surface: str,
         change_schema: str,
-        change: dict[str, Any],
+        change: JsonObject,
     ) -> "ProposalEffect":
         """Build a lineage-bearing change proposal effect."""
         return cls(

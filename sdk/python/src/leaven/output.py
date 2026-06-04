@@ -6,9 +6,11 @@ and shape the typed result the user reads.
 """
 
 from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
+
+from .json_value import JsonSchema
 
 
 class OutputContract(BaseModel):
@@ -33,9 +35,9 @@ class JsonSchemaOutput(OutputContract):
     """Enforce a JSON-schema-shaped return value."""
 
     kind: Literal["json_schema"] = "json_schema"
-    schema_: dict[str, Any]
+    schema_: JsonSchema
     """JSON Schema 2020-12 the response must validate against."""
-    parse_to: Any | None = None
+    parse_to: type[BaseModel] | None = None
     """Optional pydantic model class to parse the response into."""
 
 

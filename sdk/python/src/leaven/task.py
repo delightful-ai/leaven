@@ -5,11 +5,10 @@ and split metadata. It is inert data. Stage layouts and runtimes decide how a
 selected case is projected into a workspace.
 """
 
-from typing import Any
-
 from pydantic import BaseModel, ConfigDict, Field
 
 from .case import Case
+from .json_value import JsonObject
 from .sandbox.config import SandboxConfig
 from .setup import SetupScript
 
@@ -23,7 +22,7 @@ class Task(BaseModel):
     sandbox: SandboxConfig | None = None
     setup: SetupScript | None = None
     name: str | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: JsonObject = Field(default_factory=dict)
 
 
 __all__ = ["Task"]

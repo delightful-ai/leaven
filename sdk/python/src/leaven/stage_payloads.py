@@ -9,11 +9,12 @@ hand-shaped versions here exist so the scaffold is importable and the
 decorator signatures resolve.
 """
 
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ._receipts import CallReceipt, QueryReceipt
+from .json_value import JsonObject
 
 
 class StageSourceRef(BaseModel):
@@ -59,7 +60,7 @@ class ReflectionResult(BaseModel):
     """Structured diagnostic text the proposer will consume."""
     diagnosis_source_refs: list[StageSourceRef] = Field(default_factory=list)
     """Required: refs back to the examples the diagnosis depends on."""
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: JsonObject = Field(default_factory=dict)
 
 
 class ProposeRequest(BaseModel):
