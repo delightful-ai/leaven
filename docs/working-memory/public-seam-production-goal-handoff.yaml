@@ -787,6 +787,7 @@ acceptance:
           - a43492a5
           - fe4b0471
           - f692bb8a
+          - pending-current-run
         paths:
           - crates/leaven-seam-service/src/run_bound_service/mod.rs
           - crates/leaven-seam-service/src/run_bound_service/params.rs
@@ -797,6 +798,8 @@ acceptance:
           - cargo fmt --check
           - cargo check -p leaven-public-seam -p leaven-seam-runtime -p leaven-seam-service -p leaven-acp -p leaven-acp-stage-bridge -p leaven-cli
           - cargo test -p leaven-seam-service
+          - cargo test -p leaven-seam-service run_bound_service -- --nocapture
+          - cargo check -p leaven-seam-service
           - cargo test -p leaven-acp-stage-bridge
         note: >-
           The run-bound service and ACP stage-bridge graph host now parse
@@ -805,12 +808,18 @@ acceptance:
           `event.emit` before touching `RunContext`, host lowerers, or receipt
           projection. A follow-up service slice typed `event.emit`
           request/result hash preimages, primary result, receipt, and extension
-          envelope records instead of carrying a raw event write through service
-          projection. This is not row closure: ACP/runtime ingress still
-          receives transport JSON, nested host-domain payloads, non-event
-          extension-result projection, and ACP stage-bridge event projection
-          remain explicit `Value` islands that require typed-owner follow-up
-          slices or an approved raw-island entry.
+          envelope records instead of carrying a raw event write through
+          service projection. A later service slice typed the remaining
+          run-bound `proposal.apply`, `evaluation.request`, and
+          `assessment.submit` extension-result projections: those methods now
+          parse graph-backed PlanResult primary values and write receipts into
+          method-specific records, reject wrong primary kinds, missing matching
+          receipts, and untyped nested assessment replayability rows, then
+          serialize the ACP extension result from typed records. This is not
+          row closure: ACP/runtime ingress still receives transport JSON,
+          nested host-domain payloads, ACP result payloads, ACP stage-bridge
+          event/result projection, and wider PlanResult/effect leaf slots remain
+          explicit `Value` islands that require typed-owner follow-up slices.
       - kind: product_route_topology_decision
         paths:
           - docs/working-memory/run-bound-durable-runcontext-service.md
@@ -1124,9 +1133,11 @@ acceptance:
           `AcpClosedPlanError` facts while retaining the original JSON only for
           transport projection. This is still foundation evidence only:
           transport ingress, nested domain payloads, ACP result payloads,
-          non-event extension-result projection, costs, blob refs, and nested
-          Plan Result bodies remain raw JSON islands that must be eliminated or
-          approved explicitly before typed-seam closeout.
+          ACP stage-bridge extension-result projection, costs, blob refs,
+          PlanError details, metadata/info refs, stage case inputs, and nested
+          Plan Result bodies remain raw JSON islands that must be eliminated
+          before typed-seam closeout; there is no standing approval for those
+          internal islands.
     closeout_check: >-
       Handwritten Python schema mirrors, pydantic-only wire models, untyped
       dict payloads, response-order batch routing, or msgspec used as a

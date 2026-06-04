@@ -22,6 +22,14 @@ pub enum RunBoundGraphEffectError {
         /// Field name.
         field: &'static str,
     },
+    /// A graph-backed public-seam projection had an unexpected shape.
+    #[error("graph-backed public-seam projection field `{field}` had invalid shape: {reason}")]
+    InvalidProjection {
+        /// Field path or semantic field name.
+        field: &'static str,
+        /// Expected shape or violated invariant.
+        reason: &'static str,
+    },
     /// The callback did not carry an apply proposal write.
     #[error("leaven/proposal.apply callback must carry an apply_proposal_batch write")]
     MissingApplyWrite,
