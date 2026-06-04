@@ -88,6 +88,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         write_json_line(&mut stdin, &invalid_envelope());
         write_json_line(&mut stdin, &removed_human_review_request());
         write_json_line(&mut stdin, &workspace_release_request());
+        write_json_line(&mut stdin, &workspace_query_after_release_request());
         for request in &workspace_queries {
             write_json_line(&mut stdin, request);
         }
@@ -122,7 +123,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
     let responses = response_lines(&output.stdout);
     assert_eq!(
         responses.len(),
-        11 + workspace_queries.len() + graph_case_queries.len(),
+        12 + workspace_queries.len() + graph_case_queries.len(),
         "one response per request line"
     );
 
@@ -155,8 +156,22 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         "workspace_release"
     );
 
+    assert_eq!(
+        responses[3]["id"],
+        json!("workspace-query-after-release-cli")
+    );
+    assert_eq!(responses[3]["error"]["code"], json!(-32006));
+    assert!(
+        responses[3]["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("workspace_query refused already released workspace"),
+        "unexpected released workspace error: {:?}",
+        responses[3]
+    );
+
     for (offset, request) in workspace_queries.iter().enumerate() {
-        let response = &responses[3 + offset];
+        let response = &responses[4 + offset];
         let query_name = request["params"]["return"][0].as_str().unwrap();
         assert_eq!(
             response["id"],
@@ -191,7 +206,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         }
     }
 
-    let graph_case_start = 3 + workspace_queries.len();
+    let graph_case_start = 4 + workspace_queries.len();
     for (offset, request) in graph_case_queries.iter().enumerate() {
         let response = &responses[graph_case_start + offset];
         assert_eq!(response["id"], request["id"]);
@@ -486,6 +501,68 @@ fn workspace_release_request() -> Value {
                 }
             ],
             "return": ["release"],
+            "commit": {
+                "kind": "graph_writes_atomic",
+                "on_stale": "reject"
+            }
+        }
+    })
+}
+
+fn workspace_query_after_release_request() -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": "workspace-query-after-release-cli",
+        "method": "leaven/workspace.read_file",
+        "params": {
+            "schema_version": "leaven.plan.v1",
+            "plan_id": "workspacereleasedquerycli001",
+            "consistency": {
+                "kind": "latest_at_start"
+            },
+            "mode": {
+                "kind": "execute"
+            },
+            "ops": [
+                {
+                    "kind": "call",
+                    "name": "workspace",
+                    "idempotency_key": "workspace-release-query-cli-0001",
+                    "call": {
+                        "kind": "workspace_materialize",
+                        "candidate": "cand_cli",
+                        "surface": "program",
+                        "mode": "copy_on_write",
+                        "lifetime": "manual_release"
+                    }
+                },
+                {
+                    "kind": "call",
+                    "name": "release",
+                    "deps": ["workspace"],
+                    "idempotency_key": "workspace-release-query-cli-0002",
+                    "call": {
+                        "kind": "workspace_release",
+                        "workspace": "ws_cli_materialized",
+                        "force": false
+                    }
+                },
+                {
+                    "kind": "let",
+                    "name": "file",
+                    "deps": ["release"],
+                    "expr": {
+                        "kind": "workspace_query",
+                        "workspace": "ws_cli_materialized",
+                        "op": {
+                            "kind": "read_file",
+                            "path": "README.md",
+                            "expected_data_classes": ["workspace.file"]
+                        }
+                    }
+                }
+            ],
+            "return": ["file"],
             "commit": {
                 "kind": "graph_writes_atomic",
                 "on_stale": "reject"

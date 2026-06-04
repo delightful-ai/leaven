@@ -356,7 +356,7 @@ acceptance:
 
   - id: workspace_lifecycle_executes
     claim: Workspace query, file, digest, git, artifact-capture, and release methods execute.
-    status: pending
+    status: done
     proof_required:
       kind: workspace_backend_contract_and_stdio_test
       must_exercise:
@@ -372,7 +372,7 @@ acceptance:
           - cargo test -p leaven-seam-service
           - cargo test -p leaven-cli --test seam_stdio_server
           - cargo test -p leaven-public-seam --test public_seam_contract
-        note: Release now removes a workspace materialized earlier in the same Plan document and returns a validated released workspace handle through `leaven seam serve --stdio`.
+        note: Release now removes a workspace materialized earlier in the same Plan document and returns a validated released workspace handle through `leaven seam serve --stdio`; later CLI evidence proves a same-plan query after release is rejected.
       - kind: partial_finite_workspace_query_execution
         methods:
           - "`leaven/workspace.snapshot`"
@@ -408,6 +408,15 @@ acceptance:
           - crates/leaven-seam-service/src/service.rs
           - crates/leaven-cli/tests/seam_stdio_server.rs
         note: capture_artifacts now returns requested file entries with byte count, SHA-256, inline base64 bytes, and a matching blob_ref; result visibility includes listing-entry blob_ref data classes, and the process-level `leaven seam serve --stdio` test proves those bytes cross the durable CLI route.
+      - kind: stdio_post_release_denial
+        methods:
+          - "`leaven/workspace.release`"
+          - "`leaven/workspace.read_file`"
+        commands:
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-cli --test seam_stdio_server
+        paths:
+          - crates/leaven-cli/tests/seam_stdio_server.rs
+        note: The process-level CLI proof sends a Plan that materializes a workspace, releases it, then attempts a workspace.read_file against the released handle; `leaven seam serve --stdio` returns an execution error containing `workspace_query refused already released workspace`.
     closeout_check: Materialize-only workspace support cannot close this row.
 
   - id: effects_and_graph_writes_execute
