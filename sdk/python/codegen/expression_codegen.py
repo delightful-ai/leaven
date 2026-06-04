@@ -10,7 +10,8 @@ EXPRESSION_EXPORTS = (
     "PlanExpressionSort PlanExpressionTemplate PlanExpressionVar PlanExpressionWorkspaceQuery Precondition "
     "PreconditionAssessmentExists PreconditionCandidateExists PreconditionCandidateIdentity "
     "PreconditionGraphRevisionAtLeast PreconditionGraphRevisionEquals PreconditionReceiptExists "
-    "PreconditionSchemaValid SortKey ValidationErrorItem ValidationReceipt"
+    "PreconditionSchemaValid SortKey ValidationErrorItem ValidationReceipt ValueExpr "
+    "ValueExprExtension ValueExprExtract ValueExprLiteral ValueExprVar"
 )
 
 
@@ -193,6 +194,29 @@ type PlanExpression = (
 )
 
 
+class ValueExprLiteral(Struct, frozen=True, forbid_unknown_fields=True, tag="literal", tag_field="kind"):
+    value: WireJsonField
+
+
+class ValueExprVar(Struct, frozen=True, forbid_unknown_fields=True, tag="var", tag_field="kind"):
+    name: str
+
+
+class ValueExprExtract(Struct, frozen=True, forbid_unknown_fields=True, tag="extract", tag_field="kind"):
+    input: WireJsonObject
+    path: str
+
+
+class ValueExprExtension(Struct, frozen=True, forbid_unknown_fields=True, tag="extension", tag_field="kind"):
+    namespace: str
+    op: str
+    schema_fingerprint: str
+    payload: WireJsonField
+
+
+type ValueExpr = ValueExprLiteral | ValueExprVar | ValueExprExtract | ValueExprExtension
+
+
 class PreconditionCandidateExists(Struct, frozen=True, forbid_unknown_fields=True, tag="candidate_exists", tag_field="kind"):
     candidate: CandidateRef
 
@@ -220,7 +244,7 @@ class PreconditionReceiptExists(Struct, frozen=True, forbid_unknown_fields=True,
 
 class PreconditionSchemaValid(Struct, frozen=True, forbid_unknown_fields=True, tag="schema_valid", tag_field="kind"):
     schema_fingerprint: str
-    value: WireJsonObject
+    value: ValueExpr
 
 
 type Precondition = (
