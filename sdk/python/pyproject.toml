@@ -21,6 +21,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    "msgspec>=0.19",
     "pydantic>=2.10",
     "typing-extensions>=4.12",
 ]
@@ -44,6 +45,7 @@ dev = [
 
 [tool.leaven.dependency-boundaries]
 public_runtime = [
+    "msgspec",
     "pydantic",
     "typing-extensions",
 ]
@@ -61,6 +63,7 @@ private_runtime = []
 notes = [
     "Public runtime dependencies are import-time requirements for the leaven package.",
     "Public optional dependencies are user-selected integration extras.",
+    "msgspec owns private public-seam wire parsing/encoding and generated method metadata.",
     "Private dev dependencies support tests, codegen, linting, and typing only.",
     "Live provider examples use the Rust seam service process; they add no Python runtime package dependency.",
 ]

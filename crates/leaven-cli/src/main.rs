@@ -8,7 +8,7 @@ use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand, error::ErrorKind};
 use doctor::{DoctorCommand, OutputFormat};
-use seam::SeamServeCommand;
+use seam::{SeamProfileCommand, SeamServeCommand};
 use serve::ServeCommand;
 
 fn main() -> ExitCode {
@@ -39,7 +39,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<String, CliError> {
     match cli.command {
         None => Ok(DoctorCommand::Summary.run()?),
         Some(TopCommand::Doctor { command }) => Ok(doctor_command(command).run()?),
-        Some(TopCommand::Seam { command }) => Ok(seam_command(command).run()?),
+        Some(TopCommand::Seam { command }) => seam_command(command),
         Some(TopCommand::Serve(args)) => Ok(args.into_command().run()?),
     }
 }
@@ -69,8 +69,23 @@ enum TopCommand {
 
 #[derive(Debug, Subcommand)]
 enum SeamSubcommand {
+    /// Export the locked Leaven public seam profile as JSON.
+    Profile(SeamProfileArgs),
     /// Serve the locked Leaven public seam over inherited stdio.
     Serve(SeamServeArgs),
+}
+
+#[derive(Debug, Args)]
+struct SeamProfileArgs {
+    /// Repo root the locked public-seam package loads from.
+    #[arg(long, default_value = ".")]
+    root: PathBuf,
+}
+
+impl SeamProfileArgs {
+    fn into_command(self) -> SeamProfileCommand {
+        SeamProfileCommand { root: self.root }
+    }
 }
 
 #[derive(Debug, Args)]
@@ -179,9 +194,10 @@ fn doctor_command(command: Option<DoctorSubcommand>) -> DoctorCommand {
     }
 }
 
-fn seam_command(command: SeamSubcommand) -> SeamServeCommand {
+fn seam_command(command: SeamSubcommand) -> Result<String, CliError> {
     match command {
-        SeamSubcommand::Serve(args) => args.into_command(),
+        SeamSubcommand::Profile(args) => Ok(args.into_command().run()?),
+        SeamSubcommand::Serve(args) => Ok(args.into_command().run()?),
     }
 }
 

@@ -12,7 +12,8 @@ or other documented builders.
 
 ## Public Dependencies
 
-- Python standard library only.
+- Python standard library plus `msgspec` for private JSON-RPC envelope parsing
+  and generated public-seam method metadata.
 - The installed/built `leaven` CLI public command:
   `leaven seam serve --stdio --root <repo> --config <json>`.
 - The locked Leaven public seam JSON-RPC/Plan IR wire in

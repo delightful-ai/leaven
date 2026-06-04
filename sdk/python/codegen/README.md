@@ -1,4 +1,28 @@
-# Codegen — leaven-types
+# Codegen — leaven-types and seam wire
+
+## Public seam wire metadata
+
+`generate_seam_wire.py` generates the checked-in private method metadata at
+`src/leaven/_seam/_wire/methods.py`. It does not scrape Rust source or Markdown
+tables. It invokes the Rust-owned export:
+
+```bash
+cargo run -q -p leaven-cli -- seam profile --root ../..
+```
+
+The export is assembled by `leaven-public-seam`, includes the locked method
+table, schema bindings, capability actions, receipt flags, and Rust-computed
+`fp_schema_sha256_*` fingerprints. Python uses this as drift-detectable wire
+metadata for the `msgspec` codec layer; Rust remains the authority for method
+semantics and capability policy.
+
+Check drift from `sdk/python/`:
+
+```bash
+uv run python codegen/generate_seam_wire.py --check
+```
+
+## Leaven type staging
 
 Pipeline that generates Python typed records from the locked
 [public-seam-v1](../../../docs/specs/public-seam-v1/schemas/) JSON Schemas.

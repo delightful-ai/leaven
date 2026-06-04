@@ -641,7 +641,33 @@ acceptance:
         - "`lv.runs.inspect(...)`"
         - receipts, lineage, evidence, cost/usage, unsupported facts
         - blob byte retrieval for transcript/artifact refs
-    evidence: []
+    evidence:
+      - kind: rust_export_backed_msgspec_codec_foundation
+        paths:
+          - crates/leaven-cli/src/main.rs
+          - crates/leaven-cli/src/seam.rs
+          - sdk/python/codegen/generate_seam_wire.py
+          - sdk/python/src/leaven/_seam/_wire/
+          - sdk/python/tests/_seam/_wire/
+          - sdk/python/pyproject.toml
+          - sdk/python/uv.lock
+        commands:
+          - cargo run -q -p leaven-cli -- seam profile --root .
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire -q
+          - cd sdk/python && uv run ruff check src/leaven/_seam/_wire src/leaven/_seam/client.py tests/_seam/_wire codegen/generate_seam_wire.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/_wire src/leaven/_seam/client.py tests/_seam/_wire
+        note: >-
+          Python private seam wire metadata is now generated from a Rust-owned
+          `leaven seam profile` JSON export, not a Rust-source scrape or
+          Markdown table. The export carries locked methods, schema bindings,
+          required actions, receipt flags, and Rust-computed schema
+          fingerprints. The `_seam._wire` codec uses msgspec Raw/Struct
+          envelopes, UNSET result/error handling, method-specific result
+          decoding, batch routing by id, unknown-method rejection, null-id
+          handling, and typed JSON-object coercion without public/wire `Any`.
+          This is still a foundation slice: full generated Plan IR and Plan
+          Result payload structs remain before this row can be marked done.
     closeout_check: "Reading only `optimized.json` written by Python is a proxy."
 
   - id: python_wire_codegen_msgspec_boundary
@@ -663,7 +689,29 @@ acceptance:
         - codec tests for malformed envelopes, both result+error, neither result nor error, unknown methods, null ids, notifications, and typed method payload failures
         - transport separation: stdio/http/client routing is outside the msgspec codec layer
         - generated-code line-count split policy under the 650 LOC Python gate
-    evidence: []
+    evidence:
+      - kind: focused_sdk_quality_foundation
+        paths:
+          - sdk/python/pyproject.toml
+          - sdk/python/AGENTS.md
+          - sdk/python/src/leaven/_seam/AGENTS.md
+          - sdk/python/src/leaven/_seam/client.py
+          - sdk/python/src/leaven/_seam/_wire/
+          - sdk/python/tests/AGENTS.md
+          - sdk/python/tests/_seam/_wire/
+        commands:
+          - cd sdk/python && uv lock
+          - cd sdk/python && uv run pytest tests/test_stage_surface.py tests/_seam -q
+          - cd sdk/python && uv run python -c "import leaven; print('import ok', 'SeamClient' not in dir(leaven))"
+          - wc -l $(rg --files sdk/python/src sdk/python/tests sdk/python/codegen -g '*.py') | sort -nr | head -12
+        note: >-
+          msgspec is declared as a runtime dependency for the private generated
+          seam wire codec, `_seam.client` now consumes that codec instead of
+          raw JSON-RPC loads/dumps, test placement mirrors `_seam._wire`, and
+          the checked-in Python file-count scan now shows the largest file at
+          exactly 650 lines. The broader project-quality row remains pending
+          until all public SDK/wire `Any` and public backbone scaffolds are
+          audited and removed or explicitly kept private.
     closeout_check: >-
       Handwritten Python schema mirrors, pydantic-only wire models, untyped
       dict payloads, response-order batch routing, or msgspec used as a

@@ -629,7 +629,6 @@ class FakeSeamClient:
             "receipts": [{"receipt": "agentrec_completion", "call_kind": "agent_run"}],
         }
 
-
 class FakeLmSeamClient:
     def __init__(self) -> None:
         self.request_value: dict = {}
