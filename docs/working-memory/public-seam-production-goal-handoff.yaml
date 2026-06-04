@@ -331,9 +331,9 @@ acceptance:
         note: Evaluation request moved from validated-only to configured local write execution through service and stdio. The service validates a constructed EvaluationJobDocument and context-bound request-evaluation receipt before projecting the ACP-facing primary receipt; later configured-service evidence proves same-process schema-valid graph.query readback, while durable RunContext evaluation-job persistence still belongs to effects_and_graph_writes_execute.
       - kind: method_matrix_all_clear
         commands:
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-runtime -p leaven-seam-stdio -p leaven-seam-service
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-cli --test seam_stdio_server
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-public-seam --test public_seam_contract
+          - cargo test -p leaven-seam-runtime -p leaven-seam-stdio -p leaven-seam-service
+          - cargo test -p leaven-cli --test seam_stdio_server
+          - cargo test -p leaven-public-seam --test public_seam_contract
           - rg -n "Validated-only|Unsupported in service|unsupported in service|validated-only" docs/specs/public-seam-v1/executable-method-status.md crates/leaven-public-seam crates/leaven-seam-service crates/leaven-seam-runtime crates/leaven-cli/tests/seam_stdio_server.rs
         paths:
           - docs/specs/public-seam-v1/executable-method-status.md
@@ -435,9 +435,9 @@ acceptance:
         methods:
           - "`leaven/workspace.capture_artifacts`"
         commands:
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-public-seam --test public_seam_contract workspace_query_contract::workspace_query_executes_finite_reads_through_workspace_view
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service seam_runtime_executes_finite_workspace_queries_through_configured_service
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-cli --test seam_stdio_server
+          - cargo test -p leaven-public-seam --test public_seam_contract workspace_query_contract::workspace_query_executes_finite_reads_through_workspace_view
+          - cargo test -p leaven-seam-service seam_runtime_executes_finite_workspace_queries_through_configured_service
+          - cargo test -p leaven-cli --test seam_stdio_server
         paths:
           - crates/leaven-public-seam/src/plan_execution/queries/workspace_values.rs
           - crates/leaven-public-seam/src/result/visibility.rs
@@ -450,7 +450,7 @@ acceptance:
           - "`leaven/workspace.release`"
           - "`leaven/workspace.read_file`"
         commands:
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-cli --test seam_stdio_server
+          - cargo test -p leaven-cli --test seam_stdio_server
         paths:
           - crates/leaven-cli/tests/seam_stdio_server.rs
         note: The process-level CLI proof sends a Plan that materializes a workspace, releases it, then attempts a workspace.read_file against the released handle; `leaven seam serve --stdio` returns an execution error containing `workspace_query refused already released workspace`.
@@ -512,7 +512,7 @@ acceptance:
         methods:
           - "`leaven/proposal.apply`"
         commands:
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-acp-stage-bridge
+          - cargo test -p leaven-acp-stage-bridge
           - cargo test -p leaven --test topology_contract
         paths:
           - crates/leaven-acp-stage-bridge/src/graph_host.rs
@@ -525,8 +525,8 @@ acceptance:
           - "`leaven/proposal.apply`"
           - "`leaven/graph.query`"
         commands:
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-cli --test seam_stdio_server
+          - cargo test -p leaven-seam-service
+          - cargo test -p leaven-cli --test seam_stdio_server
         paths:
           - crates/leaven-seam-service/src/run_context_service.rs
           - crates/leaven-seam-service/src/service.rs
@@ -536,7 +536,7 @@ acceptance:
         methods:
           - "`leaven/assessment.submit`"
         commands:
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-acp-stage-bridge dispatch_stage_run_services_worker_initiated_assessment_submit_through_runcontext
+          - cargo test -p leaven-acp-stage-bridge dispatch_stage_run_services_worker_initiated_assessment_submit_through_runcontext
           - cargo test -p leaven-engine submit_assessments
           - cargo test -p leaven --test topology_contract
         paths:
@@ -549,7 +549,7 @@ acceptance:
         methods:
           - "`leaven/event.emit`"
         commands:
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-acp-stage-bridge
+          - cargo test -p leaven-acp-stage-bridge
           - cargo test -p leaven --test topology_contract
         paths:
           - crates/leaven-engine/src/events.rs
@@ -563,8 +563,8 @@ acceptance:
           - "`leaven/event.emit`"
           - "`leaven/graph.query`"
         commands:
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-cli --test seam_stdio_server
+          - cargo test -p leaven-seam-service
+          - cargo test -p leaven-cli --test seam_stdio_server
         paths:
           - crates/leaven-seam-service/src/run_context_service.rs
           - crates/leaven-seam-service/src/service.rs
@@ -576,8 +576,8 @@ acceptance:
           - "`leaven/assessment.submit`"
           - "`leaven/graph.query`"
         commands:
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-cli --test seam_stdio_server
+          - cargo test -p leaven-seam-service
+          - cargo test -p leaven-cli --test seam_stdio_server
           - cargo test -p leaven --test topology_contract
         paths:
           - crates/leaven-seam-service/src/run_context_service.rs
@@ -602,7 +602,7 @@ acceptance:
         methods:
           - "`leaven/evaluation.request`"
         commands:
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-acp-stage-bridge dispatch_stage_run_services_worker_initiated_evaluation_request_through_runcontext
+          - cargo test -p leaven-acp-stage-bridge dispatch_stage_run_services_worker_initiated_evaluation_request_through_runcontext
           - cargo test -p leaven-engine request_evaluation
           - cargo test -p leaven --test topology_contract
         paths:
@@ -619,8 +619,8 @@ acceptance:
           - "`leaven/event.emit`"
           - "`leaven/graph.query`"
         commands:
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-cli --test seam_stdio_server
+          - cargo test -p leaven-seam-service
+          - cargo test -p leaven-cli --test seam_stdio_server
         paths:
           - crates/leaven-seam-service/src/graph_state.rs
           - crates/leaven-seam-service/src/service.rs
@@ -689,9 +689,9 @@ acceptance:
           - docs/working-memory/run-bound-durable-runcontext-service.md
         commands:
           - cargo fmt --check
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service run_bound
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-run inspection
+          - cargo test -p leaven-seam-service run_bound
+          - cargo test -p leaven-seam-service
+          - cargo test -p leaven-run inspection
           - cargo test -p leaven --test topology_contract
           - uv run --with pyyaml python - <<'PY' ...
         note: >-
@@ -714,9 +714,9 @@ acceptance:
           - docs/working-memory/run-bound-durable-runcontext-service.md
         commands:
           - cargo fmt --check
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service run_bound_service
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-run inspection
+          - cargo test -p leaven-seam-service run_bound_service
+          - cargo test -p leaven-seam-service
+          - cargo test -p leaven-run inspection
           - cargo test -p leaven --test topology_contract
         note: >-
           `RunBoundGraphEffectService` now implements the runtime `SeamService`
@@ -762,11 +762,11 @@ acceptance:
           - docs/working-memory/run-bound-durable-runcontext-service.md
           - docs/working-memory/public-seam-production-goal-handoff.yaml
         commands:
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service engine_lifecycle_mounts_run_bound_service_and_checkpoint_readback_sees_graph_truth
+          - cargo test -p leaven-seam-service engine_lifecycle_mounts_run_bound_service_and_checkpoint_readback_sees_graph_truth
           - cargo fmt --check
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service run_bound_service
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-run inspection
+          - cargo test -p leaven-seam-service run_bound_service
+          - cargo test -p leaven-seam-service
+          - cargo test -p leaven-run inspection
           - cargo test -p leaven --test topology_contract
           - uv run --with pyyaml python - <<'PY' ...
         note: >-
@@ -782,6 +782,28 @@ acceptance:
           proof to engine lifecycle proof, but the row remains pending until a
           product public SDK server/API route exposes this mount to
           external-language workers.
+      - kind: typed_run_bound_callback_params_foundation
+        paths:
+          - crates/leaven-seam-service/src/run_bound_service/mod.rs
+          - crates/leaven-seam-service/src/run_bound_service/params.rs
+          - crates/leaven-seam-service/src/run_bound_service/extension_result.rs
+          - crates/leaven-seam-service/src/run_bound_service/tests.rs
+          - crates/leaven-acp-stage-bridge/src/graph_host.rs
+        commands:
+          - cargo fmt --check
+          - cargo check -p leaven-public-seam -p leaven-seam-runtime -p leaven-seam-service -p leaven-acp -p leaven-acp-stage-bridge -p leaven-cli
+          - cargo test -p leaven-seam-service
+          - cargo test -p leaven-acp-stage-bridge
+        note: >-
+          The run-bound service and ACP stage-bridge graph host now parse
+          worker callback params once into typed private records for
+          `proposal.apply`, `evaluation.request`, `assessment.submit`, and
+          `event.emit` before touching `RunContext`, host lowerers, or receipt
+          projection. This is not row closure: ACP/runtime ingress still
+          receives transport JSON, nested host-domain payloads, extension-result
+          projection, receipt hash preimages, and output construction remain
+          explicit `Value` islands that require typed-owner follow-up slices or
+          an approved raw-island entry.
       - kind: product_route_topology_decision
         paths:
           - docs/working-memory/run-bound-durable-runcontext-service.md
@@ -847,8 +869,8 @@ acceptance:
           - sdk/python/tests/_runs/test_rust_export.py
           - docs/specs/leaven_python.md
         commands:
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-run inspection
-          - CARGO_INCREMENTAL=0 cargo test -p leaven-cli run_inspect
+          - cargo test -p leaven-run inspection
+          - cargo test -p leaven-cli run_inspect
           - cargo test -p leaven --test topology_contract
           - cd sdk/python && uv run pytest tests/_runs/test_rust_export.py tests/test_run_inspection.py -q
           - cd sdk/python && uv run ruff check src/leaven/run_inspection.py src/leaven/runs.py src/leaven/_runs tests/_runs/test_rust_export.py
@@ -1036,10 +1058,14 @@ acceptance:
           - 2eafaf05
           - 1efc043e
           - e8a404bb
+          - fe4b0471
+          - a43492a5
         paths:
           - crates/leaven-seam-service/src/service.rs
           - crates/leaven-seam-service/src/run_context_service.rs
           - crates/leaven-seam-service/src/run_bound_service/mod.rs
+          - crates/leaven-seam-service/src/run_bound_service/params.rs
+          - crates/leaven-seam-service/src/run_bound_service/extension_result.rs
           - crates/leaven-seam-service/src/run_bound_service/tests.rs
           - crates/leaven-seam-service/src/stage.rs
           - crates/leaven-acp/src/stdio.rs
@@ -1067,10 +1093,15 @@ acceptance:
           worker-initiated callback method names at JSON-RPC ingress and pass
           LockedMethod into service effect execution. The older ACP stage bridge
           RunContext graph-effect host now dispatches callbacks by LockedMethod
-          variants too, closing the stale raw-string trait override. This is
-          method-identity evidence only: service params, run-context lowerers,
-          ACP result payloads, costs, blob refs, and nested Plan IR/Result
-          bodies remain raw JSON islands.
+          variants too, closing the stale raw-string trait override. Follow-up
+          slices parse run-bound and stage-bridge callback params into typed
+          private records before graph mutation for proposal apply, evaluation
+          request, assessment submit, and event emit. This is still foundation
+          evidence only: transport ingress, nested domain payloads, ACP result
+          payloads, extension-result projection, costs, blob refs, receipt hash
+          preimages, and nested Plan IR/Result bodies remain raw JSON islands
+          that must be eliminated or approved explicitly before typed-seam
+          closeout.
     closeout_check: >-
       Handwritten Python schema mirrors, pydantic-only wire models, untyped
       dict payloads, response-order batch routing, or msgspec used as a
@@ -1152,6 +1183,26 @@ acceptance:
           pending because public backbone scaffold removal/audit and all
           remaining public API `Any` decisions are not completed by lint success
           alone.
+      - kind: private_seam_json_builder_branding
+        commits:
+          - 414f7d0d
+        paths:
+          - sdk/python/src/leaven/_seam/plans.py
+          - sdk/python/src/leaven/_seam/config.py
+          - sdk/python/src/leaven/_seam/capability.py
+          - sdk/python/tests/_seam/test_plans.py
+        commands:
+          - cd sdk/python && uv run ruff check src/leaven/_seam tests/_seam codegen/generate_seam_wire.py
+          - cd sdk/python && uv run ty check src/leaven/_seam tests/_seam codegen/generate_seam_wire.py
+          - cd sdk/python && uv run pytest tests/_seam -q -k 'not generated_methods_match_current_rust_source'
+          - rg -n "\bAny\b|typing\.Any|dict\[str, Any\]" sdk/python/src/leaven/_seam sdk/python/tests/_seam sdk/python/codegen/generate_seam_wire.py -g '*.py'
+        note: >-
+          Private `_seam` plan/config/capability builders now use explicit
+          `JsonObject`/`JsonValue` aliases and `json_object(...)` coercion
+          instead of `typing.Any` or `dict[str, Any]` at builder boundaries.
+          Tests narrow recursive JSON values before deep assertions. This is a
+          scoped Python private-boundary cleanup, not full generated typed Plan
+          IR or public SDK API closeout.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this
