@@ -258,7 +258,7 @@ impl<R: BufRead, W: Write> AcpStdioSession<R, W> {
     /// callers that expect no callbacks pass [`RejectAllEffectHost`].
     pub fn call_extension(
         &mut self,
-        method: &str,
+        method: LockedMethod,
         params: &Value,
         host: &impl AcpEffectHost,
     ) -> AcpTransportResult<AcpJsonRpcResponseDocument> {
@@ -272,7 +272,7 @@ impl<R: BufRead, W: Write> AcpStdioSession<R, W> {
         let request_value = json!({
             "jsonrpc": "2.0",
             "id": request_id,
-            "method": method,
+            "method": method.as_str(),
             "params": params
         });
         let request = self
@@ -281,7 +281,7 @@ impl<R: BufRead, W: Write> AcpStdioSession<R, W> {
         self.write_message(&request_value)?;
 
         loop {
-            let (value, line) = self.read_until_actionable(method, request.id())?;
+            let (value, line) = self.read_until_actionable(method.as_str(), request.id())?;
             if line == InboundLine::WorkerRequest {
                 // Service the worker→host effect callback and keep waiting for
                 // this call's own response.
@@ -778,7 +778,7 @@ impl AcpStdioProcessSession {
     /// Sends one locked Leaven ACP extension request and waits for its response.
     pub fn call_extension(
         &mut self,
-        method: &str,
+        method: LockedMethod,
         params: &Value,
         host: &impl AcpEffectHost,
     ) -> AcpTransportResult<AcpJsonRpcResponseDocument> {

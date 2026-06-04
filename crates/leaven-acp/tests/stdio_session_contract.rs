@@ -43,7 +43,7 @@ printf '%s\n' "$LEAVEN_TEST_RESPONSE" | sed "s/__CAPABILITY_FINGERPRINT__/$LEAVE
 
     let response = session
         .call_extension(
-            "leaven/lm.complete",
+            LockedMethod::LmComplete,
             &acp_plan_params(),
             &RejectAllEffectHost,
         )
@@ -117,7 +117,7 @@ print(json.dumps(response, sort_keys=True), flush=True)
 
     let result = session
         .call_extension(
-            "leaven/lm.complete",
+            LockedMethod::LmComplete,
             &acp_plan_params(),
             &RejectAllEffectHost,
         )
@@ -754,7 +754,7 @@ with open(os.environ["LEAVEN_TEST_OBSERVED_REQUESTS"], "w", encoding="utf-8") as
     for (index, (method, primary_kind)) in expected.iter().enumerate() {
         let response = session
             .call_extension(
-                method,
+                locked_method(method),
                 &acp_plan_params_for_method(method),
                 &RejectAllEffectHost,
             )
@@ -958,7 +958,7 @@ print(json.dumps({
 
     let response = session
         .call_extension(
-            "leaven/workspace.materialize",
+            LockedMethod::WorkspaceMaterialize,
             &acp_plan_params(),
             &RejectAllEffectHost,
         )
@@ -966,7 +966,7 @@ print(json.dumps({
     assert_eq!(response.primary_kind(), MethodPrimaryKind::WorkspaceHandle);
     assert!(matches!(
         session.call_extension(
-            "leaven/lm.complete",
+            LockedMethod::LmComplete,
             &acp_plan_params(),
             &RejectAllEffectHost
         ),
@@ -1019,7 +1019,7 @@ printf '%s\n' "$LEAVEN_TEST_RESPONSE" | sed "s/__CAPABILITY_FINGERPRINT__/$LEAVE
 
     session
         .call_extension(
-            "leaven/lm.complete",
+            LockedMethod::LmComplete,
             &acp_plan_params(),
             &RejectAllEffectHost,
         )
@@ -1035,33 +1035,8 @@ printf '%s\n' "$LEAVEN_TEST_RESPONSE" | sed "s/__CAPABILITY_FINGERPRINT__/$LEAVE
 fn stdio_session_rejects_private_mcp_or_bare_process_protocols() {
     let package = package();
     let profile = profile(&package, 32, "pause_worker");
-    let mut private_session = spawn_worker(
-        &package,
-        &profile,
-        worker_script("read request\n"),
-        response_for(
-            "leaven/lm.complete",
-            "leaven-acp-0",
-            extension_result(
-                "leaven/lm.complete",
-                lm_response_primary(),
-                call_receipt("lm_complete", "lmrec_acp"),
-                &["completion.raw"],
-            ),
-        ),
-    );
-    assert!(matches!(
-        private_session.call_extension("private/run_lm", &acp_plan_params(), &RejectAllEffectHost),
-        Err(AcpTransportError::PublicSeam(_))
-    ));
-    assert!(matches!(
-        private_session.call_extension(
-            "leaven/mcp.bridge",
-            &acp_plan_params(),
-            &RejectAllEffectHost
-        ),
-        Err(AcpTransportError::PublicSeam(_))
-    ));
+    assert!(LockedMethod::parse("private/run_lm").is_none());
+    assert!(LockedMethod::parse("leaven/mcp.bridge").is_none());
 
     let mut bare_payload_session = spawn_worker(
         &package,
@@ -1076,7 +1051,7 @@ printf '%s\n' '{"jsonrpc":"2.0","id":"leaven-acp-0","result":{"message":{"role":
     );
     assert!(matches!(
         bare_payload_session.call_extension(
-            "leaven/lm.complete",
+            LockedMethod::LmComplete,
             &acp_plan_params(),
             &RejectAllEffectHost
         ),
@@ -1103,7 +1078,11 @@ printf '%s\n' "$LEAVEN_TEST_RESPONSE" | sed "s/__CAPABILITY_FINGERPRINT__/$LEAVE
             response_for(case.method, request_id, case.result),
         );
         let response = session
-            .call_extension(case.method, &acp_plan_params(), &RejectAllEffectHost)
+            .call_extension(
+                locked_method(case.method),
+                &acp_plan_params(),
+                &RejectAllEffectHost,
+            )
             .unwrap_or_else(|error| panic!("case {index} {} failed: {error:?}", case.method));
         assert_eq!(response.method(), locked_method(case.method));
         assert_eq!(response.primary_kind(), primary_kind_for(case.primary_kind));
@@ -1182,7 +1161,11 @@ printf '%s\n' "$LEAVEN_TEST_RESPONSE" | sed "s/__CAPABILITY_FINGERPRINT__/$LEAVE
         ),
     );
     assert!(matches!(
-        cross_method.call_extension("leaven/agent.run", &acp_plan_params(), &RejectAllEffectHost),
+        cross_method.call_extension(
+            LockedMethod::AgentRun,
+            &acp_plan_params(),
+            &RejectAllEffectHost
+        ),
         Err(AcpTransportError::PublicSeam(_))
     ));
 
@@ -1206,7 +1189,7 @@ printf '%s\n' "$LEAVEN_TEST_RESPONSE" | sed "s/__CAPABILITY_FINGERPRINT__/$LEAVE
     );
     assert!(matches!(
         semantic_fake.call_extension(
-            "leaven/lm.complete",
+            LockedMethod::LmComplete,
             &acp_plan_params(),
             &RejectAllEffectHost
         ),
@@ -1243,7 +1226,7 @@ printf '%s\n' "$LEAVEN_TEST_RESPONSE" | sed "s/__CAPABILITY_FINGERPRINT__/$LEAVE
 
     let error = session
         .call_extension(
-            "leaven/lm.complete",
+            LockedMethod::LmComplete,
             &acp_plan_params(),
             &RejectAllEffectHost,
         )
@@ -1313,7 +1296,7 @@ printf '%s\n' "$cancel" > "$LEAVEN_TEST_CANCEL_LOG"
 
     assert!(matches!(
         session.call_extension(
-            "leaven/lm.complete",
+            LockedMethod::LmComplete,
             &acp_plan_params(),
             &RejectAllEffectHost
         ),
@@ -1363,7 +1346,7 @@ printf '%s\n' "$cancel" > "$LEAVEN_TEST_CANCEL_LOG"
     let cancellation = session.cancellation_handle();
     let call = thread::spawn(move || {
         let result = session.call_extension(
-            "leaven/lm.complete",
+            LockedMethod::LmComplete,
             &acp_plan_params(),
             &RejectAllEffectHost,
         );
@@ -1399,7 +1382,7 @@ printf '%s\n' "$cancel" > "$LEAVEN_TEST_CANCEL_LOG"
     );
     assert!(matches!(
         session.call_extension(
-            "leaven/lm.complete",
+            LockedMethod::LmComplete,
             &acp_plan_params(),
             &RejectAllEffectHost
         ),
@@ -1442,7 +1425,7 @@ printf '%s\n' "$LEAVEN_TEST_RESPONSE" | sed "s/__CAPABILITY_FINGERPRINT__/$LEAVE
     let cancellation = session.cancellation_handle();
     let call = thread::spawn(move || {
         let result = session.call_extension(
-            "leaven/lm.complete",
+            LockedMethod::LmComplete,
             &acp_plan_params(),
             &RejectAllEffectHost,
         );
