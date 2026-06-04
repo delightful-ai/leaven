@@ -894,6 +894,28 @@ acceptance:
           evaluation requests. This is not row closure: the assessment/request
           payload bodies themselves remain host-domain JSON leaves that still
           need typed owners.
+      - kind: typed_acp_stage_bridge_lm_callback_projection_foundation
+        commits:
+          - f176b65b
+        paths:
+          - crates/leaven-acp-stage-bridge/src/host.rs
+        commands:
+          - cargo fmt
+          - cargo test -p leaven-acp-stage-bridge
+          - cargo check -p leaven-acp-stage-bridge
+        note: >-
+          ACP stage-bridge `leaven/lm.complete` callback handling no longer
+          walks callback params with ad hoc JSON pointers or constructs the
+          `lm_response` extension result with anonymous JSON blobs. The
+          transport hook still receives a `Value`, but the code now immediately
+          decodes that buffer into private typed Plan IR records, exposes only
+          a typed `LmCompletionRequest` to `HostLm`, and serializes the
+          response primary, receipt, extension envelope, and result-hash
+          preimage from named Rust records. Tests reject an untyped prompt
+          expression and still prove the worker-process bidirectional callback
+          path. This is foundation evidence only: the transport trait
+          signature, shared Plan IR leaves, costs, data classes, and wider
+          public-seam payload owners still need typed follow-up slices.
       - kind: product_route_topology_decision
         paths:
           - docs/working-memory/run-bound-durable-runcontext-service.md
