@@ -844,7 +844,7 @@ acceptance:
           remains a host-domain JSON blocker rather than an approved raw island.
       - kind: typed_acp_stage_bridge_graph_projection_foundation
         commits:
-          - pending-current-run
+          - 5ed5d1c7
         paths:
           - crates/leaven-acp-stage-bridge/src/lib.rs
           - crates/leaven-acp-stage-bridge/src/graph_host.rs
