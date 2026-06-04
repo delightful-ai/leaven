@@ -2368,6 +2368,33 @@ acceptance:
           `cases/csv.py` to `tests/cases/test_csv.py`. This still does not
           close the SDK quality row: `cases.parquet`, standalone `serve_stage`,
           and larger public backbone surfaces remain open.
+      - kind: public_parquet_case_loader_scaffold_removed
+        paths:
+          - docs/specs/leaven_python.md
+          - sdk/python/src/leaven/cases/__init__.py
+          - sdk/python/src/leaven/cases/parquet.py
+          - sdk/python/examples/02_cases_and_artifacts.py
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/tests/cases/test_public_surface.py
+        commands:
+          - cd sdk/python && uv run pytest tests/cases/test_public_surface.py tests/cases/test_csv.py tests/cases/test_jsonl.py -q
+          - cd sdk/python && uv run ruff check src/leaven/cases scripts/check_quality_contract.py examples/02_cases_and_artifacts.py tests/cases
+          - cd sdk/python && uv run ty check src/leaven/cases scripts/check_quality_contract.py examples/02_cases_and_artifacts.py tests/cases
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - cd sdk/python && uv run pytest -q
+          - >-
+            rg -n "from_parquet|parquet" sdk/python/src sdk/python/tests sdk/python/examples docs/specs/leaven_python.md sdk/python/AGENTS.md
+        note: >-
+          The unimplemented Parquet case loader has been removed from the
+          public `leaven.cases` namespace and its scaffold module was deleted
+          rather than replaced with a Python dependency or fake Rust-backed
+          path. The Python spec now names only implemented generic loaders:
+          `from_jsonl`, `from_iterable`, and `from_csv`. The only active
+          `from_parquet` matches are the negative public-surface test proving
+          the loader is no longer advertised. This does not close the SDK
+          quality row; standalone `serve_stage` and wider public backbone
+          surfaces still need implementation or removal.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this

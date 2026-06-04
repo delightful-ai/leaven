@@ -50,8 +50,7 @@ def main() -> None:
     print("seeded skill bank:", len(seeded_bank.files), "files")
 
     # ---- Case loaders -------------------------------------------------------
-    # These calls raise NotImplementedError in the scaffold; the construction
-    # pattern is what matters. The fixture file exists at:
+    # Generic loaders build real typed `Case` records. The fixture file exists at:
     print()
     print("fixture path :", FIXTURE)
     print("fixture lines:", sum(1 for _ in FIXTURE.open()))

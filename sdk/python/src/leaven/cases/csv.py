@@ -18,7 +18,7 @@ def from_csv(
     limit: int | None = None,
     delimiter: str = ",",
 ) -> CaseSet:
-    """Load a CaseSet from a CSV file. Same column conventions as `from_parquet`."""
+    """Load a CaseSet from a CSV file with explicit case-field columns."""
     if not input_columns:
         raise ValueError("input_columns must name at least one column")
 

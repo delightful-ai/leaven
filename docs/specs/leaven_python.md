@@ -647,8 +647,9 @@ The implementation must honor:
   Rust public seam service for provider execution; adding a Python provider
   dependency requires moving it into the declared dependency boundary in the
   same change.
-- **Don't bundle benchmark catalogs.** `lv.cases.from_jsonl` /
-  `lv.cases.from_parquet` are generic loaders. Paper-specific catalogs
+- **Don't bundle benchmark catalogs.** `lv.cases.from_jsonl`,
+  `lv.cases.from_iterable`, and `lv.cases.from_csv` are generic loaders.
+  Paper-specific catalogs
   (OfficeQA, SealQA, BrowseComp) live in separate
   `leaven_benchmarks_<name>` packages users opt in to.
 - **Don't depend on the upstream ACP SDK for the V1 SDK seam.** Path B per the
