@@ -45,6 +45,9 @@ from .payloads import (
     WireJsonObject,
     WriteReceiptKind,
 )
+from .payloads import (
+    StageRunResult as StageRunDispatchResult,
+)
 
 
 class MethodResultBinding(Struct, frozen=True):
@@ -110,6 +113,72 @@ class CaseRecordPrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_de
     metadata: WireJsonObject | UnsetType = UNSET
 
 
+class GraphSetPrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    kind: Literal["graph_set"]
+    items: list[WireJsonObject]
+    graph_revision: str
+    data_classes: list[str]
+    replayability: Replayability
+    receipt: str | UnsetType = UNSET
+
+
+class WorkspaceHandlePrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    kind: Literal["workspace_handle"]
+    workspace: str
+    lifetime: str
+    released: bool
+    graph_revision: str
+    data_classes: list[str]
+    replayability: Replayability
+    receipt: str
+
+
+class WorkspaceSnapshotPrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    kind: Literal["workspace_snapshot"]
+    workspace: str
+    digest: str
+    graph_revision: str
+    data_classes: list[str]
+    replayability: Replayability
+
+
+class WorkspaceListingEntry(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    path: str
+    kind: str
+    data_classes: list[str]
+    blob_ref: BlobRef | UnsetType = UNSET
+
+
+class WorkspaceListingPrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    kind: Literal["workspace_listing"]
+    entries: list[WorkspaceListingEntry]
+    graph_revision: str
+    data_classes: list[str]
+    replayability: Replayability
+
+
+class WorkspaceFilePrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    kind: Literal["workspace_file"]
+    path: str
+    graph_revision: str
+    data_classes: list[str]
+    replayability: Replayability
+    receipt: str
+    content: str | UnsetType = UNSET
+    content_base64: str | UnsetType = UNSET
+    blob_ref: BlobRef | UnsetType = UNSET
+
+
+class WorkspaceDiffPrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    kind: Literal["workspace_diff"]
+    graph_revision: str
+    data_classes: list[str]
+    replayability: Replayability
+    text: str | UnsetType = UNSET
+    entries: list[WorkspaceListingEntry] | UnsetType = UNSET
+    surface_fingerprint: str | UnsetType = UNSET
+
+
 class LmContentPart(Struct, frozen=True, forbid_unknown_fields=True):
     kind: Literal["text"]
     text: str
@@ -142,6 +211,20 @@ class AgentSessionPrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_
     cost: Cost | UnsetType = UNSET
 
 
+class SandboxExecPrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    kind: Literal["sandbox_exec"]
+    status: str
+    cost: Cost
+    graph_revision: str
+    data_classes: list[str]
+    replayability: Replayability
+    receipt: str
+    exit_code: int | UnsetType = UNSET
+    stdout_ref: BlobRef | UnsetType = UNSET
+    stderr_ref: BlobRef | UnsetType = UNSET
+    files: dict[str, BlobRef] | UnsetType = UNSET
+
+
 class ProposalBatchPrimary(Struct, frozen=True, forbid_unknown_fields=True):
     kind: Literal["proposal_batch_receipt"]
     batch_id: str
@@ -150,9 +233,115 @@ class ProposalBatchPrimary(Struct, frozen=True, forbid_unknown_fields=True):
     receipt: str
 
 
+class ApplyReceiptPrimary(Struct, frozen=True, forbid_unknown_fields=True):
+    kind: Literal["apply_receipt"]
+    created_candidates: list[str]
+    status: str
+    graph_revision: str
+    data_classes: list[str]
+    replayability: Replayability
+    receipt: str
+
+
+class AssessmentRecord(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    assessment: str
+    replayability: Replayability
+
+
+class AssessmentBatchPrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    kind: Literal["assessment_batch_receipt"]
+    assessment_ids: list[str]
+    status: str
+    graph_revision: str
+    data_classes: list[str]
+    replayability: Replayability
+    receipt: str
+    evaluation_request_id: str | UnsetType = UNSET
+    per_assessment: list[AssessmentRecord] | UnsetType = UNSET
+
+
+class EvaluationRequestPrimary(Struct, frozen=True, forbid_unknown_fields=True):
+    kind: Literal["evaluation_request_receipt"]
+    evaluation_request_id: str
+    status: str
+    graph_revision: str
+    data_classes: list[str]
+    replayability: Replayability
+    receipt: str
+
+
+class EmitRunEventPrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    kind: Literal["emit_run_event"]
+    event_id: str
+    receipt: str
+    data_classes: list[str]
+    replayability: Replayability
+    graph_revision: str | UnsetType = UNSET
+
+
+class GraphQueryResult(ExtensionResultBase, frozen=True, forbid_unknown_fields=True):
+    method: Literal["leaven/graph.query"]
+    primary: GraphSetPrimary
+
+
 class CaseLoadResult(ExtensionResultBase, frozen=True, forbid_unknown_fields=True):
     method: CaseReadMethod
     primary: CaseRecordPrimary
+
+
+class WorkspaceMaterializeResult(ExtensionResultBase, frozen=True, forbid_unknown_fields=True):
+    method: Literal["leaven/workspace.materialize"]
+    primary: WorkspaceHandlePrimary
+
+
+class WorkspaceSnapshotResult(ExtensionResultBase, frozen=True, forbid_unknown_fields=True):
+    method: Literal["leaven/workspace.snapshot"]
+    primary: WorkspaceSnapshotPrimary
+
+
+class WorkspaceListResult(ExtensionResultBase, frozen=True, forbid_unknown_fields=True):
+    method: Literal["leaven/workspace.list"]
+    primary: WorkspaceListingPrimary
+
+
+class WorkspaceReadFileResult(ExtensionResultBase, frozen=True, forbid_unknown_fields=True):
+    method: Literal["leaven/workspace.read_file"]
+    primary: WorkspaceFilePrimary
+
+
+class WorkspaceStatResult(ExtensionResultBase, frozen=True, forbid_unknown_fields=True):
+    method: Literal["leaven/workspace.stat"]
+    primary: WorkspaceListingPrimary
+
+
+class WorkspaceDigestResult(ExtensionResultBase, frozen=True, forbid_unknown_fields=True):
+    method: Literal["leaven/workspace.digest"]
+    primary: WorkspaceSnapshotPrimary
+
+
+class WorkspaceGitLogResult(ExtensionResultBase, frozen=True, forbid_unknown_fields=True):
+    method: Literal["leaven/workspace.git_log"]
+    primary: WorkspaceDiffPrimary
+
+
+class WorkspaceGitDiffResult(ExtensionResultBase, frozen=True, forbid_unknown_fields=True):
+    method: Literal["leaven/workspace.git_diff"]
+    primary: WorkspaceDiffPrimary
+
+
+class WorkspaceGitStatusResult(ExtensionResultBase, frozen=True, forbid_unknown_fields=True):
+    method: Literal["leaven/workspace.git_status"]
+    primary: WorkspaceDiffPrimary
+
+
+class WorkspaceCaptureArtifactsResult(ExtensionResultBase, frozen=True, forbid_unknown_fields=True):
+    method: Literal["leaven/workspace.capture_artifacts"]
+    primary: WorkspaceListingPrimary
+
+
+class WorkspaceReleaseResult(ExtensionResultBase, frozen=True, forbid_unknown_fields=True):
+    method: Literal["leaven/workspace.release"]
+    primary: WorkspaceHandlePrimary
 
 
 class LmCompleteResult(ExtensionResultBase, frozen=True, forbid_unknown_fields=True):
@@ -165,9 +354,34 @@ class AgentRunResult(ExtensionResultBase, frozen=True, forbid_unknown_fields=Tru
     primary: AgentSessionPrimary
 
 
+class SandboxExecResult(ExtensionResultBase, frozen=True, forbid_unknown_fields=True):
+    method: Literal["leaven/sandbox.exec"]
+    primary: SandboxExecPrimary
+
+
 class ProposalSubmitResult(ExtensionResultBase, frozen=True, forbid_unknown_fields=True):
     method: Literal["leaven/proposal.submit_batch"]
     primary: ProposalBatchPrimary
+
+
+class ProposalApplyResult(ExtensionResultBase, frozen=True, forbid_unknown_fields=True):
+    method: Literal["leaven/proposal.apply"]
+    primary: ApplyReceiptPrimary
+
+
+class AssessmentSubmitResult(ExtensionResultBase, frozen=True, forbid_unknown_fields=True):
+    method: Literal["leaven/assessment.submit"]
+    primary: AssessmentBatchPrimary
+
+
+class EvaluationRequestResult(ExtensionResultBase, frozen=True, forbid_unknown_fields=True):
+    method: Literal["leaven/evaluation.request"]
+    primary: EvaluationRequestPrimary
+
+
+class EventEmitResult(ExtensionResultBase, frozen=True, forbid_unknown_fields=True):
+    method: Literal["leaven/event.emit"]
+    primary: EmitRunEventPrimary
 
 
 __all__ = [
@@ -175,18 +389,49 @@ __all__ = [
     "AgentCommandRecord",
     "AgentRunResult",
     "AgentSessionPrimary",
+    "ApplyReceiptPrimary",
+    "AssessmentBatchPrimary",
+    "AssessmentRecord",
+    "AssessmentSubmitResult",
     "CaseLoadResult",
     "CaseRecordPrimary",
+    "EmitRunEventPrimary",
+    "EvaluationRequestPrimary",
+    "EvaluationRequestResult",
+    "EventEmitResult",
     "ExtensionResultBase",
+    "GraphQueryResult",
+    "GraphSetPrimary",
     "LmCompleteResult",
     "LmContentPart",
     "LmMessageRecord",
     "LmResponsePrimary",
     "MethodResultBinding",
+    "ProposalApplyResult",
     "ProposalBatchPrimary",
     "ProposalSubmitResult",
     "ResultReceipt",
     "ResultRedaction",
+    "SandboxExecPrimary",
+    "SandboxExecResult",
+    "StageRunDispatchResult",
+    "WorkspaceCaptureArtifactsResult",
+    "WorkspaceDiffPrimary",
+    "WorkspaceDigestResult",
+    "WorkspaceFilePrimary",
+    "WorkspaceGitDiffResult",
+    "WorkspaceGitLogResult",
+    "WorkspaceGitStatusResult",
+    "WorkspaceHandlePrimary",
+    "WorkspaceListResult",
+    "WorkspaceListingEntry",
+    "WorkspaceListingPrimary",
+    "WorkspaceMaterializeResult",
+    "WorkspaceReadFileResult",
+    "WorkspaceReleaseResult",
+    "WorkspaceSnapshotPrimary",
+    "WorkspaceSnapshotResult",
+    "WorkspaceStatResult",
 ]
 '''
 

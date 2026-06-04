@@ -1229,6 +1229,27 @@ acceptance:
           in the private client, but does not close the row: every retained
           locked method still needs generated request/result bindings and
           remaining JSON leaf slots still need typed owners.
+      - kind: generated_result_records_for_retained_method_families
+        paths:
+          - sdk/python/codegen/result_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/results.py
+          - sdk/python/tests/_seam/_wire/test_results.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run ruff check codegen/result_codegen.py src/leaven/_seam/_wire/results.py tests/_seam/_wire/test_results.py
+          - cd sdk/python && uv run ty check codegen/result_codegen.py src/leaven/_seam/_wire/results.py tests/_seam/_wire/test_results.py
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_results.py -q
+        note: >-
+          Generated Python result records now cover the retained graph,
+          workspace, sandbox, proposal apply, assessment submit, evaluation
+          request, and event emit method families in addition to the existing
+          case, LM, agent, and proposal submit records. Focused tests decode a
+          representative result for each newly covered family and prove a
+          workspace method rejects a mismatched primary kind. The generated
+          result file remains below the 650 LOC Python cap. This still does not
+          close the row: several primary records retain named JSON leaf slots
+          such as graph-set items and case/input metadata until Rust/Python
+          owners are introduced for those leaves.
       - kind: typed_plan_expression_owner_foundation
         commits:
           - a0397e66

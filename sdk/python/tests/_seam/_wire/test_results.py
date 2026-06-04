@@ -9,9 +9,26 @@ from leaven._seam._wire.methods import LOCKED_METHODS
 from leaven._seam._wire.results import (
     METHOD_RESULT_BINDINGS,
     AgentRunResult,
+    AssessmentSubmitResult,
     CaseLoadResult,
+    EvaluationRequestResult,
+    EventEmitResult,
+    GraphQueryResult,
     LmCompleteResult,
+    ProposalApplyResult,
     ResultReceipt,
+    SandboxExecResult,
+    WorkspaceCaptureArtifactsResult,
+    WorkspaceDigestResult,
+    WorkspaceGitDiffResult,
+    WorkspaceGitLogResult,
+    WorkspaceGitStatusResult,
+    WorkspaceListResult,
+    WorkspaceMaterializeResult,
+    WorkspaceReadFileResult,
+    WorkspaceReleaseResult,
+    WorkspaceSnapshotResult,
+    WorkspaceStatResult,
 )
 
 
@@ -129,3 +146,219 @@ def test_generated_case_result_accepts_locked_case_methods() -> None:
         payload = {**base, "method": method}
         decoded = msgspec.json.decode(json.dumps(payload).encode(), type=CaseLoadResult)
         assert decoded.method == method
+
+
+def test_generated_result_records_decode_remaining_locked_method_families() -> None:
+    """Scenario: every retained non-case extension family has a typed result target."""
+
+    cases = [
+        ("leaven/graph.query", GraphQueryResult, _graph_set_primary()),
+        ("leaven/workspace.materialize", WorkspaceMaterializeResult, _workspace_handle_primary()),
+        ("leaven/workspace.snapshot", WorkspaceSnapshotResult, _workspace_snapshot_primary()),
+        ("leaven/workspace.list", WorkspaceListResult, _workspace_listing_primary()),
+        ("leaven/workspace.read_file", WorkspaceReadFileResult, _workspace_file_primary()),
+        ("leaven/workspace.stat", WorkspaceStatResult, _workspace_listing_primary()),
+        ("leaven/workspace.digest", WorkspaceDigestResult, _workspace_snapshot_primary()),
+        ("leaven/workspace.git_log", WorkspaceGitLogResult, _workspace_diff_primary()),
+        ("leaven/workspace.git_diff", WorkspaceGitDiffResult, _workspace_diff_primary()),
+        ("leaven/workspace.git_status", WorkspaceGitStatusResult, _workspace_diff_primary()),
+        ("leaven/workspace.capture_artifacts", WorkspaceCaptureArtifactsResult, _workspace_listing_primary()),
+        ("leaven/workspace.release", WorkspaceReleaseResult, _released_workspace_handle_primary()),
+        ("leaven/sandbox.exec", SandboxExecResult, _sandbox_exec_primary()),
+        ("leaven/proposal.apply", ProposalApplyResult, _apply_receipt_primary()),
+        ("leaven/assessment.submit", AssessmentSubmitResult, _assessment_batch_primary()),
+        ("leaven/evaluation.request", EvaluationRequestResult, _evaluation_request_primary()),
+        ("leaven/event.emit", EventEmitResult, _emit_run_event_primary()),
+    ]
+
+    for method, result_type, primary in cases:
+        decoded = msgspec.json.decode(
+            json.dumps(_extension_result(method, primary)).encode(),
+            type=result_type,
+        )
+        assert decoded.method == method
+        assert decoded.primary.kind == primary["kind"]
+
+
+def test_generated_workspace_result_rejects_wrong_primary_kind() -> None:
+    """Regression: workspace method result classes bind the primary kind too."""
+
+    payload = _extension_result("leaven/workspace.read_file", _workspace_listing_primary())
+
+    with pytest.raises(msgspec.ValidationError, match="Invalid enum value"):
+        msgspec.json.decode(json.dumps(payload).encode(), type=WorkspaceReadFileResult)
+
+
+def _extension_result(method: str, primary: dict[str, object]) -> dict[str, object]:
+    return {
+        "method": method,
+        "primary": primary,
+        "receipts": [
+            {
+                "kind": _receipt_kind(method),
+                "receipt": primary.get("receipt", "qrec_result"),
+                "status": "succeeded",
+                "result_hash": "fp_result",
+            }
+        ],
+        "redactions": [],
+        "capability_fingerprint": "fp_cap",
+        "policy_fingerprint": "fp_policy",
+        "data_classes": ["public"],
+    }
+
+
+def _receipt_kind(method: str) -> str:
+    if method in {
+        "leaven/workspace.materialize",
+        "leaven/workspace.release",
+        "leaven/sandbox.exec",
+    }:
+        return "call"
+    if method.startswith(("leaven/proposal.", "leaven/assessment.", "leaven/evaluation.", "leaven/event.")):
+        return "write"
+    return "query"
+
+
+def _graph_set_primary() -> dict[str, object]:
+    return {
+        "kind": "graph_set",
+        "items": [{"kind": "event_summary", "event_kind": "case.loaded", "revision": "rev"}],
+        "graph_revision": "rev",
+        "data_classes": ["public"],
+        "replayability": "pure_read",
+        "receipt": "qrec_graph",
+    }
+
+
+def _workspace_handle_primary() -> dict[str, object]:
+    return {
+        "kind": "workspace_handle",
+        "workspace": "ws",
+        "lifetime": "stage_call",
+        "released": False,
+        "graph_revision": "rev",
+        "data_classes": ["workspace.file"],
+        "replayability": "fully_managed",
+        "receipt": "wrec_workspace",
+    }
+
+
+def _released_workspace_handle_primary() -> dict[str, object]:
+    primary = _workspace_handle_primary()
+    primary["released"] = True
+    primary["receipt"] = "wrec_release"
+    return primary
+
+
+def _workspace_snapshot_primary() -> dict[str, object]:
+    return {
+        "kind": "workspace_snapshot",
+        "workspace": "ws",
+        "digest": "sha256:workspace",
+        "graph_revision": "rev",
+        "data_classes": ["workspace.file"],
+        "replayability": "pure_read",
+    }
+
+
+def _workspace_listing_primary() -> dict[str, object]:
+    return {
+        "kind": "workspace_listing",
+        "entries": [{"path": "src/lib.rs", "kind": "file", "data_classes": ["workspace.file"]}],
+        "graph_revision": "rev",
+        "data_classes": ["workspace.file"],
+        "replayability": "pure_read",
+    }
+
+
+def _workspace_file_primary() -> dict[str, object]:
+    return {
+        "kind": "workspace_file",
+        "path": "src/lib.rs",
+        "content": "pub fn demo() {}",
+        "graph_revision": "rev",
+        "data_classes": ["workspace.file"],
+        "replayability": "pure_read",
+        "receipt": "qrec_workspace_file",
+    }
+
+
+def _workspace_diff_primary() -> dict[str, object]:
+    return {
+        "kind": "workspace_diff",
+        "text": " M src/lib.rs",
+        "graph_revision": "rev",
+        "data_classes": ["workspace.file"],
+        "replayability": "pure_read",
+    }
+
+
+def _sandbox_exec_primary() -> dict[str, object]:
+    blob = {
+        "kind": "blob_ref",
+        "id": "blob",
+        "sha256": "a" * 64,
+        "bytes": 12,
+        "data_classes": ["public"],
+    }
+    return {
+        "kind": "sandbox_exec",
+        "status": "completed",
+        "exit_code": 0,
+        "cost": {"usd_micro": 10, "sandbox_calls": 1},
+        "stdout_ref": blob,
+        "stderr_ref": blob,
+        "graph_revision": "rev",
+        "data_classes": ["public"],
+        "replayability": "fully_managed",
+        "receipt": "execrec",
+    }
+
+
+def _apply_receipt_primary() -> dict[str, object]:
+    return {
+        "kind": "apply_receipt",
+        "created_candidates": ["cand_created"],
+        "status": "committed",
+        "graph_revision": "rev",
+        "data_classes": ["public"],
+        "replayability": "fully_managed",
+        "receipt": "wrec_apply",
+    }
+
+
+def _assessment_batch_primary() -> dict[str, object]:
+    return {
+        "kind": "assessment_batch_receipt",
+        "assessment_ids": ["assess_1"],
+        "evaluation_request_id": "evalreq_1",
+        "per_assessment": [{"assessment": "assess_1", "replayability": "fully_managed"}],
+        "status": "committed",
+        "graph_revision": "rev",
+        "data_classes": ["public"],
+        "replayability": "fully_managed",
+        "receipt": "wrec_assessment",
+    }
+
+
+def _evaluation_request_primary() -> dict[str, object]:
+    return {
+        "kind": "evaluation_request_receipt",
+        "evaluation_request_id": "evalreq_1",
+        "status": "recorded",
+        "graph_revision": "rev",
+        "data_classes": ["public"],
+        "replayability": "fully_managed",
+        "receipt": "wrec_evaluation",
+    }
+
+
+def _emit_run_event_primary() -> dict[str, object]:
+    return {
+        "kind": "emit_run_event",
+        "event_id": "event_1",
+        "receipt": "wrec_event",
+        "data_classes": ["public"],
+        "replayability": "fully_managed",
+    }
