@@ -15,6 +15,7 @@ leaven-kernel = { workspace = true }
 leaven-public-seam = { workspace = true }
 leaven-run = { workspace = true }
 jcs-canonicalize = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }

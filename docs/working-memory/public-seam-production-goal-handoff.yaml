@@ -820,6 +820,31 @@ acceptance:
           nested host-domain payloads, ACP result payloads, ACP stage-bridge
           event/result projection, and wider PlanResult/effect leaf slots remain
           explicit `Value` islands that require typed-owner follow-up slices.
+      - kind: typed_acp_stage_bridge_event_projection_foundation
+        commits:
+          - pending-current-run
+        paths:
+          - crates/leaven-acp-stage-bridge/Cargo.toml
+          - crates/leaven-acp-stage-bridge/src/graph_host.rs
+          - crates/leaven-acp-stage-bridge/tests/dispatch_contract.rs
+          - crates/leaven/tests/topology_contract.rs
+        commands:
+          - cargo test -p leaven-acp-stage-bridge
+          - cargo check -p leaven-acp-stage-bridge
+          - cargo test -p leaven --test topology_contract
+        note: >-
+          ACP stage-bridge `event.emit` projection no longer carries the raw
+          write object through request/result hashing or builds the extension
+          result with ad hoc JSON assembly. It now uses private typed records
+          for the write preimage, primary event result, result preimage, write
+          receipt, return field, and extension envelope. The worker-process
+          dispatch contract still proves `leaven/event.emit` crosses the
+          stage-run bidirectional bridge and mutates `RunContext` through the
+          public callback path. This is not row closure: stage-bridge
+          `proposal.apply`, `evaluation.request`, and `assessment.submit`
+          extension-result projections still need typed owners, and the event
+          payload body remains a host-domain JSON blocker rather than an
+          approved raw island.
       - kind: product_route_topology_decision
         paths:
           - docs/working-memory/run-bound-durable-runcontext-service.md
