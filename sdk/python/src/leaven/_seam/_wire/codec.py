@@ -24,7 +24,7 @@ def encode_request(
     *,
     method: LockedMethod,
     request_id: JsonRpcId | UnsetType,
-    params: RequestParams | Raw | UnsetType = UNSET,
+    params: RequestParams | UnsetType = UNSET,
 ) -> bytes:
     """Encode one locked-method JSON-RPC request or notification."""
     require_locked_method(method)
@@ -70,11 +70,9 @@ def decode_batch_responses[T](
     return decoded
 
 
-def _raw_params(params: RequestParams | Raw | UnsetType) -> Raw | UnsetType:
+def _raw_params(params: RequestParams | UnsetType) -> Raw | UnsetType:
     if params is UNSET:
         return UNSET
-    if isinstance(params, Raw):
-        return params
     return Raw(_ENCODER.encode(params))
 
 

@@ -145,6 +145,8 @@ class CapturedRun:
             '{"jsonrpc":"2.0","id":"req_agent","result":'
             '{"method":"leaven/agent.run","primary":'
             '{"kind":"agent_session","status":"completed","receipt":"agentrec_test",'
+            '"graph_revision":"rev_agent","data_classes":["public"],'
+            '"replayability":"boundary_managed",'
             '"commands":[{"argv":["codex"],"status":"completed"}]},'
             '"receipts":[],"redactions":[],"capability_fingerprint":"fp_cap_test",'
             '"policy_fingerprint":"fp_policy_test","data_classes":["public"]}}'
