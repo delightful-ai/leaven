@@ -250,7 +250,7 @@ def register_stage[O](
     return _make_registered(role, func, id, trust_profile)
 
 
-def serve_stage(*stages: RegisteredStage[object, object]) -> None:
+def serve_stage[A, O](*stages: RegisteredStage[A, O]) -> None:
     """Run one or more stages as a standalone public-seam worker process.
 
     Usage:

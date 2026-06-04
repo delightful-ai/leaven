@@ -27,7 +27,10 @@ FIXTURE = HERE / "fixtures" / "arithmetic.jsonl"
 @lv.reward(weight=1.0)
 async def correct(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> lv.RewardValue:
     _ = cx
-    target = (case.target or {}).get("answer", "")
+    assert case.target is not None
+    target = case.target["answer"]
+    if not isinstance(target, str):
+        raise TypeError("arithmetic fixture target answer must be text")
     return lv.RewardValue(
         value=lv.scoring.multi_tolerance(output, target),
         feedback=f"answered {output!r}; target {target!r}",
@@ -37,7 +40,7 @@ async def correct(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -
 @lv.reward(weight=0.3)
 async def shows_work(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
     _ = (case, cx)
-    return 1.0 if "=" in str(output) else 0.0
+    return 1.0 if "=" in output else 0.0
 
 
 async def amain() -> None:

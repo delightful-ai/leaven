@@ -83,7 +83,7 @@ def test_optimize_surface_names_the_four_product_inputs() -> None:
 
 
 @lv.reward
-async def dummy_reward(output: object, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
+async def dummy_reward(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
     """The reward can inspect scorer-role case data."""
     _ = (output, case, cx)
     return 1.0

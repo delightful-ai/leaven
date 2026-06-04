@@ -30,14 +30,18 @@ FIXTURE = HERE / "fixtures" / "arithmetic.jsonl"
 @lv.runner
 async def run(bank: lv.SkillBank, case: lv.InputCaseView, cx: lv.RolloutContext) -> str:
     _ = bank
-    reply = await cx.lm.complete(prompt=case.input["question"], max_tokens=64)
+    question = case.input["question"]
+    if not isinstance(question, str):
+        raise TypeError("arithmetic fixture question must be text")
+    reply = await cx.lm.complete(prompt=question, max_tokens=64)
     return reply.text.strip()
 
 
 @lv.reward
 async def exact(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
     _ = cx
-    return 1.0 if output == (case.target or {}).get("answer", "") else 0.0
+    assert case.target is not None
+    return 1.0 if output == case.target["answer"] else 0.0
 
 
 # ----- custom reflector: target-safe diagnosis over reflection examples -----

@@ -1,107 +1,72 @@
-"""Tests for `scripts/check_quality_contract.py` defensive erasure lint."""
+"""Tests for `scripts.check_quality_contract`."""
 
 import importlib.util
 from pathlib import Path
-from typing import Protocol, cast
+from types import ModuleType
 
-from _pytest.monkeypatch import MonkeyPatch
-
-SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "check_quality_contract.py"
+ROOT = Path(__file__).resolve().parents[2]
 
 
-class QualityContractModule(Protocol):
-    ROOT: Path
-    KNOWN_DEFENSIVE_ERASURE_FAILURES: set[str]
-
-    def check_defensive_type_erasure(self, files: list[Path] | None = None) -> list[str]: ...
-
-
-def _quality_module() -> QualityContractModule:
-    spec = importlib.util.spec_from_file_location("check_quality_contract", SCRIPT)
-    assert spec is not None
+def _load_quality_contract() -> ModuleType:
+    path = ROOT / "scripts" / "check_quality_contract.py"
+    spec = importlib.util.spec_from_file_location("check_quality_contract", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"could not load {path}")
     module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
     spec.loader.exec_module(module)
-    return cast("QualityContractModule", module)
+    return module
 
 
-def _check(tmp_path: Path, monkeypatch: MonkeyPatch, source: str) -> list[str]:
-    module = _quality_module()
-    monkeypatch.setattr(module, "ROOT", tmp_path)
-    monkeypatch.setattr(module, "KNOWN_DEFENSIVE_ERASURE_FAILURES", set())
-    path = tmp_path / "src" / "leaven" / "sample.py"
-    path.parent.mkdir(parents=True)
-    path.write_text(source, encoding="utf-8")
-    return module.check_defensive_type_erasure([path])
+QUALITY_CONTRACT = _load_quality_contract()
+defensive_type_erasure_failures_for_source = (
+    QUALITY_CONTRACT.defensive_type_erasure_failures_for_source
+)
 
 
-def test_defensive_erasure_lint_detects_user_called_out_patterns(
-    tmp_path: Path, monkeypatch: MonkeyPatch
-) -> None:
-    """Regression: the quality contract catches defensive type-erasure idioms."""
+def test_defensive_type_erasure_lint_rejects_failure_hiding_patterns() -> None:
+    """Regression: callback output widening and fallback probes stay banned."""
 
-    failures = _check(
-        tmp_path,
-        monkeypatch,
-        """
-def reward(output: object, case, cx):
-    assert isinstance(output, str)
-    return str(output)
+    source = """
+async def reward(output: object, case, cx) -> float:
+    target = (case.target or {}).get("answer", "")
+    return 1.0 if str(output) == target else 0.0
 
-def target(case):
-    return (case.target or {}).get("answer", "")
+def ref_id(value: object) -> str:
+    return getattr(value, "id", "")
+"""
 
-def payload_probe(payload):
-    return payload.get("value")
-
-def arbitrary(value):
-    return getattr(value, "id", None)
-""",
-    )
+    failures = defensive_type_erasure_failures_for_source(_probe_path(), source)
 
     assert failures == [
-        "src/leaven/sample.py:2: widens callback output to object",
-        "src/leaven/sample.py:3: branches on isinstance(output, ...) instead of typed output",
-        "src/leaven/sample.py:4: uses str(...) to coerce a domain value",
-        "src/leaven/sample.py:7: uses .get(...) on an unparsed domain value",
-        "src/leaven/sample.py:10: uses .get(...) on an unparsed domain value",
-        "src/leaven/sample.py:13: uses getattr(...) to probe a domain value",
+        "tests/scripts/lint_probe.py:2: widens callback output to object",
+        "tests/scripts/lint_probe.py:3: uses .get(...) on an unparsed domain value",
+        "tests/scripts/lint_probe.py:4: uses str(...) to coerce a domain value",
+        "tests/scripts/lint_probe.py:7: uses getattr(...) to probe a domain value",
     ]
 
 
-def test_defensive_erasure_lint_allows_declared_boundaries(
-    tmp_path: Path, monkeypatch: MonkeyPatch
-) -> None:
-    """Example: declared mapping/env lookups and strict parse guards are not erasure."""
+def test_defensive_type_erasure_lint_allows_declared_boundaries() -> None:
+    """Example: typed mapping APIs and strict type guards are still idiomatic."""
 
-    failures = _check(
-        tmp_path,
-        monkeypatch,
-        """
+    source = """
 import os
-from collections.abc import Mapping
 
-from leaven.output import OutputContract, TextOutput
+from leaven.json_value import JsonObject
 
-def env():
+def env() -> str | None:
     return os.environ.get("LEAVEN_BIN")
 
-def mapping(payload: Mapping[str, str]):
-    return payload.get("value")
+def declared_mapping(row: JsonObject) -> object:
+    return row.get("answer")
 
-def parse_boundary(output):
-    if not isinstance(output, str):
-        raise TypeError("output must be text")
-    return output
+def strict_text(raw_output: object) -> str:
+    if not isinstance(raw_output, str):
+        raise TypeError("runner output must be text")
+    return raw_output
+"""
 
-def output_contract(output: OutputContract | None):
-    if isinstance(output, TextOutput):
-        return output.max_chars
-    return None
-""",
-    )
-
-    assert failures == []
+    assert defensive_type_erasure_failures_for_source(_probe_path(), source) == []
 
 
-__all__ = []
+def _probe_path() -> Path:
+    return QUALITY_CONTRACT.ROOT / "tests" / "scripts" / "lint_probe.py"

@@ -3,7 +3,6 @@
 from ..assessment import RewardAssessment
 from ..case import ScoringCaseView
 from ..contexts import RubricContext
-from ..json_value import JsonValue
 from ..output_record import OutputRecord
 from ..rubric import RewardValue, Rubric
 from ..score import Score
@@ -13,7 +12,7 @@ from .types import PlannedOptimizeCase
 async def evaluate_reward_vector(
     *,
     rubric: Rubric,
-    output: JsonValue | None,
+    output: str,
     case: PlannedOptimizeCase,
 ) -> tuple[Score, list[RewardAssessment]]:
     """Run every configured Python reward and return aggregate + vector rows."""

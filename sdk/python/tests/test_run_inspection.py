@@ -12,16 +12,15 @@ async def run(prompt: lv.PromptArtifact, case: lv.InputCaseView, cx: lv.RolloutC
 
 
 @lv.reward(id="exact")
-async def exact(output: object, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
+async def exact(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
     _ = cx
-    assert isinstance(output, str)
+    assert case.target is not None
     return 1.0 if output == (case.target or {})["answer"] else 0.0
 
 
 @lv.reward(weight=0.25, id="short")
-async def short(output: object, case: lv.ScoringCaseView, cx: lv.RubricContext) -> lv.RewardValue:
+async def short(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> lv.RewardValue:
     _ = (case, cx)
-    assert isinstance(output, str)
     return lv.RewardValue(value=1.0 if len(output) < 8 else 0.0, feedback=f"{len(output)} chars")
 
 

@@ -16,6 +16,18 @@ from .._seam._wire.payloads import (
 from .._seam._wire.payloads import (
     ReflectionResult as WireReflectionResult,
 )
+from .._seam._wire.refs import (
+    AssessmentRefRecord,
+    CandidateRef,
+    CandidateRefRecord,
+    CaseRefRecord,
+    EvaluationAttemptRefRecord,
+    EvaluationRequestRefRecord,
+    ExternalInfoRefRecord,
+    InfoRef,
+    ProposalBatchRefRecord,
+    ProposalRefRecord,
+)
 from ..decorators import RegisteredStage
 from ..proposal import ProposalBatch
 from ..stage_payloads import ProposeRequest, ReflectionResult
@@ -89,13 +101,12 @@ def _propose_request_from_payload(payload: WireProposeRequest) -> ProposeRequest
     )
 
 
-def _candidate_id(value: object) -> str:
+def _candidate_id(value: CandidateRef) -> str:
     if isinstance(value, str):
         return value
-    candidate_id = getattr(value, "id", None)
-    if isinstance(candidate_id, str):
-        return candidate_id
-    raise ValueError(f"unsupported candidate ref: {value!r}")
+    if isinstance(value, CandidateRefRecord):
+        return value.id
+    raise TypeError(f"unsupported candidate ref: {value!r}")
 
 
 def _reflection_receipt(reflection: WireReflectionResult) -> str:
@@ -154,16 +165,25 @@ def _surface_suggestion_json(suggestion: SurfaceSuggestion) -> JsonObject:
     return output
 
 
-def _ref_id(value: object) -> str:
+def _ref_id(value: InfoRef) -> str:
     if isinstance(value, str):
         return value
-    ref_id = getattr(value, "id", None)
-    if isinstance(ref_id, str):
-        return ref_id
-    namespace = getattr(value, "namespace", None)
-    if isinstance(namespace, str):
-        return namespace
-    raise ValueError(f"unsupported info ref: {value!r}")
+    if isinstance(value, ExternalInfoRefRecord):
+        return value.namespace
+    if isinstance(
+        value,
+        (
+            AssessmentRefRecord,
+            CandidateRefRecord,
+            CaseRefRecord,
+            EvaluationAttemptRefRecord,
+            EvaluationRequestRefRecord,
+            ProposalBatchRefRecord,
+            ProposalRefRecord,
+        ),
+    ):
+        return value.id
+    raise TypeError(f"unsupported info ref: {value!r}")
 
 
 __all__ = ["run_proposer_stage"]

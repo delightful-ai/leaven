@@ -38,7 +38,7 @@ class RewardValue(BaseModel):
 
 # A reward function body: `(output, case, cx) -> float | RewardValue`.
 RewardFunc = Callable[
-    [object, ScoringCaseView, RubricContext],
+    [str, ScoringCaseView, RubricContext],
     Awaitable["float | RewardValue"],
 ]
 

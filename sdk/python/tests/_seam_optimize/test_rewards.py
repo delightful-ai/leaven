@@ -13,17 +13,16 @@ async def test_reward_vector_executes_all_registered_rewards() -> None:
     """Example: Python rubric rewards produce per-axis rows and aggregate score."""
 
     @lv.reward(weight=2.0, id="correct")
-    async def correct(output: object, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
+    async def correct(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
         _ = cx
-        assert isinstance(output, str)
+        assert case.target is not None
         return 1.0 if output == (case.target or {})["answer"] else 0.0
 
     @lv.reward(weight=1.0, id="concise")
     async def concise(
-        output: object, case: lv.ScoringCaseView, cx: lv.RubricContext
+        output: str, case: lv.ScoringCaseView, cx: lv.RubricContext
     ) -> lv.RewardValue:
         _ = (case, cx)
-        assert isinstance(output, str)
         return lv.RewardValue(value=0.5, feedback=f"{len(output)} chars")
 
     score, rewards = await evaluate_reward_vector(

@@ -20,6 +20,7 @@ from leaven.assessment import AssessmentWrite
 from leaven.builders.assessments import AssessmentSubmission
 from leaven.evaluation_job import EvaluationJob
 from leaven.evidence import EvidenceEnvelope
+from leaven.json_value import JsonValue
 
 
 class JudgeResult(BaseModel):
@@ -59,7 +60,7 @@ async def evaluate(job: EvaluationJob, cx: lv.EvaluatorContext) -> AssessmentSub
             instructions=lv.AgentInstructions(
                 task=f"Judge the candidate's answer against the rubric.\n"
                 f"Question: {case.input['question']}\n"
-                f"Rubric: {(case.target or {}).get('rubric', 'exact match')}",
+                f"Rubric: {_target_rubric(case)}",
                 system=lv.roles.JUDGE,
             ),
             output=lv.output.json_schema(JudgeResult),
@@ -102,6 +103,12 @@ async def evaluate(job: EvaluationJob, cx: lv.EvaluatorContext) -> AssessmentSub
         )
 
     return await cx.assessments.submit(job.evaluation_request_id, assessments)
+
+
+def _target_rubric(case: lv.Case) -> JsonValue:
+    if case.target is None or "rubric" not in case.target:
+        return "exact match"
+    return case.target["rubric"]
 
 
 def main() -> None:

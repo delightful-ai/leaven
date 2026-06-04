@@ -155,7 +155,7 @@ def _messages_to_wire(
 
 def _message_to_wire(message: LmMessage | JsonObject) -> JsonObject:
     value = message.model_dump() if isinstance(message, LmMessage) else dict(message)
-    content = value.get("content")
+    content = value["content"]
     if isinstance(content, str):
         content = [{"kind": "text", "text": content}]
     elif not isinstance(content, list):
@@ -164,7 +164,7 @@ def _message_to_wire(message: LmMessage | JsonObject) -> JsonObject:
         "role": value["role"],
         "content": content,
     }
-    if value.get("tool_call_id") is not None:
+    if "tool_call_id" in value and value["tool_call_id"] is not None:
         wire["tool_call_id"] = value["tool_call_id"]
     return json_object(wire)
 

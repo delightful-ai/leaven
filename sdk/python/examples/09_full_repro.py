@@ -21,6 +21,7 @@ from pathlib import Path
 import leaven as lv
 from leaven.assessment import AssessmentWrite
 from leaven.evidence import EvidenceEnvelope
+from leaven.json_value import JsonValue
 from leaven.proposal import ProposalBatch
 from leaven.stage_payloads import (
     JudgeRequest,
@@ -40,7 +41,10 @@ FIXTURE = HERE / "fixtures" / "arithmetic.jsonl"
 @lv.reward(weight=1.0)
 async def correct(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> lv.RewardValue:
     _ = cx
-    target = (case.target or {}).get("answer", "")
+    assert case.target is not None
+    target = case.target["answer"]
+    if not isinstance(target, str):
+        raise TypeError("arithmetic fixture target answer must be text")
     return lv.RewardValue(
         value=lv.scoring.multi_tolerance(output, target),
         feedback=f"candidate answered {output!r}; target was {target!r}",
@@ -50,7 +54,7 @@ async def correct(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -
 @lv.reward(weight=0.3)
 async def shows_work(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
     _ = (case, cx)
-    return 1.0 if "=" in str(output) else 0.0
+    return 1.0 if "=" in output else 0.0
 
 
 # ----- outer loop: reflector — typed diagnosis from failing examples --------
@@ -112,7 +116,7 @@ async def judge(req: JudgeRequest, cx: lv.JudgeContext) -> AssessmentWrite:
                 "role": "user",
                 "content": (
                     f"Q: {case.input['question']}\nRubric: "
-                    f"{(case.target or {}).get('rubric', 'exact match')}\nCandidates: {req.candidates}"
+                    f"{_target_rubric(case)}\nCandidates: {req.candidates}"
                 ),
             },
         ],
@@ -129,6 +133,12 @@ async def judge(req: JudgeRequest, cx: lv.JudgeContext) -> AssessmentWrite:
         effect_receipts=[response.receipt],
         replayability="boundary_managed",
     )
+
+
+def _target_rubric(case: lv.Case) -> JsonValue:
+    if case.target is None or "rubric" not in case.target:
+        return "exact match"
+    return case.target["rubric"]
 
 
 # ----- composition: an EvoSkill-shaped optimization, all roles wired --------

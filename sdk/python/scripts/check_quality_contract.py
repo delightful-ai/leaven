@@ -35,45 +35,6 @@ MAPPING_ANNOTATION_NAMES = {
     "JsonValue",
     "WireJsonObject",
 }
-KNOWN_DEFENSIVE_ERASURE_FAILURES = {
-    # Existing cleanup debt. This baseline keeps the lint active for new code
-    # while the typed callback/reward/output hard cutover lands.
-    "examples/04_evoskill_skill_bank.py:30: uses .get(...) on an unparsed domain value",
-    "examples/04_evoskill_skill_bank.py:40: uses str(...) to coerce a domain value",
-    "examples/05_evaluator_with_judge.py:62: uses .get(...) on an unparsed domain value",
-    "examples/06_reflect_propose_custom.py:40: uses .get(...) on an unparsed domain value",
-    "examples/07_serve_stage_worker.py:55: uses .get(...) on an unparsed domain value",
-    "examples/09_full_repro.py:43: uses .get(...) on an unparsed domain value",
-    "examples/09_full_repro.py:53: uses str(...) to coerce a domain value",
-    "examples/09_full_repro.py:118: uses .get(...) on an unparsed domain value",
-    "src/leaven/_seam_worker/proposer.py:95: uses getattr(...) to probe a domain value",
-    "src/leaven/_seam_worker/proposer.py:160: uses getattr(...) to probe a domain value",
-    "src/leaven/_seam_worker/proposer.py:163: uses getattr(...) to probe a domain value",
-    "src/leaven/_seam_worker/runner.py:43: uses str(...) to coerce a domain value",
-    "src/leaven/_seam_worker/runner.py:44: branches on isinstance(output, ...) instead of typed output",
-    "src/leaven/_seam_worker/runner.py:65: uses getattr(...) to probe a domain value",
-    "src/leaven/builders/lm.py:158: uses .get(...) on an unparsed domain value",
-    "src/leaven/builders/lm.py:167: uses .get(...) on an unparsed domain value",
-    "tests/_seam_optimize/test_rewards.py:16: widens callback output to object",
-    "tests/_seam_optimize/test_rewards.py:18: branches on isinstance(output, ...) instead of typed output",
-    "tests/_seam_optimize/test_rewards.py:23: widens callback output to object",
-    "tests/_seam_optimize/test_rewards.py:26: branches on isinstance(output, ...) instead of typed output",
-    "tests/test_optimize_proposer_mechanics.py:17: widens callback output to object",
-    "tests/test_optimize_proposer_mechanics.py:19: branches on isinstance(output, ...) instead of typed output",
-    "tests/test_optimize_public_seam_e2e.py:21: widens callback output to object",
-    "tests/test_optimize_public_seam_e2e.py:23: branches on isinstance(output, ...) instead of typed output",
-    "tests/test_reward_vector_inspection.py:15: widens callback output to object",
-    "tests/test_reward_vector_inspection.py:17: branches on isinstance(output, ...) instead of typed output",
-    "tests/test_reward_vector_inspection.py:23: widens callback output to object",
-    "tests/test_reward_vector_inspection.py:26: branches on isinstance(output, ...) instead of typed output",
-    "tests/test_run_inspection.py:15: widens callback output to object",
-    "tests/test_run_inspection.py:17: branches on isinstance(output, ...) instead of typed output",
-    "tests/test_run_inspection.py:22: widens callback output to object",
-    "tests/test_run_inspection.py:24: branches on isinstance(output, ...) instead of typed output",
-    "tests/test_run_receipt_inspection.py:19: widens callback output to object",
-    "tests/test_run_receipt_inspection.py:21: branches on isinstance(output, ...) instead of typed output",
-    "tests/test_stage_surface.py:86: widens callback output to object",
-}
 MIRRORED_TESTS = {
     ROOT / "src" / "leaven" / "_runs" / "rust_export.py": ROOT
     / "tests"
@@ -106,6 +67,10 @@ MIRRORED_TESTS = {
     ROOT / "src" / "leaven" / "builders" / "case.py": ROOT / "tests" / "builders" / "test_case.py",
     ROOT / "src" / "leaven" / "cases" / "jsonl.py": ROOT / "tests" / "cases" / "test_jsonl.py",
     ROOT / "src" / "leaven" / "run_inspection.py": ROOT / "tests" / "test_run_inspection.py",
+    ROOT / "scripts" / "check_quality_contract.py": ROOT
+    / "tests"
+    / "scripts"
+    / "test_check_quality_contract.py",
 }
 
 
@@ -170,11 +135,15 @@ def check_defensive_type_erasure(files: list[Path] | None = None) -> list[str]:
         if path.relative_to(ROOT).parts[:1] == ("scripts",):
             continue
         text = path.read_text(encoding="utf-8")
-        tree = ast.parse(text, filename=str(path))
-        visitor = DefensiveTypeErasureVisitor(path)
-        visitor.visit(tree)
-        failures.extend(visitor.failures)
-    return [failure for failure in failures if failure not in KNOWN_DEFENSIVE_ERASURE_FAILURES]
+        failures.extend(defensive_type_erasure_failures_for_source(path, text))
+    return failures
+
+
+def defensive_type_erasure_failures_for_source(path: Path, source: str) -> list[str]:
+    tree = ast.parse(source, filename=str(path))
+    visitor = DefensiveTypeErasureVisitor(path)
+    visitor.visit(tree)
+    return visitor.failures
 
 
 class DefensiveTypeErasureVisitor(ast.NodeVisitor):

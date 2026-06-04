@@ -111,7 +111,11 @@ async def run_prompt_mechanics(
                 case_input=_case_input(seed, case),
             ),
         )
-        output: JsonValue | None = None if result.output.value is UNSET else result.output.value
+        if result.output.value is UNSET:
+            raise TypeError("runner stage result must include text output value")
+        output = result.output.value
+        if not isinstance(output, str):
+            raise TypeError("runner stage result output value must be text")
         score, rewards = await evaluate_reward_vector(
             rubric=rubric,
             output=output,

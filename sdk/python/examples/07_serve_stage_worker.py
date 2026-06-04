@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 import leaven as lv
 from leaven.assessment import AssessmentWrite
 from leaven.evidence import EvidenceEnvelope
+from leaven.json_value import JsonValue
 from leaven.stage_payloads import JudgeRequest
 
 
@@ -52,7 +53,7 @@ async def judge(req: JudgeRequest, cx: lv.JudgeContext) -> AssessmentWrite:
                 "role": "user",
                 "content": (
                     f"Question: {case.input['question']}\n"
-                    f"Rubric  : {(case.target or {}).get('rubric', 'exact match')}\n"
+                    f"Rubric  : {_target_rubric(case)}\n"
                     f"Candidates ({req.kind}): {', '.join(req.candidates)}"
                 ),
             },
@@ -75,6 +76,12 @@ async def judge(req: JudgeRequest, cx: lv.JudgeContext) -> AssessmentWrite:
         effect_receipts=[response.receipt],
         replayability="boundary_managed",
     )
+
+
+def _target_rubric(case: lv.Case) -> JsonValue:
+    if case.target is None or "rubric" not in case.target:
+        return "exact match"
+    return case.target["rubric"]
 
 
 if __name__ == "__main__":

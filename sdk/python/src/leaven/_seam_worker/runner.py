@@ -3,6 +3,7 @@
 from .._seam._wire import JsonObject
 from .._seam._wire.json_value import json_object
 from .._seam._wire.payloads import RunnerRequest, StageRunRequest
+from .._seam._wire.refs import CandidateRef, CandidateRefRecord, CaseRef, CaseRefRecord
 from ..artifacts.prompt import PromptArtifact
 from ..case import InputCaseView
 from ..decorators import RegisteredStage
@@ -26,8 +27,8 @@ async def run_runner_stage(
 
     case_input = json_object(payload.case_input)
     rendered_prompt = str(case_input["prompt"])
-    candidate = _string_ref(payload.candidate, "candidate")
-    case_id = _string_ref(payload.case, "case")
+    candidate = _candidate_id(payload.candidate)
+    case_id = _case_id(payload.case)
     stage_call_id = payload.stage_call_id
     prompt = PromptArtifact(template=rendered_prompt, candidate_id=candidate)
     view_input = {key: value for key, value in case_input.items() if key != "prompt"}
@@ -40,7 +41,8 @@ async def run_runner_stage(
         callback=callback,
     )
     raw_output = await stage.func(prompt, case, cx)
-    output = raw_output if isinstance(raw_output, str) else str(raw_output)
+    if not isinstance(raw_output, str):
+        raise TypeError("runner stages must return str for the current text output contract")
     return json_object(
         {
             "schema_version": "leaven.stage_run.v1",
@@ -50,7 +52,7 @@ async def run_runner_stage(
             "output": {
                 "kind": "text",
                 "summary": f"runner output for {case_id}",
-                "value": output.strip(),
+                "value": raw_output.strip(),
                 "visibility": "optimizer_visible",
                 "data_classes": ["candidate.output"],
             },
@@ -59,13 +61,20 @@ async def run_runner_stage(
     )
 
 
-def _string_ref(value: object, field: str) -> str:
+def _candidate_id(value: CandidateRef) -> str:
     if isinstance(value, str):
         return value
-    candidate_id = getattr(value, "id", None)
-    if isinstance(candidate_id, str):
-        return candidate_id
-    raise ValueError(f"stage.run runner payload field {field} must be a string")
+    if isinstance(value, CandidateRefRecord):
+        return value.id
+    raise TypeError(f"unsupported candidate ref: {value!r}")
+
+
+def _case_id(value: CaseRef) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, CaseRefRecord):
+        return value.id
+    raise TypeError(f"unsupported case ref: {value!r}")
 
 
 __all__ = ["run_runner_stage"]

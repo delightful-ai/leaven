@@ -99,7 +99,7 @@ rollout = lv.Rollout.command(
 )
 
 @lv.reward
-async def correct(output: object, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
+async def correct(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
     result_file = await cx.workspace.read_file(
         cx.rollout_workspace, "output/result.json")
     return 1.0 if result_file.content == case.target["answer"] else 0.0
