@@ -4,7 +4,9 @@ use leaven_core::{
     Artifact, ArtifactIdentity, CacheIdentity, Evidence, OptimizationProblem, Proposal,
     ProposalBatch, ProposalBatchSemantics,
 };
-use leaven_engine::{ApplyOutcome, BudgetLedger, ProposalBatchReport, RunContext, RunGraph};
+use leaven_engine::{
+    ApplyOutcome, BudgetLedger, ProposalBatchReport, RunContext, RunEvent, RunGraph,
+};
 use leaven_kernel::{Budget, ContentId, Cost, MetadataBag, RunId, StageId};
 use leaven_public_seam::{
     PlanApplyProposalBatchRequest, PlanGraphQueryOutcome, PlanGraphQueryRequest, PublicSeamError,
@@ -51,6 +53,8 @@ pub(crate) struct RunContextProposalApplyState {
     batch: ProposalBatchReport,
     config: SeamRunContextConfig,
     created_candidates: Vec<String>,
+    emitted_events: Vec<Value>,
+    event_count: usize,
     candidate_count: usize,
     applied: bool,
 }
@@ -62,6 +66,8 @@ impl fmt::Debug for RunContextProposalApplyState {
             .field("batch", &self.batch)
             .field("config", &self.config)
             .field("created_candidates", &self.created_candidates)
+            .field("emitted_events", &self.emitted_events)
+            .field("event_count", &self.event_count)
             .field("candidate_count", &self.candidate_count)
             .field("applied", &self.applied)
             .finish_non_exhaustive()
@@ -95,6 +101,8 @@ impl RunContextProposalApplyState {
             batch,
             config,
             created_candidates: Vec::new(),
+            emitted_events: Vec::new(),
+            event_count: 2,
             candidate_count: 1,
             applied: false,
         })
@@ -106,6 +114,12 @@ impl RunContextProposalApplyState {
 
     pub(crate) fn accepts_proposal_batch_ref(&self, batch_ref: &str) -> bool {
         batch_ref == self.config.proposal_batch_alias
+    }
+
+    pub(crate) fn accepts_event_emit(&self, params: &Value) -> bool {
+        event_emit_write(params)
+            .map(|event| event.event_kind == "run_context.checked")
+            .unwrap_or(false)
     }
 
     pub(crate) fn accepts_graph_query_plan_id(&self, expr: &Value) -> bool {
@@ -177,6 +191,33 @@ impl RunContextProposalApplyState {
         extension_result_for_plan_report(method, params, &plan_result)
     }
 
+    pub(crate) fn emit_run_event(
+        &mut self,
+        method: &str,
+        params: &Value,
+        context: &SeamExecutionContextConfig,
+    ) -> Result<Value, PublicSeamError> {
+        let event = event_emit_write(params)?;
+        let event_id = format!("event_{}", event.name);
+        let mut run_context = RunContext::<SeamTextProblem>::new(&mut self.graph, &mut self.budget);
+        run_context.emit(RunEvent::ExternalEventEmitted {
+            event_id: event_id.clone(),
+            event_kind: event.event_kind.to_owned(),
+            payload_schema: event.payload_schema.to_owned(),
+            payload: event.payload.clone(),
+            visibility: event.visibility.to_owned(),
+        });
+        self.event_count = run_context.graph().events().count();
+        self.emitted_events.push(json!({
+            "event_id": event_id,
+            "event_kind": event.event_kind,
+            "payload_schema": event.payload_schema,
+            "payload": event.payload,
+            "visibility": event.visibility
+        }));
+        run_context_event_emit_extension_result(method, event, context)
+    }
+
     pub(crate) fn graph_query(&self, request: PlanGraphQueryRequest<'_>) -> PlanGraphQueryOutcome {
         PlanGraphQueryOutcome::new(
             [json!({
@@ -188,6 +229,8 @@ impl RunContextProposalApplyState {
                     "candidate_count": self.candidate_count,
                     "proposal_batch": self.config.proposal_batch_alias,
                     "created_candidates": self.created_candidates,
+                    "event_count": self.event_count,
+                    "emitted_events": self.emitted_events,
                     "applied": self.applied
                 }
             })],
@@ -219,6 +262,107 @@ fn proposal_apply_batch_ref(params: &Value) -> Option<&str> {
         .and_then(Value::as_str)
 }
 
+struct EventEmitWrite<'a> {
+    name: &'a str,
+    write: &'a Value,
+    event_kind: &'a str,
+    payload_schema: &'a str,
+    payload: &'a Value,
+    visibility: &'a str,
+}
+
+fn event_emit_write(params: &Value) -> Result<EventEmitWrite<'_>, PublicSeamError> {
+    let ops = params
+        .get("ops")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_plan("event.emit plan must carry ops"))?;
+    for op in ops {
+        let Some(write) = op.get("write") else {
+            continue;
+        };
+        if write.get("kind").and_then(Value::as_str) == Some("emit_run_event") {
+            return Ok(EventEmitWrite {
+                name: string_field(op, "name")?,
+                write,
+                event_kind: string_field(write, "event_kind")?,
+                payload_schema: string_field(write, "payload_schema")?,
+                payload: write
+                    .get("payload")
+                    .ok_or_else(|| invalid_plan("emit_run_event must carry payload"))?,
+                visibility: string_field(write, "visibility")?,
+            });
+        }
+    }
+    Err(invalid_plan(
+        "event.emit method must carry an emit_run_event write",
+    ))
+}
+
+fn run_context_event_emit_extension_result(
+    method: &str,
+    event: EventEmitWrite<'_>,
+    context: &SeamExecutionContextConfig,
+) -> Result<Value, PublicSeamError> {
+    let event_id = format!("event_{}", event.name);
+    let receipt_id = format!("wrec_{}", event.name);
+    let request_hash = prefixed_jcs_hash(
+        "fp_request_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_write_request.v1",
+            "name": event.name,
+            "kind": "emit_run_event",
+            "write": event.write,
+            "deps": {},
+            "dependency_data_classes": [],
+            "base_revision": context.base_revision
+        }),
+    )?;
+    let primary = json!({
+        "kind": "emit_run_event",
+        "event_id": event_id,
+        "receipt": receipt_id,
+        "data_classes": ["public"],
+        "replayability": "fully_managed"
+    });
+    let result_hash = prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_write_result.v1",
+            "name": event.name,
+            "value": primary
+        }),
+    )?;
+    Ok(json!({
+        "method": method,
+        "primary": primary,
+        "receipts": [{
+            "kind": "write",
+            "receipt": primary["receipt"],
+            "op_var": event.name,
+            "started_at": context.started_at,
+            "completed_at": context.completed_at,
+            "write_kind": "emit_run_event",
+            "request_hash": request_hash,
+            "result_hash": result_hash,
+            "base_revision": context.base_revision,
+            "committed_revision": context.base_revision,
+            "status": "succeeded",
+            "event_id": primary["event_id"]
+        }],
+        "redactions": [],
+        "capability_fingerprint": context.capability_fingerprint,
+        "policy_fingerprint": context.policy_fingerprint,
+        "data_classes": ["public"]
+    }))
+}
+
+fn string_field<'a>(value: &'a Value, field: &'static str) -> Result<&'a str, PublicSeamError> {
+    value
+        .get(field)
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_plan(format!("{field} must be a string")))
+}
+
 fn graph_query_revision(request: PlanGraphQueryRequest<'_>, default_revision: &str) -> String {
     match request.scope() {
         leaven_public_seam::PlanGraphReadScope::LatestAtStart { revision }
@@ -233,6 +377,20 @@ fn invalid_run_context(error: impl std::fmt::Display) -> PublicSeamError {
     PublicSeamError::InvalidPlan {
         message: format!("RunContext-backed seam service failed: {error}"),
     }
+}
+
+fn invalid_plan(message: impl Into<String>) -> PublicSeamError {
+    PublicSeamError::InvalidPlan {
+        message: message.into(),
+    }
+}
+
+fn prefixed_jcs_hash(prefix: &str, value: &Value) -> Result<String, PublicSeamError> {
+    let digest =
+        jcs_canonicalize::sha256_jcs_hex(value).map_err(|error| PublicSeamError::InvalidPlan {
+            message: format!("RunContext event.emit receipt hash failed: {error}"),
+        })?;
+    Ok(format!("{prefix}{digest}"))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

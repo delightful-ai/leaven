@@ -124,6 +124,23 @@ impl ConfiguredSeamService {
                     });
             }
         }
+        if method == "leaven/event.emit"
+            && let Some(state) = &self.run_context_state
+        {
+            self.package.validate_plan_document(params)?;
+            let mut state = state.lock().map_err(|_| PublicSeamError::InvalidPlan {
+                message: "RunContext seam service state lock poisoned".to_owned(),
+            })?;
+            if state.accepts_event_emit(params) {
+                return state
+                    .emit_run_event(method, params, &self.config.context)
+                    .and_then(|result| {
+                        self.package
+                            .validate_acp_extension_result_document(&result)?;
+                        Ok(result)
+                    });
+            }
+        }
         if method == "leaven/evaluation.request" {
             return self.execute_evaluation_request_method(method, params);
         }

@@ -105,6 +105,11 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         }
         write_json_line(&mut stdin, &proposal_apply_request());
         write_json_line(&mut stdin, &run_context_graph_readback_request());
+        write_json_line(&mut stdin, &run_context_event_emit_request());
+        write_json_line(
+            &mut stdin,
+            &run_context_graph_readback_after_event_request(),
+        );
         write_json_line(&mut stdin, &assessment_submit_request());
         write_json_line(&mut stdin, &evaluation_request_request());
         write_json_line(&mut stdin, &event_emit_request());
@@ -132,7 +137,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
     let responses = response_lines(&output.stdout);
     assert_eq!(
         responses.len(),
-        13 + workspace_queries.len() + graph_case_queries.len(),
+        15 + workspace_queries.len() + graph_case_queries.len(),
         "one response per request line"
     );
 
@@ -324,7 +329,43 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         run_context_created[0]
     );
 
-    let assessment_submit_index = run_context_readback_index + 1;
+    let run_context_event_index = run_context_readback_index + 1;
+    assert_eq!(
+        responses[run_context_event_index]["id"],
+        json!("run-context-event-emit-cli")
+    );
+    assert!(
+        responses[run_context_event_index].get("error").is_none(),
+        "unexpected RunContext event response: {:?}",
+        responses[run_context_event_index]
+    );
+    assert_eq!(
+        responses[run_context_event_index]["result"]["primary"]["kind"],
+        "emit_run_event"
+    );
+    assert_eq!(
+        responses[run_context_event_index]["result"]["receipts"][0]["write_kind"],
+        "emit_run_event"
+    );
+
+    let run_context_event_readback_index = run_context_event_index + 1;
+    assert_eq!(
+        responses[run_context_event_readback_index]["id"],
+        json!("run-context-graph-readback-after-event-cli")
+    );
+    let event_readback =
+        &responses[run_context_event_readback_index]["result"]["primary"]["items"][0]["payload"];
+    assert_eq!(event_readback["event_count"], 5);
+    assert_eq!(
+        event_readback["emitted_events"][0]["event_kind"],
+        "run_context.checked"
+    );
+    assert_eq!(
+        event_readback["emitted_events"][0]["payload"]["ok"],
+        json!(true)
+    );
+
+    let assessment_submit_index = run_context_event_readback_index + 1;
     assert_eq!(
         responses[assessment_submit_index]["id"],
         json!("assessment-submit-cli")
@@ -865,6 +906,47 @@ fn run_context_graph_readback_request() -> Value {
             "return": ["run_context_graph"],
             "commit": {
                 "kind": "no_graph_writes"
+            }
+        }
+    })
+}
+
+fn run_context_graph_readback_after_event_request() -> Value {
+    let mut request = run_context_graph_readback_request();
+    request["id"] = json!("run-context-graph-readback-after-event-cli");
+    request
+}
+
+fn run_context_event_emit_request() -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": "run-context-event-emit-cli",
+        "method": "leaven/event.emit",
+        "params": {
+            "schema_version": "leaven.plan.v1",
+            "plan_id": "runcontexteventemitcli001",
+            "consistency": {
+                "kind": "latest_at_start"
+            },
+            "mode": {
+                "kind": "execute"
+            },
+            "ops": [{
+                "kind": "write",
+                "name": "run_context_status",
+                "idempotency_key": "run-context-event-emit-cli-0001",
+                "write": {
+                    "kind": "emit_run_event",
+                    "event_kind": "run_context.checked",
+                    "payload_schema": "fp_schema_sha256_run_context_event",
+                    "payload": {"ok": true},
+                    "visibility": "public"
+                }
+            }],
+            "return": ["run_context_status"],
+            "commit": {
+                "kind": "graph_writes_atomic",
+                "on_stale": "reject"
             }
         }
     })

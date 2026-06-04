@@ -549,7 +549,19 @@ acceptance:
           - crates/leaven-acp-stage-bridge/tests/dispatch_contract.rs
           - crates/leaven-acp-stage-bridge/AGENTS.md
           - docs/specs/public-seam-v1/executable-method-status.md
-        note: The bidirectional stdio stage bridge now services a worker-initiated `leaven/event.emit` callback by lowering the locked Plan IR write into `RunContext::emit(RunEvent::ExternalEventEmitted { ... })`, returning a receipt-bound extension result, and proving the event persists in RunGraph history. This closes the stdio callback leg for event.emit, but the durable `leaven seam serve --stdio` SDK service still uses configured receipt plumbing.
+        note: The bidirectional stdio stage bridge now services a worker-initiated `leaven/event.emit` callback by lowering the locked Plan IR write into `RunContext::emit(RunEvent::ExternalEventEmitted { ... })`, returning a receipt-bound extension result, and proving the event persists in RunGraph history. The durable SDK service leg is now covered by `durable_stdio_runcontext_event_emit`.
+      - kind: durable_stdio_runcontext_event_emit
+        methods:
+          - "`leaven/event.emit`"
+          - "`leaven/graph.query`"
+        commands:
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-seam-service
+          - CARGO_INCREMENTAL=0 cargo test -p leaven-cli --test seam_stdio_server
+        paths:
+          - crates/leaven-seam-service/src/run_context_service.rs
+          - crates/leaven-seam-service/src/service.rs
+          - crates/leaven-cli/tests/seam_stdio_server.rs
+        note: The durable `leaven seam serve --stdio` service can now route an explicit `run_context.checked` `leaven/event.emit` plan through `RunContext::emit(RunEvent::ExternalEventEmitted { ... })`, return a receipt-bound extension result, and read back the same service-owned RunContext graph summary showing the external event in emitted_events and the engine event count advanced. The row remains pending until `assessment.submit` and `evaluation.request` also execute through the durable RunContext service route.
       - kind: runcontext_graph_backed_evaluation_request_projection
         methods:
           - "`leaven/evaluation.request`"
