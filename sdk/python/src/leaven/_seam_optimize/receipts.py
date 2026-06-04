@@ -1,9 +1,18 @@
 """Private receipt projection for durable-seam optimize reports."""
 
 from dataclasses import dataclass
-from typing import Any
+
+from msgspec import UNSET
 
 from .._receipts import CallReceipt, WriteReceipt
+from .._seam._wire.payloads import (
+    BlobRef as WireBlobRef,
+)
+from .._seam._wire.payloads import (
+    ReceiptRefRecord,
+    StageEffectReceipt,
+    StageRunResult,
+)
 from ..blob_ref import BlobRef
 
 
@@ -15,59 +24,49 @@ class EffectCostTotals:
     lm_tokens: int
 
 
-def effect_receipts_from_stage_result(result: dict[str, Any]) -> list[CallReceipt]:
+def effect_receipts_from_stage_result(result: StageRunResult) -> list[CallReceipt]:
     """Extract opaque effect receipts from private worker stage metadata."""
-    receipts = []
-    for value in result.get("effect_receipts", []):
-        if not isinstance(value, dict):
-            continue
-        receipt = value.get("receipt")
-        if isinstance(receipt, str) and receipt:
-            receipts.append(
-                CallReceipt(
-                    receipt_id=receipt,
-                    blob_refs=_blob_refs_from_receipt(value),
-                )
-            )
-    return receipts
+    if result.effect_receipts is UNSET:
+        return []
+    return [
+        CallReceipt(
+            receipt_id=value.receipt,
+            blob_refs=_blob_refs_from_receipt(value),
+        )
+        for value in result.effect_receipts
+        if value.receipt
+    ]
 
 
-def effect_cost_totals_from_stage_result(result: dict[str, Any]) -> EffectCostTotals:
+def effect_cost_totals_from_stage_result(result: StageRunResult) -> EffectCostTotals:
     """Extract metered usage totals from private worker stage metadata."""
     usd_micro = 0
     lm_tokens = 0
-    for value in result.get("effect_receipts", []):
-        if not isinstance(value, dict):
+    if result.effect_receipts is UNSET:
+        return EffectCostTotals(cost_usd=0.0, lm_tokens=0)
+    for value in result.effect_receipts:
+        cost = value.cost
+        if cost is UNSET:
             continue
-        cost = value.get("cost")
-        if not isinstance(cost, dict):
-            continue
-        usd_micro += _nonnegative_int(cost.get("usd_micro"))
-        lm_tokens += _nonnegative_int(cost.get("input_tokens"))
-        lm_tokens += _nonnegative_int(cost.get("output_tokens"))
+        usd_micro += _nonnegative_int(cost.usd_micro)
+        lm_tokens += _nonnegative_int(cost.input_tokens)
+        lm_tokens += _nonnegative_int(cost.output_tokens)
     return EffectCostTotals(cost_usd=usd_micro / 1_000_000, lm_tokens=lm_tokens)
 
 
-def proposal_receipts_from_stage_result(result: dict[str, Any]) -> list[WriteReceipt]:
+def proposal_receipts_from_stage_result(result: StageRunResult) -> list[WriteReceipt]:
     """Extract proposal write receipts from private worker stage metadata."""
     receipts = []
-    for value in result.get("proposal_receipts", []):
-        if not isinstance(value, dict):
+    if result.proposal_receipts is UNSET:
+        return receipts
+    for value in result.proposal_receipts:
+        receipt = _receipt_id(value.receipt)
+        if not receipt:
             continue
-        receipt = value.get("receipt")
-        if not isinstance(receipt, str) or not receipt:
-            continue
-        proposal_ids = value.get("proposal_ids")
         receipts.append(
             WriteReceipt(
                 receipt_id=receipt,
-                proposal_ids=[
-                    proposal_id
-                    for proposal_id in proposal_ids
-                    if isinstance(proposal_id, str)
-                ]
-                if isinstance(proposal_ids, list)
-                else [],
+                proposal_ids=list(value.proposal_ids) if value.proposal_ids is not UNSET else [],
             )
         )
     return receipts
@@ -81,34 +80,31 @@ def sum_effect_cost_totals(values: list[EffectCostTotals]) -> EffectCostTotals:
     )
 
 
-def _nonnegative_int(value: object) -> int:
+def _nonnegative_int(value: int | object) -> int:
     if isinstance(value, int) and value >= 0:
         return value
     return 0
 
 
-def _blob_refs_from_receipt(value: dict[str, Any]) -> list[BlobRef]:
-    refs = []
-    for ref in value.get("blob_refs", []):
-        if not isinstance(ref, dict):
-            continue
-        blob_id = ref.get("blob_id") or ref.get("id")
-        if not isinstance(blob_id, str):
-            continue
-        try:
-            refs.append(
-                BlobRef(
-                    blob_id=blob_id,
-                    sha256=ref.get("sha256") if isinstance(ref.get("sha256"), str) else None,
-                    bytes=ref.get("bytes") if isinstance(ref.get("bytes"), int) else None,
-                    data_classes=[
-                        item for item in ref.get("data_classes", []) if isinstance(item, str)
-                    ],
-                )
-            )
-        except ValueError:
-            continue
-    return refs
+def _blob_refs_from_receipt(value: StageEffectReceipt) -> list[BlobRef]:
+    if value.blob_refs is UNSET:
+        return []
+    return [_blob_ref(ref) for ref in value.blob_refs]
+
+
+def _blob_ref(ref: WireBlobRef) -> BlobRef:
+    return BlobRef(
+        blob_id=ref.id,
+        sha256=ref.sha256,
+        bytes=ref.bytes,
+        data_classes=list(ref.data_classes),
+    )
+
+
+def _receipt_id(value: str | ReceiptRefRecord) -> str:
+    if isinstance(value, str):
+        return value
+    return value.id
 
 
 __all__ = [

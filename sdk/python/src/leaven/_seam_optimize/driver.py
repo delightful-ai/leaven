@@ -4,6 +4,8 @@ import asyncio
 import os
 from typing import Any
 
+from msgspec import UNSET
+
 from .._seam import (
     CodexCliRuntimeConfig,
     CommandRunnerStageConfig,
@@ -93,7 +95,7 @@ async def run_prompt_mechanics(
     assessments = []
     for index, case in enumerate(cases):
         result = await asyncio.to_thread(
-            client.request,
+            client.stage_run,
             StageRunRequest(
                 request_id=f"stage-optimize-{index}",
                 run_id=f"run_{run_id}",
@@ -101,12 +103,9 @@ async def run_prompt_mechanics(
                 candidate="cand_seed",
                 case=case["case_id"],
                 case_input=_case_input(seed, case),
-            ).to_json_rpc(),
+            ),
         )
-        output_record = result.get("output")
-        if not isinstance(output_record, dict):
-            raise TypeError("stage.run result missing output object")
-        output = output_record.get("value")
+        output = None if result.output.value is UNSET else result.output.value
         score, rewards = await evaluate_reward_vector(
             rubric=rubric,
             output=output,
@@ -198,7 +197,7 @@ async def _run_configured_proposer(
         )
     )
     result = await asyncio.to_thread(
-        client.request,
+        client.stage_propose,
         StageRunProposeRequest(
             request_id=f"stage-propose-{run_id}-0",
             run_id=f"run_{run_id}",
@@ -210,7 +209,7 @@ async def _run_configured_proposer(
             capability_fingerprint=capability_fingerprint,
             query_policy_fingerprint=policy_fingerprint,
             reflection_summary=_reflection_summary(assessments),
-        ).to_json_rpc(),
+        ),
     )
     proposal_receipts = proposal_receipts_from_stage_result(result)
     if not proposal_receipts:

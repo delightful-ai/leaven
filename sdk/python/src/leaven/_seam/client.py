@@ -11,7 +11,13 @@ from ._wire import (
     JsonRpcRemoteError,
 )
 from ._wire.codec import decode_response, encode_request
-from ._wire.results import AgentRunResult, CaseLoadResult, LmCompleteResult, ProposalSubmitResult
+from ._wire.results import (
+    AgentRunResult,
+    CaseLoadResult,
+    LmCompleteResult,
+    ProposalSubmitResult,
+    StageRunDispatchResult,
+)
 from .config import SeamServiceConfig
 from .errors import SeamClientError
 from .plans import (
@@ -20,6 +26,8 @@ from .plans import (
     LmCompleteRequest,
     ProposalSubmitRequest,
     SeamJsonRpcRequest,
+    StageRunProposeRequest,
+    StageRunRequest,
 )
 from .resolve import resolve_leaven_binary, resolve_repo_root
 
@@ -58,6 +66,19 @@ class SeamClient:
     def case_load(self, request: CaseLoadRequest, *, timeout_s: int = 240) -> CaseLoadResult:
         """Send one case read request and return its typed result."""
         return self._typed_request(request, CaseLoadResult, timeout_s=timeout_s)
+
+    def stage_run(self, request: StageRunRequest, *, timeout_s: int = 240) -> StageRunDispatchResult:
+        """Send one runner `leaven/stage.run` request and return its typed result."""
+        return self._typed_request(request, StageRunDispatchResult, timeout_s=timeout_s)
+
+    def stage_propose(
+        self,
+        request: StageRunProposeRequest,
+        *,
+        timeout_s: int = 240,
+    ) -> StageRunDispatchResult:
+        """Send one proposer `leaven/stage.run` request and return its typed result."""
+        return self._typed_request(request, StageRunDispatchResult, timeout_s=timeout_s)
 
     def _request_bytes(self, request: SeamJsonRpcRequest, *, timeout_s: int) -> bytes:
         with tempfile.TemporaryDirectory(prefix="leaven-seam-client-") as tmp:

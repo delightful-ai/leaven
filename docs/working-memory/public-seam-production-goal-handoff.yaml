@@ -1230,6 +1230,33 @@ acceptance:
           in the private client, but does not close the row: every retained
           locked method still needs generated request/result bindings and
           remaining JSON leaf slots still need typed owners.
+      - kind: typed_optimize_stage_client_cutover
+        paths:
+          - sdk/python/src/leaven/_seam/client.py
+          - sdk/python/src/leaven/_seam_optimize/driver.py
+          - sdk/python/src/leaven/_seam_optimize/receipts.py
+          - sdk/python/src/leaven/_seam_worker/target.py
+          - sdk/python/tests/_seam/test_client.py
+          - sdk/python/tests/_seam_optimize/test_receipts.py
+        commands:
+          - cd sdk/python && uv run ruff check src/leaven/_seam/client.py src/leaven/_seam_optimize/driver.py src/leaven/_seam_optimize/receipts.py src/leaven/_seam_worker/target.py tests/_seam/test_client.py tests/_seam_optimize/test_receipts.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/client.py src/leaven/_seam_optimize/driver.py src/leaven/_seam_optimize/receipts.py src/leaven/_seam_worker/target.py tests/_seam/test_client.py tests/_seam_optimize/test_receipts.py
+          - cd sdk/python && uv run pytest tests/_seam/test_client.py tests/_seam_optimize/test_receipts.py -q
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - rg -n "client\\.request|def request\\(" sdk/python/src/leaven/_seam sdk/python/src/leaven/_seam_optimize sdk/python/tests/_seam sdk/python/tests/_seam_optimize -g '*.py'
+        note: >-
+          The Python optimize mechanics driver no longer calls a raw
+          `client.request(...to_json_rpc())` compatibility route. `SeamClient`
+          now exposes typed `stage_run` and `stage_propose` methods that lower
+          typed stage request records through the same msgspec JSON-RPC encoder
+          as other locked methods and decode `StageRunResult` directly.
+          Optimize receipt projection now consumes generated `StageRunResult`
+          and stage receipt records instead of walking raw dictionaries, and
+          the worker target protocol was corrected to require async registered
+          stage functions. The final grep is expected to return no matches.
+          This removes the discovered raw optimize path; it does not yet prove
+          generated request bindings for every retained locked method or close
+          remaining JSON-shaped leaf owners.
       - kind: generated_result_records_for_retained_method_families
         paths:
           - sdk/python/codegen/result_codegen.py

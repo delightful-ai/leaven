@@ -2,7 +2,7 @@
 
 import inspect
 import sys
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -35,7 +35,7 @@ class StageWorkerTarget:
 
 class _StageLike(Protocol):
     id: str
-    func: Callable[..., object]
+    func: Callable[..., Awaitable[object]]
 
 
 def worker_argv_for_stage(stage: _StageLike, *, lm_model: str = "mock") -> tuple[str, ...]:
