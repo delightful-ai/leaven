@@ -9,6 +9,7 @@ from typing import Literal
 
 from msgspec import UNSET, Struct, UnsetType, field
 
+from .calls import CapabilityCall
 from .expressions import PlanExpression, Precondition, ValidationReceipt
 from .refs import (
     AssessmentRef,
@@ -163,9 +164,6 @@ type CommitPolicy = (
 )
 type PlanDeps = list[str]
 type PlanOpKind = Literal["let", "call", "write"]
-type PlanCallKind = Literal[
-    "lm_complete", "agent_run", "sandbox_exec", "workspace_materialize", "workspace_release"
-]
 type PlanWriteKind = Literal[
     "submit_proposal_batch",
     "submit_assessments",
@@ -173,10 +171,6 @@ type PlanWriteKind = Literal[
     "apply_proposal_batch",
     "emit_run_event",
 ]
-
-
-class CapabilityCall(Struct, frozen=True, omit_defaults=True, kw_only=True):
-    kind: PlanCallKind
 
 
 class PlanOp(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, kw_only=True):

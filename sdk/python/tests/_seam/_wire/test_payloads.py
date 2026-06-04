@@ -5,6 +5,7 @@ import pytest
 from msgspec import UNSET
 
 from leaven._seam._wire import JsonRpcProtocolError, decode_response
+from leaven._seam._wire.calls import LmCompleteCall, LmContentText, LmOutputFinalMessage
 from leaven._seam._wire.expressions import (
     GraphSourceByCandidate,
     PlanExpressionGraphQuery,
@@ -17,7 +18,6 @@ from leaven._seam._wire.payloads import (
     PLAN_SCHEMA_FINGERPRINT,
     STAGE_RUN_SCHEMA_FINGERPRINT,
     CandidateRefRecord,
-    CapabilityCall,
     CaseRefRecord,
     CommitPolicyNoGraphWrites,
     ConsistencyLatestAtStart,
@@ -62,7 +62,11 @@ def test_plan_document_decodes_typed_operation_kinds() -> None:
         b'"ops":['
         b'{"kind":"let","name":"x","expr":{"kind":"literal","value":"ok"}},'
         b'{"kind":"call","name":"lm","idempotency_key":"idem_1",'
-        b'"call":{"kind":"lm_complete","model":"gpt-test"}},'
+        b'"call":{"kind":"lm_complete","purpose":"python.test",'
+        b'"model":"gpt-test","messages":[{"role":"user",'
+        b'"content":[{"kind":"text","text":"say ok"}]}],'
+        b'"output":{"kind":"final_message","max_bytes":64},'
+        b'"input_classes":["public"]}},'
         b'{"kind":"write","name":"evt","idempotency_key":"idem_2",'
         b'"write":{"kind":"emit_run_event","event_kind":"stage_completed",'
         b'"payload_schema":"fp_schema_event","payload":{"ok":true},'
@@ -74,11 +78,15 @@ def test_plan_document_decodes_typed_operation_kinds() -> None:
 
     call = decoded.ops[1].call
     write = decoded.ops[2].write
-    assert isinstance(call, CapabilityCall)
+    assert isinstance(call, LmCompleteCall)
     assert isinstance(write, EmitRunEventWrite)
     assert isinstance(decoded.ops[0].expr, PlanExpressionLiteral)
     assert decoded.ops[0].kind == "let"
-    assert call.kind == "lm_complete"
+    assert call.model == "gpt-test"
+    content = call.messages[0].content[0]
+    assert isinstance(content, LmContentText)
+    assert content.text == "say ok"
+    assert isinstance(call.output, LmOutputFinalMessage)
     assert write.event_kind == "stage_completed"
 
 

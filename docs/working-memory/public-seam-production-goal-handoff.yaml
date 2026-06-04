@@ -1593,6 +1593,38 @@ acceptance:
           typed call owners for LM, agent, workspace, sandbox, and release
           calls. Those must be cut over before the Python request surface can
           be called fully typed end to end.
+      - kind: generated_plan_call_payloads_are_typed_records
+        paths:
+          - sdk/python/codegen/call_codegen.py
+          - sdk/python/codegen/generate_seam_wire.py
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/calls.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/tests/_seam/_wire/test_calls.py
+          - sdk/python/tests/_seam/_wire/test_payloads.py
+          - sdk/python/tests/_seam/test_plans.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run ruff check codegen/call_codegen.py codegen/generate_seam_wire.py codegen/payload_codegen.py src/leaven/_seam/_wire/calls.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_calls.py tests/_seam/_wire/test_payloads.py tests/_seam/test_plans.py
+          - cd sdk/python && uv run ty check codegen/call_codegen.py codegen/generate_seam_wire.py codegen/payload_codegen.py src/leaven/_seam/_wire/calls.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_calls.py tests/_seam/_wire/test_payloads.py tests/_seam/test_plans.py
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_calls.py tests/_seam/_wire/test_payloads.py tests/_seam/test_plans.py -q
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Generated Python Plan documents now decode `PlanOp.call` through
+          concrete tagged capability-call records instead of a kind-only
+          `CapabilityCall` shell. The generated owner module covers retained
+          V1 LM, agent, sandbox, workspace materialize, and workspace release
+          calls, including typed LM messages/content parts, output contracts,
+          agent instructions/tool policy/limits, sandbox command shape, and
+          workspace lifecycle enums. Focused tests prove all retained call
+          variants preserve concrete identity and reject unknown call kinds and
+          unknown LM content parts; request-builder tests decode produced LM
+          and agent params through generated `PlanDocument` to catch builder
+          drift at the typed call boundary. Schema/provider-hint leaves remain
+          JSON-shaped where the Rust-owned public schema allows arbitrary JSON,
+          and request records still expose `to_params() -> JsonObject`; full
+          request-builder cutover to generated Plan/Stage structs remains a
+          separate follow-up.
       - kind: typed_plan_expression_owner_foundation
         commits:
           - a0397e66
