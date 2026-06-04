@@ -916,6 +916,31 @@ acceptance:
           path. This is foundation evidence only: the transport trait
           signature, shared Plan IR leaves, costs, data classes, and wider
           public-seam payload owners still need typed follow-up slices.
+      - kind: typed_runcontext_event_projection_foundation
+        commits:
+          - ec7f0154
+        paths:
+          - crates/leaven-seam-service/src/run_context_service.rs
+          - crates/leaven-cli/tests/seam_stdio_server.rs
+        commands:
+          - cargo fmt
+          - cargo test -p leaven-seam-service
+          - cargo check -p leaven-seam-service
+          - cargo test -p leaven-cli --test seam_stdio_server
+        note: >-
+          The configured RunContext-backed service route for
+          `run_context.checked` `leaven/event.emit` no longer stores emitted
+          event readback rows as `Vec<Value>` or builds request/result hashes,
+          primary values, receipts, and extension envelopes from raw JSON
+          objects. The service now parses the special payload into
+          `RunContextEventPayload`, keeps readback rows as typed summaries, and
+          serializes the event projection from named Rust records. Tests reject
+          an extra-field payload and still prove the durable `leaven seam serve
+          --stdio` readback scenario. This is foundation evidence only: the
+          public transport still enters as validated Plan JSON, and
+          `RunEvent::ExternalEventEmitted` itself still accepts a serialized
+          payload slot that needs a deeper engine-domain owner in a later
+          typed-seam slice.
       - kind: product_route_topology_decision
         paths:
           - docs/working-memory/run-bound-durable-runcontext-service.md
