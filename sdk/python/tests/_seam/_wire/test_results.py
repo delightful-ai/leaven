@@ -133,7 +133,7 @@ def test_generated_lm_result_decodes_schema_dependent_parsed_payload() -> None:
 
     decoded = msgspec.json.decode(json.dumps(payload).encode(), type=LmCompleteResult)
 
-    assert isinstance(decoded.primary.parsed, msgspec.Raw)
+    assert decoded.primary.parsed == {"answer": "ok", "scores": [1, 2, 3]}
     assert decode_lm_parsed(decoded, ParsedAnswer) == ParsedAnswer(
         answer="ok",
         scores=[1, 2, 3],
@@ -159,7 +159,7 @@ def test_generated_agent_result_decodes_schema_dependent_parsed_payload() -> Non
 
     decoded = msgspec.json.decode(json.dumps(payload).encode(), type=AgentRunResult)
 
-    assert isinstance(decoded.primary.parsed, msgspec.Raw)
+    assert decoded.primary.parsed == {"mutation": {"skill": "alpha", "changed": True}}
     assert decode_agent_parsed(decoded, ParsedMutation) == ParsedMutation(
         mutation={"skill": "alpha", "changed": True}
     )

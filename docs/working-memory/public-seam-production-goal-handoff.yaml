@@ -3057,8 +3057,43 @@ acceptance:
           focused test asserts the generated wire value itself before decoding
           it into `PrivateEvidencePayload`, and the full `_seam/_wire` lane
           stays green. This closes the evidence-private Raw slot; JSON-RPC
-          envelope Raw buffers and remaining method-specific delayed result
-          buffers still need their own owner decisions before the row closes.
+          envelope Raw buffers still need an owner decision before the row
+          closes, and a later evidence item closes the method-specific parsed
+          result buffers.
+      - kind: lm_agent_parsed_result_raw_removed
+        paths:
+          - sdk/python/codegen/result_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/results.py
+          - sdk/python/src/leaven/builders/lm.py
+          - sdk/python/src/leaven/builders/agent.py
+          - sdk/python/tests/_seam/_wire/test_results.py
+          - sdk/python/tests/builders/test_lm.py
+          - sdk/python/tests/_stage_runtime/test_lm.py
+          - sdk/python/tests/builders/test_agent.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_results.py tests/builders/test_lm.py tests/_stage_runtime/test_lm.py tests/builders/test_agent.py -q
+          - cd sdk/python && uv run pytest tests/_seam/_wire tests/builders/test_lm.py tests/_stage_runtime/test_lm.py tests/builders/test_agent.py -q
+          - cd sdk/python && uv run ruff check codegen/result_codegen.py src/leaven/_seam/_wire/results.py src/leaven/builders/lm.py src/leaven/builders/agent.py tests/_seam/_wire/test_results.py tests/builders/test_lm.py tests/_stage_runtime/test_lm.py tests/builders/test_agent.py
+          - cd sdk/python && uv run ty check codegen/result_codegen.py src/leaven/_seam/_wire/results.py src/leaven/builders/lm.py src/leaven/builders/agent.py tests/_seam/_wire/test_results.py tests/builders/test_lm.py tests/_stage_runtime/test_lm.py tests/builders/test_agent.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - rg -n "parsed: Raw|from msgspec import .*Raw|msgspec\\.Raw" sdk/python/src/leaven/_seam/_wire/results.py sdk/python/codegen/result_codegen.py sdk/python/src/leaven/builders/lm.py sdk/python/src/leaven/builders/agent.py sdk/python/tests/_seam/_wire/test_results.py sdk/python/tests/builders/test_lm.py sdk/python/tests/_stage_runtime/test_lm.py sdk/python/tests/builders/test_agent.py
+          - rg -n "Raw" sdk/python/src/leaven/_seam/_wire sdk/python/codegen -g "*.py"
+        note: >-
+          Generated `LmResponsePrimary.parsed` and
+          `AgentSessionPrimary.parsed` now carry
+          `WireJsonExtensionPayload | UnsetType` instead of msgspec `Raw`.
+          The schema-selected decode helpers use `msgspec.convert` to produce
+          caller-owned parsed payload Structs, and the public LM/agent builders
+          validate already-decoded JSON values directly instead of round-tripping
+          parsed output back through bytes. Tests now construct generated result
+          records with decoded bounded JSON values and assert those wire values
+          before schema-specific conversion. The full seam-wire lane stays
+          green. The broad Raw inventory is now limited to JSON-RPC envelope
+          params/result buffers in `_wire/jsonrpc.py` and `_wire/codec.py`,
+          matching the documented delayed-decode boundary pattern.
       - kind: python_request_envelope_raw_dict_escape_removed
         paths:
           - sdk/python/src/leaven/_seam/client.py

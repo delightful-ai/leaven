@@ -15,7 +15,7 @@ from .._seam._wire import JsonObject
 from .._seam._wire.calls import LmTool as WireLmTool
 from .._seam._wire.json_value import json_object, json_value
 from .._seam._wire.payloads import Cost
-from .._seam._wire.refs import WireJsonSchemaObject
+from .._seam._wire.refs import WireJsonExtensionPayload, WireJsonSchemaObject
 from .._seam._wire.results import LmCompleteResult
 from ..json_value import JsonSchema, JsonValue
 from ..output import JsonSchemaOutput, JsonSchemaValueOutput
@@ -270,7 +270,7 @@ def _cost_usd(cost: Cost | UnsetType) -> float | None:
 
 
 def _parsed_json[ParsedOutputT: BaseModel](
-    value: msgspec.Raw | UnsetType,
+    value: WireJsonExtensionPayload | UnsetType,
     output: JsonSchemaOutput[ParsedOutputT] | JsonSchemaValueOutput | None,
 ) -> ParsedOutputT | JsonValue:
     if value is UNSET:
@@ -279,8 +279,8 @@ def _parsed_json[ParsedOutputT: BaseModel](
         return None
     if isinstance(output, JsonSchemaOutput):
         model = output.parse_to
-        return model.model_validate_json(bytes(value))
-    return json_value(msgspec.json.decode(value))
+        return model.model_validate(value)
+    return json_value(value)
 
 
 __all__ = ["LmBuilder", "LmMessage", "LmMessageRole", "LmResponse", "LmTool"]

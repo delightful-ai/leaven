@@ -11,6 +11,7 @@ from leaven._receipts import CallReceipt
 from leaven._seam import AgentRunRequest
 from leaven._seam._wire.payloads import BlobRef as WireBlobRef
 from leaven._seam._wire.payloads import Cost
+from leaven._seam._wire.refs import WireJsonExtensionPayload
 from leaven._seam._wire.results import AgentCommandRecord, AgentRunResult, AgentSessionPrimary
 from leaven.builders.agent import AgentBuilder
 from leaven.json_value import JsonObject, JsonValue
@@ -122,7 +123,7 @@ class FakeAgentSeamClient:
                     bytes=128,
                     data_classes=["transcript.raw"],
                 ),
-                parsed=msgspec.Raw(msgspec.json.encode({"status": "ok"})),
+                parsed=_wire_json({"status": "ok"}),
                 commands=[
                     AgentCommandRecord(
                         argv=["codex", "exec"],
@@ -145,6 +146,10 @@ def _params_object(params: object) -> JsonObject:
     if not isinstance(value, dict):
         raise TypeError("expected JSON object")
     return value
+
+
+def _wire_json(value: JsonObject) -> WireJsonExtensionPayload:
+    return msgspec.convert(value, type=WireJsonExtensionPayload)
 
 
 def _json_array(value: JsonValue) -> list[JsonValue]:

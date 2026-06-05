@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 import leaven as lv
 from leaven._seam._wire.payloads import Cost
+from leaven._seam._wire.refs import WireJsonExtensionPayload
 from leaven._seam._wire.results import (
     LmCompleteResult,
     LmContentPart,
@@ -74,7 +75,7 @@ class FakeLmCallback:
                 data_classes=["public"],
                 replayability="boundary_managed",
                 cost=Cost(usd_micro=42, input_tokens=3, output_tokens=2),
-                parsed=msgspec.Raw(msgspec.json.encode({"answer": "ok"})),
+                parsed=_wire_json({"answer": "ok"}),
             ),
             receipts=[],
             redactions=[],
@@ -82,3 +83,7 @@ class FakeLmCallback:
             policy_fingerprint="fp_policy_callback",
             data_classes=["public"],
         )
+
+
+def _wire_json(value: dict[str, str]) -> WireJsonExtensionPayload:
+    return msgspec.convert(value, type=WireJsonExtensionPayload)

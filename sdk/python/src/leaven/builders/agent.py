@@ -5,7 +5,6 @@ import math
 from collections.abc import Sequence
 from typing import Protocol, cast, overload
 
-import msgspec
 from msgspec import UNSET, UnsetType
 from pydantic import BaseModel, ConfigDict
 
@@ -17,6 +16,7 @@ from .._seam._wire import JsonObject
 from .._seam._wire.json_value import json_object, json_value
 from .._seam._wire.payloads import BlobRef as WireBlobRef
 from .._seam._wire.payloads import Cost
+from .._seam._wire.refs import WireJsonExtensionPayload
 from .._seam._wire.results import AgentRunResult
 from ..agent_instructions import AgentInstructions
 from ..blob_ref import BlobRef
@@ -256,7 +256,7 @@ def _blob_ref(value: WireBlobRef | UnsetType) -> BlobRef | None:
 
 
 def _parsed_json[ParsedOutputT: BaseModel](
-    value: msgspec.Raw | UnsetType,
+    value: WireJsonExtensionPayload | UnsetType,
     output: OutputContract | None,
 ) -> JsonValue | ParsedOutputT:
     if value is UNSET:
@@ -265,8 +265,8 @@ def _parsed_json[ParsedOutputT: BaseModel](
         return None
     if isinstance(output, JsonSchemaOutput):
         model = cast("type[ParsedOutputT]", output.parse_to)
-        return model.model_validate_json(bytes(value))
-    return json_value(msgspec.json.decode(value))
+        return model.model_validate(value)
+    return json_value(value)
 
 
 __all__ = ["AgentBuilder", "AgentCommand", "AgentSession"]
