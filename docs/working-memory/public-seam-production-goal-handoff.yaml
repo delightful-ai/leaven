@@ -2145,6 +2145,34 @@ acceptance:
           and `WriteOutputRecord.trace_refs` decodes as generated `TraceRef`
           records instead of arbitrary JSON objects. Focused tests prove typed
           graph-write output ref decode and malformed blob-ref rejection.
+      - kind: generated_assessment_evidence_envelope_is_typed_record
+        paths:
+          - sdk/python/codegen/evidence_codegen.py
+          - sdk/python/codegen/generate_seam_wire.py
+          - sdk/python/codegen/write_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/evidence.py
+          - sdk/python/src/leaven/_seam/_wire/writes.py
+          - sdk/python/tests/_seam/_wire/test_graph_writes.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_graph_writes.py tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_results.py -q
+          - cd sdk/python && uv run ruff check codegen/evidence_codegen.py codegen/generate_seam_wire.py codegen/write_codegen.py src/leaven/_seam/_wire/evidence.py src/leaven/_seam/_wire/writes.py tests/_seam/_wire/test_graph_writes.py
+          - cd sdk/python && uv run ty check codegen/evidence_codegen.py codegen/generate_seam_wire.py codegen/write_codegen.py src/leaven/_seam/_wire/evidence.py src/leaven/_seam/_wire/writes.py tests/_seam/_wire/test_graph_writes.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Generated graph-write assessment records now decode `evidence` as a
+          generated `EvidenceEnvelope` instead of `WireJsonObject`. The
+          envelope owns typed producer, public projection, private projection
+          metadata, redaction policy, source receipts, data classes, trace
+          refs, replayability, and metadata shape. Focused tests prove a valid
+          envelope decodes through `SubmitAssessmentRecord.evidence` and an
+          envelope missing the required public projection is rejected at the
+          msgspec boundary. `EvidencePrivate.payload` remains msgspec `Raw`
+          by design because the V1 schema permits any JSON there and the
+          concrete semantic owner is selected by `payload_schema_fingerprint`;
+          this is a schema-selected delayed-decode slot, not arbitrary decoded
+          Python object acceptance or row closure.
       - kind: python_request_envelope_raw_dict_escape_removed
         paths:
           - sdk/python/src/leaven/_seam/client.py

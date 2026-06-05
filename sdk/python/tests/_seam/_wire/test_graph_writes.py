@@ -116,6 +116,46 @@ def test_assessment_output_rejects_malformed_blob_ref() -> None:
         )
 
 
+def test_assessment_evidence_decodes_typed_envelope() -> None:
+    """Example: assessment evidence preserves generated envelope structure."""
+
+    decoded = msgspec.json.decode(
+        _mixed_write_plan().replace(
+            _evidence_envelope(),
+            _private_payload_evidence_envelope(),
+        ),
+        type=PlanDocument,
+    )
+    assessment = decoded.ops[0].write
+
+    assert isinstance(assessment, SubmitAssessmentsWrite)
+    evidence = assessment.assessments[0].evidence
+    assert evidence.producer.stage_call_id == "sc_score"
+    assert evidence.public.summary == "score evidence"
+    assert evidence.private is not UNSET
+    assert evidence.private.visibility == "evaluator_only"
+    assert isinstance(evidence.private.payload_ref, BlobRef)
+    assert evidence.source_receipts.effect == ["lmrec_1"]
+
+
+def test_assessment_evidence_rejects_missing_public_projection() -> None:
+    """Boundary check: evidence envelopes do not pass as arbitrary objects."""
+
+    with pytest.raises(msgspec.ValidationError):
+        msgspec.json.decode(
+            _mixed_write_plan().replace(
+                _evidence_envelope(),
+                b'{"schema_version":"leaven.evidence_envelope.v1",'
+                b'"target_derived":false,'
+                b'"redaction_policy":{"optimizer":"score_and_feedback",'
+                b'"reflector":"score_only","operator":"full"},'
+                b'"producer":{"stage_call_id":"sc_score"},'
+                b'"source_receipts":{"read":[],"effect":["lmrec_1"]}}',
+            ),
+            type=PlanDocument,
+        )
+
+
 def test_assessment_write_rejects_unknown_assessment_kind() -> None:
     """Boundary check: assessment write records are not raw dictionaries."""
 
@@ -236,7 +276,7 @@ def _mixed_write_plan() -> bytes:
         b'"assessments":[{"kind":"independent","candidate":"cand_seed",'
         b'"score":{"value":0.5,"output":{"kind":"text","visibility":"public",'
         b'"data_classes":["public"],"summary":"score evidence"}},'
-        b'"evidence":{"schema_version":"leaven.evidence_envelope.v1"},'
+        b'"evidence":' + _evidence_envelope() + b','
         b'"replayability":"fully_managed",'
         b'"cost_attribution":{"kind":"explicit","cost":{"usd_micro":12}}}]}},'
         b'{"kind":"write","name":"eval","idempotency_key":"idem_eval",'
@@ -249,6 +289,33 @@ def _mixed_write_plan() -> bytes:
         b'"visibility":"optimizer_visible"}}],'
         b'"return":["assess","eval","event"],'
         b'"commit":{"kind":"graph_writes_atomic","on_stale":"reject"}}'
+    )
+
+
+def _evidence_envelope() -> bytes:
+    return (
+        b'{"schema_version":"leaven.evidence_envelope.v1",'
+        b'"target_derived":false,'
+        b'"public":{"summary":"score evidence","data_classes":["public"]},'
+        b'"redaction_policy":{"optimizer":"score_and_feedback",'
+        b'"reflector":"score_only","operator":"full"},'
+        b'"producer":{"stage_call_id":"sc_score"},'
+        b'"source_receipts":{"read":[],"effect":["lmrec_1"]}}'
+    )
+
+
+def _private_payload_evidence_envelope() -> bytes:
+    return (
+        b'{"schema_version":"leaven.evidence_envelope.v1",'
+        b'"target_derived":false,'
+        b'"public":{"summary":"score evidence","data_classes":["public"]},'
+        b'"private":{"visibility":"evaluator_only","data_classes":["private"],'
+        b'"payload_ref":{"kind":"blob_ref","id":"blob_private","sha256":"def",'
+        b'"bytes":5,"data_classes":["private"]}},'
+        b'"redaction_policy":{"optimizer":"score_and_feedback",'
+        b'"reflector":"score_only","operator":"full"},'
+        b'"producer":{"stage_call_id":"sc_score"},'
+        b'"source_receipts":{"read":[],"effect":["lmrec_1"]}}'
     )
 
 

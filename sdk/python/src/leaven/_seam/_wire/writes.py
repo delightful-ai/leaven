@@ -7,6 +7,7 @@ from typing import Literal
 
 from msgspec import UNSET, Struct, UnsetType
 
+from .evidence import EvidenceEnvelope
 from .expressions import PlanExpression, ValueExpr
 from .refs import (
     BlobRef,
@@ -131,7 +132,7 @@ class CostAttribution(Struct, frozen=True, forbid_unknown_fields=True, omit_defa
 class SubmitAssessmentRecord(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
     kind: Literal["independent", "pairwise", "listwise"]
     score: WriteScore
-    evidence: WireJsonObject
+    evidence: EvidenceEnvelope
     replayability: Replayability
     candidate: CandidateRef | UnsetType = UNSET
     candidates: list[CandidateRef] | UnsetType = UNSET

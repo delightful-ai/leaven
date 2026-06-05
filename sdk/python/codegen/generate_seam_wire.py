@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 
 from call_codegen import render_calls
+from evidence_codegen import render_evidence
 from expression_codegen import render_expressions
 from method_codegen import MethodCodegenRow, render_methods
 from method_result_codegen import render_method_results
@@ -19,6 +20,7 @@ WIRE_DIR = REPO_ROOT / "sdk/python/src/leaven/_seam/_wire"
 METHODS_OUTPUT = WIRE_DIR / "methods.py"
 EXPRESSIONS_OUTPUT = WIRE_DIR / "expressions.py"
 CALLS_OUTPUT = WIRE_DIR / "calls.py"
+EVIDENCE_OUTPUT = WIRE_DIR / "evidence.py"
 PAYLOADS_OUTPUT = WIRE_DIR / "payloads.py"
 REFS_OUTPUT = WIRE_DIR / "refs.py"
 RESULTS_OUTPUT = WIRE_DIR / "results.py"
@@ -60,6 +62,7 @@ def generated_files() -> dict[Path, str]:
     return {
         METHODS_OUTPUT: render_methods(method_rows(rows)),
         REFS_OUTPUT: render_refs(),
+        EVIDENCE_OUTPUT: render_evidence(),
         EXPRESSIONS_OUTPUT: render_expressions(),
         CALLS_OUTPUT: render_calls(),
         WRITES_OUTPUT: render_writes(),
