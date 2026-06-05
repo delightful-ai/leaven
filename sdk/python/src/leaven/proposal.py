@@ -6,12 +6,15 @@ surfaces. Effect kinds are `create` (fresh) and `change` (lineage-bearing).
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ._receipts import CallReceipt, QueryReceipt
-from .artifacts.skill_bank import SkillBankChange, SkillBankChangeRecord
+from .artifacts.directory import DirectoryArtifact
+from .artifacts.prompt import PromptArtifact
+from .artifacts.skill_bank import SkillBank, SkillBankChange, SkillBankChangeRecord
 from .json_value import JsonValue
 
+type ProposalArtifactValue = DirectoryArtifact | PromptArtifact | SkillBank
 type ProposalChangeValue = JsonValue | SkillBankChangeRecord
 
 
@@ -34,7 +37,7 @@ class ProposalEffect(BaseModel):
     """Required for 'create' effects."""
     artifact_schema: str | None = None
     """Required for 'create' effects."""
-    artifact: JsonValue | None = None
+    artifact: ProposalArtifactValue | None = None
     """Artifact value for 'create' effects."""
     change_schema: str | None = None
     """Required for all change effects."""
@@ -44,6 +47,13 @@ class ProposalEffect(BaseModel):
     """Parser used by workspace-diff or agent-session changes."""
     agent_session_receipt: CallReceipt | None = None
     """Required for 'change_from_agent_session'."""
+
+    @field_validator("artifact", mode="before")
+    @classmethod
+    def _reject_raw_artifact_dict(cls, artifact: ProposalArtifactValue | JsonValue | None) -> ProposalArtifactValue | JsonValue | None:
+        if isinstance(artifact, dict):
+            raise TypeError("create proposal effects require a typed artifact object")
+        return artifact
 
     @model_validator(mode="after")
     def _validate_effect_shape(self) -> "ProposalEffect":
@@ -73,7 +83,7 @@ class ProposalEffect(BaseModel):
         *,
         artifact_type: str,
         artifact_schema: str,
-        artifact: JsonValue,
+        artifact: ProposalArtifactValue,
     ) -> "ProposalEffect":
         """Build a fresh artifact creation proposal effect."""
         return cls(
@@ -171,4 +181,10 @@ def _require[T](value: T | None, message: str) -> T:
     return value
 
 
-__all__ = ["ProposalBatch", "ProposalChangeValue", "ProposalEffect", "SkillProposal"]
+__all__ = [
+    "ProposalArtifactValue",
+    "ProposalBatch",
+    "ProposalChangeValue",
+    "ProposalEffect",
+    "SkillProposal",
+]

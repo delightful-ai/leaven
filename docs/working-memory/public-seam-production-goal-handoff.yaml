@@ -2213,6 +2213,38 @@ acceptance:
           of raw LM message dictionaries. This closes the proposer reflection
           metadata bag only; other stage payload case/output leaves remain
           typed-owner work.
+      - kind: python_create_proposal_artifact_owner_cutover
+        paths:
+          - sdk/python/src/leaven/proposal.py
+          - sdk/python/src/leaven/builders/proposals.py
+          - sdk/python/tests/test_proposal.py
+          - sdk/python/tests/test_proposal_submission.py
+          - docs/specs/leaven_python.md
+        commands:
+          - cd sdk/python && uv run pytest tests/test_proposal.py tests/test_proposal_submission.py -q
+          - cd sdk/python && uv run pytest tests/test_optimize_proposer_mechanics.py tests/test_proposer_worker.py -q
+          - cd sdk/python && uv run ruff check src/leaven/proposal.py src/leaven/builders/proposals.py tests/test_proposal.py tests/test_proposal_submission.py
+          - cd sdk/python && uv run ty check src/leaven/proposal.py src/leaven/builders/proposals.py tests/test_proposal.py tests/test_proposal_submission.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - >-
+            cd sdk/python && ! rg -n
+            "artifact=\\{\\\"template\\\"|artifact: JsonValue|create artifacts
+            carry artifact fields directly"
+            src/leaven/proposal.py src/leaven/builders/proposals.py
+            tests/test_proposal.py tests/test_proposal_submission.py
+        note: >-
+          Public Python create proposal effects no longer accept raw artifact
+          JSON bags. `ProposalEffect.create(...)` and direct create-effect
+          construction require declared artifact owners (`PromptArtifact`,
+          `SkillBank`, or `DirectoryArtifact`), and reject dictionary payloads
+          before Pydantic can silently coerce them. `ProposalsBuilder` projects
+          those typed artifacts to generated public-seam Plan literals only at
+          the boundary, with a focused prompt-create submission test proving
+          the exact wire effect. This closes the Python Prompt create artifact
+          leaf. GitProgram remains a Rust/Firkin/Codex Kit proof path until a
+          real Python GitProgram artifact owner is introduced.
       - kind: extension_result_receipts_match_rust_audit_shape
         paths:
           - sdk/python/codegen/result_codegen.py

@@ -1,6 +1,7 @@
 """`cx.proposals.*` — submit + apply proposal batches from proposer stages."""
 
 import asyncio
+import json
 from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict
@@ -18,9 +19,11 @@ from .._seam._wire.writes import (
     ProposalEffectCreate,
     ProposalWriteRecord,
 )
-from ..artifacts.skill_bank import SkillBankChangeRecord
+from ..artifacts.directory import DirectoryArtifact
+from ..artifacts.prompt import PromptArtifact
+from ..artifacts.skill_bank import SkillBank, SkillBankChangeRecord
 from ..json_value import JsonValue
-from ..proposal import ProposalBatch, ProposalChangeValue, ProposalEffect
+from ..proposal import ProposalArtifactValue, ProposalBatch, ProposalChangeValue, ProposalEffect
 
 
 class ProposalSubmission(BaseModel):
@@ -144,7 +147,7 @@ def _create_effect_to_wire(effect: ProposalEffect, batch: ProposalBatch) -> Prop
         effect=ProposalEffectCreate(
             artifact_type=_required_string(effect.artifact_type, "create artifact_type"),
             artifact_schema=_required_string(effect.artifact_schema, "create artifact_schema"),
-            artifact=_literal_expr(_required_value(effect.artifact, "create artifact")),
+            artifact=_artifact_literal_expr(_required_artifact(effect.artifact, "create artifact")),
         ),
         causal=ProposalCausalInputs(inputs=[]),
         informed_by=_plan_literal_expr(read_receipts),
@@ -215,6 +218,10 @@ def _literal_expr(value: ProposalChangeValue | JsonValue) -> ValueExprLiteral:
     return ValueExprLiteral(value=_proposal_value(value))
 
 
+def _artifact_literal_expr(value: ProposalArtifactValue) -> ValueExprLiteral:
+    return ValueExprLiteral(value=_artifact_value(value))
+
+
 def _required_string(value: str | None, field: str) -> str:
     if value is None:
         raise ValueError(f"proposal effect missing {field}")
@@ -227,10 +234,38 @@ def _required_value(value: ProposalChangeValue | None, field: str) -> ProposalCh
     return value
 
 
+def _required_artifact(value: ProposalArtifactValue | None, field: str) -> ProposalArtifactValue:
+    if value is None:
+        raise ValueError(f"proposal effect missing {field}")
+    return value
+
+
+def _artifact_value(value: ProposalArtifactValue) -> JsonValue:
+    if isinstance(value, DirectoryArtifact | PromptArtifact | SkillBank):
+        raw: object = json.loads(value.model_dump_json(exclude_none=True))
+        return _json_value(raw)
+    raise TypeError(f"unsupported proposal artifact: {type(value).__name__}")
+
+
 def _proposal_value(value: ProposalChangeValue | JsonValue) -> JsonValue:
     if isinstance(value, SkillBankChangeRecord):
         return value.to_json_value()
     return value
+
+
+def _json_value(raw: object) -> JsonValue:
+    if raw is None or isinstance(raw, str | int | float | bool):
+        return raw
+    if isinstance(raw, list):
+        return [_json_value(item) for item in raw]
+    if isinstance(raw, dict):
+        result: dict[str, JsonValue] = {}
+        for key, value in raw.items():
+            if not isinstance(key, str):
+                raise TypeError("artifact JSON object keys must be strings")
+            result[key] = _json_value(value)
+        return result
+    raise TypeError(f"artifact value is not JSON: {type(raw).__name__}")
 
 
 __all__ = ["ProposalSubmission", "ProposalsBuilder"]

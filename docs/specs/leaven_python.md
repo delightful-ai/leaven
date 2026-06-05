@@ -387,14 +387,17 @@ validates against the locked seam before execution.
 
 `ProposalBatch` contains `ProposalEffect` records with direct typed fields for
 the effect kind, causal parent, surface fingerprint, change schema, parser,
-agent-session receipt, artifact fields, artifact value, and `change_value`. It
+agent-session receipt, artifact fields, typed artifact value, and `change_value`. It
 does not carry an anonymous `payload` object that builders later reparse by
-key. Public skill-bank proposal output uses a typed `SkillBankChange`
+key. Create effects take declared artifact objects such as `PromptArtifact`,
+`SkillBank`, or `DirectoryArtifact`; callers must not pass raw JSON objects and
+the builder projects the typed artifact to a Plan literal only at the
+public-seam boundary. Public skill-bank proposal output uses a typed `SkillBankChange`
 discriminated union (`write_file`, `rename_file`, `atomic`, etc.) instead of a
 free-form object bag; the builder projects that domain value to a Plan literal
-only at the public-seam boundary. Remaining Prompt, GitProgram, and future
-adapter artifact/change leaves still need concrete owners before they can count
-as fully typed artifact semantics.
+only at the public-seam boundary. GitProgram and future adapter artifact/change
+leaves still need concrete Python owners before they can count as fully typed
+Python artifact semantics.
 
 The builder geometry:
 

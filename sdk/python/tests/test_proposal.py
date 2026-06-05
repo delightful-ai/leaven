@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from leaven._receipts import CallReceipt, QueryReceipt
+from leaven.artifacts.prompt import PromptArtifact
 from leaven.artifacts.skill_bank import SkillBankChangeFile, SkillBankWriteFileChange
 from leaven.proposal import ProposalBatch, ProposalEffect, SkillProposal
 
@@ -53,15 +54,29 @@ def test_proposal_effect_rejects_incomplete_change_shape() -> None:
 
 
 def test_proposal_effect_create_carries_direct_artifact_fields() -> None:
-    """Example: create effects carry artifact fields directly."""
+    """Example: create effects carry typed artifact fields directly."""
 
     effect = ProposalEffect.create(
         artifact_type="prompt",
         artifact_schema="fp_schema_sha256_prompt",
-        artifact={"template": "Say hi."},
+        artifact=PromptArtifact(template="Say hi."),
     )
 
     assert effect.kind == "create"
     assert effect.artifact_type == "prompt"
     assert effect.artifact_schema == "fp_schema_sha256_prompt"
-    assert effect.artifact == {"template": "Say hi."}
+    assert effect.artifact == PromptArtifact(template="Say hi.")
+
+
+def test_proposal_effect_create_rejects_raw_artifact_bag() -> None:
+    """Regression: create artifacts must have an explicit public owner."""
+
+    with pytest.raises(TypeError, match="typed artifact object"):
+        ProposalEffect.model_validate(
+            {
+                "kind": "create",
+                "artifact_type": "prompt",
+                "artifact_schema": "fp_schema_sha256_prompt",
+                "artifact": {"template": "Say hi."},
+            }
+        )

@@ -13,6 +13,7 @@ from leaven._seam._wire.results import (
     ProposalSubmitResult,
 )
 from leaven._seam._wire.writes import ProposalEffectAgentSession, ProposalWriteRecord
+from leaven.artifacts.prompt import PromptArtifact
 from leaven.artifacts.skill_bank import SkillBankChangeFile, SkillBankWriteFileChange
 from leaven.builders.proposals import ProposalsBuilder, ProposalSubmission
 from leaven.json_value import JsonObject, JsonValue
@@ -132,6 +133,44 @@ async def test_proposals_builder_projects_skill_bank_change_at_plan_boundary() -
             "file": {"content": "improved", "executable": False},
         },
     }
+
+
+@pytest.mark.asyncio
+async def test_proposals_builder_projects_prompt_artifact_at_plan_boundary() -> None:
+    """Scenario: typed prompt create artifacts stay typed until Plan encoding."""
+
+    client = FakeProposalSeamClient()
+    proposals = ProposalsBuilder._for_seam(client)
+    batch = ProposalBatch(
+        effects=[
+            ProposalEffect.create(
+                artifact_type="prompt",
+                artifact_schema="fp_schema_sha256_prompt",
+                artifact=PromptArtifact(template="Say hi.", examples=["Use terse answers."]),
+            )
+        ],
+        read_receipts=[QueryReceipt(receipt_id="qrec_seed")],
+    )
+
+    await proposals.submit(batch)
+
+    write = _json_object(_json_array(_params_object(client.request_value.to_params())["ops"])[0])["write"]
+    proposal = _json_object(_json_array(_json_object(write)["proposals"])[0])
+    effect = _json_object(proposal["effect"])
+    assert effect == {
+        "kind": "create",
+        "artifact_type": "prompt",
+        "artifact_schema": "fp_schema_sha256_prompt",
+        "artifact": {
+            "kind": "literal",
+            "value": {
+                "template": "Say hi.",
+                "examples": ["Use terse answers."],
+            },
+        },
+    }
+    assert proposal["causal"] == {"inputs": []}
+    assert proposal["read_receipts"] == ["qrec_seed"]
 
 
 @pytest.mark.asyncio
