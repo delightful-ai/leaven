@@ -7,7 +7,13 @@ analysis, ablation reports, sharing run state with teammates.
 
 from pathlib import Path
 
-from ._runs import list_run_dirs, load_rust_blob_readback, load_rust_run_readback, open_optimized
+from ._runs import (
+    list_run_dirs,
+    load_rust_blob_readback,
+    load_rust_run_readback,
+    open_optimized,
+    open_rust_optimized,
+)
 from .result import Optimized
 from .run_inspection import RunInspection, inspect_optimized
 
@@ -19,6 +25,9 @@ def open(path: str | Path) -> Optimized[object]:
     determined at write time; callers can narrow if they know the type. A
     future API revision may make this generic over a passed artifact decoder.
     """
+    rust_result = open_rust_optimized(path)
+    if rust_result is not None:
+        return rust_result
     return open_optimized(path)
 
 

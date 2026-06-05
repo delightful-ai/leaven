@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .assessment import Assessment
 from .blob_ref import BlobRef
-from .json_value import JsonObject
+from .json_value import JsonObject, JsonValue
 from .result import Optimized
 from .run_status import RunCostStatus, RunUsageStatus, UnsupportedRunFact
 
@@ -70,6 +70,8 @@ class GraphReadbackSummary(BaseModel):
     blob: BlobReadbackSummary
     bytes: int
     run_id: str | None
+    best_candidate_id: str | None = None
+    candidates: list["CandidateReadback"] = Field(default_factory=list)
     candidate_count: int
     proposal_batch_count: int
     proposal_count: int
@@ -77,6 +79,16 @@ class GraphReadbackSummary(BaseModel):
     evaluation_request_count: int
     assessment_count: int
     event_count: int
+
+
+class CandidateReadback(BaseModel):
+    """Candidate facts read from a Rust-owned graph snapshot."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str
+    parent_id: str | None = None
+    artifact: JsonValue
 
 
 class RustRunReadback(BaseModel):
@@ -260,6 +272,7 @@ def _evidence_summary(assessment: Assessment) -> EvidenceSummary:
 __all__ = [
     "BlobByteReadbackRef",
     "BlobReadbackSummary",
+    "CandidateReadback",
     "CheckpointReadbackSummary",
     "EvidenceReadbackRef",
     "EvidenceSummary",

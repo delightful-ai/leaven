@@ -84,6 +84,10 @@ pub struct GraphInspection {
     pub bytes: usize,
     /// Run id recorded inside the graph snapshot JSON, if present.
     pub run_id: Option<String>,
+    /// Best candidate recorded by the completed run event, if present.
+    pub best_candidate_id: Option<String>,
+    /// Candidate records projected from Rust-owned graph snapshot JSON.
+    pub candidates: Vec<CandidateReadback>,
     /// Number of candidate records in the graph snapshot.
     pub candidate_count: usize,
     /// Number of proposal-batch records in the graph snapshot.
@@ -98,6 +102,17 @@ pub struct GraphInspection {
     pub assessment_count: usize,
     /// Number of event records in the graph snapshot.
     pub event_count: usize,
+}
+
+/// Candidate facts projected from the Rust-owned graph snapshot.
+#[derive(Clone, Debug, Serialize)]
+pub struct CandidateReadback {
+    /// Graph-local candidate id.
+    pub id: String,
+    /// Parent candidate id for proposal-created candidates.
+    pub parent_id: Option<String>,
+    /// Serialized problem artifact payload stored in the graph snapshot.
+    pub artifact: Value,
 }
 
 /// Rust-owned byte export for one blob in a local Leaven run directory.
@@ -210,6 +225,8 @@ pub fn export_local_run_inspection(
             .get("run_id")
             .and_then(Value::as_str)
             .map(str::to_owned),
+        best_candidate_id: best_candidate_id(&graph_json),
+        candidates: candidate_readbacks(&graph_json),
         candidate_count: array_len(&graph_json, "candidates"),
         proposal_batch_count: array_len(&graph_json, "proposal_batches"),
         proposal_count: array_len(&graph_json, "proposals"),
@@ -291,6 +308,64 @@ fn evidence_ref(reference: &EvidenceRef) -> EvidenceReadbackRef {
     }
 }
 
+fn best_candidate_id(graph: &Value) -> Option<String> {
+    graph
+        .get("events")?
+        .as_array()?
+        .iter()
+        .rev()
+        .find_map(|event| {
+            event
+                .get("OptimizationEnded")
+                .and_then(|ended| ended.get("best"))
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        })
+}
+
+fn candidate_readbacks(graph: &Value) -> Vec<CandidateReadback> {
+    graph
+        .get("candidates")
+        .and_then(Value::as_array)
+        .map(|candidates| {
+            candidates
+                .iter()
+                .filter_map(|candidate| candidate_readback(graph, candidate))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn candidate_readback(graph: &Value, candidate: &Value) -> Option<CandidateReadback> {
+    Some(CandidateReadback {
+        id: candidate.get("id")?.as_str()?.to_owned(),
+        parent_id: candidate_parent_id(graph, candidate),
+        artifact: candidate.get("artifact")?.clone(),
+    })
+}
+
+fn candidate_parent_id(graph: &Value, candidate: &Value) -> Option<String> {
+    candidate
+        .get("origin")?
+        .get("Proposal")?
+        .get("proposal_id")
+        .and_then(Value::as_str)
+        .and_then(|proposal_id| proposal_parent_id(graph, proposal_id))
+}
+
+fn proposal_parent_id(graph: &Value, proposal_id: &str) -> Option<String> {
+    graph
+        .get("proposals")?
+        .as_array()?
+        .iter()
+        .find(|proposal| proposal.get("id").and_then(Value::as_str) == Some(proposal_id))?
+        .get("effect")?
+        .get("Change")?
+        .get("target")?
+        .as_str()
+        .map(str::to_owned)
+}
+
 fn array_len(value: &Value, field: &str) -> usize {
     value
         .get(field)
@@ -342,13 +417,32 @@ mod tests {
         let store = FileStore::open(&run_dir).unwrap();
         let graph_json = br#"{
             "run_id":"run_export",
-            "candidates":[{},{}],
+            "candidates":[
+                {
+                    "id":"cand_seed",
+                    "identity":"seed",
+                    "artifact":{"template":"seed"},
+                    "origin":{"Seed":{"seed_index":0}},
+                    "created_at":"2026-06-04T00:00:00Z"
+                },
+                {
+                    "id":"cand_child",
+                    "identity":"child",
+                    "artifact":{"template":"child"},
+                    "origin":{"Proposal":{"proposal_id":"prop_child","apply_attempt_id":"apply_child"}},
+                    "created_at":"2026-06-04T00:00:01Z"
+                }
+            ],
             "proposal_batches":[{}],
-            "proposals":[{}],
+            "proposals":[{"id":"prop_child","effect":{"Change":{"target":"cand_seed","change":{}}}}],
             "apply_attempts":[{}],
             "evaluation_requests":[{}],
             "assessments":[{},{}],
-            "events":[{},{},{}]
+            "events":[
+                {},
+                {"OptimizationEnded":{"run_id":"run_export","best":"cand_child","budget":{}}},
+                {}
+            ]
         }"#;
         let graph_blob = BlobStore::put(
             &store,
@@ -416,6 +510,19 @@ mod tests {
         assert_eq!(export.checkpoint.workspace_journal_ref_count, 1);
         assert_eq!(export.graph.bytes, graph_json.len());
         assert_eq!(export.graph.run_id.as_deref(), Some("run_export"));
+        assert_eq!(
+            export.graph.best_candidate_id.as_deref(),
+            Some("cand_child")
+        );
+        assert_eq!(export.graph.candidates[0].id, "cand_seed");
+        assert_eq!(export.graph.candidates[0].parent_id, None);
+        assert_eq!(export.graph.candidates[0].artifact["template"], "seed");
+        assert_eq!(export.graph.candidates[1].id, "cand_child");
+        assert_eq!(
+            export.graph.candidates[1].parent_id.as_deref(),
+            Some("cand_seed")
+        );
+        assert_eq!(export.graph.candidates[1].artifact["template"], "child");
         assert_eq!(export.graph.candidate_count, 2);
         assert_eq!(export.graph.proposal_batch_count, 1);
         assert_eq!(export.graph.proposal_count, 1);

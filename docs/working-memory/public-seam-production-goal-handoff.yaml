@@ -1184,6 +1184,34 @@ acceptance:
           This is still foundation evidence for the Python inspection row:
           `lv.runs.open(...)` still must stop depending on Python-written
           `optimized.json` before row closure.
+      - kind: rust_checkpoint_open_preferred_foundation
+        paths:
+          - crates/leaven-run/src/inspection.rs
+          - sdk/python/src/leaven/run_inspection.py
+          - sdk/python/src/leaven/runs.py
+          - sdk/python/src/leaven/_runs/__init__.py
+          - sdk/python/src/leaven/_runs/rust_open.py
+          - sdk/python/tests/_runs/test_rust_export.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cargo test -p leaven-run inspection --lib
+          - cd sdk/python && uv run pytest tests/_runs/test_rust_export.py -q
+          - cd sdk/python && uv run ruff check src/leaven/runs.py src/leaven/run_inspection.py src/leaven/_runs/__init__.py src/leaven/_runs/rust_open.py tests/_runs/test_rust_export.py
+          - cd sdk/python && uv run ty check src/leaven/runs.py src/leaven/run_inspection.py src/leaven/_runs/__init__.py src/leaven/_runs/rust_open.py tests/_runs/test_rust_export.py
+          - cargo fmt --check
+        note: >-
+          Rust run inspection now exports candidate readback records with
+          candidate id, parent id resolved through proposal effects, JSON-shaped
+          artifact payload, and completed-run best candidate id from the
+          `OptimizationEnded` graph event. Python decodes those typed fields and
+          `lv.runs.open(...)` now prefers Rust checkpoint readback when a latest
+          checkpoint exists, constructing an `Optimized[object]` from Rust-owned
+          graph candidates without requiring Python-written `optimized.json`.
+          A regression test opens a checkpoint directory with no `optimized.json`
+          through a fake `leaven run inspect` CLI. This is still foundation
+          evidence, not row closure: Rust readback now owns candidates/lineage,
+          but `lv.runs.open(...)` still marks cost, usage, and assessment rows
+          unsupported until Rust exports those semantic facts.
     closeout_check: "Reading only `optimized.json` written by Python is a proxy."
 
   - id: python_wire_codegen_msgspec_boundary

@@ -1,9 +1,12 @@
 """Tests for `leaven._runs.rust_export`."""
 
+import json
 from pathlib import Path
 
 import pytest
 
+from leaven import runs
+from leaven._runs import optimized_from_rust_readback
 from leaven._runs.rust_export import load_rust_blob_readback, load_rust_run_readback
 from leaven.run_inspection import RustRunReadback
 
@@ -161,6 +164,56 @@ def test_load_rust_blob_readback_reports_cli_failure(tmp_path: Path) -> None:
         load_rust_blob_readback(run_dir, readback.graph.blob, leaven_bin=fake)
 
 
+def test_optimized_from_rust_readback_uses_graph_candidates() -> None:
+    readback = load_rust_run_readback_fixture()
+
+    result = optimized_from_rust_readback(readback, run_dir="/tmp/run")
+
+    assert result.run_id == "run_1"
+    assert result.best.id == "cand_child"
+    assert result.best.parent_id == "cand_seed"
+    assert result.best.artifact == {"template": "child"}
+    assert [candidate.id for candidate in result.lineage("cand_child")] == [
+        "cand_child",
+        "cand_seed",
+    ]
+    assert result.summary.run_dir == "/tmp/run"
+    assert result.summary.cost_status == "unsupported_dependency"
+    assert result.summary.usage_status == "unsupported_dependency"
+    assert [fact.surface for fact in result.summary.unsupported] == [
+        "run.cost",
+        "run.usage",
+        "run.inspection",
+    ]
+
+
+def test_runs_open_prefers_rust_checkpoint_without_optimized_json(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_dir = tmp_path / "run"
+    (run_dir / "checkpoints").mkdir(parents=True)
+    (run_dir / "checkpoints" / "LATEST").write_text("checkpoint_1\n", encoding="utf-8")
+    fake = tmp_path / "leaven"
+    output = tmp_path / "readback.json"
+    output.write_text(
+        json.dumps(load_rust_run_readback_fixture().model_dump(mode="json", by_alias=True)),
+        encoding="utf-8",
+    )
+    fake.write_text(f"#!/bin/sh\ncat {output}\n", encoding="utf-8")
+    fake.chmod(0o755)
+    monkeypatch.setenv("LEAVEN_BIN", str(fake))
+
+    result = runs.open(run_dir)
+
+    assert result.best.id == "cand_child"
+    assert result.summary.run_dir == str(run_dir)
+    assert [candidate.id for candidate in result.lineage("cand_child")] == [
+        "cand_child",
+        "cand_seed",
+    ]
+
+
 def load_rust_run_readback_fixture() -> RustRunReadback:
     return RustRunReadback.model_validate(
         {
@@ -195,6 +248,19 @@ def load_rust_run_readback_fixture() -> RustRunReadback:
                 },
                 "bytes": 128,
                 "run_id": "run_graph",
+                "best_candidate_id": "cand_child",
+                "candidates": [
+                    {
+                        "id": "cand_seed",
+                        "parent_id": None,
+                        "artifact": {"template": "seed"},
+                    },
+                    {
+                        "id": "cand_child",
+                        "parent_id": "cand_seed",
+                        "artifact": {"template": "child"},
+                    },
+                ],
                 "candidate_count": 2,
                 "proposal_batch_count": 1,
                 "proposal_count": 1,
