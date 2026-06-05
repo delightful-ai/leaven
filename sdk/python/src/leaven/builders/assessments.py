@@ -247,7 +247,10 @@ def _private_evidence_to_wire(private: EvidencePrivate) -> WireEvidencePrivate:
     return WireEvidencePrivate(
         visibility=_private_visibility(private.visibility),
         data_classes=list(private.data_classes),
-        payload=msgspec.convert(private.payload, type=ExtensionJsonPayload),
+        payload=msgspec.convert(
+            private.payload.model_dump(exclude_none=True),
+            type=ExtensionJsonPayload,
+        ),
     )
 
 

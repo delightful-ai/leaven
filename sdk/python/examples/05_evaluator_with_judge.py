@@ -19,7 +19,13 @@ import leaven as lv
 from leaven.assessment import AssessmentWrite
 from leaven.builders.assessments import AssessmentSubmission
 from leaven.evaluation_job import EvaluationJob
-from leaven.evidence import EvidenceEnvelope, EvidencePrivate, EvidencePublic, EvidencePublicPayload
+from leaven.evidence import (
+    EvidenceEnvelope,
+    EvidencePrivate,
+    EvidencePrivatePayload,
+    EvidencePublic,
+    EvidencePublicPayload,
+)
 from leaven.json_value import JsonValue
 
 
@@ -92,7 +98,7 @@ async def evaluate(job: EvaluationJob, cx: lv.EvaluatorContext) -> AssessmentSub
                             lv.data_class.CASE_TARGET,
                             lv.data_class.EVALUATOR_PRIVATE,
                         ],
-                        payload={"git_diff": diff.text},
+                        payload=EvidencePrivatePayload(git_diff=diff.text),
                     ),
                     target_derived=True,
                 ),

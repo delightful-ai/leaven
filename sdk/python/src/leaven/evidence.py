@@ -9,7 +9,6 @@ hide target material under non-target labels.
 from pydantic import BaseModel, ConfigDict, Field
 
 from .data_class import CASE_TARGET
-from .json_value import JsonObject
 
 
 class EvidencePublicPayload(BaseModel):
@@ -21,6 +20,15 @@ class EvidencePublicPayload(BaseModel):
     output: str | None = None
     feedback: str | None = None
     metrics: dict[str, float] | None = None
+
+
+class EvidencePrivatePayload(BaseModel):
+    """Evaluator-private assessment evidence payload."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+
+    rubric: str | None = None
+    git_diff: str | None = None
 
 
 class EvidencePublic(BaseModel):
@@ -41,7 +49,7 @@ class EvidencePrivate(BaseModel):
 
     visibility: str = "evaluator_only"
     data_classes: list[str]
-    payload: JsonObject = Field(default_factory=dict)
+    payload: EvidencePrivatePayload = Field(default_factory=EvidencePrivatePayload)
 
 
 class EvidenceEnvelope(BaseModel):
@@ -85,6 +93,7 @@ class EvidenceEnvelope(BaseModel):
 __all__ = [
     "EvidenceEnvelope",
     "EvidencePrivate",
+    "EvidencePrivatePayload",
     "EvidencePublic",
     "EvidencePublicPayload",
 ]

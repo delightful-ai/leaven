@@ -328,8 +328,10 @@ the wire carries:
   classes preserved through the wire. Target-derived evidence flagged
   honestly. Source receipts present and typed. Python public assessment
   evidence uses the closed `EvidencePublicPayload` owner (`summary`,
-  `output`, `feedback`, `metrics`) and must not be re-parsed from an
-  arbitrary JSON object by SDK builders or inspection surfaces.
+  `output`, `feedback`, `metrics`), and Python private assessment
+  evidence uses the closed `EvidencePrivatePayload` owner (`rubric`,
+  `git_diff`). SDK builders and inspection surfaces must not re-parse
+  evidence from arbitrary JSON objects.
 - **Replay determinism.** Receipts plus inputs plus locked seam validation
   reproduce the assessment.
 

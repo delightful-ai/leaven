@@ -1971,6 +1971,31 @@ acceptance:
           before JSON encoding. This closes the shared agent/sandbox output
           raw-object parser island; other capability/config/callback/readback
           leaf slots remain pending.
+      - kind: evidence_private_payload_public_owner_cutover
+        paths:
+          - sdk/python/src/leaven/evidence.py
+          - sdk/python/src/leaven/builders/assessments.py
+          - sdk/python/tests/test_evidence.py
+          - sdk/python/tests/builders/test_assessments.py
+          - sdk/python/examples/05_evaluator_with_judge.py
+          - docs/specs/leaven_python.md
+        commands:
+          - cd sdk/python && uv run pytest tests/test_evidence.py tests/builders/test_assessments.py -q
+          - cd sdk/python && uv run ruff check src/leaven/evidence.py src/leaven/builders/assessments.py tests/test_evidence.py tests/builders/test_assessments.py examples/05_evaluator_with_judge.py
+          - cd sdk/python && uv run ty check src/leaven/evidence.py src/leaven/builders/assessments.py tests/test_evidence.py tests/builders/test_assessments.py examples/05_evaluator_with_judge.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - cd sdk/python && just compile-examples
+        note: >-
+          Python public assessment evidence no longer exposes
+          `EvidencePrivate.payload` as an arbitrary `JsonObject`. The public
+          SDK now has a closed `EvidencePrivatePayload` owner for the active
+          private evidence fields (`rubric`, `git_diff`), rejects unknown
+          private fields at construction, and lowers the Pydantic owner to the
+          generated wire `ExtensionJsonPayload` only at the assessment write
+          boundary. This removes one public JSON bag; generated wire private
+          evidence still supports schema-selected extension payload decoding
+          for Rust-owned seam records.
       - kind: raw_output_lowering_helper_removed
         paths:
           - sdk/python/src/leaven/builders/_output_contract.py

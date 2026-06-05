@@ -1,7 +1,13 @@
 import pytest
 
 import leaven as lv
-from leaven.evidence import EvidenceEnvelope, EvidencePrivate, EvidencePublic, EvidencePublicPayload
+from leaven.evidence import (
+    EvidenceEnvelope,
+    EvidencePrivate,
+    EvidencePrivatePayload,
+    EvidencePublic,
+    EvidencePublicPayload,
+)
 
 
 def test_public_only_builds_public_projection() -> None:
@@ -26,7 +32,7 @@ def test_public_private_splits_data_classes_from_payloads() -> None:
         private=EvidencePrivate(
             visibility="evaluator_only",
             data_classes=[lv.data_class.CASE_TARGET],
-            payload={"rubric": "exact"},
+            payload=EvidencePrivatePayload(rubric="exact"),
         ),
         target_derived=True,
     )
@@ -34,7 +40,7 @@ def test_public_private_splits_data_classes_from_payloads() -> None:
     assert envelope.public is not None
     assert envelope.public.payload == EvidencePublicPayload(feedback="clear")
     assert envelope.private is not None
-    assert envelope.private.payload == {"rubric": "exact"}
+    assert envelope.private.payload == EvidencePrivatePayload(rubric="exact")
     assert envelope.private.visibility == "evaluator_only"
     assert envelope.target_derived is True
 
@@ -50,3 +56,8 @@ def test_target_private_evidence_must_be_declared() -> None:
 def test_public_payload_rejects_unknown_fields_at_construction() -> None:
     with pytest.raises(ValueError, match="extra_forbidden"):
         EvidencePublicPayload.model_validate({"verdict": "correct"})
+
+
+def test_private_payload_rejects_unknown_fields_at_construction() -> None:
+    with pytest.raises(ValueError, match="extra_forbidden"):
+        EvidencePrivatePayload.model_validate({"trace": "hidden"})
