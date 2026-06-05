@@ -3424,6 +3424,34 @@ acceptance:
           exactly 650 lines. The broader project-quality row remains pending
           until all public SDK/wire `Any` and public backbone scaffolds are
           audited and removed or explicitly kept private.
+      - kind: private_run_codec_msgspec_boundary_and_line_cap
+        paths:
+          - sdk/python/src/leaven/_runs/codec.py
+          - sdk/python/src/leaven/_runs/store.py
+          - sdk/python/codegen/expression_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/expressions.py
+          - sdk/python/tests/_runs/test_codec.py
+          - sdk/python/tests/_runs/test_rust_export.py
+          - sdk/python/tests/test_run_inspection.py
+        commands:
+          - cd sdk/python && uv run pytest tests/_runs/test_codec.py tests/_runs/test_rust_export.py tests/test_run_inspection.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_runs/codec.py src/leaven/_runs/store.py codegen/expression_codegen.py src/leaven/_seam/_wire/expressions.py tests/_runs/test_codec.py tests/_runs/test_rust_export.py tests/test_run_inspection.py
+          - cd sdk/python && uv run ty check src/leaven/_runs/codec.py src/leaven/_runs/store.py codegen/expression_codegen.py src/leaven/_seam/_wire/expressions.py tests/_runs/test_codec.py tests/_runs/test_rust_export.py tests/test_run_inspection.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && just check
+        note: >-
+          Private run-result persistence no longer opens `optimized.json` by
+          loading an untyped object tree and walking mapping fields by hand.
+          `_runs.codec` now parses a msgspec `Struct` envelope, keeps the
+          delayed `optimized` payload as `Raw`, decodes the selected payload
+          after the artifact kind is known, and `store.py` reads/writes through
+          the byte codec. The generated expression template also lost the extra
+          blank line that pushed generated `expressions.py` over the 650-line
+          Python cap, and the generated stale check plus custom quality
+          contract both pass. This is a project-quality and private run-codec
+          cleanup; it does not close the broader Rust-owned public-seam
+          codegen row.
       - kind: sdk_quality_gate_lint_type_tests_package
         paths:
           - sdk/python/pyproject.toml

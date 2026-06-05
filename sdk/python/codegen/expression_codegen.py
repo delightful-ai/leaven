@@ -644,7 +644,6 @@ class ValidationReceipt(Struct, frozen=True, forbid_unknown_fields=True, omit_de
     schema_fingerprint: str | UnsetType = UNSET
     errors: list[ValidationErrorItem] | UnsetType = UNSET
 
-
 __all__ = (  # noqa: PLE0605, SIM905
     "{EXPRESSION_EXPORTS}"
 ).split()

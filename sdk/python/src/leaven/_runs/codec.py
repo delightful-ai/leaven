@@ -1,20 +1,38 @@
 """Private JSON codec for persisted Python SDK run results."""
 
-from collections.abc import Mapping
 from typing import Literal
 
-from .._seam._wire.json_value import JsonObject, json_object
+import msgspec
+from msgspec import Raw, Struct
+
+from .._seam._wire.json_value import JsonArray, JsonObject, JsonValue, json_object
 from ..artifacts.prompt import PromptArtifact
 from ..result import Optimized
 
 RUN_RESULT_SCHEMA = "leaven.python.optimized.v1"
 ArtifactKind = Literal["prompt"]
-type OptimizedRecord = dict[str, object]
+type DecodedCandidate = dict[str, JsonValue | PromptArtifact]
+type OptimizedRecord = dict[str, JsonValue | DecodedCandidate | list[DecodedCandidate]]
+
+
+class _RunResultEnvelope(Struct, forbid_unknown_fields=True):
+    schema: str
+    artifact_kind: str
+    optimized: Raw
+
+
+_ENCODER = msgspec.json.Encoder()
+_ENVELOPE_DECODER = msgspec.json.Decoder(_RunResultEnvelope)
 
 
 def encode_optimized[A](result: Optimized[A]) -> JsonObject:
     """Encode an inspectable optimized result into the private JSON envelope."""
-    return json_object(
+    return json_object(msgspec.json.decode(encode_optimized_bytes(result)))
+
+
+def encode_optimized_bytes[A](result: Optimized[A]) -> bytes:
+    """Encode an inspectable optimized result into private JSON bytes."""
+    return _ENCODER.encode(
         {
             "schema": RUN_RESULT_SCHEMA,
             "artifact_kind": _artifact_kind(result.best.artifact),
@@ -25,14 +43,16 @@ def encode_optimized[A](result: Optimized[A]) -> JsonObject:
 
 def decode_optimized(envelope: JsonObject) -> Optimized[object]:
     """Decode a persisted optimized result envelope."""
-    schema = _required_field(envelope, "schema")
-    if schema != RUN_RESULT_SCHEMA:
-        raise ValueError(f"unsupported run result schema {schema!r}")
-    kind = _artifact_kind_from_json(_required_field(envelope, "artifact_kind"))
-    raw = _required_field(envelope, "optimized")
-    if not isinstance(raw, dict):
-        raise TypeError("persisted run result is missing optimized object")
-    decoded = _decode_artifacts(json_object(raw), kind)
+    return decode_optimized_bytes(_ENCODER.encode(envelope))
+
+
+def decode_optimized_bytes(body: bytes) -> Optimized[object]:
+    """Decode a persisted optimized result envelope from private JSON bytes."""
+    envelope = _ENVELOPE_DECODER.decode(body)
+    if envelope.schema != RUN_RESULT_SCHEMA:
+        raise ValueError(f"unsupported run result schema {envelope.schema!r}")
+    kind = _artifact_kind_from_json(envelope.artifact_kind)
+    decoded = _decode_artifacts(json_object(msgspec.json.decode(envelope.optimized)), kind)
     return Optimized[object].model_validate(decoded)
 
 
@@ -50,36 +70,44 @@ def _artifact_kind_from_json(value: object) -> ArtifactKind:
 
 def _decode_artifacts(raw: JsonObject, kind: ArtifactKind) -> OptimizedRecord:
     decoded = dict(raw)
-    decoded["best"] = _decode_candidate(decoded["best"], kind)
-    frontier = _optional_field(decoded, "frontier", [])
-    if not isinstance(frontier, list):
-        raise TypeError("persisted run frontier must be a list")
+    decoded["best"] = _decode_candidate(_required_object(decoded, "best"), kind)
+    frontier = _optional_array(decoded, "frontier")
     decoded["frontier"] = [
-        _decode_candidate(candidate, kind) for candidate in frontier
+        _decode_candidate(json_object(candidate), kind) for candidate in frontier
     ]
     return decoded
 
 
-def _decode_candidate(candidate: object, kind: ArtifactKind) -> OptimizedRecord:
-    if not isinstance(candidate, dict):
-        raise TypeError("persisted candidate must be an object")
+def _decode_candidate(candidate: JsonObject, kind: ArtifactKind) -> DecodedCandidate:
     decoded = dict(candidate)
-    artifact = _required_field(decoded, "artifact")
     if kind == "prompt":
-        decoded["artifact"] = PromptArtifact.model_validate(artifact)
+        decoded["artifact"] = PromptArtifact.model_validate(_required_object(decoded, "artifact"))
     return decoded
 
 
-def _required_field(record: Mapping[str, object], key: str) -> object:
+def _required_json(record: JsonObject, key: str) -> JsonValue:
     if key not in record:
         raise KeyError(f"persisted run result is missing {key!r}")
     return record[key]
 
 
-def _optional_field(record: Mapping[str, object], key: str, default: object) -> object:
+def _required_object(record: JsonObject, key: str) -> JsonObject:
+    return json_object(_required_json(record, key))
+
+
+def _optional_array(record: JsonObject, key: str) -> JsonArray:
     if key not in record:
-        return default
-    return record[key]
+        return []
+    value = record[key]
+    if not isinstance(value, list):
+        raise TypeError(f"persisted run result field {key!r} must be a list")
+    return value
 
 
-__all__ = ["RUN_RESULT_SCHEMA", "decode_optimized", "encode_optimized"]
+__all__ = [
+    "RUN_RESULT_SCHEMA",
+    "decode_optimized",
+    "decode_optimized_bytes",
+    "encode_optimized",
+    "encode_optimized_bytes",
+]

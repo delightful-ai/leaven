@@ -1,11 +1,9 @@
 """Private run-directory store for Python SDK inspection results."""
 
-import json
 from pathlib import Path
 
-from .._seam._wire.json_value import json_object
 from ..result import Optimized
-from .codec import decode_optimized, encode_optimized
+from .codec import decode_optimized_bytes, encode_optimized_bytes
 
 RUN_RESULT_FILE = "optimized.json"
 
@@ -22,10 +20,7 @@ def persist_optimized[A](
     run_dir.mkdir(parents=True, exist_ok=True)
     target = run_dir / RUN_RESULT_FILE
     tmp = run_dir / f".{RUN_RESULT_FILE}.tmp"
-    tmp.write_text(
-        json.dumps(encode_optimized(persisted), sort_keys=True, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    tmp.write_bytes(encode_optimized_bytes(persisted) + b"\n")
     tmp.replace(target)
     return persisted
 
@@ -33,7 +28,7 @@ def persist_optimized[A](
 def open_optimized(path: str | Path) -> Optimized[object]:
     """Open a persisted optimized result from a run directory or result file."""
     result_path = _result_path(Path(path))
-    return decode_optimized(json_object(json.loads(result_path.read_text(encoding="utf-8"))))
+    return decode_optimized_bytes(result_path.read_bytes())
 
 
 def list_run_dirs(root: str | Path = ".leaven/runs") -> list[str]:
