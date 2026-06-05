@@ -301,7 +301,8 @@ fn runner_payload() -> Value {
         "candidate": "cand_stagerun_parent",
         "case": "case_stagerun",
         "case_input": {"question": "5 + 7"},
-        "target_forbidden": true
+        "target_forbidden": true,
+        "capability_fingerprint": "fp_cap_sha256_stagerun"
     })
 }
 

@@ -2305,7 +2305,8 @@ mod tests {
                     "candidate": "cand_stage_service",
                     "case": "case_stage_service",
                     "case_input": {"question": "2 + 2"},
-                    "target_forbidden": true
+                    "target_forbidden": true,
+                    "capability_fingerprint": "fp_cap_sha256_stage_service"
                 }
             }
         })

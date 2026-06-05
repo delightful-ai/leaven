@@ -2091,6 +2091,56 @@ acceptance:
           generated dispatch record. The row remains pending because graph-row
           fragments are now covered by later evidence, while nested result
           fragments still need typed owners.
+      - kind: runner_stage_capability_fingerprint_hard_cut
+        paths:
+          - docs/specs/public-seam-v1/schemas/leaven.stage_payloads.v1.schema.json
+          - docs/specs/public-seam-v1/conformance-matrix.yaml
+          - crates/leaven-public-seam/src/stage_payload/inspect.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/stage_run.rs
+          - crates/leaven-seam-runtime/tests/runtime_contract.rs
+          - crates/leaven-seam-service/src/service.rs
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/src/leaven/_seam/plans.py
+          - sdk/python/src/leaven/_stage_runtime/contexts.py
+          - sdk/python/src/leaven/_seam_worker/context.py
+          - sdk/python/src/leaven/_seam_worker/runner.py
+          - sdk/python/tests/_seam/_wire/test_stage_payloads.py
+          - sdk/python/tests/_seam/test_plans.py
+          - sdk/python/tests/test_stage_surface.py
+        commands:
+          - cargo fmt --check -p leaven-public-seam -p leaven-seam-runtime -p leaven-seam-service
+          - cargo check -p leaven-public-seam -p leaven-seam-runtime -p leaven-seam-service
+          - cargo test -p leaven-public-seam --test public_seam_contract stage_payloads::
+          - cargo test -p leaven-public-seam --test public_seam_contract stage_run::stage_run_validates_generic_runner_dispatch_request_and_text_result -- --exact
+          - cargo test -p leaven-seam-runtime --test runtime_contract
+          - cargo test -p leaven-seam-service service::tests::seam_runtime_executes_configured_runner_stage_dispatch -- --exact
+          - cargo test -p leaven-seam-service service::tests::seam_runtime_executes_runner_stage_through_command_worker -- --exact
+          - cargo test -p leaven-seam-service service::tests::seam_runtime_services_lm_callback_from_command_worker -- --exact
+          - cargo test -p leaven-seam-service service::tests::seam_runtime_services_agent_callback_from_command_worker -- --exact
+          - cargo test -p leaven-seam-service service::tests::seam_runtime_services_proposal_submit_callback_from_command_worker -- --exact
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_stage_payloads.py tests/_seam/test_plans.py tests/_seam/test_client.py tests/_seam_worker/test_protocol.py tests/test_stage_surface.py -q
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run ruff check src/leaven/contexts.py src/leaven/_stage_runtime/contexts.py src/leaven/_seam_worker/context.py src/leaven/_seam_worker/runner.py src/leaven/_seam_worker/proposer.py src/leaven/_seam/plans.py src/leaven/_seam_optimize/driver.py src/leaven/_seam_optimize/rewards.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_stage_payloads.py tests/_seam/test_plans.py tests/_seam/test_client.py tests/_seam_worker/test_protocol.py tests/test_stage_surface.py codegen/payload_codegen.py
+          - cd sdk/python && uv run ty check src/leaven/contexts.py src/leaven/_stage_runtime/contexts.py src/leaven/_seam_worker/context.py src/leaven/_seam_worker/runner.py src/leaven/_seam_worker/proposer.py src/leaven/_seam/plans.py src/leaven/_seam_optimize/driver.py src/leaven/_seam_optimize/rewards.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_stage_payloads.py tests/_seam/test_plans.py tests/_seam/test_client.py tests/_seam_worker/test_protocol.py tests/test_stage_surface.py codegen/payload_codegen.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && uv run pytest tests/_seam_optimize/test_rewards.py tests/test_optimize_public_seam_e2e.py tests/test_optimize_proposer_mechanics.py -q
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Runner stage dispatch no longer permits a capability-less payload.
+          The locked stage-payload schema requires
+          `RunnerRequest.capability_fingerprint`, Rust semantic validation has
+          a negative contract for missing runner capability, service/runtime
+          runner fixtures carry the field, and Python generated msgspec
+          `RunnerRequest` plus hand-authored `StageRunRequest` require it.
+          Concrete callback `RolloutContext` and `ProposeContext` now expose
+          the typed capability fingerprint from the stage payload; public
+          context classes are abstract contracts rather than public property
+          scaffolds that raise `NotImplementedError`. Worker tests prove user
+          runner code can read `cx.capability_fingerprint` from the real
+          stage request. The row remains pending because other stage roles and
+          remaining result fragments still need complete generated owners.
       - kind: rust_and_python_graph_row_fragments_preserve_typed_json_owner
         paths:
           - crates/leaven-public-seam/src/result.rs
@@ -3759,6 +3809,33 @@ acceptance:
           honest SDK readback verifier, not the final full backend replay
           implementation, so the broader Python project-quality row remains
           pending.
+      - kind: public_stage_context_property_scaffolds_replaced
+        paths:
+          - sdk/python/src/leaven/contexts.py
+          - sdk/python/src/leaven/_stage_runtime/contexts.py
+          - sdk/python/src/leaven/_seam_worker/context.py
+          - sdk/python/src/leaven/_seam_worker/runner.py
+          - sdk/python/src/leaven/_seam_worker/proposer.py
+          - sdk/python/src/leaven/_seam_optimize/rewards.py
+          - sdk/python/tests/test_stage_surface.py
+        commands:
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_stage_payloads.py tests/_seam/test_plans.py tests/_seam/test_client.py tests/_seam_worker/test_protocol.py tests/test_stage_surface.py -q
+          - cd sdk/python && uv run pytest tests/_seam_optimize/test_rewards.py tests/test_optimize_public_seam_e2e.py tests/test_optimize_proposer_mechanics.py -q
+          - cd sdk/python && uv run ruff check src/leaven/contexts.py src/leaven/_stage_runtime/contexts.py src/leaven/_seam_worker/context.py src/leaven/_seam_worker/runner.py src/leaven/_seam_worker/proposer.py src/leaven/_seam/plans.py src/leaven/_seam_optimize/driver.py src/leaven/_seam_optimize/rewards.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_stage_payloads.py tests/_seam/test_plans.py tests/_seam/test_client.py tests/_seam_worker/test_protocol.py tests/test_stage_surface.py codegen/payload_codegen.py
+          - cd sdk/python && uv run ty check src/leaven/contexts.py src/leaven/_stage_runtime/contexts.py src/leaven/_seam_worker/context.py src/leaven/_seam_worker/runner.py src/leaven/_seam_worker/proposer.py src/leaven/_seam/plans.py src/leaven/_seam_optimize/driver.py src/leaven/_seam_optimize/rewards.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_stage_payloads.py tests/_seam/test_plans.py tests/_seam/test_client.py tests/_seam_worker/test_protocol.py tests/test_stage_surface.py codegen/payload_codegen.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Public stage context property scaffolds in `contexts.py` are now
+          abstract typed contracts instead of public properties that raise
+          `NotImplementedError`. Concrete callback rollout/propose contexts
+          implement `stage_id` and `capability_fingerprint` from the typed
+          stage payload, and the pure Python reward mechanics context carries
+          explicit local stage/capability/workspace facts. Worker tests prove
+          user runner code reads `cx.capability_fingerprint` from the real
+          stage request. The broader row remains pending because optional DSPy
+          and remaining workspace/optimize public scaffolds still require
+          removal, privatization, or product-surface classification.
       - kind: private_seam_json_builder_branding
         commits:
           - 414f7d0d

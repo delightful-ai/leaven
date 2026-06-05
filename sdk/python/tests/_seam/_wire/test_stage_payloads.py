@@ -21,7 +21,8 @@ def test_stage_run_request_decodes_top_level_dispatch_shape() -> None:
         b'"stage":"runner","payload":{'
         b'"schema_version":"leaven.stage_payloads.v1","role":"runner",'
         b'"run":"run_1","stage_call_id":"sc_1","candidate":"cand_1",'
-        b'"case":"case_1","case_input":{"prompt":"hello"},"target_forbidden":true}}'
+        b'"case":"case_1","case_input":{"prompt":"hello"},"target_forbidden":true,'
+        b'"capability_fingerprint":"fp_cap_sha256_test"}}'
     )
 
     decoded = msgspec.json.decode(body, type=StageRunRequest)
@@ -29,6 +30,7 @@ def test_stage_run_request_decodes_top_level_dispatch_shape() -> None:
     assert decoded.stage == "runner"
     assert isinstance(decoded.payload, RunnerRequest)
     assert decoded.payload.case_input == {"prompt": "hello"}
+    assert decoded.payload.capability_fingerprint == "fp_cap_sha256_test"
 
 
 def test_stage_run_request_decodes_typed_runner_refs() -> None:
@@ -39,7 +41,8 @@ def test_stage_run_request_decodes_typed_runner_refs() -> None:
         b'"run":"run_1","stage_call_id":"sc_1",'
         b'"candidate":{"kind":"candidate","run":"run_1","id":"cand_1"},'
         b'"case":{"kind":"case","run":"run_1","id":"case_1"},'
-        b'"case_input":{"prompt":"hello"},"target_forbidden":true}}'
+        b'"case_input":{"prompt":"hello"},"target_forbidden":true,'
+        b'"capability_fingerprint":"fp_cap_sha256_test"}}'
     )
 
     decoded = msgspec.json.decode(body, type=StageRunRequest)
@@ -77,7 +80,8 @@ def test_stage_run_request_rejects_arbitrary_runner_ref_objects() -> None:
         b'"run":"run_1","stage_call_id":"sc_1",'
         b'"candidate":{"kind":"workspace","id":"ws_1"},'
         b'"case":{"kind":"case","id":"case_1"},'
-        b'"case_input":{"prompt":"hello"},"target_forbidden":true}}'
+        b'"case_input":{"prompt":"hello"},"target_forbidden":true,'
+        b'"capability_fingerprint":"fp_cap_sha256_test"}}'
     )
 
     with pytest.raises(msgspec.ValidationError):
@@ -91,7 +95,8 @@ def test_stage_run_request_rejects_non_object_case_input() -> None:
         b'"schema_version":"leaven.stage_payloads.v1","role":"runner",'
         b'"run":"run_1","stage_call_id":"sc_1",'
         b'"candidate":"cand_1","case":"case_1",'
-        b'"case_input":["prompt","hello"],"target_forbidden":true}}'
+        b'"case_input":["prompt","hello"],"target_forbidden":true,'
+        b'"capability_fingerprint":"fp_cap_sha256_test"}}'
     )
 
     with pytest.raises(msgspec.ValidationError):

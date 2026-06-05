@@ -120,11 +120,13 @@ def test_stage_run_request_preserves_typed_case_input_owner() -> None:
         candidate="cand_stage",
         case="case_stage",
         case_input={"question": "2 + 2", "nested": {"answer": "4"}},
+        capability_fingerprint="fp_cap_sha256_stage",
     )
 
     decoded = msgspec.json.decode(msgspec.json.encode(request.to_params()), type=StageRunParams)
 
     assert isinstance(decoded.payload, RunnerRequest)
+    assert decoded.payload.capability_fingerprint == "fp_cap_sha256_stage"
     assert decoded.payload.case_input == {
         "question": "2 + 2",
         "nested": {"answer": "4"},

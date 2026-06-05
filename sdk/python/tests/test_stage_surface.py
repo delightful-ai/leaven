@@ -199,6 +199,7 @@ def test_stage_run_request_names_locked_runner_dispatch_shape() -> None:
         candidate="cand_stage_builder",
         case="case_stage_builder",
         case_input={"question": "2 + 2"},
+        capability_fingerprint="fp_cap_sha256_stage_builder",
     )
 
     assert request.method == "leaven/stage.run"
@@ -215,6 +216,7 @@ def test_stage_run_request_names_locked_runner_dispatch_shape() -> None:
         "case": "case_stage_builder",
         "case_input": {"question": "2 + 2"},
         "target_forbidden": True,
+        "capability_fingerprint": "fp_cap_sha256_stage_builder",
     }
     assert MockRunnerStageConfig(text="ok", summary="runner").to_json() == {
         "kind": "mock_runner",
@@ -265,7 +267,10 @@ import leaven as lv
 @lv.runner
 async def run(prompt, case, cx):
     reply = await cx.lm.complete(prompt=prompt.template, max_tokens=12)
-    return f"{case.input['question']} => {reply.text} / {reply.usage['total_tokens']}"
+    return (
+        f"{case.input['question']} => {reply.text} / {reply.usage['total_tokens']} "
+        f"/ {cx.capability_fingerprint}"
+    )
 """.lstrip(),
         encoding="utf-8",
     )
@@ -276,6 +281,7 @@ async def run(prompt, case, cx):
         candidate="cand_stage_worker",
         case="case_stage_worker",
         case_input={"question": "2 + 2", "prompt": "Answer the question."},
+        capability_fingerprint="fp_cap_sha256_stage_worker",
     )
 
     process = subprocess.Popen(
@@ -345,7 +351,7 @@ async def run(prompt, case, cx):
     assert stdout == ""
     assert process.returncode == 0, stderr
     assert response["result"]["stage_call_id"] == "sc_stage_worker"
-    assert response["result"]["output"]["value"] == "2 + 2 => 4 / 5"
+    assert response["result"]["output"]["value"] == "2 + 2 => 4 / 5 / fp_cap_sha256_stage_worker"
 
 
 def test_checked_in_stage_worker_can_callback_agent_run(tmp_path: Path) -> None:
@@ -374,6 +380,7 @@ async def run(prompt, case, cx):
         candidate="cand_stage_worker_agent",
         case="case_stage_worker_agent",
         case_input={"question": "2 + 2", "prompt": "Answer the question."},
+        capability_fingerprint="fp_cap_sha256_stage_worker_agent",
     )
 
     process = subprocess.Popen(

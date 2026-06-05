@@ -1,5 +1,7 @@
 """Reward-vector execution for the durable-seam optimize mechanics path."""
 
+from .._handles import WorkspaceHandle
+from .._receipts import CallReceipt
 from ..assessment import RewardAssessment
 from ..case import ScoringCaseView
 from ..contexts import RubricContext
@@ -52,6 +54,23 @@ async def evaluate_reward_vector(
 
 class _RubricContext(RubricContext):
     """Minimal scorer-role context for pure Python reward mechanics."""
+
+    @property
+    def stage_id(self) -> str:
+        return "sc_python_reward_vector"
+
+    @property
+    def capability_fingerprint(self) -> str:
+        return "fp_cap_sha256_python_reward_vector"
+
+    @property
+    def rollout_workspace(self) -> WorkspaceHandle:
+        return WorkspaceHandle(
+            workspace_id="ws_python_reward_vector",
+            candidate_id="cand_seed",
+            lifetime="stage_call",
+            receipt=CallReceipt(receipt_id="wrec_python_reward_vector"),
+        )
 
 
 def _normalize_reward_value(value: float | RewardValue) -> tuple[float, str, OutputRecord | None]:

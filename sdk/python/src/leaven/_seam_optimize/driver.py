@@ -109,6 +109,7 @@ async def run_prompt_mechanics(
                 candidate="cand_seed",
                 case=case.case_id,
                 case_input=_case_input(seed, case),
+                capability_fingerprint=capability_fingerprint,
             ),
         )
         if result.output.value is UNSET:

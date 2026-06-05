@@ -1810,7 +1810,8 @@ fn stage_run_request_params() -> Value {
             "candidate": "cand_envelope",
             "case": "case_envelope",
             "case_input": {"question": "2 + 3"},
-            "target_forbidden": true
+            "target_forbidden": true,
+            "capability_fingerprint": "fp_cap_sha256_acp"
         }
     })
 }

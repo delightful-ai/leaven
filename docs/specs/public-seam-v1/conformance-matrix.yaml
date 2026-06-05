@@ -978,6 +978,7 @@ rows:
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::stage_score_contexts_reject_public_only_assessed_outputs
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::score_and_judge_contexts_reject_nested_output_data_class_gaps
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::runner_request_rejects_case_target_material
+      - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::runner_request_requires_capability_fingerprint
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::callback_and_adapter_payloads_reject_missing_payload_schema
       - crates/leaven-public-seam/tests/public_seam_contract/stage_payloads.rs::reflect_propose_submission_rejects_mutation_without_cited_handoff
       - crates/leaven-agentic/tests/agentic_contract/public_seam_stage.rs::agentic_reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fakes

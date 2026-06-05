@@ -37,6 +37,7 @@ async def run_runner_stage(
     cx = rollout_context(
         candidate_id=candidate,
         stage_call_id=stage_call_id,
+        capability_fingerprint=payload.capability_fingerprint,
         lm_model=lm_model,
         callback=callback,
     )

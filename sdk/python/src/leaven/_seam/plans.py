@@ -319,6 +319,7 @@ class StageRunRequest:
     candidate: str
     case: str
     case_input: WireJsonCaseInput
+    capability_fingerprint: str
 
     @property
     def method(self) -> SeamRequestMethod:
@@ -339,6 +340,7 @@ class StageRunRequest:
                 case=self.case,
                 case_input=self.case_input,
                 target_forbidden=True,
+                capability_fingerprint=self.capability_fingerprint,
             ),
         )
 

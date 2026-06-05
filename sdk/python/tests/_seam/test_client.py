@@ -74,12 +74,14 @@ def test_client_lowers_typed_runner_stage_request(monkeypatch: MonkeyPatch) -> N
             candidate="cand_seed",
             case="case_1",
             case_input={"prompt": "hi"},
+            capability_fingerprint="fp_cap_sha256_stage",
         )
     )
 
     envelope = msgspec.json.decode(captured.input_text.encode(), type=JsonRpcRequestEnvelope)
     assert envelope.method == "leaven/stage.run"
     assert envelope.id == "req_stage"
+    assert b"fp_cap_sha256_stage" in captured.input_text.encode()
     assert result.stage == "runner"
     assert result.output.summary == "ok"
 

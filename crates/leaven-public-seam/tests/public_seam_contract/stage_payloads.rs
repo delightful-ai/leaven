@@ -994,6 +994,22 @@ fn runner_request_rejects_case_target_material() {
 }
 
 #[test]
+fn runner_request_requires_capability_fingerprint() {
+    let package = package();
+    let mut missing_capability = runner_request();
+    missing_capability
+        .as_object_mut()
+        .unwrap()
+        .remove("capability_fingerprint");
+
+    assert!(
+        package
+            .validate_stage_payload_document(&missing_capability)
+            .is_err()
+    );
+}
+
+#[test]
 fn callback_and_adapter_payloads_reject_missing_payload_schema() {
     let package = package();
 
@@ -1267,7 +1283,8 @@ fn runner_request() -> Value {
         "candidate": "cand_stagepayload_parent",
         "case": "case_stagepayload",
         "case_input": {"question": "target-free"},
-        "target_forbidden": true
+        "target_forbidden": true,
+        "capability_fingerprint": "fp_cap_sha256_stagepayload"
     })
 }
 

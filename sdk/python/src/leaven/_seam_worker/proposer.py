@@ -52,6 +52,7 @@ async def run_proposer_stage(
     cx = propose_context(
         parent_candidate_id=request.parent_candidate_id,
         stage_call_id=payload.stage_call_id,
+        capability_fingerprint=payload.capability_fingerprint,
         lm_model=lm_model,
         callback=callback,
     )

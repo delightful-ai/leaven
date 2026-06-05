@@ -23,6 +23,7 @@ class CallbackRolloutContext(RolloutContext):
         *,
         candidate_id: str,
         stage_call_id: str,
+        capability_fingerprint: str,
         lm_model: str,
         agent_callback: AgentRunCallback | None = None,
     ) -> None:
@@ -39,6 +40,7 @@ class CallbackRolloutContext(RolloutContext):
         )
         self._candidate_id = candidate_id
         self._stage_call_id = stage_call_id
+        self._capability_fingerprint = capability_fingerprint
 
     @property
     def candidate_id(self) -> str:
@@ -47,6 +49,10 @@ class CallbackRolloutContext(RolloutContext):
     @property
     def stage_id(self) -> str:
         return self._stage_call_id
+
+    @property
+    def capability_fingerprint(self) -> str:
+        return self._capability_fingerprint
 
     @property
     def rollout_workspace(self) -> WorkspaceHandle:
@@ -67,6 +73,7 @@ class CallbackProposeContext(ProposeContext):
         *,
         parent_candidate_id: str,
         stage_call_id: str,
+        capability_fingerprint: str,
         lm_model: str,
         agent_callback: AgentRunCallback | None = None,
         proposal_callback: ProposalSubmitCallback | None = None,
@@ -93,6 +100,7 @@ class CallbackProposeContext(ProposeContext):
         )
         self._parent_candidate_id = parent_candidate_id
         self._stage_call_id = stage_call_id
+        self._capability_fingerprint = capability_fingerprint
 
     @property
     def parent_candidate_id(self) -> str:
@@ -101,6 +109,10 @@ class CallbackProposeContext(ProposeContext):
     @property
     def stage_id(self) -> str:
         return self._stage_call_id
+
+    @property
+    def capability_fingerprint(self) -> str:
+        return self._capability_fingerprint
 
     @property
     def parent_workspace(self) -> WorkspaceHandle:

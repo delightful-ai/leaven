@@ -438,6 +438,7 @@ class RunnerRequest(
     case: CaseRef
     case_input: WireJsonCaseInput
     target_forbidden: bool
+    capability_fingerprint: str
 
 
 type ProposalEffect = Literal[

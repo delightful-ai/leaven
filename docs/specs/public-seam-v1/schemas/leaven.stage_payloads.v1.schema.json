@@ -362,6 +362,9 @@
         "case_input": {},
         "target_forbidden": {
           "const": true
+        },
+        "capability_fingerprint": {
+          "$ref": "common.schema.json#/$defs/Fingerprint"
         }
       },
       "required": [
@@ -372,7 +375,8 @@
         "candidate",
         "case",
         "case_input",
-        "target_forbidden"
+        "target_forbidden",
+        "capability_fingerprint"
       ],
       "additionalProperties": false
     },

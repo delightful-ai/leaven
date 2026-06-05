@@ -10,6 +10,8 @@ The case projection (target-free vs target-bearing) is the `case` PARAMETER type
 on the stage function (`InputCaseView` / `ScoringCaseView`), not a `cx` field.
 """
 
+from abc import ABC, abstractmethod
+
 from ._handles import WorkspaceHandle
 from .builders.agent import AgentBuilder
 from .builders.assessments import AssessmentsBuilder
@@ -20,16 +22,16 @@ from .builders.sandbox import SandboxBuilder
 from .builders.workspace import WorkspaceBuilder, WorkspaceReads
 
 
-class _StageMeta:
+class _StageMeta(ABC):
     @property
+    @abstractmethod
     def stage_id(self) -> str:
         """Engine-minted stage call id, immutable within the stage."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
     @property
+    @abstractmethod
     def capability_fingerprint(self) -> str:
         """Capability document fingerprint for this stage's authority."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
 
 class _Effects(_StageMeta):
@@ -46,14 +48,14 @@ class RolloutContext(_Effects):
     """`Rollout.fn` body. TARGET-FREE. Runs the current artifact on one case."""
 
     @property
+    @abstractmethod
     def candidate_id(self) -> str:
         """The candidate being run in this rollout."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
     @property
+    @abstractmethod
     def rollout_workspace(self) -> WorkspaceHandle:
         """Engine-prepared workspace for this rollout (read via `cx.workspace`)."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
 
 class RubricContext(_Effects):
@@ -61,9 +63,9 @@ class RubricContext(_Effects):
     target via the `ScoringCaseView` case param (not `cx`), no graph mutation."""
 
     @property
+    @abstractmethod
     def rollout_workspace(self) -> WorkspaceHandle:
         """Engine-prepared workspace the rollout just used."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
 
 class ReflectContext(_Effects):
@@ -80,14 +82,14 @@ class ProposeContext(_Effects):
     proposals: ProposalsBuilder
 
     @property
+    @abstractmethod
     def parent_candidate_id(self) -> str | None:
         """Parent candidate id this proposal changes; None for fresh authoring."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
     @property
+    @abstractmethod
     def parent_workspace(self) -> WorkspaceHandle:
         """Engine-prepared workspace for the parent candidate."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
 
 class JudgeContext(_Effects):
@@ -110,9 +112,9 @@ class EvaluatorContext(_Effects):
     assessments: AssessmentsBuilder
 
     @property
+    @abstractmethod
     def evaluation_request_id(self) -> str:
         """The evaluation request id this evaluator was invoked for."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
 
 __all__ = [

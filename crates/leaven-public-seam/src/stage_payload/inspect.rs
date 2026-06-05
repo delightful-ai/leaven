@@ -517,6 +517,7 @@ fn collect_output_record_data_classes(
 pub(super) fn inspect_runner_request(
     object: &serde_json::Map<String, Value>,
 ) -> Result<RunnerCaseInputDocument, PublicSeamError> {
+    require_field(object, "capability_fingerprint")?;
     if object.get("target_forbidden") != Some(&Value::Bool(true)) {
         return Err(invalid_stage_payload(
             "runner request must declare target_forbidden=true",

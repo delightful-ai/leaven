@@ -100,6 +100,7 @@ def rollout_context(
     *,
     candidate_id: str,
     stage_call_id: str,
+    capability_fingerprint: str,
     lm_model: str,
     callback: JsonRpcCallbackClient | None = None,
 ) -> CallbackRolloutContext:
@@ -109,6 +110,7 @@ def rollout_context(
         callback,
         candidate_id=candidate_id,
         stage_call_id=stage_call_id,
+        capability_fingerprint=capability_fingerprint,
         lm_model=lm_model,
         agent_callback=callback,
     )
@@ -118,6 +120,7 @@ def propose_context(
     *,
     parent_candidate_id: str,
     stage_call_id: str,
+    capability_fingerprint: str,
     lm_model: str,
     callback: JsonRpcCallbackClient | None = None,
 ) -> CallbackProposeContext:
@@ -127,6 +130,7 @@ def propose_context(
         callback,
         parent_candidate_id=parent_candidate_id,
         stage_call_id=stage_call_id,
+        capability_fingerprint=capability_fingerprint,
         lm_model=lm_model,
         agent_callback=callback,
         proposal_callback=callback,

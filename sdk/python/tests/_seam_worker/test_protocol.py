@@ -94,5 +94,6 @@ def _runner_params() -> StageRunRequest:
             case="case_worker_protocol",
             case_input={"prompt": "Say ok."},
             target_forbidden=True,
+            capability_fingerprint="fp_cap_sha256_worker_protocol",
         ),
     )
