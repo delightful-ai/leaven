@@ -1843,6 +1843,42 @@ acceptance:
           message raw-dict island only; other output contracts, capability
           config records, callback payloads, and run-inspection leaf values
           still require typed owners before the row can be marked done.
+      - kind: lm_output_request_uses_generated_wire_records
+        paths:
+          - sdk/python/src/leaven/_seam/lm_plans.py
+          - sdk/python/src/leaven/builders/lm.py
+          - sdk/python/tests/builders/test_lm.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/builders/test_lm.py tests/_seam/test_plans.py tests/test_stage_surface.py::test_lm_builder_complete_uses_bound_public_seam_client tests/_stage_runtime/test_lm.py tests/_seam/_wire/test_calls.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_seam/lm_plans.py src/leaven/builders/lm.py src/leaven/_stage_runtime/lm.py tests/builders/test_lm.py tests/_seam/test_plans.py tests/test_stage_surface.py tests/_stage_runtime/test_lm.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/lm_plans.py src/leaven/builders/lm.py src/leaven/_stage_runtime/lm.py tests/builders/test_lm.py tests/_seam/test_plans.py tests/test_stage_surface.py tests/_stage_runtime/test_lm.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - >-
+            ! rg -n
+            "Sequence\[LmMessage\] \| Sequence\[JsonObject\]|messages:
+            Sequence\[JsonObject\]|output: JsonObject \| None|convert\(message,
+            type=LmMessage\)|def _message_to_wire\(message: LmMessage \|
+            JsonObject\)|def _wire_lm_output_contract|dict\(message\)|json_schema_output_to_wire\(response_format\)"
+            sdk/python/src/leaven/_seam/lm_plans.py
+            sdk/python/src/leaven/builders/lm.py
+            sdk/python/src/leaven/_stage_runtime/lm.py
+            sdk/python/tests/builders/test_lm.py
+            sdk/python/tests/_seam/test_plans.py
+            sdk/python/tests/test_stage_surface.py
+        note: >-
+          The Python LM output request path no longer lowers
+          `response_format` into a raw `JsonObject` and reparses `"kind"` in
+          `_seam/lm_plans.py`. `LmBuilder.complete(...)` now lowers JSON Schema
+          response formats directly into generated msgspec `LmOutputJsonSchema`
+          records, including a generated `WireJsonSchemaObject`; the private
+          `LmCompleteRequest.output` field is typed as generated
+          `LmOutputContract`, and the default text output is a generated
+          `LmOutputFinalMessage`. Focused tests assert the private request
+          already carries a generated output record before JSON encoding. This
+          closes the LM output raw-object island only; shared agent/sandbox
+          output contracts and other public-seam leaf slots remain pending.
       - kind: extension_result_receipts_match_rust_audit_shape
         paths:
           - sdk/python/codegen/result_codegen.py

@@ -7,8 +7,13 @@ from pydantic import BaseModel
 
 import leaven as lv
 from leaven._seam import LmCompleteRequest
-from leaven._seam._wire.calls import LmContentText
-from leaven._seam._wire.calls import LmMessage as WireLmMessage
+from leaven._seam._wire.calls import (
+    LmContentText,
+    LmOutputJsonSchema,
+)
+from leaven._seam._wire.calls import (
+    LmMessage as WireLmMessage,
+)
 from leaven._seam._wire.payloads import Cost
 from leaven._seam._wire.refs import ExtensionJsonPayload
 from leaven._seam._wire.results import (
@@ -65,6 +70,8 @@ async def test_lm_builder_complete_lowers_json_schema_response_format() -> None:
     assert isinstance(request_message, WireLmMessage)
     assert isinstance(request_message.content[0], LmContentText)
     assert request_message.content[0].text == "Answer as JSON."
+    assert isinstance(client.request_value.output, LmOutputJsonSchema)
+    assert msgspec.to_builtins(client.request_value.output.schema) == response_format.schema_
     params = _params_object(client.request_value.to_params())
     ops = _json_array(params["ops"])
     call = _json_object(_json_object(ops[0])["call"])

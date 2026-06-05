@@ -13,6 +13,8 @@ from .._receipts import CallReceipt
 from .._seam import LmCompleteRequest
 from .._seam._wire.calls import (
     LmContentText,
+    LmOutputContract,
+    LmOutputJsonSchema,
 )
 from .._seam._wire.calls import (
     LmMessage as WireLmMessage,
@@ -26,7 +28,7 @@ from .._seam._wire.refs import ExtensionJsonPayload, WireJsonSchemaObject
 from .._seam._wire.results import LmCompleteResult
 from ..json_value import JsonSchema, JsonValue
 from ..output import JsonSchemaOutput, JsonSchemaValueOutput
-from ._output_contract import json_schema_output_to_wire
+from ._output_contract import schema_fingerprint
 
 LmMessageRole = Literal["system", "developer", "user", "assistant", "tool"]
 
@@ -177,7 +179,7 @@ class LmBuilder:
             temperature=temperature,
             max_tokens=max_tokens,
             stop=stop,
-            output=None if response_format is None else json_schema_output_to_wire(response_format),
+            output=None if response_format is None else _lm_output_to_wire(response_format),
             tools=None if tools is None else [_tool_to_wire(tool) for tool in tools],
             input_classes=input_classes,
             forbidden_input_classes=forbidden_input_classes,
@@ -227,6 +229,15 @@ def _tool_to_wire(tool: LmTool) -> WireLmTool:
         input_schema=msgspec.convert(tool.input_schema, type=WireJsonSchemaObject),
         description=description,
         requires_capability_action=requires_capability_action,
+    )
+
+
+def _lm_output_to_wire[ParsedOutputT: BaseModel](
+    output: JsonSchemaOutput[ParsedOutputT] | JsonSchemaValueOutput,
+) -> LmOutputContract:
+    return LmOutputJsonSchema(
+        schema_fingerprint=schema_fingerprint(output.schema_),
+        schema=msgspec.convert(output.schema_, type=WireJsonSchemaObject),
     )
 
 
