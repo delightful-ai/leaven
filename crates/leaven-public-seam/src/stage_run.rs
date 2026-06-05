@@ -1,4 +1,6 @@
+use base64::{Engine as _, engine::general_purpose};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 use crate::{
     LockedMethod, OutputRecordDocument, PublicSeamError, StagePayloadDocument, StagePayloadRole,
@@ -112,6 +114,7 @@ pub struct StageEffectReceipt {
     call_kind: Option<String>,
     cost: Option<StageEffectCostFact>,
     blob_refs: Vec<StageEffectBlobRefFact>,
+    blob_contents: Vec<StageEffectBlobContent>,
 }
 
 /// Metered cost counters reported by a stage effect callback.
@@ -172,6 +175,58 @@ pub struct StageEffectBlobRefFact {
     media_type: Option<String>,
     uri: Option<String>,
     data_classes: Vec<String>,
+}
+
+/// Byte content bound to a worker callback blob ref.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StageEffectBlobContent {
+    blob_ref: StageEffectBlobRefFact,
+    content_base64: String,
+}
+
+impl StageEffectBlobContent {
+    fn from_schema_valid_value(value: &Value, field: &str) -> Result<Self, PublicSeamError> {
+        let object = value.as_object().ok_or_else(|| {
+            invalid_stage_run(format!("stage run field `{field}` must be an object"))
+        })?;
+        let blob_ref = StageEffectBlobRefFact::from_schema_valid_value(
+            object.get("blob_ref").ok_or_else(|| {
+                invalid_stage_run("effect_receipts.blob_contents.blob_ref is required")
+            })?,
+            "effect_receipts.blob_contents.blob_ref",
+        )?;
+        let content_base64 = required_str(
+            object.get("content_base64"),
+            "effect_receipts.blob_contents.content_base64",
+        )?
+        .to_owned();
+        validate_blob_content(&blob_ref, &content_base64)?;
+        Ok(Self {
+            blob_ref,
+            content_base64,
+        })
+    }
+
+    /// Blob ref whose bytes are supplied.
+    pub const fn blob_ref(&self) -> &StageEffectBlobRefFact {
+        &self.blob_ref
+    }
+
+    /// Base64-encoded blob bytes.
+    pub fn content_base64(&self) -> &str {
+        &self.content_base64
+    }
+
+    /// Decode the supplied blob bytes.
+    pub fn content_bytes(&self) -> Result<Vec<u8>, PublicSeamError> {
+        general_purpose::STANDARD
+            .decode(&self.content_base64)
+            .map_err(|error| {
+                invalid_stage_run(format!(
+                    "effect_receipts.blob_contents.content_base64 is invalid: {error}"
+                ))
+            })
+    }
 }
 
 impl StageEffectBlobRefFact {
@@ -252,13 +307,17 @@ impl StageEffectReceipt {
         let call_kind = optional_str(object.get("call_kind"), "effect_receipts.call_kind")?;
         let cost = optional_cost_fact(object.get("cost"), "effect_receipts.cost")?;
         let blob_refs = blob_ref_facts(object.get("blob_refs"), "effect_receipts.blob_refs")?;
+        let blob_contents =
+            blob_contents(object.get("blob_contents"), "effect_receipts.blob_contents")?;
         validate_effect_receipt_binding(method, &receipt, call_kind)?;
+        validate_blob_content_refs(&blob_refs, &blob_contents)?;
         Ok(Self {
             method,
             receipt,
             call_kind: call_kind.map(ToOwned::to_owned),
             cost,
             blob_refs,
+            blob_contents,
         })
     }
 
@@ -285,6 +344,11 @@ impl StageEffectReceipt {
     /// Blob references reported by the callback primary value.
     pub fn blob_refs(&self) -> &[StageEffectBlobRefFact] {
         &self.blob_refs
+    }
+
+    /// Blob byte contents reported by the callback primary value.
+    pub fn blob_contents(&self) -> &[StageEffectBlobContent] {
+        &self.blob_contents
     }
 }
 
@@ -447,6 +511,70 @@ fn blob_ref_facts(
         .iter()
         .map(|value| StageEffectBlobRefFact::from_schema_valid_value(value, field))
         .collect()
+}
+
+fn blob_contents(
+    value: Option<&Value>,
+    field: &str,
+) -> Result<Vec<StageEffectBlobContent>, PublicSeamError> {
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
+    let values = value
+        .as_array()
+        .ok_or_else(|| invalid_stage_run(format!("stage run field `{field}` must be an array")))?;
+    values
+        .iter()
+        .map(|value| StageEffectBlobContent::from_schema_valid_value(value, field))
+        .collect()
+}
+
+fn validate_blob_content(
+    blob_ref: &StageEffectBlobRefFact,
+    content_base64: &str,
+) -> Result<(), PublicSeamError> {
+    let bytes = general_purpose::STANDARD
+        .decode(content_base64)
+        .map_err(|error| {
+            invalid_stage_run(format!(
+                "effect_receipts.blob_contents.content_base64 is invalid: {error}"
+            ))
+        })?;
+    let actual_len = u64::try_from(bytes.len()).map_err(|_| {
+        invalid_stage_run("effect_receipts.blob_contents content is too large for byte audit")
+    })?;
+    if blob_ref.bytes != actual_len {
+        return Err(invalid_stage_run(format!(
+            "effect_receipts.blob_contents blob_ref bytes `{}` do not match content bytes `{actual_len}`",
+            blob_ref.bytes
+        )));
+    }
+    let actual_sha = format!("{:x}", Sha256::digest(&bytes));
+    if blob_ref.sha256 != actual_sha {
+        return Err(invalid_stage_run(
+            "effect_receipts.blob_contents blob_ref sha256 does not match content",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_blob_content_refs(
+    blob_refs: &[StageEffectBlobRefFact],
+    contents: &[StageEffectBlobContent],
+) -> Result<(), PublicSeamError> {
+    for content in contents {
+        if !blob_refs.iter().any(|reference| {
+            reference.id == content.blob_ref.id
+                && reference.sha256 == content.blob_ref.sha256
+                && reference.bytes == content.blob_ref.bytes
+        }) {
+            return Err(invalid_stage_run(format!(
+                "effect_receipts.blob_contents ref `{}` must also appear in blob_refs",
+                content.blob_ref.id
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn required_receipt_id(value: Option<&Value>, field: &str) -> Result<String, PublicSeamError> {

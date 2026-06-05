@@ -108,6 +108,19 @@ def _write_record(
                     }
                     for receipt in assessment.effect_receipts
                 ],
+                "effect_blob_contents": [
+                    {
+                        "receipt_id": content.receipt_id,
+                        "blob_ref": {
+                            "blob_id": content.blob_ref.blob_id,
+                            "sha256": content.blob_ref.sha256,
+                            "bytes": content.blob_ref.bytes,
+                            "data_classes": content.blob_ref.data_classes,
+                        },
+                        "content_base64": content.content_base64,
+                    }
+                    for content in assessment.effect_blob_contents
+                ],
             }
             for assessment in report.assessments
         ],

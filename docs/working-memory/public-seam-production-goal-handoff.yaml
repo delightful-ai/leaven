@@ -1596,6 +1596,56 @@ acceptance:
           transcript blob id and data class from Rust-owned checkpoint/evidence
           readback. The row remains pending because this does not yet prove
           every live Codex artifact byte path and final release gate.
+      - kind: rust_checkpoint_effect_blob_bytes_survive_python_inspection
+        paths:
+          - docs/specs/public-seam-v1/schemas/leaven.stage_run.v1.schema.json
+          - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
+          - crates/leaven-public-seam/src/plan_execution/effects/agent.rs
+          - crates/leaven-public-seam/src/plan_execution/outcomes.rs
+          - crates/leaven-public-seam/src/stage_run.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/stage_run.rs
+          - crates/leaven-run/Cargo.toml
+          - crates/leaven-run/src/sdk_checkpoint.rs
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/codegen/result_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/src/leaven/_seam/_wire/results.py
+          - sdk/python/src/leaven/_seam_worker/callbacks.py
+          - sdk/python/src/leaven/_seam_optimize/receipts.py
+          - sdk/python/src/leaven/_seam_optimize/types.py
+          - sdk/python/src/leaven/_seam_optimize/driver.py
+          - sdk/python/src/leaven/_runs/rust_checkpoint.py
+          - sdk/python/tests/test_run_receipt_inspection.py
+        commands:
+          - cargo fmt --check
+          - cargo test -p leaven-run --lib
+          - cargo test -p leaven-public-seam --test public_seam_contract stage_run::stage_run_result_preserves_worker_effect_blob_contents -- --exact
+          - cargo test -p leaven-public-seam --test public_seam_contract stage_run::stage_run_result_rejects_mismatched_worker_effect_blob_contents -- --exact
+          - cargo test -p leaven-public-seam --test public_seam_contract stage_run::stage_run_result_preserves_worker_effect_receipts -- --exact
+          - cd sdk/python && uv run pytest tests/test_run_receipt_inspection.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_seam_worker/callbacks.py src/leaven/_seam_optimize/receipts.py src/leaven/_seam_optimize/types.py src/leaven/_seam_optimize/driver.py src/leaven/_runs/rust_checkpoint.py codegen/result_codegen.py codegen/payload_codegen.py tests/test_run_receipt_inspection.py
+          - cd sdk/python && uv run ty check src/leaven/_seam_worker/callbacks.py src/leaven/_seam_optimize/receipts.py src/leaven/_seam_optimize/types.py src/leaven/_seam_optimize/driver.py src/leaven/_runs/rust_checkpoint.py codegen/result_codegen.py codegen/payload_codegen.py tests/test_run_receipt_inspection.py
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Agent callback results now carry an audited
+          `transcript_content_base64` field whose bytes are validated against
+          the `transcript_ref` SHA-256/byte-count projection. Stage-run effect
+          receipts now have typed `blob_contents` entries, validated by
+          `leaven-public-seam` against their declared `blob_refs` and decoded
+          by generated Python msgspec records. The SDK optimize driver carries
+          those private byte records into `leaven.sdk_prompt_run_record.v1`;
+          Rust `checkpoint-sdk-prompt` writes them into `FileStore` and records
+          them through `RunContext::record_stage_journal_entry`. The focused
+          Python scenario now asserts that a fake Codex CLI agent run reopens
+          through `lv.runs.inspect(...)`, reads exactly one Rust
+          stage-journal blob through `leaven run blob`, and finds the serialized
+          transcript bytes containing both the user task and fake Codex final
+          message. `cargo test -p leaven-run` remains blocked by an unrelated
+          existing integration-test compile error in
+          `crates/leaven-run/tests/public_seam.rs` where `AnswerTarget` lacks
+          `serde::Serialize`; `cargo test -p leaven-run --lib` passes.
     closeout_check: "Reading only `optimized.json` written by Python is a proxy."
 
   - id: python_wire_codegen_msgspec_boundary

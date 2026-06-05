@@ -32,6 +32,7 @@ from ..optimizers.gepa import Gepa
 from ..rubric import Rubric
 from ..runtime import Runtime
 from .receipts import (
+    effect_blob_contents_from_stage_result,
     effect_cost_totals_from_stage_result,
     effect_receipts_from_stage_result,
     proposal_receipts_from_stage_result,
@@ -133,6 +134,7 @@ async def run_prompt_mechanics(
                 score=score,
                 rewards=rewards,
                 effect_receipts=effect_receipts_from_stage_result(result),
+                effect_blob_contents=effect_blob_contents_from_stage_result(result),
                 effect_costs=effect_cost_totals_from_stage_result(result),
             )
         )

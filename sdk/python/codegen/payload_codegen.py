@@ -366,12 +366,18 @@ class StageCost(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=T
     lm_calls: int | UnsetType = UNSET
 
 
+class StageEffectBlobContent(Struct, frozen=True, forbid_unknown_fields=True):
+    blob_ref: BlobRef
+    content_base64: str
+
+
 class StageEffectReceipt(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
     method: Literal["leaven/lm.complete", "leaven/agent.run"]
     receipt: str
     call_kind: Literal["lm_complete", "agent_run"] | UnsetType = UNSET
     cost: StageCost | UnsetType = UNSET
     blob_refs: list[BlobRef] | UnsetType = UNSET
+    blob_contents: list[StageEffectBlobContent] | UnsetType = UNSET
 
 
 class StageProposalReceipt(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):

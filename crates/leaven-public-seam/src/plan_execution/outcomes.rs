@@ -108,6 +108,9 @@ pub(super) fn record_agent_call_outcome(
     if let Some(transcript_ref) = outcome.transcript_ref {
         value["transcript_ref"] = transcript_ref;
     }
+    if let Some(transcript_content_base64) = outcome.transcript_content_base64 {
+        value["transcript_content_base64"] = json!(transcript_content_base64);
+    }
     if let Some(cost) = outcome.cost {
         value["cost"] = cost;
     }

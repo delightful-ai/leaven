@@ -88,6 +88,90 @@ fn stage_run_result_preserves_worker_effect_receipts() {
 }
 
 #[test]
+fn stage_run_result_preserves_worker_effect_blob_contents() {
+    let package = package();
+    let mut result_value = stage_run_result();
+    result_value["effect_receipts"] = json!([
+        {
+            "method": "leaven/agent.run",
+            "receipt": "agentrec_completion",
+            "call_kind": "agent_run",
+            "blob_refs": [
+                {
+                    "kind": "blob_ref",
+                    "id": "blob_stage_effect_transcript",
+                    "sha256": "54e6289e14c7b0e7ad9acc2dfc4c1e3d027d0eef7f5c4c3fe7c292761d0e06a6",
+                    "bytes": 10,
+                    "data_classes": ["transcript.raw"]
+                }
+            ],
+            "blob_contents": [
+                {
+                    "blob_ref": {
+                        "kind": "blob_ref",
+                        "id": "blob_stage_effect_transcript",
+                        "sha256": "54e6289e14c7b0e7ad9acc2dfc4c1e3d027d0eef7f5c4c3fe7c292761d0e06a6",
+                        "bytes": 10,
+                        "data_classes": ["transcript.raw"]
+                    },
+                    "content_base64": "dHJhbnNjcmlwdA=="
+                }
+            ]
+        }
+    ]);
+
+    let result = package
+        .validate_stage_run_result_document(&result_value)
+        .unwrap();
+
+    let contents = result.effect_receipts()[0].blob_contents();
+    assert_eq!(contents.len(), 1);
+    assert_eq!(contents[0].blob_ref().id(), "blob_stage_effect_transcript");
+    assert_eq!(contents[0].content_bytes().unwrap(), b"transcript");
+}
+
+#[test]
+fn stage_run_result_rejects_mismatched_worker_effect_blob_contents() {
+    let package = package();
+    let mut result_value = stage_run_result();
+    result_value["effect_receipts"] = json!([
+        {
+            "method": "leaven/agent.run",
+            "receipt": "agentrec_completion",
+            "call_kind": "agent_run",
+            "blob_refs": [
+                {
+                    "kind": "blob_ref",
+                    "id": "blob_stage_effect_transcript",
+                    "sha256": "54e6289e14c7b0e7ad9acc2dfc4c1e3d027d0eef7f5c4c3fe7c292761d0e06a6",
+                    "bytes": 10,
+                    "data_classes": ["transcript.raw"]
+                }
+            ],
+            "blob_contents": [
+                {
+                    "blob_ref": {
+                        "kind": "blob_ref",
+                        "id": "blob_stage_effect_transcript",
+                        "sha256": "54e6289e14c7b0e7ad9acc2dfc4c1e3d027d0eef7f5c4c3fe7c292761d0e06a6",
+                        "bytes": 10,
+                        "data_classes": ["transcript.raw"]
+                    },
+                    "content_base64": "bm90LXRyYW5zY3JpcHQ="
+                }
+            ]
+        }
+    ]);
+
+    assert!(matches!(
+        package
+            .validate_stage_run_result_document(&result_value)
+            .unwrap_err(),
+        PublicSeamError::InvalidStageRun { .. } | PublicSeamError::ExampleValidation { .. }
+    ));
+}
+
+#[test]
 fn stage_run_result_preserves_worker_proposal_receipts() {
     let package = package();
     let mut result_value = proposer_stage_run_result();

@@ -2,6 +2,8 @@
 
 use std::path::Path;
 
+use base64::{Engine as _, engine::general_purpose};
+use bytes::Bytes;
 use leaven_core::{
     Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget,
     EvaluationPurpose, EvaluationRequest, EvaluationSet, OptimizationProblem, ResolvedRequestKind,
@@ -16,9 +18,11 @@ use leaven_kernel::{
     Budget, CandidateId, CaseId, ContentId, Cost, EvaluationSetId, EvaluatorId, Fingerprint,
     FingerprintBuilder, MetadataBag, MetadataValue, Metered, RunId,
 };
+use leaven_store::{BlobStore, BlobWrite};
 use leaven_store_file::{FileEvidenceStore, FileStore};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::Digest;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -112,6 +116,9 @@ pub struct SdkPromptAssessment {
     /// Effect receipts produced while computing this assessment.
     #[serde(default)]
     pub effect_receipts: Vec<SdkPromptEffectReceipt>,
+    /// Effect blob contents to materialize into Rust-owned stage journal blobs.
+    #[serde(default)]
+    pub effect_blob_contents: Vec<SdkPromptEffectBlobContent>,
 }
 
 /// One effect receipt and its public blob metadata from the SDK mechanics route.
@@ -138,6 +145,17 @@ pub struct SdkPromptBlobRef {
     /// Public data classes associated with the blob.
     #[serde(default)]
     pub data_classes: Vec<String>,
+}
+
+/// Private SDK checkpoint blob bytes bound to a public blob ref.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SdkPromptEffectBlobContent {
+    /// Receipt that produced this blob.
+    pub receipt_id: String,
+    /// Public blob metadata reported by the callback receipt.
+    pub blob_ref: SdkPromptBlobRef,
+    /// Base64-encoded blob bytes.
+    pub content_base64: String,
 }
 
 /// One reward-vector dimension from the SDK scorer.
@@ -172,7 +190,7 @@ pub fn materialize_sdk_prompt_checkpoint(
     record.validate()?;
     let run_dir = run_dir.as_ref();
     let file_store = FileStore::open(run_dir).map_err(SdkPromptCheckpointError::Store)?;
-    let persistence = StoreRunPersistence::new(file_store);
+    let persistence = StoreRunPersistence::new(file_store.clone());
     let evidence_store = FileEvidenceStore::<CaseAssessmentEvidence>::open(
         "case-assessment",
         run_dir.join("evidence"),
@@ -190,6 +208,7 @@ pub fn materialize_sdk_prompt_checkpoint(
         record.cases.clone(),
         record.assessments.clone(),
         record.total_lm_tokens,
+        file_store,
     );
     futures::executor::block_on(engine.run(&mut optimizer, &case_set, &evidence_store))
         .map_err(SdkPromptCheckpointError::Optimizer)?;
@@ -222,6 +241,7 @@ struct SdkPromptCheckpointOptimizer {
     cases: Vec<SdkPromptCase>,
     assessments: Vec<SdkPromptAssessment>,
     total_lm_tokens: u64,
+    store: FileStore,
     candidate: Option<CandidateId>,
     evaluated: bool,
 }
@@ -232,15 +252,43 @@ impl SdkPromptCheckpointOptimizer {
         cases: Vec<SdkPromptCase>,
         assessments: Vec<SdkPromptAssessment>,
         total_lm_tokens: u64,
+        store: FileStore,
     ) -> Self {
         Self {
             seed,
             cases,
             assessments,
             total_lm_tokens,
+            store,
             candidate: None,
             evaluated: false,
         }
+    }
+
+    fn record_effect_blob_contents(
+        &self,
+        ctx: &mut RunContext<'_, SdkPromptRunProblem>,
+    ) -> Result<(), OptimizerError> {
+        for assessment in &self.assessments {
+            for content in &assessment.effect_blob_contents {
+                let bytes = decode_blob_content(content).map_err(|source| {
+                    OptimizerError::with_source("decode SDK effect blob", source)
+                })?;
+                let reference = BlobStore::put(
+                    &self.store,
+                    BlobWrite {
+                        bytes: Bytes::from(bytes),
+                        content_type: Some("application/json".to_owned()),
+                    },
+                )
+                .map_err(|source| OptimizerError::with_source("write SDK effect blob", source))?;
+                ctx.record_stage_journal_entry(reference)
+                    .map_err(|source| {
+                        OptimizerError::with_source("record SDK effect blob stage journal", source)
+                    })?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -263,6 +311,7 @@ impl Optimizer<SdkPromptRunProblem> for SdkPromptCheckpointOptimizer {
         if self.evaluated {
             return Ok(StepStatus::Done);
         }
+        self.record_effect_blob_contents(ctx)?;
         let candidate = self.candidate.ok_or_else(|| {
             OptimizerError::Message("SDK prompt seed was not initialized".to_owned())
         })?;
@@ -418,6 +467,33 @@ impl SdkPromptEvaluator {
             metadata,
         })
     }
+}
+
+fn decode_blob_content(content: &SdkPromptEffectBlobContent) -> Result<Vec<u8>, EvaluationError> {
+    let bytes = general_purpose::STANDARD
+        .decode(&content.content_base64)
+        .map_err(|source| EvaluationError::with_source("decode SDK effect blob", source))?;
+    if let Some(declared) = content.blob_ref.bytes {
+        let actual = u64::try_from(bytes.len()).map_err(|source| {
+            EvaluationError::with_source("measure SDK effect blob bytes", source)
+        })?;
+        if declared != actual {
+            return Err(EvaluationError::Message(format!(
+                "SDK effect blob `{}` byte count {declared} does not match decoded bytes {actual}",
+                content.blob_ref.blob_id
+            )));
+        }
+    }
+    if let Some(expected_sha) = &content.blob_ref.sha256 {
+        let actual_sha = format!("{:x}", sha2::Sha256::digest(&bytes));
+        if expected_sha != &actual_sha {
+            return Err(EvaluationError::Message(format!(
+                "SDK effect blob `{}` sha256 does not match decoded bytes",
+                content.blob_ref.blob_id
+            )));
+        }
+    }
+    Ok(bytes)
 }
 
 fn output_text(value: &Value) -> String {

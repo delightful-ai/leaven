@@ -160,3 +160,7 @@ printf '{"type":"message","content":"ok"}\\n'
     assert [receipt.receipt_id for receipt in call_receipts] == ["agentrec_completion"]
     assert call_receipts[0].blob_refs[0].blob_id == "blob_completion_transcript"
     assert call_receipts[0].blob_refs[0].data_classes == ["transcript.raw"]
+    assert len(inspection.rust_stage_journal_blobs) == 1
+    transcript_bytes = inspection.rust_stage_journal_blobs[0].content_bytes()
+    assert b"answer return transcript ref" in transcript_bytes
+    assert b"fake codex runner final" in transcript_bytes

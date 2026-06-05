@@ -7,7 +7,7 @@ from ..assessment import RewardAssessment
 from ..json_value import JsonObject, JsonValue
 from ..run_status import UnsupportedRunFact
 from ..score import Score
-from .receipts import EffectCostTotals
+from .receipts import EffectBlobContent, EffectCostTotals
 
 
 @dataclass(frozen=True)
@@ -35,6 +35,7 @@ class SeamStageAssessment:
     rewards: list[RewardAssessment]
     receipt: str | None = None
     effect_receipts: list[CallReceipt] = field(default_factory=list)
+    effect_blob_contents: list[EffectBlobContent] = field(default_factory=list)
     effect_costs: EffectCostTotals = field(default_factory=lambda: EffectCostTotals(0.0, 0))
 
 

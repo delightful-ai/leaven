@@ -12,6 +12,7 @@ workspace = true
 
 [dependencies]
 base64 = { workspace = true }
+bytes = { workspace = true }
 leaven-core = { workspace = true }
 leaven-engine = { workspace = true }
 leaven-eval = { workspace = true }
@@ -29,6 +30,5 @@ thiserror = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-bytes = { workspace = true }
 leaven-public-seam = { workspace = true }
 rusqlite = { workspace = true }

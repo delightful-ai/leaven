@@ -136,11 +136,33 @@
           "items": {
             "$ref": "common.schema.json#/$defs/BlobRef"
           }
+        },
+        "blob_contents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StageEffectBlobContent"
+          }
         }
       },
       "required": [
         "method",
         "receipt"
+      ],
+      "additionalProperties": false
+    },
+    "StageEffectBlobContent": {
+      "type": "object",
+      "properties": {
+        "blob_ref": {
+          "$ref": "common.schema.json#/$defs/BlobRef"
+        },
+        "content_base64": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "blob_ref",
+        "content_base64"
       ],
       "additionalProperties": false
     },

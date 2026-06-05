@@ -752,6 +752,9 @@
             "transcript_ref": {
               "$ref": "common.schema.json#/$defs/BlobRef"
             },
+            "transcript_content_base64": {
+              "type": "string"
+            },
             "commands": {
               "type": "array",
               "items": {}

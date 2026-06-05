@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
+use base64::{Engine as _, engine::general_purpose};
 use leaven_agent::{
     AgentInstructions, AgentLimits, AgentRunRequest, AgentToolPolicy, OutputContract,
 };
@@ -250,6 +251,7 @@ pub struct PlanAgentRunOutcome {
     pub(in crate::plan_execution) status: String,
     pub(in crate::plan_execution) parsed: Option<Value>,
     pub(in crate::plan_execution) transcript_ref: Option<Value>,
+    pub(in crate::plan_execution) transcript_content_base64: Option<String>,
     pub(in crate::plan_execution) commands: Vec<Value>,
     pub(in crate::plan_execution) data_classes: Vec<String>,
     pub(in crate::plan_execution) replayability: String,
@@ -296,6 +298,7 @@ impl PlanAgentRunOutcome {
             status: "completed".to_owned(),
             parsed: None,
             transcript_ref: None,
+            transcript_content_base64: None,
             commands: Vec::new(),
             data_classes: vec!["public".to_owned()],
             replayability: "has_declared_external_effects".to_owned(),
@@ -332,7 +335,7 @@ impl PlanAgentRunOutcome {
             runtime_fingerprint.to_hex()
         ))
         .with_status(agent_status_value(&value.status))
-        .with_transcript_ref(transcript_ref)
+        .with_transcript_ref(transcript_ref, &value.transcript)?
         .with_cost(cost_value(&cost));
         let commands = value
             .commands
@@ -347,11 +350,19 @@ impl PlanAgentRunOutcome {
     }
 
     /// Attaches a transcript blob reference.
-    #[must_use]
-    fn with_transcript_ref(mut self, transcript_ref: Value) -> Self {
+    fn with_transcript_ref(
+        mut self,
+        transcript_ref: Value,
+        transcript: &leaven_agent::AgentTranscript,
+    ) -> Result<Self, PublicSeamError> {
+        let transcript_bytes = serde_json::to_vec(transcript).map_err(|error| {
+            invalid_call(format!("agent transcript serialization failed: {error}"))
+        })?;
+        blob_ref::validate_stream_blob_ref(&transcript_ref, &transcript_bytes, "agent transcript")?;
         extend_data_classes_from_blob_ref(&mut self.data_classes, &transcript_ref);
         self.transcript_ref = Some(transcript_ref);
-        self
+        self.transcript_content_base64 = Some(general_purpose::STANDARD.encode(transcript_bytes));
+        Ok(self)
     }
 
     /// Attaches the parsed payload required by JSON-schema output contracts.

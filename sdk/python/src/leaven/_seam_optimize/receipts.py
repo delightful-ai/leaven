@@ -24,6 +24,15 @@ class EffectCostTotals:
     lm_tokens: int
 
 
+@dataclass(frozen=True)
+class EffectBlobContent:
+    """Private byte content attached to an effect receipt blob ref."""
+
+    receipt_id: str
+    blob_ref: BlobRef
+    content_base64: str
+
+
 def effect_receipts_from_stage_result(result: StageRunResult) -> list[CallReceipt]:
     """Extract opaque effect receipts from private worker stage metadata."""
     if result.effect_receipts is UNSET:
@@ -36,6 +45,25 @@ def effect_receipts_from_stage_result(result: StageRunResult) -> list[CallReceip
         for value in result.effect_receipts
         if value.receipt
     ]
+
+
+def effect_blob_contents_from_stage_result(result: StageRunResult) -> list[EffectBlobContent]:
+    """Extract callback blob contents that must be materialized by Rust."""
+    if result.effect_receipts is UNSET:
+        return []
+    contents: list[EffectBlobContent] = []
+    for receipt in result.effect_receipts:
+        if receipt.blob_contents is UNSET:
+            continue
+        contents.extend(
+            EffectBlobContent(
+                receipt_id=receipt.receipt,
+                blob_ref=_blob_ref(content.blob_ref),
+                content_base64=content.content_base64,
+            )
+            for content in receipt.blob_contents
+        )
+    return contents
 
 
 def effect_cost_totals_from_stage_result(result: StageRunResult) -> EffectCostTotals:
@@ -108,7 +136,9 @@ def _receipt_id(value: str | ReceiptRefRecord) -> str:
 
 
 __all__ = [
+    "EffectBlobContent",
     "EffectCostTotals",
+    "effect_blob_contents_from_stage_result",
     "effect_cost_totals_from_stage_result",
     "effect_receipts_from_stage_result",
     "proposal_receipts_from_stage_result",

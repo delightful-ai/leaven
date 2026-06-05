@@ -391,6 +391,7 @@ class AgentSessionPrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_
     data_classes: list[str]
     replayability: Replayability
     transcript_ref: BlobRef | UnsetType = UNSET
+    transcript_content_base64: str | UnsetType = UNSET
     cost: Cost | UnsetType = UNSET
     parsed: WireJsonExtensionPayload | UnsetType = UNSET
 

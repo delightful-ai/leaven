@@ -58,10 +58,10 @@ PLAN_SCHEMA_FINGERPRINT = (
     "fp_schema_sha256_0a95fd2eba6182cadec084f3f04f783f7f41a79fbcd61758f1f767a09e887a76"
 )
 PLAN_RESULT_SCHEMA_FINGERPRINT = (
-    "fp_schema_sha256_2dabfac70fb80e32fe0f5b5e3259fb21677da427bd268b87979fd0ce3a5155d3"
+    "fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4"
 )
 STAGE_RUN_SCHEMA_FINGERPRINT = (
-    "fp_schema_sha256_860ddd5b1831bb09b54fbbe10bc68e87126bedbee3eaa31c4a2754d999c2275a"
+    "fp_schema_sha256_da2d026c060b655ea39850dbd43034e097260eefb88a3667207343fb6353a7ec"
 )
 
 
@@ -373,12 +373,18 @@ class StageCost(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=T
     lm_calls: int | UnsetType = UNSET
 
 
+class StageEffectBlobContent(Struct, frozen=True, forbid_unknown_fields=True):
+    blob_ref: BlobRef
+    content_base64: str
+
+
 class StageEffectReceipt(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
     method: Literal["leaven/lm.complete", "leaven/agent.run"]
     receipt: str
     call_kind: Literal["lm_complete", "agent_run"] | UnsetType = UNSET
     cost: StageCost | UnsetType = UNSET
     blob_refs: list[BlobRef] | UnsetType = UNSET
+    blob_contents: list[StageEffectBlobContent] | UnsetType = UNSET
 
 
 class StageProposalReceipt(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):

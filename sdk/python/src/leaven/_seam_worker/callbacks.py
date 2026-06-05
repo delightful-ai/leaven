@@ -6,7 +6,13 @@ from msgspec import UNSET
 
 from .._seam._wire import JsonObject
 from .._seam._wire.json_value import json_value
-from .._seam._wire.payloads import BlobRef, Cost, ReceiptRef, ReceiptRefRecord
+from .._seam._wire.payloads import (
+    BlobRef,
+    Cost,
+    ReceiptRef,
+    ReceiptRefRecord,
+    StageEffectBlobContent,
+)
 from .._seam._wire.results import AgentRunResult, LmCompleteResult, ProposalSubmitResult
 
 EFFECT_CALLBACK_METHODS = frozenset({"leaven/lm.complete", "leaven/agent.run"})
@@ -26,6 +32,7 @@ class CallbackReceipt:
     cost: Cost | None = None
     proposal_ids: list[str] | None = None
     blob_refs: list[BlobRef] | None = None
+    blob_contents: list[StageEffectBlobContent] | None = None
 
     def to_json(self) -> JsonObject:
         value: JsonObject = {"method": self.method, "receipt": self.receipt_id}
@@ -39,6 +46,10 @@ class CallbackReceipt:
             value["proposal_ids"] = json_value(self.proposal_ids)
         if self.blob_refs is not None:
             value["blob_refs"] = json_value([_blob_ref_json(ref) for ref in self.blob_refs])
+        if self.blob_contents is not None:
+            value["blob_contents"] = json_value(
+                [_blob_content_json(content) for content in self.blob_contents]
+            )
         return value
 
 
@@ -84,6 +95,7 @@ def _receipts_from_result(result: CallbackResult) -> list[CallbackReceipt]:
                 cost=_matching_primary_cost(result, receipt),
                 proposal_ids=_matching_proposal_ids(result, receipt),
                 blob_refs=_matching_blob_refs(result, receipt),
+                blob_contents=_matching_blob_contents(result, receipt),
             )
         )
     return records
@@ -116,6 +128,25 @@ def _matching_blob_refs(result: CallbackResult, receipt: str) -> list[BlobRef] |
     if primary.transcript_ref is UNSET:
         return None
     return [primary.transcript_ref]
+
+
+def _matching_blob_contents(
+    result: CallbackResult,
+    receipt: str,
+) -> list[StageEffectBlobContent] | None:
+    if not isinstance(result, AgentRunResult):
+        return None
+    primary = result.primary
+    if primary.receipt != receipt:
+        return None
+    if primary.transcript_ref is UNSET or primary.transcript_content_base64 is UNSET:
+        return None
+    return [
+        StageEffectBlobContent(
+            blob_ref=primary.transcript_ref,
+            content_base64=primary.transcript_content_base64,
+        )
+    ]
 
 
 def _receipt_id(value: ReceiptRef) -> str:
@@ -160,6 +191,13 @@ def _blob_ref_json(blob: BlobRef) -> JsonObject:
     if blob.uri is not UNSET:
         value["uri"] = blob.uri
     return value
+
+
+def _blob_content_json(content: StageEffectBlobContent) -> JsonObject:
+    return {
+        "blob_ref": _blob_ref_json(content.blob_ref),
+        "content_base64": content.content_base64,
+    }
 
 
 def _is_effect_receipt(record: CallbackReceipt) -> bool:
