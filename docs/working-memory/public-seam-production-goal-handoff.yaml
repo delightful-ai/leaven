@@ -2938,6 +2938,35 @@ acceptance:
           evolved prompt and skill. This still does not execute live
           `gpt-5.4-mini` or prove process-level CLI submit/apply for arbitrary
           GitProgram artifacts.
+      - kind: live_codex_agentkit_consumption_and_git_substrate_foundation
+        paths:
+          - crates/leaven-gepa-agentic-agent-kit/AGENTS.md
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/codex_agent_kit_reflection.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/agent_kit_seam_checkpoint.rs
+          - crates/leaven-workspace-firkin/tests/firkin_contract/firkin_git_e2e.rs
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - LEAVEN_CODEX_LIVE=1 LEAVEN_CODEX_BIN="$HOME/.bun/bin/codex" cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit -- --ignored --nocapture
+          - cargo test -p leaven-gepa-agentic-agent-kit --test codex_agent_kit_reflection codex_agent_kit_git_child_applies_through_run_bound_stdio_before_next_projection -- --exact
+          - cargo test -p leaven-gepa-agentic-agent-kit --test agent_kit_seam_checkpoint agent_kit_git_child_applied_through_sdk_route_restores_from_checkpoint -- --exact
+          - cargo test -p leaven-workspace-firkin --test firkin_contract firkin_git_e2e::firkin_product_pod_materializes_and_reads_back_isolated_git_workspaces -- --exact
+        note: >-
+          A live local Codex CLI run with the default `gpt-5.4-mini` Codex
+          adapter consumed the projected AgentKit system prompt, projected
+          `AGENTS.md`, and projected `.agents/skills/alpha/SKILL.md` surfaces,
+          creating all required proof files and preserving the immutable
+          projected instruction/skill files outside the mutable `agent/`
+          subtree. The same session reran the deterministic run-bound stdio
+          submit/apply proof, the checkpointed SDK-route Git child readback
+          proof, and the host-backed Firkin product-pod Git materialization plus
+          readback proof. This materially proves that Codex Kit projection,
+          local filesystem mutation, Git import/readback, and Firkin-backed Git
+          workspaces work as separate pieces. It still cannot close the row
+          because the live Codex-authored mutation is not yet the same mutation
+          submitted through `leaven/proposal.submit_batch`, applied through
+          `leaven/proposal.apply`, checkpointed, restored, and consumed by a
+          later live Codex stage in one e2e scenario.
     closeout_check: >-
       A live Codex prompt-consumption test, a deterministic AgentKit projection
       test, or `proposal.submit_batch` without application cannot close this
