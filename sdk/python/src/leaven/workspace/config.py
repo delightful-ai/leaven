@@ -9,7 +9,7 @@ class WorkspaceConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     backend: str
-    """Backend name (e.g. 'local', 'docker', 'git', 'firkin')."""
+    """Backend name (e.g. 'local', 'docker', 'git')."""
 
 
 __all__ = ["WorkspaceConfig"]

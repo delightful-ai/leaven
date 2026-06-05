@@ -5587,6 +5587,37 @@ acceptance:
           naming the removed module. The broad `ty` check also caught and fixed
           `CaseBuilder` treating a generated `CaseRef` as a receipt/dict shape;
           `_case_id` now consumes the generated case reference type directly.
+      - kind: unwired_optimizer_and_firkin_python_scaffolds_removed
+        paths:
+          - docs/specs/leaven_python.md
+          - sdk/python/src/leaven/optimizers/__init__.py
+          - sdk/python/src/leaven/optimizers/config.py
+          - sdk/python/src/leaven/optimizers/mipro.py
+          - sdk/python/src/leaven/optimizers/textgrad.py
+          - sdk/python/src/leaven/workspace/__init__.py
+          - sdk/python/src/leaven/workspace/config.py
+          - sdk/python/src/leaven/workspace/firkin.py
+          - sdk/python/tests/test_product_surface_ring.py
+        commands:
+          - cd sdk/python && uv run pytest tests/test_product_surface_ring.py -q
+          - cd sdk/python && uv run ruff check src/leaven/optimizers src/leaven/workspace tests/test_product_surface_ring.py
+          - cd sdk/python && uv run ty check src/leaven/optimizers src/leaven/workspace tests/test_product_surface_ring.py
+          - cd sdk/python && uv run ty check src/leaven tests --exclude src/leaven/_types
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - >-
+            rg -n "Mipro|mipro|TextGrad|textgrad|FirkinWorkspace|workspace\\.firkin|lv\\.workspace\\.firkin|\\bfirkin\\(" sdk/python/src/leaven docs/specs/leaven_python.md -g '*.py' -g '*.md'
+        note: >-
+          Ordinary Python registry exports for `lv.optimizers.mipro(...)`,
+          `lv.optimizers.textgrad(...)`, and `lv.workspace.firkin(...)` are
+          gone. The MIPRO/TextGrad Python modules and unwired Firkin Python
+          config facade were deleted instead of leaving reserved public
+          scaffolds. Product-surface tests assert both the namespace exports
+          and direct module imports stay absent until behavior-bearing Rust
+          crates and seam-backed Python execution exist. The Rust/Firkin
+          substrate proof remains separate and current; this cut only removes
+          the Python facade that was not wired to that substrate.
       - kind: public_reward_text_contract_and_defensive_erasure_lint
         commits:
           - 713275a0

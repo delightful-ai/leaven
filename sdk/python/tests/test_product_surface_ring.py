@@ -84,6 +84,29 @@ def test_dspy_adapter_is_absent_until_it_executes() -> None:
     assert importlib.util.find_spec("leaven.x.dspy") is None
 
 
+def test_unwired_optimizer_scaffolds_are_absent_until_backed_by_rust() -> None:
+    """Optimizer names enter the Python registry only after real execution lands."""
+
+    forbidden = {"Mipro", "TextGrad", "mipro", "textgrad"}
+
+    assert forbidden.isdisjoint(lv.optimizers.__all__)
+    for name in forbidden:
+        assert not hasattr(lv.optimizers, name)
+    assert importlib.util.find_spec("leaven.optimizers.mipro") is None
+    assert importlib.util.find_spec("leaven.optimizers.textgrad") is None
+
+
+def test_unwired_firkin_python_workspace_config_is_absent() -> None:
+    """Rust Firkin proof does not imply an unwired Python config facade."""
+
+    forbidden = {"FirkinWorkspace", "firkin"}
+
+    assert forbidden.isdisjoint(lv.workspace.__all__)
+    for name in forbidden:
+        assert not hasattr(lv.workspace, name)
+    assert importlib.util.find_spec("leaven.workspace.firkin") is None
+
+
 def test_optimize_builder_does_not_advertise_unwired_dry_run() -> None:
     """Builder methods should name executable product behavior only."""
 

@@ -9,7 +9,7 @@ class OptimizerConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
-    """Optimizer name (e.g. 'gepa', 'mipro', 'seed_best')."""
+    """Optimizer name (e.g. 'gepa', 'seed_best')."""
 
 
 __all__ = ["OptimizerConfig"]

@@ -187,11 +187,12 @@ that this spec resolves below.
 ## What the user does not write
 
 The user does not write the optimizer loop. They configure existing
-optimizers from a registry — `lv.optimizers.gepa(...)`,
-`lv.optimizers.mipro(...)`, future entries — by passing typed configs to
-`lv.optimize(...)`. The optimizer loop runs in Rust. New optimizers
-require behavior-bearing Rust crates with local tests and topology rows,
-not Python authoring.
+optimizers from a registry — currently `lv.optimizers.gepa(...)` and
+`lv.optimizers.seed_best()` — by passing typed configs to `lv.optimize(...)`.
+The optimizer loop runs in Rust. New optimizers require behavior-bearing Rust
+crates with local tests, topology rows, and seam-backed Python execution before
+they are exported from the Python registry; reserved Python config builders are
+not public API.
 
 This is not a temporary limitation. Optimizer strategy state binds
 tightly to engine state — parent selectors mutate frontiers, samplers
