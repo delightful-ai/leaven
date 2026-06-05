@@ -27,7 +27,15 @@ NO_ANY_ROOTS = (
     ROOT / "examples",
     ROOT / "codegen",
 )
-DOMAIN_VALUE_NAMES = {"output", "raw_output", "target", "payload", "result", "value"}
+DOMAIN_VALUE_NAMES = {
+    "case_input",
+    "output",
+    "raw_output",
+    "target",
+    "payload",
+    "result",
+    "value",
+}
 MIRRORED_TESTS = {
     ROOT / "src" / "leaven" / "_runs" / "rust_export.py": ROOT
     / "tests"

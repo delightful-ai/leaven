@@ -26,7 +26,7 @@ async def run_runner_stage(
         raise ValueError(f"configured stage must be a runner; got {stage.role!r}")
 
     case_input = json_object(payload.case_input)
-    rendered_prompt = str(case_input["prompt"])
+    rendered_prompt = _prompt_template(case_input)
     candidate = _candidate_id(payload.candidate)
     case_id = _case_id(payload.case)
     stage_call_id = payload.stage_call_id
@@ -76,6 +76,13 @@ def _case_id(value: CaseRef) -> str:
     if isinstance(value, CaseRefRecord):
         return value.id
     raise TypeError(f"unsupported case ref: {value!r}")
+
+
+def _prompt_template(case_input: JsonObject) -> str:
+    value = case_input["prompt"]
+    if not isinstance(value, str):
+        raise TypeError("runner case_input.prompt must be a string")
+    return value
 
 
 __all__ = ["run_runner_stage"]

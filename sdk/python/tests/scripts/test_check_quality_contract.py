@@ -47,6 +47,9 @@ def ref_id(value: object) -> str:
 
 def declared_mapping(row: JsonObject) -> object:
     return row.get("answer")
+
+def runner_prompt(case_input: JsonObject) -> str:
+    return str(case_input["prompt"])
 """
 
     failures = defensive_type_erasure_failures_for_source(_probe_path(), source)
@@ -62,6 +65,7 @@ def declared_mapping(row: JsonObject) -> object:
         "tests/scripts/lint_probe.py:15: LEAVEN001 widens domain value `value` to object",
         "tests/scripts/lint_probe.py:16: LEAVEN006 uses getattr(...) to probe a domain value",
         "tests/scripts/lint_probe.py:19: LEAVEN005 uses .get(...) on an unparsed domain value",
+        "tests/scripts/lint_probe.py:22: LEAVEN002 uses str(...) to coerce a domain value",
     ]
 
 

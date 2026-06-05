@@ -4595,6 +4595,29 @@ acceptance:
           owner types without permitting arbitrary output probing, the oversized
           generated payload test was split into plan/result and stage-payload
           files under the 650-line cap, and `just check` passes after the repair.
+      - kind: anti_coercion_lint_covers_runner_case_input_prompt
+        paths:
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/tests/scripts/test_check_quality_contract.py
+          - sdk/python/src/leaven/_seam_worker/runner.py
+          - sdk/python/tests/test_stage_surface.py
+        commands:
+          - cd sdk/python && uv run pytest tests/scripts/test_check_quality_contract.py tests/test_stage_surface.py::test_checked_in_stage_worker_dispatches_registered_runner -q
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && uv run ruff check scripts/check_quality_contract.py tests/scripts/test_check_quality_contract.py src/leaven/_seam_worker/runner.py
+          - cd sdk/python && uv run ty check scripts/check_quality_contract.py tests/scripts/test_check_quality_contract.py src/leaven/_seam_worker/runner.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          The custom Python quality contract now treats `case_input` as a
+          domain value, so `str(case_input["prompt"])` fallback coercion is
+          rejected under LEAVEN002 and still requires a line-local
+          `# noqa: LEAVENxxx -- justification` for any explicit exception.
+          The command-runner stage worker no longer stringifies
+          `case_input.prompt`; it requires that field to already be a string and
+          raises `TypeError` otherwise. The focused worker scenario still
+          passes, proving the normal checked-in runner path remains executable.
+          This strengthens the SDK quality gate but does not close the row
+          while broader package/example/API audits remain pending.
       - kind: public_skill_proposal_constructor_scaffold_removed
         paths:
           - sdk/python/src/leaven/proposal.py
