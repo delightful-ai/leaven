@@ -26,8 +26,8 @@ from .._seam._wire.evidence import (
     EvidencePublic as WireEvidencePublic,
 )
 from .._seam._wire.refs import (
+    AssessmentRankingValue,
     ReceiptRef,
-    WireJsonAssessmentRanking,
     WireJsonExtensionPayload,
 )
 from .._seam._wire.results import AssessmentSubmitResult
@@ -336,7 +336,7 @@ def _receipt_refs(values: Sequence[str]) -> list[ReceiptRef]:
     return output
 
 
-def _wire_assessment_ranking(values: Sequence[str]) -> WireJsonAssessmentRanking:
+def _wire_assessment_ranking(values: Sequence[str]) -> AssessmentRankingValue:
     return list(values)
 
 

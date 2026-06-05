@@ -22,7 +22,7 @@ def render_payloads(rows: Sequence[PayloadMethodRow]) -> str:
         f"    {name},"
         for name in sorted(
             f"{REF_EXPORTS} DataClassSet MetadataBag "
-            "WireJsonOutputValue".split()
+            "OutputJsonValue".split()
         )
     )
     return f'''"""Generated top-level public-seam payload records.
@@ -536,6 +536,6 @@ __all__ = (  # noqa: PLE0605, SIM905
     "RunnerRequest Score "
     "StageEffectReceipt StageProposalReceipt StageRunKind StageRunPayload StageRunRequest StageRunResult "
     "StaleWritePolicy SurfaceSuggestion TraceRef ValidationReceipt VisibilityClass "
-    "WireJsonOutputValue"
+    "OutputJsonValue"
 ).split()
 '''

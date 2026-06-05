@@ -3673,6 +3673,38 @@ acceptance:
           through `GraphSourceEvents`; the full seam-wire lane remains green.
           The targeted grep has no old alias matches. Literal, output,
           assessment, and extension JSON value owners remain for later audit.
+      - kind: output_and_assessment_value_owners_branded
+        paths:
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/codegen/write_codegen.py
+          - sdk/python/codegen/graph_row_codegen.py
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/refs.py
+          - sdk/python/src/leaven/_seam/_wire/writes.py
+          - sdk/python/src/leaven/_seam/_wire/graph_rows.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/src/leaven/builders/assessments.py
+          - sdk/python/tests/_seam/_wire/test_graph_writes.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_graph_writes.py tests/_seam/_wire/test_graph_rows.py tests/builders/test_assessments.py -q
+          - cd sdk/python && uv run ruff check codegen/ref_codegen.py codegen/write_codegen.py codegen/graph_row_codegen.py codegen/payload_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/writes.py src/leaven/_seam/_wire/graph_rows.py src/leaven/_seam/_wire/payloads.py src/leaven/builders/assessments.py tests/_seam/_wire/test_graph_writes.py tests/_seam/_wire/test_graph_rows.py tests/builders/test_assessments.py
+          - cd sdk/python && uv run ty check codegen/ref_codegen.py codegen/write_codegen.py codegen/graph_row_codegen.py codegen/payload_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/writes.py src/leaven/_seam/_wire/graph_rows.py src/leaven/_seam/_wire/payloads.py src/leaven/builders/assessments.py tests/_seam/_wire/test_graph_writes.py tests/_seam/_wire/test_graph_rows.py tests/builders/test_assessments.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - rg -n "WireJson(OutputValue|AssessmentPreference|AssessmentRanking|AssessmentTarget)" sdk/python/codegen sdk/python/src sdk/python/tests sdk/python/examples -g '*.py'
+        note: >-
+          Generated graph-row and graph-write output slots now use
+          `OutputJsonValue`, and assessment target/preference/ranking slots now
+          use `AssessmentTargetValue`, `AssessmentPreferenceValue`, and
+          `AssessmentRankingValue`. The public assessment builder was hard-cut
+          to the branded ranking owner rather than importing the old erased
+          alias. A focused regression checks the generated owner names, and the
+          targeted grep has no matches for the old output or assessment
+          `WireJson*` aliases in Python codegen, SDK source, tests, or examples.
+          Literal values and extension payloads still need separate typed-owner
+          treatment; JSON-RPC `Raw` remains the intentional msgspec
+          delayed-decode envelope, not a domain payload owner.
       - kind: python_request_envelope_raw_dict_escape_removed
         paths:
           - sdk/python/src/leaven/_seam/client.py

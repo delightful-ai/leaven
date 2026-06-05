@@ -23,18 +23,18 @@ from msgspec import UNSET, Struct, UnsetType
 from .evidence import EvidenceEnvelope
 from .expressions import EvaluationSetExpr, PlanExpression, ValueExpr
 from .refs import (
+    AssessmentPreferenceValue,
+    AssessmentRankingValue,
+    AssessmentTargetValue,
     BlobRef,
     CandidateRef,
     DataClassSet,
     ExternalEventPayload,
     MetadataBag,
+    OutputJsonValue,
     ProposalBatchRef,
     ReceiptRef,
     TraceRef,
-    WireJsonAssessmentPreference,
-    WireJsonAssessmentRanking,
-    WireJsonAssessmentTarget,
-    WireJsonOutputValue,
     WorkspaceRef,
 )
 
@@ -139,7 +139,7 @@ class WriteOutputRecord(Struct, frozen=True, forbid_unknown_fields=True, omit_de
     visibility: VisibilityClass
     data_classes: DataClassSet
     summary: str | UnsetType = UNSET
-    value: WireJsonOutputValue | UnsetType = UNSET
+    value: OutputJsonValue | UnsetType = UNSET
     blob_ref: BlobRef | UnsetType = UNSET
     trace_refs: list[TraceRef] | UnsetType = UNSET
 
@@ -175,9 +175,9 @@ class SubmitAssessmentRecord(Struct, frozen=True, forbid_unknown_fields=True, om
     replayability: Replayability
     candidate: CandidateRef | UnsetType = UNSET
     candidates: list[CandidateRef] | UnsetType = UNSET
-    target: WireJsonAssessmentTarget | UnsetType = UNSET
-    preference: WireJsonAssessmentPreference | UnsetType = UNSET
-    ranking: WireJsonAssessmentRanking | UnsetType = UNSET
+    target: AssessmentTargetValue | UnsetType = UNSET
+    preference: AssessmentPreferenceValue | UnsetType = UNSET
+    ranking: AssessmentRankingValue | UnsetType = UNSET
     read_receipts: list[ReceiptRef] | UnsetType = UNSET
     effect_receipts: list[ReceiptRef] | UnsetType = UNSET
     cost_attribution: CostAttribution | UnsetType = UNSET

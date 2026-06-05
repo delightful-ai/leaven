@@ -67,6 +67,7 @@ from .refs import (
     InfoRef,
     MetadataBag,
     MetadataValue,
+    OutputJsonValue,
     ProposalBatchAppliedEventPayload,
     ProposalBatchRef,
     ProposalBatchRefRecord,
@@ -80,7 +81,6 @@ from .refs import (
     TraceRef,
     TraceRefRecord,
     TraceVisibility,
-    WireJsonOutputValue,
     WorkspaceRef,
     WorkspaceRefRecord,
 )
@@ -560,5 +560,5 @@ __all__ = (  # noqa: PLE0605, SIM905
     "RunnerRequest Score "
     "StageEffectReceipt StageProposalReceipt StageRunKind StageRunPayload StageRunRequest StageRunResult "
     "StaleWritePolicy SurfaceSuggestion TraceRef ValidationReceipt VisibilityClass "
-    "WireJsonOutputValue"
+    "OutputJsonValue"
 ).split()

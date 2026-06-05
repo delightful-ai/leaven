@@ -16,7 +16,15 @@ from leaven._seam._wire.expressions import (
 from leaven._seam._wire.payloads import (
     PlanDocument,
 )
-from leaven._seam._wire.refs import BlobRef, ExternalEventPayload, TraceRefRecord
+from leaven._seam._wire.refs import (
+    AssessmentPreferenceValue,
+    AssessmentRankingValue,
+    AssessmentTargetValue,
+    BlobRef,
+    ExternalEventPayload,
+    OutputJsonValue,
+    TraceRefRecord,
+)
 from leaven._seam._wire.writes import (
     EmitRunEventWrite,
     ProposalCausalInputs,
@@ -31,6 +39,15 @@ from leaven._seam._wire.writes import (
 class PrivateEvidencePayload(Struct, frozen=True, forbid_unknown_fields=True):
     rationale: str
     confidence: float
+
+
+def test_output_and_assessment_json_slots_have_owned_aliases() -> None:
+    """Boundary check: graph-write JSON leaves use domain-named wire owners."""
+
+    assert OutputJsonValue.__name__ == "OutputJsonValue"
+    assert AssessmentTargetValue.__name__ == "AssessmentTargetValue"
+    assert AssessmentPreferenceValue.__name__ == "AssessmentPreferenceValue"
+    assert AssessmentRankingValue.__name__ == "AssessmentRankingValue"
 
 
 def test_submit_proposal_batch_write_decodes_typed_effect_value_exprs() -> None:

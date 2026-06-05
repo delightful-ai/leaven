@@ -16,11 +16,11 @@ from .refs import (
     EventSummaryPayload,
     InfoRef,
     MetadataBag,
+    OutputJsonValue,
     ProposalBatchRef,
     ProposalRef,
     ReceiptRef,
     TraceRef,
-    WireJsonOutputValue,
     WorkspaceRef,
 )
 
@@ -40,7 +40,7 @@ class OutputRecord(Struct, frozen=True, forbid_unknown_fields=True, omit_default
     visibility: VisibilityClass
     data_classes: DataClassSet
     summary: str | UnsetType = UNSET
-    value: WireJsonOutputValue | UnsetType = UNSET
+    value: OutputJsonValue | UnsetType = UNSET
     blob_ref: BlobRef | UnsetType = UNSET
     trace_refs: list[TraceRef] | UnsetType = UNSET
 
