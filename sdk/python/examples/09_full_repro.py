@@ -126,9 +126,10 @@ async def judge(req: JudgeRequest, cx: lv.JudgeContext) -> AssessmentWrite:
         candidates=req.candidates,
         case=req.case_id,
         preference=req.candidates[0],  # judge picks; demo uses first
+        score=lv.Score(value=1.0, feedback=response.text),
         evidence=EvidenceEnvelope.public_only(
-            payload={"reasoning": response.text},
-            data_classes=[lv.data_class.OPTIMIZER_VISIBLE],
+            payload={"feedback": response.text},
+            data_classes=[lv.data_class.CANDIDATE_OUTPUT, lv.data_class.OPTIMIZER_VISIBLE],
         ),
         effect_receipts=[response.receipt],
         replayability="boundary_managed",

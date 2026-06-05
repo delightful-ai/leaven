@@ -41,6 +41,7 @@ def test_pairwise_requires_two_candidates_and_member_preference() -> None:
         candidates=["cand_a", "cand_b"],
         case="case_1",
         preference="cand_b",
+        score=lv.Score(value=1.0, feedback="cand_b preferred"),
         evidence=_evidence(),
     )
 
@@ -53,6 +54,7 @@ def test_pairwise_requires_two_candidates_and_member_preference() -> None:
             candidates=["cand_a"],
             case="case_1",
             preference="cand_a",
+            score=lv.Score(value=1.0),
             evidence=_evidence(),
         )
 
@@ -61,6 +63,7 @@ def test_pairwise_requires_two_candidates_and_member_preference() -> None:
             candidates=["cand_a", "cand_b"],
             case="case_1",
             preference="cand_c",
+            score=lv.Score(value=1.0),
             evidence=_evidence(),
         )
 
@@ -70,6 +73,7 @@ def test_listwise_requires_ranking_to_cover_candidates() -> None:
         candidates=["cand_a", "cand_b", "cand_c"],
         case="case_1",
         ranking=["cand_c", "cand_a", "cand_b"],
+        score=lv.Score(value=0.8, feedback="cand_c first"),
         evidence=_evidence(),
     )
 
@@ -81,6 +85,6 @@ def test_listwise_requires_ranking_to_cover_candidates() -> None:
             candidates=["cand_a", "cand_b"],
             case="case_1",
             ranking=["cand_a"],
+            score=lv.Score(value=0.8),
             evidence=_evidence(),
         )
-

@@ -13,6 +13,7 @@ from ._wire import (
 from ._wire.codec import decode_method_response, encode_request
 from ._wire.results import (
     AgentRunResult,
+    AssessmentSubmitResult,
     CaseLoadResult,
     LmCompleteResult,
     ProposalApplyResult,
@@ -23,6 +24,7 @@ from .config import SeamServiceConfig
 from .errors import SeamClientError
 from .plans import (
     AgentRunRequest,
+    AssessmentSubmitRequest,
     CaseLoadRequest,
     LmCompleteRequest,
     ProposalApplyRequest,
@@ -51,6 +53,15 @@ class SeamClient:
     def agent_run(self, request: AgentRunRequest, *, timeout_s: int = 240) -> AgentRunResult:
         """Send one `leaven/agent.run` request and return its typed result."""
         return self._typed_request(request, AgentRunResult, timeout_s=timeout_s)
+
+    def assessment_submit(
+        self,
+        request: AssessmentSubmitRequest,
+        *,
+        timeout_s: int = 240,
+    ) -> AssessmentSubmitResult:
+        """Send one `leaven/assessment.submit` request and return its typed result."""
+        return self._typed_request(request, AssessmentSubmitResult, timeout_s=timeout_s)
 
     def lm_complete(self, request: LmCompleteRequest, *, timeout_s: int = 240) -> LmCompleteResult:
         """Send one `leaven/lm.complete` request and return its typed result."""

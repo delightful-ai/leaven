@@ -24,10 +24,14 @@ class ProposalSubmission(BaseModel):
     proposal_ids: list[str]
 
 
-class _SeamRequester(Protocol):
-    """Small private protocol ProposalsBuilder needs from the seam client."""
+class _ProposalSubmitter(Protocol):
+    """Small private protocol ProposalsBuilder needs for proposal submission."""
 
     def proposal_submit(self, request: ProposalSubmitRequest) -> ProposalSubmitResult: ...
+
+
+class _ProposalApplier(Protocol):
+    """Small private protocol ProposalsBuilder needs for proposal application."""
 
     def proposal_apply(self, request: ProposalApplyRequest) -> ProposalApplyResult: ...
 
@@ -38,25 +42,29 @@ class ProposalsBuilder:
     def __init__(
         self,
         *,
-        _client: "_SeamRequester | None" = None,
+        _client: "_ProposalSubmitter | None" = None,
+        _apply_client: "_ProposalApplier | None" = None,
         _idempotency_prefix: str = "proposal-builder",
         _plan_id: str = "planpythonproposalbuilder001",
     ) -> None:
         self._client = _client
+        self._apply_client = _apply_client
         self._idempotency_prefix = _idempotency_prefix
         self._plan_id = _plan_id
 
     @classmethod
     def _for_seam(
         cls,
-        client: "_SeamRequester",
+        client: "_ProposalSubmitter",
         *,
+        apply_client: "_ProposalApplier | None" = None,
         idempotency_prefix: str = "proposal-builder",
         plan_id: str = "planpythonproposalbuilder001",
     ) -> "ProposalsBuilder":
         """Bind this builder to the private public-seam process client."""
         return cls(
             _client=client,
+            _apply_client=apply_client,
             _idempotency_prefix=idempotency_prefix,
             _plan_id=plan_id,
         )
@@ -79,7 +87,7 @@ class ProposalsBuilder:
 
     async def apply(self, submission: ProposalSubmission) -> WriteReceipt:
         """Ask the engine to apply a previously-submitted proposal batch."""
-        if self._client is None:
+        if self._apply_client is None:
             raise NotImplementedError(
                 "ProposalsBuilder.apply needs an engine-bound public-seam client; "
                 "use the cx.proposals instance supplied to a proposer stage"
@@ -90,7 +98,7 @@ class ProposalsBuilder:
             idempotency_key=f"{self._idempotency_prefix}-apply",
             proposal_batch=submission.batch_id,
         )
-        result = await asyncio.to_thread(self._client.proposal_apply, request)
+        result = await asyncio.to_thread(self._apply_client.proposal_apply, request)
         return _proposal_apply_receipt_from_result(result)
 
     async def submit_and_apply(self, batch: ProposalBatch) -> WriteReceipt:

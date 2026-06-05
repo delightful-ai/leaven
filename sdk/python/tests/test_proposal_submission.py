@@ -23,6 +23,7 @@ async def test_proposals_builder_submits_agent_session_batch_through_seam() -> N
     client = FakeProposalSeamClient()
     proposals = ProposalsBuilder._for_seam(
         client,
+        apply_client=client,
         idempotency_prefix="proposal-builder-test",
         plan_id="planproposalbuilder001",
     )
@@ -98,6 +99,7 @@ async def test_proposals_builder_applies_submitted_batch_through_seam() -> None:
     client = FakeProposalSeamClient()
     proposals = ProposalsBuilder._for_seam(
         client,
+        apply_client=client,
         idempotency_prefix="proposal-builder-test",
         plan_id="planproposalbuilder001",
     )
@@ -133,6 +135,7 @@ async def test_proposals_builder_submit_and_apply_uses_batch_ref_from_submit() -
     client = FakeProposalSeamClient()
     proposals = ProposalsBuilder._for_seam(
         client,
+        apply_client=client,
         idempotency_prefix="proposal-builder-test",
         plan_id="planproposalbuilder001",
     )

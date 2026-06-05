@@ -3205,6 +3205,57 @@ acceptance:
           but does not close the SDK quality row; remaining public scaffolds and
           the full Rust-owned generated wire-codegen denominator still require
           later cuts.
+      - kind: public_assessment_submit_scaffold_removed
+        paths:
+          - sdk/python/src/leaven/_seam/__init__.py
+          - sdk/python/src/leaven/_seam/client.py
+          - sdk/python/src/leaven/_seam/plans.py
+          - sdk/python/src/leaven/assessment.py
+          - sdk/python/src/leaven/builders/assessments.py
+          - sdk/python/src/leaven/builders/proposals.py
+          - sdk/python/src/leaven/_runs/__init__.py
+          - sdk/python/src/leaven/_stage_runtime/contexts.py
+          - sdk/python/tests/builders/test_assessments.py
+          - sdk/python/tests/test_assessment.py
+          - sdk/python/tests/test_proposal_submission.py
+          - sdk/python/examples/07_serve_stage_worker.py
+          - sdk/python/examples/09_full_repro.py
+        commands:
+          - cd sdk/python && uv run pytest tests/builders/test_assessments.py tests/test_assessment.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_seam/plans.py src/leaven/_seam/client.py src/leaven/_seam/__init__.py src/leaven/assessment.py src/leaven/builders/assessments.py tests/builders/test_assessments.py tests/test_assessment.py examples/07_serve_stage_worker.py examples/09_full_repro.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/plans.py src/leaven/_seam/client.py src/leaven/_seam/__init__.py src/leaven/assessment.py src/leaven/builders/assessments.py tests/builders/test_assessments.py tests/test_assessment.py examples/07_serve_stage_worker.py examples/09_full_repro.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - cd sdk/python && just compile-examples
+          - cd sdk/python && uv run pytest tests/test_product_surface_ring.py tests/test_stage_surface.py tests/test_assessment.py tests/builders/test_assessments.py -q
+          - rg -n "AssessmentWrite\\.(pairwise|listwise)" sdk/python/src sdk/python/tests sdk/python/examples -g '*.py'
+          - cd sdk/python && uv run pytest tests/builders/test_assessments.py tests/test_assessment.py tests/test_proposal_submission.py -q
+          - cd sdk/python && uv run ruff check src/leaven/builders/proposals.py tests/test_proposal_submission.py src/leaven/_stage_runtime/contexts.py
+          - cd sdk/python && uv run ty check src/leaven/builders/proposals.py tests/test_proposal_submission.py src/leaven/_stage_runtime/contexts.py
+          - cd sdk/python && just check
+        note: >-
+          `AssessmentsBuilder.submit(...)` is now a seam-backed public builder
+          path instead of a scaffold. The SDK adds typed
+          `AssessmentSubmitRequest`, `SeamClient.assessment_submit(...)`, and
+          generated `AssessmentSubmitResult` readback; the builder lowers
+          public `AssessmentWrite` records into generated
+          `SubmitAssessmentRecord` / `SubmitAssessmentsWrite` records and
+          returns the admitted assessment ids plus the write receipt. Pairwise
+          and listwise `AssessmentWrite` constructors now require `Score` too,
+          matching the locked public-seam requirement that every submitted
+          assessment carries a score and score output. Python refuses to invent
+          assessed-output semantics: assessment score output data classes must
+          already include `candidate.output` or `candidate.artifact`, and public
+          evidence payload lowering accepts only the wire-owned summary,
+          feedback, and metrics slots. This removes one public backbone scaffold
+          and the default SDK gate is green. The same `just check` run caught
+          and fixed a proposal authority-boundary regression: proposer-stage
+          contexts remain submit-only, while `proposal.apply` now requires a
+          separately injected apply-capable seam client. The `_runs/__init__.py`
+          change is a mechanical Ruff import-order repair exposed by the
+          default gate. This does not close the SDK quality row; remaining
+          public scaffolds and the full Rust-owned generated wire-codegen
+          denominator still require later cuts.
       - kind: python_no_unparsed_get_probe_lint_hardened
         paths:
           - sdk/python/scripts/check_quality_contract.py

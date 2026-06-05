@@ -44,6 +44,8 @@ from leaven._seam._wire.refs import WireJsonField, WireJsonSchemaObject
 from leaven._seam._wire.writes import (
     ApplyProposalBatchWrite,
     ProposalWriteRecord,
+    SubmitAssessmentRecord,
+    SubmitAssessmentsWrite,
     SubmitProposalBatchWrite,
 )
 
@@ -51,6 +53,7 @@ CaseField = Literal["input", "target", "metadata", "files", "setup", "sandbox", 
 SeamRequestMethod = Literal[
     "leaven/stage.run",
     "leaven/agent.run",
+    "leaven/assessment.submit",
     "leaven/case.load",
     "leaven/case.input",
     "leaven/case.target",
@@ -261,6 +264,42 @@ class LmCompleteRequest:
                 ),
                 sampling=convert(sampling, type=LmSampling) if sampling else UNSET,
                 input_classes=list(self.input_classes or ["public"]),
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class AssessmentSubmitRequest:
+    """A single public-seam `leaven/assessment.submit` Plan request."""
+
+    request_id: str
+    plan_id: str
+    idempotency_key: str
+    evaluation_request_id: str
+    assessments: Sequence[SubmitAssessmentRecord]
+
+    @property
+    def method(self) -> SeamRequestMethod:
+        """Locked assessment submission method."""
+        return "leaven/assessment.submit"
+
+    def to_params(self) -> PlanDocument:
+        """Return the locked assessment submission Plan params."""
+        return _plan_document(
+            plan_id=self.plan_id,
+            ops=[self._assessment_write()],
+            return_names=["assessment_batch"],
+            commit=CommitPolicyGraphWritesAtomic(on_stale="reject"),
+        )
+
+    def _assessment_write(self) -> PlanOp:
+        return PlanOp(
+            kind="write",
+            name="assessment_batch",
+            idempotency_key=self.idempotency_key,
+            write=SubmitAssessmentsWrite(
+                evaluation_request_id=self.evaluation_request_id,
+                assessments=list(self.assessments),
             ),
         )
 
@@ -520,6 +559,7 @@ def _optional_json_schema_field(value: JsonObject, field: str) -> WireJsonSchema
 
 __all__ = [
     "AgentRunRequest",
+    "AssessmentSubmitRequest",
     "CaseLoadRequest",
     "LmCompleteRequest",
     "ProposalApplyRequest",
