@@ -9,19 +9,21 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
-use leaven_core::{Assessment, EvaluationRequest, OptimizationProblem};
+use leaven_core::{Assessment, EvaluationRequest, OptimizationProblem, ProposalBatch};
 use leaven_engine::{ProposalBatchReport, RunContext, RunEvent};
-use leaven_kernel::{EvaluatorId, Fingerprint, Metered, ProposalBatchId};
+use leaven_kernel::{Cost, EvaluatorId, Fingerprint, Metered, ProposalBatchId, StageId};
 use leaven_public_seam::LockedMethod;
 use leaven_seam_runtime::{SeamPlanRequest, SeamService, SeamServiceError, SeamStageRunRequest};
 use serde_json::Value;
+
+use crate::configured_extension::extension_result_for_plan_report;
 
 mod error;
 mod extension_result;
 mod params;
 
 pub use error::RunBoundGraphEffectError;
-pub use params::{AssessmentSubmitParams, EvaluationRequestParams};
+pub use params::{AssessmentSubmitParams, EvaluationRequestParams, ProposalSubmitParams};
 
 use extension_result::{
     EventEmitExtensionContext, assessment_submit_extension_result,
@@ -37,6 +39,8 @@ type AssessmentSubmitter<'service, P> = dyn for<'params> Fn(&AssessmentSubmitPar
     + 'service;
 type EvaluationRequester<'service> = dyn for<'params> Fn(&EvaluationRequestParams<'params>) -> Result<RunBoundEvaluationRequest, String>
     + 'service;
+type ProposalSubmitter<'service, P> = dyn for<'params> Fn(&ProposalSubmitParams<'params>) -> Result<ProposalBatch<P>, String>
+    + 'service;
 
 /// Typed evaluation request produced by a host-owned public payload lowerer.
 pub struct RunBoundEvaluationRequest {
@@ -51,7 +55,8 @@ pub struct RunBoundEvaluationRequest {
 /// Run-bound service for worker-initiated public-seam graph writes.
 pub struct RunBoundGraphEffectService<'service, 'run, P: OptimizationProblem> {
     context: RefCell<&'service mut RunContext<'run, P>>,
-    batches: BTreeMap<ProposalBatchId, ProposalBatchReport>,
+    batches: RefCell<BTreeMap<ProposalBatchId, ProposalBatchReport>>,
+    proposal_submitter: Option<Box<ProposalSubmitter<'service, P>>>,
     assessment_submitter: Option<Box<AssessmentSubmitter<'service, P>>>,
     evaluation_requester: Option<Box<EvaluationRequester<'service>>>,
     capability_fingerprint: String,
@@ -74,10 +79,13 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
     ) -> Self {
         Self {
             context: RefCell::new(context),
-            batches: batches
-                .into_iter()
-                .map(|batch| (batch.batch_id, batch))
-                .collect(),
+            batches: RefCell::new(
+                batches
+                    .into_iter()
+                    .map(|batch| (batch.batch_id, batch))
+                    .collect(),
+            ),
+            proposal_submitter: None,
             assessment_submitter: None,
             evaluation_requester: None,
             capability_fingerprint: capability_fingerprint.into(),
@@ -98,6 +106,19 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
     ) -> Self {
         self.started_at = started_at.into();
         self.completed_at = completed_at.into();
+        self
+    }
+
+    /// Installs host-side lowering for proposal payloads.
+    #[must_use]
+    pub fn with_proposal_submitter(
+        mut self,
+        submitter: impl for<'params> Fn(
+            &ProposalSubmitParams<'params>,
+        ) -> Result<ProposalBatch<P>, String>
+        + 'service,
+    ) -> Self {
+        self.proposal_submitter = Some(Box::new(submitter));
         self
     }
 
@@ -134,6 +155,9 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
         params: &Value,
     ) -> Result<Value, RunBoundGraphEffectError> {
         match method {
+            LockedMethod::ProposalSubmitBatch => {
+                self.proposal_submit(params::proposal_submit_params(params)?, params)
+            }
             LockedMethod::ProposalApply => self.proposal_apply(proposal_apply_params(params)?),
             LockedMethod::EvaluationRequest => {
                 self.evaluation_request(evaluation_request_params(params)?)
@@ -148,6 +172,38 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
         }
     }
 
+    fn proposal_submit(
+        &self,
+        params: ProposalSubmitParams<'_>,
+        plan: &Value,
+    ) -> Result<Value, RunBoundGraphEffectError> {
+        let submitter = self
+            .proposal_submitter
+            .as_ref()
+            .ok_or(RunBoundGraphEffectError::MissingProposalSubmitter)?;
+        let proposal_batch =
+            submitter(&params).map_err(RunBoundGraphEffectError::ProposalSubmit)?;
+        let mut context = self.context.borrow_mut();
+        let batch = context.record_proposal_batch(
+            StageId::custom(params.write.name.to_owned()),
+            proposal_batch,
+            Cost::zero(),
+        )?;
+        let graph = context.graph();
+        let plan_result = leaven_run::PublicProposalWriteReceiptContext::new(
+            params.plan_id,
+            &self.base_revision,
+            &self.base_revision,
+            &self.capability_fingerprint,
+            &self.policy_fingerprint,
+        )
+        .with_submit_timing(&self.started_at, &self.completed_at)
+        .proposal_submit_plan_result(&graph, &batch)?;
+        self.batches.borrow_mut().insert(batch.batch_id, batch);
+        extension_result_for_plan_report(LockedMethod::ProposalSubmitBatch, plan, &plan_result)
+            .map_err(|error| RunBoundGraphEffectError::ExtensionProjection(error.to_string()))
+    }
+
     fn proposal_apply(
         &self,
         params: ProposalApplyParams<'_>,
@@ -155,6 +211,7 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
         let batch_id = params.write.proposal_batch_id;
         let batch = self
             .batches
+            .borrow()
             .get(&batch_id)
             .ok_or(RunBoundGraphEffectError::UnknownBatch(batch_id))?
             .clone();

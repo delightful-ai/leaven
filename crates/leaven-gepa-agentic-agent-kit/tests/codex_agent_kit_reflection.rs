@@ -266,39 +266,73 @@ fn codex_agent_kit_git_child_applies_through_run_bound_stdio_before_next_project
             let mut ctx = RunContext::<AgentKitGitProblem>::new(&mut graph, &mut budget);
             ctx.insert_seed(parent_artifact, 0).unwrap()
         };
-        let batch = {
-            let mut ctx = RunContext::<AgentKitGitProblem>::new(&mut graph, &mut budget);
-            ctx.record_proposal_batch(
-                leaven_kernel::StageId::custom("agent-kit-run-bound-stdio"),
-                ProposalBatch {
-                    proposals: vec![
-                        Proposal::mutate(parent, change)
-                            .informed_by([InfoRef::Candidate(parent)])
-                            .build(),
-                    ],
-                    semantics: ProposalBatchSemantics::Alternatives,
-                    metadata: MetadataBag::new(),
-                },
-                Cost::zero(),
-            )
-            .unwrap()
-        };
-        let batch_ref = format!("pb_{}", batch.batch_id.as_uuid());
         {
             let mut ctx = RunContext::<AgentKitGitProblem>::new(&mut graph, &mut budget);
             let service = RunBoundGraphEffectService::new(
                 &mut ctx,
-                [batch],
+                [],
                 "fp_cap_sha256_agent_kit",
                 "fp_policy_sha256_agent_kit",
                 "rev_agent_kit_base",
                 "rev_agent_kit_child",
-            );
+            )
+            .with_proposal_submitter({
+                move |params| {
+                    assert_eq!(params.plan_id(), "plan_agent_kit_submit");
+                    assert_eq!(params.op_name(), "proposal_batch");
+                    assert_eq!(
+                        params.proposals_payload()[0]["effect"]["kind"],
+                        "change_from_agent_session"
+                    );
+                    Ok(ProposalBatch {
+                        proposals: vec![
+                            Proposal::mutate(parent, change.clone())
+                                .informed_by([InfoRef::Candidate(parent)])
+                                .build(),
+                        ],
+                        semantics: ProposalBatchSemantics::Alternatives,
+                        metadata: MetadataBag::new(),
+                    })
+                }
+            });
             let package = leaven_public_seam::PublicSeamPackage::active_from_repo(workspace_root())
                 .expect("public seam package loads from workspace");
             let runtime = SeamRuntime::from_package(package, service).unwrap();
-            let mut output = Vec::new();
-            let report = serve_reader_writer(
+            let mut submit_output = Vec::new();
+            let submit_report = serve_reader_writer(
+                &runtime,
+                Cursor::new(format!(
+                    "{}\n",
+                    jsonrpc_request(
+                        "agent-kit-submit",
+                        "leaven/proposal.submit_batch",
+                        proposal_submit_request(),
+                    )
+                )),
+                &mut submit_output,
+            )
+            .unwrap();
+            assert_eq!(submit_report.requests, 1);
+            let submit_lines = response_lines(submit_output);
+            assert!(
+                submit_lines.iter().all(|line| line.get("error").is_none()),
+                "stdio runtime returned submit errors: {submit_lines:?}"
+            );
+            assert_eq!(
+                submit_lines[0]["result"]["primary"]["kind"],
+                "proposal_batch_receipt"
+            );
+            assert_eq!(
+                submit_lines[0]["result"]["receipts"][0]["write_kind"],
+                "submit_proposal_batch"
+            );
+            let batch_ref = submit_lines[0]["result"]["primary"]["batch_id"]
+                .as_str()
+                .expect("proposal.submit_batch returns batch id")
+                .to_owned();
+
+            let mut apply_output = Vec::new();
+            let apply_report = serve_reader_writer(
                 &runtime,
                 Cursor::new(format!(
                     "{}\n",
@@ -308,11 +342,11 @@ fn codex_agent_kit_git_child_applies_through_run_bound_stdio_before_next_project
                         proposal_apply_request(&batch_ref),
                     )
                 )),
-                &mut output,
+                &mut apply_output,
             )
             .unwrap();
-            assert_eq!(report.requests, 1);
-            let lines = response_lines(output);
+            assert_eq!(apply_report.requests, 1);
+            let lines = response_lines(apply_output);
             assert!(
                 lines.iter().all(|line| line.get("error").is_none()),
                 "stdio runtime returned error responses: {lines:?}"
@@ -573,6 +607,51 @@ fn response_lines(output: Vec<u8>) -> Vec<Value> {
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
         .collect()
+}
+
+fn proposal_submit_request() -> Value {
+    json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "plan_agent_kit_submit",
+        "consistency": {
+            "kind": "latest_at_start"
+        },
+        "mode": {
+            "kind": "execute"
+        },
+        "ops": [{
+            "kind": "write",
+            "name": "proposal_batch",
+            "idempotency_key": "agent-kit-submit-0001",
+            "write": {
+                "kind": "submit_proposal_batch",
+                "semantics": "sequence",
+                "proposals": [{
+                    "effect": {
+                        "kind": "change_from_agent_session",
+                        "target": "cand_agent_kit_parent",
+                        "agent_receipt": "agentrec_codex",
+                        "parser": "leaven.agent_session.skill_patch.v1",
+                        "surface_fingerprint": "fp_surface_sha256_agent_kit",
+                        "change_schema": "fp_schema_sha256_agent_kit_change"
+                    },
+                    "causal": {
+                        "inputs": ["cand_agent_kit_parent"]
+                    },
+                    "informed_by": {
+                        "kind": "literal",
+                        "value": ["qrec_agent_kit_parent", "agentrec_codex"]
+                    },
+                    "read_receipts": ["qrec_agent_kit_parent", "agentrec_codex"]
+                }]
+            }
+        }],
+        "return": ["proposal_batch"],
+        "commit": {
+            "kind": "graph_writes_atomic",
+            "on_stale": "reject"
+        }
+    })
 }
 
 fn proposal_apply_request(batch_ref: &str) -> Value {

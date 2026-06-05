@@ -2670,8 +2670,12 @@ acceptance:
           does not run live `gpt-5.4-mini`, route `proposal.submit_batch` or
           `proposal.apply` through `leaven seam serve --stdio`, or prove durable
           checkpoint/readback for the applied child.
-      - kind: agent_kit_git_run_bound_stdio_apply_foundation
+      - kind: agent_kit_git_run_bound_stdio_submit_apply_foundation
         paths:
+          - crates/leaven-run/src/public_seam/proposal_write.rs
+          - crates/leaven-seam-service/src/run_bound_service/mod.rs
+          - crates/leaven-seam-service/src/run_bound_service/params.rs
+          - crates/leaven-seam-service/src/run_bound_service/error.rs
           - crates/leaven-gepa-agentic-agent-kit/Cargo.toml
           - crates/leaven-gepa-agentic-agent-kit/tests/codex_agent_kit_reflection.rs
         commands:
@@ -2684,13 +2688,14 @@ acceptance:
           bare Git AgentKit repo, materializes it into a local workspace, mutates
           `system_prompt.md` and a skill through filesystem writes plus Git
           commit, imports the child with `GitProgramReadback`, registers the
-          typed `GitProgramChange` proposal batch in `RunContext`, applies it by
-          sending `leaven/proposal.apply` as a JSON-RPC line through the stdio
-          runtime, then materializes the graph child and proves the next Codex
-          AgentKit projection sees the evolved prompt and skill. This is still
-          foundation evidence: it does not execute live `gpt-5.4-mini`, does not
-          route `leaven/proposal.submit_batch` through the durable CLI server,
-          and does not checkpoint/read back the applied child.
+          typed `GitProgramChange` proposal batch by sending
+          `leaven/proposal.submit_batch` as a schema-validated JSON-RPC line
+          through the stdio runtime, applies the returned `pb_<uuid>` with a
+          second `leaven/proposal.apply` line, then materializes the graph child
+          and proves the next Codex AgentKit projection sees the evolved prompt
+          and skill. This is still foundation evidence: it does not execute live
+          `gpt-5.4-mini`, route through the process-level durable CLI server, or
+          checkpoint/read back the applied child.
     closeout_check: >-
       A live Codex prompt-consumption test, a deterministic AgentKit projection
       test, or `proposal.submit_batch` without application cannot close this

@@ -10,6 +10,37 @@ pub(super) struct ProposalApplyParams<'a> {
     pub(crate) write: ProposalApplyWrite,
 }
 
+/// Parsed `leaven/proposal.submit_batch` callback params.
+pub struct ProposalSubmitParams<'a> {
+    pub(crate) plan_id: &'a str,
+    pub(crate) write: ProposalSubmitWrite<'a>,
+}
+
+pub(crate) struct ProposalSubmitWrite<'a> {
+    pub(crate) name: &'a str,
+    pub(crate) proposals: &'a Value,
+}
+
+impl ProposalSubmitParams<'_> {
+    /// Plan identity carried by the public-seam callback.
+    #[must_use]
+    pub fn plan_id(&self) -> &str {
+        self.plan_id
+    }
+
+    /// Operation name for the proposal submit write.
+    #[must_use]
+    pub fn op_name(&self) -> &str {
+        self.write.name
+    }
+
+    /// Host-domain proposal payloads.
+    #[must_use]
+    pub fn proposals_payload(&self) -> &Value {
+        self.write.proposals
+    }
+}
+
 pub(crate) struct ProposalApplyWrite {
     pub(crate) proposal_batch_id: ProposalBatchId,
 }
@@ -117,6 +148,26 @@ pub(super) fn proposal_apply_params(
         plan_id,
         write: ProposalApplyWrite {
             proposal_batch_id: ProposalBatchId::from_uuid(uuid),
+        },
+    })
+}
+
+pub(super) fn proposal_submit_params(
+    params: &Value,
+) -> Result<ProposalSubmitParams<'_>, RunBoundGraphEffectError> {
+    let plan_id = string_field(params, "plan_id")?;
+    let op = write_op(params, "submit_proposal_batch", || {
+        RunBoundGraphEffectError::MissingProposalSubmitWrite
+    })?;
+    let proposals = op
+        .write
+        .get("proposals")
+        .ok_or(RunBoundGraphEffectError::MissingValue { field: "proposals" })?;
+    Ok(ProposalSubmitParams {
+        plan_id,
+        write: ProposalSubmitWrite {
+            name: op.name,
+            proposals,
         },
     })
 }

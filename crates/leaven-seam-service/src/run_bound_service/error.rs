@@ -33,6 +33,9 @@ pub enum RunBoundGraphEffectError {
     /// The callback did not carry an apply proposal write.
     #[error("leaven/proposal.apply callback must carry an apply_proposal_batch write")]
     MissingApplyWrite,
+    /// The callback did not carry a proposal submit write.
+    #[error("leaven/proposal.submit_batch callback must carry a submit_proposal_batch write")]
+    MissingProposalSubmitWrite,
     /// The callback did not carry an evaluation request write.
     #[error("leaven/evaluation.request callback must carry a request_evaluation write")]
     MissingEvaluationRequestWrite,
@@ -48,9 +51,15 @@ pub enum RunBoundGraphEffectError {
     /// The host has no typed assessment lowerer installed.
     #[error("leaven/assessment.submit callback requires a typed host assessment lowerer")]
     MissingAssessmentSubmitter,
+    /// The host has no typed proposal lowerer installed.
+    #[error("leaven/proposal.submit_batch callback requires a typed host proposal lowerer")]
+    MissingProposalSubmitter,
     /// The host has no typed evaluation request lowerer installed.
     #[error("leaven/evaluation.request callback requires a typed host evaluation request lowerer")]
     MissingEvaluationRequester,
+    /// Host-side typed proposal lowering refused the payload.
+    #[error("proposal submit payload refused by host lowerer: {0}")]
+    ProposalSubmit(String),
     /// Host-side typed assessment lowering refused the payload.
     #[error("assessment submit payload refused by host lowerer: {0}")]
     AssessmentSubmit(String),
@@ -81,6 +90,9 @@ pub enum RunBoundGraphEffectError {
     /// The graph-backed evaluation request failed public-seam projection.
     #[error(transparent)]
     EvaluationProjection(#[from] leaven_run::PublicEvaluationJobProjectionError),
+    /// The graph-backed extension result failed public-seam projection.
+    #[error("graph-backed public-seam extension result projection failed: {0}")]
+    ExtensionProjection(String),
     /// Canonical JSON hashing failed.
     #[error("failed to hash public seam receipt preimage: {0}")]
     Hash(String),

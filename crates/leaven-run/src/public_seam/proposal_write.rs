@@ -71,6 +71,72 @@ impl PublicProposalWriteReceiptContext {
     ///
     /// This helper refuses to mint receipts from ids alone: the supplied batch
     /// and every created candidate must already be visible in the engine graph.
+    pub fn proposal_submit_plan_result<P>(
+        &self,
+        graph: &RunGraphView<'_, P>,
+        batch: &ProposalBatchReport,
+    ) -> Result<Value, PublicProposalWriteReceiptProjectionError>
+    where
+        P: OptimizationProblem,
+    {
+        let proposal_ids = graph_proposal_ids(graph, batch)?;
+        let submit_receipt = "wrec_submit_proposal_batch".to_owned();
+        let proposal_value = json!({
+            "kind": "proposal_batch_receipt",
+            "batch_id": proposal_batch_ref(batch.batch_id),
+            "proposal_ids": proposal_ids,
+            "status": "staged",
+            "graph_revision": self.base_revision,
+            "data_classes": ["public"],
+            "replayability": "fully_managed",
+            "receipt": submit_receipt
+        });
+        let submit_started_at = self
+            .submit_started_at
+            .as_deref()
+            .ok_or(PublicProposalWriteReceiptProjectionError::MissingTiming)?;
+        let submit_completed_at = self
+            .submit_completed_at
+            .as_deref()
+            .ok_or(PublicProposalWriteReceiptProjectionError::MissingTiming)?;
+        Ok(json!({
+            "schema_version": "leaven.plan_result.v1",
+            "plan_id": self.plan_id,
+            "capability_fingerprint": self.capability_fingerprint,
+            "policy_fingerprint": self.policy_fingerprint,
+            "base_revision": self.base_revision,
+            "final_revision": self.base_revision,
+            "replayability_summary": "fully_managed",
+            "values": {
+                "proposal_batch": proposal_value
+            },
+            "receipts": [
+                {
+                    "kind": "write",
+                    "receipt": submit_receipt,
+                    "op_var": "proposal_batch",
+                    "started_at": submit_started_at,
+                    "completed_at": submit_completed_at,
+                    "write_kind": "submit_proposal_batch",
+                    "request_hash": self.proposal_submit_request_hash(batch)?,
+                    "result_hash": plan_write_result_hash("proposal_batch", &proposal_value)?,
+                    "base_revision": self.base_revision,
+                    "committed_revision": self.base_revision,
+                    "status": "succeeded",
+                    "proposal_batch_id": proposal_batch_ref(batch.batch_id),
+                    "proposal_ids": batch.proposal_ids.iter().copied().map(proposal_ref).collect::<Vec<_>>()
+                }
+            ],
+            "redactions": [],
+            "charges": [],
+            "errors": []
+        }))
+    }
+
+    /// Projects `RunContext` proposal submission/application into locked Plan Result receipts.
+    ///
+    /// This helper refuses to mint receipts from ids alone: the supplied batch
+    /// and every created candidate must already be visible in the engine graph.
     pub fn proposal_apply_plan_result<P>(
         &self,
         graph: &RunGraphView<'_, P>,
@@ -83,18 +149,7 @@ impl PublicProposalWriteReceiptContext {
         if apply.batch_id != batch.batch_id {
             return Err(PublicProposalWriteReceiptProjectionError::ApplyBatchMismatch);
         }
-        let graph_batch = graph
-            .proposal_batch(batch.batch_id)
-            .ok_or(PublicProposalWriteReceiptProjectionError::BatchNotInGraph)?;
-        if graph_batch.proposal_ids() != batch.proposal_ids.as_slice() {
-            return Err(PublicProposalWriteReceiptProjectionError::BatchReportDoesNotMatchGraph);
-        }
-        let proposal_ids = batch
-            .proposal_ids
-            .iter()
-            .copied()
-            .map(proposal_ref)
-            .collect::<Vec<_>>();
+        let proposal_ids = graph_proposal_ids(graph, batch)?;
         let created_candidates = created_candidates(graph, batch, apply)?;
         let submit_receipt = "wrec_submit_proposal_batch".to_owned();
         let apply_receipt = "wrec_apply_proposal_batch".to_owned();
@@ -274,6 +329,27 @@ fn plan_write_result_hash(
             "value": value
         }),
     )
+}
+
+fn graph_proposal_ids<P>(
+    graph: &RunGraphView<'_, P>,
+    batch: &ProposalBatchReport,
+) -> Result<Vec<String>, PublicProposalWriteReceiptProjectionError>
+where
+    P: OptimizationProblem,
+{
+    let graph_batch = graph
+        .proposal_batch(batch.batch_id)
+        .ok_or(PublicProposalWriteReceiptProjectionError::BatchNotInGraph)?;
+    if graph_batch.proposal_ids() != batch.proposal_ids.as_slice() {
+        return Err(PublicProposalWriteReceiptProjectionError::BatchReportDoesNotMatchGraph);
+    }
+    Ok(batch
+        .proposal_ids
+        .iter()
+        .copied()
+        .map(proposal_ref)
+        .collect())
 }
 
 fn created_candidates<P>(
