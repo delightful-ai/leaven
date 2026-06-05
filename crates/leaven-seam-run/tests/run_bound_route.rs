@@ -133,7 +133,10 @@ impl Optimizer<RouteProblem> for RouteMountedOptimizer {
                         params.plan_id()
                     ));
                 }
-                if params.proposals_payload()[0]["effect"]["kind"] != "change_from_agent_session" {
+                if !params.proposals()[0]
+                    .effect()
+                    .is_change_from_agent_session()
+                {
                     return Err("unexpected route proposal effect".to_owned());
                 }
                 Ok(ProposalBatch {
