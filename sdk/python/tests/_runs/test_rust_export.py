@@ -275,6 +275,10 @@ def test_optimized_from_rust_readback_uses_graph_candidates() -> None:
     assert readback.graph.assessments[0].id == "assessment_child"
     assert readback.graph.assessments[0].candidate_ids == ["cand_child"]
     assert readback.graph.assessments[0].evidence.key == "0"
+    assert readback.graph.proposal_batches[0].id == "pb_child"
+    assert readback.graph.proposal_batches[0].proposal_ids == ["prop_child"]
+    assert [receipt.receipt_id for receipt in result.proposal_receipts] == ["pb_child"]
+    assert result.proposal_receipts[0].proposal_ids == ["prop_child"]
     assert result.summary.cost_status == "unsupported_dependency"
     assert result.summary.total_lm_tokens == 18
     assert result.summary.usage_status == "known"
@@ -564,6 +568,12 @@ def load_rust_run_readback_fixture() -> RustRunReadback:
                         "parent_id": "cand_seed",
                         "artifact": {"template": "child"},
                     },
+                ],
+                "proposal_batches": [
+                    {
+                        "id": "pb_child",
+                        "proposal_ids": ["prop_child"],
+                    }
                 ],
                 "assessments": [
                     {

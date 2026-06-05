@@ -90,18 +90,14 @@ async def test_optimize_runs_configured_proposer_as_submit_only_slice(
     assert result.best.artifact == lv.PromptArtifact(template="{answer}", candidate_id="cand_seed")
     assert result.frontier == [result.best]
     assert result.assessment("case_submit_001").score.value == 1.0
+    assert [receipt.receipt_id for receipt in result.proposal_receipts] == ["wrec_proposal_batch"]
+    assert result.proposal_receipts[0].proposal_ids == ["prop_proposal_batch_0"]
 
     reopened = lv.runs.open(result.summary.run_dir or "")
-    assert [receipt.receipt_id for receipt in reopened.proposal_receipts] == ["wrec_proposal_batch"]
-    assert reopened.proposal_receipts[0].proposal_ids == ["prop_proposal_batch_0"]
+    assert reopened.proposal_receipts == []
 
     inspection = lv.runs.inspect(result.summary.run_dir or "")
-    proposal_receipt = next(
-        receipt for receipt in inspection.receipts if receipt.receipt_id == "wrec_proposal_batch"
-    )
-    assert proposal_receipt.kind == "write"
-    assert proposal_receipt.source == "proposal_batch"
-    assert proposal_receipt.proposal_ids == ["prop_proposal_batch_0"]
+    assert "wrec_proposal_batch" not in inspection.receipt_ids(kind="write")
 
 
 async def test_optimize_proposer_can_run_agent_then_submit_agent_session_change(
@@ -168,13 +164,10 @@ printf '{"type":"message","content":"ok"}\\n'
     assert result.summary.iterations > 0
     assert result.best.artifact == lv.PromptArtifact(template="{answer}", candidate_id="cand_seed")
     assert result.assessment("case_agent_submit_001").score.value == 1.0
+    assert result.effect_receipts[0].blob_refs[0].blob_id == "blob_completion_transcript"
 
     reopened = lv.runs.open(result.summary.run_dir or "")
-    assert reopened.effect_receipts[0].blob_refs[0].blob_id == "blob_completion_transcript"
+    assert reopened.effect_receipts == []
 
     inspection = lv.runs.inspect(result.summary.run_dir or "")
-    agent_receipt = next(
-        receipt for receipt in inspection.receipts if receipt.receipt_id == "agentrec_completion"
-    )
-    assert agent_receipt.source == "proposer_stage"
-    assert agent_receipt.blob_refs[0].blob_id == "blob_completion_transcript"
+    assert "agentrec_completion" not in inspection.receipt_ids(kind="call")

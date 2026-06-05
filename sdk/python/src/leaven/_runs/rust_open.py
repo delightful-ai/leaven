@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from .._receipts import WriteReceipt
 from ..artifacts.prompt import PromptArtifact
 from ..assessment import Assessment, Replayability
 from ..json_value import JsonValue
@@ -71,6 +72,13 @@ def optimized_from_rust_readback(
             replayability=_replayability(),
         ),
         assessment_rows=list(assessment_rows or []),
+        proposal_receipts=[
+            WriteReceipt(
+                receipt_id=batch.id,
+                proposal_ids=list(batch.proposal_ids),
+            )
+            for batch in readback.graph.proposal_batches
+        ],
     )
 
 

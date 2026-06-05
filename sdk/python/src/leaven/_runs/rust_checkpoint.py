@@ -4,9 +4,6 @@ import json
 import subprocess
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
-
-from .._receipts import CallReceipt, WriteReceipt
 from .._seam_optimize import PlannedOptimizeCase, SeamOptimizeReport
 from ..artifacts.prompt import PromptArtifact
 from ..result import Optimized, RunSummary
@@ -103,12 +100,6 @@ def _write_record(
             for assessment in report.assessments
         ],
         "total_lm_tokens": report.total_lm_tokens,
-        "proposal_receipts": [
-            receipt.model_dump(mode="json") for receipt in report.proposal_receipts
-        ],
-        "effect_receipts": [
-            receipt.model_dump(mode="json") for receipt in report.effect_receipts
-        ],
     }
     tmp = path.with_name(f".{path.name}.tmp")
     tmp.write_text(json.dumps(record, sort_keys=True, indent=2) + "\n", encoding="utf-8")
@@ -145,38 +136,4 @@ def _with_report_status(result: Optimized[object], report: SeamOptimizeReport) -
     )
 
 
-class _SdkPromptReceiptRecord(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    schema_version: str
-    proposal_receipts: list[WriteReceipt] = Field(default_factory=list)
-    effect_receipts: list[CallReceipt] = Field(default_factory=list)
-
-
-def overlay_sdk_prompt_receipts(
-    result: Optimized[object],
-    path: str | Path,
-) -> Optimized[object]:
-    """Attach SDK prompt sidecar receipts to a Rust-opened run when present."""
-    record_path = _run_dir(path) / "sdk_prompt_run_record.json"
-    if not record_path.is_file():
-        return result
-    record = _SdkPromptReceiptRecord.model_validate_json(record_path.read_text(encoding="utf-8"))
-    if record.schema_version != SDK_PROMPT_RUN_RECORD_SCHEMA:
-        return result
-    return result.model_copy(
-        update={
-            "proposal_receipts": record.proposal_receipts,
-            "effect_receipts": record.effect_receipts,
-        }
-    )
-
-
-def _run_dir(path: str | Path) -> Path:
-    candidate = Path(path)
-    if candidate.is_file():
-        return candidate.parent
-    return candidate
-
-
-__all__ = ["overlay_sdk_prompt_receipts", "persist_rust_prompt_checkpoint"]
+__all__ = ["persist_rust_prompt_checkpoint"]

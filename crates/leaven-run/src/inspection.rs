@@ -93,6 +93,8 @@ pub struct GraphInspection {
     pub best_candidate_id: Option<String>,
     /// Candidate records projected from Rust-owned graph snapshot JSON.
     pub candidates: Vec<CandidateReadback>,
+    /// Proposal batch records projected from Rust-owned graph snapshot JSON.
+    pub proposal_batches: Vec<ProposalBatchReadback>,
     /// Assessment records projected from Rust-owned graph snapshot JSON.
     pub assessments: Vec<AssessmentReadback>,
     /// Number of candidate records in the graph snapshot.
@@ -120,6 +122,15 @@ pub struct CandidateReadback {
     pub parent_id: Option<String>,
     /// Serialized problem artifact payload stored in the graph snapshot.
     pub artifact: Value,
+}
+
+/// Proposal-batch facts projected from the Rust-owned graph snapshot.
+#[derive(Clone, Debug, Serialize)]
+pub struct ProposalBatchReadback {
+    /// Graph-local proposal batch id.
+    pub id: String,
+    /// Proposal ids recorded in this batch.
+    pub proposal_ids: Vec<String>,
 }
 
 /// Assessment facts projected from the Rust-owned graph snapshot.
@@ -305,6 +316,7 @@ pub fn export_local_run_inspection(
             .map(str::to_owned),
         best_candidate_id: best_candidate_id(&graph_json),
         candidates: candidate_readbacks(&graph_json),
+        proposal_batches: proposal_batch_readbacks(&graph_json),
         assessments: assessment_readbacks(&graph_json),
         candidate_count: array_len(&graph_json, "candidates"),
         proposal_batch_count: array_len(&graph_json, "proposal_batches"),
@@ -491,6 +503,34 @@ fn proposal_parent_id(graph: &Value, proposal_id: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
+fn proposal_batch_readbacks(graph: &Value) -> Vec<ProposalBatchReadback> {
+    graph
+        .get("proposal_batches")
+        .and_then(Value::as_array)
+        .map(|proposal_batches| {
+            proposal_batches
+                .iter()
+                .filter_map(proposal_batch_readback)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn proposal_batch_readback(batch: &Value) -> Option<ProposalBatchReadback> {
+    Some(ProposalBatchReadback {
+        id: batch.get("id")?.as_str()?.to_owned(),
+        proposal_ids: batch
+            .get("proposal_ids")?
+            .as_array()?
+            .iter()
+            .map(Value::as_str)
+            .collect::<Option<Vec<_>>>()?
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+    })
+}
+
 fn assessment_readbacks(graph: &Value) -> Vec<AssessmentReadback> {
     graph
         .get("assessments")
@@ -626,7 +666,7 @@ mod tests {
                     "created_at":"2026-06-04T00:00:01Z"
                 }
             ],
-            "proposal_batches":[{}],
+            "proposal_batches":[{"id":"pb_child","proposal_ids":["prop_child"]}],
             "proposals":[{"id":"prop_child","effect":{"Change":{"target":"cand_seed","change":{}}}}],
             "apply_attempts":[{}],
             "evaluation_requests":[{}],
@@ -733,6 +773,11 @@ mod tests {
         assert_eq!(export.graph.candidates[1].artifact["template"], "child");
         assert_eq!(export.graph.candidate_count, 2);
         assert_eq!(export.graph.proposal_batch_count, 1);
+        assert_eq!(export.graph.proposal_batches[0].id, "pb_child");
+        assert_eq!(
+            export.graph.proposal_batches[0].proposal_ids,
+            vec!["prop_child".to_owned()]
+        );
         assert_eq!(export.graph.proposal_count, 1);
         assert_eq!(export.graph.apply_attempt_count, 1);
         assert_eq!(export.graph.evaluation_request_count, 1);

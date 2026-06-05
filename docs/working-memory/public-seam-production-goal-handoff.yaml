@@ -1484,6 +1484,40 @@ acceptance:
           reward row come from Rust checkpoint/evidence exports. USD cost
           remains an explicit unsupported fact, and the larger durable
           `lv.optimize(...).run()` route still needs full row closure.
+      - kind: rust_graph_receipts_replace_python_sidecar_overlay
+        paths:
+          - crates/leaven-run/src/inspection.rs
+          - sdk/python/src/leaven/run_inspection.py
+          - sdk/python/src/leaven/runs.py
+          - sdk/python/src/leaven/_runs/__init__.py
+          - sdk/python/src/leaven/_runs/rust_checkpoint.py
+          - sdk/python/src/leaven/_runs/rust_open.py
+          - sdk/python/tests/_runs/test_rust_export.py
+          - sdk/python/tests/test_optimize_proposer_mechanics.py
+        commands:
+          - cargo fmt --check
+          - cargo test -p leaven-run inspection --lib
+          - cargo test -p leaven-cli tests::run_inspect_exports_rust_owned_checkpoint_and_graph_blob_readback -- --exact
+          - cargo check -p leaven-run -p leaven-cli
+          - cargo test -p leaven --test topology_contract
+          - cd sdk/python && uv run pytest tests/_runs/test_rust_export.py tests/test_optimize_proposer_mechanics.py tests/test_run_receipt_inspection.py tests/test_optimize_public_seam_e2e.py -q
+          - cd sdk/python && uv run ruff check src/leaven/runs.py src/leaven/run_inspection.py src/leaven/_runs tests/_runs/test_rust_export.py tests/test_optimize_proposer_mechanics.py tests/test_run_receipt_inspection.py tests/test_optimize_public_seam_e2e.py
+          - cd sdk/python && uv run ty check src/leaven/runs.py src/leaven/run_inspection.py src/leaven/_runs tests/_runs/test_rust_export.py tests/test_optimize_proposer_mechanics.py tests/test_run_receipt_inspection.py tests/test_optimize_public_seam_e2e.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+        note: >-
+          Rust `leaven.run_inspection_export.v1` now projects graph-owned
+          proposal batch ids and proposal ids from the checkpoint graph
+          snapshot. Python `RustRunReadback` decodes those typed
+          `ProposalBatchReadback` rows, and Rust-opened `Optimized` handles
+          expose top-level proposal receipts only from that Rust graph state.
+          The old `overlay_sdk_prompt_receipts` path was removed, and
+          `sdk_prompt_run_record.json` no longer carries top-level
+          proposal/effect receipt sidecar fields for Python to rehydrate after
+          reopening. Focused proposer tests now assert that immediate
+          in-process callback receipts remain visible on the live result, while
+          reopened/inspected durable state does not resurrect unowned
+          proposer-stage sidecar receipts. Assessment call receipts still come
+          from Rust-owned evidence bytes.
     closeout_check: "Reading only `optimized.json` written by Python is a proxy."
 
   - id: python_wire_codegen_msgspec_boundary

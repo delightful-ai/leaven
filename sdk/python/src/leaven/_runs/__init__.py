@@ -1,6 +1,6 @@
 """Private persisted-run helpers for `lv.runs`."""
 
-from .rust_checkpoint import overlay_sdk_prompt_receipts, persist_rust_prompt_checkpoint
+from .rust_checkpoint import persist_rust_prompt_checkpoint
 from .rust_evidence import rust_assessment_rows, rust_evidence_summaries
 from .rust_export import (
     load_rust_blob_readback,
@@ -19,7 +19,6 @@ __all__ = [
     "open_optimized",
     "open_rust_optimized",
     "optimized_from_rust_readback",
-    "overlay_sdk_prompt_receipts",
     "persist_optimized",
     "persist_rust_prompt_checkpoint",
     "rust_assessment_rows",

@@ -74,6 +74,7 @@ class GraphReadbackSummary(BaseModel):
     run_id: str | None
     best_candidate_id: str | None = None
     candidates: list["CandidateReadback"] = Field(default_factory=list)
+    proposal_batches: list["ProposalBatchReadback"] = Field(default_factory=list)
     assessments: list["AssessmentReadback"] = Field(default_factory=list)
     candidate_count: int
     proposal_batch_count: int
@@ -92,6 +93,15 @@ class CandidateReadback(BaseModel):
     id: str
     parent_id: str | None = None
     artifact: JsonValue
+
+
+class ProposalBatchReadback(BaseModel):
+    """Proposal-batch facts read from a Rust-owned graph snapshot."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str
+    proposal_ids: list[str]
 
 
 class AssessmentReadback(BaseModel):
@@ -366,6 +376,7 @@ __all__ = [
     "EvidenceReadbackRef",
     "EvidenceSummary",
     "GraphReadbackSummary",
+    "ProposalBatchReadback",
     "ReceiptKind",
     "ReceiptSummary",
     "RewardDimensionSummary",
