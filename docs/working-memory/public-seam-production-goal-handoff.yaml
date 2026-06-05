@@ -5038,6 +5038,23 @@ acceptance:
           with a mirrored `tests/_runs/test_store.py`; the quality contract
           enforces that mapping along with line count, no `from __future__`,
           no production `Any`, and the custom defensive-erasure lints.
+      - kind: python_no_reflective_object_probe_quality_gate
+        paths:
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/tests/scripts/test_check_quality_contract.py
+          - sdk/python/tests/builders/test_batch.py
+        commands:
+          - cd sdk/python && uv run pytest tests/scripts/test_check_quality_contract.py tests/builders/test_batch.py -q
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && uv run ruff check scripts/check_quality_contract.py tests/scripts/test_check_quality_contract.py tests/builders/test_batch.py
+          - cd sdk/python && uv run ty check scripts/check_quality_contract.py tests/scripts/test_check_quality_contract.py tests/builders/test_batch.py
+        note: >-
+          The Python quality contract now rejects every `getattr(...)` object
+          probe in checked source/tests/examples/codegen unless it carries a
+          line-local `# noqa: LEAVEN006 -- justification`. `.get(...)` remains
+          rejected outside explicit environment reads. The only existing test
+          helper reflection was replaced with direct module-dict assertions so
+          the test suite models the same no-defensive-probing rule it enforces.
       - kind: python_output_schema_helper_rejects_public_object_ingress
         paths:
           - sdk/python/src/leaven/output.py

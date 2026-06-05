@@ -309,7 +309,7 @@ class DefensiveTypeErasureVisitor(ast.NodeVisitor):
         if self._is_banned_get_probe(node):
             self._add(node, "LEAVEN005", "uses .get(...) on an unparsed domain value")
         if self._is_getattr_probe(node):
-            self._add(node, "LEAVEN006", "uses getattr(...) to probe a domain value")
+            self._add(node, "LEAVEN006", "uses getattr(...) to probe an object shape")
         self.generic_visit(node)
 
     def _check_function_args(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
@@ -397,12 +397,7 @@ class DefensiveTypeErasureVisitor(ast.NodeVisitor):
         return not self._is_os_environ(owner)
 
     def _is_getattr_probe(self, node: ast.Call) -> bool:
-        return (
-            isinstance(node.func, ast.Name)
-            and node.func.id == "getattr"
-            and bool(node.args)
-            and self._is_domain_value(node.args[0])
-        )
+        return isinstance(node.func, ast.Name) and node.func.id == "getattr"
 
     def _is_domain_value(self, node: ast.AST) -> bool:
         return self._root_name(node) in DOMAIN_VALUE_NAMES

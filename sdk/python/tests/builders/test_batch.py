@@ -2,6 +2,7 @@
 
 import importlib
 import inspect
+from types import ModuleType
 
 import pytest
 
@@ -20,8 +21,8 @@ def test_batch_module_exports_no_public_placeholder() -> None:
 def test_builders_namespace_does_not_export_batch_surface() -> None:
     assert "BatchBuilder" not in builders_module.__all__
     assert "batch" not in builders_module.__all__
-    assert not hasattr(builders_module, "BatchBuilder")
-    assert not callable(getattr(builders_module, "batch", None))
+    assert "BatchBuilder" not in builders_module.__dict__
+    assert isinstance(builders_module.__dict__["batch"], ModuleType)
 
 
 def test_batch_module_does_not_use_public_not_implemented_scaffold() -> None:
