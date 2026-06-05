@@ -3589,6 +3589,34 @@ acceptance:
           generic JSON aliases remain confined to the reference module. The
           targeted grep has no matches in `payloads.py` or its generator. This
           is a facade-hardening slice, not a final typed-leaf closeout.
+      - kind: runner_case_input_payload_owner_branded
+        paths:
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/refs.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/src/leaven/_seam/plans.py
+          - sdk/python/src/leaven/_seam_optimize/driver.py
+          - sdk/python/tests/_seam/_wire/test_refs.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_refs.py tests/_seam/test_client.py tests/test_optimize_public_seam_e2e.py -q
+          - cd sdk/python && uv run pytest tests/_seam/_wire -q
+          - cd sdk/python && uv run ruff check codegen/ref_codegen.py codegen/payload_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/payloads.py src/leaven/_seam/plans.py src/leaven/_seam_optimize/driver.py tests/_seam/_wire/test_refs.py tests/_seam/test_client.py tests/test_optimize_public_seam_e2e.py
+          - cd sdk/python && uv run ty check codegen/ref_codegen.py codegen/payload_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/payloads.py src/leaven/_seam/plans.py src/leaven/_seam_optimize/driver.py tests/_seam/_wire/test_refs.py tests/_seam/test_client.py tests/test_optimize_public_seam_e2e.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - rg -n "WireJsonCaseInput" sdk/python/codegen sdk/python/src/leaven sdk/python/tests -g '*.py' -S
+        note: >-
+          Runner stage `case_input` is now exposed as a branded
+          `CaseInputPayload`/`CaseInputField` owner in generated refs,
+          generated stage-run payloads, private request construction, and the
+          durable optimize driver. The old generic `WireJsonCaseInput` alias
+          has no matches in Python codegen, SDK source, or tests. Focused tests
+          prove the branded owner decodes structured case input and the
+          optimize seam e2e still lowers runner stage requests through the
+          public-seam path. This removes one active `WireJson*` request
+          carrier, while other bounded JSON owners still need separate audit.
       - kind: python_request_envelope_raw_dict_escape_removed
         paths:
           - sdk/python/src/leaven/_seam/client.py

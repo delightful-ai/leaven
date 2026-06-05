@@ -3,7 +3,7 @@
 import msgspec
 import pytest
 
-from leaven._seam._wire.refs import BlobRef, MetadataBag, WireJsonCaseReadTarget
+from leaven._seam._wire.refs import BlobRef, CaseInputPayload, MetadataBag, WireJsonCaseReadTarget
 
 
 def test_blob_ref_decodes_schema_owned_reference() -> None:
@@ -25,6 +25,21 @@ def test_case_read_target_alias_accepts_json_scalar() -> None:
     decoded = msgspec.json.decode(b'"answer"', type=WireJsonCaseReadTarget)
 
     assert decoded == "answer"
+
+
+def test_case_input_payload_is_a_branded_stage_input_owner() -> None:
+    """Regression: runner case input is exposed through a branded owner."""
+
+    decoded = msgspec.json.decode(
+        b'{"question":"2+2?","context":{"difficulty":"easy"},"choices":["3","4"]}',
+        type=CaseInputPayload,
+    )
+
+    assert decoded == {
+        "question": "2+2?",
+        "context": {"difficulty": "easy"},
+        "choices": ["3", "4"],
+    }
 
 
 def test_metadata_bag_is_a_branded_recursive_json_owner() -> None:

@@ -20,7 +20,7 @@ from .._seam import (
     proposer_stage_capability,
     resolve_codex_binary,
 )
-from .._seam._wire.refs import WireJsonCaseInput
+from .._seam._wire.refs import CaseInputPayload
 from .._seam_worker import worker_argv_for_stage
 from ..agent.codex import CodexAgent
 from ..artifacts.prompt import PromptArtifact
@@ -254,13 +254,13 @@ def _materialized_workspace_id(candidate_id: str) -> str:
     return f"ws_{sanitized}_materialized"
 
 
-def _case_input(seed: PromptArtifact, case: PlannedOptimizeCase) -> WireJsonCaseInput:
+def _case_input(seed: PromptArtifact, case: PlannedOptimizeCase) -> CaseInputPayload:
     value: JsonObject = dict(case.input)
     try:
         value["prompt"] = seed.template.format(**value)
     except KeyError:
         value["prompt"] = seed.template
-    return convert(value, type=WireJsonCaseInput)
+    return convert(value, type=CaseInputPayload)
 
 
 def _runner_text(runtime: Runtime) -> str:

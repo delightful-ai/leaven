@@ -36,8 +36,8 @@ from leaven._seam._wire.payloads import (
 )
 from leaven._seam._wire.payloads import StageRunRequest as StageRunParams
 from leaven._seam._wire.refs import (
+    CaseInputPayload,
     CaseRefRecord,
-    WireJsonCaseInput,
     WireJsonSchemaObject,
 )
 from leaven._seam._wire.writes import (
@@ -324,7 +324,7 @@ class StageRunRequest:
     stage_call_id: str
     candidate: str
     case: str
-    case_input: WireJsonCaseInput
+    case_input: CaseInputPayload
     capability_fingerprint: str
 
     @property

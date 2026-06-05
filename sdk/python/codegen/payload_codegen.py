@@ -21,7 +21,7 @@ def render_payloads(rows: Sequence[PayloadMethodRow]) -> str:
     ref_imports = "\n".join(
         f"    {name},"
         for name in sorted(
-            f"{REF_EXPORTS} DataClassSet MetadataBag WireJsonCaseInput "
+            f"{REF_EXPORTS} DataClassSet MetadataBag "
             "WireJsonOutputValue".split()
         )
     )
@@ -346,7 +346,7 @@ class RunnerRequest(
     stage_call_id: str
     candidate: CandidateRef
     case: CaseRef
-    case_input: WireJsonCaseInput
+    case_input: CaseInputPayload
     target_forbidden: bool
     capability_fingerprint: str
 
@@ -536,6 +536,6 @@ __all__ = (  # noqa: PLE0605, SIM905
     "RunnerRequest Score "
     "StageEffectReceipt StageProposalReceipt StageRunKind StageRunPayload StageRunRequest StageRunResult "
     "StaleWritePolicy SurfaceSuggestion TraceRef ValidationReceipt VisibilityClass "
-    "WireJsonCaseInput WireJsonOutputValue"
+    "WireJsonOutputValue"
 ).split()
 '''

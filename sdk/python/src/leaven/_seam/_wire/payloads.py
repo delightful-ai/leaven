@@ -40,6 +40,8 @@ from .refs import (
     CandidateCostScope,
     CandidateRef,
     CandidateRefRecord,
+    CaseInputField,
+    CaseInputPayload,
     CaseRef,
     CaseRefRecord,
     CostDimension,
@@ -74,7 +76,6 @@ from .refs import (
     TraceRef,
     TraceRefRecord,
     TraceVisibility,
-    WireJsonCaseInput,
     WireJsonOutputValue,
     WorkspaceRef,
     WorkspaceRefRecord,
@@ -365,7 +366,7 @@ class RunnerRequest(
     stage_call_id: str
     candidate: CandidateRef
     case: CaseRef
-    case_input: WireJsonCaseInput
+    case_input: CaseInputPayload
     target_forbidden: bool
     capability_fingerprint: str
 
@@ -544,7 +545,7 @@ class StageRunResult(Struct, frozen=True, forbid_unknown_fields=True, omit_defau
 
 __all__ = (  # noqa: PLE0605, SIM905
     "PLAN_RESULT_SCHEMA_FINGERPRINT PLAN_SCHEMA_FINGERPRINT STAGE_RUN_SCHEMA_FINGERPRINT "
-    "ArtifactSelector ArtifactSelectorJsonPointer AssessmentRef AssessmentRefRecord AssessmentsSubmittedEventPayload BlobRef CandidateCostScope CandidateRef CandidateRefRecord CaseRef CaseRefRecord CostDimension CostScope EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestCostScope EvaluationRequestRef EvaluationRequestRefRecord EvaluationRequestedEventPayload EventEmittedSummaryPayload EventSummaryPayload ExtensionBlobRefPayload ExtensionPayload ExtensionSummaryPayload ExternalEventPayload ExternalInfoRefRecord InfoRef MetadataValue ProposalBatchAppliedEventPayload ProposalBatchRef ProposalBatchRefRecord ProposalBatchSubmittedEventPayload ProposalRef ProposalRefRecord ReceiptRef RunContextSummaryEventPayload RunCostScope ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility WorkspaceRef WorkspaceRefRecord "
+    "ArtifactSelector ArtifactSelectorJsonPointer AssessmentRef AssessmentRefRecord AssessmentsSubmittedEventPayload BlobRef CandidateCostScope CandidateRef CandidateRefRecord CaseInputField CaseInputPayload CaseRef CaseRefRecord CostDimension CostScope EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestCostScope EvaluationRequestRef EvaluationRequestRefRecord EvaluationRequestedEventPayload EventEmittedSummaryPayload EventSummaryPayload ExtensionBlobRefPayload ExtensionPayload ExtensionSummaryPayload ExternalEventPayload ExternalInfoRefRecord InfoRef MetadataValue ProposalBatchAppliedEventPayload ProposalBatchRef ProposalBatchRefRecord ProposalBatchSubmittedEventPayload ProposalRef ProposalRefRecord ReceiptRef RunContextSummaryEventPayload RunCostScope ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility WorkspaceRef WorkspaceRefRecord "
     "AssessmentSummaryGraphRow CandidateArtifactSummary CandidateCaseScore CandidateScoresSummary CandidateSummaryGraphRow CapabilityCall ChargeReceipt CommitPolicy CommitPolicyGraphWritesAtomic "
     "CommitPolicyGraphWritesSequential CommitPolicyNoGraphWrites Consistency ConsistencyAtRevision "
     "ConsistencyLatestAtStart ConsistencySinceRevision Cost DataClassSet EvalMode EvalModeDryRun "
@@ -555,5 +556,5 @@ __all__ = (  # noqa: PLE0605, SIM905
     "RunnerRequest Score "
     "StageEffectReceipt StageProposalReceipt StageRunKind StageRunPayload StageRunRequest StageRunResult "
     "StaleWritePolicy SurfaceSuggestion TraceRef ValidationReceipt VisibilityClass "
-    "WireJsonCaseInput WireJsonOutputValue"
+    "WireJsonOutputValue"
 ).split()
