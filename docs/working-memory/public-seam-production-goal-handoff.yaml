@@ -2437,6 +2437,36 @@ acceptance:
           Plan Result values/receipts, evidence, cost, blob refs, service
           execution payloads, and generated Python Raw islands remain
           typed-seam blockers to eliminate.
+      - kind: msgspec_boundary_rejects_unknown_wire_fields
+        paths:
+          - sdk/python/codegen/method_codegen.py
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/codegen/result_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/errors.py
+          - sdk/python/src/leaven/_seam/_wire/jsonrpc.py
+          - sdk/python/src/leaven/_seam/_wire/methods.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/src/leaven/_seam/_wire/results.py
+          - sdk/python/tests/_seam/_wire/test_codec.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_codec.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_seam/_wire tests/_seam/_wire codegen/generate_seam_wire.py codegen/method_codegen.py codegen/payload_codegen.py codegen/result_codegen.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/_wire tests/_seam/_wire
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          The Python private seam codec follows the msgspec boundary pattern:
+          JSON-RPC envelopes keep `result`, `error.data`, and request `params`
+          as `Raw` only until the method or caller-selected schema determines
+          the concrete payload type, while `UNSET` preserves missing-vs-null.
+          Request/response envelopes, JSON-RPC error objects, generated method
+          bindings, result bindings, result receipts, `LeavenValue`, and
+          `OperationReceipt` now set `forbid_unknown_fields=True`; codec tests
+          prove unknown request, response, and error fields fail at decode
+          time. This uses msgspec as the schema/codec blade only and does not
+          move transport, retry, routing, capability, service semantics, or
+          graph mutation into Python.
       - kind: typed_capability_owner_split_foundation
         commits:
           - 409706ca

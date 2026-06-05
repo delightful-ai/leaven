@@ -9,7 +9,7 @@ from .json_value import JsonRpcId
 from .methods import LockedMethod
 
 
-class JsonRpcRequestEnvelope(Struct, frozen=True):
+class JsonRpcRequestEnvelope(Struct, frozen=True, forbid_unknown_fields=True):
     """A JSON-RPC request or notification envelope."""
 
     method: LockedMethod
@@ -18,7 +18,7 @@ class JsonRpcRequestEnvelope(Struct, frozen=True):
     id: JsonRpcId | UnsetType = UNSET
 
 
-class JsonRpcResponseEnvelope(Struct, frozen=True, omit_defaults=True):
+class JsonRpcResponseEnvelope(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
     """A JSON-RPC response envelope parsed before method-specific result decode."""
 
     jsonrpc: Literal["2.0"]

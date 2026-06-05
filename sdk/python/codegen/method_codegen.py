@@ -34,7 +34,7 @@ type LockedMethod = (
 )
 
 
-class LockedMethodBinding(Struct, frozen=True):
+class LockedMethodBinding(Struct, frozen=True, forbid_unknown_fields=True):
     """A generated public-seam method/profile binding."""
 
     method: LockedMethod

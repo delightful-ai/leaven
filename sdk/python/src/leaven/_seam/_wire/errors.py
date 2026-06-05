@@ -7,7 +7,7 @@ class JsonRpcProtocolError(ValueError):
     """The local or remote peer sent an invalid JSON-RPC envelope."""
 
 
-class JsonRpcError(Struct, frozen=True, omit_defaults=True):
+class JsonRpcError(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
     """A JSON-RPC error object with raw optional extension data."""
 
     code: int

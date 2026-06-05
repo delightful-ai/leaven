@@ -17,14 +17,24 @@ from leaven._seam._wire import (
     encode_request,
     method_result_type,
 )
+from leaven._seam._wire.errors import JsonRpcError
+from leaven._seam._wire.jsonrpc import JsonRpcRequestEnvelope, JsonRpcResponseEnvelope
 from leaven._seam._wire.method_results import METHOD_RESULT_TYPES
+from leaven._seam._wire.methods import LockedMethodBinding
 from leaven._seam._wire.payloads import (
     CommitPolicyNoGraphWrites,
     ConsistencyLatestAtStart,
     EvalModeExecute,
+    LeavenValue,
+    OperationReceipt,
     PlanDocument,
 )
-from leaven._seam._wire.results import AgentRunResult, LmCompleteResult
+from leaven._seam._wire.results import (
+    AgentRunResult,
+    LmCompleteResult,
+    MethodResultBinding,
+    ResultReceipt,
+)
 
 
 class Widget(msgspec.Struct, frozen=True):
@@ -84,6 +94,32 @@ def test_encode_request_rejects_unknown_method() -> None:
     method = cast("LockedMethod", "leaven/not_a_locked_method")
     with pytest.raises(ValueError, match="unknown locked Leaven public-seam method"):
         encode_request(method=method, request_id="req_1", params=plan_params())
+
+
+def test_boundary_structs_forbid_unknown_fields() -> None:
+    strict_records: tuple[type[msgspec.Struct], ...] = (
+        JsonRpcRequestEnvelope,
+        JsonRpcResponseEnvelope,
+        JsonRpcError,
+        LockedMethodBinding,
+        MethodResultBinding,
+        LeavenValue,
+        OperationReceipt,
+        ResultReceipt,
+    )
+
+    for record_type in strict_records:
+        assert record_type.__struct_config__.forbid_unknown_fields
+
+
+def test_decode_request_envelope_rejects_unknown_fields() -> None:
+    body = (
+        b'{"jsonrpc":"2.0","method":"leaven/lm.complete","id":"req_1",'
+        b'"unexpected":true}'
+    )
+
+    with pytest.raises(msgspec.ValidationError, match="unexpected"):
+        msgspec.json.decode(body, type=JsonRpcRequestEnvelope)
 
 
 def test_decode_response_decodes_method_specific_raw_result() -> None:
@@ -155,6 +191,26 @@ def test_decode_response_rejects_malformed_envelope() -> None:
     body = b'{"jsonrpc":"1.0","id":"req_1","result":{"ok":true,"name":"done"}}'
 
     with pytest.raises(JsonRpcProtocolError):
+        decode_response(body, Widget)
+
+
+def test_decode_response_rejects_unknown_envelope_fields() -> None:
+    body = (
+        b'{"jsonrpc":"2.0","id":"req_1","result":{"ok":true,"name":"done"},'
+        b'"unexpected":true}'
+    )
+
+    with pytest.raises(JsonRpcProtocolError, match="unexpected"):
+        decode_response(body, Widget)
+
+
+def test_decode_error_rejects_unknown_fields() -> None:
+    body = (
+        b'{"jsonrpc":"2.0","id":"req_1","error":{"code":-32000,'
+        b'"message":"no","unexpected":true}}'
+    )
+
+    with pytest.raises(JsonRpcProtocolError, match="unexpected"):
         decode_response(body, Widget)
 
 

@@ -501,7 +501,7 @@ type WriteReceiptKind = Literal[
 ]
 
 
-class LeavenValue(Struct, frozen=True, omit_defaults=True, kw_only=True):
+class LeavenValue(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, kw_only=True):
     kind: LeavenValueKind
     graph_revision: str
     data_classes: DataClassSet
@@ -522,7 +522,7 @@ class LeavenValue(Struct, frozen=True, omit_defaults=True, kw_only=True):
     trace_refs: list[TraceRef] | UnsetType = UNSET
 
 
-class OperationReceipt(Struct, frozen=True, omit_defaults=True, kw_only=True):
+class OperationReceipt(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, kw_only=True):
     kind: OperationReceiptKind
     receipt: ReceiptRef
     status: PlanResultStatus

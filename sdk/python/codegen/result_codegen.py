@@ -53,7 +53,7 @@ from .payloads import (
 )
 
 
-class MethodResultBinding(Struct, frozen=True):
+class MethodResultBinding(Struct, frozen=True, forbid_unknown_fields=True):
     """Generated method-to-result binding from the Rust locked method table."""
 
     method: str
@@ -72,7 +72,7 @@ type CaseReadMethod = (
 )
 
 
-class ResultReceipt(Struct, frozen=True, omit_defaults=True):
+class ResultReceipt(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
     """Typed receipt projection carried by extension method results."""
 
     kind: OperationReceiptKind
