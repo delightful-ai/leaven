@@ -3266,6 +3266,42 @@ acceptance:
           not close typed-seam work: selected primary values, receipt extras,
           redactions, and payload/body families still carry schema-valid JSON
           leaves that need narrower owners or generated records.
+      - kind: runcontext_service_plan_write_selectors_typed_hard_cut
+        paths:
+          - crates/leaven-public-seam/src/lib.rs
+          - crates/leaven-public-seam/src/plan.rs
+          - crates/leaven-public-seam/src/plan/model.rs
+          - crates/leaven-public-seam/src/plan_execution/effects/proposal.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_document.rs
+          - crates/leaven-seam-service/src/run_context_service.rs
+          - crates/leaven-seam-service/src/service.rs
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cargo fmt --check -p leaven-public-seam -p leaven-seam-service
+          - cargo check -p leaven-public-seam -p leaven-seam-service
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_document::apply_proposal_batch_write_exposes_typed_batch_ref -- --exact
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_document::submit_assessments_write_exposes_typed_evaluation_request_ref -- --exact
+          - cargo test -p leaven-seam-service run_context_service::tests -- --nocapture
+          - cargo test -p leaven-seam-service service::tests::seam_runtime_executes_proposal_apply_through_configured_service -- --exact
+          - cargo test -p leaven-seam-service service::tests::seam_runtime_executes_evaluation_request_through_configured_service -- --exact
+          - cargo test -p leaven-seam-service service::tests::seam_runtime_executes_assessment_submit_through_configured_service -- --exact
+          - cargo test -p leaven-seam-service service::tests::seam_runtime_executes_event_emit_through_configured_service -- --exact
+          - cargo test -p leaven-seam-service
+          - rg -n "proposal_apply_batch_ref\\(params|request_evaluation_write\\(params|submit_assessments_write\\(params|event_emit_write\\(params|string_field\\(|params\\.get\\(\\\"ops\\\"|\\.get\\(\\\"proposal_batch\\\"\\)" crates/leaven-seam-service/src/run_context_service.rs crates/leaven-public-seam/src/plan_execution/effects/proposal.rs
+        note: >-
+          RunContext-backed configured-service routing no longer reselects
+          `proposal.apply`, `evaluation.request`, `assessment.submit`, or
+          `event.emit` writes by walking raw Plan JSON. `PlanDocument` now
+          owns typed `apply_proposal_batch` and `submit_assessments` write
+          facts alongside the existing typed event/evaluation write facts, and
+          the service dispatcher validates the incoming Plan once before
+          passing that typed document into RunContext route checks and graph
+          mutation. The remaining grep hit is the public-seam execution-host
+          request accessor for `PlanApplyProposalBatchRequest::proposal_batch`,
+          which is the owning boundary for lowered host requests. This is not
+          full typed-seam closeout: graph-query expression routing,
+          extension-result payload leaves, and generated Python owners still
+          have separate evidence rows.
       - kind: typed_locked_method_identity_foundation
         paths:
           - crates/leaven-public-seam/src/acp_profile/methods.rs

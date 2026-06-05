@@ -119,13 +119,13 @@ impl ConfiguredSeamService {
         if method == LockedMethod::ProposalApply
             && let Some(state) = &self.run_context_state
         {
-            self.package.validate_plan_document(params)?;
+            let plan = self.package.validate_plan_document(params)?;
             let mut state = state.lock().map_err(|_| PublicSeamError::InvalidPlan {
                 message: "RunContext seam service state lock poisoned".to_owned(),
             })?;
-            if state.accepts_proposal_apply(params) {
+            if state.accepts_proposal_apply(&plan) {
                 return state
-                    .apply_proposal_batch(method, params, &self.config.context)
+                    .apply_proposal_batch(method, &plan, params, &self.config.context)
                     .and_then(|result| {
                         self.package
                             .validate_acp_extension_result_document(&result)?;
@@ -136,13 +136,13 @@ impl ConfiguredSeamService {
         if method == LockedMethod::EventEmit
             && let Some(state) = &self.run_context_state
         {
-            self.package.validate_plan_document(params)?;
+            let plan = self.package.validate_plan_document(params)?;
             let mut state = state.lock().map_err(|_| PublicSeamError::InvalidPlan {
                 message: "RunContext seam service state lock poisoned".to_owned(),
             })?;
-            if state.accepts_event_emit(params) {
+            if state.accepts_event_emit(&plan) {
                 return state
-                    .emit_run_event(method, params, &self.config.context)
+                    .emit_run_event(method, &plan, &self.config.context)
                     .and_then(|result| {
                         self.package
                             .validate_acp_extension_result_document(&result)?;
@@ -153,13 +153,13 @@ impl ConfiguredSeamService {
         if method == LockedMethod::EvaluationRequest
             && let Some(state) = &self.run_context_state
         {
-            self.package.validate_plan_document(params)?;
+            let plan = self.package.validate_plan_document(params)?;
             let mut state = state.lock().map_err(|_| PublicSeamError::InvalidPlan {
                 message: "RunContext seam service state lock poisoned".to_owned(),
             })?;
-            if state.accepts_evaluation_request(params) {
+            if state.accepts_evaluation_request(&plan) {
                 return state
-                    .request_evaluation(method, params, &self.config.context)
+                    .request_evaluation(method, &plan, params, &self.config.context)
                     .and_then(|result| {
                         self.package
                             .validate_acp_extension_result_document(&result)?;
@@ -170,13 +170,13 @@ impl ConfiguredSeamService {
         if method == LockedMethod::AssessmentSubmit
             && let Some(state) = &self.run_context_state
         {
-            self.package.validate_plan_document(params)?;
+            let plan = self.package.validate_plan_document(params)?;
             let mut state = state.lock().map_err(|_| PublicSeamError::InvalidPlan {
                 message: "RunContext seam service state lock poisoned".to_owned(),
             })?;
-            if state.accepts_assessment_submit(params) {
+            if state.accepts_assessment_submit(&plan) {
                 return state
-                    .submit_assessments(method, params, &self.config.context)
+                    .submit_assessments(method, &plan, params, &self.config.context)
                     .and_then(|result| {
                         self.package
                             .validate_acp_extension_result_document(&result)?;

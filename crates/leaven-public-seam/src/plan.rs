@@ -15,9 +15,10 @@ pub use expression::{
     PlanGraphQuerySource,
 };
 pub use model::{
-    PlanCallKind, PlanCommitKind, PlanEmitRunEventWrite, PlanEvaluationSetExpr,
-    PlanEvaluationShape, PlanEventPayload, PlanId, PlanMode, PlanOperation, PlanOperationKind,
-    PlanQueryKind, PlanRequestEvaluationWrite, PlanReturnBinding, PlanSchemaVersion, PlanWriteKind,
+    PlanApplyProposalBatchWrite, PlanCallKind, PlanCommitKind, PlanEmitRunEventWrite,
+    PlanEvaluationSetExpr, PlanEvaluationShape, PlanEventPayload, PlanId, PlanMode, PlanOperation,
+    PlanOperationKind, PlanQueryKind, PlanRequestEvaluationWrite, PlanReturnBinding,
+    PlanSchemaVersion, PlanSubmitAssessmentsWrite, PlanWriteKind,
 };
 
 use assessment::AssessmentScoreOutputUsage;

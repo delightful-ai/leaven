@@ -157,6 +157,55 @@ fn request_evaluation_write_preserves_recursive_set_expr() {
 }
 
 #[test]
+fn apply_proposal_batch_write_exposes_typed_batch_ref() {
+    let package = package();
+    let plan = json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "planapplytyped001",
+        "consistency": {"kind": "latest_at_start"},
+        "mode": {"kind": "execute"},
+        "commit": {"kind": "graph_writes_atomic", "on_stale": "reject"},
+        "ops": [{
+            "kind": "write",
+            "name": "apply",
+            "idempotency_key": "apply-typed-0001",
+            "write": {
+                "kind": "apply_proposal_batch",
+                "proposal_batch": "pb_typed_batch",
+                "policy": "apply_first_valid"
+            }
+        }],
+        "return": ["apply"]
+    });
+
+    let document = package.validate_plan_document(&plan).unwrap();
+    let [op] = document.operations() else {
+        panic!("expected one apply_proposal_batch op");
+    };
+    assert_eq!(op.write_kind(), Some(PlanWriteKind::ApplyProposalBatch));
+    let write = op
+        .write()
+        .and_then(|write| write.apply_proposal_batch())
+        .expect("apply_proposal_batch write exposes typed facts");
+
+    assert_eq!(write.proposal_batch(), "pb_typed_batch");
+}
+
+#[test]
+fn submit_assessments_write_exposes_typed_evaluation_request_ref() {
+    let package = package();
+    let document = package
+        .validate_plan_document(&submit_assessments_plan())
+        .unwrap();
+    let write = document.operations()[0]
+        .write()
+        .and_then(|write| write.submit_assessments())
+        .expect("submit_assessments write exposes typed facts");
+
+    assert_eq!(write.evaluation_request_id(), "evalreq_score_output");
+}
+
+#[test]
 fn plan_ir_extension_expression_preserves_typed_payload() {
     let package = package();
     let plan = json!({

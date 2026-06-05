@@ -388,9 +388,13 @@ impl PlanWriteOperation {
             PlanWriteKind::RequestEvaluation => PlanWriteDetail::RequestEvaluation(
                 PlanRequestEvaluationWrite::from_schema_valid_value(value)?,
             ),
-            PlanWriteKind::SubmitProposalBatch
-            | PlanWriteKind::SubmitAssessments
-            | PlanWriteKind::ApplyProposalBatch => PlanWriteDetail::Other,
+            PlanWriteKind::SubmitAssessments => PlanWriteDetail::SubmitAssessments(
+                PlanSubmitAssessmentsWrite::from_schema_valid_value(value)?,
+            ),
+            PlanWriteKind::ApplyProposalBatch => PlanWriteDetail::ApplyProposalBatch(
+                PlanApplyProposalBatchWrite::from_schema_valid_value(value)?,
+            ),
+            PlanWriteKind::SubmitProposalBatch => PlanWriteDetail::Other,
         };
         Ok(Self {
             kind,
@@ -453,7 +457,10 @@ impl PlanWriteOperation {
     pub const fn emit_run_event(&self) -> Option<&PlanEmitRunEventWrite> {
         match &self.detail {
             PlanWriteDetail::EmitRunEvent(write) => Some(write),
-            PlanWriteDetail::RequestEvaluation(_) | PlanWriteDetail::Other => None,
+            PlanWriteDetail::RequestEvaluation(_)
+            | PlanWriteDetail::SubmitAssessments(_)
+            | PlanWriteDetail::ApplyProposalBatch(_)
+            | PlanWriteDetail::Other => None,
         }
     }
 
@@ -463,6 +470,30 @@ impl PlanWriteOperation {
             PlanWriteDetail::RequestEvaluation(write) => Some(write),
             PlanWriteDetail::Other => None,
             PlanWriteDetail::EmitRunEvent(_) => None,
+            PlanWriteDetail::SubmitAssessments(_) => None,
+            PlanWriteDetail::ApplyProposalBatch(_) => None,
+        }
+    }
+
+    /// Typed request details for `submit_assessments` writes.
+    pub const fn submit_assessments(&self) -> Option<&PlanSubmitAssessmentsWrite> {
+        match &self.detail {
+            PlanWriteDetail::SubmitAssessments(write) => Some(write),
+            PlanWriteDetail::EmitRunEvent(_)
+            | PlanWriteDetail::RequestEvaluation(_)
+            | PlanWriteDetail::ApplyProposalBatch(_)
+            | PlanWriteDetail::Other => None,
+        }
+    }
+
+    /// Typed request details for `apply_proposal_batch` writes.
+    pub const fn apply_proposal_batch(&self) -> Option<&PlanApplyProposalBatchWrite> {
+        match &self.detail {
+            PlanWriteDetail::ApplyProposalBatch(write) => Some(write),
+            PlanWriteDetail::EmitRunEvent(_)
+            | PlanWriteDetail::RequestEvaluation(_)
+            | PlanWriteDetail::SubmitAssessments(_)
+            | PlanWriteDetail::Other => None,
         }
     }
 }
@@ -471,7 +502,54 @@ impl PlanWriteOperation {
 enum PlanWriteDetail {
     EmitRunEvent(PlanEmitRunEventWrite),
     RequestEvaluation(PlanRequestEvaluationWrite),
+    SubmitAssessments(PlanSubmitAssessmentsWrite),
+    ApplyProposalBatch(PlanApplyProposalBatchWrite),
     Other,
+}
+
+/// Typed `apply_proposal_batch` write facts.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanApplyProposalBatchWrite {
+    proposal_batch: String,
+}
+
+impl PlanApplyProposalBatchWrite {
+    fn from_schema_valid_value(value: &Value) -> Result<Self, PublicSeamError> {
+        let object = value
+            .as_object()
+            .ok_or_else(|| invalid_plan("apply_proposal_batch write must be an object"))?;
+        Ok(Self {
+            proposal_batch: required_object_string(object, "proposal_batch")?.to_owned(),
+        })
+    }
+
+    /// Public proposal-batch reference carried by the write.
+    pub fn proposal_batch(&self) -> &str {
+        &self.proposal_batch
+    }
+}
+
+/// Typed `submit_assessments` write facts.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanSubmitAssessmentsWrite {
+    evaluation_request_id: String,
+}
+
+impl PlanSubmitAssessmentsWrite {
+    fn from_schema_valid_value(value: &Value) -> Result<Self, PublicSeamError> {
+        let object = value
+            .as_object()
+            .ok_or_else(|| invalid_plan("submit_assessments write must be an object"))?;
+        Ok(Self {
+            evaluation_request_id: required_object_string(object, "evaluation_request_id")?
+                .to_owned(),
+        })
+    }
+
+    /// Public evaluation request id receiving the assessments.
+    pub fn evaluation_request_id(&self) -> &str {
+        &self.evaluation_request_id
+    }
 }
 
 /// Typed `request_evaluation` write facts.

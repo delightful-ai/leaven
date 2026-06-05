@@ -14,8 +14,8 @@ use leaven_kernel::{
     MetadataBag, Metered, RunId, StageId,
 };
 use leaven_public_seam::{
-    LockedMethod, PlanApplyProposalBatchRequest, PlanGraphQueryOutcome, PlanGraphQueryRequest,
-    PublicSeamError,
+    LockedMethod, PlanApplyProposalBatchRequest, PlanDocument, PlanGraphQueryOutcome,
+    PlanGraphQueryRequest, PublicSeamError,
 };
 use leaven_run::{
     PublicAssessmentWriteReceiptContext, PublicEvaluationJobContext,
@@ -135,31 +135,31 @@ impl RunContextProposalApplyState {
         })
     }
 
-    pub(crate) fn accepts_proposal_apply(&self, params: &Value) -> bool {
-        proposal_apply_batch_ref(params) == Some(self.config.proposal_batch_alias.as_str())
+    pub(crate) fn accepts_proposal_apply(&self, plan: &PlanDocument) -> bool {
+        proposal_apply_batch_ref(plan) == Some(self.config.proposal_batch_alias.as_str())
     }
 
     pub(crate) fn accepts_proposal_batch_ref(&self, batch_ref: &str) -> bool {
         batch_ref == self.config.proposal_batch_alias
     }
 
-    pub(crate) fn accepts_event_emit(&self, params: &Value) -> bool {
-        event_emit_write(params)
+    pub(crate) fn accepts_event_emit(&self, plan: &PlanDocument) -> bool {
+        event_emit_write(plan)
             .map(|event| event.event_kind == "run_context.checked")
             .unwrap_or(false)
     }
 
-    pub(crate) fn accepts_evaluation_request(&self, params: &Value) -> bool {
-        request_evaluation_write(params)
+    pub(crate) fn accepts_evaluation_request(&self, plan: &PlanDocument) -> bool {
+        request_evaluation_write(plan)
             .map(|write| write.evaluator == "eval_run_context")
             .unwrap_or(false)
     }
 
-    pub(crate) fn accepts_assessment_submit(&self, params: &Value) -> bool {
+    pub(crate) fn accepts_assessment_submit(&self, plan: &PlanDocument) -> bool {
         let Some(expected) = self.evaluation_request_ref.as_deref() else {
             return false;
         };
-        submit_assessments_write(params)
+        submit_assessments_write(plan)
             .map(|write| {
                 write.evaluation_request_id == expected
                     || write.evaluation_request_id == "evalreq_run_context_latest"
@@ -185,11 +185,12 @@ impl RunContextProposalApplyState {
     pub(crate) fn apply_proposal_batch(
         &mut self,
         method: LockedMethod,
+        plan: &PlanDocument,
         params: &Value,
         context: &SeamExecutionContextConfig,
     ) -> Result<Value, PublicSeamError> {
         let batch_ref =
-            proposal_apply_batch_ref(params).ok_or_else(|| PublicSeamError::InvalidPlan {
+            proposal_apply_batch_ref(plan).ok_or_else(|| PublicSeamError::InvalidPlan {
                 message: "RunContext proposal.apply requires proposal_batch".to_owned(),
             })?;
         if batch_ref != self.config.proposal_batch_alias {
@@ -240,10 +241,11 @@ impl RunContextProposalApplyState {
     pub(crate) fn request_evaluation(
         &mut self,
         method: LockedMethod,
+        plan: &PlanDocument,
         params: &Value,
         context: &SeamExecutionContextConfig,
     ) -> Result<Value, PublicSeamError> {
-        request_evaluation_write(params)?;
+        request_evaluation_write(plan)?;
         let candidates = if self.created_candidate_ids.is_empty() {
             vec![self.seed_candidate]
         } else {
@@ -292,10 +294,11 @@ impl RunContextProposalApplyState {
     pub(crate) fn submit_assessments(
         &mut self,
         method: LockedMethod,
+        plan: &PlanDocument,
         params: &Value,
         context: &SeamExecutionContextConfig,
     ) -> Result<Value, PublicSeamError> {
-        submit_assessments_write(params)?;
+        submit_assessments_write(plan)?;
         let request_id = self.evaluation_request.ok_or_else(|| {
             invalid_plan("RunContext assessment submit requires prior evaluation request")
         })?;
@@ -347,10 +350,10 @@ impl RunContextProposalApplyState {
     pub(crate) fn emit_run_event(
         &mut self,
         method: LockedMethod,
-        params: &Value,
+        plan: &PlanDocument,
         context: &SeamExecutionContextConfig,
     ) -> Result<Value, PublicSeamError> {
-        let event = event_emit_write(params)?;
+        let event = event_emit_write(plan)?;
         let event_id = format!("event_{}", event.name);
         let mut run_context = RunContext::<SeamTextProblem>::new(&mut self.graph, &mut self.budget);
         run_context.emit(RunEvent::ExternalEventEmitted {
@@ -399,50 +402,37 @@ impl RunContextProposalApplyState {
 pub(crate) fn requested_proposal_batch<'a>(
     request: &'a PlanApplyProposalBatchRequest<'a>,
 ) -> Result<&'a str, PublicSeamError> {
-    request
-        .write()
-        .get("proposal_batch")
-        .and_then(Value::as_str)
-        .ok_or_else(|| PublicSeamError::InvalidPlan {
-            message: "apply_proposal_batch must carry proposal_batch".to_owned(),
-        })
+    request.proposal_batch()
 }
 
-fn proposal_apply_batch_ref(params: &Value) -> Option<&str> {
-    params
-        .get("ops")?
-        .as_array()?
+fn proposal_apply_batch_ref(plan: &PlanDocument) -> Option<&str> {
+    plan.operations()
         .iter()
-        .filter_map(|op| op.get("write"))
-        .find(|write| write.get("kind").and_then(Value::as_str) == Some("apply_proposal_batch"))
-        .and_then(|write| write.get("proposal_batch"))
-        .and_then(Value::as_str)
+        .filter_map(|operation| operation.write())
+        .find_map(|write| {
+            write
+                .apply_proposal_batch()
+                .map(|apply| apply.proposal_batch())
+        })
 }
 
 struct RequestEvaluationWrite<'a> {
     evaluator: &'a str,
 }
 
-fn request_evaluation_write(params: &Value) -> Result<RequestEvaluationWrite<'_>, PublicSeamError> {
-    let ops = params
-        .get("ops")
-        .and_then(Value::as_array)
-        .ok_or_else(|| invalid_plan("evaluation.request plan must carry ops"))?;
-    for op in ops {
-        let Some(write) = op.get("write") else {
+fn request_evaluation_write(
+    plan: &PlanDocument,
+) -> Result<RequestEvaluationWrite<'_>, PublicSeamError> {
+    for operation in plan.operations() {
+        let Some(write) = operation
+            .write()
+            .and_then(|write| write.request_evaluation())
+        else {
             continue;
         };
-        if write.get("kind").and_then(Value::as_str) == Some("request_evaluation") {
-            let request = write
-                .get("request")
-                .ok_or_else(|| invalid_plan("request_evaluation must carry request"))?;
-            return Ok(RequestEvaluationWrite {
-                evaluator: request
-                    .get("evaluator")
-                    .and_then(Value::as_str)
-                    .unwrap_or("eval_run_context"),
-            });
-        }
+        return Ok(RequestEvaluationWrite {
+            evaluator: write.evaluator().unwrap_or("eval_run_context"),
+        });
     }
     Err(invalid_plan(
         "evaluation.request method must carry a request_evaluation write",
@@ -453,25 +443,19 @@ struct SubmitAssessmentsWrite<'a> {
     evaluation_request_id: &'a str,
 }
 
-fn submit_assessments_write(params: &Value) -> Result<SubmitAssessmentsWrite<'_>, PublicSeamError> {
-    let ops = params
-        .get("ops")
-        .and_then(Value::as_array)
-        .ok_or_else(|| invalid_plan("assessment.submit plan must carry ops"))?;
-    for op in ops {
-        let Some(write) = op.get("write") else {
+fn submit_assessments_write(
+    plan: &PlanDocument,
+) -> Result<SubmitAssessmentsWrite<'_>, PublicSeamError> {
+    for operation in plan.operations() {
+        let Some(write) = operation
+            .write()
+            .and_then(|write| write.submit_assessments())
+        else {
             continue;
         };
-        if write.get("kind").and_then(Value::as_str) == Some("submit_assessments") {
-            return Ok(SubmitAssessmentsWrite {
-                evaluation_request_id: write
-                    .get("evaluation_request_id")
-                    .and_then(Value::as_str)
-                    .ok_or_else(|| {
-                    invalid_plan("submit_assessments must carry evaluation_request_id")
-                })?,
-            });
-        }
+        return Ok(SubmitAssessmentsWrite {
+            evaluation_request_id: write.evaluation_request_id(),
+        });
     }
     Err(invalid_plan(
         "assessment.submit method must carry a submit_assessments write",
@@ -487,24 +471,15 @@ struct EventEmitWrite<'a> {
     visibility: &'a str,
 }
 
-fn event_emit_write(params: &Value) -> Result<EventEmitWrite<'_>, PublicSeamError> {
-    let ops = params
-        .get("ops")
-        .and_then(Value::as_array)
-        .ok_or_else(|| invalid_plan("event.emit plan must carry ops"))?;
-    for op in ops {
-        let Some(write) = op.get("write") else {
-            continue;
-        };
-        if write.get("kind").and_then(Value::as_str) == Some("emit_run_event") {
+fn event_emit_write(plan: &PlanDocument) -> Result<EventEmitWrite<'_>, PublicSeamError> {
+    for operation in plan.operations() {
+        if let Some(write) = operation.write().and_then(|write| write.emit_run_event()) {
             return Ok(EventEmitWrite {
-                name: string_field(op, "name")?,
-                event_kind: string_field(write, "event_kind")?,
-                payload_schema: string_field(write, "payload_schema")?,
-                payload: run_context_event_payload(write.get("payload").ok_or_else(|| {
-                    invalid_plan("emit_run_event must carry run_context.checked payload")
-                })?)?,
-                visibility: string_field(write, "visibility")?,
+                name: operation.name(),
+                event_kind: write.event_kind(),
+                payload_schema: write.payload_schema(),
+                payload: run_context_event_payload(write.payload().as_json())?,
+                visibility: write.visibility(),
             });
         }
     }
@@ -680,13 +655,6 @@ fn run_context_event_emit_extension_result(
     .map_err(|error| invalid_plan(format!("RunContext event.emit projection failed: {error}")))
 }
 
-fn string_field<'a>(value: &'a Value, field: &'static str) -> Result<&'a str, PublicSeamError> {
-    value
-        .get(field)
-        .and_then(Value::as_str)
-        .ok_or_else(|| invalid_plan(format!("{field} must be a string")))
-}
-
 fn graph_query_revision(request: PlanGraphQueryRequest<'_>, default_revision: &str) -> String {
     match request.scope() {
         leaven_public_seam::PlanGraphReadScope::LatestAtStart { revision }
@@ -725,8 +693,9 @@ mod tests {
     #[test]
     fn event_emit_write_accepts_typed_run_context_payload() {
         let params = run_context_event_params(json!({"ok": true}));
+        let plan = validate_test_plan(&params);
 
-        let event = event_emit_write(&params).unwrap();
+        let event = event_emit_write(&plan).unwrap();
 
         assert_eq!(event.name, "run_context_status");
         assert_eq!(event.event_kind, "run_context.checked");
@@ -742,8 +711,9 @@ mod tests {
     #[test]
     fn event_emit_write_rejects_untyped_run_context_payload() {
         let params = run_context_event_params(json!({"ok": true, "extra": "raw"}));
+        let plan = validate_test_plan(&params);
 
-        let error = event_emit_write(&params).unwrap_err();
+        let error = event_emit_write(&plan).unwrap_err();
 
         assert!(
             error
@@ -756,7 +726,8 @@ mod tests {
     #[test]
     fn event_emit_extension_result_uses_typed_projection_records() {
         let params = run_context_event_params(json!({"ok": true}));
-        let event = event_emit_write(&params).unwrap();
+        let plan = validate_test_plan(&params);
+        let event = event_emit_write(&plan).unwrap();
         let context = SeamExecutionContextConfig::default();
 
         let result =
@@ -774,13 +745,32 @@ mod tests {
         );
     }
 
+    fn validate_test_plan(value: &Value) -> PlanDocument {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = manifest_dir
+            .parent()
+            .and_then(std::path::Path::parent)
+            .expect("crate lives under crates/leaven-seam-service");
+        leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root)
+            .expect("active public seam package loads")
+            .validate_plan_document(value)
+            .expect("test plan is schema-valid")
+    }
+
     fn run_context_event_params(payload: Value) -> Value {
         json!({
             "schema_version": "leaven.plan.v1",
             "plan_id": "plan_run_context_event",
+            "consistency": {
+                "kind": "latest_at_start"
+            },
+            "mode": {
+                "kind": "execute"
+            },
             "ops": [{
                 "kind": "write",
                 "name": "run_context_status",
+                "idempotency_key": "run-context-event-unit-0001",
                 "write": {
                     "kind": "emit_run_event",
                     "event_kind": "run_context.checked",
@@ -788,7 +778,12 @@ mod tests {
                     "payload": payload,
                     "visibility": "public"
                 }
-            }]
+            }],
+            "return": ["run_context_status"],
+            "commit": {
+                "kind": "graph_writes_atomic",
+                "on_stale": "reject"
+            }
         })
     }
 }

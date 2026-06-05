@@ -55,13 +55,13 @@ pub use package::{
     ValidationReport, WorkerTransportKind, WorkerTransportRequest,
 };
 pub use plan::{
-    PlanArtifactProjectionSelector, PlanAssessmentPreferenceValue, PlanAssessmentRankingValue,
-    PlanAssessmentTargetValue, PlanCallKind, PlanCommitKind, PlanCostScope, PlanDocument,
-    PlanEmitRunEventWrite, PlanEvaluationSetExpr, PlanEvaluationShape, PlanEventPayload,
-    PlanExpression, PlanExpressionKind, PlanExtensionPayload, PlanGraphQuerySource, PlanId,
-    PlanLiteralValue, PlanMode, PlanOperation, PlanOperationKind, PlanQueryKind,
-    PlanRequestEvaluationWrite, PlanReturnBinding, PlanSchemaVersion, PlanScoreOutputValue,
-    PlanWriteKind,
+    PlanApplyProposalBatchWrite, PlanArtifactProjectionSelector, PlanAssessmentPreferenceValue,
+    PlanAssessmentRankingValue, PlanAssessmentTargetValue, PlanCallKind, PlanCommitKind,
+    PlanCostScope, PlanDocument, PlanEmitRunEventWrite, PlanEvaluationSetExpr, PlanEvaluationShape,
+    PlanEventPayload, PlanExpression, PlanExpressionKind, PlanExtensionPayload,
+    PlanGraphQuerySource, PlanId, PlanLiteralValue, PlanMode, PlanOperation, PlanOperationKind,
+    PlanQueryKind, PlanRequestEvaluationWrite, PlanReturnBinding, PlanSchemaVersion,
+    PlanScoreOutputValue, PlanSubmitAssessmentsWrite, PlanWriteKind,
 };
 pub use plan_error::{PlanErrorCode, PlanErrorDetails, PlanErrorDocument};
 pub use plan_execution::{

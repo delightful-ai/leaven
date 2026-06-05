@@ -2,7 +2,7 @@ use serde_json::Value;
 
 use crate::PublicSeamError;
 
-use super::super::invalid_plan;
+use super::super::{invalid_plan, required_string};
 
 /// Lowered `submit_proposal_batch` or `apply_proposal_batch` write passed to a plan execution host.
 #[derive(Clone, Debug)]
@@ -43,6 +43,11 @@ impl<'a> PlanProposalWriteRequest<'a> {
             .and_then(Value::as_array)
             .map(Vec::len)
             .ok_or_else(|| invalid_plan("submit_proposal_batch must carry proposals"))
+    }
+
+    /// Proposal-batch id carried by an `apply_proposal_batch` write.
+    pub fn proposal_batch(&self) -> Result<&str, PublicSeamError> {
+        required_string(self.write.get("proposal_batch"), "proposal_batch")
     }
 }
 
