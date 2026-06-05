@@ -6,7 +6,9 @@ import pytest
 import leaven as lv
 from leaven._receipts import CallReceipt, QueryReceipt
 from leaven._seam import AssessmentSubmitRequest
+from leaven._seam._wire.payloads import PlanDocument
 from leaven._seam._wire.results import AssessmentBatchPrimary, AssessmentSubmitResult
+from leaven._seam._wire.writes import SubmitAssessmentsWrite
 from leaven.assessment import AssessmentWrite
 from leaven.builders.assessments import AssessmentsBuilder
 from leaven.evidence import EvidenceEnvelope
@@ -104,6 +106,34 @@ async def test_assessments_builder_requires_candidate_output_data_class() -> Non
 
     with pytest.raises(ValueError, match=r"candidate\.output or candidate\.artifact"):
         await assessments.submit("evalreq_1", [assessment])
+
+
+@pytest.mark.asyncio
+async def test_assessments_builder_preserves_listwise_ranking_owner() -> None:
+    """Example: listwise rankings use the generated assessment ranking owner."""
+
+    client = FakeAssessmentSeamClient()
+    assessments = AssessmentsBuilder._for_seam(client)
+    assessment = AssessmentWrite.listwise(
+        candidates=["cand_a", "cand_b", "cand_c"],
+        case="case_1",
+        ranking=["cand_c", "cand_a", "cand_b"],
+        score=lv.Score(value=0.9, feedback="cand_c best"),
+        evidence=EvidenceEnvelope.public_only(
+            payload={"feedback": "cand_c best"},
+            data_classes=[lv.data_class.CANDIDATE_OUTPUT],
+        ),
+    )
+
+    await assessments.submit("evalreq_1", [assessment])
+
+    decoded = msgspec.json.decode(
+        msgspec.json.encode(client.request_value.to_params()),
+        type=PlanDocument,
+    )
+    write = decoded.ops[0].write
+    assert isinstance(write, SubmitAssessmentsWrite)
+    assert write.assessments[0].ranking == ["cand_c", "cand_a", "cand_b"]
 
 
 @pytest.mark.asyncio

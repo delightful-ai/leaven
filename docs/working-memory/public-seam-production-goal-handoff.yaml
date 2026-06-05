@@ -2154,6 +2154,33 @@ acceptance:
           fragments, evidence private payloads, and public SDK/runtime `object`
           erasure points still need typed owners or explicit generated
           schema-selected decode paths.
+      - kind: python_assessment_builder_uses_generated_ranking_owner
+        paths:
+          - sdk/python/src/leaven/builders/assessments.py
+          - sdk/python/tests/builders/test_assessments.py
+          - sdk/python/tests/_seam/_wire/test_graph_writes.py
+        commands:
+          - cd sdk/python && uv run pytest tests/builders/test_assessments.py tests/_seam/_wire/test_graph_writes.py -q
+          - cd sdk/python && uv run pytest tests/_seam/_wire -q
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run ruff check src/leaven/builders/assessments.py tests/builders/test_assessments.py
+          - cd sdk/python && uv run ty check src/leaven/builders/assessments.py tests/builders/test_assessments.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - rg -n "WireJsonField|WireJsonScalar|_wire_string_array" sdk/python/src/leaven/builders/assessments.py sdk/python/tests/builders/test_assessments.py
+        note: >-
+          Public Python assessment submission no longer lowers listwise ranking
+          through a shallow `WireJsonField` helper. `AssessmentsBuilder` now
+          uses the generated `WireJsonAssessmentRanking` owner for ranking
+          leaves, and the builder test decodes the emitted PlanDocument through
+          generated `SubmitAssessmentsWrite` records to prove the ranking
+          survives as the generated assessment owner. The generated graph-write
+          suite still proves pairwise/listwise judgment leaves decode through
+          their wire owners. The targeted grep for the old builder helper and
+          shallow aliases returns no matches. The row remains pending because
+          case read/result metadata, schema-dependent parsed result fragments,
+          evidence private payloads, and public SDK/runtime `object` erasure
+          points still need typed owners or explicit generated schema-selected
+          decode paths.
       - kind: typed_private_client_request_cutover
         paths:
           - sdk/python/src/leaven/_seam/plans.py

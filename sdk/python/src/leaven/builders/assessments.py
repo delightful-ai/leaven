@@ -24,7 +24,7 @@ from .._seam._wire.evidence import (
 from .._seam._wire.evidence import (
     EvidencePublic as WireEvidencePublic,
 )
-from .._seam._wire.refs import ReceiptRef, WireJsonField, WireJsonScalar
+from .._seam._wire.refs import ReceiptRef, WireJsonAssessmentRanking
 from .._seam._wire.results import AssessmentSubmitResult
 from .._seam._wire.writes import SubmitAssessmentRecord, WriteOutputRecord, WriteScore
 from ..assessment import AssessmentWrite, Replayability
@@ -148,7 +148,11 @@ def _assessment_to_wire(
         candidate=assessment.candidate if assessment.candidate is not None else UNSET,
         candidates=list(assessment.candidates) if assessment.candidates is not None else UNSET,
         preference=assessment.preference if assessment.preference is not None else UNSET,
-        ranking=_wire_string_array(assessment.ranking) if assessment.ranking is not None else UNSET,
+        ranking=(
+            _wire_assessment_ranking(assessment.ranking)
+            if assessment.ranking is not None
+            else UNSET
+        ),
         read_receipts=(
             _receipt_refs([receipt.receipt_id for receipt in assessment.read_receipts])
             if assessment.read_receipts
@@ -327,10 +331,8 @@ def _receipt_refs(values: Sequence[str]) -> list[ReceiptRef]:
     return output
 
 
-def _wire_string_array(values: Sequence[str]) -> WireJsonField:
-    output: list[WireJsonScalar] = []
-    output.extend(values)
-    return output
+def _wire_assessment_ranking(values: Sequence[str]) -> WireJsonAssessmentRanking:
+    return list(values)
 
 
 def _private_visibility(value: str) -> PrivateEvidenceVisibility:
