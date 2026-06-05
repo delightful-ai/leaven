@@ -10,7 +10,7 @@ from ._wire import (
     JsonRpcProtocolError,
     JsonRpcRemoteError,
 )
-from ._wire.codec import decode_response, encode_request
+from ._wire.codec import decode_method_response, encode_request
 from ._wire.results import (
     AgentRunResult,
     CaseLoadResult,
@@ -106,11 +106,14 @@ class SeamClient:
     ) -> T:
         body = self._request_bytes(request, timeout_s=timeout_s)
         try:
-            return decode_response(body, result_type)
+            result = decode_method_response(body, request.method)
         except JsonRpcRemoteError as error:
             raise SeamClientError(f"seam returned JSON-RPC error: {error.error}") from error
         except JsonRpcProtocolError as error:
             raise SeamClientError(f"seam returned invalid JSON-RPC: {error}") from error
+        if not isinstance(result, result_type):
+            raise SeamClientError(f"seam returned {type(result).__name__} for {request.method}")
+        return result
 
     def _run_process(
         self,

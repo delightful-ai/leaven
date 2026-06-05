@@ -8,6 +8,7 @@ from pathlib import Path
 from call_codegen import render_calls
 from expression_codegen import render_expressions
 from method_codegen import MethodCodegenRow, render_methods
+from method_result_codegen import render_method_results
 from payload_codegen import PayloadMethodRow, render_payloads
 from ref_codegen import render_refs
 from result_codegen import ReceiptExpectation, ResultMethodRow, render_results
@@ -21,6 +22,7 @@ CALLS_OUTPUT = WIRE_DIR / "calls.py"
 PAYLOADS_OUTPUT = WIRE_DIR / "payloads.py"
 REFS_OUTPUT = WIRE_DIR / "refs.py"
 RESULTS_OUTPUT = WIRE_DIR / "results.py"
+METHOD_RESULTS_OUTPUT = WIRE_DIR / "method_results.py"
 WRITES_OUTPUT = WIRE_DIR / "writes.py"
 
 
@@ -63,6 +65,7 @@ def generated_files() -> dict[Path, str]:
         WRITES_OUTPUT: render_writes(),
         PAYLOADS_OUTPUT: render_payloads(rows),
         RESULTS_OUTPUT: render_results(result_rows(rows)),
+        METHOD_RESULTS_OUTPUT: render_method_results(result_rows(rows)),
     }
 
 

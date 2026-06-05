@@ -1413,10 +1413,10 @@ acceptance:
           reads; tests use generated result fixtures rather than arbitrary
           dict-shaped success values. This removes the immediate Python
           builder/client result-erasure point and the hand-authored result
-          mirror. The row remains pending because the generated result module
-          does not yet expose method-specific result classes for every retained
-          locked method and remaining Plan/body leaf records still need typed
-          owners.
+          mirror. Later evidence added generated result classes and generated
+          method-result decode routing for every retained locked method. The
+          row remains pending because remaining Plan/body/result leaf records
+          still need typed owners.
       - kind: typed_private_client_request_cutover
         paths:
           - sdk/python/src/leaven/_seam/plans.py
@@ -1516,6 +1516,37 @@ acceptance:
           close the row: several primary records retain named JSON leaf slots
           such as graph-set items and case/input metadata until Rust/Python
           owners are introduced for those leaves.
+      - kind: generated_method_result_decode_routing
+        paths:
+          - sdk/python/codegen/generate_seam_wire.py
+          - sdk/python/codegen/method_result_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/method_results.py
+          - sdk/python/src/leaven/_seam/_wire/codec.py
+          - sdk/python/src/leaven/_seam/client.py
+          - sdk/python/src/leaven/_seam_worker/context.py
+          - sdk/python/tests/_seam/_wire/test_codec.py
+          - sdk/python/tests/_seam/_wire/test_results.py
+          - sdk/python/tests/_seam/test_client.py
+          - sdk/python/tests/_seam_worker/test_callbacks.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_codec.py tests/_seam/_wire/test_results.py tests/_seam/test_client.py tests/_seam_worker/test_callbacks.py -q
+          - cd sdk/python && uv run ruff check codegen/generate_seam_wire.py codegen/method_result_codegen.py src/leaven/_seam/_wire src/leaven/_seam/client.py src/leaven/_seam_worker/context.py tests/_seam/_wire/test_codec.py tests/_seam/_wire/test_results.py tests/_seam/test_client.py tests/_seam_worker/test_callbacks.py
+          - cd sdk/python && uv run ty check codegen/generate_seam_wire.py codegen/method_result_codegen.py src/leaven/_seam/_wire src/leaven/_seam/client.py src/leaven/_seam_worker/context.py tests/_seam/_wire/test_codec.py tests/_seam/_wire/test_results.py tests/_seam/test_client.py tests/_seam_worker/test_callbacks.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          The msgspec JSON-RPC codec now has a generated
+          `_seam._wire.method_results` table from Rust profile result facts.
+          `decode_method_response` parses the outer JSON-RPC envelope, keeps
+          `Raw` only as an internal delayed decode buffer, then selects the
+          result record from the locked method. `SeamClient` and the worker
+          callback client now decode by request method instead of independently
+          supplying an arbitrary result class. Tests prove the generated table
+          covers `LOCKED_METHODS`, `leaven/lm.complete` decodes to
+          `LmCompleteResult`, and the same payload fails when decoded as
+          `leaven/agent.run`. This closes the method-result pairing gap; the
+          row remains pending for typed ownership of remaining JSON-shaped leaf
+          slots.
       - kind: generated_graph_rows_are_typed_records
         paths:
           - sdk/python/codegen/generate_seam_wire.py

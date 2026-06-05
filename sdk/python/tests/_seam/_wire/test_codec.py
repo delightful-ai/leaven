@@ -7,19 +7,24 @@ import msgspec
 import pytest
 
 from leaven._seam._wire import (
+    LOCKED_METHODS,
     JsonRpcProtocolError,
     JsonRpcRemoteError,
     LockedMethod,
     decode_batch_responses,
+    decode_method_response,
     decode_response,
     encode_request,
+    method_result_type,
 )
+from leaven._seam._wire.method_results import METHOD_RESULT_TYPES
 from leaven._seam._wire.payloads import (
     CommitPolicyNoGraphWrites,
     ConsistencyLatestAtStart,
     EvalModeExecute,
     PlanDocument,
 )
+from leaven._seam._wire.results import AgentRunResult, LmCompleteResult
 
 
 class Widget(msgspec.Struct, frozen=True):
@@ -85,6 +90,42 @@ def test_decode_response_decodes_method_specific_raw_result() -> None:
     body = b'{"jsonrpc":"2.0","id":"req_1","result":{"ok":true,"name":"done"}}'
 
     assert decode_response(body, Widget) == Widget(ok=True, name="done")
+
+
+def test_method_result_types_cover_every_locked_method() -> None:
+    assert set(METHOD_RESULT_TYPES) == set(LOCKED_METHODS)
+
+
+def test_decode_method_response_uses_locked_method_result_type() -> None:
+    body = (
+        b'{"jsonrpc":"2.0","id":"req_1","result":{"method":"leaven/lm.complete",'
+        b'"primary":{"kind":"lm_response","message":{"role":"assistant","content":'
+        b'[{"kind":"text","text":"ok"}]},"receipt":"lmrec_1","graph_revision":"rev",'
+        b'"data_classes":["public"],"replayability":"boundary_managed"},"receipts":[],'
+        b'"redactions":[],"capability_fingerprint":"fp_cap",'
+        b'"policy_fingerprint":"fp_policy","data_classes":["public"]}}'
+    )
+
+    decoded = decode_method_response(body, "leaven/lm.complete")
+
+    assert isinstance(decoded, LmCompleteResult)
+    assert decoded.primary.message.content[0].text == "ok"
+    assert method_result_type("leaven/lm.complete") is LmCompleteResult
+
+
+def test_decode_method_response_rejects_mismatched_method_result_shape() -> None:
+    body = (
+        b'{"jsonrpc":"2.0","id":"req_1","result":{"method":"leaven/lm.complete",'
+        b'"primary":{"kind":"lm_response","message":{"role":"assistant","content":'
+        b'[{"kind":"text","text":"ok"}]},"receipt":"lmrec_1","graph_revision":"rev",'
+        b'"data_classes":["public"],"replayability":"boundary_managed"},"receipts":[],'
+        b'"redactions":[],"capability_fingerprint":"fp_cap",'
+        b'"policy_fingerprint":"fp_policy","data_classes":["public"]}}'
+    )
+
+    assert method_result_type("leaven/agent.run") is AgentRunResult
+    with pytest.raises(JsonRpcProtocolError):
+        decode_method_response(body, "leaven/agent.run")
 
 
 def test_decode_response_allows_null_id() -> None:

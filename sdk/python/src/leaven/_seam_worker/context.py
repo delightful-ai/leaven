@@ -5,7 +5,7 @@ from collections.abc import Sequence
 
 from .._seam import AgentRunRequest, LmCompleteRequest, ProposalSubmitRequest, SeamJsonRpcRequest
 from .._seam._wire import JsonObject
-from .._seam._wire.codec import decode_response, encode_request
+from .._seam._wire.codec import decode_method_response, encode_request
 from .._seam._wire.errors import JsonRpcProtocolError, JsonRpcRemoteError
 from .._seam._wire.results import AgentRunResult, LmCompleteResult, ProposalSubmitResult
 from .._stage_runtime import CallbackProposeContext, CallbackRolloutContext
@@ -37,11 +37,13 @@ class JsonRpcCallbackClient:
         if not line:
             raise RuntimeError("stage host closed before answering callback request")
         try:
-            result = decode_response(line.encode(), result_type)
+            result = decode_method_response(line.encode(), request.method)
         except JsonRpcRemoteError as error:
             raise RuntimeError(f"stage callback failed: {error.error}") from error
         except JsonRpcProtocolError as error:
             raise RuntimeError(f"stage callback returned invalid JSON-RPC: {error}") from error
+        if not isinstance(result, result_type):
+            raise TypeError(f"stage callback returned {type(result).__name__} for {request.method}")
         self._receipts.record_result(result)
         return result
 

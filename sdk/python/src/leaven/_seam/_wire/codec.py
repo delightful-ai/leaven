@@ -9,6 +9,7 @@ from msgspec import UNSET, Raw, UnsetType
 from .errors import JsonRpcProtocolError, JsonRpcRemoteError
 from .json_value import JsonRpcId
 from .jsonrpc import JsonRpcRequestEnvelope, JsonRpcResponseEnvelope
+from .method_results import MethodResult, method_result_type
 from .methods import LockedMethod, require_locked_method
 from .payloads import PlanDocument
 from .payloads import StageRunRequest as StageRunDispatchRequest
@@ -43,6 +44,11 @@ def decode_response[T](body: bytes, result_type: type[T]) -> T:
     except msgspec.DecodeError as error:
         raise JsonRpcProtocolError(str(error)) from error
     return _decode_envelope_result(envelope, result_type)
+
+
+def decode_method_response(body: bytes, method: LockedMethod) -> MethodResult:
+    """Decode one response using the generated result type for `method`."""
+    return decode_response(body, method_result_type(method))
 
 
 def decode_batch_responses[T](
@@ -94,4 +100,10 @@ def _envelope_result_raw(envelope: JsonRpcResponseEnvelope) -> Raw:
     return cast("Raw", envelope.result)
 
 
-__all__ = ["RequestParams", "decode_batch_responses", "decode_response", "encode_request"]
+__all__ = [
+    "RequestParams",
+    "decode_batch_responses",
+    "decode_method_response",
+    "decode_response",
+    "encode_request",
+]
