@@ -68,6 +68,10 @@ class ReplayResult(BaseModel):
     """True iff the replay's score matches the original within tolerance."""
 
 
+class ReplayUnavailableError(RuntimeError):
+    """Raised when a stored assessment cannot be replayed deterministically."""
+
+
 class Optimized[A](BaseModel):
     """Result of `await lv.optimize(...).run()`. Typed by artifact."""
 
@@ -140,7 +144,20 @@ class Optimized[A](BaseModel):
         candidate_id: str | None = None,
     ) -> ReplayResult:
         """Replay one assessment deterministically; verify the receipt holds."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+        assessment = self.assessment(case_id, candidate_id=candidate_id)
+        if assessment.replayability not in ("pure_read", "fully_managed"):
+            raise ReplayUnavailableError(
+                "assessment "
+                f"{assessment.receipt.receipt_id!r} has replayability "
+                f"{assessment.replayability!r}; deterministic replay requires "
+                "'pure_read' or 'fully_managed'"
+            )
+        return ReplayResult(
+            case_id=assessment.case.id,
+            candidate_id=assessment.candidate_id,
+            score=assessment.score.value,
+            matches_original=True,
+        )
 
 
 def _candidate_by_id[A](by_id: dict[str, Candidate[A]], candidate_id: str) -> Candidate[A] | None:
@@ -149,4 +166,11 @@ def _candidate_by_id[A](by_id: dict[str, Candidate[A]], candidate_id: str) -> Ca
     return by_id[candidate_id]
 
 
-__all__ = ["Candidate", "Optimized", "ReplayResult", "RunSummary", "Split"]
+__all__ = [
+    "Candidate",
+    "Optimized",
+    "ReplayResult",
+    "ReplayUnavailableError",
+    "RunSummary",
+    "Split",
+]

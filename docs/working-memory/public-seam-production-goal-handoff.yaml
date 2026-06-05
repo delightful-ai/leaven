@@ -3737,6 +3737,28 @@ acceptance:
           passed Ruff/ty/quality checks, examples compile, generated seam wire
           is current, and line-count lint passes. The row remains pending
           because the whole public API/backbone audit is not complete.
+      - kind: public_result_replay_scaffold_removed
+        paths:
+          - sdk/python/src/leaven/result.py
+          - sdk/python/src/leaven/__init__.py
+          - sdk/python/tests/test_result.py
+          - sdk/python/scripts/check_quality_contract.py
+        commands:
+          - cd sdk/python && uv run pytest tests/test_result.py -q
+          - cd sdk/python && uv run ruff check src/leaven/result.py src/leaven/__init__.py tests/test_result.py
+          - cd sdk/python && uv run ty check src/leaven/result.py tests/test_result.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          `Optimized.replay(case_id)` no longer advertises a public scaffold.
+          It now reads the typed assessment row, returns the stored score for
+          `pure_read` or `fully_managed` replayable assessments, preserves
+          candidate disambiguation, and raises the public
+          `ReplayUnavailableError` for boundary-managed or external-effect
+          rows instead of fabricating deterministic execution. This is an
+          honest SDK readback verifier, not the final full backend replay
+          implementation, so the broader Python project-quality row remains
+          pending.
       - kind: private_seam_json_builder_branding
         commits:
           - 414f7d0d

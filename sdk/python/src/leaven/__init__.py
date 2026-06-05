@@ -64,7 +64,7 @@ from .environment import Environment
 from .optimize import OptimizeBuilder, optimize
 
 # ----- Result + inspection -------------------------------------------------
-from .result import Candidate, Optimized, ReplayResult, RunSummary, Split
+from .result import Candidate, Optimized, ReplayResult, ReplayUnavailableError, RunSummary, Split
 from .rubric import RewardValue, Rubric, reward
 from .run_status import RunCostStatus, RunUsageStatus, UnsupportedRunFact
 from .runtime import Cache, Runtime, runtime
@@ -144,6 +144,7 @@ __all__ = [
     "Reflect",
     "ReflectContext",
     "ReplayResult",
+    "ReplayUnavailableError",
     "RewardValue",
     "Rollout",
     "RolloutContext",
