@@ -1,3 +1,5 @@
+from typing import cast
+
 import pytest
 from pydantic import BaseModel
 
@@ -34,8 +36,10 @@ def test_json_schema_output_from_raw_schema() -> None:
 
 
 def test_json_schema_output_rejects_non_json_schema_values() -> None:
+    bad_key_schema = cast("JsonObject", {"properties": {1: {"type": "string"}}})
     with pytest.raises(TypeError, match="JSON object keys must be strings"):
-        lv.output.json_schema({"properties": {1: {"type": "string"}}})
+        lv.output.json_schema(bad_key_schema)
 
+    not_a_schema = cast("JsonObject", "not a schema")
     with pytest.raises(TypeError, match="expected a pydantic model class or JSON schema object"):
-        lv.output.json_schema("not a schema")
+        lv.output.json_schema(not_a_schema)

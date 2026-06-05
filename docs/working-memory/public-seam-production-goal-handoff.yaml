@@ -4967,6 +4967,25 @@ acceptance:
           with a mirrored `tests/_runs/test_store.py`; the quality contract
           enforces that mapping along with line count, no `from __future__`,
           no production `Any`, and the custom defensive-erasure lints.
+      - kind: python_output_schema_helper_rejects_public_object_ingress
+        paths:
+          - sdk/python/src/leaven/output.py
+          - sdk/python/tests/test_output.py
+        commands:
+          - cd sdk/python && uv run pytest tests/test_output.py tests/builders/test_output_contract.py -q
+          - cd sdk/python && uv run ruff check src/leaven/output.py tests/test_output.py tests/builders/test_output_contract.py
+          - cd sdk/python && uv run ty check src/leaven/output.py tests/test_output.py tests/builders/test_output_contract.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - cd sdk/python && ! rg -n "model_or_schema: object|Never" src/leaven/output.py tests/test_output.py
+        note: >-
+          Public `lv.output.json_schema(...)` no longer advertises an
+          `object -> Never` overload or accepts `object` in its implementation
+          signature. The retained public shapes are the spec-named inputs:
+          a Pydantic model class or a `JsonObject` JSON Schema. Negative tests
+          now explicitly cast untrusted runtime values when exercising the
+          runtime guard, so ordinary typed callers see bad input as a static
+          error instead of a supported public shape.
       - kind: prompt_stage_runtime_erasure_narrowed
         paths:
           - sdk/python/src/leaven/stages.py

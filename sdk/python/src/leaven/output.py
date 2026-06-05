@@ -6,7 +6,7 @@ and shape the typed result the user reads.
 """
 
 from collections.abc import Sequence
-from typing import Literal, Never, overload
+from typing import Literal, overload
 
 from pydantic import BaseModel, ConfigDict
 
@@ -76,12 +76,8 @@ def json_schema[ParsedModelT: BaseModel](
 def json_schema(model_or_schema: JsonObject) -> JsonSchemaValueOutput: ...
 
 
-@overload
-def json_schema(model_or_schema: object) -> Never: ...
-
-
 def json_schema(
-    model_or_schema: object,
+    model_or_schema: type[BaseModel] | JsonObject,
 ) -> JsonSchemaOutput[BaseModel] | JsonSchemaValueOutput:
     """Output contract: response must match the given JSON Schema or pydantic model.
 
