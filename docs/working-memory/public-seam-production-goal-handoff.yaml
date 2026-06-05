@@ -6365,6 +6365,48 @@ acceptance:
           Codex e2e passed 1 test in 55.15s. This is current criteria proof,
           not final goal closeout while prerequisite typed-backbone rows remain
           pending.
+      - kind: git_filesystem_codex_kit_after_selector_scope_cutover_rerun
+        paths:
+          - crates/leaven-seam-service/src/git_workspace.rs
+          - crates/leaven-cli/tests/seam_stdio_server.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/codex_agent_kit_reflection.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/agent_kit_seam_checkpoint.rs
+          - crates/leaven-workspace-firkin/tests/firkin_contract/firkin_git_e2e.rs
+          - crates/leaven-agent-codex-cli/tests/codex_cli_runtime.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution_support.rs
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cargo test -p leaven-seam-service seam_runtime_executes_finite_workspace_queries_through_configured_service -- --nocapture
+          - cargo test -p leaven-cli --test seam_stdio_server seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers -- --exact --nocapture
+          - cargo test -p leaven-seam-service service::tests::seam_runtime_executes_agent_run_in_materialized_workspace_through_codex_adapter -- --exact --nocapture
+          - cargo test -p leaven-seam-service service::tests::seam_runtime_services_agent_callback_from_command_worker -- --exact --nocapture
+          - cargo test -p leaven-agent-codex-cli --test codex_cli_runtime
+          - cargo test -p leaven-gepa-agentic-agent-kit --test codex_agent_kit_reflection
+          - cargo test -p leaven-gepa-agentic-agent-kit --test agent_kit_seam_checkpoint
+          - cargo test -p leaven-workspace-firkin --test firkin_contract firkin_git_e2e::firkin_product_pod_materializes_and_reads_back_isolated_git_workspaces -- --exact --nocapture
+          - cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution --no-run
+          - set -a; source .env; set +a; LEAVEN_CODEX_LIVE=1 LEAVEN_CODEX_BIN="$HOME/.bun/bin/codex" cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution live_codex_agent_kit_evolves_through_stdio_checkpoint_and_next_codex_consumes_child -- --ignored --exact --nocapture
+        note: >-
+          Fresh current-checkout rerun after typed plan selector/cost-scope
+          hard-cutover reconfirmed the user's explicit Git repository,
+          filesystem, Firkin, Codex CLI, and Codex Kit criteria with normal
+          Cargo incremental settings. The configured service and process-level
+          stdio server executed real local workspace filesystem reads,
+          artifact capture, Git log/diff/status, and Codex adapter callback
+          routing. Codex CLI runtime/parser tests passed 8 tests. AgentKit
+          deterministic Git projection/readback passed 3 tests. The
+          checkpointed AgentKit SDK route restored the applied Git child from
+          `StoreRunPersistence<FileStore>`. The host-backed Firkin product-pod
+          Git workspace materialization/readback proof passed. The live
+          evolution binary built, and the `.env`-loaded live `gpt-5.4-mini`
+          Codex e2e passed 1 test in 71.83s. The live e2e still requires Codex
+          Kit projection, live reflection, a separate live Codex mutation
+          inside the Git repo, typed Git readback, public-seam stdio
+          submit/apply, checkpoint restore, fresh child AgentKit
+          materialization, and a later Codex stage consuming the applied child
+          rather than the seed. This is current criteria proof, not final goal
+          closeout while prerequisite typed-backbone rows remain pending.
     closeout_check: >-
       A live Codex prompt-consumption test, a deterministic AgentKit projection
       test, or `proposal.submit_batch` without application cannot close this
