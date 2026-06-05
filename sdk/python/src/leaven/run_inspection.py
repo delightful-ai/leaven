@@ -7,10 +7,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ._json_parse import parse_json_value
 from .assessment import Assessment
 from .blob_ref import BlobRef
 from .evidence import EvidencePublicPayload
-from .json_value import JsonObject, JsonValue
+from .json_value import JsonValue
 from .result import Optimized
 from .run_status import RunCostStatus, RunUsageStatus, UnsupportedRunFact
 
@@ -184,7 +185,10 @@ class RustEvidenceReadback(BaseModel):
 
     def content_json(self) -> JsonValue:
         """Decode and validate the Rust-exported evidence JSON payload."""
-        return _json_value(json.loads(self.content_bytes()))
+        return parse_json_value(
+            json.loads(self.content_bytes()),
+            context="Rust-exported evidence JSON",
+        )
 
 
 class ReceiptSummary(BaseModel):
@@ -289,21 +293,6 @@ def inspect_optimized[A](
         rust_evidence=list(rust_evidence),
         unsupported=result.summary.unsupported,
     )
-
-
-def _json_value(raw_json: object) -> JsonValue:
-    if raw_json is None or isinstance(raw_json, str | int | float | bool):
-        return raw_json
-    if isinstance(raw_json, list):
-        return [_json_value(item) for item in raw_json]
-    if isinstance(raw_json, dict):
-        output: JsonObject = {}
-        for key, item in raw_json.items():
-            if not isinstance(key, str):
-                raise TypeError("JSON object keys must be strings")
-            output[key] = _json_value(item)
-        return output
-    raise TypeError(f"value is not JSON: {type(raw_json).__name__}")
 
 
 def _receipts[A](result: Optimized[A]) -> list[ReceiptSummary]:

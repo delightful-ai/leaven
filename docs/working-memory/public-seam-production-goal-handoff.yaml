@@ -5111,6 +5111,25 @@ acceptance:
           does not eliminate all JSON-shaped leaves, but it names the remaining
           unknown-value parse boundary and removes duplicated domain-local
           erasure helpers.
+      - kind: python_rust_evidence_readback_uses_named_json_boundary
+        paths:
+          - sdk/python/src/leaven/run_inspection.py
+          - sdk/python/tests/_runs/test_rust_export.py
+          - sdk/python/tests/test_run_inspection.py
+          - sdk/python/tests/test_run_receipt_inspection.py
+        commands:
+          - cd sdk/python && uv run pytest tests/_runs/test_rust_export.py tests/test_run_inspection.py tests/test_run_receipt_inspection.py -q
+          - cd sdk/python && uv run ruff check src/leaven/run_inspection.py tests/_runs/test_rust_export.py tests/test_run_inspection.py tests/test_run_receipt_inspection.py
+          - cd sdk/python && uv run ty check src/leaven/run_inspection.py tests/_runs/test_rust_export.py tests/test_run_inspection.py tests/test_run_receipt_inspection.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Rust-exported evidence blob JSON readback no longer carries a local
+          recursive `object` parser in `run_inspection.py`. The blob bytes are
+          still decoded from the Rust-owned run store export, then routed
+          through the SDK's named `_json_parse` boundary before being exposed as
+          `JsonValue`. This keeps Rust-owned readback as the authority while
+          removing another domain-local unknown-value parser.
       - kind: prompt_stage_runtime_erasure_narrowed
         paths:
           - sdk/python/src/leaven/stages.py
