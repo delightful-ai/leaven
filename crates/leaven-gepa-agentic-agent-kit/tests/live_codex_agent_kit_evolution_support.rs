@@ -6,7 +6,7 @@ use std::time::Duration;
 use bytes::Bytes;
 use leaven_agent::{
     AgentContextRef, AgentInstructions, AgentLimits, AgentRunContext, AgentRunRequest,
-    AgentRuntime, OutputContract,
+    AgentRuntime, AgentSession, AgentStatus, OutputContract,
 };
 use leaven_agent_codex_cli::{CodexCliConfig, CodexCliRuntime};
 use leaven_agentic_agent_kit::{AgentKitMountMode, CodexAgentKitMaterializer};
@@ -219,7 +219,7 @@ async fn read_back_live_codex_agent_kit_change(
             .map_err(|source| {
                 OptimizerError::with_source("project live AgentKit into Codex ABI", source)
             })?;
-        run_live_codex_reflection_stage(&mut view, &projection.system_prompt).await?;
+        run_live_codex_reflection_stage(&mut view, &projection.system_prompt, &root).await?;
         let mut instructions = AgentInstructions::task(
             "Read agent/reflection.md, then edit only files under repos/agent. Replace \
              repos/agent/system_prompt.md with exactly:\n\
@@ -229,6 +229,9 @@ async fn read_back_live_codex_agent_kit_change(
              ---\nname: alpha\ndescription: Use when asked for the child alpha proof.\n---\n\n\
              When this skill is invoked, create agent/child-skill-proof.txt containing exactly CHILD_SKILL_CONSUMED.\n\
              \n\
+             Then create repos/agent/proposal-mutation-proof.txt containing exactly:\n\
+             LIVE_PROPOSAL_MUTATED\n\
+             \n\
              Do not edit AGENTS.md, hooks, .agents, or files outside repos/agent.",
         );
         instructions.system = projection.system_prompt.clone();
@@ -237,15 +240,9 @@ async fn read_back_live_codex_agent_kit_change(
             path: WorkspacePath::new("agent/reflection.md").unwrap(),
             media_type: Some("text/markdown".to_owned()),
         });
-        let mut request = AgentRunRequest::new(
-            instructions,
-            OutputContract::WorkspaceDiff {
-                roots: vec![WorkspacePath::new("repos/agent").unwrap()],
-                surface_fingerprint: None,
-            },
-        );
+        let mut request = AgentRunRequest::new(instructions, OutputContract::FinalMessage);
         request.limits = live_limits();
-        CodexCliRuntime::new(codex_config())
+        let session = CodexCliRuntime::new(codex_config())
             .run_session(
                 &mut view,
                 request,
@@ -255,7 +252,13 @@ async fn read_back_live_codex_agent_kit_change(
             .map_err(|source| {
                 OptimizerError::with_source("run live Codex AgentKit mutation stage", source)
             })?;
-        assert_live_codex_authored_child_files(&root);
+        require_live_codex_success(&session.value, "mutation", &root)?;
+        assert_live_file(
+            &root,
+            "repos/agent/proposal-mutation-proof.txt",
+            "LIVE_PROPOSAL_MUTATED\n",
+        )?;
+        assert_live_codex_authored_child_files(&root)?;
         GitProgramReadback::new(stores)
             .read_back_change(parent_artifact, &mut view)
             .map_err(|source| {
@@ -276,6 +279,7 @@ async fn read_back_live_codex_agent_kit_change(
 async fn run_live_codex_reflection_stage(
     view: &mut leaven_workspace::WorkspaceView<'_>,
     system_prompt: &Option<String>,
+    root: &Path,
 ) -> Result<(), OptimizerError> {
     let mut instructions = AgentInstructions::task(
         "Inspect repos/agent/system_prompt.md and repos/agent/skills/alpha/SKILL.md. \
@@ -283,14 +287,9 @@ async fn run_live_codex_reflection_stage(
          REFLECTION_DIAGNOSIS: replace the parent prompt and alpha skill with child proof instructions.\n",
     );
     instructions.system.clone_from(system_prompt);
-    let mut request = AgentRunRequest::new(
-        instructions,
-        OutputContract::Files {
-            paths: vec![WorkspacePath::new("agent/reflection.md").unwrap()],
-        },
-    );
+    let mut request = AgentRunRequest::new(instructions, OutputContract::FinalMessage);
     request.limits = live_limits();
-    CodexCliRuntime::new(codex_config())
+    let session = CodexCliRuntime::new(codex_config())
         .run_session(
             view,
             request,
@@ -300,6 +299,7 @@ async fn run_live_codex_reflection_stage(
         .map_err(|source| {
             OptimizerError::with_source("run live Codex AgentKit reflection stage", source)
         })?;
+    require_live_codex_success(&session.value, "reflection", root)?;
     let reflection = view
         .read_file(&WorkspacePath::new("agent/reflection.md").unwrap())
         .map_err(|source| OptimizerError::with_source("read live Codex reflection", source))?;
@@ -353,7 +353,7 @@ async fn run_live_codex_child_consumption(
             },
         );
         request.limits = live_limits();
-        if let Err(source) = CodexCliRuntime::new(codex_config())
+        match CodexCliRuntime::new(codex_config())
             .run_session(
                 &mut view,
                 request,
@@ -361,10 +361,19 @@ async fn run_live_codex_child_consumption(
             )
             .await
         {
-            panic!(
-                "run live Codex AgentKit child-consumption stage: {source:?}\n{}",
-                child_consumption_debug(&root)
-            );
+            Ok(session) => {
+                if let Err(source) =
+                    require_live_codex_success(&session.value, "child-consumption", &root)
+                {
+                    panic!("{source:?}\n{}", child_consumption_debug(&root));
+                }
+            }
+            Err(source) => {
+                panic!(
+                    "run live Codex AgentKit child-consumption stage: {source:?}\n{}",
+                    child_consumption_debug(&root)
+                );
+            }
         }
         LiveChildConsumption {
             system_proof: fs::read_to_string(root.join("agent/child-system-proof.txt")).unwrap(),
@@ -378,6 +387,21 @@ async fn run_live_codex_child_consumption(
 struct LiveChildConsumption {
     system_proof: String,
     skill_proof: String,
+}
+
+fn require_live_codex_success(
+    session: &AgentSession,
+    stage: &str,
+    root: &Path,
+) -> Result<(), OptimizerError> {
+    if matches!(session.status, AgentStatus::Succeeded) {
+        return Ok(());
+    }
+    Err(OptimizerError::Message(format!(
+        "live Codex {stage} stage did not succeed: {:?}\n{}",
+        session.status,
+        child_consumption_debug(root)
+    )))
 }
 
 fn child_consumption_debug(root: &Path) -> String {
@@ -403,15 +427,37 @@ fn sorted_names(path: &Path) -> Vec<String> {
     names
 }
 
-fn assert_live_codex_authored_child_files(root: &Path) {
-    assert_eq!(
-        fs::read_to_string(root.join("repos/agent/system_prompt.md")).unwrap(),
-        "Child system proof requirement: create agent/child-system-proof.txt containing exactly CHILD_SYSTEM_CONSUMED\n"
-    );
-    assert_eq!(
-        fs::read_to_string(root.join("repos/agent/skills/alpha/SKILL.md")).unwrap(),
-        "---\nname: alpha\ndescription: Use when asked for the child alpha proof.\n---\n\nWhen this skill is invoked, create agent/child-skill-proof.txt containing exactly CHILD_SKILL_CONSUMED.\n"
-    );
+fn assert_live_codex_authored_child_files(root: &Path) -> Result<(), OptimizerError> {
+    assert_live_file(
+        root,
+        "repos/agent/system_prompt.md",
+        "Child system proof requirement: create agent/child-system-proof.txt containing exactly CHILD_SYSTEM_CONSUMED\n",
+    )?;
+    assert_live_file(
+        root,
+        "repos/agent/skills/alpha/SKILL.md",
+        "---\nname: alpha\ndescription: Use when asked for the child alpha proof.\n---\n\nWhen this skill is invoked, create agent/child-skill-proof.txt containing exactly CHILD_SKILL_CONSUMED.\n",
+    )
+}
+
+fn assert_live_file(root: &Path, relative: &str, expected: &str) -> Result<(), OptimizerError> {
+    let path = root.join(relative);
+    let actual = fs::read_to_string(&path).map_err(|source| {
+        OptimizerError::with_source(
+            format!(
+                "read live Codex proof file `{relative}`\n{}",
+                child_consumption_debug(root)
+            ),
+            source,
+        )
+    })?;
+    if actual != expected {
+        return Err(OptimizerError::Message(format!(
+            "live Codex proof file `{relative}` mismatch\nexpected: {expected:?}\nactual: {actual:?}\n{}",
+            child_consumption_debug(root)
+        )));
+    }
+    Ok(())
 }
 
 fn assert_success(response: &Value, method: &str) -> Result<(), OptimizerError> {

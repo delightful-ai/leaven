@@ -3176,6 +3176,37 @@ acceptance:
           (1 passed), Firkin product-pod Git workspace proof (1 passed), and
           live child-consumption e2e (1 passed in 75.31s) with normal Cargo
           incremental settings.
+      - kind: live_codex_evolution_status_checked_git_filesystem_proof
+        paths:
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution_support.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution.rs
+          - crates/leaven-agent-codex-cli/src/parser.rs
+          - crates/leaven-agent-codex-cli/tests/codex_cli_runtime.rs
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cargo test -p leaven-agentic-git --test git_program_materializer
+          - cargo test -p leaven-gepa-agentic-agent-kit --test agent_kit_seam_checkpoint agent_kit_git_child_applied_through_sdk_route_restores_from_checkpoint -- --exact
+          - cargo test -p leaven-workspace-firkin --test firkin_contract firkin_git_e2e::firkin_product_pod_materializes_and_reads_back_isolated_git_workspaces -- --exact
+          - cargo test -p leaven-agent-codex-cli --test codex_cli_runtime
+          - cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution --no-run
+          - LEAVEN_CODEX_LIVE=1 LEAVEN_CODEX_BIN="$HOME/.bun/bin/codex" cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution live_codex_agent_kit_evolves_through_stdio_checkpoint_and_next_codex_consumes_child -- --ignored --exact --nocapture
+          - cargo fmt --check
+        note: >-
+          Current rerun evidence on 2026-06-04 reconfirmed the Git and
+          filesystem substrate with the focused git-materializer suite (13
+          passed), checkpointed AgentKit SDK route (1 passed), host-backed
+          Firkin Git workspace proof (1 passed), Codex CLI adapter status
+          parser suite (7 passed), and the live child-consumption e2e (1 passed
+          in 70.05s) under normal Cargo incremental settings. The live harness
+          now rejects non-succeeded Codex sessions for reflection, mutation, and
+          child consumption, records diagnostics with workspace layout and last
+          Codex message, and requires the live mutation stage to write an
+          explicit `repos/agent/proposal-mutation-proof.txt` marker inside the
+          Git repo that is imported. This closes the immediate concern that Git
+          repos, filesystem materialization/readback, Codex Kit projection,
+          stdio submit/apply, checkpoint restore, and next-Codex consumption
+          only passed through an over-permissive smoke. The row still remains
+          pending until all prerequisite backbone rows close.
     closeout_check: >-
       A live Codex prompt-consumption test, a deterministic AgentKit projection
       test, or `proposal.submit_batch` without application cannot close this
