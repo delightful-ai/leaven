@@ -14,6 +14,8 @@ class LiveLmUsage(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    prompt_tokens: int
+    completion_tokens: int
     total_tokens: int
 
 
@@ -39,9 +41,15 @@ def live_lm_output_from_assessment(assessment: Assessment) -> LiveLmOutput:
     raw = public.payload["output"]
     if not isinstance(raw, str):
         raise ValueError(f"assessment {assessment.case.id!r} public output is not inline text")
-    return LiveLmOutput.model_validate(
-        _json_object(json.loads(raw), context=f"assessment {assessment.case.id!r} public output")
+    return live_lm_output_from_text(
+        raw,
+        context=f"assessment {assessment.case.id!r} public output",
     )
+
+
+def live_lm_output_from_text(text: str, *, context: str) -> LiveLmOutput:
+    """Parse the runner's inline JSON output into the typed live proof record."""
+    return LiveLmOutput.model_validate(_json_object(json.loads(text), context=context))
 
 
 def valid_live_lm_output(value: LiveLmOutput) -> bool:
@@ -49,6 +57,8 @@ def valid_live_lm_output(value: LiveLmOutput) -> bool:
     return (
         value.text == EXPECTED_TEXT
         and value.receipt == "lmrec_completion"
+        and value.usage.prompt_tokens > 0
+        and value.usage.completion_tokens > 0
         and value.usage.total_tokens > 0
     )
 
@@ -74,4 +84,10 @@ def _json_value(raw_json: object, *, context: str) -> JsonValue:
     raise ValueError(f"{context} contains non-JSON value {type(raw_json).__name__}")
 
 
-__all__ = ["LiveLmOutput", "LiveLmUsage", "live_lm_output_from_assessment", "valid_live_lm_output"]
+__all__ = [
+    "LiveLmOutput",
+    "LiveLmUsage",
+    "live_lm_output_from_assessment",
+    "live_lm_output_from_text",
+    "valid_live_lm_output",
+]

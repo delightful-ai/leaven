@@ -5906,6 +5906,42 @@ acceptance:
           consuming the applied child rather than the seed. This is current
           criteria proof, not final goal closeout while prerequisite backbone
           rows remain pending.
+      - kind: git_filesystem_codex_kit_user_reconfirmation_2026_06_05
+        paths:
+          - crates/leaven-agentic-git/tests/git_program_materializer.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/agent_kit_seam_checkpoint.rs
+          - crates/leaven-workspace-firkin/tests/firkin_contract/firkin_git_e2e.rs
+          - crates/leaven-agent-codex-cli/tests/codex_cli_runtime.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution_support.rs
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cargo test -p leaven-agentic-git --test git_program_materializer
+          - cargo test -p leaven-gepa-agentic-agent-kit --test agent_kit_seam_checkpoint agent_kit_git_child_applied_through_sdk_route_restores_from_checkpoint -- --exact
+          - cargo test -p leaven-workspace-firkin --test firkin_contract firkin_git_e2e::firkin_product_pod_materializes_and_reads_back_isolated_git_workspaces -- --exact
+          - cargo test -p leaven-agent-codex-cli --test codex_cli_runtime
+          - cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution --no-run
+          - set -a; source .env; set +a; LEAVEN_CODEX_LIVE=1 LEAVEN_CODEX_BIN="$HOME/.bun/bin/codex" cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution live_codex_agent_kit_evolves_through_stdio_checkpoint_and_next_codex_consumes_child -- --ignored --exact --nocapture
+          - cargo fmt --check
+        note: >-
+          Fresh current-checkout rerun on 2026-06-05 reconfirmed the user's
+          explicit hard criteria that Git repos, filesystem
+          materialization/readback, Firkin workspaces, Codex CLI status
+          parsing, and Codex Kit projection must work. GitProgram
+          materialization/readback passed all 13 tests. The checkpointed
+          AgentKit SDK route passed and restored the applied typed Git child
+          from `StoreRunPersistence<FileStore>`. The host-backed Firkin
+          product-pod Git workspace materialization/readback proof passed. The
+          Codex CLI runtime/parser suite passed 8 tests. The live evolution
+          binary built, and the `.env`-loaded live `gpt-5.4-mini` Codex e2e
+          passed 1 test in 46.62s with normal Cargo incremental settings. The
+          live test still requires Codex Kit projection, live reflection, a
+          separate live Codex mutation inside the Git repo, typed Git readback,
+          public-seam stdio submit/apply, checkpoint restore, fresh child
+          AgentKit materialization, and a later Codex stage consuming the
+          applied child rather than the seed. This is current criteria proof,
+          not final goal closeout while prerequisite backbone rows remain
+          pending.
     closeout_check: >-
       A live Codex prompt-consumption test, a deterministic AgentKit projection
       test, or `proposal.submit_batch` without application cannot close this
@@ -6095,6 +6131,45 @@ acceptance:
           and executable example coverage. This removes the remaining optional
           adapter `NotImplementedError` exception from the runnable examples
           matrix.
+      - kind: live_examples_current_direct_rerun_with_tour_timeout_noted
+        paths:
+          - sdk/python/examples/10_live_codex_seam.py
+          - sdk/python/examples/11_live_optimize_codex_stage.py
+          - sdk/python/examples/12_live_optimize_codex_proposer.py
+          - sdk/python/examples/13_live_optimize_openai_lm.py
+          - sdk/python/examples/live_openai_lm/src/live_openai_lm/output.py
+          - sdk/python/examples/live_openai_lm/src/live_openai_lm/scenario.py
+          - sdk/python/examples/live_openai_lm/tests/test_output.py
+          - sdk/python/examples/run_all.py
+        commands:
+          - cd sdk/python && set -a; source ../../.env; set +a; LEAVEN_LIVE_CODEX=1 LEAVEN_CODEX_BIN="$HOME/.bun/bin/codex" uv run python examples/10_live_codex_seam.py
+          - cd sdk/python && set -a; source ../../.env; set +a; LEAVEN_LIVE_CODEX=1 LEAVEN_CODEX_BIN="$HOME/.bun/bin/codex" uv run python examples/11_live_optimize_codex_stage.py
+          - cd sdk/python && set -a; source ../../.env; set +a; LEAVEN_LIVE_CODEX=1 LEAVEN_CODEX_BIN="$HOME/.bun/bin/codex" uv run python examples/12_live_optimize_codex_proposer.py
+          - cd sdk/python && set -a; source ../../.env; set +a; LEAVEN_LIVE_OPENAI=1 uv run python examples/13_live_optimize_openai_lm.py
+          - cd sdk/python && PYTHONPATH=examples/live_openai_lm/src uv run --project examples/live_openai_lm pytest examples/live_openai_lm/tests -q
+          - cd sdk/python && PYTHONPATH=examples/live_openai_lm/src uv run ty check examples/live_openai_lm/src examples/live_openai_lm/tests
+          - cd sdk/python && uv run ruff check examples/12_live_optimize_codex_proposer.py examples/live_openai_lm/src examples/live_openai_lm/tests
+          - cd sdk/python && just compile-examples
+          - cd sdk/python && uv run pytest tests/examples/test_run_all.py -q
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Direct live reruns after the example assertion fixes proved the
+          current live-gated examples individually: example 10 returned
+          `agentrec_completion`, example 11 returned best score 1.000 and
+          `agentrec_completion`, example 12 returned best score 1.000 with
+          one evaluated candidate and proposal receipt `wrec_proposal_batch`,
+          and example 13 returned best score 1.000 with `lmrec_completion` and
+          known OpenAI token/cost status. Example 12 now asserts the product
+          invariant, not the stale assumption that summary iteration count is
+          one. The nested OpenAI example now parses runner JSON at a typed
+          boundary and checks prompt, completion, and total tokens. A full
+          live-enabled `examples/run_all.py` tour in this slice still hit a
+          real timeout in example 10 (`workspace command ... timed out after
+          180s`), while examples 11-13 passed later in that same tour. That
+          timeout is not claimed as success; it keeps this row pending until
+          the live tour itself is made reliable or the example matrix is
+          reshaped around explicit per-example live proofs.
     closeout_check: A typechecked tour is not a runnable product example.
 
   - id: release_gate_for_public_contract

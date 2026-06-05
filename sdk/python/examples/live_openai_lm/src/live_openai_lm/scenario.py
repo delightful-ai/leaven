@@ -5,7 +5,7 @@ import json
 import leaven as lv
 
 from live_openai_lm.config import EXPECTED_TEXT, LiveOpenAiConfig
-from live_openai_lm.output import valid_live_lm_output
+from live_openai_lm.output import live_lm_output_from_text, valid_live_lm_output
 
 
 @lv.runner
@@ -34,7 +34,7 @@ async def run(prompt: lv.PromptArtifact, case: lv.InputCaseView, cx: lv.RolloutC
 async def exact(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
     """Score the live LM output and receipt projection."""
     _ = (case, cx)
-    value = json.loads(output)
+    value = live_lm_output_from_text(output, context="live OpenAI reward output")
     return 1.0 if valid_live_lm_output(value) else 0.0
 
 

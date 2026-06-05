@@ -104,11 +104,13 @@ async def amain() -> None:
         ),
     ).run()
 
-    assert result.summary.iterations == 1
+    assert result.summary.candidates_evaluated == 1
     assert result.best.summary_score == 1.0
+    assert result.proposal_receipts
     print("run id:          ", result.run_id)
     print("best score:      ", f"{result.best.summary_score:.3f}")
-    print("iterations:      ", result.summary.iterations)
+    print("graph events:    ", result.summary.iterations)
+    print("proposal receipt:", result.proposal_receipts[0].receipt_id)
     print("cost status:     ", result.summary.cost_status)
 
 

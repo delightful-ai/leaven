@@ -6,14 +6,19 @@ from leaven.evidence import EvidenceEnvelope, EvidencePublic
 from leaven.score import Score
 
 from live_openai_lm.config import EXPECTED_TEXT
-from live_openai_lm.output import LiveLmOutput, LiveLmUsage, live_lm_output_from_assessment
+from live_openai_lm.output import (
+    LiveLmOutput,
+    LiveLmUsage,
+    live_lm_output_from_assessment,
+    live_lm_output_from_text,
+)
 
 
 def test_live_lm_output_from_assessment_reads_public_runner_output() -> None:
     output = {
         "text": EXPECTED_TEXT,
         "receipt": "lmrec_completion",
-        "usage": {"total_tokens": 35},
+        "usage": {"prompt_tokens": 20, "completion_tokens": 15, "total_tokens": 35},
         "cost_usd": None,
         "model": "gpt-4.1-mini",
     }
@@ -44,7 +49,28 @@ def test_live_lm_output_from_assessment_reads_public_runner_output() -> None:
     assert live_lm_output_from_assessment(assessment) == LiveLmOutput(
         text=EXPECTED_TEXT,
         receipt="lmrec_completion",
-        usage=LiveLmUsage(total_tokens=35),
+        usage=LiveLmUsage(prompt_tokens=20, completion_tokens=15, total_tokens=35),
+        cost_usd=None,
+        model="gpt-4.1-mini",
+    )
+
+
+def test_live_lm_output_from_text_parses_reward_boundary() -> None:
+    output = json.dumps(
+        {
+            "text": EXPECTED_TEXT,
+            "receipt": "lmrec_completion",
+            "usage": {"prompt_tokens": 20, "completion_tokens": 15, "total_tokens": 35},
+            "cost_usd": None,
+            "model": "gpt-4.1-mini",
+        },
+        sort_keys=True,
+    )
+
+    assert live_lm_output_from_text(output, context="test output") == LiveLmOutput(
+        text=EXPECTED_TEXT,
+        receipt="lmrec_completion",
+        usage=LiveLmUsage(prompt_tokens=20, completion_tokens=15, total_tokens=35),
         cost_usd=None,
         model="gpt-4.1-mini",
     )
