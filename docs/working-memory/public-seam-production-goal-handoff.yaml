@@ -1843,6 +1843,47 @@ acceptance:
           method-result decode routing for every retained locked method. The
           row remains pending because remaining Plan/body/result leaf records
           still need typed owners.
+      - kind: case_read_values_have_rust_and_python_wire_owners
+        paths:
+          - crates/leaven-public-seam/src/plan_execution/queries/case.rs
+          - crates/leaven-public-seam/src/plan_execution/evaluate.rs
+          - crates/leaven-seam-service/src/service.rs
+          - sdk/python/codegen/case_result_codegen.py
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/codegen/result_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/case_results.py
+          - sdk/python/src/leaven/_seam/_wire/refs.py
+          - sdk/python/src/leaven/_seam/_wire/results.py
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/tests/_seam/_wire/test_case_results.py
+          - sdk/python/tests/_seam/_wire/test_refs.py
+          - sdk/python/tests/_seam/_wire/test_results.py
+        commands:
+          - cargo test -p leaven-public-seam --test public_seam_contract evaluator_target_reads_execute_case_query_load_with_query_receipts
+          - cargo check -p leaven-seam-service
+          - cargo fmt --check
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_case_results.py tests/_seam/_wire/test_refs.py tests/_seam/_wire/test_results.py -q
+          - cd sdk/python && uv run ruff check codegen/case_result_codegen.py codegen/generate_seam_wire.py codegen/ref_codegen.py codegen/result_codegen.py src/leaven/_seam/_wire/case_results.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/results.py scripts/check_quality_contract.py tests/_seam/_wire/test_case_results.py tests/_seam/_wire/test_refs.py tests/_seam/_wire/test_results.py
+          - cd sdk/python && uv run ruff format --check codegen/case_result_codegen.py codegen/generate_seam_wire.py codegen/ref_codegen.py codegen/result_codegen.py src/leaven/_seam/_wire/case_results.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/results.py scripts/check_quality_contract.py tests/_seam/_wire/test_case_results.py tests/_seam/_wire/test_refs.py tests/_seam/_wire/test_results.py
+          - cd sdk/python && uv run ty check codegen/case_result_codegen.py codegen/generate_seam_wire.py codegen/ref_codegen.py codegen/result_codegen.py src/leaven/_seam/_wire/case_results.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/results.py scripts/check_quality_contract.py tests/_seam/_wire/test_case_results.py tests/_seam/_wire/test_refs.py tests/_seam/_wire/test_results.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+        note: >-
+          Case read material no longer flows through naked Rust
+          `serde_json::Value` fields in `PlanCaseQueryOutcome`; hosts must
+          return `PlanCaseInputValue`, `PlanCaseTargetValue`, or
+          `PlanCaseMetadataValue`, and plan execution consumes those owners
+          before serializing the locked case-record primary. Python generation
+          now gives case input, target, and metadata their own generated
+          `WireJsonCaseRead*` owners instead of reusing a generic object bag,
+          and `CaseRecordPrimary` moved into split generated
+          `_wire.case_results` so the result module stays under the 650 LOC
+          gate. The new tests prove non-object JSON case targets survive typed
+          msgspec decode, which the previous object-only typing rejected, and
+          the quality contract now locks mirrored tests for `_wire.refs`,
+          `_wire.case_results`, and `_wire.results`. This resolves the
+          case-read/result-metadata blocker for this row; remaining leaf JSON
+          owners still need the same treatment.
       - kind: generated_method_routing_reaches_retained_effect_methods
         paths:
           - sdk/python/src/leaven/_seam/effect_plans.py

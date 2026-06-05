@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use leaven_lm::{MessageContentPart, OutputMode, Role};
 use leaven_public_seam::{
     AgentCommandOutputRefs, CapabilityDocument, PlanAgentRunOutcome, PlanAgentRunRequest,
-    PlanCallKind, PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanCommitKind,
+    PlanCallKind, PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanCaseTargetValue, PlanCommitKind,
     PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanEvaluationShape, PlanExecutionContext,
     PlanExecutionHost, PlanExpressionKind, PlanGraphEventFilter, PlanGraphQueryOutcome,
     PlanGraphQueryRequest, PlanGraphReadScope, PlanLmCompleteOutcome, PlanLmCompleteRequest,
@@ -5302,7 +5302,9 @@ impl PlanExecutionHost for RecordingPlanHost {
         );
         self.case_reads.push("target:case_1".to_owned());
         Ok(PlanCaseQueryOutcome::new("case_1", "rev_planexec_base")
-            .with_target(json!({"answer": "expected"}))
+            .with_target(PlanCaseTargetValue::from_json(
+                json!({"answer": "expected"}),
+            ))
             .with_data_classes(["case.target".to_owned()]))
     }
 

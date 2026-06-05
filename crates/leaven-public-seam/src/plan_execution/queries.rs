@@ -8,7 +8,10 @@ mod case;
 mod graph;
 mod workspace_values;
 
-pub use case::{PlanCaseQueryOutcome, PlanCaseQueryRequest};
+pub use case::{
+    PlanCaseInputValue, PlanCaseMetadataValue, PlanCaseQueryOutcome, PlanCaseQueryRequest,
+    PlanCaseTargetValue,
+};
 pub use graph::{PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope};
 
 pub(super) use case::{

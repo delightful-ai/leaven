@@ -248,15 +248,15 @@ pub(super) fn execute_case_query_expr(
     });
     if let Some(input) = outcome.input {
         require_requested_case_field(&include, "input")?;
-        value["input"] = input;
+        value["input"] = input.into_json();
     }
     if let Some(target) = outcome.target {
         require_requested_case_field(&include, "target")?;
-        value["target"] = target;
+        value["target"] = target.into_json();
     }
     if let Some(metadata) = outcome.metadata {
         require_requested_case_field(&include, "metadata")?;
-        value["metadata"] = metadata;
+        value["metadata"] = metadata.into_json();
     }
     require_included_case_fields(&value, &include)?;
     let op_hash = prefixed_jcs_hash(

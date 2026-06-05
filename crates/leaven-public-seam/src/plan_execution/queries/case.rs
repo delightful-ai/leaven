@@ -6,6 +6,51 @@ use crate::PublicSeamError;
 
 use super::invalid_plan;
 
+/// Case input material returned by a public-seam case read.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanCaseInputValue(Value);
+
+impl PlanCaseInputValue {
+    /// Wraps JSON material that has already crossed the case-input authority boundary.
+    pub fn from_json(value: Value) -> Self {
+        Self(value)
+    }
+
+    pub(in crate::plan_execution) fn into_json(self) -> Value {
+        self.0
+    }
+}
+
+/// Case target material returned by a public-seam case read.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanCaseTargetValue(Value);
+
+impl PlanCaseTargetValue {
+    /// Wraps JSON material that has already crossed the case-target authority boundary.
+    pub fn from_json(value: Value) -> Self {
+        Self(value)
+    }
+
+    pub(in crate::plan_execution) fn into_json(self) -> Value {
+        self.0
+    }
+}
+
+/// Case metadata material returned by a public-seam case read.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanCaseMetadataValue(Value);
+
+impl PlanCaseMetadataValue {
+    /// Wraps JSON material that has already crossed the case-metadata authority boundary.
+    pub fn from_json(value: Value) -> Self {
+        Self(value)
+    }
+
+    pub(in crate::plan_execution) fn into_json(self) -> Value {
+        self.0
+    }
+}
+
 /// Lowered `case_query.load` request passed to a plan execution host.
 #[derive(Clone, Copy, Debug)]
 pub struct PlanCaseQueryRequest<'a> {
@@ -31,9 +76,9 @@ pub struct PlanCaseQueryOutcome {
     pub(in crate::plan_execution) case: String,
     pub(in crate::plan_execution) graph_revision: String,
     pub(in crate::plan_execution) data_classes: Vec<String>,
-    pub(in crate::plan_execution) input: Option<Value>,
-    pub(in crate::plan_execution) target: Option<Value>,
-    pub(in crate::plan_execution) metadata: Option<Value>,
+    pub(in crate::plan_execution) input: Option<PlanCaseInputValue>,
+    pub(in crate::plan_execution) target: Option<PlanCaseTargetValue>,
+    pub(in crate::plan_execution) metadata: Option<PlanCaseMetadataValue>,
 }
 
 impl PlanCaseQueryOutcome {
@@ -58,21 +103,21 @@ impl PlanCaseQueryOutcome {
 
     /// Adds case input to the loaded record.
     #[must_use]
-    pub fn with_input(mut self, input: Value) -> Self {
+    pub fn with_input(mut self, input: PlanCaseInputValue) -> Self {
         self.input = Some(input);
         self
     }
 
     /// Adds case target to the loaded record.
     #[must_use]
-    pub fn with_target(mut self, target: Value) -> Self {
+    pub fn with_target(mut self, target: PlanCaseTargetValue) -> Self {
         self.target = Some(target);
         self
     }
 
     /// Adds case metadata to the loaded record.
     #[must_use]
-    pub fn with_metadata(mut self, metadata: Value) -> Self {
+    pub fn with_metadata(mut self, metadata: PlanCaseMetadataValue) -> Self {
         self.metadata = Some(metadata);
         self
     }

@@ -35,9 +35,9 @@ from typing import Literal
 import msgspec
 from msgspec import UNSET, Struct, UnsetType
 
+from .case_results import CaseRecordPrimary
 from .payloads import (
     CallReceiptKind,
-    CaseRef,
     Cost,
     GraphRow,
     InfoRef,
@@ -47,7 +47,6 @@ from .payloads import (
     ReceiptRef,
     Replayability,
     TraceRef,
-    WireJsonObject,
     WriteReceiptKind,
 )
 from .payloads import (
@@ -126,17 +125,6 @@ class ExtensionResultBase(Struct, frozen=True, forbid_unknown_fields=True):
     capability_fingerprint: str
     policy_fingerprint: str
     data_classes: list[str]
-
-
-class CaseRecordPrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
-    kind: Literal["case_record"]
-    case: CaseRef
-    receipt: str
-    data_classes: list[str]
-    replayability: Replayability
-    input: WireJsonObject | UnsetType = UNSET
-    target: WireJsonObject | UnsetType = UNSET
-    metadata: WireJsonObject | UnsetType = UNSET
 
 
 class GraphSetPrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):

@@ -23,9 +23,10 @@ use leaven_kernel::{AgentSessionId, BudgetSnapshot, Cost, FingerprintBuilder, Me
 use leaven_public_seam::{
     AgentCommandOutputRefs, CapabilityDocument, LockedMethod, PlanAgentRunOutcome,
     PlanAgentRunRequest, PlanApplyProposalBatchOutcome, PlanApplyProposalBatchRequest,
-    PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest,
-    PlanExecutionContext, PlanExecutionHost, PlanGraphQueryOutcome, PlanGraphQueryRequest,
-    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome, PlanSandboxExecRequest,
+    PlanCaseInputValue, PlanCaseMetadataValue, PlanCaseQueryOutcome, PlanCaseQueryRequest,
+    PlanCaseTargetValue, PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext,
+    PlanExecutionHost, PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanLmCompleteOutcome,
+    PlanLmCompleteRequest, PlanSandboxExecOutcome, PlanSandboxExecRequest,
     PlanSubmitAssessmentsOutcome, PlanSubmitAssessmentsRequest, PlanSubmitProposalBatchOutcome,
     PlanSubmitProposalBatchRequest, PlanWorkspaceMaterializeOutcome,
     PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest,
@@ -526,7 +527,7 @@ impl PlanExecutionHost for ConfiguredPlanHost {
                 .ok_or_else(|| PublicSeamError::InvalidPlan {
                     message: format!("case `{case_id}` has no configured input"),
                 })?;
-            outcome = outcome.with_input(input.clone());
+            outcome = outcome.with_input(PlanCaseInputValue::from_json(input.clone()));
         }
         if includes("target") {
             let target = record
@@ -535,7 +536,7 @@ impl PlanExecutionHost for ConfiguredPlanHost {
                 .ok_or_else(|| PublicSeamError::InvalidPlan {
                     message: format!("case `{case_id}` has no configured target"),
                 })?;
-            outcome = outcome.with_target(target.clone());
+            outcome = outcome.with_target(PlanCaseTargetValue::from_json(target.clone()));
         }
         if includes("metadata") {
             let metadata =
@@ -545,7 +546,7 @@ impl PlanExecutionHost for ConfiguredPlanHost {
                     .ok_or_else(|| PublicSeamError::InvalidPlan {
                         message: format!("case `{case_id}` has no configured metadata"),
                     })?;
-            outcome = outcome.with_metadata(metadata.clone());
+            outcome = outcome.with_metadata(PlanCaseMetadataValue::from_json(metadata.clone()));
         }
         Ok(outcome)
     }

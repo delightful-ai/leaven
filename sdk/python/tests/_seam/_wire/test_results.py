@@ -242,6 +242,30 @@ def test_generated_case_result_accepts_locked_case_methods() -> None:
         assert decoded.method == method
 
 
+def test_generated_case_result_preserves_non_object_case_values() -> None:
+    """Regression: case read values are owned JSON fields, not object-only bags."""
+
+    payload = _extension_result(
+        "leaven/case.load",
+        {
+            "kind": "case_record",
+            "case": "case_1",
+            "receipt": "qrec_case",
+            "data_classes": ["case.input", "case.target", "case.metadata"],
+            "replayability": "fully_managed",
+            "input": ["question", {"text": "2+2?"}],
+            "target": "4",
+            "metadata": {"partition": ["validation", 1]},
+        },
+    )
+
+    decoded = msgspec.json.decode(json.dumps(payload).encode(), type=CaseLoadResult)
+
+    assert decoded.primary.input == ["question", {"text": "2+2?"}]
+    assert decoded.primary.target == "4"
+    assert decoded.primary.metadata == {"partition": ["validation", 1]}
+
+
 def test_generated_case_result_decodes_case_ref_object() -> None:
     """Example: case_record primary carries a schema-owned CaseRef."""
 
@@ -295,7 +319,11 @@ def test_generated_result_records_decode_remaining_locked_method_families() -> N
         ("leaven/workspace.git_log", WorkspaceGitLogResult, _workspace_diff_primary()),
         ("leaven/workspace.git_diff", WorkspaceGitDiffResult, _workspace_diff_primary()),
         ("leaven/workspace.git_status", WorkspaceGitStatusResult, _workspace_diff_primary()),
-        ("leaven/workspace.capture_artifacts", WorkspaceCaptureArtifactsResult, _workspace_listing_primary()),
+        (
+            "leaven/workspace.capture_artifacts",
+            WorkspaceCaptureArtifactsResult,
+            _workspace_listing_primary(),
+        ),
         ("leaven/workspace.release", WorkspaceReleaseResult, _released_workspace_handle_primary()),
         ("leaven/sandbox.exec", SandboxExecResult, _sandbox_exec_primary()),
         ("leaven/proposal.apply", ProposalApplyResult, _apply_receipt_primary()),
@@ -366,7 +394,9 @@ def _receipt_kind(method: str) -> str:
         "leaven/sandbox.exec",
     }:
         return "call"
-    if method.startswith(("leaven/proposal.", "leaven/assessment.", "leaven/evaluation.", "leaven/event.")):
+    if method.startswith(
+        ("leaven/proposal.", "leaven/assessment.", "leaven/evaluation.", "leaven/event.")
+    ):
         return "write"
     return "query"
 

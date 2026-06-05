@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 
 from call_codegen import render_calls
+from case_result_codegen import render_case_results
 from evidence_codegen import render_evidence
 from expression_codegen import render_expressions
 from method_codegen import MethodCodegenRow, render_methods
@@ -23,6 +24,7 @@ CALLS_OUTPUT = WIRE_DIR / "calls.py"
 EVIDENCE_OUTPUT = WIRE_DIR / "evidence.py"
 PAYLOADS_OUTPUT = WIRE_DIR / "payloads.py"
 REFS_OUTPUT = WIRE_DIR / "refs.py"
+CASE_RESULTS_OUTPUT = WIRE_DIR / "case_results.py"
 RESULTS_OUTPUT = WIRE_DIR / "results.py"
 METHOD_RESULTS_OUTPUT = WIRE_DIR / "method_results.py"
 WRITES_OUTPUT = WIRE_DIR / "writes.py"
@@ -62,6 +64,7 @@ def generated_files() -> dict[Path, str]:
     return {
         METHODS_OUTPUT: render_methods(method_rows(rows)),
         REFS_OUTPUT: render_refs(),
+        CASE_RESULTS_OUTPUT: render_case_results(),
         EVIDENCE_OUTPUT: render_evidence(),
         EXPRESSIONS_OUTPUT: render_expressions(),
         CALLS_OUTPUT: render_calls(),
@@ -134,7 +137,6 @@ def method_rows(rows: list[MethodRow]) -> list[MethodCodegenRow]:
         }
         for row in rows
     ]
-
 
 
 if __name__ == "__main__":

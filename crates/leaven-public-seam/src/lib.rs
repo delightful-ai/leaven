@@ -67,15 +67,16 @@ pub use plan::{
 pub use plan_error::{PlanErrorCode, PlanErrorDetails, PlanErrorDocument};
 pub use plan_execution::{
     AgentCommandOutputRefs, PlanAgentRunOutcome, PlanAgentRunRequest,
-    PlanApplyProposalBatchOutcome, PlanApplyProposalBatchRequest, PlanCaseQueryOutcome,
-    PlanCaseQueryRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext,
-    PlanExecutionHost, PlanExecutionReport, PlanGraphQueryOutcome, PlanGraphQueryRequest,
-    PlanGraphReadScope, PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome,
-    PlanSandboxExecRequest, PlanSubmitAssessmentsOutcome, PlanSubmitAssessmentsRequest,
-    PlanSubmitProposalBatchOutcome, PlanSubmitProposalBatchRequest,
-    PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome,
-    PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
-    WorkspaceDigestAlgorithm, WorkspaceGitAgainst, WorkspaceQueryOp,
+    PlanApplyProposalBatchOutcome, PlanApplyProposalBatchRequest, PlanCaseInputValue,
+    PlanCaseMetadataValue, PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanCaseTargetValue,
+    PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
+    PlanExecutionReport, PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope,
+    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome, PlanSandboxExecRequest,
+    PlanSubmitAssessmentsOutcome, PlanSubmitAssessmentsRequest, PlanSubmitProposalBatchOutcome,
+    PlanSubmitProposalBatchRequest, PlanWorkspaceMaterializeOutcome,
+    PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest,
+    PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest, WorkspaceDigestAlgorithm,
+    WorkspaceGitAgainst, WorkspaceQueryOp,
 };
 pub use proposal_authority::ProposalAuthorityReport;
 pub use result::{

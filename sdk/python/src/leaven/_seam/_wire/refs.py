@@ -13,14 +13,30 @@ type WireJsonLeafObject = dict[str, WireJsonScalar | WireJsonLeafArray]
 type WireJsonField = WireJsonScalar | WireJsonLeafArray | WireJsonLeafObject
 type WireJsonValue = WireJsonScalar | list[WireJsonValue] | dict[str, WireJsonValue]
 type WireJsonLiteralDepth0 = WireJsonScalar
-type WireJsonLiteralDepth1 = WireJsonScalar | list[WireJsonLiteralDepth0] | dict[str, WireJsonLiteralDepth0]
-type WireJsonLiteralDepth2 = WireJsonScalar | list[WireJsonLiteralDepth1] | dict[str, WireJsonLiteralDepth1]
-type WireJsonLiteralDepth3 = WireJsonScalar | list[WireJsonLiteralDepth2] | dict[str, WireJsonLiteralDepth2]
-type WireJsonLiteralDepth4 = WireJsonScalar | list[WireJsonLiteralDepth3] | dict[str, WireJsonLiteralDepth3]
-type WireJsonLiteralDepth5 = WireJsonScalar | list[WireJsonLiteralDepth4] | dict[str, WireJsonLiteralDepth4]
-type WireJsonLiteralDepth6 = WireJsonScalar | list[WireJsonLiteralDepth5] | dict[str, WireJsonLiteralDepth5]
-type WireJsonLiteralDepth7 = WireJsonScalar | list[WireJsonLiteralDepth6] | dict[str, WireJsonLiteralDepth6]
-type WireJsonLiteralDepth8 = WireJsonScalar | list[WireJsonLiteralDepth7] | dict[str, WireJsonLiteralDepth7]
+type WireJsonLiteralDepth1 = (
+    WireJsonScalar | list[WireJsonLiteralDepth0] | dict[str, WireJsonLiteralDepth0]
+)
+type WireJsonLiteralDepth2 = (
+    WireJsonScalar | list[WireJsonLiteralDepth1] | dict[str, WireJsonLiteralDepth1]
+)
+type WireJsonLiteralDepth3 = (
+    WireJsonScalar | list[WireJsonLiteralDepth2] | dict[str, WireJsonLiteralDepth2]
+)
+type WireJsonLiteralDepth4 = (
+    WireJsonScalar | list[WireJsonLiteralDepth3] | dict[str, WireJsonLiteralDepth3]
+)
+type WireJsonLiteralDepth5 = (
+    WireJsonScalar | list[WireJsonLiteralDepth4] | dict[str, WireJsonLiteralDepth4]
+)
+type WireJsonLiteralDepth6 = (
+    WireJsonScalar | list[WireJsonLiteralDepth5] | dict[str, WireJsonLiteralDepth5]
+)
+type WireJsonLiteralDepth7 = (
+    WireJsonScalar | list[WireJsonLiteralDepth6] | dict[str, WireJsonLiteralDepth6]
+)
+type WireJsonLiteralDepth8 = (
+    WireJsonScalar | list[WireJsonLiteralDepth7] | dict[str, WireJsonLiteralDepth7]
+)
 type WireJsonEventPayload = WireJsonLiteralDepth8
 type WireJsonExtensionPayload = WireJsonLiteralDepth8
 type WireJsonGraphEventPayload = WireJsonLiteralDepth8
@@ -34,6 +50,9 @@ type WireJsonAssessmentTarget = WireJsonLiteralDepth8
 type WireJsonArtifactSelector = WireJsonLiteralDepth8
 type WireJsonCandidateArtifact = WireJsonLiteralDepth8
 type WireJsonCandidateScores = WireJsonLiteralDepth8
+type WireJsonCaseReadInput = WireJsonLiteralDepth8
+type WireJsonCaseReadMetadata = WireJsonLiteralDepth8
+type WireJsonCaseReadTarget = WireJsonLiteralDepth8
 type WireJsonCaseInput = dict[str, WireJsonLiteralDepth7]
 type WireJsonCostScope = WireJsonLiteralDepth8
 type WireJsonProposalEffectSummary = WireJsonLiteralDepth8
@@ -143,7 +162,9 @@ class CaseRefRecord(Struct, frozen=True, forbid_unknown_fields=True, tag="case",
     run: str | UnsetType = UNSET
 
 
-class WorkspaceRefRecord(Struct, frozen=True, forbid_unknown_fields=True, tag="workspace", tag_field="kind"):
+class WorkspaceRefRecord(
+    Struct, frozen=True, forbid_unknown_fields=True, tag="workspace", tag_field="kind"
+):
     id: str
     run: str | UnsetType = UNSET
     snapshot_fingerprint: str | UnsetType = UNSET
@@ -181,5 +202,5 @@ type TraceRef = TraceRefRecord
 
 __all__ = (  # noqa: PLE0605, SIM905
     "AssessmentRef AssessmentRefRecord BlobRef CandidateRef CandidateRefRecord CaseRef CaseRefRecord EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestRef EvaluationRequestRefRecord ExternalInfoRefRecord InfoRef ProposalBatchRef ProposalBatchRefRecord ProposalRef ProposalRefRecord ReceiptRef ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility WorkspaceRef WorkspaceRefRecord "
-    "DataClassSet MetadataBag WireJsonArtifactSelector WireJsonAssessmentPreference WireJsonAssessmentRanking WireJsonAssessmentTarget WireJsonCandidateArtifact WireJsonCandidateScores WireJsonCaseInput WireJsonCostScope WireJsonEventPayload WireJsonExtensionPayload WireJsonField WireJsonGraphEventFilter WireJsonGraphEventPayload WireJsonGraphExtensionPayload WireJsonLeafArray WireJsonLeafObject WireJsonLiteralDepth0 WireJsonLiteralDepth1 WireJsonLiteralDepth2 WireJsonLiteralDepth3 WireJsonLiteralDepth4 WireJsonLiteralDepth5 WireJsonLiteralDepth6 WireJsonLiteralDepth7 WireJsonLiteralDepth8 WireJsonLiteralValue WireJsonObject WireJsonOutputValue WireJsonProposalEffectSummary WireJsonScalar WireJsonSchema WireJsonSchemaObject WireJsonSchemaTypeName WireJsonValue"
+    "DataClassSet MetadataBag WireJsonArtifactSelector WireJsonAssessmentPreference WireJsonAssessmentRanking WireJsonAssessmentTarget WireJsonCandidateArtifact WireJsonCandidateScores WireJsonCaseInput WireJsonCaseReadInput WireJsonCaseReadMetadata WireJsonCaseReadTarget WireJsonCostScope WireJsonEventPayload WireJsonExtensionPayload WireJsonField WireJsonGraphEventFilter WireJsonGraphEventPayload WireJsonGraphExtensionPayload WireJsonLeafArray WireJsonLeafObject WireJsonLiteralDepth0 WireJsonLiteralDepth1 WireJsonLiteralDepth2 WireJsonLiteralDepth3 WireJsonLiteralDepth4 WireJsonLiteralDepth5 WireJsonLiteralDepth6 WireJsonLiteralDepth7 WireJsonLiteralDepth8 WireJsonLiteralValue WireJsonObject WireJsonOutputValue WireJsonProposalEffectSummary WireJsonScalar WireJsonSchema WireJsonSchemaObject WireJsonSchemaTypeName WireJsonValue"
 ).split()
