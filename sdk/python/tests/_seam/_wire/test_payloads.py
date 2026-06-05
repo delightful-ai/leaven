@@ -27,6 +27,7 @@ from leaven._seam._wire.payloads import (
     LeavenValue,
     OperationReceipt,
     PlanDocument,
+    PlanErrorDetailsObject,
     PlanResultDocument,
     ProposeRequest,
     ReceiptRefRecord,
@@ -258,6 +259,87 @@ def test_plan_result_decodes_typed_values_and_receipts() -> None:
     assert value.event_id == "event_1"
     assert receipt.kind == "write"
     assert receipt.write_kind == "emit_run_event"
+
+
+def test_plan_result_decodes_closed_plan_error_details() -> None:
+    body = (
+        b'{"jsonrpc":"2.0","id":"req_1","result":{'
+        b'"schema_version":"leaven.plan_result.v1","plan_id":"plan_1",'
+        b'"capability_fingerprint":"fp_cap_sha256_test",'
+        b'"policy_fingerprint":"fp_policy_sha256_test",'
+        b'"base_revision":"rev_base","final_revision":"rev_final",'
+        b'"replayability_summary":"fully_managed","values":{},'
+        b'"receipts":[],"redactions":[],"charges":[],'
+        b'"errors":[{"code":"rate_limited","message":"wait",'
+        b'"receipt":{"kind":"receipt","id":"err_1"},"retryable":true,'
+        b'"details":{"summary":"slow down","reason":"provider_limit",'
+        b'"retry_after_ms":250}}]}}'
+    )
+
+    decoded = decode_response(body, PlanResultDocument)
+    details = decoded.errors[0].details
+
+    assert isinstance(details, PlanErrorDetailsObject)
+    assert details.summary == "slow down"
+    assert details.reason == "provider_limit"
+    assert details.retry_after_ms == 250
+
+
+def test_plan_result_accepts_plan_error_detail_summary_string() -> None:
+    body = (
+        b'{"jsonrpc":"2.0","id":"req_1","result":{'
+        b'"schema_version":"leaven.plan_result.v1","plan_id":"plan_1",'
+        b'"capability_fingerprint":"fp_cap_sha256_test",'
+        b'"policy_fingerprint":"fp_policy_sha256_test",'
+        b'"base_revision":"rev_base","final_revision":"rev_final",'
+        b'"replayability_summary":"fully_managed","values":{},'
+        b'"receipts":[],"redactions":[],"charges":[],'
+        b'"errors":[{"code":"provider_error","message":"provider failed",'
+        b'"receipt":{"kind":"receipt","id":"err_1"},'
+        b'"details":"provider returned unavailable"}]}}'
+    )
+
+    decoded = decode_response(body, PlanResultDocument)
+
+    assert decoded.errors[0].details == "provider returned unavailable"
+
+
+def test_plan_result_rejects_unknown_plan_error_code() -> None:
+    body = (
+        b'{"jsonrpc":"2.0","id":"req_1","result":{'
+        b'"schema_version":"leaven.plan_result.v1","plan_id":"plan_1",'
+        b'"capability_fingerprint":"fp_cap_sha256_test",'
+        b'"policy_fingerprint":"fp_policy_sha256_test",'
+        b'"base_revision":"rev_base","final_revision":"rev_final",'
+        b'"replayability_summary":"fully_managed","values":{},'
+        b'"receipts":[],"redactions":[],"charges":[],'
+        b'"errors":[{"code":"made_up","message":"bad",'
+        b'"receipt":{"kind":"receipt","id":"err_1"}}]}}'
+    )
+
+    with pytest.raises(JsonRpcProtocolError):
+        decode_response(body, PlanResultDocument)
+
+
+def test_plan_result_rejects_plan_error_detail_unknown_or_empty_object() -> None:
+    unknown = (
+        b'{"jsonrpc":"2.0","id":"req_1","result":{'
+        b'"schema_version":"leaven.plan_result.v1","plan_id":"plan_1",'
+        b'"capability_fingerprint":"fp_cap_sha256_test",'
+        b'"policy_fingerprint":"fp_policy_sha256_test",'
+        b'"base_revision":"rev_base","final_revision":"rev_final",'
+        b'"replayability_summary":"fully_managed","values":{},'
+        b'"receipts":[],"redactions":[],"charges":[],'
+        b'"errors":[{"code":"provider_error","message":"bad",'
+        b'"receipt":{"kind":"receipt","id":"err_1"},'
+        b'"details":{"extra":"no"}}]}}'
+    )
+    empty = unknown.replace(b'{"extra":"no"}', b"{}")
+
+    with pytest.raises(JsonRpcProtocolError):
+        decode_response(unknown, PlanResultDocument)
+    with pytest.raises(JsonRpcProtocolError):
+        decode_response(empty, PlanResultDocument)
 
 
 def test_plan_result_case_record_uses_case_ref_not_receipt_ref() -> None:

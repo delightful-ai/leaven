@@ -1547,6 +1547,31 @@ acceptance:
           `leaven/agent.run`. This closes the method-result pairing gap; the
           row remains pending for typed ownership of remaining JSON-shaped leaf
           slots.
+      - kind: generated_plan_error_code_and_details_typing
+        paths:
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/tests/_seam/_wire/test_payloads.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_payloads.py -q
+          - cd sdk/python && uv run ruff check codegen/payload_codegen.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_payloads.py
+          - cd sdk/python && uv run ty check codegen/payload_codegen.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_payloads.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Python generated Plan Result records now consume the Rust-owned
+          closed `PlanError` vocabulary instead of treating PlanError leaves as
+          arbitrary JSON. `PlanError.code` is a `Literal` union matching the
+          Rust `PlanErrorCode` wire spellings, and `PlanError.details` is a
+          typed union of summary string or `PlanErrorDetailsObject` with
+          `summary`, `reason`, and `retry_after_ms` fields. The msgspec Struct
+          post-init check rejects empty detail objects, while msgspec
+          `forbid_unknown_fields` rejects unknown detail keys. Focused tests
+          prove typed detail-object decode, summary-string decode, unknown code
+          rejection, unknown detail-field rejection, and empty detail-object
+          rejection. This removes the Python PlanError details blocker; other
+          JSON-shaped result, expression, metadata, and proposal leaf owners
+          remain.
       - kind: generated_graph_rows_are_typed_records
         paths:
           - sdk/python/codegen/generate_seam_wire.py

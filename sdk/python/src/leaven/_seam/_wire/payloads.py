@@ -316,14 +316,54 @@ class Redaction(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=T
     audit_reason: str | UnsetType = UNSET
 
 
+type PlanErrorCode = Literal[
+    "token_invalid",
+    "token_expired",
+    "token_revoked",
+    "capability_denied",
+    "budget_exceeded",
+    "quota_exceeded",
+    "hidden_partition_violation",
+    "data_class_violation",
+    "schema_validation_failed",
+    "stage_runtime_error",
+    "precondition_failed",
+    "revision_stale",
+    "rate_limited",
+    "cancelled",
+    "timeout",
+    "provider_policy_denied",
+    "provider_error",
+    "workspace_policy_denied",
+    "path_denied",
+    "sandbox_denied",
+    "watch_closed",
+    "internal_error",
+    "extension_error",
+]
+
+
+class PlanErrorDetailsObject(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    summary: str | UnsetType = UNSET
+    reason: str | UnsetType = UNSET
+    retry_after_ms: int | UnsetType = UNSET
+
+    def __post_init__(self) -> None:
+        if self.summary is UNSET and self.reason is UNSET and self.retry_after_ms is UNSET:
+            raise ValueError("PlanError.details object must carry a typed detail field")
+
+
+type PlanErrorDetails = str | PlanErrorDetailsObject
+
+
 class PlanError(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
-    code: str
+    code: PlanErrorCode
     message: str
     op: str | UnsetType = UNSET
     path: str | UnsetType = UNSET
     receipt: ReceiptRef | UnsetType = UNSET
     retryable: bool | UnsetType = UNSET
-    details: WireJsonField | UnsetType = UNSET
+    details: PlanErrorDetails | UnsetType = UNSET
 
 
 class StageCost(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
@@ -581,7 +621,7 @@ __all__ = (  # noqa: PLE0605, SIM905
     "ConsistencyLatestAtStart ConsistencySinceRevision Cost DataClassSet EvalMode EvalModeDryRun "
     "EvalModeExecute EvalModeReplay EvalModeRequireCached EventSummaryGraphRow ExtensionGraphRow FailureMode "
     "GraphRow GraphWrite InfoRef LeavenValue MetadataBag OperationReceipt OutputRecord PlanDocument PlanExpression Precondition "
-    "PlanError PlanOp PlanResultDocument ProposalBatchRef ProposalBatchRefRecord ProposalEffect ProposeRequest "
+    "PlanError PlanErrorCode PlanErrorDetails PlanErrorDetailsObject PlanOp PlanResultDocument ProposalBatchRef ProposalBatchRefRecord ProposalEffect ProposeRequest "
     "ProposalRef ProposalRefRecord ProposalSummaryGraphRow ReceiptRef Redaction ReflectionResult Replayability "
     "RunnerRequest Score "
     "StageEffectReceipt StageProposalReceipt StageRunKind StageRunPayload StageRunRequest StageRunResult "
