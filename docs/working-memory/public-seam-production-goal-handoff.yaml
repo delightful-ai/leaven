@@ -787,6 +787,29 @@ acceptance:
           proof to engine lifecycle proof, but the row remains pending until a
           product public SDK server/API route exposes this mount to
           external-language workers.
+      - kind: seam_run_successor_route_submit_apply_checkpoint
+        paths:
+          - crates/leaven-seam-run/AGENTS.md
+          - crates/leaven-seam-run/src/route.rs
+          - crates/leaven-seam-run/tests/run_bound_route.rs
+          - crates/leaven-seam-service/src/run_bound_service/mod.rs
+          - crates/leaven-seam-service/src/run_bound_service/params.rs
+          - crates/leaven-run/src/public_seam/proposal_write.rs
+        commands:
+          - cargo test -p leaven-seam-run
+        note: >-
+          The behavior-bearing `leaven-seam-run` successor route now mounts a
+          `RunBoundGraphEffectService` from inside an `Optimizer::step`, serves
+          schema-validated JSON-RPC lines through `RunBoundSdkRoute` and
+          `leaven-seam-stdio`, lowers `leaven/proposal.submit_batch` through a
+          host-owned typed proposal lowerer into `RunContext::record_proposal_batch`,
+          applies the returned `pb_<uuid>` through `RunContext::apply_batch`,
+          routes evaluation request, assessment submit, and event emit through
+          their typed RunContext methods, lets the engine checkpoint the run,
+          and restores the checkpoint to prove candidate/evaluation/assessment/event
+          graph truth. This is the successor public SDK route proof; it is not
+          the configured process-level `leaven seam serve --stdio` command and
+          does not yet prove AgentKit/Codex live execution.
       - kind: typed_run_bound_callback_params_foundation
         commits:
           - a43492a5

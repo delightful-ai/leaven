@@ -11,7 +11,7 @@ use leaven_engine::{
     CaseSet, Optimizer, OptimizerError, RunContext, RunEvent, StepStatus, StoreRunPersistence,
 };
 use leaven_kernel::{
-    Budget, CandidateId, ContentId, Cost, EvaluatorId, Fingerprint, MetadataBag, Metered, StageId,
+    Budget, CandidateId, ContentId, Cost, EvaluatorId, Fingerprint, MetadataBag, Metered,
 };
 use leaven_seam_run::RunBoundSdkRoute;
 use leaven_seam_service::{RunBoundEvaluationRequest, RunBoundGraphEffectService};
@@ -72,26 +72,32 @@ impl Optimizer<RouteProblem> for RouteMountedOptimizer {
         ctx: &mut RunContext<'_, RouteProblem>,
     ) -> Result<StepStatus, OptimizerError> {
         let seed = self.seed;
-        let batch = ctx
-            .record_proposal_batch(
-                StageId::custom("route-proposer"),
-                ProposalBatch {
-                    proposals: vec![Proposal::mutate(seed, 17).build()],
-                    semantics: ProposalBatchSemantics::Alternatives,
-                    metadata: MetadataBag::new(),
-                },
-                Cost::zero(),
-            )
-            .map_err(|source| OptimizerError::with_source("record proposal batch", source))?;
-        let batch_ref = format!("pb_{}", batch.batch_id.as_uuid());
         let service = RunBoundGraphEffectService::new(
             ctx,
-            [batch],
+            [],
             "fp_cap_sha256_route",
             "fp_policy_sha256_route",
             "rev_route_base",
             "rev_route_final",
         )
+        .with_proposal_submitter({
+            move |params| {
+                if params.plan_id() != "plan_route_submit" {
+                    return Err(format!(
+                        "unexpected proposal submit plan {}",
+                        params.plan_id()
+                    ));
+                }
+                if params.proposals_payload()[0]["effect"]["kind"] != "change_from_agent_session" {
+                    return Err("unexpected route proposal effect".to_owned());
+                }
+                Ok(ProposalBatch {
+                    proposals: vec![Proposal::mutate(seed, 17).build()],
+                    semantics: ProposalBatchSemantics::Alternatives,
+                    metadata: MetadataBag::new(),
+                })
+            }
+        })
         .with_evaluation_requester({
             move |_params| {
                 Ok(RunBoundEvaluationRequest {
@@ -128,6 +134,21 @@ impl Optimizer<RouteProblem> for RouteMountedOptimizer {
                 .any(|method| method == "leaven/proposal.apply")
         );
 
+        let submit = serve_jsonrpc_lines(
+            &route,
+            [jsonrpc_request(
+                "route-submit",
+                "leaven/proposal.submit_batch",
+                submit_request(),
+            )],
+        )?;
+        assert_success(&submit[0], "leaven/proposal.submit_batch")?;
+        let batch_ref = submit[0]["result"]["primary"]["batch_id"]
+            .as_str()
+            .ok_or_else(|| {
+                OptimizerError::Message("route submit response missing batch id".to_owned())
+            })?
+            .to_owned();
         let first = serve_jsonrpc_lines(
             &route,
             [
@@ -223,6 +244,42 @@ fn jsonrpc_request(id: &str, method: &str, params: Value) -> Value {
         "id": id,
         "method": method,
         "params": params,
+    })
+}
+
+fn submit_request() -> Value {
+    json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "plan_route_submit",
+        "consistency": {"kind": "latest_at_start"},
+        "mode": {"kind": "execute"},
+        "ops": [{
+            "kind": "write",
+            "name": "proposal_batch",
+            "idempotency_key": "route-submit-0001",
+            "write": {
+                "kind": "submit_proposal_batch",
+                "semantics": "sequence",
+                "proposals": [{
+                    "effect": {
+                        "kind": "change_from_agent_session",
+                        "target": "cand_route_parent",
+                        "agent_receipt": "agentrec_route",
+                        "parser": "leaven.agent_session.route_patch.v1",
+                        "surface_fingerprint": "fp_surface_sha256_route",
+                        "change_schema": "fp_schema_sha256_route_change"
+                    },
+                    "causal": {"inputs": ["cand_route_parent"]},
+                    "informed_by": {
+                        "kind": "literal",
+                        "value": ["qrec_route_parent", "agentrec_route"]
+                    },
+                    "read_receipts": ["qrec_route_parent", "agentrec_route"]
+                }]
+            }
+        }],
+        "return": ["proposal_batch"],
+        "commit": {"kind": "graph_writes_atomic", "on_stale": "reject"}
     })
 }
 
