@@ -50,20 +50,14 @@ def optimized_from_rust_readback(
             total_cost_usd=None,
             cost_status="unsupported_dependency",
             total_calls=readback.graph.event_count,
-            total_lm_tokens=None,
-            usage_status="unsupported_dependency",
+            total_lm_tokens=readback.cost.lm_tokens,
+            usage_status="known",
             unsupported=(
                 UnsupportedRunFact(
                     surface="run.cost",
                     dependency="Rust checkpoint inspection",
                     reason="provider_cost_not_reported",
                     detail="Rust run-open readback does not yet export cost totals.",
-                ),
-                UnsupportedRunFact(
-                    surface="run.usage",
-                    dependency="Rust checkpoint inspection",
-                    reason="provider_usage_not_reported",
-                    detail="Rust run-open readback does not yet export usage totals.",
                 ),
                 UnsupportedRunFact(
                     surface="run.inspection",

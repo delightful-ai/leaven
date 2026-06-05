@@ -91,6 +91,23 @@ class CandidateReadback(BaseModel):
     artifact: JsonValue
 
 
+class CostReadback(BaseModel):
+    """Cost and usage axes read from Rust checkpoint state."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    metric_calls: int
+    lm_calls: int
+    prompt_tokens: int
+    completion_tokens: int
+    seconds: float
+
+    @property
+    def lm_tokens(self) -> int:
+        """Total prompt plus completion tokens."""
+        return self.prompt_tokens + self.completion_tokens
+
+
 class RustRunReadback(BaseModel):
     """Rust-owned checkpoint and graph readback attached to run inspection."""
 
@@ -101,6 +118,7 @@ class RustRunReadback(BaseModel):
     latest_checkpoint: str
     checkpoint: CheckpointReadbackSummary
     graph: GraphReadbackSummary
+    cost: CostReadback
 
 
 class RustBlobReadback(BaseModel):
@@ -274,6 +292,7 @@ __all__ = [
     "BlobReadbackSummary",
     "CandidateReadback",
     "CheckpointReadbackSummary",
+    "CostReadback",
     "EvidenceReadbackRef",
     "EvidenceSummary",
     "GraphReadbackSummary",

@@ -1212,6 +1212,28 @@ acceptance:
           evidence, not row closure: Rust readback now owns candidates/lineage,
           but `lv.runs.open(...)` still marks cost, usage, and assessment rows
           unsupported until Rust exports those semantic facts.
+      - kind: rust_checkpoint_usage_axes_foundation
+        paths:
+          - crates/leaven-run/src/inspection.rs
+          - sdk/python/src/leaven/run_inspection.py
+          - sdk/python/src/leaven/_runs/rust_open.py
+          - sdk/python/tests/_runs/test_rust_export.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cargo test -p leaven-run inspection --lib
+          - cd sdk/python && uv run pytest tests/_runs/test_rust_export.py -q
+          - cd sdk/python && uv run ruff check src/leaven/run_inspection.py src/leaven/_runs/rust_open.py tests/_runs/test_rust_export.py
+          - cd sdk/python && uv run ty check src/leaven/run_inspection.py src/leaven/_runs/rust_open.py tests/_runs/test_rust_export.py
+          - cargo fmt --check
+        note: >-
+          Rust run inspection now exports checkpoint budget-ledger usage axes:
+          metric calls, LM calls, prompt tokens, completion tokens, and seconds.
+          Python decodes those fields as typed `CostReadback` and Rust-opened
+          `Optimized[object]` values now report `summary.total_lm_tokens` and
+          `usage_status="known"` from Rust checkpoint truth. USD cost remains
+          explicitly unsupported because the Rust ledger exports usage axes, not
+          provider price conversion, and assessment/evidence rows still need a
+          Rust-owned semantic export before the row can close.
     closeout_check: "Reading only `optimized.json` written by Python is a proxy."
 
   - id: python_wire_codegen_msgspec_boundary

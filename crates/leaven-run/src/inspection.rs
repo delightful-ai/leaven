@@ -4,7 +4,7 @@ use std::path::Path;
 
 use base64::{Engine as _, engine::general_purpose};
 use leaven_engine::RunCheckpoint;
-use leaven_kernel::{BlobRef, CheckpointId, EvidenceRef, RunId};
+use leaven_kernel::{BlobRef, CheckpointId, Cost, EvidenceRef, RunId};
 use leaven_store::{BlobStore, CheckpointStore};
 use leaven_store_file::FileStore;
 use serde::Serialize;
@@ -31,6 +31,8 @@ pub struct RustRunInspectionExport {
     pub checkpoint: CheckpointInspection,
     /// Resolved graph snapshot blob facts.
     pub graph: GraphInspection,
+    /// Total cost/usage axes from the Rust checkpoint budget ledger.
+    pub cost: CostReadback,
 }
 
 /// Checkpoint envelope facts needed by external-language inspection.
@@ -113,6 +115,39 @@ pub struct CandidateReadback {
     pub parent_id: Option<String>,
     /// Serialized problem artifact payload stored in the graph snapshot.
     pub artifact: Value,
+}
+
+/// Cost and usage axes read from the Rust checkpoint budget ledger.
+#[derive(Clone, Debug, Serialize)]
+pub struct CostReadback {
+    /// Number of metric calls charged to the run.
+    pub metric_calls: u64,
+    /// Number of LM calls charged to the run.
+    pub lm_calls: u64,
+    /// Prompt/input tokens charged to the run.
+    pub prompt_tokens: u64,
+    /// Completion/output tokens charged to the run.
+    pub completion_tokens: u64,
+    /// Seconds charged to the run.
+    pub seconds: f64,
+}
+
+impl CostReadback {
+    #[must_use]
+    pub fn from_cost(cost: &Cost) -> Self {
+        Self {
+            metric_calls: cost.metric_calls,
+            lm_calls: cost.llm_calls,
+            prompt_tokens: cost.prompt_tokens,
+            completion_tokens: cost.completion_tokens,
+            seconds: cost.seconds.as_f64(),
+        }
+    }
+
+    #[must_use]
+    pub const fn lm_tokens(&self) -> u64 {
+        self.prompt_tokens + self.completion_tokens
+    }
 }
 
 /// Rust-owned byte export for one blob in a local Leaven run directory.
@@ -241,6 +276,7 @@ pub fn export_local_run_inspection(
         latest_checkpoint,
         checkpoint: checkpoint_inspection,
         graph,
+        cost: CostReadback::from_cost(&checkpoint.budget_ledger.spent),
     })
 }
 
@@ -468,6 +504,10 @@ mod tests {
             store: "file".to_owned(),
             key: "workspace-journal.blob".to_owned(),
         };
+        let budget = BudgetSnapshot {
+            spent: Cost::llm_calls(2).combine(&Cost::tokens(7, 11)),
+            ..BudgetSnapshot::default()
+        };
         let mut checkpoint = RunCheckpoint::new(
             leaven_kernel::RunId::new(),
             now(),
@@ -476,7 +516,7 @@ mod tests {
                 format: StateFormat::Json,
                 bytes: graph_blob.clone(),
             },
-            BudgetSnapshot::default(),
+            budget,
         );
         checkpoint.artifact_refs.push(artifact_ref.clone());
         checkpoint.evidence_refs.push(evidence_ref.clone());
@@ -530,6 +570,10 @@ mod tests {
         assert_eq!(export.graph.evaluation_request_count, 1);
         assert_eq!(export.graph.assessment_count, 2);
         assert_eq!(export.graph.event_count, 3);
+        assert_eq!(export.cost.lm_calls, 2);
+        assert_eq!(export.cost.prompt_tokens, 7);
+        assert_eq!(export.cost.completion_tokens, 11);
+        assert_eq!(export.cost.lm_tokens(), 18);
 
         std::fs::remove_dir_all(run_dir).unwrap();
     }

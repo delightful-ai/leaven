@@ -60,6 +60,11 @@ def test_load_rust_run_readback_invokes_leaven_run_inspect(tmp_path: Path) -> No
         "    },\n"
         '    "bytes": 128,\n'
         '    "run_id": "run_graph",\n'
+        '    "best_candidate_id": "cand_child",\n'
+        '    "candidates": [\n'
+        '      {"id": "cand_seed", "parent_id": null, "artifact": {"template": "seed"}},\n'
+        '      {"id": "cand_child", "parent_id": "cand_seed", "artifact": {"template": "child"}}\n'
+        "    ],\n"
         '    "candidate_count": 2,\n'
         '    "proposal_batch_count": 1,\n'
         '    "proposal_count": 1,\n'
@@ -67,6 +72,13 @@ def test_load_rust_run_readback_invokes_leaven_run_inspect(tmp_path: Path) -> No
         '    "evaluation_request_count": 1,\n'
         '    "assessment_count": 2,\n'
         '    "event_count": 3\n'
+        "  },\n"
+        '  "cost": {\n'
+        '    "metric_calls": 0,\n'
+        '    "lm_calls": 2,\n'
+        '    "prompt_tokens": 7,\n'
+        '    "completion_tokens": 11,\n'
+        '    "seconds": 0.0\n'
         "  }\n"
         "}\n"
         "JSON\n",
@@ -179,10 +191,10 @@ def test_optimized_from_rust_readback_uses_graph_candidates() -> None:
     ]
     assert result.summary.run_dir == "/tmp/run"
     assert result.summary.cost_status == "unsupported_dependency"
-    assert result.summary.usage_status == "unsupported_dependency"
+    assert result.summary.total_lm_tokens == 18
+    assert result.summary.usage_status == "known"
     assert [fact.surface for fact in result.summary.unsupported] == [
         "run.cost",
-        "run.usage",
         "run.inspection",
     ]
 
@@ -268,6 +280,13 @@ def load_rust_run_readback_fixture() -> RustRunReadback:
                 "evaluation_request_count": 1,
                 "assessment_count": 2,
                 "event_count": 3,
+            },
+            "cost": {
+                "metric_calls": 0,
+                "lm_calls": 2,
+                "prompt_tokens": 7,
+                "completion_tokens": 11,
+                "seconds": 0.0,
             },
         }
     )
