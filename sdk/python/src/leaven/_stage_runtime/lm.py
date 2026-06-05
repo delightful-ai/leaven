@@ -1,10 +1,15 @@
 """Callback-backed LM builder for active Python stage contexts."""
 
 from collections.abc import Sequence
+from typing import overload
+
+from pydantic import BaseModel
 
 from .._receipts import CallReceipt
 from .._seam._wire import JsonObject
 from ..builders.lm import LmBuilder, LmMessage, LmResponse, _lm_response_from_result
+from ..json_value import JsonValue
+from ..output import JsonSchemaOutput, JsonSchemaValueOutput
 from .protocols import LmCompleteCallback
 
 
@@ -13,7 +18,7 @@ class CallbackLmBuilder(LmBuilder):
 
     The prompt path is wired: `complete(prompt=..., ...)` ships the prompt over
     the active stage seam and returns the host LM completion. Message lists,
-    model/role selection, tools, and structured output are later slices.
+    model/role selection, and tools are later slices.
     """
 
     def __init__(
@@ -28,7 +33,8 @@ class CallbackLmBuilder(LmBuilder):
         self._default_model = default_model
         self._seq = 0
 
-    async def complete(  # type: ignore[override]
+    @overload
+    async def complete[ParsedOutputT: BaseModel](
         self,
         *,
         prompt: str | None = None,
@@ -38,12 +44,45 @@ class CallbackLmBuilder(LmBuilder):
         temperature: float | None = None,
         max_tokens: int | None = None,
         stop: Sequence[str] | None = None,
-        response_format: object | None = None,
+        response_format: JsonSchemaOutput[ParsedOutputT],
         tools: Sequence[JsonObject] | None = None,
         input_classes: Sequence[str] | None = None,
         forbidden_input_classes: Sequence[str] | None = None,
-    ) -> LmResponse:
-        _ = (messages, response_format, tools, forbidden_input_classes)
+    ) -> LmResponse[ParsedOutputT]: ...
+
+    @overload
+    async def complete(
+        self,
+        *,
+        prompt: str | None = None,
+        messages: Sequence[LmMessage] | Sequence[JsonObject] | None = None,
+        model: str | None = None,
+        model_role: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        stop: Sequence[str] | None = None,
+        response_format: JsonSchemaValueOutput | None = None,
+        tools: Sequence[JsonObject] | None = None,
+        input_classes: Sequence[str] | None = None,
+        forbidden_input_classes: Sequence[str] | None = None,
+    ) -> LmResponse[JsonValue]: ...
+
+    async def complete[ParsedOutputT: BaseModel](
+        self,
+        *,
+        prompt: str | None = None,
+        messages: Sequence[LmMessage] | Sequence[JsonObject] | None = None,
+        model: str | None = None,
+        model_role: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        stop: Sequence[str] | None = None,
+        response_format: JsonSchemaOutput[ParsedOutputT] | JsonSchemaValueOutput | None = None,
+        tools: Sequence[JsonObject] | None = None,
+        input_classes: Sequence[str] | None = None,
+        forbidden_input_classes: Sequence[str] | None = None,
+    ) -> LmResponse[ParsedOutputT] | LmResponse[JsonValue]:
+        _ = (messages, tools, forbidden_input_classes)
         if prompt is None:
             raise NotImplementedError("cx.lm.complete requires `prompt=` in this slice")
         request_id = f"{self._stage_call_id}::lm::{self._seq}"
@@ -59,10 +98,10 @@ class CallbackLmBuilder(LmBuilder):
             stop=stop,
             input_classes=input_classes,
         )
-        return _lm_response_from_result(result, model=selected_model)
+        return _lm_response_from_result(result, model=selected_model, output=response_format)
 
 
-def lm_response(text: str) -> LmResponse:
+def lm_response(text: str) -> LmResponse[JsonValue]:
     """Build the `LmResponse` returned by callback-backed `cx.lm.complete`.
 
     This slice carries completion text over the stage callback. Usage and cost
@@ -71,6 +110,7 @@ def lm_response(text: str) -> LmResponse:
     """
     return LmResponse(
         text=text,
+        parsed=None,
         finish_reason="stop",
         usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
         cost_usd=0.0,

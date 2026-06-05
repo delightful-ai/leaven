@@ -2518,6 +2518,28 @@ acceptance:
           pending because public backbone scaffold removal/audit and all
           remaining public API `Any` decisions are not completed by lint success
           alone.
+      - kind: stage_runtime_lm_and_quality_contract_repair
+        paths:
+          - sdk/python/src/leaven/_stage_runtime/lm.py
+          - sdk/python/tests/_stage_runtime/test_lm.py
+          - sdk/python/tests/_seam/_wire/test_payloads.py
+          - sdk/python/tests/_seam/_wire/test_stage_payloads.py
+          - sdk/python/tests/test_output.py
+          - sdk/python/scripts/check_quality_contract.py
+        commands:
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_stage_payloads.py tests/_stage_runtime/test_lm.py tests/test_output.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_stage_runtime/lm.py tests/_stage_runtime/test_lm.py tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_stage_payloads.py tests/test_output.py scripts/check_quality_contract.py
+          - cd sdk/python && uv run ty check src/leaven/_stage_runtime/lm.py tests/_stage_runtime/test_lm.py tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_stage_payloads.py tests/test_output.py scripts/check_quality_contract.py
+          - cd sdk/python && just check
+        note: >-
+          The stage-runtime `cx.lm.complete` path now preserves the declared
+          JSON-schema response contract into the shared typed result projector,
+          with a mirrored `_stage_runtime/lm.py` test proving model-backed parsed
+          output. The custom quality contract recognizes explicit output-contract
+          owner types without permitting arbitrary output probing, the oversized
+          generated payload test was split into plan/result and stage-payload
+          files under the 650-line cap, and `just check` passes after the repair.
       - kind: private_seam_json_builder_branding
         commits:
           - 414f7d0d
@@ -3282,6 +3304,27 @@ acceptance:
           mechanics path. This is not row closure because live OpenAI/Codex
           examples and the future Codex evolution example still need live proof
           when their prerequisite rows are ready.
+      - kind: repaired_no_spend_examples_tour
+        paths:
+          - sdk/python/src/leaven/_stage_runtime/lm.py
+          - sdk/python/tests/_stage_runtime/test_lm.py
+          - sdk/python/examples/03_prompt_optimize.py
+          - sdk/python/examples/README.md
+          - sdk/python/examples/run_all.py
+        commands:
+          - cd sdk/python && just example 03
+          - cd sdk/python && just examples
+          - cd sdk/python && just compile-examples
+          - cd sdk/python && just check
+        note: >-
+          A live quality-gate rerun found example 03 broken because
+          callback-backed `cx.lm.complete` dropped the typed response-format
+          owner before result projection. The callback LM builder now preserves
+          that contract, `just example 03` runs the durable seam mechanics path,
+          `just examples` completes all 13 examples with scaffold/live skips
+          matching the README table, compile-examples passes, and SDK `just
+          check` passes. This remains no-spend example evidence; live-gated
+          Codex/OpenAI examples still need their own opt-in proof.
     closeout_check: A typechecked tour is not a runnable product example.
 
   - id: release_gate_for_public_contract

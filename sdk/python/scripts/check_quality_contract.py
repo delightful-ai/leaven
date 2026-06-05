@@ -342,7 +342,7 @@ class DefensiveTypeErasureVisitor(ast.NodeVisitor):
 
     def _is_output_contract_annotation(self, annotation: ast.AST) -> bool:
         match annotation:
-            case ast.Name(id="OutputContract"):
+            case ast.Name(id="OutputContract" | "JsonSchemaOutput" | "JsonSchemaValueOutput"):
                 return True
             case ast.Subscript(value=value):
                 return self._is_output_contract_annotation(value)

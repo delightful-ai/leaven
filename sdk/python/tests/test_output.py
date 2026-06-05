@@ -11,12 +11,12 @@ class StructuredAnswer(BaseModel):
 
 
 def test_json_schema_output_from_pydantic_model() -> None:
-    output = lv.output.json_schema(StructuredAnswer)
+    contract = lv.output.json_schema(StructuredAnswer)
 
-    assert output.kind == "json_schema"
-    assert output.parse_to is StructuredAnswer
-    assert output.schema_["type"] == "object"
-    properties = output.schema_["properties"]
+    assert contract.kind == "json_schema"
+    assert contract.parse_to is StructuredAnswer
+    assert contract.schema_["type"] == "object"
+    properties = contract.schema_["properties"]
     assert isinstance(properties, dict)
     answer = properties["answer"]
     assert isinstance(answer, dict)
@@ -26,11 +26,11 @@ def test_json_schema_output_from_pydantic_model() -> None:
 def test_json_schema_output_from_raw_schema() -> None:
     schema: JsonObject = {"type": "object", "properties": {"answer": {"type": "string"}}}
 
-    output = lv.output.json_schema(schema)
+    contract = lv.output.json_schema(schema)
 
-    assert isinstance(output, lv.output.JsonSchemaValueOutput)
-    assert output.parse_to is None
-    assert output.schema_ == schema
+    assert isinstance(contract, lv.output.JsonSchemaValueOutput)
+    assert contract.parse_to is None
+    assert contract.schema_ == schema
 
 
 def test_json_schema_output_rejects_non_json_schema_values() -> None:
