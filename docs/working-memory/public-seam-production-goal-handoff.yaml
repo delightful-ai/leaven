@@ -2342,6 +2342,30 @@ acceptance:
           concrete semantic owner is selected by `payload_schema_fingerprint`;
           this is a schema-selected delayed-decode slot, not arbitrary decoded
           Python object acceptance or row closure.
+      - kind: evidence_private_payload_has_schema_selected_decode_helper
+        paths:
+          - sdk/python/codegen/evidence_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/evidence.py
+          - sdk/python/tests/_seam/_wire/test_graph_writes.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire -q
+          - cd sdk/python && uv run ruff check codegen/evidence_codegen.py src/leaven/_seam/_wire/evidence.py tests/_seam/_wire/test_graph_writes.py
+          - cd sdk/python && uv run ty check codegen/evidence_codegen.py src/leaven/_seam/_wire/evidence.py tests/_seam/_wire/test_graph_writes.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Generated `EvidencePrivate.payload` remains msgspec `Raw` only as a
+          schema-selected delayed-decode buffer keyed by
+          `payload_schema_fingerprint`; callers no longer need to handle raw
+          bytes directly. The generated `decode_evidence_private_payload[T]`
+          helper requires a caller-owned msgspec payload type and fails loudly
+          when payload bytes are absent. Focused graph-write tests decode a
+          private evidence payload into a concrete `PrivateEvidencePayload`
+          Struct while the full private wire suite still rejects malformed
+          evidence envelopes. This narrows the private evidence Raw slot but
+          does not close JSON-RPC error data or other schema-declared arbitrary
+          JSON leaves.
       - kind: python_request_envelope_raw_dict_escape_removed
         paths:
           - sdk/python/src/leaven/_seam/client.py

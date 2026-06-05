@@ -2,8 +2,9 @@
 
 import msgspec
 import pytest
-from msgspec import UNSET
+from msgspec import UNSET, Struct
 
+from leaven._seam._wire.evidence import decode_evidence_private_payload
 from leaven._seam._wire.expressions import ValueExprLiteral, ValueExprVar
 from leaven._seam._wire.payloads import (
     PlanDocument,
@@ -21,6 +22,11 @@ from leaven._seam._wire.writes import (
     SubmitAssessmentsWrite,
     SubmitProposalBatchWrite,
 )
+
+
+class PrivateEvidencePayload(Struct, frozen=True, forbid_unknown_fields=True):
+    rationale: str
+    confidence: float
 
 
 def test_submit_proposal_batch_write_decodes_typed_effect_value_exprs() -> None:
@@ -135,6 +141,9 @@ def test_assessment_evidence_decodes_typed_envelope() -> None:
     assert evidence.private is not UNSET
     assert evidence.private.visibility == "evaluator_only"
     assert isinstance(evidence.private.payload_ref, BlobRef)
+    payload = decode_evidence_private_payload(evidence.private, PrivateEvidencePayload)
+    assert payload.rationale == "grader trace"
+    assert payload.confidence == 0.75
     assert evidence.source_receipts.effect == ["lmrec_1"]
 
 
@@ -310,6 +319,8 @@ def _private_payload_evidence_envelope() -> bytes:
         b'"target_derived":false,'
         b'"public":{"summary":"score evidence","data_classes":["public"]},'
         b'"private":{"visibility":"evaluator_only","data_classes":["private"],'
+        b'"payload":{"rationale":"grader trace","confidence":0.75},'
+        b'"payload_schema_fingerprint":"fp_schema_sha256_private_evidence",'
         b'"payload_ref":{"kind":"blob_ref","id":"blob_private","sha256":"def",'
         b'"bytes":5,"data_classes":["private"]}},'
         b'"redaction_policy":{"optimizer":"score_and_feedback",'
