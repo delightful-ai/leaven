@@ -14,7 +14,7 @@ EXPRESSION_EXPORTS = (
     "PreconditionGraphRevisionEquals PreconditionReceiptExists PreconditionSchemaValid Predicate PredicateAnd PredicateContains "
     "PredicateEq PredicateExists PredicateGt PredicateGte PredicateIn PredicateIsNull PredicateLt PredicateLte PredicateMatches "
     "PredicateNe PredicateNot PredicateOr Projection ProjectionArtifact ProjectionAssessment ProjectionCandidate ProjectionDiff "
-    "ProjectionExtension ProjectionIds ProjectionSummary SortKey ValidationErrorItem ValidationReceipt ValueExpr ValueExprExtension ValueExprExtract ValueExprLiteral ValueExprVar WireJsonLiteralValue WorkspaceQuery WorkspaceQueryCaptureArtifacts WorkspaceQueryDigest WorkspaceQueryGitDiff WorkspaceQueryGitLog WorkspaceQueryGitStatus WorkspaceQueryList WorkspaceQueryReadFile WorkspaceQuerySnapshot WorkspaceQueryStat"
+    "PlanLiteralValue ProjectionExtension ProjectionIds ProjectionSummary SortKey ValidationErrorItem ValidationReceipt ValueExpr ValueExprExtension ValueExprExtract ValueExprLiteral ValueExprVar WorkspaceQuery WorkspaceQueryCaptureArtifacts WorkspaceQueryDigest WorkspaceQueryGitDiff WorkspaceQueryGitLog WorkspaceQueryGitStatus WorkspaceQueryList WorkspaceQueryReadFile WorkspaceQuerySnapshot WorkspaceQueryStat"
 )
 
 def render_expressions() -> str:
@@ -36,10 +36,10 @@ from .refs import (
     EvaluationRequestRef,
     ExtensionPayload,
     GraphEventFilterPayload,
+    PlanLiteralValue,
     ProposalBatchRef,
     ProposalRef,
     ReceiptRef,
-    WireJsonLiteralValue,
     WorkspaceRef,
 )
 
@@ -58,47 +58,47 @@ class SortKey(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=Tru
 
 class PredicateEq(Struct, frozen=True, forbid_unknown_fields=True, tag="eq", tag_field="kind"):
     field: str
-    value: WireJsonLiteralValue
+    value: PlanLiteralValue
 
 
 class PredicateNe(Struct, frozen=True, forbid_unknown_fields=True, tag="ne", tag_field="kind"):
     field: str
-    value: WireJsonLiteralValue
+    value: PlanLiteralValue
 
 
 class PredicateGt(Struct, frozen=True, forbid_unknown_fields=True, tag="gt", tag_field="kind"):
     field: str
-    value: WireJsonLiteralValue
+    value: PlanLiteralValue
 
 
 class PredicateGte(Struct, frozen=True, forbid_unknown_fields=True, tag="gte", tag_field="kind"):
     field: str
-    value: WireJsonLiteralValue
+    value: PlanLiteralValue
 
 
 class PredicateLt(Struct, frozen=True, forbid_unknown_fields=True, tag="lt", tag_field="kind"):
     field: str
-    value: WireJsonLiteralValue
+    value: PlanLiteralValue
 
 
 class PredicateLte(Struct, frozen=True, forbid_unknown_fields=True, tag="lte", tag_field="kind"):
     field: str
-    value: WireJsonLiteralValue
+    value: PlanLiteralValue
 
 
 class PredicateContains(Struct, frozen=True, forbid_unknown_fields=True, tag="contains", tag_field="kind"):
     field: str
-    value: WireJsonLiteralValue
+    value: PlanLiteralValue
 
 
 class PredicateMatches(Struct, frozen=True, forbid_unknown_fields=True, tag="matches", tag_field="kind"):
     field: str
-    value: WireJsonLiteralValue
+    value: PlanLiteralValue
 
 
 class PredicateIn(Struct, frozen=True, forbid_unknown_fields=True, tag="in", tag_field="kind"):
     field: str
-    values: list[WireJsonLiteralValue]
+    values: list[PlanLiteralValue]
 
 
 class PredicateExists(Struct, frozen=True, forbid_unknown_fields=True, tag="exists", tag_field="kind"):
@@ -346,7 +346,7 @@ type GraphSource = (
 
 
 class PlanExpressionLiteral(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="literal", tag_field="kind"):
-    value: WireJsonLiteralValue
+    value: PlanLiteralValue
     data_classes: list[str] | UnsetType = UNSET
 
 
@@ -570,7 +570,7 @@ type PlanExpression = (
 
 
 class ValueExprLiteral(Struct, frozen=True, forbid_unknown_fields=True, tag="literal", tag_field="kind"):
-    value: WireJsonLiteralValue
+    value: PlanLiteralValue
 
 
 class ValueExprVar(Struct, frozen=True, forbid_unknown_fields=True, tag="var", tag_field="kind"):

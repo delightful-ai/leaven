@@ -3736,6 +3736,29 @@ acceptance:
           codegen, SDK source, tests, or examples. Literal value owners remain
           the next active `WireJson*` domain slot; JSON-RPC `Raw` remains the
           intentional delayed-decode envelope.
+      - kind: plan_literal_value_owner_branded
+        paths:
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/codegen/expression_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/refs.py
+          - sdk/python/src/leaven/_seam/_wire/expressions.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire -q
+          - cd sdk/python && uv run ruff check codegen/ref_codegen.py codegen/expression_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/expressions.py tests/_seam/_wire/test_expressions.py tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_graph_writes.py
+          - cd sdk/python && uv run ty check codegen/ref_codegen.py codegen/expression_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/expressions.py tests/_seam/_wire/test_expressions.py tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_graph_writes.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - rg -n "WireJsonLiteralValue" sdk/python/src sdk/python/tests sdk/python/examples sdk/python/codegen -g '*.py'
+        note: >-
+          Generated Plan predicates, `PlanExpressionLiteral`, and
+          `ValueExprLiteral` now use the branded `PlanLiteralValue` owner
+          instead of `WireJsonLiteralValue`. The full private seam-wire lane
+          passed after regeneration, and the old literal alias has no matches
+          in Python codegen, SDK source, tests, or examples. The remaining
+          `WireJson*` names are the shared recursive JSON/schema vocabulary and
+          the JSON-RPC `Raw` delayed-decode envelope; those need audit against
+          schema ownership but are no longer active method payload slot names.
       - kind: python_request_envelope_raw_dict_escape_removed
         paths:
           - sdk/python/src/leaven/_seam/client.py
