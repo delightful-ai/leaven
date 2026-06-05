@@ -7,7 +7,7 @@ from .._seam._wire.refs import CandidateRef, CandidateRefRecord, CaseRef, CaseRe
 from ..artifacts.prompt import PromptArtifact
 from ..case import InputCaseView
 from ..decorators import RegisteredStage
-from ..json_value import JsonObject, JsonValue
+from ..json_value import JsonObject
 from .context import JsonRpcCallbackClient, rollout_context
 
 
@@ -91,7 +91,7 @@ def _prompt_runner_case_input(payload: RunnerRequest) -> _PromptRunnerCaseInput:
         raise ValueError("runner case_input must carry prompt") from error
     if not isinstance(prompt, str):
         raise TypeError("runner case_input.prompt must be a string")
-    case_fields: dict[str, JsonValue] = {
+    case_fields: JsonObject = {
         key: value for key, value in case_input.items() if key != "prompt"
     }
     return _PromptRunnerCaseInput(prompt=prompt, case_fields=case_fields)

@@ -5371,7 +5371,9 @@ acceptance:
           `# noqa: LEAVENxxx -- justification` for any explicit exception.
           The command-runner stage worker no longer stringifies
           `case_input.prompt`; it requires that field to already be a string and
-          raises `TypeError` otherwise. The focused worker scenario still
+          raises `TypeError` otherwise. A follow-up cleanup also changed the
+          projected runner case fields from an anonymous `dict[str, JsonValue]`
+          local to the shared `JsonObject` alias. The focused worker scenario still
           passes, proving the normal checked-in runner path remains executable.
           This strengthens the SDK quality gate but does not close the row
           while broader package/example/API audits remain pending.
