@@ -6561,7 +6561,7 @@ acceptance:
       After the retained public-seam method families are executable, a live
       Codex-backed agentic reflection/proposal loop evolves an AgentKit skill or
       system prompt and the next Codex stage consumes the applied child artifact.
-    status: pending
+    status: proven
     depends_on:
       - no_validated_only_locked_v1_methods
       - workspace_lifecycle_executes
@@ -6986,6 +6986,30 @@ acceptance:
           and next-Codex consumption; the row remains pending only because the
           broader goal still has independent Python SDK, examples, and
           release-gate rows pending.
+      - kind: live_codex_evolution_row_closeout
+        paths:
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution_support.rs
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - set -a; source .env; set +a; LEAVEN_CODEX_LIVE=1 LEAVEN_CODEX_BIN="$HOME/.bun/bin/codex" cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution live_codex_agent_kit_evolves_through_stdio_checkpoint_and_next_codex_consumes_child -- --ignored --exact --nocapture
+          - cargo test -p leaven-agentic-git --test git_program_materializer
+          - cargo test -p leaven-agentic-agent-kit --test codex_profile
+          - cargo test -p leaven-gepa-agentic-agent-kit --test codex_agent_kit_reflection codex_agent_kit_git_child_applies_through_run_bound_stdio_before_next_projection -- --exact
+          - cargo test -p leaven-gepa-agentic-agent-kit --test agent_kit_seam_checkpoint agent_kit_git_child_applied_through_sdk_route_restores_from_checkpoint -- --exact
+          - cargo test -p leaven-workspace-firkin --test firkin_contract firkin_git_e2e::firkin_product_pod_materializes_and_reads_back_isolated_git_workspaces -- --exact
+          - cargo test -p leaven-agent-codex-cli --test codex_cli_runtime
+        note: >-
+          The row is now closed after its declared prerequisite backbone rows
+          were proven. The current live e2e uses real `gpt-5.4-mini` Codex
+          execution and proves separate reflection and proposal stages, live
+          filesystem mutation inside the AgentKit Git repo, typed
+          `GitProgramChange` readback, public-seam stdio submit/apply,
+          RunContext-owned child creation and lineage, Rust checkpoint
+          export/restore, child AgentKit materialization, and a later live Codex
+          stage that consumes the applied child system prompt and alpha skill.
+          Adjacent focused reruns prove the GitProgram, Codex Kit projection,
+          Firkin product-pod Git workspace, and Codex CLI adapter substrates.
       - kind: live_codex_typed_proposal_effect_path_rerun
         paths:
           - crates/leaven-seam-service/src/lib.rs
@@ -8063,7 +8087,7 @@ acceptance:
 
   - id: examples_match_product_truth
     claim: Examples are classified and verified according to what they actually prove.
-    status: pending
+    status: proven
     proof_required:
       kind: examples_audit_and_run_matrix
       must_exercise:
@@ -8332,6 +8356,46 @@ acceptance:
           classifications: example 03 ran the durable seam prompt mechanics
           path, 04/06/09 stopped only at the declared non-`PromptArtifact`
           boundary, and live examples 10-13 skipped behind environment gates.
+      - kind: examples_matrix_current_closeout
+        paths:
+          - sdk/python/examples/README.md
+          - sdk/python/examples/run_all.py
+          - sdk/python/examples/10_live_codex_seam.py
+          - sdk/python/examples/11_live_optimize_codex_stage.py
+          - sdk/python/examples/12_live_optimize_codex_proposer.py
+          - sdk/python/examples/13_live_optimize_openai_lm.py
+          - sdk/python/examples/live_openai_lm/
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution.rs
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && just examples
+          - cd sdk/python && just compile-examples
+          - cd sdk/python && just check
+          - cd sdk/python && uv run ruff check examples examples/live_openai_lm
+          - cd sdk/python && uv run ty check examples --extra-search-path examples/live_openai_lm/src
+          - cd sdk/python && set -a; source ../../.env; set +a; LEAVEN_LIVE_CODEX=1 uv run python examples/10_live_codex_seam.py
+          - cd sdk/python && set -a; source ../../.env; set +a; LEAVEN_LIVE_CODEX=1 uv run python examples/11_live_optimize_codex_stage.py
+          - cd sdk/python && set -a; source ../../.env; set +a; LEAVEN_LIVE_CODEX=1 uv run python examples/12_live_optimize_codex_proposer.py
+          - cd sdk/python && set -a; source ../../.env; set +a; LEAVEN_LIVE_OPENAI=1 uv run --project examples/live_openai_lm live-openai-lm
+          - cd sdk/python && set -a; source ../../.env; set +a; LEAVEN_LIVE_OPENAI=1 uv run python examples/13_live_optimize_openai_lm.py
+          - set -a; source .env; set +a; LEAVEN_CODEX_LIVE=1 LEAVEN_CODEX_BIN="$HOME/.bun/bin/codex" cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution live_codex_agent_kit_evolves_through_stdio_checkpoint_and_next_codex_consumes_child -- --ignored --exact --nocapture
+        note: >-
+          Current closeout uses the reliable matrix shape instead of one
+          long-running live tour. The no-spend tour ran all 12 current numbered
+          examples with explicit maturity classifications: 03 ran the durable
+          seam prompt mechanics path, 04/06/09 stopped at the named
+          non-`PromptArtifact` boundary, and live examples skipped without env
+          gates. Compile, SDK `just check`, examples Ruff, and examples ty all
+          passed. With `.env` loaded, live Codex example 10 returned
+          `agentrec_completion`; example 11 returned best score 1.000 and
+          `agentrec_completion`; example 12 returned best score 1.000, graph
+          events, and proposal receipt `wrec_proposal_batch`; the live OpenAI
+          package and wrapper example 13 both returned best score 1.000,
+          `lmrec_completion`, 35 LM tokens, and known cost status. The live
+          Codex evolution proof is intentionally not a misleading Python
+          numbered example; it is the behavior-bearing Rust AgentKit e2e that
+          has already passed and proves the applied child reaches a later live
+          Codex stage.
           The wider examples `ty` gate found real drift and forced repairs:
           evaluator/judge examples now construct typed `EvidencePublic`,
           `EvidencePrivate`, `EvidencePublicPayload`, and `lv.lm.LmMessage`
