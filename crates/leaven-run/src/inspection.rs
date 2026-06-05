@@ -646,117 +646,43 @@ mod tests {
 
     #[test]
     fn export_local_run_inspection_reads_latest_checkpoint_and_graph_blob() {
-        let run_dir = test_run_dir("graph-readback");
-        let store = FileStore::open(&run_dir).unwrap();
-        let graph_json = br#"{
-            "run_id":"run_export",
-            "candidates":[
-                {
-                    "id":"cand_seed",
-                    "identity":"seed",
-                    "artifact":{"template":"seed"},
-                    "origin":{"Seed":{"seed_index":0}},
-                    "created_at":"2026-06-04T00:00:00Z"
-                },
-                {
-                    "id":"cand_child",
-                    "identity":"child",
-                    "artifact":{"template":"child"},
-                    "origin":{"Proposal":{"proposal_id":"prop_child","apply_attempt_id":"apply_child"}},
-                    "created_at":"2026-06-04T00:00:01Z"
-                }
-            ],
-            "proposal_batches":[{"id":"pb_child","proposal_ids":["prop_child"]}],
-            "proposals":[{"id":"prop_child","effect":{"Change":{"target":"cand_seed","change":{}}}}],
-            "apply_attempts":[{}],
-            "evaluation_requests":[{}],
-            "assessments":[
-                {
-                    "id":"assessment_child",
-                    "request_id":"eval_req_child",
-                    "evaluator":"evaluator/exact",
-                    "target":{"Independent":{"candidate":"cand_child","target":"Unscoped"}},
-                    "evidence":{"store":"leaven-run","key":"0"},
-                    "metadata":{"split":"validation"},
-                    "created_at":"2026-06-04T00:00:02Z"
-                },
-                {}
-            ],
-            "events":[
-                {},
-                {"OptimizationEnded":{"run_id":"run_export","best":"cand_child","budget":{}}},
-                {}
-            ]
-        }"#;
-        let graph_blob = BlobStore::put(
-            &store,
-            BlobWrite {
-                bytes: Bytes::from_static(graph_json),
-                content_type: Some("application/json".to_owned()),
-            },
-        )
-        .unwrap();
-        let artifact_ref = BlobRef {
-            store: "file".to_owned(),
-            key: "artifact.blob".to_owned(),
-        };
-        let evidence_ref = EvidenceRef {
-            store: "evidence".to_owned(),
-            key: "evidence.json".to_owned(),
-        };
-        let stage_ref = BlobRef {
-            store: "file".to_owned(),
-            key: "stage-journal.blob".to_owned(),
-        };
-        let workspace_ref = BlobRef {
-            store: "file".to_owned(),
-            key: "workspace-journal.blob".to_owned(),
-        };
-        let budget = BudgetSnapshot {
-            spent: Cost::llm_calls(2).combine(&Cost::tokens(7, 11)),
-            ..BudgetSnapshot::default()
-        };
-        let mut checkpoint = RunCheckpoint::new(
-            leaven_kernel::RunId::new(),
-            now(),
-            GraphSnapshotRef {
-                schema: Fingerprint::from_bytes([7; 32]),
-                format: StateFormat::Json,
-                bytes: graph_blob.clone(),
-            },
-            budget,
-        );
-        checkpoint.artifact_refs.push(artifact_ref.clone());
-        checkpoint.evidence_refs.push(evidence_ref.clone());
-        checkpoint.stage_journal = StageJournalSnapshot {
-            entries: vec![stage_ref.clone()],
-        };
-        checkpoint.workspace_journal = WorkspaceJournalSnapshot {
-            entries: vec![workspace_ref.clone()],
-        };
-        let checkpoint_bytes = serde_json::to_vec(&checkpoint).unwrap();
-        let checkpoint_id =
-            CheckpointStore::put(&store, CheckpointBytes(Bytes::from(checkpoint_bytes))).unwrap();
-        CheckpointStore::mark_latest(&store, checkpoint_id).unwrap();
+        let fixture = write_inspection_checkpoint_fixture();
 
-        let export = export_local_run_inspection(&run_dir).unwrap();
+        let export = export_local_run_inspection(&fixture.run_dir).unwrap();
 
+        assert_inspection_export_matches_fixture(&export, &fixture);
+        std::fs::remove_dir_all(fixture.run_dir).unwrap();
+    }
+
+    fn assert_inspection_export_matches_fixture(
+        export: &RustRunInspectionExport,
+        fixture: &InspectionCheckpointFixture,
+    ) {
         assert_eq!(export.schema_version, RUN_INSPECTION_EXPORT_SCHEMA);
-        assert_eq!(export.latest_checkpoint, checkpoint_id);
-        assert_eq!(export.run_id, checkpoint.run_id);
-        assert_eq!(export.checkpoint.graph_snapshot.key, graph_blob.key);
-        assert_eq!(export.checkpoint.artifact_refs[0].key, artifact_ref.key);
+        assert_eq!(export.latest_checkpoint, fixture.checkpoint_id);
+        assert_eq!(export.run_id, fixture.run_id);
+        assert_eq!(export.checkpoint.graph_snapshot.key, fixture.graph_blob.key);
+        assert_eq!(
+            export.checkpoint.artifact_refs[0].key,
+            fixture.artifact_ref.key
+        );
         assert_eq!(export.checkpoint.artifact_ref_count, 1);
-        assert_eq!(export.checkpoint.evidence_refs[0].key, evidence_ref.key);
+        assert_eq!(
+            export.checkpoint.evidence_refs[0].key,
+            fixture.evidence_ref.key
+        );
         assert_eq!(export.checkpoint.evidence_ref_count, 1);
-        assert_eq!(export.checkpoint.stage_journal_refs[0].key, stage_ref.key);
+        assert_eq!(
+            export.checkpoint.stage_journal_refs[0].key,
+            fixture.stage_ref.key
+        );
         assert_eq!(export.checkpoint.stage_journal_ref_count, 1);
         assert_eq!(
             export.checkpoint.workspace_journal_refs[0].key,
-            workspace_ref.key
+            fixture.workspace_ref.key
         );
         assert_eq!(export.checkpoint.workspace_journal_ref_count, 1);
-        assert_eq!(export.graph.bytes, graph_json.len());
+        assert_eq!(export.graph.bytes, fixture.graph_json.len());
         assert_eq!(export.graph.run_id.as_deref(), Some("run_export"));
         assert_eq!(
             export.graph.best_candidate_id.as_deref(),
@@ -798,8 +724,6 @@ mod tests {
         assert_eq!(export.cost.prompt_tokens, 7);
         assert_eq!(export.cost.completion_tokens, 11);
         assert_eq!(export.cost.lm_tokens(), 18);
-
-        std::fs::remove_dir_all(run_dir).unwrap();
     }
 
     #[test]
@@ -894,6 +818,123 @@ mod tests {
             "leaven-run-inspection-{label}-{}",
             uuid::Uuid::new_v4()
         ))
+    }
+
+    struct InspectionCheckpointFixture {
+        run_dir: std::path::PathBuf,
+        checkpoint_id: CheckpointId,
+        run_id: leaven_kernel::RunId,
+        graph_blob: BlobRef,
+        artifact_ref: BlobRef,
+        evidence_ref: EvidenceRef,
+        stage_ref: BlobRef,
+        workspace_ref: BlobRef,
+        graph_json: &'static [u8],
+    }
+
+    fn write_inspection_checkpoint_fixture() -> InspectionCheckpointFixture {
+        let run_dir = test_run_dir("graph-readback");
+        let store = FileStore::open(&run_dir).unwrap();
+        let graph_json = br#"{
+            "run_id":"run_export",
+            "candidates":[
+                {
+                    "id":"cand_seed",
+                    "identity":"seed",
+                    "artifact":{"template":"seed"},
+                    "origin":{"Seed":{"seed_index":0}},
+                    "created_at":"2026-06-04T00:00:00Z"
+                },
+                {
+                    "id":"cand_child",
+                    "identity":"child",
+                    "artifact":{"template":"child"},
+                    "origin":{"Proposal":{"proposal_id":"prop_child","apply_attempt_id":"apply_child"}},
+                    "created_at":"2026-06-04T00:00:01Z"
+                }
+            ],
+            "proposal_batches":[{"id":"pb_child","proposal_ids":["prop_child"]}],
+            "proposals":[{"id":"prop_child","effect":{"Change":{"target":"cand_seed","change":{}}}}],
+            "apply_attempts":[{}],
+            "evaluation_requests":[{}],
+            "assessments":[
+                {
+                    "id":"assessment_child",
+                    "request_id":"eval_req_child",
+                    "evaluator":"evaluator/exact",
+                    "target":{"Independent":{"candidate":"cand_child","target":"Unscoped"}},
+                    "evidence":{"store":"leaven-run","key":"0"},
+                    "metadata":{"split":"validation"},
+                    "created_at":"2026-06-04T00:00:02Z"
+                },
+                {}
+            ],
+            "events":[
+                {},
+                {"OptimizationEnded":{"run_id":"run_export","best":"cand_child","budget":{}}},
+                {}
+            ]
+        }"#;
+        let graph_blob = BlobStore::put(
+            &store,
+            BlobWrite {
+                bytes: Bytes::from_static(graph_json),
+                content_type: Some("application/json".to_owned()),
+            },
+        )
+        .unwrap();
+        let artifact_ref = blob_ref("artifact.blob");
+        let evidence_ref = EvidenceRef {
+            store: "evidence".to_owned(),
+            key: "evidence.json".to_owned(),
+        };
+        let stage_ref = blob_ref("stage-journal.blob");
+        let workspace_ref = blob_ref("workspace-journal.blob");
+        let budget = BudgetSnapshot {
+            spent: Cost::llm_calls(2).combine(&Cost::tokens(7, 11)),
+            ..BudgetSnapshot::default()
+        };
+        let mut checkpoint = RunCheckpoint::new(
+            leaven_kernel::RunId::new(),
+            now(),
+            GraphSnapshotRef {
+                schema: Fingerprint::from_bytes([7; 32]),
+                format: StateFormat::Json,
+                bytes: graph_blob.clone(),
+            },
+            budget,
+        );
+        checkpoint.artifact_refs.push(artifact_ref.clone());
+        checkpoint.evidence_refs.push(evidence_ref.clone());
+        checkpoint.stage_journal = StageJournalSnapshot {
+            entries: vec![stage_ref.clone()],
+        };
+        checkpoint.workspace_journal = WorkspaceJournalSnapshot {
+            entries: vec![workspace_ref.clone()],
+        };
+        let run_id = checkpoint.run_id;
+        let checkpoint_bytes = serde_json::to_vec(&checkpoint).unwrap();
+        let checkpoint_id =
+            CheckpointStore::put(&store, CheckpointBytes(Bytes::from(checkpoint_bytes))).unwrap();
+        CheckpointStore::mark_latest(&store, checkpoint_id).unwrap();
+        InspectionCheckpointFixture {
+            run_dir,
+            checkpoint_id,
+            run_id,
+            graph_blob,
+            artifact_ref,
+            evidence_ref,
+            stage_ref,
+            workspace_ref,
+            graph_json,
+        }
+    }
+
+    fn blob_ref(key: &str) -> BlobRef {
+        BlobRef {
+            store: "file".to_owned(),
+            key: key.to_owned(),
+        }
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]

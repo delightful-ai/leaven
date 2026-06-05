@@ -83,7 +83,7 @@ fn run_bound_sdk_route_refuses_configured_service_alias_batches() {
         [jsonrpc_request(
             "route-reject-configured-alias",
             "leaven/proposal.apply",
-            apply_request("pb_configured_run_context"),
+            &apply_request("pb_configured_run_context"),
         )],
     )
     .unwrap();
@@ -108,6 +108,10 @@ struct RouteMountedOptimizer {
 }
 
 impl Optimizer<RouteProblem> for RouteMountedOptimizer {
+    #[allow(
+        clippy::too_many_lines,
+        reason = "single optimizer step proves the full run-bound route scenario"
+    )]
     async fn step(
         &mut self,
         ctx: &mut RunContext<'_, RouteProblem>,
@@ -180,7 +184,7 @@ impl Optimizer<RouteProblem> for RouteMountedOptimizer {
             [jsonrpc_request(
                 "route-submit",
                 "leaven/proposal.submit_batch",
-                submit_request(),
+                &submit_request(),
             )],
         )?;
         assert_success(&submit[0], "leaven/proposal.submit_batch")?;
@@ -196,12 +200,12 @@ impl Optimizer<RouteProblem> for RouteMountedOptimizer {
                 jsonrpc_request(
                     "route-apply",
                     "leaven/proposal.apply",
-                    apply_request(&batch_ref),
+                    &apply_request(&batch_ref),
                 ),
                 jsonrpc_request(
                     "route-evaluation",
                     "leaven/evaluation.request",
-                    evaluation_request(),
+                    &evaluation_request(),
                 ),
             ],
         )?;
@@ -219,9 +223,9 @@ impl Optimizer<RouteProblem> for RouteMountedOptimizer {
                 jsonrpc_request(
                     "route-assessment",
                     "leaven/assessment.submit",
-                    assessment_request(&evaluation_ref),
+                    &assessment_request(&evaluation_ref),
                 ),
-                jsonrpc_request("route-event", "leaven/event.emit", event_request()),
+                jsonrpc_request("route-event", "leaven/event.emit", &event_request()),
             ],
         )?;
         assert_success(&second[0], "leaven/assessment.submit")?;
@@ -271,15 +275,15 @@ fn serve_jsonrpc_lines<const N: usize>(
     route
         .serve_reader_writer(Cursor::new(format!("{input}\n")), &mut output)
         .map_err(|source| OptimizerError::with_source("serve run-bound SDK route", source))?;
-    Ok(String::from_utf8(output)
+    String::from_utf8(output)
         .map_err(|source| OptimizerError::with_source("decode route output", source))?
         .lines()
         .map(serde_json::from_str)
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|source| OptimizerError::with_source("parse route response", source))?)
+        .map_err(|source| OptimizerError::with_source("parse route response", source))
 }
 
-fn jsonrpc_request(id: &str, method: &str, params: Value) -> Value {
+fn jsonrpc_request(id: &str, method: &str, params: &Value) -> Value {
     json!({
         "jsonrpc": "2.0",
         "id": id,

@@ -47,7 +47,7 @@ pub struct JsonRpcResponse {
 
 impl JsonRpcResponse {
     /// Builds a JSON-RPC error response.
-    pub fn error(id: JsonRpcId, code: JsonRpcErrorCode, message: impl Into<String>) -> Self {
+    pub fn error(id: &JsonRpcId, code: JsonRpcErrorCode, message: impl Into<String>) -> Self {
         error_response(id, code, message)
     }
 
@@ -144,7 +144,7 @@ impl<S: SeamService> SeamRuntime<S> {
                 self.handle_stage_run_request(value, request)
             }
             Err(error) => error_response(
-                JsonRpcId::from_request_value(value),
+                &JsonRpcId::from_request_value(value),
                 error.code,
                 error.to_string(),
             ),
@@ -184,7 +184,7 @@ impl<S: SeamService> SeamRuntime<S> {
     ) -> JsonRpcResponse {
         let Some(params) = value.get("params") else {
             return error_response(
-                JsonRpcId::from_request_value(value),
+                &JsonRpcId::from_request_value(value),
                 JsonRpcErrorCode::InvalidRequest,
                 "request missing params",
             );
@@ -204,11 +204,11 @@ impl<S: SeamService> SeamRuntime<S> {
                 {
                     Ok(_) => JsonRpcResponse { value: response },
                     Err(error) => {
-                        error_response(id, JsonRpcErrorCode::InvalidResult, error.to_string())
+                        error_response(&id, JsonRpcErrorCode::InvalidResult, error.to_string())
                     }
                 }
             }
-            Err(error) => error_response(id, error.code(), error.to_string()),
+            Err(error) => error_response(&id, error.code(), error.to_string()),
         }
     }
 
@@ -219,7 +219,7 @@ impl<S: SeamService> SeamRuntime<S> {
     ) -> JsonRpcResponse {
         let Some(params) = value.get("params") else {
             return error_response(
-                JsonRpcId::from_request_value(value),
+                &JsonRpcId::from_request_value(value),
                 JsonRpcErrorCode::InvalidRequest,
                 "request missing params",
             );
@@ -239,11 +239,11 @@ impl<S: SeamService> SeamRuntime<S> {
                 {
                     Ok(_) => JsonRpcResponse { value: response },
                     Err(error) => {
-                        error_response(id, JsonRpcErrorCode::InvalidResult, error.to_string())
+                        error_response(&id, JsonRpcErrorCode::InvalidResult, error.to_string())
                     }
                 }
             }
-            Err(error) => error_response(id, error.code(), error.to_string()),
+            Err(error) => error_response(&id, error.code(), error.to_string()),
         }
     }
 }
@@ -416,7 +416,7 @@ impl RequestError {
 }
 
 fn error_response(
-    id: JsonRpcId,
+    id: &JsonRpcId,
     code: JsonRpcErrorCode,
     message: impl Into<String>,
 ) -> JsonRpcResponse {

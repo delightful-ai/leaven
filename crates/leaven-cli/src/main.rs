@@ -277,7 +277,7 @@ fn run_command(command: RunSubcommand) -> Result<String, CliError> {
         RunSubcommand::CheckpointSdkPrompt(args) => {
             let input = std::fs::File::open(args.input)?;
             let record = serde_json::from_reader(input)?;
-            let report = leaven_run::materialize_sdk_prompt_checkpoint(record, args.run_dir)?;
+            let report = leaven_run::materialize_sdk_prompt_checkpoint(&record, args.run_dir)?;
             serde_json::to_string_pretty(&report)
                 .map(|mut output| {
                     output.push('\n');

@@ -19,7 +19,7 @@ pub struct SeamWorkspaceGitConfig {
     pub post_commit_files: BTreeMap<String, String>,
 }
 
-pub(crate) fn initialize_workspace_git(
+pub fn initialize_workspace_git(
     view: &mut WorkspaceView<'_>,
     config: &SeamWorkspaceGitConfig,
 ) -> Result<(), PublicSeamError> {
@@ -51,7 +51,7 @@ pub(crate) fn initialize_workspace_git(
     Ok(())
 }
 
-pub(crate) fn execute_git_workspace_query(
+pub fn execute_git_workspace_query(
     request: &PlanWorkspaceQueryRequest<'_>,
     view: &mut WorkspaceView<'_>,
     graph_revision: String,

@@ -404,7 +404,7 @@ fn authorize_workspace_query_read(
     capability: &CapabilityDocument,
 ) -> Result<(), PublicSeamError> {
     let op_kind = request.op_kind();
-    let input_classes = workspace_query_authorized_input_classes(request)?;
+    let input_classes = workspace_query_authorized_input_classes(request);
     let mut grant = CapabilityGrantRequest::for_action("workspace.read")
         .with_resource("workspace_ids", json!(request.workspace()))
         .with_workspace_op(op_kind);
@@ -421,15 +421,15 @@ fn authorize_workspace_query_read(
 
 fn workspace_query_authorized_input_classes(
     request: &PlanWorkspaceQueryRequest<'_>,
-) -> Result<BTreeSet<String>, PublicSeamError> {
+) -> BTreeSet<String> {
     if request.op_kind() == "read_file" {
-        return Ok(request
+        return request
             .expected_data_classes()
             .into_iter()
             .map(str::to_owned)
-            .collect());
+            .collect();
     }
-    Ok(BTreeSet::from(["candidate.artifact".to_owned()]))
+    BTreeSet::from(["candidate.artifact".to_owned()])
 }
 
 fn authorize_case_query_load(

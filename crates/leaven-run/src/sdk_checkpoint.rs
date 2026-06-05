@@ -74,8 +74,8 @@ impl Artifact for SdkPromptArtifact {
         )))
     }
 
-    fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
-        match *change {}
+    fn apply_change(&self, _change: &Self::Change) -> Result<Self, Self::ApplyError> {
+        Err(SdkPromptChangeError)
     }
 }
 
@@ -184,7 +184,7 @@ pub struct SdkPromptCheckpointReport {
 
 /// Materialize one SDK prompt mechanics report into a Rust-owned run checkpoint.
 pub fn materialize_sdk_prompt_checkpoint(
-    record: SdkPromptRunRecord,
+    record: &SdkPromptRunRecord,
     run_dir: impl AsRef<Path>,
 ) -> Result<SdkPromptCheckpointReport, SdkPromptCheckpointError> {
     record.validate()?;
@@ -196,8 +196,7 @@ pub fn materialize_sdk_prompt_checkpoint(
         run_dir.join("evidence"),
     )
     .map_err(SdkPromptCheckpointError::Store)?;
-    let case_rows = record.case_rows();
-    let case_set = CaseSet::new(case_rows.clone());
+    let case_set = CaseSet::new(record.case_rows());
     let mut engine = Engine::<SdkPromptRunProblem>::builder()
         .run_id(RunId::from_uuid(run_uuid(&record.run_id)))
         .budget(Budget::unlimited())
@@ -583,7 +582,7 @@ pub enum SdkPromptCheckpointError {
         /// Assessment row id.
         assessment_case_id: String,
     },
-    /// RunContext rejected the materialization.
+    /// `RunContext` rejected the materialization.
     #[error(transparent)]
     RunContext(#[from] leaven_engine::RunContextError),
     /// Engine optimizer lifecycle rejected the materialization.

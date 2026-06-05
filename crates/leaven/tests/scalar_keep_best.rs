@@ -291,6 +291,7 @@ impl EventKind {
             RunEvent::OptimizationEnded { .. } => Self::OptimizationEnded,
             RunEvent::OptimizationStopping { .. }
             | RunEvent::StageAttemptRecorded { .. }
+            | RunEvent::ExternalEventEmitted { .. }
             | RunEvent::ApplyFailed { .. }
             | RunEvent::Error { .. } => return None,
         })

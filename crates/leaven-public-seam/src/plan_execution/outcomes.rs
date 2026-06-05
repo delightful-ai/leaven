@@ -529,7 +529,9 @@ fn execute_submit_proposal_batch_write<H: PlanExecutionHost>(
         "proposal_batch_id": value["batch_id"],
         "proposal_ids": value["proposal_ids"]
     }));
-    state.final_revision = outcome.committed_revision().to_owned();
+    outcome
+        .committed_revision()
+        .clone_into(&mut state.final_revision);
     state.values.insert(name.clone(), value.clone());
     state.bindings.insert(name, value);
     Ok(())
@@ -594,7 +596,9 @@ fn execute_apply_proposal_batch_write<H: PlanExecutionHost>(
         "status": "succeeded",
         "created_candidates": value["created_candidates"]
     }));
-    state.final_revision = outcome.committed_revision().to_owned();
+    outcome
+        .committed_revision()
+        .clone_into(&mut state.final_revision);
     state.values.insert(name.clone(), value.clone());
     state.bindings.insert(name, value);
     Ok(())
@@ -664,7 +668,9 @@ fn execute_submit_assessments_write<H: PlanExecutionHost>(
         "evaluation_request_id": value["evaluation_request_id"],
         "assessment_ids": value["assessment_ids"]
     }));
-    state.final_revision = outcome.committed_revision().to_owned();
+    outcome
+        .committed_revision()
+        .clone_into(&mut state.final_revision);
     state.values.insert(name.clone(), value.clone());
     state.bindings.insert(name, value);
     Ok(())

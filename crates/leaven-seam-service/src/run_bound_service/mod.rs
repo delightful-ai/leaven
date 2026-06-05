@@ -153,12 +153,12 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
             }
             LockedMethod::ProposalApply => self.proposal_apply(proposal_apply_params(params)?),
             LockedMethod::EvaluationRequest => {
-                self.evaluation_request(evaluation_request_params(params)?)
+                self.evaluation_request(&evaluation_request_params(params)?)
             }
             LockedMethod::AssessmentSubmit => {
                 self.assessment_submit(assessment_submit_params(params)?)
             }
-            LockedMethod::EventEmit => self.event_emit(event_emit_params(params)?),
+            LockedMethod::EventEmit => self.event_emit(&event_emit_params(params)?),
             other => Err(RunBoundGraphEffectError::UnsupportedMethod {
                 method: other.as_str().to_owned(),
             }),
@@ -178,7 +178,7 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
             submitter(&params).map_err(RunBoundGraphEffectError::ProposalSubmit)?;
         let mut context = self.context.borrow_mut();
         let batch = context.record_proposal_batch(
-            StageId::custom(params.write.name.to_owned()),
+            StageId::custom(params.write.name.clone()),
             proposal_batch,
             Cost::zero(),
         )?;
@@ -226,16 +226,16 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
 
     fn evaluation_request(
         &self,
-        params: EvaluationRequestParams,
+        params: &EvaluationRequestParams,
     ) -> Result<Value, RunBoundGraphEffectError> {
         let requester = self
             .evaluation_requester
             .as_ref()
             .ok_or(RunBoundGraphEffectError::MissingEvaluationRequester)?;
-        let request = requester(&params).map_err(RunBoundGraphEffectError::EvaluationRequest)?;
+        let request = requester(params).map_err(RunBoundGraphEffectError::EvaluationRequest)?;
         let mut context = self.context.borrow_mut();
         let request_id = context.request_evaluation(
-            request.evaluator,
+            &request.evaluator,
             request.evaluator_fingerprint,
             request.request,
         )?;
@@ -281,19 +281,19 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
         assessment_submit_extension_result(&plan_result)
     }
 
-    fn event_emit(&self, params: EventEmitParams) -> Result<Value, RunBoundGraphEffectError> {
+    fn event_emit(&self, params: &EventEmitParams) -> Result<Value, RunBoundGraphEffectError> {
         let event = &params.write;
         let event_id = format!("event_{}", event.name);
         self.context
             .borrow_mut()
             .emit(RunEvent::ExternalEventEmitted {
                 event_id: event_id.clone(),
-                event_kind: event.event_kind.to_owned(),
-                payload_schema: event.payload_schema.to_owned(),
+                event_kind: event.event_kind.clone(),
+                payload_schema: event.payload_schema.clone(),
                 payload: event.payload.clone(),
-                visibility: event.visibility.to_owned(),
+                visibility: event.visibility.clone(),
             });
-        event_emit_extension_result(EventEmitExtensionContext {
+        event_emit_extension_result(&EventEmitExtensionContext {
             plan_id: &params.plan_id,
             name: &event.name,
             event_kind: &event.event_kind,

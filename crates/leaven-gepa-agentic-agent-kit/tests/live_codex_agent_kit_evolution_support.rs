@@ -26,7 +26,10 @@ use leaven_workspace::{WorkspaceFactory, WorkspacePath};
 use leaven_workspace_local::LocalWorkspaceFactory;
 use serde_json::{Value, json};
 
-use crate::live_codex_agent_kit_fixture::{
+#[path = "live_codex_agent_kit_fixture.rs"]
+mod live_codex_agent_kit_fixture;
+
+use self::live_codex_agent_kit_fixture::{
     LiveAgentKitCase, LiveAgentKitEvidence, LiveAgentKitProblem, LiveAgentKitRepoFixture,
 };
 
@@ -158,7 +161,7 @@ impl Optimizer<LiveAgentKitProblem> for LiveAgentKitOptimizer {
             [jsonrpc_request(
                 "live-agent-kit-submit",
                 "leaven/proposal.submit_batch",
-                live_submit_request(),
+                &live_submit_request(),
             )],
         )?;
         assert_success(&submit[0], "leaven/proposal.submit_batch")?;
@@ -173,7 +176,7 @@ impl Optimizer<LiveAgentKitProblem> for LiveAgentKitOptimizer {
             [jsonrpc_request(
                 "live-agent-kit-apply",
                 "leaven/proposal.apply",
-                live_apply_request(&batch_ref),
+                &live_apply_request(&batch_ref),
             )],
         )?;
         assert_success(&apply[0], "leaven/proposal.apply")?;
@@ -219,7 +222,8 @@ async fn read_back_live_codex_agent_kit_change(
             .map_err(|source| {
                 OptimizerError::with_source("project live AgentKit into Codex ABI", source)
             })?;
-        run_live_codex_reflection_stage(&mut view, &projection.system_prompt, &root).await?;
+        run_live_codex_reflection_stage(&mut view, projection.system_prompt.as_ref(), &root)
+            .await?;
         let mut instructions = AgentInstructions::task(
             "Read agent/reflection.md, then edit only files under repos/agent. Treat \
              repos/agent as the Git repository and worktree; the outer workspace is \
@@ -280,7 +284,7 @@ async fn read_back_live_codex_agent_kit_change(
 
 async fn run_live_codex_reflection_stage(
     view: &mut leaven_workspace::WorkspaceView<'_>,
-    system_prompt: &Option<String>,
+    system_prompt: Option<&String>,
     root: &Path,
 ) -> Result<(), OptimizerError> {
     let mut instructions = AgentInstructions::task(
@@ -288,7 +292,7 @@ async fn run_live_codex_reflection_stage(
          Do not edit repos/agent. Create agent/reflection.md containing exactly:\n\
          REFLECTION_DIAGNOSIS: replace the parent prompt and alpha skill with child proof instructions.\n",
     );
-    instructions.system.clone_from(system_prompt);
+    instructions.system = system_prompt.cloned();
     let mut request = AgentRunRequest::new(instructions, OutputContract::FinalMessage);
     request.limits = live_limits();
     let session = CodexCliRuntime::new(codex_config())
@@ -499,17 +503,15 @@ fn serve_jsonrpc_lines<const N: usize>(
     route
         .serve_reader_writer(Cursor::new(format!("{input}\n")), &mut output)
         .map_err(|source| OptimizerError::with_source("serve live AgentKit route", source))?;
-    Ok(String::from_utf8(output)
+    String::from_utf8(output)
         .map_err(|source| OptimizerError::with_source("decode live AgentKit route output", source))?
         .lines()
         .map(serde_json::from_str)
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|source| {
-            OptimizerError::with_source("parse live AgentKit route response", source)
-        })?)
+        .map_err(|source| OptimizerError::with_source("parse live AgentKit route response", source))
 }
 
-fn jsonrpc_request(id: &str, method: &str, params: Value) -> Value {
+fn jsonrpc_request(id: &str, method: &str, params: &Value) -> Value {
     json!({
         "jsonrpc": "2.0",
         "id": id,

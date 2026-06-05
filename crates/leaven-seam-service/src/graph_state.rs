@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use crate::service::SeamGraphConfig;
 
 #[derive(Clone, Debug)]
-pub(crate) struct SeamGraphState {
+pub struct SeamGraphState {
     items: Vec<Value>,
     data_classes: Vec<String>,
     next_cursor: Option<String>,
@@ -62,7 +62,7 @@ impl SeamGraphState {
 
     pub(crate) fn submit_proposal_batch(
         &mut self,
-        request: PlanSubmitProposalBatchRequest<'_>,
+        request: &PlanSubmitProposalBatchRequest<'_>,
     ) -> Result<PlanSubmitProposalBatchOutcome, PublicSeamError> {
         let proposal_ids = (0..request.proposal_count()?)
             .map(|index| format!("prop_{}_{}", request.name(), index))
@@ -87,7 +87,7 @@ impl SeamGraphState {
 
     pub(crate) fn apply_proposal_batch(
         &mut self,
-        request: PlanApplyProposalBatchRequest<'_>,
+        request: &PlanApplyProposalBatchRequest<'_>,
     ) -> Result<PlanApplyProposalBatchOutcome, PublicSeamError> {
         let batch = request
             .write()
@@ -112,7 +112,7 @@ impl SeamGraphState {
 
     pub(crate) fn submit_assessments(
         &mut self,
-        request: PlanSubmitAssessmentsRequest<'_>,
+        request: &PlanSubmitAssessmentsRequest<'_>,
     ) -> Result<PlanSubmitAssessmentsOutcome, PublicSeamError> {
         let assessment_ids = (0..request.assessment_count()?)
             .map(|index| format!("assess_{}_{}", request.name(), index))

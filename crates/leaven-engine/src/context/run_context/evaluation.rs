@@ -383,7 +383,7 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
     /// reference.
     pub fn request_evaluation(
         &mut self,
-        evaluator: EvaluatorId,
+        evaluator: &EvaluatorId,
         evaluator_fingerprint: leaven_kernel::Fingerprint,
         request: EvaluationRequest,
     ) -> Result<EvaluationRequestId, RunContextError> {
@@ -406,7 +406,7 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
             purpose: super::support::request_purpose(&request),
         });
         Ok(self.record_evaluation_request(
-            &evaluator,
+            evaluator,
             evaluator_fingerprint,
             request,
             resolved_set,

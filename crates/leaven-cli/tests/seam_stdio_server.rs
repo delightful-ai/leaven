@@ -13,6 +13,10 @@ use serde_json::{Value, json};
 use tempfile::TempDir;
 
 #[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "single CLI scenario exercises the locked stdio method matrix"
+)]
 fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() {
     let temp = TempDir::new().unwrap();
     let config_path = temp.path().join("seam-service.json");
@@ -858,11 +862,11 @@ fn workspace_query_requests() -> Vec<Value> {
         ),
     ]
     .into_iter()
-    .map(|(method, name, op)| workspace_query_request(method, name, op))
+    .map(|(method, name, op)| workspace_query_request(method, name, &op))
     .collect()
 }
 
-fn workspace_query_request(method: &str, name: &str, op: Value) -> Value {
+fn workspace_query_request(method: &str, name: &str, op: &Value) -> Value {
     json!({
         "jsonrpc": "2.0",
         "id": format!("workspace-query-cli-{name}"),
@@ -1505,6 +1509,10 @@ fn sandbox_exec_request() -> Value {
     })
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "test fixture keeps the full capability document visible"
+)]
 fn seam_capability() -> Value {
     json!({
         "schema_version": "leaven.capability.v1",
@@ -1729,7 +1737,8 @@ fn stage_run_request() -> Value {
                 "candidate": "cand_cli_unwired",
                 "case": "case_cli_unwired",
                 "case_input": {"question": "2 + 2"},
-                "target_forbidden": true
+                "target_forbidden": true,
+                "capability_fingerprint": "fp_cap_sha256_leaven_seam_local"
             }
         }
     })

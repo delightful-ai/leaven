@@ -1,5 +1,4 @@
 mod live_codex_agent_kit_evolution_support;
-mod live_codex_agent_kit_fixture;
 
 #[test]
 #[ignore = "requires local Codex auth and LEAVEN_CODEX_LIVE=1; runs three live Codex stages"]

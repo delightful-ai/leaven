@@ -81,7 +81,7 @@ impl PlanErrorDocument {
     }
 }
 
-/// Closed public-seam PlanError codes.
+/// Closed public-seam `PlanError` codes.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum PlanErrorCode {
     TokenInvalid,
@@ -248,17 +248,14 @@ pub fn validate_closed_plan_error(error: &Map<String, Value>) -> Result<(), Stri
     Ok(())
 }
 
-pub(crate) fn closed_plan_error(error: &Value, field: &str) -> Result<PlanErrorDocument, String> {
+pub fn closed_plan_error(error: &Value, field: &str) -> Result<PlanErrorDocument, String> {
     let error = error
         .as_object()
         .ok_or_else(|| format!("{field} must be a PlanError object"))?;
     PlanErrorDocument::from_object(error)
 }
 
-pub(crate) fn closed_plan_errors(
-    errors: &[Value],
-    field: &str,
-) -> Result<Vec<PlanErrorDocument>, String> {
+pub fn closed_plan_errors(errors: &[Value], field: &str) -> Result<Vec<PlanErrorDocument>, String> {
     errors
         .iter()
         .map(|error| closed_plan_error(error, field))

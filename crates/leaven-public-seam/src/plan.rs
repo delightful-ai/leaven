@@ -109,7 +109,7 @@ impl PlanDocument {
                 PlanOperationDetail::Write { write } => {
                     assessment_score_outputs.merge(&write.submit_assessments);
                 }
-            };
+            }
             operation_kinds.push(operation_kind);
             operations.push(operation);
         }

@@ -43,12 +43,11 @@ fn opaque_token_resolves_to_structured_capability_document() {
     assert_eq!(resolved.max_agent_usd_micro(), Some(150_000));
     assert_eq!(resolved.max_concurrent_calls(), Some(4));
     assert_eq!(resolved.delegation_allowed_actions(), &[] as &[String]);
-    assert_eq!(
+    assert!(
         resolved
             .grant("case.read")
             .unwrap()
-            .allows_resource("evaluation_request_id", "evalreq_01"),
-        true
+            .allows_resource("evaluation_request_id", "evalreq_01")
     );
     assert_eq!(
         resolved.grant("lm.complete").unwrap().limit("max_calls"),

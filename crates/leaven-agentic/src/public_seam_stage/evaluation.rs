@@ -20,6 +20,7 @@ impl RunnerRequestPayload {
         candidate: impl Into<String>,
         case_ref: impl Into<String>,
         case_input: Value,
+        capability_fingerprint: impl Into<String>,
     ) -> Result<Self, PublicStagePayloadError> {
         reject_case_target_material(&case_input, "case_input")?;
         let mut object = stage_object("runner");
@@ -29,6 +30,11 @@ impl RunnerRequestPayload {
         insert_non_empty(&mut object, "case", case_ref)?;
         object.insert("case_input".to_owned(), case_input);
         object.insert("target_forbidden".to_owned(), Value::Bool(true));
+        insert_non_empty(
+            &mut object,
+            "capability_fingerprint",
+            capability_fingerprint,
+        )?;
         Ok(Self {
             value: Value::Object(object),
         })

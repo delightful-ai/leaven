@@ -847,11 +847,7 @@ fn request_evaluation_records_external_worker_request_through_runcontext() {
     let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget).with_case_set(&case_set);
 
     let request_id = ctx
-        .request_evaluation(
-            evaluator.clone(),
-            fingerprint,
-            independent_request(candidate),
-        )
+        .request_evaluation(&evaluator, fingerprint, independent_request(candidate))
         .unwrap();
 
     let request = ctx
@@ -891,8 +887,9 @@ fn request_evaluation_refuses_hidden_partition_without_recording_request() {
         .with_case_set(&case_set)
         .with_trust_policy(TrustPolicy::default().hide_from_optimizers([secret.clone()]));
 
+    let evaluator = EvaluatorId::from("external-evaluator");
     let result = ctx.request_evaluation(
-        EvaluatorId::from("external-evaluator"),
+        &evaluator,
         Fingerprint::from_bytes([30; 32]),
         EvaluationRequest::Independent {
             candidates: vec![candidate],

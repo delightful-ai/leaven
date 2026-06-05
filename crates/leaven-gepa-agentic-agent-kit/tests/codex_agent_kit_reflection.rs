@@ -224,6 +224,10 @@ fn codex_agent_kit_reflection_reads_back_git_workspace_child_before_next_project
 }
 
 #[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "single scenario proves AgentKit stdio submit/apply before next projection"
+)]
 fn codex_agent_kit_git_child_applies_through_run_bound_stdio_before_next_projection() {
     futures::executor::block_on(async {
         let fixture = AgentKitRepoFixture::new();
@@ -306,7 +310,7 @@ fn codex_agent_kit_git_child_applies_through_run_bound_stdio_before_next_project
                     jsonrpc_request(
                         "agent-kit-submit",
                         "leaven/proposal.submit_batch",
-                        proposal_submit_request(),
+                        &proposal_submit_request(),
                     )
                 )),
                 &mut submit_output,
@@ -339,7 +343,7 @@ fn codex_agent_kit_git_child_applies_through_run_bound_stdio_before_next_project
                     jsonrpc_request(
                         "agent-kit-apply",
                         "leaven/proposal.apply",
-                        proposal_apply_request(&batch_ref),
+                        &proposal_apply_request(&batch_ref),
                     )
                 )),
                 &mut apply_output,
@@ -592,7 +596,7 @@ fn workspace_path(path: &str) -> WorkspacePath {
     WorkspacePath::new(path).unwrap()
 }
 
-fn jsonrpc_request(id: &str, method: &str, params: Value) -> Value {
+fn jsonrpc_request(id: &str, method: &str, params: &Value) -> Value {
     json!({
         "jsonrpc": "2.0",
         "id": id,

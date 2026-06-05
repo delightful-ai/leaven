@@ -8,7 +8,7 @@ use leaven_public_seam::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-pub(crate) fn extension_result_for_plan_report(
+pub fn extension_result_for_plan_report(
     method: LockedMethod,
     plan: &Value,
     result: &Value,
@@ -35,12 +35,12 @@ pub(crate) fn extension_result_for_plan_report(
     })
 }
 
-pub(crate) struct RequestEvaluationWriteSelection {
+pub struct RequestEvaluationWriteSelection {
     pub(crate) name: String,
     pub(crate) write: PlanRequestEvaluationWrite,
 }
 
-pub(crate) fn single_request_evaluation_write(
+pub fn single_request_evaluation_write(
     plan: &PlanDocument,
 ) -> Result<RequestEvaluationWriteSelection, PublicSeamError> {
     if plan.mode() != PlanMode::Execute {
@@ -79,7 +79,7 @@ pub(crate) fn single_request_evaluation_write(
     })
 }
 
-pub(crate) fn authorize_evaluation_request_write(
+pub fn authorize_evaluation_request_write(
     write: &PlanRequestEvaluationWrite,
     capability: &CapabilityDocument,
 ) -> Result<(), PublicSeamError> {
@@ -94,7 +94,7 @@ pub(crate) fn authorize_evaluation_request_write(
     Ok(())
 }
 
-pub(crate) fn evaluation_job_value_from_write(
+pub fn evaluation_job_value_from_write(
     write: &PlanRequestEvaluationWrite,
     context: &PlanExecutionContext,
 ) -> Result<Value, PublicSeamError> {
@@ -126,7 +126,7 @@ pub(crate) fn evaluation_job_value_from_write(
     }))
 }
 
-pub(crate) fn evaluation_request_plan_result(
+pub fn evaluation_request_plan_result(
     plan: &PlanDocument,
     name: &str,
     context: &PlanExecutionContext,

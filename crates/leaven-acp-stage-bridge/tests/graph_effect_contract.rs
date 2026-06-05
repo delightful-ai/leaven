@@ -30,6 +30,10 @@ use tempfile::TempDir;
 use uuid::Uuid;
 
 #[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "keeps the worker callback scenario in one readable contract test"
+)]
 fn dispatch_stage_run_services_worker_initiated_assessment_submit_through_runcontext() {
     block_on(async {
         let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
@@ -191,15 +195,17 @@ print(json.dumps({{
             .expect("worker callback records an assessment");
         assert_eq!(assessment.request_id(), request_id);
         assert_eq!(assessment.independent_candidate(), Some(candidate));
-        assert_eq!(
-            context.assessment_evidence(assessment.id()).unwrap().score,
-            0.875
-        );
+        let score = context.assessment_evidence(assessment.id()).unwrap().score;
+        assert!((score - 0.875).abs() < f64::EPSILON);
         forget(script);
     });
 }
 
 #[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "keeps the worker callback scenario in one readable contract test"
+)]
 fn dispatch_stage_run_services_worker_initiated_evaluation_request_through_runcontext() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let profile = acp_profile(&package);
@@ -429,7 +435,8 @@ fn runner_request(prompt: &str) -> Value {
             "candidate": "cand_graph_effect_contract",
             "case": "case_graph_effect_contract",
             "case_input": {"question": "score", "prompt": prompt},
-            "target_forbidden": true
+            "target_forbidden": true,
+            "capability_fingerprint": "fp_cap_sha256_graph_effect_contract"
         }
     })
 }

@@ -277,9 +277,13 @@ fn ensure_constraints_attenuate(parent: &Grant, child: &Grant) -> Result<bool, C
         let parent_value = parent.constraints.get(key);
         let child_value = child.constraints.get(key);
         narrowed |= if key.starts_with("forbidden_") {
-            ensure_forbidden_constraint_attenuates(key, parent_value, child_value)?
+            ensure_forbidden_constraint_attenuates(
+                key,
+                parent_value.as_ref(),
+                child_value.as_ref(),
+            )?
         } else {
-            ensure_allowed_constraint_attenuates(key, parent_value, child_value)?
+            ensure_allowed_constraint_attenuates(key, parent_value.as_ref(), child_value.as_ref())?
         };
     }
     Ok(narrowed)
@@ -287,10 +291,10 @@ fn ensure_constraints_attenuate(parent: &Grant, child: &Grant) -> Result<bool, C
 
 fn ensure_allowed_constraint_attenuates(
     key: &str,
-    parent: Option<CapabilityConstraintValue>,
-    child: Option<CapabilityConstraintValue>,
+    parent: Option<&CapabilityConstraintValue>,
+    child: Option<&CapabilityConstraintValue>,
 ) -> Result<bool, CapabilityDenial> {
-    match (&parent, &child) {
+    match (parent, child) {
         (None, None) => Ok(false),
         (Some(_), None) => Err(CapabilityDenial::new(
             CapabilityDenialKind::Delegation,
@@ -310,10 +314,10 @@ fn ensure_allowed_constraint_attenuates(
 
 fn ensure_forbidden_constraint_attenuates(
     key: &str,
-    parent: Option<CapabilityConstraintValue>,
-    child: Option<CapabilityConstraintValue>,
+    parent: Option<&CapabilityConstraintValue>,
+    child: Option<&CapabilityConstraintValue>,
 ) -> Result<bool, CapabilityDenial> {
-    match (&parent, &child) {
+    match (parent, child) {
         (None, None) => Ok(false),
         (Some(_), None) => Err(CapabilityDenial::new(
             CapabilityDenialKind::Delegation,

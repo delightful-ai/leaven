@@ -127,6 +127,7 @@ fn agentic_role_payloads_lower_remaining_stage_roles_through_locked_public_seam_
         "cand_agentic",
         "case_agentic",
         json!({"question": "target-free"}),
+        "fp_cap_sha256_agentic",
     )
     .unwrap();
     let runner = package
@@ -230,6 +231,7 @@ fn agentic_runner_and_scorer_payload_builders_reject_target_and_output_fakes() {
         "cand_agentic",
         "case_agentic",
         json!({"case.target": "secret answer"}),
+        "fp_cap_sha256_agentic",
     )
     .unwrap_err();
     assert!(matches!(

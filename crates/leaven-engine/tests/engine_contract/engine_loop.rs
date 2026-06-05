@@ -548,7 +548,7 @@ fn store_run_persistence_harvests_graph_owned_evidence_refs() {
             .with_evidence_store(&evidence);
         let request_id = ctx
             .request_evaluation(
-                EvaluatorId::from("checkpoint-evidence"),
+                &EvaluatorId::from("checkpoint-evidence"),
                 Fingerprint::from_bytes([23; 32]),
                 EvaluationRequest::Independent {
                     candidates: vec![seed],

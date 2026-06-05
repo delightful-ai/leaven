@@ -1,5 +1,5 @@
 use crate::support::{package, plan_call_result_hash, sha256_hex};
-use leaven_agent::{AgentSession, CommandRecord};
+use leaven_agent::{AgentSession, AgentTranscript, CommandRecord};
 use leaven_kernel::{AgentSessionId, Cost, Fingerprint, Metered};
 use leaven_public_seam::{
     AgentCommandOutputRefs, CapabilityDocument, PlanAgentRunOutcome, PlanAgentRunRequest,
@@ -536,7 +536,8 @@ fn agent_output_schema() -> Value {
 }
 
 fn blob_ref(id: &'static str) -> Value {
-    blob_ref_for_bytes(id, b"transcript", &["transcript.raw"])
+    let transcript_bytes = serde_json::to_vec(&AgentTranscript::default()).unwrap();
+    blob_ref_for_bytes(id, &transcript_bytes, &["transcript.raw"])
 }
 
 fn blob_ref_for_bytes(id: &'static str, bytes: &[u8], data_classes: &[&str]) -> Value {

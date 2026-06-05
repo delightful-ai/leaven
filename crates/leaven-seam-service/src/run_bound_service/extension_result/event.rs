@@ -5,7 +5,7 @@ use serde_json::Value;
 use super::common::{EmptyObject, prefixed_jcs_hash};
 use crate::run_bound_service::RunBoundGraphEffectError;
 
-pub(crate) struct EventEmitExtensionContext<'a> {
+pub struct EventEmitExtensionContext<'a> {
     pub(crate) plan_id: &'a str,
     pub(crate) name: &'a str,
     pub(crate) event_kind: &'a str,
@@ -22,8 +22,8 @@ pub(crate) struct EventEmitExtensionContext<'a> {
     pub(crate) return_values: Option<&'a Value>,
 }
 
-pub(crate) fn event_emit_extension_result(
-    context: EventEmitExtensionContext<'_>,
+pub fn event_emit_extension_result(
+    context: &EventEmitExtensionContext<'_>,
 ) -> Result<Value, RunBoundGraphEffectError> {
     let receipt_id = format!("wrec_{}", context.name);
     let request_hash = prefixed_jcs_hash(

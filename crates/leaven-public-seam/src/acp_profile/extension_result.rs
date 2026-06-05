@@ -70,7 +70,6 @@ impl AcpExtensionResultDocument {
         }
         let expected_receipt = receipts.expected_for_method(method)?;
         validate_primary_result_hash(primary_value, expected_receipt)?;
-        validate_extension_primary_op(method, primary)?;
         validate_effect_primary_audit(method, primary, expected_receipt)?;
         let primary_receipt = primary.get("receipt").and_then(Value::as_str);
         if let Some(primary_receipt) = primary_receipt {
@@ -439,17 +438,6 @@ fn validate_effect_primary_audit(
             }
         }
         _ => Ok(()),
-    }
-}
-
-fn validate_extension_primary_op(
-    _method: LockedMethod,
-    primary: &serde_json::Map<String, Value>,
-) -> Result<(), PublicSeamError> {
-    if primary.get("kind").and_then(Value::as_str) != Some("extension") {
-        Ok(())
-    } else {
-        Ok(())
     }
 }
 

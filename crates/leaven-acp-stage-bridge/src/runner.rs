@@ -107,7 +107,8 @@ fn runner_stage_run_request(
             "candidate": candidate_id,
             "case": case_id,
             "case_input": case_input,
-            "target_forbidden": true
+            "target_forbidden": true,
+            "capability_fingerprint": "fp_cap_sha256_runner_dispatch"
         }
     })
 }

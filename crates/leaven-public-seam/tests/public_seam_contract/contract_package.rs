@@ -736,8 +736,14 @@ fn conformance_evidence_audit_rejects_pending_rows_with_closeout_evidence_fields
     let error = package.audit_conformance_evidence(&matrix).unwrap_err();
 
     assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
-    assert!(error.to_string().contains("ps1.acp.transport_profile"));
-    assert!(error.to_string().contains("partial_contract evidence"));
+    assert!(
+        error.to_string().contains("ps1.acp.transport_profile"),
+        "unexpected error: {error:?}"
+    );
+    assert!(
+        error.to_string().contains("partial_contract evidence"),
+        "unexpected error: {error:?}"
+    );
 }
 
 #[test]
@@ -755,8 +761,14 @@ fn conformance_evidence_audit_rejects_blocked_rows_without_named_prerequisites()
     let error = package.audit_conformance_evidence(&matrix).unwrap_err();
 
     assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
-    assert!(error.to_string().contains("ps1.acp.transport_profile"));
-    assert!(error.to_string().contains("blocked_on prerequisites"));
+    assert!(
+        error.to_string().contains("ps1.acp.transport_profile"),
+        "unexpected error: {error:?}"
+    );
+    assert!(
+        error.to_string().contains("blocked_on prerequisites"),
+        "unexpected error: {error:?}"
+    );
 
     let row = matrix
         .rows
@@ -767,8 +779,14 @@ fn conformance_evidence_audit_rejects_blocked_rows_without_named_prerequisites()
 
     let error = package.audit_conformance_evidence(&matrix).unwrap_err();
     assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
-    assert!(error.to_string().contains("ps1.acp.transport_profile"));
-    assert!(error.to_string().contains("blocked_on prerequisites"));
+    assert!(
+        error.to_string().contains("ps1.acp.transport_profile"),
+        "unexpected error: {error:?}"
+    );
+    assert!(
+        error.to_string().contains("blocked_on prerequisites"),
+        "unexpected error: {error:?}"
+    );
 }
 
 #[test]
@@ -882,7 +900,10 @@ fn conformance_evidence_audit_rejects_partial_review_preamble_signoff_language()
 
     let error = package.audit_conformance_evidence(&matrix).unwrap_err();
     assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
-    assert!(error.to_string().contains("ps1.lm.contract"));
+    assert!(
+        error.to_string().contains("ps1.lm.contract"),
+        "unexpected error: {error:?}"
+    );
     assert!(
         error
             .to_string()

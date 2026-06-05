@@ -17,7 +17,7 @@ pub struct ProposalSubmitParams {
     pub(crate) write: ProposalSubmitWrite,
 }
 
-pub(crate) struct ProposalSubmitWrite {
+pub struct ProposalSubmitWrite {
     pub(crate) name: String,
     pub(crate) proposals: Value,
 }
@@ -42,7 +42,7 @@ impl ProposalSubmitParams {
     }
 }
 
-pub(crate) struct ProposalApplyWrite {
+pub struct ProposalApplyWrite {
     pub(crate) proposal_batch_id: ProposalBatchId,
 }
 
@@ -52,7 +52,7 @@ pub struct EvaluationRequestParams {
     pub(crate) write: EvaluationRequestWrite,
 }
 
-pub(crate) struct EvaluationRequestWrite {
+pub struct EvaluationRequestWrite {
     pub(crate) name: String,
     pub(crate) request: Value,
 }
@@ -83,7 +83,7 @@ pub struct AssessmentSubmitParams {
     pub(crate) write: AssessmentSubmitWrite,
 }
 
-pub(crate) struct AssessmentSubmitWrite {
+pub struct AssessmentSubmitWrite {
     pub(crate) name: String,
     pub(crate) evaluation_request_id: EvaluationRequestId,
     pub(crate) assessments: Value,
@@ -121,7 +121,7 @@ pub(super) struct EventEmitParams {
     pub(crate) return_values: Option<Value>,
 }
 
-pub(crate) struct EventEmitWrite {
+pub struct EventEmitWrite {
     pub(crate) name: String,
     pub(crate) event_kind: String,
     pub(crate) payload_schema: String,

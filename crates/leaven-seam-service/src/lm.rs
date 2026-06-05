@@ -1,4 +1,3 @@
-use std::future::Future;
 use std::time::Duration;
 
 use leaven_kernel::{Fingerprint, Metered};
@@ -17,9 +16,9 @@ pub enum SeamLmConfig {
         /// Responses consumed in order by executed `lm_complete` calls.
         responses: Vec<MockLmResponseConfig>,
     },
-    /// Live OpenAI Responses API provider.
+    /// Live `OpenAI` Responses API provider.
     OpenAi {
-        /// Environment variable that carries the OpenAI API key.
+        /// Environment variable that carries the `OpenAI` API key.
         api_key_env: String,
         /// Optional OpenAI-compatible Responses API endpoint.
         base_url: Option<String>,
@@ -130,7 +129,7 @@ impl Default for MockLmResponseConfig {
 }
 
 /// Executable LM runtime selected by a seam service config.
-pub(crate) enum ConfiguredLmRuntime {
+pub enum ConfiguredLmRuntime {
     Mock(MockLm),
     OpenAi(OpenAiLm),
 }
@@ -150,15 +149,10 @@ impl Lm for ConfiguredLmRuntime {
         }
     }
 
-    fn complete(
-        &self,
-        request: LmRequest,
-    ) -> impl Future<Output = Result<Metered<LmResponse>, LmError>> + Send + '_ {
-        async move {
-            match self {
-                Self::Mock(lm) => lm.complete(request).await,
-                Self::OpenAi(lm) => lm.complete(request).await,
-            }
+    async fn complete(&self, request: LmRequest) -> Result<Metered<LmResponse>, LmError> {
+        match self {
+            Self::Mock(lm) => lm.complete(request).await,
+            Self::OpenAi(lm) => lm.complete(request).await,
         }
     }
 }

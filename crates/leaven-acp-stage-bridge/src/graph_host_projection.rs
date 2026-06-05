@@ -5,21 +5,21 @@ use serde_json::Value;
 
 use crate::graph_host::RunContextGraphEffectHostError;
 
-pub(crate) fn proposal_apply_extension_result(
+pub fn proposal_apply_extension_result(
     plan_result: &Value,
 ) -> Result<Value, RunContextGraphEffectHostError> {
     let projection = ApplyExtensionProjection::from_plan_result(plan_result)?;
     to_value(projection)
 }
 
-pub(crate) fn assessment_submit_extension_result(
+pub fn assessment_submit_extension_result(
     plan_result: &Value,
 ) -> Result<Value, RunContextGraphEffectHostError> {
     let projection = AssessmentSubmitExtensionProjection::from_plan_result(plan_result)?;
     to_value(projection)
 }
 
-pub(crate) fn evaluation_request_extension_result(
+pub fn evaluation_request_extension_result(
     plan_result: &Value,
 ) -> Result<Value, RunContextGraphEffectHostError> {
     let projection = EvaluationRequestExtensionProjection::from_plan_result(plan_result)?;
@@ -393,7 +393,7 @@ impl AssessmentSubmitReceipt {
 }
 
 #[derive(Serialize)]
-struct WriteResultPreimage<'a, T: Serialize> {
+struct WriteResultPreimage<'a, T> {
     schema_version: &'static str,
     name: &'a str,
     value: &'a T,

@@ -26,6 +26,10 @@ use tempfile::TempDir;
 use super::*;
 
 #[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "scenario proof keeps one run context mutation/readback flow together"
+)]
 fn run_bound_service_mutates_real_context_and_checkpoint_readback_sees_graph_truth() {
     let package = leaven_public_seam::PublicSeamPackage::active_from_repo(workspace_root())
         .expect("public seam package loads from workspace");
@@ -252,12 +256,16 @@ fn run_bound_service_refuses_configured_alias_batch_refs() {
 }
 
 #[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "scenario proof keeps runtime and stdio graph-write routing together"
+)]
 fn run_bound_service_routes_graph_writes_through_runtime_and_stdio() {
     let package = leaven_public_seam::PublicSeamPackage::active_from_repo(workspace_root())
         .expect("public seam package loads from workspace");
     let temp = TempDir::new().unwrap();
     let store = FileStore::open(temp.path()).unwrap();
-    let persistence = StoreRunPersistence::new(store.clone());
+    let persistence = StoreRunPersistence::new(store);
     let evidence_store = InlineEvidenceStore::<RunBoundEvidence>::new("run-bound");
     let case_set = CaseSet::new(vec![RunBoundCase]);
     let mut graph = leaven_engine::RunGraph::new(leaven_kernel::RunId::new());
@@ -323,12 +331,12 @@ fn run_bound_service_routes_graph_writes_through_runtime_and_stdio() {
             jsonrpc_request(
                 "runtime-apply",
                 "leaven/proposal.apply",
-                proposal_apply_request(&batch_ref)
+                &proposal_apply_request(&batch_ref)
             ),
             jsonrpc_request(
                 "runtime-evaluation",
                 "leaven/evaluation.request",
-                evaluation_request_request()
+                &evaluation_request_request()
             ),
         );
         let mut first_output = Vec::new();
@@ -358,9 +366,9 @@ fn run_bound_service_routes_graph_writes_through_runtime_and_stdio() {
             jsonrpc_request(
                 "runtime-assessment",
                 "leaven/assessment.submit",
-                assessment_submit_request(&evaluation_ref),
+                &assessment_submit_request(&evaluation_ref),
             ),
-            jsonrpc_request("runtime-event", "leaven/event.emit", event_emit_request()),
+            jsonrpc_request("runtime-event", "leaven/event.emit", &event_emit_request()),
         );
         let mut second_output = Vec::new();
         let second_report =
@@ -453,7 +461,7 @@ fn engine_lifecycle_mounts_run_bound_service_and_checkpoint_readback_sees_graph_
     )));
 }
 
-fn jsonrpc_request(id: &str, method: &str, params: Value) -> Value {
+fn jsonrpc_request(id: &str, method: &str, params: &Value) -> Value {
     json!({
         "jsonrpc": "2.0",
         "id": id,
@@ -752,12 +760,12 @@ impl Optimizer<RunBoundProblem> for SeamMountedOptimizer {
                     jsonrpc_request(
                         "engine-mounted-apply",
                         "leaven/proposal.apply",
-                        proposal_apply_request(&batch_ref),
+                        &proposal_apply_request(&batch_ref),
                     ),
                     jsonrpc_request(
                         "engine-mounted-evaluation",
                         "leaven/evaluation.request",
-                        evaluation_request_request(),
+                        &evaluation_request_request(),
                     ),
                 ],
             )?;
@@ -775,12 +783,12 @@ impl Optimizer<RunBoundProblem> for SeamMountedOptimizer {
                     jsonrpc_request(
                         "engine-mounted-assessment",
                         "leaven/assessment.submit",
-                        assessment_submit_request(&evaluation_ref),
+                        &assessment_submit_request(&evaluation_ref),
                     ),
                     jsonrpc_request(
                         "engine-mounted-event",
                         "leaven/event.emit",
-                        event_emit_request(),
+                        &event_emit_request(),
                     ),
                 ],
             )?;

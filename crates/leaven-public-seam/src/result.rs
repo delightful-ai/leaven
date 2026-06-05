@@ -166,7 +166,7 @@ impl PlanResultDocument {
         }
     }
 
-    /// Typed PlanErrors carried by the top-level result error section.
+    /// Typed `PlanErrors` carried by the top-level result error section.
     pub fn plan_errors(&self) -> &[PlanErrorDocument] {
         &self.errors
     }

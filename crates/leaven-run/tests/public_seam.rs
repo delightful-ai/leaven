@@ -931,12 +931,12 @@ use support::{
     TEST_RUNNER_FINGERPRINT, TEST_SCORER_FINGERPRINT, TextArtifact, candidate_artifact_output,
 };
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
 struct PromptInput {
     addend: i32,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
 struct AnswerTarget {
     answer: i32,
 }

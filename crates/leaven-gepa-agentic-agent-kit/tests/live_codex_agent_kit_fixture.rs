@@ -1,3 +1,8 @@
+#![allow(
+    dead_code,
+    reason = "fixture module is compiled standalone by all-targets clippy"
+)]
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -10,7 +15,7 @@ use leaven_artifact_git::{
 use leaven_core::{Evidence, OptimizationProblem};
 
 #[derive(Clone, Debug)]
-pub(crate) struct LiveAgentKitProblem;
+pub struct LiveAgentKitProblem;
 
 impl OptimizationProblem for LiveAgentKitProblem {
     type Artifact = GitProgramArtifact;
@@ -20,14 +25,14 @@ impl OptimizationProblem for LiveAgentKitProblem {
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub(crate) struct LiveAgentKitCase;
+pub struct LiveAgentKitCase;
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub(crate) struct LiveAgentKitEvidence;
+pub struct LiveAgentKitEvidence;
 
 impl Evidence for LiveAgentKitEvidence {}
 
-pub(crate) struct LiveAgentKitRepoFixture {
+pub struct LiveAgentKitRepoFixture {
     _temp: tempfile::TempDir,
     bare_store: PathBuf,
     parent_commit: GitObjectId,

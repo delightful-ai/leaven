@@ -165,7 +165,7 @@ impl Optimizer<AgentKitCheckpointProblem> for AgentKitCheckpointOptimizer {
             [jsonrpc_request(
                 "agent-kit-checkpoint-submit",
                 "leaven/proposal.submit_batch",
-                submit_request(),
+                &submit_request(),
             )],
         )?;
         assert_success(&submit[0], "leaven/proposal.submit_batch")?;
@@ -180,7 +180,7 @@ impl Optimizer<AgentKitCheckpointProblem> for AgentKitCheckpointOptimizer {
             [jsonrpc_request(
                 "agent-kit-checkpoint-apply",
                 "leaven/proposal.apply",
-                apply_request(&batch_ref),
+                &apply_request(&batch_ref),
             )],
         )?;
         assert_success(&apply[0], "leaven/proposal.apply")?;
@@ -275,12 +275,12 @@ fn serve_jsonrpc_lines<const N: usize>(
     route
         .serve_reader_writer(Cursor::new(format!("{input}\n")), &mut output)
         .map_err(|source| OptimizerError::with_source("serve AgentKit route", source))?;
-    Ok(String::from_utf8(output)
+    String::from_utf8(output)
         .map_err(|source| OptimizerError::with_source("decode AgentKit route output", source))?
         .lines()
         .map(serde_json::from_str)
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|source| OptimizerError::with_source("parse AgentKit route response", source))?)
+        .map_err(|source| OptimizerError::with_source("parse AgentKit route response", source))
 }
 
 fn submit_request() -> Value {
@@ -340,7 +340,7 @@ fn apply_request(batch_ref: &str) -> Value {
     })
 }
 
-fn jsonrpc_request(id: &str, method: &str, params: Value) -> Value {
+fn jsonrpc_request(id: &str, method: &str, params: &Value) -> Value {
     json!({
         "jsonrpc": "2.0",
         "id": id,

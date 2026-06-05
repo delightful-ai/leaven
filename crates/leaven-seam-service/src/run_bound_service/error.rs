@@ -78,7 +78,7 @@ pub enum RunBoundGraphEffectError {
     /// The batch is not one of the batches registered with the service.
     #[error("proposal batch `{0}` is not registered with the run-bound graph service")]
     UnknownBatch(ProposalBatchId),
-    /// RunContext rejected the write.
+    /// `RunContext` rejected the write.
     #[error(transparent)]
     RunContext(#[from] leaven_engine::RunContextError),
     /// The graph-backed proposal report failed public-seam projection.

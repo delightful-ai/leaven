@@ -8,7 +8,7 @@ use leaven_agent::{
 };
 use leaven_agent_codex_cli::{CodexCliApproval, CodexCliConfig, CodexCliRuntime};
 use leaven_kernel::{AgentSessionId, BudgetSnapshot};
-use leaven_public_seam::{AcpProfileDocument, PublicSeamPackage};
+use leaven_public_seam::{AcpProfileDocument, LockedMethod, MethodPrimaryKind, PublicSeamPackage};
 use leaven_workspace::{
     FactoryError, WorkspaceConfig, WorkspaceError, WorkspaceFactory, WorkspacePath,
 };
@@ -18,12 +18,18 @@ use serde_json::{Map, Value, json};
 
 type Result<T> = std::result::Result<T, P9Error>;
 
-const ACP_METHODS: [(&str, &str); 5] = [
-    ("leaven/event.emit", "emit_run_event"),
-    ("leaven/lm.complete", "lm_response"),
-    ("leaven/agent.run", "agent_session"),
-    ("leaven/proposal.submit_batch", "proposal_batch_receipt"),
-    ("leaven/assessment.submit", "assessment_batch_receipt"),
+const ACP_METHODS: [(LockedMethod, MethodPrimaryKind); 5] = [
+    (LockedMethod::EventEmit, MethodPrimaryKind::EmitRunEvent),
+    (LockedMethod::LmComplete, MethodPrimaryKind::LmResponse),
+    (LockedMethod::AgentRun, MethodPrimaryKind::AgentSession),
+    (
+        LockedMethod::ProposalSubmitBatch,
+        MethodPrimaryKind::ProposalBatchReceipt,
+    ),
+    (
+        LockedMethod::AssessmentSubmit,
+        MethodPrimaryKind::AssessmentBatchReceipt,
+    ),
 ];
 
 #[derive(Debug, thiserror::Error)]
@@ -111,7 +117,10 @@ async fn main() -> Result<()> {
         seed_score,
         child_score,
         accepted_candidate: "codex_child",
-        acp_methods: ACP_METHODS.iter().map(|(method, _)| *method).collect(),
+        acp_methods: ACP_METHODS
+            .iter()
+            .map(|(method, _)| method.as_str())
+            .collect(),
         acp_request_count: acp.request_count,
         acp_observed_requests_path: acp.observed_requests_path.display().to_string(),
         proof_limits: vec![
@@ -284,6 +293,8 @@ fn run_python_acp_worker(
     )?;
 
     for (method, primary_kind) in ACP_METHODS {
+        let method_name = method.as_str();
+        let primary_kind_name = primary_kind.as_str();
         let response = session.call_extension(
             method,
             &acp_plan_params_for_method(method),
@@ -291,14 +302,14 @@ fn run_python_acp_worker(
         )?;
         if response.method() != method {
             return Err(P9Error::Message(format!(
-                "ACP response method mismatch: expected {method}, got {}",
-                response.method()
+                "ACP response method mismatch: expected {method_name}, got {}",
+                response.method().as_str()
             )));
         }
         if response.primary_kind() != primary_kind {
             return Err(P9Error::Message(format!(
-                "ACP response primary mismatch for {method}: expected {primary_kind}, got {}",
-                response.primary_kind()
+                "ACP response primary mismatch for {method_name}: expected {primary_kind_name}, got {}",
+                response.primary_kind().as_str()
             )));
         }
     }
@@ -315,33 +326,34 @@ fn run_python_acp_worker(
 fn response_map(codex: &CodexProof, seed_score: f64, child_score: f64) -> Value {
     let mut responses = Map::new();
     for (index, (method, _)) in ACP_METHODS.iter().enumerate() {
+        let method_name = method.as_str();
         let result = match *method {
-            "leaven/event.emit" => extension_result(
-                method,
+            LockedMethod::EventEmit => extension_result(
+                method_name,
                 event_emit_primary(),
                 write_receipt("emit_run_event", "wrec_event_emit"),
                 &["public"],
             ),
-            "leaven/lm.complete" => extension_result(
-                method,
+            LockedMethod::LmComplete => extension_result(
+                method_name,
                 lm_response_primary(seed_score, child_score),
                 call_receipt("lm_complete", "lmrec_p9"),
                 &["completion.raw"],
             ),
-            "leaven/agent.run" => extension_result(
-                method,
+            LockedMethod::AgentRun => extension_result(
+                method_name,
                 agent_session_primary(codex),
                 call_receipt("agent_run", "agentrec_p9"),
                 &["public", "transcript.raw"],
             ),
-            "leaven/proposal.submit_batch" => extension_result(
-                method,
+            LockedMethod::ProposalSubmitBatch => extension_result(
+                method_name,
                 proposal_batch_primary(),
                 write_receipt("submit_proposal_batch", "wrec_proposal_submit"),
                 &["public"],
             ),
-            "leaven/assessment.submit" => extension_result(
-                method,
+            LockedMethod::AssessmentSubmit => extension_result(
+                method_name,
                 assessment_batch_primary(),
                 write_receipt("submit_assessments", "wrec_assessment_submit"),
                 &["public"],
@@ -350,7 +362,7 @@ fn response_map(codex: &CodexProof, seed_score: f64, child_score: f64) -> Value 
         };
         responses.insert(
             format!("leaven-acp-{index}"),
-            response_for(method, &format!("leaven-acp-{index}"), result),
+            response_for(method_name, &format!("leaven-acp-{index}"), result),
         );
     }
     Value::Object(responses)
@@ -460,7 +472,8 @@ fn stage_run_method() -> Value {
     })
 }
 
-fn acp_plan_params_for_method(method: &str) -> Value {
+fn acp_plan_params_for_method(method: LockedMethod) -> Value {
+    let method = method.as_str();
     json!({
         "schema_version": "leaven.plan.v1",
         "plan_id": format!("plan_p9_{}", method.replace(['/', '.'], "_")),

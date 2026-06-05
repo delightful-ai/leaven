@@ -29,38 +29,38 @@ pub enum PlanExpression {
     WorkspaceQuery { workspace: WorkspaceRefExpression },
     /// Projection over another expression.
     Project {
-        input: Box<PlanExpression>,
+        input: Box<Self>,
         artifact_selectors: Vec<PlanArtifactProjectionSelector>,
         cost_scopes: Vec<PlanCostScope>,
     },
     /// Predicate filter over another expression.
     Filter {
-        input: Box<PlanExpression>,
+        input: Box<Self>,
         artifact_selectors: Vec<PlanArtifactProjectionSelector>,
         cost_scopes: Vec<PlanCostScope>,
     },
     /// Sort over another expression.
     Sort {
-        input: Box<PlanExpression>,
+        input: Box<Self>,
         artifact_selectors: Vec<PlanArtifactProjectionSelector>,
         cost_scopes: Vec<PlanCostScope>,
     },
     /// Limit over another expression.
     Limit {
-        input: Box<PlanExpression>,
+        input: Box<Self>,
         limit: u64,
         artifact_selectors: Vec<PlanArtifactProjectionSelector>,
         cost_scopes: Vec<PlanCostScope>,
     },
     /// Strict-template expression with typed variable expression dependencies.
     Template {
-        vars: BTreeMap<String, PlanExpression>,
+        vars: BTreeMap<String, Self>,
         artifact_selectors: Vec<PlanArtifactProjectionSelector>,
         cost_scopes: Vec<PlanCostScope>,
     },
-    /// JSONPath extraction over another expression.
+    /// `JSONPath` extraction over another expression.
     Extract {
-        input: Box<PlanExpression>,
+        input: Box<Self>,
         artifact_selectors: Vec<PlanArtifactProjectionSelector>,
         cost_scopes: Vec<PlanCostScope>,
     },
@@ -76,6 +76,10 @@ pub enum PlanExpression {
 }
 
 impl PlanExpression {
+    #[allow(
+        clippy::too_many_lines,
+        reason = "keeps schema discriminant parsing in one audited owner"
+    )]
     pub(super) fn from_schema_valid_value(value: &Value) -> Result<Self, PublicSeamError> {
         let object = value
             .as_object()
@@ -606,7 +610,7 @@ impl PlanGraphQuerySource {
 /// Typed event-filter facts carried by a graph event query.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PlanGraphEventFilter {
-    /// Service-local RunContext event summary filter.
+    /// Service-local `RunContext` event summary filter.
     RunContext,
     /// Schema-valid event filter not interpreted by this owner.
     Other(PlanGraphEventFilterPayload),
@@ -636,7 +640,7 @@ impl PlanGraphEventFilterPayload {
         Self(value.clone())
     }
 
-    /// JSON payload carried by an event filter outside the RunContext filter.
+    /// JSON payload carried by an event filter outside the `RunContext` filter.
     pub const fn as_json(&self) -> &Value {
         &self.0
     }
@@ -744,20 +748,11 @@ fn collect_projection_artifact_selectors(
     let Some(object) = value.as_object() else {
         return;
     };
-    match object.get("kind").and_then(Value::as_str) {
-        Some("candidate_projection") => {
-            if let Some(artifact) = object.get("artifact") {
-                collect_artifact_projection_selector(artifact, selectors);
-            }
-        }
-        Some("artifact_projection") => {
-            if let Some(artifact) = object.get("artifact") {
-                collect_artifact_projection_selector(artifact, selectors);
-            }
-        }
-        Some("ids" | "summary" | "assessment_projection" | "diff_projection" | "extension")
-        | Some(_)
-        | None => {}
+    if let Some("candidate_projection" | "artifact_projection") =
+        object.get("kind").and_then(Value::as_str)
+        && let Some(artifact) = object.get("artifact")
+    {
+        collect_artifact_projection_selector(artifact, selectors);
     }
 }
 

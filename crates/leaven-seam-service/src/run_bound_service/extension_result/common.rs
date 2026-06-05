@@ -7,7 +7,7 @@ use crate::run_bound_service::RunBoundGraphEffectError;
 pub(super) struct EmptyObject {}
 
 #[derive(Serialize)]
-pub(super) struct WriteResultPreimage<'a, T: Serialize> {
+pub(super) struct WriteResultPreimage<'a, T> {
     pub(super) schema_version: &'static str,
     pub(super) name: &'a str,
     pub(super) value: &'a T,

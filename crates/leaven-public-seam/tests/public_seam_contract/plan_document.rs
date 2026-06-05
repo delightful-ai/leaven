@@ -1,4 +1,6 @@
-use crate::support::{FIXTURE_BLOB_SHA256, package, plan_call_result_hash, prefixed_jcs_hash};
+use crate::support::{
+    FIXTURE_BLOB_SHA256, package, plan_call_result_hash, prefixed_jcs_hash, sha256_hex,
+};
 use std::collections::{BTreeMap, BTreeSet};
 
 use leaven_lm::{MessageContentPart, OutputMode, Role};
@@ -5216,6 +5218,10 @@ impl SandboxStreamFixture {
     }
 }
 
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "test fixture implements fallible PlanExecutionHost methods even when a specific branch cannot fail"
+)]
 impl PlanExecutionHost for RecordingPlanHost {
     fn graph_query(
         &mut self,
@@ -5475,7 +5481,7 @@ impl PlanExecutionHost for RecordingPlanHost {
         let mut outcome = PlanAgentRunOutcome::from_agent_session_with_command_output_refs(
             agent_session(),
             leaven_kernel::Fingerprint::from_bytes([0xa7; 32]),
-            blob_ref("blob_agent_transcript"),
+            agent_transcript_blob_ref("blob_agent_transcript"),
             "agentrec_completion",
             [agent_command_output_refs()],
         )?;
@@ -5797,11 +5803,14 @@ impl RecordingPlanHost {
         &mut self,
         request: &PlanWorkspaceQueryRequest<'_>,
     ) -> Result<PlanWorkspaceQueryOutcome, PublicSeamError> {
-        assert_eq!(request.path(), Some("README.md"));
-        assert_eq!(
-            request.expected_data_classes(),
-            BTreeSet::from(["candidate.artifact"])
-        );
+        ensure_workspace_fixture(
+            request.path() == Some("README.md"),
+            "read_file path must be README.md",
+        )?;
+        ensure_workspace_fixture(
+            request.expected_data_classes() == BTreeSet::from(["candidate.artifact"]),
+            "read_file data classes must match fixture",
+        )?;
         self.calls.push("workspace_read_file");
         Ok(workspace_query_outcome(json!({
             "kind": "workspace_file",
@@ -5814,7 +5823,7 @@ impl RecordingPlanHost {
         &mut self,
         request: &PlanWorkspaceQueryRequest<'_>,
     ) -> Result<PlanWorkspaceQueryOutcome, PublicSeamError> {
-        assert_eq!(request.path(), Some("."));
+        ensure_workspace_fixture(request.path() == Some("."), "list path must be .")?;
         self.calls.push("workspace_list");
         Ok(workspace_query_outcome(workspace_listing_value()))
     }
@@ -5823,7 +5832,10 @@ impl RecordingPlanHost {
         &mut self,
         request: &PlanWorkspaceQueryRequest<'_>,
     ) -> Result<PlanWorkspaceQueryOutcome, PublicSeamError> {
-        assert_eq!(request.path(), Some("README.md"));
+        ensure_workspace_fixture(
+            request.path() == Some("README.md"),
+            "stat path must be README.md",
+        )?;
         self.calls.push("workspace_stat");
         Ok(workspace_query_outcome(json!({
             "kind": "workspace_listing",
@@ -5840,11 +5852,17 @@ impl RecordingPlanHost {
         &mut self,
         request: &PlanWorkspaceQueryRequest<'_>,
     ) -> Result<PlanWorkspaceQueryOutcome, PublicSeamError> {
-        assert_eq!(request.path(), Some("README.md"));
-        assert!(matches!(
-            request.op(),
-            WorkspaceQueryOp::Digest { algorithm, .. } if algorithm.as_str() == "sha256"
-        ));
+        ensure_workspace_fixture(
+            request.path() == Some("README.md"),
+            "digest path must be README.md",
+        )?;
+        ensure_workspace_fixture(
+            matches!(
+                request.op(),
+                WorkspaceQueryOp::Digest { algorithm, .. } if algorithm.as_str() == "sha256"
+            ),
+            "digest algorithm must be sha256",
+        )?;
         self.calls.push("workspace_digest");
         Ok(workspace_query_outcome(json!({
             "kind": "workspace_snapshot",
@@ -6551,6 +6569,17 @@ fn blob_ref_with_data_classes(id: &'static str, data_classes: &[&str]) -> Value 
     blob_ref_with_hash_and_data_classes(id, FIXTURE_BLOB_SHA256, 12, data_classes)
 }
 
+fn agent_transcript_blob_ref(id: &'static str) -> Value {
+    let transcript_bytes = serde_json::to_vec(&leaven_agent::AgentTranscript::default()).unwrap();
+    json!({
+        "kind": "blob_ref",
+        "id": id,
+        "sha256": sha256_hex(&transcript_bytes),
+        "bytes": transcript_bytes.len(),
+        "data_classes": ["transcript.raw"]
+    })
+}
+
 fn blob_ref_with_hash_and_data_classes(
     id: &'static str,
     sha256: &'static str,
@@ -6591,6 +6620,16 @@ fn workspace_listing_value() -> Value {
             }
         ]
     })
+}
+
+fn ensure_workspace_fixture(condition: bool, message: &'static str) -> Result<(), PublicSeamError> {
+    if condition {
+        Ok(())
+    } else {
+        Err(PublicSeamError::InvalidPlan {
+            message: message.to_owned(),
+        })
+    }
 }
 
 fn since_revision_event_diff_plan() -> Value {

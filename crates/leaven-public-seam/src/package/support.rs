@@ -54,6 +54,8 @@ pub(super) fn looks_like_denial_test(symbol: &str) -> bool {
         "rejects",
         "refuse",
         "refuses",
+        "require",
+        "requires",
         "deny",
         "denies",
         "denial",

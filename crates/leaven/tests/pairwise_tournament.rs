@@ -250,6 +250,7 @@ impl EventKind {
             | RunEvent::Error { .. }
             | RunEvent::IterationEnded { .. }
             | RunEvent::StageAttemptRecorded { .. }
+            | RunEvent::ExternalEventEmitted { .. }
             | RunEvent::OptimizationStopping { .. } => None,
         }
     }

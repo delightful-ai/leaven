@@ -41,7 +41,7 @@ pub struct SeamRunContextConfig {
     pub proposal_batch_alias: String,
     /// Final graph revision projected after a successful apply.
     pub final_revision: String,
-    /// Plan id routed to the RunContext graph readback summary.
+    /// Plan id routed to the `RunContext` graph readback summary.
     pub readback_plan_id: String,
 }
 
@@ -58,7 +58,7 @@ impl Default for SeamRunContextConfig {
     }
 }
 
-pub(crate) struct RunContextProposalApplyState {
+pub struct RunContextProposalApplyState {
     graph: RunGraph<SeamTextProblem>,
     budget: BudgetLedger,
     case_set: CaseSet<()>,
@@ -143,13 +143,13 @@ impl RunContextProposalApplyState {
         batch_ref == self.config.proposal_batch_alias
     }
 
-    pub(crate) fn accepts_event_emit(&self, plan: &PlanDocument) -> bool {
+    pub(crate) fn accepts_event_emit(plan: &PlanDocument) -> bool {
         event_emit_write(plan)
             .map(|event| event.event_kind == "run_context.checked")
             .unwrap_or(false)
     }
 
-    pub(crate) fn accepts_evaluation_request(&self, plan: &PlanDocument) -> bool {
+    pub(crate) fn accepts_evaluation_request(plan: &PlanDocument) -> bool {
         request_evaluation_write(plan)
             .map(|write| write.evaluator == "eval_run_context")
             .unwrap_or(false)
@@ -249,12 +249,9 @@ impl RunContextProposalApplyState {
         };
         let mut run_context = RunContext::<SeamTextProblem>::new(&mut self.graph, &mut self.budget)
             .with_case_set(&self.case_set);
+        let evaluator = EvaluatorId::from("eval_run_context");
         let request_id = run_context
-            .request_evaluation(
-                EvaluatorId::from("eval_run_context"),
-                Fingerprint::from_bytes([57; 32]),
-                request,
-            )
+            .request_evaluation(&evaluator, Fingerprint::from_bytes([57; 32]), request)
             .map_err(invalid_run_context)?;
         let graph = run_context.graph();
         let request = graph
@@ -361,10 +358,10 @@ impl RunContextProposalApplyState {
             payload: event.payload.clone(),
             visibility: event.visibility.to_owned(),
         });
-        run_context_event_emit_extension_result(method, event, context)
+        run_context_event_emit_extension_result(method, &event, context)
     }
 
-    pub(crate) fn graph_query(&self, request: PlanGraphQueryRequest<'_>) -> PlanGraphQueryOutcome {
+    pub(crate) fn graph_query(&self, request: &PlanGraphQueryRequest<'_>) -> PlanGraphQueryOutcome {
         let summary = RunContextGraphQueryItem {
             kind: "event_summary",
             event_kind: "proposal.apply",
@@ -389,7 +386,7 @@ impl RunContextProposalApplyState {
     }
 }
 
-pub(crate) fn requested_proposal_batch<'a>(
+pub fn requested_proposal_batch<'a>(
     request: &'a PlanApplyProposalBatchRequest<'a>,
 ) -> Result<&'a str, PublicSeamError> {
     request.proposal_batch()
@@ -402,7 +399,7 @@ fn proposal_apply_batch_ref(plan: &PlanDocument) -> Option<&str> {
         .find_map(|write| {
             write
                 .apply_proposal_batch()
-                .map(|apply| apply.proposal_batch())
+                .map(leaven_public_seam::PlanApplyProposalBatchWrite::proposal_batch)
         })
 }
 
@@ -582,7 +579,7 @@ struct EmptyObject {}
 
 fn run_context_event_emit_extension_result(
     method: LockedMethod,
-    event: EventEmitWrite<'_>,
+    event: &EventEmitWrite<'_>,
     context: &SeamExecutionContextConfig,
 ) -> Result<Value, PublicSeamError> {
     let event_id = format!("event_{}", event.name);
@@ -645,7 +642,7 @@ fn run_context_event_emit_extension_result(
     .map_err(|error| invalid_plan(format!("RunContext event.emit projection failed: {error}")))
 }
 
-fn graph_query_revision(request: PlanGraphQueryRequest<'_>, default_revision: &str) -> String {
+fn graph_query_revision(request: &PlanGraphQueryRequest<'_>, default_revision: &str) -> String {
     match request.scope() {
         leaven_public_seam::PlanGraphReadScope::LatestAtStart { revision }
         | leaven_public_seam::PlanGraphReadScope::AtRevision { revision } => revision.to_owned(),
@@ -682,7 +679,7 @@ mod tests {
 
     #[test]
     fn event_emit_write_accepts_typed_run_context_payload() {
-        let params = run_context_event_params(json!({"ok": true}));
+        let params = run_context_event_params(&json!({"ok": true}));
         let plan = validate_test_plan(&params);
 
         let event = event_emit_write(&plan).unwrap();
@@ -700,7 +697,7 @@ mod tests {
 
     #[test]
     fn event_emit_write_rejects_untyped_run_context_payload() {
-        let params = run_context_event_params(json!({"ok": true, "extra": "raw"}));
+        let params = run_context_event_params(&json!({"ok": true, "extra": "raw"}));
         let plan = validate_test_plan(&params);
 
         let error = event_emit_write(&plan).unwrap_err();
@@ -715,13 +712,13 @@ mod tests {
 
     #[test]
     fn event_emit_extension_result_uses_typed_projection_records() {
-        let params = run_context_event_params(json!({"ok": true}));
+        let params = run_context_event_params(&json!({"ok": true}));
         let plan = validate_test_plan(&params);
         let event = event_emit_write(&plan).unwrap();
         let context = SeamExecutionContextConfig::default();
 
         let result =
-            run_context_event_emit_extension_result(LockedMethod::EventEmit, event, &context)
+            run_context_event_emit_extension_result(LockedMethod::EventEmit, &event, &context)
                 .unwrap();
 
         assert_eq!(result["method"], "leaven/event.emit");
@@ -747,7 +744,7 @@ mod tests {
             .expect("test plan is schema-valid")
     }
 
-    fn run_context_event_params(payload: Value) -> Value {
+    fn run_context_event_params(payload: &Value) -> Value {
         json!({
             "schema_version": "leaven.plan.v1",
             "plan_id": "plan_run_context_event",

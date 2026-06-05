@@ -7,7 +7,7 @@ use super::common::{
 };
 use crate::run_bound_service::RunBoundGraphEffectError;
 
-pub(crate) fn assessment_submit_extension_result(
+pub fn assessment_submit_extension_result(
     plan_result: &Value,
 ) -> Result<Value, RunBoundGraphEffectError> {
     let projection = AssessmentSubmitExtensionProjection::from_plan_result(plan_result)?;

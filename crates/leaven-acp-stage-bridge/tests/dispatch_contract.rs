@@ -459,7 +459,8 @@ fn runner_request(prompt: &str) -> Value {
             "candidate": "cand_dispatch_contract",
             "case": "case_dispatch_contract",
             "case_input": {"question": "5 + 7", "prompt": prompt},
-            "target_forbidden": true
+            "target_forbidden": true,
+            "capability_fingerprint": "fp_cap_sha256_dispatch_contract"
         }
     })
 }

@@ -58,7 +58,7 @@ pub struct ExternalEvaluationRequest {
 }
 
 impl<'context, 'run, P: OptimizationProblem> RunContextGraphEffectHost<'context, 'run, P> {
-    /// Binds a mutable RunContext and the proposal batches workers may apply.
+    /// Binds a mutable `RunContext` and the proposal batches workers may apply.
     pub fn new(
         context: &'context mut RunContext<'run, P>,
         batches: impl IntoIterator<Item = ProposalBatchReport>,
@@ -153,7 +153,7 @@ impl<'context, 'run, P: OptimizationProblem> RunContextGraphEffectHost<'context,
                 payload: callback.write.payload.clone(),
                 visibility: callback.write.visibility.to_owned(),
             });
-        event_emit_extension_result(EventEmitExtensionContext {
+        event_emit_extension_result(&EventEmitExtensionContext {
             plan_id: callback.plan_id,
             name: callback.write.name,
             event_kind: callback.write.event_kind,
@@ -204,7 +204,7 @@ impl<'context, 'run, P: OptimizationProblem> RunContextGraphEffectHost<'context,
             requester(&callback).map_err(RunContextGraphEffectHostError::EvaluationRequest)?;
         let mut context = self.context.borrow_mut();
         let request_id = context.request_evaluation(
-            external.evaluator,
+            &external.evaluator,
             external.evaluator_fingerprint,
             external.request,
         )?;
@@ -235,10 +235,16 @@ impl<P: OptimizationProblem> AcpEffectHost for RunContextGraphEffectHost<'_, '_,
 
     fn service(&self, method: LockedMethod, params: &Value) -> AcpTransportResult<Value> {
         match method {
-            LockedMethod::ProposalApply => self.proposal_apply(params).map_err(protocol),
-            LockedMethod::AssessmentSubmit => self.assessment_submit(params).map_err(protocol),
-            LockedMethod::EvaluationRequest => self.evaluation_request(params).map_err(protocol),
-            LockedMethod::EventEmit => self.event_emit(params).map_err(protocol),
+            LockedMethod::ProposalApply => self
+                .proposal_apply(params)
+                .map_err(|error| protocol(&error)),
+            LockedMethod::AssessmentSubmit => self
+                .assessment_submit(params)
+                .map_err(|error| protocol(&error)),
+            LockedMethod::EvaluationRequest => self
+                .evaluation_request(params)
+                .map_err(|error| protocol(&error)),
+            LockedMethod::EventEmit => self.event_emit(params).map_err(|error| protocol(&error)),
             LockedMethod::LmComplete => self.lm_complete(params),
             other => Err(AcpTransportError::EffectUnimplemented {
                 method: other.as_str().to_owned(),
@@ -309,7 +315,7 @@ pub enum RunContextGraphEffectHostError {
     /// The batch is not one of the batches registered with the host.
     #[error("proposal batch `{0}` is not registered with the RunContext effect host")]
     UnknownBatch(ProposalBatchId),
-    /// RunContext rejected the apply.
+    /// `RunContext` rejected the apply.
     #[error(transparent)]
     RunContext(#[from] leaven_engine::RunContextError),
     /// The graph-backed report failed public-seam projection.
@@ -580,7 +586,7 @@ fn external_event_payload(
 }
 
 fn event_emit_extension_result(
-    context: EventEmitExtensionContext<'_>,
+    context: &EventEmitExtensionContext<'_>,
 ) -> Result<Value, RunContextGraphEffectHostError> {
     let receipt_id = format!("wrec_{}", context.name);
     let request_hash = prefixed_jcs_hash(
@@ -757,7 +763,7 @@ fn string_field<'a>(
         .ok_or(RunContextGraphEffectHostError::MissingString { field })
 }
 
-fn protocol(error: RunContextGraphEffectHostError) -> AcpTransportError {
+fn protocol(error: &RunContextGraphEffectHostError) -> AcpTransportError {
     AcpTransportError::Protocol {
         message: error.to_string(),
     }

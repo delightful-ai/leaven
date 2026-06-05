@@ -6,10 +6,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 /// Configured runner-stage execution for public-seam service processes.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SeamStageConfig {
     /// No stage runner is wired.
+    #[default]
     None,
     /// Deterministic runner output. This is mechanics evidence, not Python worker proof.
     MockRunner {
@@ -40,12 +41,6 @@ impl SeamStageConfig {
             }
             Self::CommandRunner { argv } => command_runner_result(argv, params, effects),
         }
-    }
-}
-
-impl Default for SeamStageConfig {
-    fn default() -> Self {
-        Self::None
     }
 }
 

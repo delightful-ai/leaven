@@ -140,7 +140,7 @@ impl ConfiguredSeamService {
             let mut state = state.lock().map_err(|_| PublicSeamError::InvalidPlan {
                 message: "RunContext seam service state lock poisoned".to_owned(),
             })?;
-            if state.accepts_event_emit(&plan) {
+            if RunContextProposalApplyState::accepts_event_emit(&plan) {
                 return state
                     .emit_run_event(method, &plan, &self.config.context)
                     .and_then(|result| {
@@ -157,7 +157,7 @@ impl ConfiguredSeamService {
             let mut state = state.lock().map_err(|_| PublicSeamError::InvalidPlan {
                 message: "RunContext seam service state lock poisoned".to_owned(),
             })?;
-            if state.accepts_evaluation_request(&plan) {
+            if RunContextProposalApplyState::accepts_evaluation_request(&plan) {
                 return state
                     .request_evaluation(method, &plan, params, &self.config.context)
                     .and_then(|result| {
@@ -246,7 +246,7 @@ impl ConfiguredSeamService {
 }
 
 /// Serve-process configuration for executable public-seam methods.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct SeamServiceConfig {
     /// Execution context projected into Plan Result receipts.
@@ -267,22 +267,6 @@ pub struct SeamServiceConfig {
     pub run_context: SeamRunContextConfig,
     /// Configured case records by case id.
     pub cases: BTreeMap<String, SeamCaseRecordConfig>,
-}
-
-impl Default for SeamServiceConfig {
-    fn default() -> Self {
-        Self {
-            context: SeamExecutionContextConfig::default(),
-            capability: None,
-            workspace: SeamWorkspaceConfig::default(),
-            agent: SeamAgentConfig::default(),
-            lm: SeamLmConfig::default(),
-            stage: SeamStageConfig::default(),
-            graph: SeamGraphConfig::default(),
-            run_context: SeamRunContextConfig::default(),
-            cases: BTreeMap::new(),
-        }
-    }
 }
 
 /// Stable execution metadata for one local seam service.
@@ -395,7 +379,7 @@ impl Default for SeamCaseRecordConfig {
 }
 
 /// Workspace provider configuration for public-seam execution.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct SeamWorkspaceConfig {
     /// Parent directory for local temp workspaces. Uses the OS temp directory when omitted.
@@ -414,21 +398,12 @@ impl SeamWorkspaceConfig {
     }
 }
 
-impl Default for SeamWorkspaceConfig {
-    fn default() -> Self {
-        Self {
-            parent: None,
-            seed_files: BTreeMap::new(),
-            git: SeamWorkspaceGitConfig::default(),
-        }
-    }
-}
-
 /// Agent provider configuration for public-seam execution.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SeamAgentConfig {
     /// No agent provider is wired.
+    #[default]
     None,
     /// Run agent sessions through the Codex CLI.
     CodexCli {
@@ -438,7 +413,7 @@ pub enum SeamAgentConfig {
         model: String,
         /// Optional process timeout in seconds.
         timeout_s: Option<u64>,
-        /// Optional CODEX_HOME override.
+        /// Optional `CODEX_HOME` override.
         codex_home: Option<String>,
         /// Run Codex with full bypass flags. Intended for explicit live proof only.
         bypass_approvals_and_sandbox: bool,
@@ -471,12 +446,6 @@ impl SeamAgentConfig {
     }
 }
 
-impl Default for SeamAgentConfig {
-    fn default() -> Self {
-        Self::None
-    }
-}
-
 struct ConfiguredPlanHost {
     lm: ConfiguredLmRuntime,
     workspace_config: SeamWorkspaceConfig,
@@ -499,7 +468,7 @@ impl PlanExecutionHost for ConfiguredPlanHost {
                 message: "RunContext seam service state lock poisoned".to_owned(),
             })?;
             if state.accepts_graph_query(&request) {
-                return Ok(state.graph_query(request));
+                return Ok(state.graph_query(&request));
             }
         }
         Ok(self
@@ -610,7 +579,7 @@ impl PlanExecutionHost for ConfiguredPlanHost {
             .map_err(|_| PublicSeamError::InvalidPlan {
                 message: "configured seam graph state lock poisoned".to_owned(),
             })?
-            .submit_proposal_batch(request)
+            .submit_proposal_batch(&request)
     }
 
     fn apply_proposal_batch(
@@ -634,7 +603,7 @@ impl PlanExecutionHost for ConfiguredPlanHost {
             .map_err(|_| PublicSeamError::InvalidPlan {
                 message: "configured seam graph state lock poisoned".to_owned(),
             })?
-            .apply_proposal_batch(request)
+            .apply_proposal_batch(&request)
     }
 
     fn submit_assessments(
@@ -646,7 +615,7 @@ impl PlanExecutionHost for ConfiguredPlanHost {
             .map_err(|_| PublicSeamError::InvalidPlan {
                 message: "configured seam graph state lock poisoned".to_owned(),
             })?
-            .submit_assessments(request)
+            .submit_assessments(&request)
     }
 
     fn workspace_materialize(
@@ -1984,6 +1953,10 @@ mod tests {
         assert_primary: fn(&Value),
     }
 
+    #[allow(
+        clippy::too_many_lines,
+        reason = "fixture table keeps workspace query cases adjacent to their assertions"
+    )]
     fn finite_workspace_query_cases() -> Vec<WorkspaceQueryCase> {
         vec![
             WorkspaceQueryCase {
@@ -2987,6 +2960,10 @@ mod tests {
         value
     }
 
+    #[allow(
+        clippy::too_many_lines,
+        reason = "capability fixture stays inline so effect grants remain reviewable together"
+    )]
     fn effect_capability() -> Value {
         json!({
             "schema_version": "leaven.capability.v1",

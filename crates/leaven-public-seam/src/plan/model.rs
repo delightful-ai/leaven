@@ -468,10 +468,10 @@ impl PlanWriteOperation {
     pub const fn request_evaluation(&self) -> Option<&PlanRequestEvaluationWrite> {
         match &self.detail {
             PlanWriteDetail::RequestEvaluation(write) => Some(write),
-            PlanWriteDetail::Other => None,
-            PlanWriteDetail::EmitRunEvent(_) => None,
-            PlanWriteDetail::SubmitAssessments(_) => None,
-            PlanWriteDetail::ApplyProposalBatch(_) => None,
+            PlanWriteDetail::Other
+            | PlanWriteDetail::EmitRunEvent(_)
+            | PlanWriteDetail::SubmitAssessments(_)
+            | PlanWriteDetail::ApplyProposalBatch(_) => None,
         }
     }
 
@@ -676,22 +676,22 @@ pub enum PlanEvaluationSetExpr {
         requires_partition_resolution: bool,
     },
     Union {
-        sets: Vec<PlanEvaluationSetExpr>,
+        sets: Vec<Self>,
     },
     Intersect {
-        sets: Vec<PlanEvaluationSetExpr>,
+        sets: Vec<Self>,
     },
     Difference {
-        base: Box<PlanEvaluationSetExpr>,
-        subtract: Box<PlanEvaluationSetExpr>,
+        base: Box<Self>,
+        subtract: Box<Self>,
     },
     Sample {
-        base: Box<PlanEvaluationSetExpr>,
+        base: Box<Self>,
         n: u64,
         seed: i64,
     },
     Stratified {
-        base: Box<PlanEvaluationSetExpr>,
+        base: Box<Self>,
         by: String,
         per_bucket: u64,
         seed: i64,
