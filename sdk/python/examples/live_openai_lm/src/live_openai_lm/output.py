@@ -53,25 +53,25 @@ def valid_live_lm_output(value: LiveLmOutput) -> bool:
     )
 
 
-def _json_object(value: object, *, context: str) -> JsonObject:
-    if not isinstance(value, dict):
+def _json_object(raw_json: object, *, context: str) -> JsonObject:
+    if not isinstance(raw_json, dict):
         raise ValueError(f"{context} is not a JSON object")
     parsed: JsonObject = {}
-    for key, item in value.items():
+    for key, item in raw_json.items():
         if not isinstance(key, str):
             raise ValueError(f"{context} contains a non-string key")
         parsed[key] = _json_value(item, context=context)
     return parsed
 
 
-def _json_value(value: object, *, context: str) -> JsonValue:
-    if value is None or isinstance(value, str | int | float | bool):
-        return value
-    if isinstance(value, list):
-        return [_json_value(item, context=context) for item in value]
-    if isinstance(value, dict):
-        return _json_object(value, context=context)
-    raise ValueError(f"{context} contains non-JSON value {type(value).__name__}")
+def _json_value(raw_json: object, *, context: str) -> JsonValue:
+    if raw_json is None or isinstance(raw_json, str | int | float | bool):
+        return raw_json
+    if isinstance(raw_json, list):
+        return [_json_value(item, context=context) for item in raw_json]
+    if isinstance(raw_json, dict):
+        return _json_object(raw_json, context=context)
+    raise ValueError(f"{context} contains non-JSON value {type(raw_json).__name__}")
 
 
 __all__ = ["LiveLmOutput", "LiveLmUsage", "live_lm_output_from_assessment", "valid_live_lm_output"]

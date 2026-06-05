@@ -95,20 +95,20 @@ def normalize_schema(node: JsonValue) -> JsonValue:
     return out
 
 
-def json_value(value: object) -> JsonValue:
+def json_value(raw_json: object) -> JsonValue:
     """Return `value` as a JSON value or raise `TypeError`."""
-    if value is None or isinstance(value, str | int | float | bool):
-        return value
-    if isinstance(value, dict):
+    if raw_json is None or isinstance(raw_json, str | int | float | bool):
+        return raw_json
+    if isinstance(raw_json, dict):
         output: JsonObject = {}
-        for key, item in value.items():
+        for key, item in raw_json.items():
             if not isinstance(key, str):
                 raise TypeError("JSON object keys must be strings")
             output[key] = json_value(item)
         return output
-    if isinstance(value, list):
-        return [json_value(item) for item in value]
-    raise TypeError(f"value is not JSON: {type(value).__name__}")
+    if isinstance(raw_json, list):
+        return [json_value(item) for item in raw_json]
+    raise TypeError(f"value is not JSON: {type(raw_json).__name__}")
 
 
 def main(argv: list[str]) -> int:

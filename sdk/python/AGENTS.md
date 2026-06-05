@@ -134,13 +134,15 @@ ruff's `RUF022` (sorted `__all__`) is on. No current ruff rule for
   typed SDK model may widen a domain value to `object`, stringify unknown values
   with `str(...)`, use `isinstance(x, str) else str(x)` fallback coercion, or
   probe arbitrary objects with `.get(...)` / `getattr(...)` to paper over a bad
-  type unless the governing spec names that exact sum type. Parse and validate
-  at the boundary, keep the owned domain type through the call graph, and let
-  wrong shapes fail loudly. Internal logic must use typed attributes or explicit
-  indexing on parsed domain shapes, not optional fallback probes on raw mapping
-  objects. Custom Leaven quality lint suppressions must be line-local
-  `# noqa: LEAVENxxx -- justification` exceptions that explain why the typed
-  owner cannot be introduced in that change.
+  type unless the governing spec names that exact sum type. No internal logic
+  should match objects by optional fields or fish values out of dict-shaped
+  carriers with `.get(...)`. Parse and validate at the boundary, keep the owned
+  domain type through the call graph, and let wrong shapes fail loudly. Internal
+  logic must use typed attributes or explicit indexing on parsed domain shapes,
+  not optional fallback probes on raw mapping objects. Custom Leaven quality
+  lint suppressions must be line-local `# noqa: LEAVENxxx -- justification`
+  exceptions that explain why the typed owner cannot be introduced in that
+  change.
 - Top-level `lv.*` imports are the public surface; submodule paths
   (`lv.optimizers.gepa`, `lv.lm.anthropic`) are also part of the public
   surface where the spec names them.

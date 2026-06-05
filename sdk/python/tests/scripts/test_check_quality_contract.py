@@ -51,12 +51,14 @@ def declared_mapping(row: JsonObject) -> object:
     failures = defensive_type_erasure_failures_for_source(_probe_path(), source)
 
     assert failures == [
-        "tests/scripts/lint_probe.py:2: LEAVEN001 widens callback output to object",
+        "tests/scripts/lint_probe.py:2: LEAVEN001 widens domain value `output` to object",
         "tests/scripts/lint_probe.py:3: LEAVEN005 uses .get(...) on an unparsed domain value",
         "tests/scripts/lint_probe.py:4: LEAVEN002 uses str(...) to coerce a domain value",
         "tests/scripts/lint_probe.py:7: LEAVEN005 uses .get(...) on an unparsed domain value",
+        "tests/scripts/lint_probe.py:9: LEAVEN001 widens domain value `value` to object",
         "tests/scripts/lint_probe.py:10: LEAVEN002 uses str(...) to coerce a domain value",
         "tests/scripts/lint_probe.py:13: LEAVEN003 uses isinstance(..., str) else str(...) defensive fallback",
+        "tests/scripts/lint_probe.py:15: LEAVEN001 widens domain value `value` to object",
         "tests/scripts/lint_probe.py:16: LEAVEN006 uses getattr(...) to probe a domain value",
         "tests/scripts/lint_probe.py:19: LEAVEN005 uses .get(...) on an unparsed domain value",
     ]
@@ -71,7 +73,7 @@ import os
 def env() -> str | None:
     return os.environ.get("LEAVEN_BIN")
 
-def strict_text(raw_output: object) -> str:
+def strict_text(raw_output: object) -> str:  # noqa: LEAVEN001 -- explicit ingress guard parses unknown worker output
     if not isinstance(raw_output, str):
         raise TypeError("runner output must be text")
     return raw_output
@@ -99,6 +101,28 @@ def justified(decoded) -> object:
     assert failures == [
         "tests/scripts/lint_probe.py:3: LEAVEN005 uses .get(...) on an unparsed domain value",
         "tests/scripts/lint_probe.py:6: LEAVEN005 uses .get(...) on an unparsed domain value",
+    ]
+
+
+def test_domain_object_widening_noqa_requires_code_and_justification() -> None:
+    """Regression: `object` domain slots need an auditable local exception."""
+
+    source = """
+def bare(payload: object) -> None:
+    pass
+
+def code_only(result: object) -> None:  # noqa: LEAVEN001
+    pass
+
+def justified(value: object) -> None:  # noqa: LEAVEN001 -- third-party SDK callback is untyped until adapter lands
+    pass
+"""
+
+    failures = defensive_type_erasure_failures_for_source(_probe_path(), source)
+
+    assert failures == [
+        "tests/scripts/lint_probe.py:2: LEAVEN001 widens domain value `payload` to object",
+        "tests/scripts/lint_probe.py:5: LEAVEN001 widens domain value `result` to object",
     ]
 
 

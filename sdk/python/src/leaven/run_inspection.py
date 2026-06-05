@@ -290,19 +290,19 @@ def inspect_optimized[A](
     )
 
 
-def _json_value(value: object) -> JsonValue:
-    if value is None or isinstance(value, str | int | float | bool):
-        return value
-    if isinstance(value, list):
-        return [_json_value(item) for item in value]
-    if isinstance(value, dict):
+def _json_value(raw_json: object) -> JsonValue:
+    if raw_json is None or isinstance(raw_json, str | int | float | bool):
+        return raw_json
+    if isinstance(raw_json, list):
+        return [_json_value(item) for item in raw_json]
+    if isinstance(raw_json, dict):
         output: JsonObject = {}
-        for key, item in value.items():
+        for key, item in raw_json.items():
             if not isinstance(key, str):
                 raise TypeError("JSON object keys must be strings")
             output[key] = _json_value(item)
         return output
-    raise TypeError(f"value is not JSON: {type(value).__name__}")
+    raise TypeError(f"value is not JSON: {type(raw_json).__name__}")
 
 
 def _receipts[A](result: Optimized[A]) -> list[ReceiptSummary]:

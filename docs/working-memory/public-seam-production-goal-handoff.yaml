@@ -4602,6 +4602,38 @@ acceptance:
           invariant. This does not claim optional DSPy or private optimize
           runtime branches are complete; it removes scaffold-shaped failures
           from the public builder backbone.
+      - kind: python_defensive_erasure_lint_tightened
+        paths:
+          - sdk/python/AGENTS.md
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/tests/scripts/test_check_quality_contract.py
+          - sdk/python/src/leaven/_seam/_wire/json_value.py
+          - sdk/python/src/leaven/_seam_optimize/status.py
+          - sdk/python/src/leaven/output.py
+          - sdk/python/src/leaven/output_record.py
+          - sdk/python/src/leaven/run_inspection.py
+          - sdk/python/codegen/preprocess_schemas.py
+          - sdk/python/examples/live_openai_lm/src/live_openai_lm/output.py
+          - sdk/python/tests/_seam/_wire/test_calls.py
+        commands:
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && uv run pytest tests/scripts/test_check_quality_contract.py tests/_seam/_wire/test_calls.py -q
+          - cd sdk/python && uv run ruff check AGENTS.md scripts/check_quality_contract.py tests/scripts/test_check_quality_contract.py src/leaven/_seam/_wire/json_value.py codegen/preprocess_schemas.py examples/live_openai_lm/src/live_openai_lm/output.py src/leaven/_seam_optimize/status.py src/leaven/output.py src/leaven/output_record.py src/leaven/run_inspection.py tests/_seam/_wire/test_calls.py
+          - cd sdk/python && uv run ty check scripts/check_quality_contract.py tests/scripts/test_check_quality_contract.py src/leaven/_seam/_wire/json_value.py codegen/preprocess_schemas.py examples/live_openai_lm/src/live_openai_lm/output.py src/leaven/_seam_optimize/status.py src/leaven/output.py src/leaven/output_record.py src/leaven/run_inspection.py tests/_seam/_wire/test_calls.py
+        note: >-
+          The SDK operating rules and custom quality contract now reject
+          domain-parameter widening to `object` for named carriers such as
+          output, raw_output, target, payload, result, and value unless a
+          line-local `# noqa: LEAVEN001 -- ...` explains the temporary boundary.
+          The same lint suite keeps rejecting fallback `str(...)` coercion,
+          `isinstance(..., str) else str(...)`, arbitrary `.get(...)` field
+          fishing, and `getattr(...)` probing unless a line-local Leaven noqa
+          carries a justification. Existing JSON boundary parser helpers were
+          renamed to `raw_json` instead of broadening the allowlist, and
+          `_seam_optimize.status.first_agent` now preserves the typed
+          `AgentConfig` runtime shape instead of accepting `object`. This is a
+          quality ratchet for future SDK work, not proof that every remaining
+          public API type island has been eliminated.
       - kind: public_agent_forbidden_input_classes_scaffold_removed
         paths:
           - sdk/python/src/leaven/_seam/plans.py

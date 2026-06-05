@@ -253,10 +253,10 @@ class DefensiveTypeErasureVisitor(ast.NodeVisitor):
 
     def _check_function_args(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         for arg in node.args.args:
-            if arg.arg != "output":
+            if arg.arg not in DOMAIN_VALUE_NAMES:
                 continue
             if isinstance(arg.annotation, ast.Name) and arg.annotation.id == "object":
-                self._add(arg, "LEAVEN001", "widens callback output to object")
+                self._add(arg, "LEAVEN001", f"widens domain value `{arg.arg}` to object")
 
     def _visit_function_body(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         for arg in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]:

@@ -164,8 +164,8 @@ def test_output_json_schema_rejects_non_object_schema(
         )
 
 
-def _encoded_json(value: object) -> object:
-    return msgspec.json.decode(msgspec.json.encode(value))
+def _encoded_json(raw_json: object) -> object:
+    return msgspec.json.decode(msgspec.json.encode(raw_json))
 
 
 __all__ = []

@@ -1,6 +1,7 @@
 """Private run-status facts observed by the durable-seam optimize route."""
 
 from ..agent.codex import CodexAgent
+from ..agent.config import AgentConfig
 from ..run_status import UnsupportedRunFact
 from ..runtime import Runtime
 
@@ -35,15 +36,17 @@ def unsupported_facts_for_runtime(runtime: Runtime) -> tuple[UnsupportedRunFact,
     return tuple(facts)
 
 
-def first_agent(value: object) -> object | None:
+def first_agent(
+    agent: AgentConfig | list[AgentConfig] | dict[str, AgentConfig] | None,
+) -> AgentConfig | None:
     """Return the first configured agent without assigning provider semantics."""
-    if value is None:
+    if agent is None:
         return None
-    if isinstance(value, list):
-        return value[0] if value else None
-    if isinstance(value, dict):
-        return next(iter(value.values())) if value else None
-    return value
+    if isinstance(agent, list):
+        return agent[0] if agent else None
+    if isinstance(agent, dict):
+        return next(iter(agent.values())) if agent else None
+    return agent
 
 
 __all__ = ["first_agent", "unsupported_facts_for_runtime"]

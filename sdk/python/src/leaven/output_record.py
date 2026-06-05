@@ -115,25 +115,25 @@ def _data_classes(data_classes: list[str] | None) -> list[str]:
     return [PUBLIC] if data_classes is None else list(data_classes)
 
 
-def _json_object(value: object) -> JsonObject:
-    if not isinstance(value, dict):
+def _json_object(raw_json: object) -> JsonObject:
+    if not isinstance(raw_json, dict):
         raise TypeError("JSON value must be an object")
     output: JsonObject = {}
-    for key, item in value.items():
+    for key, item in raw_json.items():
         if not isinstance(key, str):
             raise TypeError("JSON object keys must be strings")
         output[key] = _json_value(item)
     return output
 
 
-def _json_value(value: object) -> JsonValue:
-    if value is None or isinstance(value, str | int | float | bool):
-        return value
-    if isinstance(value, dict):
-        return _json_object(value)
-    if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
-        return [_json_value(item) for item in value]
-    raise TypeError(f"value is not JSON: {type(value).__name__}")
+def _json_value(raw_json: object) -> JsonValue:
+    if raw_json is None or isinstance(raw_json, str | int | float | bool):
+        return raw_json
+    if isinstance(raw_json, dict):
+        return _json_object(raw_json)
+    if isinstance(raw_json, Sequence) and not isinstance(raw_json, str | bytes | bytearray):
+        return [_json_value(item) for item in raw_json]
+    raise TypeError(f"value is not JSON: {type(raw_json).__name__}")
 
 
 __all__ = ["OutputKind", "OutputRecord", "Visibility"]
