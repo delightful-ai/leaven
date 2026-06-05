@@ -75,12 +75,7 @@ from .refs import (
     TraceRefRecord,
     TraceVisibility,
     WireJsonCaseInput,
-    WireJsonField,
-    WireJsonLeafArray,
-    WireJsonLeafObject,
-    WireJsonObject,
     WireJsonOutputValue,
-    WireJsonScalar,
     WorkspaceRef,
     WorkspaceRefRecord,
 )
@@ -559,6 +554,6 @@ __all__ = (  # noqa: PLE0605, SIM905
     "ProposalEffectSummary ProposalEffectSummaryKind ProposalRef ProposalRefRecord ProposalSummaryGraphRow ReceiptRef Redaction ReflectionResult Replayability "
     "RunnerRequest Score "
     "StageEffectReceipt StageProposalReceipt StageRunKind StageRunPayload StageRunRequest StageRunResult "
-    "StaleWritePolicy SurfaceSuggestion TraceRef ValidationReceipt VisibilityClass WireJsonField WireJsonLeafArray "
-    "WireJsonLeafObject WireJsonObject WireJsonScalar"
+    "StaleWritePolicy SurfaceSuggestion TraceRef ValidationReceipt VisibilityClass "
+    "WireJsonCaseInput WireJsonOutputValue"
 ).split()
