@@ -83,6 +83,10 @@ MIRRORED_TESTS = {
     / "tests"
     / "builders"
     / "test_output_contract.py",
+    ROOT / "src" / "leaven" / "builders" / "batch.py": ROOT
+    / "tests"
+    / "builders"
+    / "test_batch.py",
     ROOT / "src" / "leaven" / "cases" / "__init__.py": ROOT
     / "tests"
     / "cases"

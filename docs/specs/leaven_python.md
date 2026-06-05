@@ -171,7 +171,7 @@ not grow with the paper's complexity; the stage bodies do.
 
 The locked-spec example at
 `docs/specs/public-seam-v1/examples/evaluator_dspy_codex.v0.3.py` is the
-aspirational evaluator shape. It uses `cx.case.load`, `cx.batch()`,
+aspirational evaluator shape. It uses `cx.case.load`, a deferred batch syntax,
 `cx.workspace.materialize_candidate`, `cx.sandbox.exec`, `cx.agent.run`,
 `lv.dspy_context`, `lv.AssessmentWrite.independent_case`,
 `lv.EvidenceEnvelope.public_private`. That sketch is the shape any
@@ -389,20 +389,17 @@ The builder geometry:
 # Single op, awaited directly
 case = await cx.case.load(case_id, include=["input", "target"])
 
-# Multiple ops batched into one Plan IR document
-async with cx.batch() as b:
-    diff = b.workspace.git_diff(ws, against="parent")
-    tests = b.sandbox.exec(workspace=ws, argv=[...])
-    agent = b.agent.run(workspace=ws, instructions=...)
-# After exiting the context manager, diff/tests/agent are real values.
-# The batch was sent as one Leaven seam call; the context manager handles the await.
+# Deferred: multiple ops batched into one Plan IR document.
+# Do not expose `cx.batch()` until the SDK has a real batch accumulator/requester.
 ```
 
 The batch context manager is the load-bearing ergonomic — it lets the
 user write multiple operations as if they were independent calls while
 the wire treats them as one transaction with one receipt root. Without
 it, every effect is a separate round-trip. With it, the user expresses
-intent declaratively and the wire is efficient.
+intent declaratively and the wire is efficient. It is not a current public
+Python SDK surface; a private placeholder module exists only to reserve the
+ownership location for the future real implementation.
 
 Runtime composition takes a single call:
 

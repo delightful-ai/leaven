@@ -13,7 +13,6 @@ on the stage function (`InputCaseView` / `ScoringCaseView`), not a `cx` field.
 from ._handles import WorkspaceHandle
 from .builders.agent import AgentBuilder
 from .builders.assessments import AssessmentsBuilder
-from .builders.batch import BatchBuilder
 from .builders.case import CaseBuilder
 from .builders.lm import LmBuilder
 from .builders.proposals import ProposalsBuilder
@@ -41,10 +40,6 @@ class _Effects(_StageMeta):
     agent: AgentBuilder
     sandbox: SandboxBuilder
     workspace: WorkspaceReads
-
-    def batch(self) -> BatchBuilder:
-        """Collapse multiple ops into one public-seam round-trip."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
 
 class RolloutContext(_Effects):

@@ -4239,6 +4239,27 @@ acceptance:
           and item shape instead of raising scaffold errors. This makes the
           evaluator invocation record usable without claiming assessment
           submission or service execution is complete.
+      - kind: public_batch_scaffold_deadvertised
+        paths:
+          - docs/specs/leaven_python.md
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/src/leaven/builders/__init__.py
+          - sdk/python/src/leaven/builders/batch.py
+          - sdk/python/src/leaven/contexts.py
+          - sdk/python/tests/builders/test_batch.py
+        commands:
+          - cd sdk/python && uv run pytest tests/builders/test_batch.py tests/scripts/test_check_quality_contract.py -q
+          - cd sdk/python && uv run ruff check src/leaven/builders/batch.py src/leaven/builders/__init__.py src/leaven/contexts.py tests/builders/test_batch.py scripts/check_quality_contract.py
+          - cd sdk/python && uv run ty check src/leaven/builders/batch.py src/leaven/builders/__init__.py src/leaven/contexts.py tests/builders/test_batch.py scripts/check_quality_contract.py
+        note: >-
+          The Python SDK no longer advertises `cx.batch()`, `BatchBuilder`, or
+          a callable `leaven.builders.batch` factory while no real batch
+          accumulator/requester exists. `builders.batch` is now a private
+          placeholder module with no public `__all__`, `builders.__all__` no
+          longer exports batch names, role contexts no longer expose a
+          `batch()` method, and the Python spec labels batch syntax as deferred
+          until a real implementation exists. This removes a public scaffold by
+          hard cutover rather than pretending batching works.
       - kind: public_workspace_builder_scaffold_removed
         paths:
           - sdk/python/src/leaven/_seam/__init__.py
