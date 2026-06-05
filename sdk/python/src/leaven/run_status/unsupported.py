@@ -9,6 +9,7 @@ UnsupportedReason = Literal[
     "provider_cost_not_reported",
     "provider_usage_not_reported",
     "blob_readback_not_implemented",
+    "assessment_evidence_not_loaded",
 ]
 
 

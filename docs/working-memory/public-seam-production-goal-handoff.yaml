@@ -1364,6 +1364,37 @@ acceptance:
           `Assessment` handles and Python reward-vector rows are not fully
           reconstructed from Rust-owned state; Rust currently persists scalar
           `CaseAssessmentEvidence`, not the Python reward-vector dimensions.
+      - kind: rust_target_value_assessment_rows_project_to_python_inspection
+        paths:
+          - crates/leaven-evidence/src/feedback.rs
+          - crates/leaven-evidence/tests/evidence_contract/feedback.rs
+          - crates/leaven-run/src/evidence.rs
+          - crates/leaven-run/src/evaluator/judging.rs
+          - crates/leaven-run/tests/scoring_evaluator.rs
+          - sdk/python/src/leaven/_runs/rust_evidence.py
+          - sdk/python/src/leaven/_runs/rust_open.py
+          - sdk/python/src/leaven/runs.py
+          - sdk/python/src/leaven/run_status/unsupported.py
+          - sdk/python/tests/_runs/test_rust_export.py
+        commands:
+          - cargo test -p leaven-evidence
+          - cargo test -p leaven-run --test scoring_evaluator scoring_evaluator_hides_target_from_runner_and_loads_target_with_case_data_receipt -- --exact
+          - cargo test -p leaven-run inspection --lib
+          - cd sdk/python && uv run pytest tests/_runs/test_rust_export.py tests/test_run_inspection.py tests/test_reward_vector_inspection.py -q
+          - cd sdk/python && uv run ruff check src/leaven/runs.py src/leaven/run_inspection.py src/leaven/_runs src/leaven/run_status tests/_runs/test_rust_export.py tests/test_run_inspection.py tests/test_reward_vector_inspection.py
+          - cd sdk/python && uv run ty check src/leaven/runs.py src/leaven/run_inspection.py src/leaven/_runs src/leaven/run_status tests/_runs/test_rust_export.py tests/test_run_inspection.py tests/test_reward_vector_inspection.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - cargo fmt --check
+        note: >-
+          Rust `CaseDataReadEvidence` now records the JSON target value read by
+          scorer and judge contexts, and focused Rust tests prove the target
+          value is persisted in case-data evidence. Python now decodes the
+          Rust-owned evidence bytes into public `Assessment` rows for
+          checkpoint-only runs without `optimized.json`: case target, split,
+          score value, feedback, evidence envelope, write receipt, and a scalar
+          reward row come from Rust checkpoint/evidence exports. USD cost
+          remains an explicit unsupported fact, and the larger durable
+          `lv.optimize(...).run()` route still needs full row closure.
     closeout_check: "Reading only `optimized.json` written by Python is a proxy."
 
   - id: python_wire_codegen_msgspec_boundary
@@ -3069,6 +3100,10 @@ acceptance:
         - live Codex run with `gpt-5.4-mini`
         - separate reflection and proposal stages, not one combined prompt
         - AgentKit system prompt or `.agents/skills` materialization
+        - Git repo materialization, commit/import, and readback through typed GitProgram artifacts
+        - filesystem writes and reads that mutate the AgentKit repo, not host-path shortcuts
+        - Codex Kit projection of `AGENTS.md`, system prompt, and skill files
+        - Firkin-backed git workspace execution/readback when that substrate is the configured workspace
         - Codex-authored workspace mutation parsed into a typed proposal
         - "`leaven/proposal.submit_batch` through `leaven seam serve --stdio`"
         - "`leaven/proposal.apply` through `leaven seam serve --stdio`"

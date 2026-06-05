@@ -174,17 +174,25 @@ impl<I> RunCase<I> {
 pub struct CaseDataReadLog(std::sync::Arc<std::sync::Mutex<Vec<CaseDataReadEvidence>>>);
 
 impl CaseDataReadLog {
-    pub fn record_target_read(&self, case: CaseId) {
+    pub fn record_target_read_with_value<T>(&self, case: CaseId, target: &T)
+    where
+        T: serde::Serialize,
+    {
+        let value =
+            serde_json::to_value(target).expect("scorer target read must be JSON-serializable");
         self.0
             .lock()
             .expect("case data read log lock was poisoned")
-            .push(CaseDataReadEvidence::new(
-                "case_query.load",
-                format!("qrec_case_{}_target", case.0),
-                case,
-                ["target"],
-                ["case.target"],
-            ));
+            .push(
+                CaseDataReadEvidence::new(
+                    "case_query.load",
+                    format!("qrec_case_{}_target", case.0),
+                    case,
+                    ["target"],
+                    ["case.target"],
+                )
+                .with_value("target", value),
+            );
     }
 
     pub fn snapshot(&self) -> Vec<CaseDataReadEvidence> {
@@ -286,10 +294,14 @@ impl<A, I, T, Out> ScoreContext<A, I, T, Out> {
     /// target read: callers must make target access explicit, and the evaluator
     /// attaches a target-read evidence record to the assessment.
     #[must_use]
-    pub fn load_target(&self) -> Option<&T> {
+    pub fn load_target(&self) -> Option<&T>
+    where
+        T: serde::Serialize,
+    {
         let target = self.case.target_material();
-        if target.is_some() {
-            self.case_data_reads.record_target_read(self.case.id());
+        if let Some(target) = target {
+            self.case_data_reads
+                .record_target_read_with_value(self.case.id(), target);
         }
         target
     }

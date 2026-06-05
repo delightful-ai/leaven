@@ -293,11 +293,33 @@ def test_runs_open_prefers_rust_checkpoint_without_optimized_json(
     (run_dir / "checkpoints" / "LATEST").write_text("checkpoint_1\n", encoding="utf-8")
     fake = tmp_path / "leaven"
     output = tmp_path / "readback.json"
+    evidence = tmp_path / "evidence.json"
+    evidence_bytes = rust_case_assessment_evidence_bytes()
     output.write_text(
         json.dumps(load_rust_run_readback_fixture().model_dump(mode="json", by_alias=True)),
         encoding="utf-8",
     )
-    fake.write_text(f"#!/bin/sh\ncat {output}\n", encoding="utf-8")
+    evidence.write_text(
+        json.dumps(
+            {
+                "schema_version": "leaven.run_evidence_export.v1",
+                "evidence": {"store": "leaven-run", "key": "0"},
+                "bytes": len(evidence_bytes),
+                "sha256": hashlib.sha256(evidence_bytes).hexdigest(),
+                "content_base64": base64.b64encode(evidence_bytes).decode(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    fake.write_text(
+        "#!/bin/sh\n"
+        "case \"$2\" in\n"
+        f"  inspect) cat {output} ;;\n"
+        f"  evidence) cat {evidence} ;;\n"
+        "  *) exit 9 ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
     fake.chmod(0o755)
     monkeypatch.setenv("LEAVEN_BIN", str(fake))
 
@@ -309,6 +331,15 @@ def test_runs_open_prefers_rust_checkpoint_without_optimized_json(
         "cand_child",
         "cand_seed",
     ]
+    assessment = result.assessment("1")
+    assert assessment.case.target == {"answer": "42"}
+    assert assessment.case.split == "validation"
+    assert assessment.score.value == 0.75
+    assert assessment.score.feedback == "exact match"
+    assert [(reward.id, reward.value, reward.weight, reward.feedback) for reward in assessment.rewards] == [
+        ("score", 0.75, 1.0, "exact match")
+    ]
+    assert [fact.surface for fact in result.summary.unsupported] == ["run.cost"]
 
 
 def test_runs_inspect_uses_rust_checkpoint_blob_and_evidence_without_optimized_json(
@@ -323,32 +354,7 @@ def test_runs_inspect_uses_rust_checkpoint_blob_and_evidence_without_optimized_j
     readback = tmp_path / "readback.json"
     graph_blob = tmp_path / "graph_blob.json"
     evidence = tmp_path / "evidence.json"
-    evidence_bytes = json.dumps(
-        {
-            "score": {"score": 0.75},
-            "output": {
-                "Inline": {
-                    "text": "42",
-                    "truncated": False,
-                    "metadata": {
-                        "visibility": "public",
-                        "data_classes": ["candidate.output", "public"],
-                    },
-                }
-            },
-            "feedback": "exact match",
-            "trace": [],
-            "case_data_reads": [
-                {
-                    "operation": "case_query.load",
-                    "receipt": "qrec_case_1",
-                    "case": 1,
-                    "fields": ["input", "target"],
-                    "data_classes": ["case.input", "case.target"],
-                }
-            ],
-        }
-    ).encode()
+    evidence_bytes = rust_case_assessment_evidence_bytes()
     readback.write_text(
         json.dumps(load_rust_run_readback_fixture().model_dump(mode="json", by_alias=True)),
         encoding="utf-8",
@@ -415,10 +421,7 @@ def test_runs_inspect_uses_rust_checkpoint_blob_and_evidence_without_optimized_j
         (reward.id, reward.value, reward.weight, reward.feedback)
         for reward in inspection.evidence[0].rewards
     ] == [("score", 0.75, 1.0, "exact match")]
-    assert [fact.surface for fact in inspection.unsupported] == [
-        "run.cost",
-        "run.inspection",
-    ]
+    assert [fact.surface for fact in inspection.unsupported] == ["run.cost"]
     assert calls.read_text(encoding="utf-8").splitlines() == [
         "run",
         "inspect",
@@ -528,3 +531,33 @@ def load_rust_run_readback_fixture() -> RustRunReadback:
             },
         }
     )
+
+
+def rust_case_assessment_evidence_bytes() -> bytes:
+    return json.dumps(
+        {
+            "score": {"score": 0.75},
+            "output": {
+                "Inline": {
+                    "text": "42",
+                    "truncated": False,
+                    "metadata": {
+                        "visibility": "public",
+                        "data_classes": ["candidate.output", "public"],
+                    },
+                }
+            },
+            "feedback": "exact match",
+            "trace": [],
+            "case_data_reads": [
+                {
+                    "operation": "case_query.load",
+                    "receipt": "qrec_case_1",
+                    "case": 1,
+                    "fields": ["input", "target"],
+                    "data_classes": ["case.input", "case.target"],
+                    "values": {"target": {"answer": "42"}},
+                }
+            ],
+        }
+    ).encode()

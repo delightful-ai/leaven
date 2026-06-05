@@ -2,7 +2,7 @@ use leaven_evidence::{
     CandidateAssessmentOutput, CandidateAssessmentOutputError, CaseAssessmentEvidence, DataClass,
     DataClassSet, OutputMetadata, OutputRecord, OutputVisibility, ScalarEvidence,
 };
-use leaven_kernel::CandidateId;
+use leaven_kernel::{CandidateId, CaseId};
 
 #[test]
 fn case_assessment_preserves_output_score_and_feedback() {
@@ -59,4 +59,20 @@ fn case_assessment_preserves_candidate_bound_outputs() {
     .with_candidate_outputs([output.clone()]);
 
     assert_eq!(evidence.candidate_outputs(), &[output]);
+}
+
+#[test]
+fn case_data_read_evidence_preserves_read_values() {
+    let read = leaven_evidence::CaseDataReadEvidence::new(
+        "case_query.load",
+        "qrec_case_1_target",
+        CaseId::new(1),
+        ["target"],
+        ["case.target"],
+    )
+    .with_value("target", serde_json::json!({"answer": "42"}));
+
+    assert_eq!(read.operation(), "case_query.load");
+    assert_eq!(read.fields(), &["target"]);
+    assert_eq!(read.values()["target"], serde_json::json!({"answer": "42"}));
 }

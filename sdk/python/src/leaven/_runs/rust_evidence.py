@@ -2,6 +2,11 @@
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .._receipts import WriteReceipt
+from ..assessment import Assessment, RewardAssessment
+from ..case import Case
+from ..evidence import EvidenceEnvelope
+from ..json_value import JsonObject, JsonValue
 from ..run_inspection import (
     AssessmentReadback,
     EvidenceSummary,
@@ -9,6 +14,7 @@ from ..run_inspection import (
     RustEvidenceReadback,
     RustRunReadback,
 )
+from ..score import Score
 
 
 class RustScalarEvidence(BaseModel):
@@ -103,10 +109,20 @@ class RustCaseDataReadEvidence(BaseModel):
     case: int | str
     fields: list[str]
     data_classes: list[str]
+    values: JsonObject = Field(default_factory=dict)
 
     def case_id(self) -> str:
         """Return the stable textual case id carried by Rust evidence."""
         return str(self.case)
+
+    def target(self) -> JsonObject | None:
+        """Return the target value read by Rust evidence, when present."""
+        if "target" not in self.values:
+            return None
+        value = self.values["target"]
+        if not isinstance(value, dict):
+            raise TypeError("Rust target read value must be a JSON object")
+        return value
 
 
 class RustCandidateAssessmentOutput(BaseModel):
@@ -141,6 +157,14 @@ class RustCaseAssessmentEvidence(BaseModel):
             return None
         return self.case_data_reads[0].case_id()
 
+    def target(self) -> JsonObject | None:
+        """Return the target object when Rust evidence exported it."""
+        for read in self.case_data_reads:
+            target = read.target()
+            if target is not None:
+                return target
+        return None
+
     def data_classes(self) -> list[str]:
         """Return stable public data classes represented by this evidence."""
         classes = {"public"}
@@ -165,6 +189,22 @@ def rust_evidence_summaries(
         summary = _summary_from_rust_assessment(assessment, evidence)
         summaries.append(summary)
     return summaries
+
+
+def rust_assessment_rows(
+    readback: RustRunReadback,
+    evidence_readbacks: list[RustEvidenceReadback],
+) -> list[Assessment]:
+    """Project Rust-owned case assessment evidence into public Assessment rows."""
+    by_ref = {
+        (evidence.evidence.store, evidence.evidence.key): evidence
+        for evidence in evidence_readbacks
+    }
+    rows: list[Assessment] = []
+    for assessment in readback.graph.assessments:
+        evidence = by_ref[(assessment.evidence.store, assessment.evidence.key)]
+        rows.append(_assessment_from_rust(assessment, evidence))
+    return rows
 
 
 def _summary_from_rust_assessment(
@@ -192,6 +232,65 @@ def _summary_from_rust_assessment(
     )
 
 
+def _assessment_from_rust(
+    assessment: AssessmentReadback,
+    evidence_readback: RustEvidenceReadback,
+) -> Assessment:
+    evidence = RustCaseAssessmentEvidence.from_readback(evidence_readback)
+    case_id = evidence.case_id()
+    if case_id is None:
+        raise ValueError("Rust case assessment evidence did not audit a case id")
+    public = _public_payload(evidence)
+    return Assessment(
+        case=Case(
+            id=case_id,
+            input={},
+            target=evidence.target(),
+            metadata=_metadata_object(assessment.metadata),
+            split=_split(assessment.metadata),
+        ),
+        candidate_id=_primary_candidate_id(assessment),
+        score=Score(value=evidence.score.score, feedback=evidence.feedback),
+        evidence=EvidenceEnvelope.public_only(
+            payload=public,
+            data_classes=evidence.data_classes(),
+        ),
+        receipt=WriteReceipt(receipt_id=assessment.id),
+        replayability="boundary_managed",
+        rewards=[
+            RewardAssessment(
+                id="score",
+                value=evidence.score.score,
+                weight=1.0,
+                feedback=evidence.feedback,
+            )
+        ],
+    )
+
+
+def _public_payload(evidence: RustCaseAssessmentEvidence) -> JsonObject:
+    return {"output": evidence.output.report_text()}
+
+
+def _metadata_object(value: JsonValue) -> JsonObject:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    raise TypeError("Rust assessment metadata must be a JSON object or null")
+
+
+def _split(value: JsonValue) -> str | None:
+    if not isinstance(value, dict):
+        return None
+    if "split" not in value:
+        return None
+    split = value["split"]
+    if not isinstance(split, str):
+        raise TypeError("Rust assessment metadata split must be a string")
+    return split
+
+
 def _primary_candidate_id(assessment: AssessmentReadback) -> str:
     if len(assessment.candidate_ids) != 1:
         raise ValueError("Rust inspection summary requires one candidate id")
@@ -209,5 +308,6 @@ __all__ = [
     "RustOutputMetadata",
     "RustOutputRecord",
     "RustScalarEvidence",
+    "rust_assessment_rows",
     "rust_evidence_summaries",
 ]

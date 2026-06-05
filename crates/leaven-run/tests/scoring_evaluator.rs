@@ -256,7 +256,7 @@ fn scoring_evaluator_hides_target_from_runner_and_loads_target_with_case_data_re
         addend: i32,
     }
 
-    #[derive(Clone, Debug, Eq, PartialEq)]
+    #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
     struct AnswerTarget {
         answer: i32,
     }
@@ -363,6 +363,10 @@ fn assert_one_target_case_data_read(evidence: &CaseAssessmentEvidence) {
     assert_eq!(
         evidence.case_data_reads()[0].data_classes(),
         &["case.target"]
+    );
+    assert_eq!(
+        evidence.case_data_reads()[0].values()["target"],
+        serde_json::json!({"answer": 42})
     );
 }
 

@@ -73,10 +73,14 @@ impl<A, I, T, Out> JudgeScoreContext<A, I, T, Out> {
 
     /// Loads the optional case target through the judge's audited case-data read path.
     #[must_use]
-    pub fn load_target(&self) -> Option<&T> {
+    pub fn load_target(&self) -> Option<&T>
+    where
+        T: serde::Serialize,
+    {
         let target = self.case.target_material();
-        if target.is_some() {
-            self.case_data_reads.record_target_read(self.case.id());
+        if let Some(target) = target {
+            self.case_data_reads
+                .record_target_read_with_value(self.case.id(), target);
         }
         target
     }

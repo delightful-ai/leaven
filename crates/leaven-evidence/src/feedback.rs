@@ -15,6 +15,8 @@ pub struct CaseDataReadEvidence {
     case: CaseId,
     fields: Vec<String>,
     data_classes: Vec<String>,
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    values: serde_json::Map<String, serde_json::Value>,
 }
 
 impl CaseDataReadEvidence {
@@ -33,7 +35,15 @@ impl CaseDataReadEvidence {
             case,
             fields: fields.into_iter().map(Into::into).collect(),
             data_classes: data_classes.into_iter().map(Into::into).collect(),
+            values: serde_json::Map::new(),
         }
+    }
+
+    /// Attaches one JSON-serializable case field value that was read.
+    #[must_use]
+    pub fn with_value(mut self, field: impl Into<String>, value: serde_json::Value) -> Self {
+        self.values.insert(field.into(), value);
+        self
     }
 
     /// Operation used to read case data.
@@ -64,6 +74,12 @@ impl CaseDataReadEvidence {
     #[must_use]
     pub fn data_classes(&self) -> &[String] {
         &self.data_classes
+    }
+
+    /// JSON values read from the case, keyed by field name.
+    #[must_use]
+    pub fn values(&self) -> &serde_json::Map<String, serde_json::Value> {
+        &self.values
     }
 }
 
