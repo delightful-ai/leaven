@@ -76,8 +76,11 @@ pub use plan_execution::{
 };
 pub use proposal_authority::ProposalAuthorityReport;
 pub use result::{
-    PlanResultChargeFacts, PlanResultDocument, PlanResultErrorFacts, PlanResultReceiptFact,
-    PlanResultReceiptKind, PlanResultValueFact, PlanResultValueKind, Replayability,
+    PlanResultCandidateArtifact, PlanResultCandidateScores, PlanResultChargeFacts,
+    PlanResultDocument, PlanResultErrorFacts, PlanResultGraphEventPayload,
+    PlanResultGraphExtensionPayload, PlanResultGraphRowFragments, PlanResultProposalEffectSummary,
+    PlanResultReceiptFact, PlanResultReceiptKind, PlanResultValueFact, PlanResultValueKind,
+    Replayability,
 };
 pub use stage_payload::{
     ReflectProposeHandoffDocument, ReflectProposeSubmissionDocument, RunnerCaseInputDocument,

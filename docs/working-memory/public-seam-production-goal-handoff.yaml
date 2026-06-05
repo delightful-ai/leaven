@@ -2009,8 +2009,43 @@ acceptance:
           `WireJsonCaseInput`, an object-shaped bounded msgspec JSON owner, and
           stage-payload tests reject non-object case inputs through the
           generated dispatch record. The row remains pending because graph-row
-          scores/artifacts/effects/payloads and nested result fragments still
-          need typed owners.
+          fragments are now covered by later evidence, while nested result
+          fragments still need typed owners.
+      - kind: rust_and_python_graph_row_fragments_preserve_typed_json_owner
+        paths:
+          - crates/leaven-public-seam/src/result.rs
+          - crates/leaven-public-seam/src/lib.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_result.rs
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/refs.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/tests/_seam/_wire/test_graph_rows.py
+        commands:
+          - cargo fmt --check
+          - cargo check -p leaven-public-seam
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_result::plan_result_preserves_graph_row_json_fragments_as_typed_owners -- --exact --nocapture
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_result -- --nocapture
+          - cargo test -p leaven --test topology_contract
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_graph_rows.py -q
+          - cd sdk/python && uv run pytest tests/_seam/_wire -q
+          - cd sdk/python && uv run ruff check codegen/ref_codegen.py codegen/payload_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_graph_rows.py
+          - cd sdk/python && uv run ty check codegen/ref_codegen.py codegen/payload_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_graph_rows.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - 'rg -n "target: WireJsonField|preference: WireJsonField|ranking: WireJsonField|case_input: WireJsonField|scores: WireJsonField|artifact: WireJsonField|effect: WireJsonField|payload: WireJsonField" sdk/python/codegen sdk/python/src/leaven/_seam/_wire'
+        note: >-
+          Rust PlanResult validation now collects candidate summary scores,
+          candidate artifact snapshots, proposal summary effects, event payloads,
+          and extension graph-row payloads into `PlanResultGraphRowFragments`
+          with row-specific typed wrapper accessors. The public-seam result
+          contract proves all five fragments survive schema validation and
+          result inspection. Python generated graph-row records now use named
+          bounded msgspec JSON owners for the same fields, and graph-row tests
+          decode nested fragments through generated records. The targeted
+          `WireJsonField` grep for the tracked write, stage, and graph-row
+          fields now returns no matches. The row remains pending because nested
+          result/provider fragments still need typed owners.
       - kind: typed_private_client_request_cutover
         paths:
           - sdk/python/src/leaven/_seam/plans.py

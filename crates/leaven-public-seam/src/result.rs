@@ -37,6 +37,7 @@ pub struct PlanResultDocument {
     errors: Vec<PlanErrorDocument>,
     charge_count: usize,
     assessment_batch_replayability: Vec<(String, Replayability)>,
+    graph_row_fragments: PlanResultGraphRowFragments,
 }
 
 impl PlanResultDocument {
@@ -87,6 +88,7 @@ impl PlanResultDocument {
             errors: parts.errors,
             charge_count: parts.charge_count,
             assessment_batch_replayability: value_audit.assessment_batch_replayability,
+            graph_row_fragments: value_audit.graph_row_fragments,
         })
     }
 
@@ -178,6 +180,11 @@ impl PlanResultDocument {
     pub fn assessment_batch_replayability(&self) -> &[(String, Replayability)] {
         &self.assessment_batch_replayability
     }
+
+    /// Typed JSON fragments carried by graph-set summary rows.
+    pub const fn graph_row_fragments(&self) -> &PlanResultGraphRowFragments {
+        &self.graph_row_fragments
+    }
 }
 
 fn receipt_facts(receipt_kinds: &[PlanResultReceiptKind]) -> Vec<PlanResultReceiptFact> {
@@ -195,6 +202,83 @@ pub struct PlanResultValueFact {
     kind: PlanResultValueKind,
     data_classes: Vec<String>,
 }
+
+/// Typed JSON fragments carried by graph-set result rows.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct PlanResultGraphRowFragments {
+    candidate_scores: Vec<PlanResultCandidateScores>,
+    candidate_artifacts: Vec<PlanResultCandidateArtifact>,
+    proposal_effects: Vec<PlanResultProposalEffectSummary>,
+    event_payloads: Vec<PlanResultGraphEventPayload>,
+    extension_payloads: Vec<PlanResultGraphExtensionPayload>,
+}
+
+impl PlanResultGraphRowFragments {
+    /// Candidate summary score fragments.
+    pub fn candidate_scores(&self) -> &[PlanResultCandidateScores] {
+        &self.candidate_scores
+    }
+
+    /// Candidate summary artifact fragments.
+    pub fn candidate_artifacts(&self) -> &[PlanResultCandidateArtifact] {
+        &self.candidate_artifacts
+    }
+
+    /// Proposal summary effect fragments.
+    pub fn proposal_effects(&self) -> &[PlanResultProposalEffectSummary] {
+        &self.proposal_effects
+    }
+
+    /// Event summary payload fragments.
+    pub fn event_payloads(&self) -> &[PlanResultGraphEventPayload] {
+        &self.event_payloads
+    }
+
+    /// Extension graph-row payload fragments.
+    pub fn extension_payloads(&self) -> &[PlanResultGraphExtensionPayload] {
+        &self.extension_payloads
+    }
+}
+
+macro_rules! graph_row_fragment {
+    ($name:ident, $doc:literal) => {
+        #[doc = $doc]
+        #[derive(Clone, Debug, Eq, PartialEq)]
+        pub struct $name(Value);
+
+        impl $name {
+            fn from_schema_valid_value(value: &Value) -> Self {
+                Self(value.clone())
+            }
+
+            /// JSON value carried on the wire by this graph-row fragment.
+            pub const fn as_json(&self) -> &Value {
+                &self.0
+            }
+        }
+    };
+}
+
+graph_row_fragment!(
+    PlanResultCandidateScores,
+    "Schema-valid JSON carried by `candidate_summary.scores`."
+);
+graph_row_fragment!(
+    PlanResultCandidateArtifact,
+    "Schema-valid JSON carried by `candidate_summary.artifact`."
+);
+graph_row_fragment!(
+    PlanResultProposalEffectSummary,
+    "Schema-valid JSON carried by `proposal_summary.effect`."
+);
+graph_row_fragment!(
+    PlanResultGraphEventPayload,
+    "Schema-valid JSON carried by `event_summary.payload`."
+);
+graph_row_fragment!(
+    PlanResultGraphExtensionPayload,
+    "Schema-valid JSON carried by an extension graph row payload."
+);
 
 impl PlanResultValueFact {
     fn new(name: impl Into<String>, kind: PlanResultValueKind, data_classes: Vec<String>) -> Self {
@@ -426,6 +510,7 @@ struct ValueAudit {
     value_data_classes: Vec<(String, Vec<String>)>,
     assessment_batch_replayability: Vec<(String, Replayability)>,
     assessment_batches: Vec<AssessmentBatchScope>,
+    graph_row_fragments: PlanResultGraphRowFragments,
 }
 
 fn inspect_values(
@@ -439,6 +524,7 @@ fn inspect_values(
     let mut value_replayability = Vec::with_capacity(values.len());
     let mut assessment_batch_replayability = Vec::new();
     let mut assessment_batches = Vec::new();
+    let mut graph_row_fragments = PlanResultGraphRowFragments::default();
     for (name, value) in values {
         let value_object = value
             .as_object()
@@ -450,6 +536,7 @@ fn inspect_values(
         let data_classes = optional_string_set(value_object.get("data_classes"), "data_classes")?;
         validate_value_visibility(name, value_object, &data_classes, receipt_index)?;
         validate_graph_set_assessment_summaries(value_object, receipt_index)?;
+        collect_graph_row_fragments(value_object, &mut graph_row_fragments)?;
         let data_classes = data_classes.into_iter().collect::<Vec<_>>();
         value_facts.push(PlanResultValueFact::new(
             name.to_owned(),
@@ -478,7 +565,63 @@ fn inspect_values(
         value_data_classes,
         assessment_batch_replayability,
         assessment_batches,
+        graph_row_fragments,
     })
+}
+
+fn collect_graph_row_fragments(
+    value: &serde_json::Map<String, Value>,
+    fragments: &mut PlanResultGraphRowFragments,
+) -> Result<(), PublicSeamError> {
+    if value.get("kind").and_then(Value::as_str) != Some("graph_set") {
+        return Ok(());
+    }
+    let Some(items) = value.get("items").and_then(Value::as_array) else {
+        return Ok(());
+    };
+    for item in items {
+        let Some(item_object) = item.as_object() else {
+            continue;
+        };
+        match item_object.get("kind").and_then(Value::as_str) {
+            Some("candidate_summary") => {
+                if let Some(scores) = item_object.get("scores") {
+                    fragments
+                        .candidate_scores
+                        .push(PlanResultCandidateScores::from_schema_valid_value(scores));
+                }
+                if let Some(artifact) = item_object.get("artifact") {
+                    fragments.candidate_artifacts.push(
+                        PlanResultCandidateArtifact::from_schema_valid_value(artifact),
+                    );
+                }
+            }
+            Some("proposal_summary") => {
+                if let Some(effect) = item_object.get("effect") {
+                    fragments.proposal_effects.push(
+                        PlanResultProposalEffectSummary::from_schema_valid_value(effect),
+                    );
+                }
+            }
+            Some("event_summary") => {
+                if let Some(payload) = item_object.get("payload") {
+                    fragments.event_payloads.push(
+                        PlanResultGraphEventPayload::from_schema_valid_value(payload),
+                    );
+                }
+            }
+            Some("extension") => {
+                let payload = item_object
+                    .get("payload")
+                    .ok_or_else(|| invalid_result("extension graph row must carry payload"))?;
+                fragments.extension_payloads.push(
+                    PlanResultGraphExtensionPayload::from_schema_valid_value(payload),
+                );
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 fn validate_graph_set_assessment_summaries(

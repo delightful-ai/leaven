@@ -23,12 +23,17 @@ type WireJsonLiteralDepth7 = WireJsonScalar | list[WireJsonLiteralDepth6] | dict
 type WireJsonLiteralDepth8 = WireJsonScalar | list[WireJsonLiteralDepth7] | dict[str, WireJsonLiteralDepth7]
 type WireJsonEventPayload = WireJsonLiteralDepth8
 type WireJsonExtensionPayload = WireJsonLiteralDepth8
+type WireJsonGraphEventPayload = WireJsonLiteralDepth8
+type WireJsonGraphExtensionPayload = WireJsonLiteralDepth8
 type WireJsonLiteralValue = WireJsonLiteralDepth8
 type WireJsonOutputValue = WireJsonLiteralDepth8
 type WireJsonAssessmentPreference = WireJsonLiteralDepth8
 type WireJsonAssessmentRanking = WireJsonLiteralDepth8
 type WireJsonAssessmentTarget = WireJsonLiteralDepth8
+type WireJsonCandidateArtifact = WireJsonLiteralDepth8
+type WireJsonCandidateScores = WireJsonLiteralDepth8
 type WireJsonCaseInput = dict[str, WireJsonLiteralDepth7]
+type WireJsonProposalEffectSummary = WireJsonLiteralDepth8
 type WireJsonObject = dict[str, WireJsonField]
 type DataClassSet = list[str]
 type TraceVisibility = Literal["public", "optimizer_visible", "host_private", "external_private"]
@@ -173,5 +178,5 @@ type TraceRef = TraceRefRecord
 
 __all__ = (  # noqa: PLE0605, SIM905
     "AssessmentRef AssessmentRefRecord BlobRef CandidateRef CandidateRefRecord CaseRef CaseRefRecord EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestRef EvaluationRequestRefRecord ExternalInfoRefRecord InfoRef ProposalBatchRef ProposalBatchRefRecord ProposalRef ProposalRefRecord ReceiptRef ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility WorkspaceRef WorkspaceRefRecord "
-    "DataClassSet MetadataBag WireJsonAssessmentPreference WireJsonAssessmentRanking WireJsonAssessmentTarget WireJsonCaseInput WireJsonEventPayload WireJsonExtensionPayload WireJsonField WireJsonLeafArray WireJsonLeafObject WireJsonLiteralDepth0 WireJsonLiteralDepth1 WireJsonLiteralDepth2 WireJsonLiteralDepth3 WireJsonLiteralDepth4 WireJsonLiteralDepth5 WireJsonLiteralDepth6 WireJsonLiteralDepth7 WireJsonLiteralDepth8 WireJsonLiteralValue WireJsonObject WireJsonOutputValue WireJsonScalar WireJsonSchema WireJsonSchemaObject WireJsonSchemaTypeName WireJsonValue"
+    "DataClassSet MetadataBag WireJsonAssessmentPreference WireJsonAssessmentRanking WireJsonAssessmentTarget WireJsonCandidateArtifact WireJsonCandidateScores WireJsonCaseInput WireJsonEventPayload WireJsonExtensionPayload WireJsonField WireJsonGraphEventPayload WireJsonGraphExtensionPayload WireJsonLeafArray WireJsonLeafObject WireJsonLiteralDepth0 WireJsonLiteralDepth1 WireJsonLiteralDepth2 WireJsonLiteralDepth3 WireJsonLiteralDepth4 WireJsonLiteralDepth5 WireJsonLiteralDepth6 WireJsonLiteralDepth7 WireJsonLiteralDepth8 WireJsonLiteralValue WireJsonObject WireJsonOutputValue WireJsonProposalEffectSummary WireJsonScalar WireJsonSchema WireJsonSchemaObject WireJsonSchemaTypeName WireJsonValue"
 ).split()

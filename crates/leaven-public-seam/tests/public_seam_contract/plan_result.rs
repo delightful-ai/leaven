@@ -45,6 +45,42 @@ fn plan_result_accepts_typed_success_and_failure_envelopes() {
 }
 
 #[test]
+fn plan_result_preserves_graph_row_json_fragments_as_typed_owners() {
+    let package = package();
+
+    let result = package
+        .validate_plan_result_document(&graph_row_fragment_result())
+        .unwrap();
+    let fragments = result.graph_row_fragments();
+
+    assert_eq!(fragments.candidate_scores().len(), 1);
+    assert_eq!(
+        fragments.candidate_scores()[0].as_json(),
+        &json!({"accuracy": 0.9, "checks": ["format", {"pass": true}]})
+    );
+    assert_eq!(fragments.candidate_artifacts().len(), 1);
+    assert_eq!(
+        fragments.candidate_artifacts()[0].as_json(),
+        &json!({"kind": "prompt", "body": "answer concisely"})
+    );
+    assert_eq!(fragments.proposal_effects().len(), 1);
+    assert_eq!(
+        fragments.proposal_effects()[0].as_json(),
+        &json!({"kind": "change", "target": "cand_alpha"})
+    );
+    assert_eq!(fragments.event_payloads().len(), 1);
+    assert_eq!(
+        fragments.event_payloads()[0].as_json(),
+        &json!({"note": ["loaded", {"case": "case_1"}]})
+    );
+    assert_eq!(fragments.extension_payloads().len(), 1);
+    assert_eq!(
+        fragments.extension_payloads()[0].as_json(),
+        &json!({"vendor": {"score": 7}})
+    );
+}
+
+#[test]
 fn plan_result_accepts_query_call_and_write_receipts_as_audit_currency() {
     let package = package();
 
@@ -705,6 +741,86 @@ fn typed_success_result() -> Value {
                         "kind": "candidate_summary",
                         "candidate": "cand_alpha",
                         "artifact_identity": "artifact_sha256_alpha"
+                    }
+                ],
+                "graph_revision": "rev_base",
+                "data_classes": ["public"],
+                "replayability": "pure_read",
+                "receipt": "qrec_rows"
+            }
+        },
+        "receipts": [
+            {
+                "kind": "query",
+                "receipt": "qrec_rows",
+                "op_var": "rows",
+                "started_at": "2026-05-23T12:00:00Z",
+                "completed_at": "2026-05-23T12:00:01Z",
+                "op_hash": "fp_query_sha256_rows",
+                "result_hash": "fp_result_sha256_rows",
+                "graph_revision": "rev_base",
+                "status": "succeeded",
+                "read_scope_fingerprint": "fp_scope_sha256_read",
+                "projection_fingerprint": "fp_projection_sha256_rows"
+            }
+        ],
+        "redactions": [],
+        "charges": [],
+        "errors": []
+    }))
+}
+
+fn graph_row_fragment_result() -> Value {
+    bind_result_hashes(json!({
+        "schema_version": "leaven.plan_result.v1",
+        "plan_id": "result_graph_fragments001",
+        "capability_fingerprint": "fp_cap_sha256_resultcap",
+        "policy_fingerprint": "fp_policy_sha256_resultpolicy",
+        "base_revision": "rev_base",
+        "final_revision": "rev_base",
+        "replayability_summary": "pure_read",
+        "values": {
+            "rows": {
+                "kind": "graph_set",
+                "items": [
+                    {
+                        "kind": "candidate_summary",
+                        "candidate": "cand_alpha",
+                        "artifact_identity": "artifact_sha256_alpha",
+                        "scores": {
+                            "accuracy": 0.9,
+                            "checks": ["format", {"pass": true}]
+                        },
+                        "artifact": {
+                            "kind": "prompt",
+                            "body": "answer concisely"
+                        }
+                    },
+                    {
+                        "kind": "proposal_summary",
+                        "proposal": "prop_alpha",
+                        "batch": "pb_alpha",
+                        "effect": {
+                            "kind": "change",
+                            "target": "cand_alpha"
+                        }
+                    },
+                    {
+                        "kind": "event_summary",
+                        "event_kind": "case.loaded",
+                        "revision": "rev_base",
+                        "payload": {
+                            "note": ["loaded", {"case": "case_1"}]
+                        }
+                    },
+                    {
+                        "kind": "extension",
+                        "namespace": "vendor.eval",
+                        "op": "row",
+                        "schema_fingerprint": "fp_schema_sha256_vendor_row",
+                        "payload": {
+                            "vendor": {"score": 7}
+                        }
                     }
                 ],
                 "graph_revision": "rev_base",

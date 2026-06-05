@@ -22,7 +22,9 @@ def render_payloads(rows: Sequence[PayloadMethodRow]) -> str:
         f"    {name},"
         for name in sorted(
             f"{REF_EXPORTS} DataClassSet MetadataBag WireJsonField WireJsonLeafArray "
-            "WireJsonCaseInput WireJsonLeafObject WireJsonObject WireJsonOutputValue WireJsonScalar"
+            "WireJsonCandidateArtifact WireJsonCandidateScores WireJsonCaseInput "
+            "WireJsonGraphEventPayload WireJsonGraphExtensionPayload WireJsonLeafObject "
+            "WireJsonObject WireJsonOutputValue WireJsonProposalEffectSummary WireJsonScalar"
         .split()
         )
     )
@@ -234,8 +236,8 @@ class CandidateSummaryGraphRow(
 ):
     candidate: CandidateRef
     artifact_identity: str | UnsetType = UNSET
-    scores: WireJsonField | UnsetType = UNSET
-    artifact: WireJsonField | UnsetType = UNSET
+    scores: WireJsonCandidateScores | UnsetType = UNSET
+    artifact: WireJsonCandidateArtifact | UnsetType = UNSET
 
 
 class ProposalSummaryGraphRow(
@@ -248,7 +250,7 @@ class ProposalSummaryGraphRow(
 ):
     proposal: ProposalRef
     batch: ProposalBatchRef | UnsetType = UNSET
-    effect: WireJsonField | UnsetType = UNSET
+    effect: WireJsonProposalEffectSummary | UnsetType = UNSET
 
 
 class AssessmentSummaryGraphRow(
@@ -274,7 +276,7 @@ class EventSummaryGraphRow(
 ):
     event_kind: str
     revision: str
-    payload: WireJsonField | UnsetType = UNSET
+    payload: WireJsonGraphEventPayload | UnsetType = UNSET
 
 
 class ExtensionGraphRow(
@@ -287,7 +289,7 @@ class ExtensionGraphRow(
     namespace: str
     op: str
     schema_fingerprint: str
-    payload: WireJsonField
+    payload: WireJsonGraphExtensionPayload
 
 
 type GraphRow = (
