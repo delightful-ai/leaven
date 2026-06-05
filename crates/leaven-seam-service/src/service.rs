@@ -2160,6 +2160,7 @@ mod tests {
                             "event_kind": "service.checked",
                             "payload_schema": "fp_schema_sha256_event",
                             "payload": {
+                                "kind": "external_event",
                                 "ok": true
                             },
                             "visibility": "public"

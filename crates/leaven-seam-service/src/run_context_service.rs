@@ -685,7 +685,7 @@ mod tests {
 
     #[test]
     fn event_emit_write_accepts_typed_run_context_payload() {
-        let params = run_context_event_params(&json!({"kind": "external_event", "ok": true}));
+        let params = run_context_event_params(&typed_run_context_payload());
         let plan = validate_test_plan(&params);
 
         let event = event_emit_write(&plan).unwrap();
@@ -705,21 +705,18 @@ mod tests {
     #[test]
     fn event_emit_write_rejects_untyped_run_context_payload() {
         let params = run_context_event_params(&json!({"ok": true, "extra": "raw"}));
-        let plan = validate_test_plan(&params);
 
-        let error = event_emit_write(&plan).unwrap_err();
+        let error = validate_test_plan_error(&params);
 
         assert!(
-            error
-                .to_string()
-                .contains("run_context.checked payload is not typed"),
+            error.to_string().contains("oneOf"),
             "unexpected error: {error}"
         );
     }
 
     #[test]
     fn event_emit_extension_result_uses_typed_projection_records() {
-        let params = run_context_event_params(&json!({"ok": true}));
+        let params = run_context_event_params(&typed_run_context_payload());
         let plan = validate_test_plan(&params);
         let event = event_emit_write(&plan).unwrap();
         let context = SeamExecutionContextConfig::default();
@@ -740,6 +737,18 @@ mod tests {
     }
 
     fn validate_test_plan(value: &Value) -> PlanDocument {
+        plan_package()
+            .validate_plan_document(value)
+            .expect("test plan is schema-valid")
+    }
+
+    fn validate_test_plan_error(value: &Value) -> leaven_public_seam::PublicSeamError {
+        plan_package()
+            .validate_plan_document(value)
+            .expect_err("test plan should reject untyped payload")
+    }
+
+    fn plan_package() -> leaven_public_seam::PublicSeamPackage {
         let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
         let repo_root = manifest_dir
             .parent()
@@ -747,8 +756,6 @@ mod tests {
             .expect("crate lives under crates/leaven-seam-service");
         leaven_public_seam::PublicSeamPackage::active_from_repo(repo_root)
             .expect("active public seam package loads")
-            .validate_plan_document(value)
-            .expect("test plan is schema-valid")
     }
 
     fn run_context_event_params(payload: &Value) -> Value {
@@ -779,6 +786,10 @@ mod tests {
                 "on_stale": "reject"
             }
         })
+    }
+
+    fn typed_run_context_payload() -> Value {
+        json!({"kind": "external_event", "ok": true})
     }
 }
 
