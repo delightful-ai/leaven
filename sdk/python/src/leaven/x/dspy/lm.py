@@ -20,8 +20,8 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    # dspy is an optional dep; treated as Any so the scaffold's type checker
-    # doesn't require dspy to be present for the import to resolve.
+    # dspy is an optional dep; keeping the base as object avoids requiring
+    # dspy to be present for the import to resolve.
     DspyBaseLM: type[object] = object
 else:
     try:

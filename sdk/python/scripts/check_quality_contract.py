@@ -22,9 +22,10 @@ SKIPPED_PARTS = {
     "build",
 }
 
-TYPED_BOUNDARY_ROOTS = (
-    ROOT / "src" / "leaven" / "_seam" / "_wire",
-    ROOT / "src" / "leaven" / "_seam_worker",
+NO_ANY_ROOTS = (
+    ROOT / "src" / "leaven",
+    ROOT / "examples",
+    ROOT / "codegen",
 )
 DOMAIN_VALUE_NAMES = {"output", "raw_output", "target", "payload", "result", "value"}
 MIRRORED_TESTS = {
@@ -98,7 +99,7 @@ MIRRORED_TESTS = {
 def main() -> None:
     failures = list(check_line_counts())
     failures.extend(check_future_annotations())
-    failures.extend(check_wire_any())
+    failures.extend(check_no_any())
     failures.extend(check_defensive_type_erasure())
     failures.extend(check_mirrored_tests())
     if failures:
@@ -139,14 +140,14 @@ def check_future_annotations() -> list[str]:
     return failures
 
 
-def check_wire_any() -> list[str]:
+def check_no_any() -> list[str]:
     failures: list[str] = []
-    for root in TYPED_BOUNDARY_ROOTS:
+    for root in NO_ANY_ROOTS:
         for path in sorted(root.rglob("*.py")):
             if SKIPPED_PARTS.isdisjoint(path.relative_to(ROOT).parts):
                 text = path.read_text(encoding="utf-8")
                 if "Any" in text:
-                    failures.append(f"{relative(path)} contains `Any` in a typed seam boundary")
+                    failures.append(f"{relative(path)} contains `Any` in production SDK code")
     return failures
 
 

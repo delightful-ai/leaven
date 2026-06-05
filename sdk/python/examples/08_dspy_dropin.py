@@ -16,14 +16,21 @@ modules to benefit from Leaven's wire safety without restructuring.
 """
 
 import importlib
-from typing import Any, cast
+from typing import Protocol, cast
 
 import leaven as lv
+
+
+class _DspyApi(Protocol):
+    def configure(self, *, lm: object) -> None: ...
+
+    def Predict(self, signature: str) -> object: ...  # noqa: N802 -- DSPy public API is capitalized.
+
 
 # `dspy` is an optional dep. Install with `uv add dspy-ai` or
 # `pip install 'leaven[dspy]'` to run this example end-to-end.
 try:
-    dspy = cast("Any", importlib.import_module("dspy"))
+    dspy: _DspyApi | None = cast("_DspyApi", importlib.import_module("dspy"))
 except ImportError:
     dspy = None
 

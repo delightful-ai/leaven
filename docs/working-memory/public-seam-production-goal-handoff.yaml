@@ -3012,6 +3012,29 @@ acceptance:
           typed JSON parsing instead of fallback `.get(...)` coercion. The
           schema preprocessor now uses a local recursive JSON type instead of
           `Any`.
+      - kind: production_sdk_any_lint_broadened
+        paths:
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/src/leaven/x/dspy/invoke.py
+          - sdk/python/src/leaven/x/dspy/lm.py
+          - sdk/python/examples/08_dspy_dropin.py
+          - sdk/python/tests/scripts/test_check_quality_contract.py
+        commands:
+          - cd sdk/python && uv run pytest tests/scripts/test_check_quality_contract.py -q
+          - cd sdk/python && uv run ruff check scripts/check_quality_contract.py tests/scripts/test_check_quality_contract.py src/leaven/x/dspy examples/08_dspy_dropin.py
+          - cd sdk/python && uv run ty check scripts/check_quality_contract.py tests/scripts/test_check_quality_contract.py src/leaven/x/dspy examples/08_dspy_dropin.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - rg -n "\bAny\b|typing\.Any|dict\[str, Any\]" sdk/python/src/leaven sdk/python/examples sdk/python/codegen -g '*.py'
+        note: >-
+          The custom Python quality contract now rejects `Any` in production
+          SDK source, examples, and codegen, not only in seam boundary modules.
+          The optional DSPy scaffold no longer imports or casts to `Any`:
+          prediction dictionaries use the public `JsonObject` alias, the
+          optional module import uses a small Protocol, and the only suppression
+          is a line-local Ruff `N802` justification for DSPy's capitalized
+          third-party `Predict` API. The final grep returns no matches. This
+          strengthens the quality gate but does not close the row while public
+          scaffolds remain.
       - kind: public_scoring_helpers_scaffold_removed
         paths:
           - sdk/python/scripts/check_quality_contract.py

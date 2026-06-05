@@ -6,9 +6,9 @@ prediction object with a Leaven LM receipt attached as `.leaven_lm_receipt`.
 """
 
 from collections.abc import Callable
-from typing import Any
 
 from ..._receipts import CallReceipt
+from ...json_value import JsonObject
 
 
 class DspyPrediction:
@@ -24,7 +24,7 @@ class DspyPrediction:
     def __getattr__(self, name: str) -> object:
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> JsonObject:
         """The underlying prediction's data as a dict (DSPy convention)."""
         raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
 
