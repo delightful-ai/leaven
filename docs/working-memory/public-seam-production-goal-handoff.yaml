@@ -5523,6 +5523,42 @@ acceptance:
           materialization, and a later Codex stage consuming the applied child.
           This is current criteria proof, not final goal closeout while
           prerequisite backbone rows remain pending.
+      - kind: git_filesystem_codex_kit_after_rust_receipt_readback_rerun
+        paths:
+          - crates/leaven-agentic-git/tests/git_program_materializer.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/codex_agent_kit_reflection.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/agent_kit_seam_checkpoint.rs
+          - crates/leaven-workspace-firkin/tests/firkin_contract/firkin_git_e2e.rs
+          - crates/leaven-agent-codex-cli/tests/codex_cli_runtime.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution_support.rs
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cargo test -p leaven-agentic-git --test git_program_materializer
+          - cargo test -p leaven-gepa-agentic-agent-kit --test codex_agent_kit_reflection codex_agent_kit_git_child_applies_through_run_bound_stdio_before_next_projection -- --exact
+          - cargo test -p leaven-gepa-agentic-agent-kit --test agent_kit_seam_checkpoint agent_kit_git_child_applied_through_sdk_route_restores_from_checkpoint -- --exact
+          - cargo test -p leaven-workspace-firkin --test firkin_contract firkin_git_e2e::firkin_product_pod_materializes_and_reads_back_isolated_git_workspaces -- --exact
+          - cargo test -p leaven-agent-codex-cli --test codex_cli_runtime
+          - cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution --no-run
+          - set -a; source .env; set +a; LEAVEN_CODEX_LIVE=1 LEAVEN_CODEX_BIN="$HOME/.bun/bin/codex" cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution live_codex_agent_kit_evolves_through_stdio_checkpoint_and_next_codex_consumes_child -- --ignored --exact --nocapture
+        note: >-
+          Fresh current-checkout rerun after preserving effect receipt blob refs
+          through Rust-owned Python readback reconfirmed the user's explicit
+          Git repo, filesystem, Firkin, Codex CLI, and Codex Kit criteria with
+          normal Cargo incremental settings. GitProgram materialization/readback
+          passed all 13 tests. The deterministic run-bound AgentKit projection
+          test passed, proving the next Codex projection sees the applied Git
+          child. The checkpointed AgentKit SDK route passed and restored the
+          child through `StoreRunPersistence<FileStore>`. The host-backed
+          Firkin product-pod Git workspace proof passed. The Codex CLI
+          runtime/parser suite passed 8 tests. The live evolution binary built,
+          and the `.env`-loaded live `gpt-5.4-mini` Codex e2e passed in 61.41s.
+          The live test still requires Codex Kit projection, live reflection, a
+          separate live Codex mutation inside the Git repo, typed Git readback,
+          public-seam stdio submit/apply, checkpoint restore, fresh child
+          AgentKit materialization, and a later Codex stage consuming the
+          applied child. This is current criteria proof, not final goal closeout
+          while prerequisite backbone rows remain pending.
     closeout_check: >-
       A live Codex prompt-consumption test, a deterministic AgentKit projection
       test, or `proposal.submit_batch` without application cannot close this
