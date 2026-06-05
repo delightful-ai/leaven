@@ -3666,6 +3666,29 @@ fn submit_assessments_score_outputs_cover_all_assessment_shapes() {
             {"candidate": "cand_b", "output": "answer b"}
         ])
     );
+    assert_eq!(write.assessment_target_values().len(), 3);
+    assert_eq!(
+        write.assessment_target_values()[0].as_json(),
+        &json!({"case": "case_1"})
+    );
+    assert_eq!(
+        write.assessment_target_values()[1].as_json(),
+        &json!({"case": "case_1"})
+    );
+    assert_eq!(
+        write.assessment_target_values()[2].as_json(),
+        &json!({"case": "case_1"})
+    );
+    assert_eq!(write.assessment_preference_values().len(), 1);
+    assert_eq!(
+        write.assessment_preference_values()[0].as_json(),
+        &json!({"winner": "cand_a"})
+    );
+    assert_eq!(write.assessment_ranking_values().len(), 1);
+    assert_eq!(
+        write.assessment_ranking_values()[0].as_json(),
+        &json!(["cand_a", "cand_b", "cand_c"])
+    );
 }
 
 #[test]

@@ -18,7 +18,10 @@ pub use model::{
 };
 
 use assessment::AssessmentScoreOutputUsage;
-pub use assessment::PlanScoreOutputValue;
+pub use assessment::{
+    PlanAssessmentPreferenceValue, PlanAssessmentRankingValue, PlanAssessmentTargetValue,
+    PlanScoreOutputValue,
+};
 use dialect_usage::DialectUsage;
 use model::PlanOperationDetail;
 use parse::{invalid_plan, nested_kind, required_object_string, string_array};

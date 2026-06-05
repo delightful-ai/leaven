@@ -55,6 +55,7 @@ pub use package::{
     ValidationReport, WorkerTransportKind, WorkerTransportRequest,
 };
 pub use plan::{
+    PlanAssessmentPreferenceValue, PlanAssessmentRankingValue, PlanAssessmentTargetValue,
     PlanCallKind, PlanCommitKind, PlanDocument, PlanEmitRunEventWrite, PlanEventPayload,
     PlanExpression, PlanExpressionKind, PlanExtensionPayload, PlanGraphQuerySource, PlanId,
     PlanLiteralValue, PlanMode, PlanOperation, PlanOperationKind, PlanQueryKind, PlanReturnBinding,

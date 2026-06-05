@@ -74,6 +74,7 @@ def test_assessment_evaluation_and_event_writes_decode_typed_records() -> None:
     output = assessment.assessments[0].score.output
     assert output.summary == "score evidence"
     assert output.value == {"candidate": "cand_seed", "output": ["answer", {"unit": "text"}]}
+    assert assessment.assessments[0].target == {"case": "case_1", "answer": ["42", {"unit": "text"}]}
     assert assessment.assessments[0].cost_attribution is not UNSET
     assert assessment.assessments[0].cost_attribution.kind == "explicit"
     assert isinstance(evaluation, RequestEvaluationWrite)
@@ -111,6 +112,49 @@ def test_assessment_output_decodes_typed_blob_and_trace_refs() -> None:
     assert output.blob_ref.id == "blob_1"
     assert output.trace_refs is not UNSET
     assert isinstance(output.trace_refs[0], TraceRefRecord)
+
+
+def test_assessment_preference_and_ranking_decode_owned_json_values() -> None:
+    """Example: pairwise/listwise judgment leaves keep their assessment owner."""
+
+    decoded = msgspec.json.decode(
+        b'{"kind":"submit_assessments","evaluation_request_id":"evalreq_1",'
+        b'"assessments":['
+        b'{"kind":"pairwise","candidates":["cand_a","cand_b"],'
+        b'"target":{"case":"case_1"},'
+        b'"score":{"value":0.5,"output":{"kind":"structured",'
+        b'"visibility":"public","data_classes":["candidate.output"],'
+        b'"summary":"pairwise compared candidate outputs",'
+        b'"value":[{"candidate":"cand_a","output":"answer a"},'
+        b'{"candidate":"cand_b","output":"answer b"}]}},'
+        b'"preference":{"winner":"cand_a","margin":[0.2,{"unit":"score"}]},'
+        b'"evidence":'
+        + _evidence_envelope()
+        + b',"replayability":"pure_read"},'
+        b'{"kind":"listwise","candidates":["cand_a","cand_b","cand_c"],'
+        b'"target":{"case":"case_1"},'
+        b'"score":{"value":0.75,"output":{"kind":"structured",'
+        b'"visibility":"public","data_classes":["candidate.output"],'
+        b'"summary":"listwise ranked candidate outputs",'
+        b'"value":[{"candidate":"cand_a","output":"answer a"},'
+        b'{"candidate":"cand_b","output":"answer b"},'
+        b'{"candidate":"cand_c","output":"answer c"}]}},'
+        b'"ranking":["cand_a",{"candidate":"cand_b","rank":2},"cand_c"],'
+        b'"evidence":'
+        + _evidence_envelope()
+        + b',"replayability":"pure_read"}]}',
+        type=SubmitAssessmentsWrite,
+    )
+
+    assert decoded.assessments[0].preference == {
+        "winner": "cand_a",
+        "margin": [0.2, {"unit": "score"}],
+    }
+    assert decoded.assessments[1].ranking == [
+        "cand_a",
+        {"candidate": "cand_b", "rank": 2},
+        "cand_c",
+    ]
 
 
 def test_assessment_output_rejects_malformed_blob_ref() -> None:
@@ -291,6 +335,7 @@ def _mixed_write_plan() -> bytes:
         b'{"kind":"write","name":"assess","idempotency_key":"idem_assess",'
         b'"write":{"kind":"submit_assessments","evaluation_request_id":"evalreq_1",'
         b'"assessments":[{"kind":"independent","candidate":"cand_seed",'
+        b'"target":{"case":"case_1","answer":["42",{"unit":"text"}]},'
         b'"score":{"value":0.5,"output":{"kind":"text","visibility":"public",'
         b'"data_classes":["candidate.output"],"summary":"score evidence",'
         b'"value":{"candidate":"cand_seed","output":["answer",{"unit":"text"}]}}},'

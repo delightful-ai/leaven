@@ -11,6 +11,9 @@ pub struct AssessmentScoreOutputUsage {
     pub(super) pairwise: usize,
     pub(super) listwise: usize,
     pub(super) evidence_envelopes: usize,
+    target_values: Vec<PlanAssessmentTargetValue>,
+    preference_values: Vec<PlanAssessmentPreferenceValue>,
+    ranking_values: Vec<PlanAssessmentRankingValue>,
     output_values: Vec<PlanScoreOutputValue>,
 }
 
@@ -20,6 +23,12 @@ impl AssessmentScoreOutputUsage {
         self.pairwise += other.pairwise;
         self.listwise += other.listwise;
         self.evidence_envelopes += other.evidence_envelopes;
+        self.target_values
+            .extend(other.target_values.iter().cloned());
+        self.preference_values
+            .extend(other.preference_values.iter().cloned());
+        self.ranking_values
+            .extend(other.ranking_values.iter().cloned());
         self.output_values
             .extend(other.output_values.iter().cloned());
     }
@@ -52,6 +61,19 @@ impl AssessmentScoreOutputUsage {
             validate_assessment_evidence(object)?;
             validate_assessment_candidates(kind, object)?;
             validate_score_output(kind, object, output)?;
+            if let Some(target) = object.get("target") {
+                self.target_values
+                    .push(PlanAssessmentTargetValue::from_schema_valid_value(target));
+            }
+            if let Some(preference) = object.get("preference") {
+                self.preference_values.push(
+                    PlanAssessmentPreferenceValue::from_schema_valid_value(preference),
+                );
+            }
+            if let Some(ranking) = object.get("ranking") {
+                self.ranking_values
+                    .push(PlanAssessmentRankingValue::from_schema_valid_value(ranking));
+            }
             if let Some(value) = output.get("value") {
                 self.output_values
                     .push(PlanScoreOutputValue::from_schema_valid_value(value));
@@ -74,6 +96,18 @@ impl AssessmentScoreOutputUsage {
     pub(super) fn output_values(&self) -> &[PlanScoreOutputValue] {
         &self.output_values
     }
+
+    pub(super) fn target_values(&self) -> &[PlanAssessmentTargetValue] {
+        &self.target_values
+    }
+
+    pub(super) fn preference_values(&self) -> &[PlanAssessmentPreferenceValue] {
+        &self.preference_values
+    }
+
+    pub(super) fn ranking_values(&self) -> &[PlanAssessmentRankingValue] {
+        &self.ranking_values
+    }
 }
 
 /// Schema-valid JSON value carried by an assessment `Score.output.value`.
@@ -86,6 +120,51 @@ impl PlanScoreOutputValue {
     }
 
     /// JSON value carried on the wire by the score output.
+    pub const fn as_json(&self) -> &Value {
+        &self.0
+    }
+}
+
+/// Schema-valid JSON value carried by an assessment target.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanAssessmentTargetValue(Value);
+
+impl PlanAssessmentTargetValue {
+    fn from_schema_valid_value(value: &Value) -> Self {
+        Self(value.clone())
+    }
+
+    /// JSON value carried on the wire by the assessment target.
+    pub const fn as_json(&self) -> &Value {
+        &self.0
+    }
+}
+
+/// Schema-valid JSON value carried by a pairwise assessment preference.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanAssessmentPreferenceValue(Value);
+
+impl PlanAssessmentPreferenceValue {
+    fn from_schema_valid_value(value: &Value) -> Self {
+        Self(value.clone())
+    }
+
+    /// JSON value carried on the wire by the assessment preference.
+    pub const fn as_json(&self) -> &Value {
+        &self.0
+    }
+}
+
+/// Schema-valid JSON value carried by a listwise assessment ranking.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanAssessmentRankingValue(Value);
+
+impl PlanAssessmentRankingValue {
+    fn from_schema_valid_value(value: &Value) -> Self {
+        Self(value.clone())
+    }
+
+    /// JSON value carried on the wire by the assessment ranking.
     pub const fn as_json(&self) -> &Value {
         &self.0
     }

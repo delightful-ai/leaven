@@ -17,8 +17,10 @@ from .refs import (
     ProposalBatchRef,
     ReceiptRef,
     TraceRef,
+    WireJsonAssessmentPreference,
+    WireJsonAssessmentRanking,
+    WireJsonAssessmentTarget,
     WireJsonEventPayload,
-    WireJsonField,
     WireJsonObject,
     WireJsonOutputValue,
     WorkspaceRef,
@@ -137,9 +139,9 @@ class SubmitAssessmentRecord(Struct, frozen=True, forbid_unknown_fields=True, om
     replayability: Replayability
     candidate: CandidateRef | UnsetType = UNSET
     candidates: list[CandidateRef] | UnsetType = UNSET
-    target: WireJsonField | UnsetType = UNSET
-    preference: WireJsonField | UnsetType = UNSET
-    ranking: WireJsonField | UnsetType = UNSET
+    target: WireJsonAssessmentTarget | UnsetType = UNSET
+    preference: WireJsonAssessmentPreference | UnsetType = UNSET
+    ranking: WireJsonAssessmentRanking | UnsetType = UNSET
     read_receipts: list[ReceiptRef] | UnsetType = UNSET
     effect_receipts: list[ReceiptRef] | UnsetType = UNSET
     cost_attribution: CostAttribution | UnsetType = UNSET
