@@ -14,7 +14,7 @@ from leaven._seam._wire.results import (
     LmMessageRecord,
     LmResponsePrimary,
 )
-from leaven.builders.lm import LmBuilder
+from leaven.builders.lm import LmBuilder, LmTool
 from leaven.json_value import JsonObject, JsonValue
 
 
@@ -40,7 +40,23 @@ async def test_lm_builder_complete_lowers_json_schema_response_format() -> None:
     }
     response_format = lv.output.json_schema(schema)
 
-    response = await lm.complete(prompt="Answer as JSON.", response_format=response_format)
+    response = await lm.complete(
+        prompt="Answer as JSON.",
+        response_format=response_format,
+        tools=[
+            LmTool(
+                name="lookup",
+                description="look up case facts",
+                input_schema={
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                    "required": ["query"],
+                    "additionalProperties": False,
+                },
+                requires_capability_action="case.read",
+            )
+        ],
+    )
 
     params = _params_object(client.request_value.to_params())
     ops = _json_array(params["ops"])
@@ -54,6 +70,20 @@ async def test_lm_builder_complete_lowers_json_schema_response_format() -> None:
         ),
         "schema": response_format.schema_,
     }
+    tools = _json_array(call["tools"])
+    assert tools == [
+        {
+            "name": "lookup",
+            "description": "look up case facts",
+            "input_schema": {
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+            "requires_capability_action": "case.read",
+        }
+    ]
     assert response.parsed == {"answer": "ok"}
 
 

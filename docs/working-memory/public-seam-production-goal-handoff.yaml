@@ -1515,6 +1515,26 @@ acceptance:
           Later Rust slices type PlanError details and runner case-input facts,
           but Python generation still needs to consume those owners. No
           remaining leaf slot may close by approval-only exception.
+      - kind: lm_tool_schema_wire_type_corrected
+        paths:
+          - sdk/python/codegen/call_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/calls.py
+          - sdk/python/src/leaven/_seam/lm_plans.py
+          - sdk/python/tests/builders/test_lm.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/builders/test_lm.py tests/test_stage_surface.py -q
+          - cd sdk/python && uv run ruff check src/leaven/builders/lm.py src/leaven/_stage_runtime/lm.py src/leaven/_seam/lm_plans.py src/leaven/_seam/plans.py src/leaven/_seam/client.py src/leaven/_seam/__init__.py src/leaven/_seam/_wire/calls.py codegen/call_codegen.py tests/builders/test_lm.py tests/test_stage_surface.py
+          - cd sdk/python && uv run ty check src/leaven/builders/lm.py src/leaven/_stage_runtime/lm.py src/leaven/_seam/lm_plans.py src/leaven/_seam/plans.py src/leaven/_seam/client.py src/leaven/_seam/__init__.py src/leaven/_seam/_wire/calls.py codegen/call_codegen.py tests/builders/test_lm.py tests/test_stage_surface.py
+        note: >-
+          Generated Python `LmTool.input_schema` now matches the LM tool schema
+          contract as a generated `WireJsonSchemaObject` instead of the earlier
+          shallow `WireJsonField`. `LmCompleteRequest` lives in its own private
+          LM plan module and lowers typed tool declarations into the generated
+          msgspec `LmCompleteCall`; the generator stale check proves the
+          checked-in wire output matches the codegen source. This narrows one
+          generated wire mismatch but does not close the full typed-seam row:
+          remaining Plan IR/result JSON islands still need typed owners.
       - kind: rust_profile_generated_client_result_typing
         paths:
           - crates/leaven-cli/src/seam.rs
@@ -3508,10 +3528,39 @@ acceptance:
           raises a public partial-implementation error. The typed
           `LmCompleteRequest` now owns forbidden data-class lowering and
           serializes it into the generated `LmCompleteCall` field; the
-          stage-surface test asserts the field in the emitted Plan IR. Tool
-          lowering remains an explicit scaffold because the public Python tool
-          shape is still raw and needs a typed owner before being advertised as
-          production-ready.
+          stage-surface test asserts the field in the emitted Plan IR. This
+          evidence is superseded for tool lowering by
+          `public_lm_tool_schema_scaffold_removed`.
+      - kind: public_lm_tool_schema_scaffold_removed
+        paths:
+          - sdk/python/codegen/call_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/calls.py
+          - sdk/python/src/leaven/_seam/lm_plans.py
+          - sdk/python/src/leaven/_seam/plans.py
+          - sdk/python/src/leaven/_seam/client.py
+          - sdk/python/src/leaven/_seam/__init__.py
+          - sdk/python/src/leaven/builders/lm.py
+          - sdk/python/src/leaven/_stage_runtime/lm.py
+          - sdk/python/tests/builders/test_lm.py
+        commands:
+          - cd sdk/python && uv run pytest tests/builders/test_lm.py tests/test_stage_surface.py -q
+          - cd sdk/python && uv run ruff check src/leaven/builders/lm.py src/leaven/_stage_runtime/lm.py src/leaven/_seam/lm_plans.py src/leaven/_seam/plans.py src/leaven/_seam/client.py src/leaven/_seam/__init__.py src/leaven/_seam/_wire/calls.py codegen/call_codegen.py tests/builders/test_lm.py tests/test_stage_surface.py
+          - cd sdk/python && uv run ty check src/leaven/builders/lm.py src/leaven/_stage_runtime/lm.py src/leaven/_seam/lm_plans.py src/leaven/_seam/plans.py src/leaven/_seam/client.py src/leaven/_seam/__init__.py src/leaven/_seam/_wire/calls.py codegen/call_codegen.py tests/builders/test_lm.py tests/test_stage_surface.py
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - cd sdk/python && just check
+        note: >-
+          `LmBuilder.complete(..., tools=[LmTool(...)])` no longer exposes raw
+          `Sequence[JsonObject]` tools or raises a public scaffold. The public
+          `LmTool` pydantic model owns name, description, required capability,
+          and JSON Schema input shape; the builder parses that schema into the
+          generated msgspec `WireJsonSchemaObject` and the private
+          `LmCompleteRequest` emits generated `LmTool` records in Plan IR.
+          The stage-runtime override now has the same typed public signature,
+          so it cannot reintroduce raw JSON tools at the public method surface.
+          Callback-backed stage LM still explicitly refuses tool execution
+          until that callback route lowers full LM requests, so the broader SDK
+          quality row remains pending.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this

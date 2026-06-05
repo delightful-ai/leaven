@@ -11,10 +11,12 @@ from pydantic import BaseModel, ConfigDict
 from .._receipts import CallReceipt
 from .._seam import LmCompleteRequest
 from .._seam._wire import JsonObject
+from .._seam._wire.calls import LmTool as WireLmTool
 from .._seam._wire.json_value import json_object, json_value
 from .._seam._wire.payloads import Cost
+from .._seam._wire.refs import WireJsonSchemaObject
 from .._seam._wire.results import LmCompleteResult
-from ..json_value import JsonValue
+from ..json_value import JsonSchema, JsonValue
 from ..output import JsonSchemaOutput, JsonSchemaValueOutput
 from ._output_contract import json_schema_output_to_wire
 
@@ -29,6 +31,17 @@ class LmMessage(BaseModel):
     role: LmMessageRole
     content: str
     tool_call_id: str | None = None
+
+
+class LmTool(BaseModel):
+    """One tool declaration available to an LM completion."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    input_schema: JsonSchema
+    description: str | None = None
+    requires_capability_action: str | None = None
 
 
 class LmResponse[ParsedOutputT](BaseModel):
@@ -94,7 +107,7 @@ class LmBuilder:
         max_tokens: int | None = None,
         stop: Sequence[str] | None = None,
         response_format: JsonSchemaOutput[ParsedOutputT],
-        tools: Sequence[JsonObject] | None = None,
+        tools: Sequence[LmTool] | None = None,
         input_classes: Sequence[str] | None = None,
         forbidden_input_classes: Sequence[str] | None = None,
     ) -> LmResponse[ParsedOutputT]: ...
@@ -111,7 +124,7 @@ class LmBuilder:
         max_tokens: int | None = None,
         stop: Sequence[str] | None = None,
         response_format: JsonSchemaValueOutput | None = None,
-        tools: Sequence[JsonObject] | None = None,
+        tools: Sequence[LmTool] | None = None,
         input_classes: Sequence[str] | None = None,
         forbidden_input_classes: Sequence[str] | None = None,
     ) -> LmResponse[JsonValue]: ...
@@ -127,7 +140,7 @@ class LmBuilder:
         max_tokens: int | None = None,
         stop: Sequence[str] | None = None,
         response_format: JsonSchemaOutput[ParsedOutputT] | JsonSchemaValueOutput | None = None,
-        tools: Sequence[JsonObject] | None = None,
+        tools: Sequence[LmTool] | None = None,
         input_classes: Sequence[str] | None = None,
         forbidden_input_classes: Sequence[str] | None = None,
     ) -> LmResponse[ParsedOutputT] | LmResponse[JsonValue]:
@@ -144,8 +157,6 @@ class LmBuilder:
                 "LmBuilder.complete needs an engine-bound public-seam client; "
                 "use the cx.lm instance supplied to a running stage"
             )
-        if tools is not None:
-            raise NotImplementedError("LmBuilder.complete does not lower tools yet")
 
         selected_model = model or self._model
         request = LmCompleteRequest(
@@ -159,6 +170,7 @@ class LmBuilder:
             max_tokens=max_tokens,
             stop=stop,
             output=None if response_format is None else json_schema_output_to_wire(response_format),
+            tools=None if tools is None else [_tool_to_wire(tool) for tool in tools],
             input_classes=input_classes,
             forbidden_input_classes=forbidden_input_classes,
         )
@@ -200,6 +212,21 @@ def _message_to_wire(message: LmMessage | JsonObject) -> JsonObject:
     if "tool_call_id" in value and value["tool_call_id"] is not None:
         wire["tool_call_id"] = value["tool_call_id"]
     return json_object(wire)
+
+
+def _tool_to_wire(tool: LmTool) -> WireLmTool:
+    description = tool.description if tool.description is not None else UNSET
+    requires_capability_action = (
+        tool.requires_capability_action
+        if tool.requires_capability_action is not None
+        else UNSET
+    )
+    return WireLmTool(
+        name=tool.name,
+        input_schema=msgspec.convert(tool.input_schema, type=WireJsonSchemaObject),
+        description=description,
+        requires_capability_action=requires_capability_action,
+    )
 
 
 def _lm_response_from_result[ParsedOutputT: BaseModel](
@@ -255,4 +282,4 @@ def _parsed_json[ParsedOutputT: BaseModel](
     return json_value(msgspec.json.decode(value))
 
 
-__all__ = ["LmBuilder", "LmMessage", "LmMessageRole", "LmResponse"]
+__all__ = ["LmBuilder", "LmMessage", "LmMessageRole", "LmResponse", "LmTool"]

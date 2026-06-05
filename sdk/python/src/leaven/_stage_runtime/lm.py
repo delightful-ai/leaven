@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from .._receipts import CallReceipt
 from .._seam._wire import JsonObject
-from ..builders.lm import LmBuilder, LmMessage, LmResponse, _lm_response_from_result
+from ..builders.lm import LmBuilder, LmMessage, LmResponse, LmTool, _lm_response_from_result
 from ..json_value import JsonValue
 from ..output import JsonSchemaOutput, JsonSchemaValueOutput
 from .protocols import LmCompleteCallback
@@ -45,7 +45,7 @@ class CallbackLmBuilder(LmBuilder):
         max_tokens: int | None = None,
         stop: Sequence[str] | None = None,
         response_format: JsonSchemaOutput[ParsedOutputT],
-        tools: Sequence[JsonObject] | None = None,
+        tools: Sequence[LmTool] | None = None,
         input_classes: Sequence[str] | None = None,
         forbidden_input_classes: Sequence[str] | None = None,
     ) -> LmResponse[ParsedOutputT]: ...
@@ -62,7 +62,7 @@ class CallbackLmBuilder(LmBuilder):
         max_tokens: int | None = None,
         stop: Sequence[str] | None = None,
         response_format: JsonSchemaValueOutput | None = None,
-        tools: Sequence[JsonObject] | None = None,
+        tools: Sequence[LmTool] | None = None,
         input_classes: Sequence[str] | None = None,
         forbidden_input_classes: Sequence[str] | None = None,
     ) -> LmResponse[JsonValue]: ...
@@ -78,11 +78,13 @@ class CallbackLmBuilder(LmBuilder):
         max_tokens: int | None = None,
         stop: Sequence[str] | None = None,
         response_format: JsonSchemaOutput[ParsedOutputT] | JsonSchemaValueOutput | None = None,
-        tools: Sequence[JsonObject] | None = None,
+        tools: Sequence[LmTool] | None = None,
         input_classes: Sequence[str] | None = None,
         forbidden_input_classes: Sequence[str] | None = None,
     ) -> LmResponse[ParsedOutputT] | LmResponse[JsonValue]:
-        _ = (messages, tools, forbidden_input_classes)
+        _ = (messages, forbidden_input_classes)
+        if tools is not None:
+            raise NotImplementedError("CallbackLmBuilder.complete does not lower tools yet")
         if prompt is None:
             raise NotImplementedError("cx.lm.complete requires `prompt=` in this slice")
         request_id = f"{self._stage_call_id}::lm::{self._seq}"

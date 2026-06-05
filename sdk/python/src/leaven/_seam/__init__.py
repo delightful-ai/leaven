@@ -18,11 +18,11 @@ from .config import (
     SeamServiceConfig,
 )
 from .errors import SeamClientError
+from .lm_plans import LmCompleteRequest
 from .plans import (
     AgentRunRequest,
     AssessmentSubmitRequest,
     CaseLoadRequest,
-    LmCompleteRequest,
     ProposalApplyRequest,
     ProposalSubmitRequest,
     SandboxExecRequest,

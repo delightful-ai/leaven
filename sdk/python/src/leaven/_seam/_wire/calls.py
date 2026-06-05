@@ -10,7 +10,6 @@ from msgspec import UNSET, Struct, UnsetType
 from .refs import (
     CandidateRef,
     DataClassSet,
-    WireJsonField,
     WireJsonObject,
     WireJsonSchemaObject,
     WorkspaceRef,
@@ -77,7 +76,7 @@ class LmMessage(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=T
 
 class LmTool(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
     name: str
-    input_schema: WireJsonField
+    input_schema: WireJsonSchemaObject
     description: str | UnsetType = UNSET
     requires_capability_action: str | UnsetType = UNSET
 
