@@ -2145,6 +2145,31 @@ acceptance:
           result/receipt/protocol raw-object island only; runner case input and
           proposer reflection metadata still contain explicit JSON leaf slots
           that need typed owners in later slices.
+      - kind: python_prompt_runner_case_input_projection_typed
+        paths:
+          - sdk/python/src/leaven/_seam_worker/runner.py
+          - sdk/python/tests/_seam_worker/test_runner.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && uv run pytest tests/_seam_worker/test_runner.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_seam_worker/runner.py tests/_seam_worker/test_runner.py
+          - cd sdk/python && uv run ty check src/leaven/_seam_worker/runner.py tests/_seam_worker/test_runner.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - cd sdk/python && ! rg -n "json_object\\(payload\\.case_input\\)|def _prompt_template\\(case_input: JsonObject\\)" src/leaven/_seam_worker/runner.py tests/_seam_worker/test_runner.py
+        note: >-
+          The private Python command worker no longer re-parses runner
+          `payload.case_input` as an anonymous JSON object inside
+          `_seam_worker/runner.py`. The current PromptArtifact runner path now
+          projects the generated `RunnerRequest.case_input` once into a private
+          frozen `_PromptRunnerCaseInput` owner with a required text `prompt`
+          and explicit target-free `case_fields`. Missing prompt and non-text
+          prompt values fail at the worker boundary rather than being
+          stringified, defaulted, or delivered to user runner code. This narrows
+          the runner case-input island for the current prompt mechanics path;
+          the generic public-seam runner schema still intentionally carries a
+          Rust-validated target-free JSON object for future non-prompt runner
+          adapters.
       - kind: python_proposal_effect_payload_bag_removed
         paths:
           - sdk/python/src/leaven/proposal.py
