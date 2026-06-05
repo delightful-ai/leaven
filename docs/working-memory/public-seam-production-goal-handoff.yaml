@@ -1234,6 +1234,29 @@ acceptance:
           explicitly unsupported because the Rust ledger exports usage axes, not
           provider price conversion, and assessment/evidence rows still need a
           Rust-owned semantic export before the row can close.
+      - kind: rust_checkpoint_assessment_refs_foundation
+        paths:
+          - crates/leaven-run/src/inspection.rs
+          - sdk/python/src/leaven/run_inspection.py
+          - sdk/python/tests/_runs/test_rust_export.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cargo test -p leaven-run inspection --lib
+          - cd sdk/python && uv run pytest tests/_runs/test_rust_export.py -q
+          - cd sdk/python && uv run ruff check src/leaven/run_inspection.py tests/_runs/test_rust_export.py
+          - cd sdk/python && uv run ty check src/leaven/run_inspection.py tests/_runs/test_rust_export.py
+          - cargo fmt --check
+        note: >-
+          Rust run inspection now exports graph-owned assessment readback
+          records: assessment id, evaluation request id, evaluator id, target
+          shape, target candidate ids, raw graph target payload, evidence
+          store/key, metadata, and created-at timestamp. Python decodes those
+          rows as typed `AssessmentReadback` records under `rust_readback`
+          without constructing public `Assessment` rows from incomplete data.
+          This is still foundation evidence: score/reward/evidence payload
+          semantics need an owning Rust evidence export before `lv.runs.open`
+          and `lv.runs.inspect` can expose complete assessment rows without
+          falling back to Python-only `optimized.json`.
     closeout_check: "Reading only `optimized.json` written by Python is a proxy."
 
   - id: python_wire_codegen_msgspec_boundary

@@ -90,6 +90,8 @@ pub struct GraphInspection {
     pub best_candidate_id: Option<String>,
     /// Candidate records projected from Rust-owned graph snapshot JSON.
     pub candidates: Vec<CandidateReadback>,
+    /// Assessment records projected from Rust-owned graph snapshot JSON.
+    pub assessments: Vec<AssessmentReadback>,
     /// Number of candidate records in the graph snapshot.
     pub candidate_count: usize,
     /// Number of proposal-batch records in the graph snapshot.
@@ -115,6 +117,29 @@ pub struct CandidateReadback {
     pub parent_id: Option<String>,
     /// Serialized problem artifact payload stored in the graph snapshot.
     pub artifact: Value,
+}
+
+/// Assessment facts projected from the Rust-owned graph snapshot.
+#[derive(Clone, Debug, Serialize)]
+pub struct AssessmentReadback {
+    /// Graph-local assessment id.
+    pub id: String,
+    /// Evaluation request that produced this assessment.
+    pub request_id: String,
+    /// Evaluator that produced this assessment.
+    pub evaluator: String,
+    /// Shape of the assessment target.
+    pub target_kind: String,
+    /// Candidate ids referenced by the target.
+    pub candidate_ids: Vec<String>,
+    /// Target payload exactly as stored in the graph snapshot.
+    pub target: Value,
+    /// Evidence store/key for the assessment evidence payload.
+    pub evidence: EvidenceReadbackRef,
+    /// Assessment metadata exactly as stored in the graph snapshot.
+    pub metadata: Value,
+    /// Timestamp recorded by the run graph.
+    pub created_at: String,
 }
 
 /// Cost and usage axes read from the Rust checkpoint budget ledger.
@@ -262,6 +287,7 @@ pub fn export_local_run_inspection(
             .map(str::to_owned),
         best_candidate_id: best_candidate_id(&graph_json),
         candidates: candidate_readbacks(&graph_json),
+        assessments: assessment_readbacks(&graph_json),
         candidate_count: array_len(&graph_json, "candidates"),
         proposal_batch_count: array_len(&graph_json, "proposal_batches"),
         proposal_count: array_len(&graph_json, "proposals"),
@@ -402,6 +428,73 @@ fn proposal_parent_id(graph: &Value, proposal_id: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
+fn assessment_readbacks(graph: &Value) -> Vec<AssessmentReadback> {
+    graph
+        .get("assessments")
+        .and_then(Value::as_array)
+        .map(|assessments| {
+            assessments
+                .iter()
+                .filter_map(assessment_readback)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn assessment_readback(assessment: &Value) -> Option<AssessmentReadback> {
+    let target = assessment.get("target")?;
+    let (target_kind, candidate_ids) = assessment_target_candidates(target)?;
+    Some(AssessmentReadback {
+        id: assessment.get("id")?.as_str()?.to_owned(),
+        request_id: assessment.get("request_id")?.as_str()?.to_owned(),
+        evaluator: assessment.get("evaluator")?.as_str()?.to_owned(),
+        target_kind,
+        candidate_ids,
+        target: target.clone(),
+        evidence: EvidenceReadbackRef {
+            store: assessment
+                .get("evidence")?
+                .get("store")?
+                .as_str()?
+                .to_owned(),
+            key: assessment.get("evidence")?.get("key")?.as_str()?.to_owned(),
+        },
+        metadata: assessment.get("metadata").cloned().unwrap_or(Value::Null),
+        created_at: assessment.get("created_at")?.as_str()?.to_owned(),
+    })
+}
+
+fn assessment_target_candidates(target: &Value) -> Option<(String, Vec<String>)> {
+    if let Some(independent) = target.get("Independent") {
+        return Some((
+            "independent".to_owned(),
+            vec![independent.get("candidate")?.as_str()?.to_owned()],
+        ));
+    }
+    if let Some(pairwise) = target.get("Pairwise") {
+        return Some((
+            "pairwise".to_owned(),
+            vec![
+                pairwise.get("left")?.as_str()?.to_owned(),
+                pairwise.get("right")?.as_str()?.to_owned(),
+            ],
+        ));
+    }
+    if let Some(listwise) = target.get("Listwise") {
+        let candidates = listwise
+            .get("candidates")?
+            .as_array()?
+            .iter()
+            .map(Value::as_str)
+            .collect::<Option<Vec<_>>>()?
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        return Some(("listwise".to_owned(), candidates));
+    }
+    None
+}
+
 fn array_len(value: &Value, field: &str) -> usize {
     value
         .get(field)
@@ -473,7 +566,18 @@ mod tests {
             "proposals":[{"id":"prop_child","effect":{"Change":{"target":"cand_seed","change":{}}}}],
             "apply_attempts":[{}],
             "evaluation_requests":[{}],
-            "assessments":[{},{}],
+            "assessments":[
+                {
+                    "id":"assessment_child",
+                    "request_id":"eval_req_child",
+                    "evaluator":"evaluator/exact",
+                    "target":{"Independent":{"candidate":"cand_child","target":"Unscoped"}},
+                    "evidence":{"store":"evidence","key":"assessment-child.json"},
+                    "metadata":{"split":"validation"},
+                    "created_at":"2026-06-04T00:00:02Z"
+                },
+                {}
+            ],
             "events":[
                 {},
                 {"OptimizationEnded":{"run_id":"run_export","best":"cand_child","budget":{}}},
@@ -569,6 +673,20 @@ mod tests {
         assert_eq!(export.graph.apply_attempt_count, 1);
         assert_eq!(export.graph.evaluation_request_count, 1);
         assert_eq!(export.graph.assessment_count, 2);
+        assert_eq!(export.graph.assessments.len(), 1);
+        assert_eq!(export.graph.assessments[0].id, "assessment_child");
+        assert_eq!(export.graph.assessments[0].request_id, "eval_req_child");
+        assert_eq!(export.graph.assessments[0].evaluator, "evaluator/exact");
+        assert_eq!(export.graph.assessments[0].target_kind, "independent");
+        assert_eq!(
+            export.graph.assessments[0].candidate_ids,
+            vec!["cand_child".to_owned()]
+        );
+        assert_eq!(
+            export.graph.assessments[0].evidence.key,
+            "assessment-child.json"
+        );
+        assert_eq!(export.graph.assessments[0].metadata["split"], "validation");
         assert_eq!(export.graph.event_count, 3);
         assert_eq!(export.cost.lm_calls, 2);
         assert_eq!(export.cost.prompt_tokens, 7);

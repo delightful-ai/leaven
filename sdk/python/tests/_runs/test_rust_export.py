@@ -65,6 +65,19 @@ def test_load_rust_run_readback_invokes_leaven_run_inspect(tmp_path: Path) -> No
         '      {"id": "cand_seed", "parent_id": null, "artifact": {"template": "seed"}},\n'
         '      {"id": "cand_child", "parent_id": "cand_seed", "artifact": {"template": "child"}}\n'
         "    ],\n"
+        '    "assessments": [\n'
+        '      {\n'
+        '        "id": "assessment_child",\n'
+        '        "request_id": "eval_req_child",\n'
+        '        "evaluator": "evaluator/exact",\n'
+        '        "target_kind": "independent",\n'
+        '        "candidate_ids": ["cand_child"],\n'
+        '        "target": {"Independent": {"candidate": "cand_child", "target": "Unscoped"}},\n'
+        '        "evidence": {"store": "evidence", "key": "assessment-child.json"},\n'
+        '        "metadata": {"split": "validation"},\n'
+        '        "created_at": "2026-06-04T00:00:02Z"\n'
+        "      }\n"
+        "    ],\n"
         '    "candidate_count": 2,\n'
         '    "proposal_batch_count": 1,\n'
         '    "proposal_count": 1,\n'
@@ -190,6 +203,9 @@ def test_optimized_from_rust_readback_uses_graph_candidates() -> None:
         "cand_seed",
     ]
     assert result.summary.run_dir == "/tmp/run"
+    assert readback.graph.assessments[0].id == "assessment_child"
+    assert readback.graph.assessments[0].candidate_ids == ["cand_child"]
+    assert readback.graph.assessments[0].evidence.key == "assessment-child.json"
     assert result.summary.cost_status == "unsupported_dependency"
     assert result.summary.total_lm_tokens == 18
     assert result.summary.usage_status == "known"
@@ -272,6 +288,27 @@ def load_rust_run_readback_fixture() -> RustRunReadback:
                         "parent_id": "cand_seed",
                         "artifact": {"template": "child"},
                     },
+                ],
+                "assessments": [
+                    {
+                        "id": "assessment_child",
+                        "request_id": "eval_req_child",
+                        "evaluator": "evaluator/exact",
+                        "target_kind": "independent",
+                        "candidate_ids": ["cand_child"],
+                        "target": {
+                            "Independent": {
+                                "candidate": "cand_child",
+                                "target": "Unscoped",
+                            }
+                        },
+                        "evidence": {
+                            "store": "evidence",
+                            "key": "assessment-child.json",
+                        },
+                        "metadata": {"split": "validation"},
+                        "created_at": "2026-06-04T00:00:02Z",
+                    }
                 ],
                 "candidate_count": 2,
                 "proposal_batch_count": 1,

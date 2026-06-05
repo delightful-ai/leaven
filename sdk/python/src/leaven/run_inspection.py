@@ -72,6 +72,7 @@ class GraphReadbackSummary(BaseModel):
     run_id: str | None
     best_candidate_id: str | None = None
     candidates: list["CandidateReadback"] = Field(default_factory=list)
+    assessments: list["AssessmentReadback"] = Field(default_factory=list)
     candidate_count: int
     proposal_batch_count: int
     proposal_count: int
@@ -89,6 +90,22 @@ class CandidateReadback(BaseModel):
     id: str
     parent_id: str | None = None
     artifact: JsonValue
+
+
+class AssessmentReadback(BaseModel):
+    """Assessment facts read from a Rust-owned graph snapshot."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str
+    request_id: str
+    evaluator: str
+    target_kind: Literal["independent", "pairwise", "listwise"]
+    candidate_ids: list[str]
+    target: JsonValue
+    evidence: EvidenceReadbackRef
+    metadata: JsonValue
+    created_at: str
 
 
 class CostReadback(BaseModel):
@@ -288,6 +305,7 @@ def _evidence_summary(assessment: Assessment) -> EvidenceSummary:
 
 
 __all__ = [
+    "AssessmentReadback",
     "BlobByteReadbackRef",
     "BlobReadbackSummary",
     "CandidateReadback",
