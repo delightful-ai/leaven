@@ -4199,6 +4199,28 @@ acceptance:
           matching the README table, compile-examples passes, and SDK `just
           check` passes. This remains no-spend example evidence; live-gated
           Codex/OpenAI examples still need their own opt-in proof.
+      - kind: refreshed_no_spend_examples_after_rust_readback
+        paths:
+          - sdk/python/examples/README.md
+          - sdk/python/examples/03_prompt_optimize.py
+          - sdk/python/justfile
+        commands:
+          - cd sdk/python && just example 03
+          - cd sdk/python && just examples
+          - cd sdk/python && just compile-examples
+          - cd sdk/python && just check
+          - cd sdk/python && uv run pytest -q
+        note: >-
+          The example 03 maturity label now matches the current product truth:
+          the no-spend prompt optimize mechanics path runs through
+          `leaven seam serve --stdio --config`, persists a Rust-owned checkpoint,
+          and reopens the typed result through Rust readback. The example no
+          longer catches `NotImplementedError`; if the wired path regresses it
+          fails normally. `just examples` ran all 13 examples, with only the
+          README-declared scaffold/live skips, and `just example 03` ran the
+          no-spend mechanics path directly. This still does not close the row:
+          live-gated Codex/OpenAI examples and Codex evolution proof remain
+          separate acceptance requirements.
       - kind: explicit_examples_runner_maturity_boundaries
         paths:
           - sdk/python/examples/run_all.py

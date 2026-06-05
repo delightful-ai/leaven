@@ -30,7 +30,7 @@ LEAVEN_LIVE_OPENAI=1 uv run --project examples/live_openai_lm live-openai-lm
 |---|------|-------------|----------------------|-------|
 | 01 | `01_runtime.py` | shape scaffold | `just examples` | Runtime composition slots and a minimal builder composition. |
 | 02 | `02_cases_and_artifacts.py` | shape scaffold | `just examples` | Prompt artifacts, skill banks, JSONL cases, and split-tagged `lv.Case` records. |
-| 03 | `03_prompt_optimize.py` | no-spend mechanics proof | `just examples`, `just example 03` | `lv.optimize(...).run()` over the durable `leaven seam serve --stdio --config` mechanics path for a `PromptArtifact` seed. This does not prove optimizer search, proposal application, or Rust checkpoint readback. |
+| 03 | `03_prompt_optimize.py` | no-spend mechanics proof | `just examples`, `just example 03` | `lv.optimize(...).run()` over the durable `leaven seam serve --stdio --config` mechanics path for a `PromptArtifact` seed, including Rust-owned checkpoint materialization and readback. This does not prove optimizer search or proposal application. |
 | 04 | `04_evoskill_skill_bank.py` | shape scaffold | expected boundary in `just examples` | EvoSkill-class `SkillBank` composition shape. Current front door rejects non-`PromptArtifact` seeds. |
 | 05 | `05_evaluator_with_judge.py` | shape scaffold | `just examples` | Advanced evaluator authoring shape and evidence vocabulary. |
 | 06 | `06_reflect_propose_custom.py` | shape scaffold | expected boundary in `just examples` | Separated reflector/proposer authoring shape. Current front door rejects non-`PromptArtifact` seeds here. |

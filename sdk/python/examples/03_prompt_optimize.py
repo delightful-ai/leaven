@@ -60,9 +60,9 @@ async def amain() -> None:
     ).run()
 
     # `result.best.artifact` is a fully-typed `PromptArtifact`. The current
-    # mechanics path runs over the durable `leaven seam serve --stdio` route
-    # with a deterministic configured runner; optimizer search and Python
-    # worker execution remain later slices.
+    # mechanics path runs over the durable `leaven seam serve --stdio` route,
+    # persists a Rust-owned checkpoint, and reopens the typed result from Rust
+    # readback. Optimizer search and proposal application remain later slices.
     seed = next(c for c in result.frontier if c.parent_id is None)
     print(f"seed score:  {seed.summary_score:.3f}")
     print(f"best score:  {result.best.summary_score:.3f}")
@@ -75,7 +75,4 @@ async def amain() -> None:
 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(amain())
-    except NotImplementedError as e:
-        print(f"(expected) {e}")
+    asyncio.run(amain())
