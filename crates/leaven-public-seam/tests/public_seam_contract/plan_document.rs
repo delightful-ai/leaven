@@ -72,6 +72,13 @@ fn plan_ir_family_accepts_typed_let_call_write_documents() {
         .write()
         .expect("write op exposes typed write facts");
     assert_eq!(write.kind(), PlanWriteKind::EmitRunEvent);
+    let event_write = write
+        .emit_run_event()
+        .expect("emit_run_event write exposes typed event payload");
+    assert_eq!(event_write.event_kind(), "plan.ir.checked");
+    assert_eq!(event_write.payload_schema(), "fp_schema_sha256_planir");
+    assert_eq!(event_write.payload().as_json(), &json!({"ok": true}));
+    assert_eq!(event_write.visibility(), "public");
     assert_eq!(write.assessment_score_output_count(), 0);
 }
 
@@ -5379,7 +5386,10 @@ impl PlanExecutionHost for RecordingPlanHost {
         request: PlanEmitRunEventRequest<'_>,
     ) -> Result<PlanEmitRunEventOutcome, PublicSeamError> {
         assert_eq!(request.name(), "status");
-        assert_eq!(request.write()["kind"].as_str(), Some("emit_run_event"));
+        assert_eq!(request.write().event_kind(), "plan.ir.checked");
+        assert_eq!(request.write().payload_schema(), "fp_schema_sha256_planir");
+        assert_eq!(request.write().payload().as_json(), &json!({"ok": true}));
+        assert_eq!(request.write().visibility(), "public");
         assert_eq!(request.base_revision(), "rev_planexec_base");
         self.writes.push("status");
         self.write_deps = request.deps().clone();

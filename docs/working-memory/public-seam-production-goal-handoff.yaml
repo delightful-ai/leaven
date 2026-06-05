@@ -1858,6 +1858,48 @@ acceptance:
           because remaining schema-owned leaves such as metadata/info refs,
           output values, graph-write value slots, stage case inputs, and nested
           result fragments still need typed owners.
+      - kind: rust_and_python_event_payloads_preserve_typed_json_owner
+        paths:
+          - crates/leaven-public-seam/src/plan/model.rs
+          - crates/leaven-public-seam/src/plan.rs
+          - crates/leaven-public-seam/src/lib.rs
+          - crates/leaven-public-seam/src/plan_execution/effects/outcomes.rs
+          - crates/leaven-public-seam/src/plan_execution/outcomes.rs
+          - crates/leaven-seam-service/src/graph_state.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_document.rs
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/codegen/write_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/refs.py
+          - sdk/python/src/leaven/_seam/_wire/writes.py
+          - sdk/python/tests/_seam/_wire/test_graph_writes.py
+        commands:
+          - cargo fmt --check
+          - cargo check -p leaven-public-seam
+          - cargo check -p leaven-seam-service
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_document -- --nocapture
+          - cargo test -p leaven-seam-service seam_runtime_executes_finite_workspace_queries_through_configured_service -- --nocapture
+          - cargo test -p leaven-seam-service event_emit_write -- --nocapture
+          - cargo test -p leaven --test topology_contract
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_graph_writes.py -q
+          - cd sdk/python && uv run pytest tests/_seam/_wire -q
+          - cd sdk/python && uv run ruff check codegen/ref_codegen.py codegen/write_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/writes.py tests/_seam/_wire/test_graph_writes.py
+          - cd sdk/python && uv run ty check codegen/ref_codegen.py codegen/write_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/writes.py tests/_seam/_wire/test_graph_writes.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Rust `PlanWriteOperation` now owns typed `emit_run_event` details
+          through `PlanEmitRunEventWrite` and `PlanEventPayload` instead of
+          exposing only the write kind and assessment counters. The
+          `PlanEmitRunEventRequest` passed to configured services now carries
+          those typed event facts, and `leaven-seam-service` graph-state
+          readback uses event kind, payload schema, payload, and visibility
+          accessors instead of indexing the write JSON object. Python generated
+          `EmitRunEventWrite.payload` now uses `WireJsonEventPayload`, a named
+          owner backed by the bounded msgspec JSON ladder, and the generated
+          graph-write tests prove nested event payload decode. The row remains
+          pending because assessment target/preference/ranking, output values,
+          graph-row fragments, stage case inputs, and nested result fragments
+          still need typed owners.
       - kind: typed_private_client_request_cutover
         paths:
           - sdk/python/src/leaven/_seam/plans.py

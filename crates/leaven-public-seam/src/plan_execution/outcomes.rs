@@ -410,9 +410,10 @@ pub(super) fn execute_write<H: PlanExecutionHost>(
             "representative Plan IR harness does not execute `{write_kind}` writes"
         )));
     }
+    let event_write = crate::PlanEmitRunEventWrite::from_schema_valid_value(write)?;
     let outcome = host.emit_run_event(PlanEmitRunEventRequest {
         name: &name,
-        write,
+        write: &event_write,
         deps: dep_values,
         dependency_data_classes,
         base_revision: &context.base_revision,

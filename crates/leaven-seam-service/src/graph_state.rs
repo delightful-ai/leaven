@@ -48,13 +48,13 @@ impl SeamGraphState {
         let revision = self.next_revision(request.base_revision(), "event_emit");
         self.items.push(json!({
             "kind": "event_summary",
-            "event_kind": request.write().get("event_kind").cloned().unwrap_or_else(|| json!("event")),
+            "event_kind": request.write().event_kind(),
             "revision": revision,
             "payload": {
                 "event_id": event_id,
-                "payload_schema": request.write().get("payload_schema").cloned().unwrap_or_else(|| json!(null)),
-                "value": request.write().get("payload").cloned().unwrap_or_else(|| json!(null)),
-                "visibility": request.write().get("visibility").cloned().unwrap_or_else(|| json!("public"))
+                "payload_schema": request.write().payload_schema(),
+                "value": request.write().payload().as_json(),
+                "visibility": request.write().visibility()
             }
         }));
         PlanEmitRunEventOutcome::new(event_id, revision)

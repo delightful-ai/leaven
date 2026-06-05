@@ -2,6 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
 
+use crate::PlanEmitRunEventWrite;
+
 use super::workspace_ref_object;
 
 /// Host outcome for a typed `workspace_materialize` call.
@@ -94,7 +96,7 @@ impl PlanWorkspaceReleaseOutcome {
 #[derive(Clone, Copy, Debug)]
 pub struct PlanEmitRunEventRequest<'a> {
     pub(in crate::plan_execution) name: &'a str,
-    pub(in crate::plan_execution) write: &'a Value,
+    pub(in crate::plan_execution) write: &'a PlanEmitRunEventWrite,
     pub(in crate::plan_execution) deps: &'a BTreeMap<String, Value>,
     pub(in crate::plan_execution) dependency_data_classes: &'a BTreeSet<String>,
     pub(in crate::plan_execution) base_revision: &'a str,
@@ -107,7 +109,7 @@ impl<'a> PlanEmitRunEventRequest<'a> {
     }
 
     /// Typed `emit_run_event` write body from the Plan IR.
-    pub const fn write(&self) -> &'a Value {
+    pub const fn write(&self) -> &'a PlanEmitRunEventWrite {
         self.write
     }
 

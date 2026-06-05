@@ -55,9 +55,10 @@ pub use package::{
     ValidationReport, WorkerTransportKind, WorkerTransportRequest,
 };
 pub use plan::{
-    PlanCallKind, PlanCommitKind, PlanDocument, PlanExpression, PlanExpressionKind,
-    PlanExtensionPayload, PlanGraphQuerySource, PlanId, PlanLiteralValue, PlanMode, PlanOperation,
-    PlanOperationKind, PlanQueryKind, PlanReturnBinding, PlanSchemaVersion, PlanWriteKind,
+    PlanCallKind, PlanCommitKind, PlanDocument, PlanEmitRunEventWrite, PlanEventPayload,
+    PlanExpression, PlanExpressionKind, PlanExtensionPayload, PlanGraphQuerySource, PlanId,
+    PlanLiteralValue, PlanMode, PlanOperation, PlanOperationKind, PlanQueryKind, PlanReturnBinding,
+    PlanSchemaVersion, PlanWriteKind,
 };
 pub use plan_error::{PlanErrorCode, PlanErrorDetails, PlanErrorDocument};
 pub use plan_execution::{

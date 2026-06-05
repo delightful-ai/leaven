@@ -17,6 +17,7 @@ from .refs import (
     ProposalBatchRef,
     ReceiptRef,
     TraceRef,
+    WireJsonEventPayload,
     WireJsonField,
     WireJsonObject,
     WorkspaceRef,
@@ -170,7 +171,7 @@ class ApplyProposalBatchWrite(Struct, frozen=True, forbid_unknown_fields=True, t
 class EmitRunEventWrite(Struct, frozen=True, forbid_unknown_fields=True, tag="emit_run_event", tag_field="kind"):
     event_kind: str
     payload_schema: str
-    payload: WireJsonField
+    payload: WireJsonEventPayload
     visibility: VisibilityClass
 
 

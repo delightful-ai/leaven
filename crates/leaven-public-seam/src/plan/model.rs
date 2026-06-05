@@ -324,9 +324,9 @@ impl PlanOperation {
     }
 
     /// Typed write details for `write` operations.
-    pub const fn write(&self) -> Option<PlanWriteOperation> {
+    pub const fn write(&self) -> Option<&PlanWriteOperation> {
         match &self.detail {
-            PlanOperationDetail::Write { write } => Some(*write),
+            PlanOperationDetail::Write { write } => Some(write),
             _ => None,
         }
     }
@@ -364,10 +364,11 @@ pub(super) enum PlanOperationDetail {
 }
 
 /// Typed details for one Plan IR `write` operation.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanWriteOperation {
     kind: PlanWriteKind,
     pub(super) submit_assessments: AssessmentScoreOutputUsage,
+    detail: PlanWriteDetail,
 }
 
 impl PlanWriteOperation {
@@ -377,40 +378,126 @@ impl PlanWriteOperation {
         if kind == PlanWriteKind::SubmitAssessments {
             submit_assessments.inspect_submit_assessments(value)?;
         }
+        let detail = match kind {
+            PlanWriteKind::EmitRunEvent => PlanWriteDetail::EmitRunEvent(
+                PlanEmitRunEventWrite::from_schema_valid_value(value)?,
+            ),
+            PlanWriteKind::SubmitProposalBatch
+            | PlanWriteKind::SubmitAssessments
+            | PlanWriteKind::RequestEvaluation
+            | PlanWriteKind::ApplyProposalBatch => PlanWriteDetail::Other,
+        };
         Ok(Self {
             kind,
             submit_assessments,
+            detail,
         })
     }
 
     /// Locked Plan IR write kind.
-    pub const fn kind(self) -> PlanWriteKind {
+    pub const fn kind(&self) -> PlanWriteKind {
         self.kind
     }
 
     /// Number of assessment `Score.output` values carried by this write.
-    pub const fn assessment_score_output_count(self) -> usize {
+    pub const fn assessment_score_output_count(&self) -> usize {
         self.submit_assessments.total()
     }
 
     /// Number of assessment evidence envelopes carried by this write.
-    pub const fn assessment_evidence_count(self) -> usize {
+    pub const fn assessment_evidence_count(&self) -> usize {
         self.submit_assessments.evidence_envelopes
     }
 
     /// Number of independent assessment outputs carried by this write.
-    pub const fn independent_assessment_score_output_count(self) -> usize {
+    pub const fn independent_assessment_score_output_count(&self) -> usize {
         self.submit_assessments.independent
     }
 
     /// Number of pairwise assessment outputs carried by this write.
-    pub const fn pairwise_assessment_score_output_count(self) -> usize {
+    pub const fn pairwise_assessment_score_output_count(&self) -> usize {
         self.submit_assessments.pairwise
     }
 
     /// Number of listwise assessment outputs carried by this write.
-    pub const fn listwise_assessment_score_output_count(self) -> usize {
+    pub const fn listwise_assessment_score_output_count(&self) -> usize {
         self.submit_assessments.listwise
+    }
+
+    /// Typed event write details for `emit_run_event` writes.
+    pub const fn emit_run_event(&self) -> Option<&PlanEmitRunEventWrite> {
+        match &self.detail {
+            PlanWriteDetail::EmitRunEvent(write) => Some(write),
+            PlanWriteDetail::Other => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum PlanWriteDetail {
+    EmitRunEvent(PlanEmitRunEventWrite),
+    Other,
+}
+
+/// Typed `emit_run_event` write facts.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanEmitRunEventWrite {
+    event_kind: String,
+    payload_schema: String,
+    payload: PlanEventPayload,
+    visibility: String,
+}
+
+impl PlanEmitRunEventWrite {
+    pub(crate) fn from_schema_valid_value(value: &Value) -> Result<Self, PublicSeamError> {
+        let object = value
+            .as_object()
+            .ok_or_else(|| invalid_plan("emit_run_event write must be an object"))?;
+        Ok(Self {
+            event_kind: required_object_string(object, "event_kind")?.to_owned(),
+            payload_schema: required_object_string(object, "payload_schema")?.to_owned(),
+            payload: PlanEventPayload::from_schema_valid_value(
+                object
+                    .get("payload")
+                    .ok_or_else(|| invalid_plan("emit_run_event write must carry payload"))?,
+            ),
+            visibility: required_object_string(object, "visibility")?.to_owned(),
+        })
+    }
+
+    /// Event kind carried by the write.
+    pub fn event_kind(&self) -> &str {
+        &self.event_kind
+    }
+
+    /// Schema fingerprint for the event payload.
+    pub fn payload_schema(&self) -> &str {
+        &self.payload_schema
+    }
+
+    /// Schema-valid event payload carried by the write.
+    pub const fn payload(&self) -> &PlanEventPayload {
+        &self.payload
+    }
+
+    /// Visibility class carried by the write.
+    pub fn visibility(&self) -> &str {
+        &self.visibility
+    }
+}
+
+/// Schema-valid JSON payload carried by an `emit_run_event` write.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanEventPayload(Value);
+
+impl PlanEventPayload {
+    fn from_schema_valid_value(value: &Value) -> Self {
+        Self(value.clone())
+    }
+
+    /// JSON payload carried on the wire by the event write.
+    pub const fn as_json(&self) -> &Value {
+        &self.0
     }
 }
 

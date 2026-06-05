@@ -12,8 +12,9 @@ pub use expression::PlanExtensionPayload;
 pub use expression::PlanLiteralValue;
 pub use expression::{PlanExpression, PlanExpressionKind, PlanGraphQuerySource};
 pub use model::{
-    PlanCallKind, PlanCommitKind, PlanId, PlanMode, PlanOperation, PlanOperationKind,
-    PlanQueryKind, PlanReturnBinding, PlanSchemaVersion, PlanWriteKind,
+    PlanCallKind, PlanCommitKind, PlanEmitRunEventWrite, PlanEventPayload, PlanId, PlanMode,
+    PlanOperation, PlanOperationKind, PlanQueryKind, PlanReturnBinding, PlanSchemaVersion,
+    PlanWriteKind,
 };
 
 use assessment::AssessmentScoreOutputUsage;
