@@ -49,6 +49,27 @@ def inspect(path: str | Path) -> RunInspection:
         if rust_readback is not None
         else None
     )
+    rust_artifact_blobs = (
+        [load_rust_blob_readback(path, blob) for blob in rust_readback.checkpoint.artifact_refs]
+        if rust_readback is not None
+        else []
+    )
+    rust_stage_journal_blobs = (
+        [
+            load_rust_blob_readback(path, blob)
+            for blob in rust_readback.checkpoint.stage_journal_refs
+        ]
+        if rust_readback is not None
+        else []
+    )
+    rust_workspace_journal_blobs = (
+        [
+            load_rust_blob_readback(path, blob)
+            for blob in rust_readback.checkpoint.workspace_journal_refs
+        ]
+        if rust_readback is not None
+        else []
+    )
     rust_evidence = (
         [
             load_rust_evidence_readback(path, assessment.evidence)
@@ -58,14 +79,10 @@ def inspect(path: str | Path) -> RunInspection:
         else []
     )
     evidence_summaries = (
-        rust_evidence_summaries(rust_readback, rust_evidence)
-        if rust_readback is not None
-        else None
+        rust_evidence_summaries(rust_readback, rust_evidence) if rust_readback is not None else None
     )
     assessment_rows = (
-        rust_assessment_rows(rust_readback, rust_evidence)
-        if rust_readback is not None
-        else None
+        rust_assessment_rows(rust_readback, rust_evidence) if rust_readback is not None else None
     )
     result = (
         overlay_sdk_prompt_receipts(
@@ -83,6 +100,9 @@ def inspect(path: str | Path) -> RunInspection:
         result,
         rust_readback=rust_readback,
         rust_graph_blob=rust_graph_blob,
+        rust_artifact_blobs=rust_artifact_blobs,
+        rust_stage_journal_blobs=rust_stage_journal_blobs,
+        rust_workspace_journal_blobs=rust_workspace_journal_blobs,
         rust_evidence=rust_evidence,
         evidence_summaries=evidence_summaries,
     )

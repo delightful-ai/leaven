@@ -232,6 +232,9 @@ class RunInspection(BaseModel):
     usage_status: RunUsageStatus
     rust_readback: RustRunReadback | None = None
     rust_graph_blob: RustBlobReadback | None = None
+    rust_artifact_blobs: list[RustBlobReadback] = Field(default_factory=list)
+    rust_stage_journal_blobs: list[RustBlobReadback] = Field(default_factory=list)
+    rust_workspace_journal_blobs: list[RustBlobReadback] = Field(default_factory=list)
     rust_evidence: list[RustEvidenceReadback] = Field(default_factory=list)
     unsupported: tuple[UnsupportedRunFact, ...] = ()
 
@@ -247,6 +250,9 @@ def inspect_optimized[A](
     *,
     rust_readback: RustRunReadback | None = None,
     rust_graph_blob: RustBlobReadback | None = None,
+    rust_artifact_blobs: Sequence[RustBlobReadback] = (),
+    rust_stage_journal_blobs: Sequence[RustBlobReadback] = (),
+    rust_workspace_journal_blobs: Sequence[RustBlobReadback] = (),
     rust_evidence: Sequence[RustEvidenceReadback] = (),
     evidence_summaries: Sequence[EvidenceSummary] | None = None,
 ) -> RunInspection:
@@ -266,6 +272,9 @@ def inspect_optimized[A](
         usage_status=result.summary.usage_status,
         rust_readback=rust_readback,
         rust_graph_blob=rust_graph_blob,
+        rust_artifact_blobs=list(rust_artifact_blobs),
+        rust_stage_journal_blobs=list(rust_stage_journal_blobs),
+        rust_workspace_journal_blobs=list(rust_workspace_journal_blobs),
         rust_evidence=list(rust_evidence),
         unsupported=result.summary.unsupported,
     )

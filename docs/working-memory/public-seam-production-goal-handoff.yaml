@@ -1146,6 +1146,32 @@ acceptance:
           not full row closeout because broader artifact/transcript blob
           retrieval and generalized Rust-owned receipt storage remain under
           acceptance review.
+      - kind: checkpoint_artifact_and_journal_blob_byte_readback
+        paths:
+          - sdk/python/src/leaven/run_inspection.py
+          - sdk/python/src/leaven/runs.py
+          - sdk/python/src/leaven/_runs/rust_export.py
+          - sdk/python/tests/_runs/test_rust_export.py
+        commands:
+          - cd sdk/python && uv run pytest tests/_runs/test_rust_export.py tests/test_run_inspection.py tests/test_optimize_public_seam_e2e.py -q
+          - cd sdk/python && uv run ruff check src/leaven/run_inspection.py src/leaven/runs.py src/leaven/_runs tests/_runs/test_rust_export.py
+          - cd sdk/python && uv run ty check src/leaven/run_inspection.py src/leaven/runs.py src/leaven/_runs tests/_runs/test_rust_export.py
+          - cd sdk/python && uv run pytest -q
+          - cd sdk/python && just check
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          `lv.runs.inspect(...)` now resolves checkpoint artifact refs, stage
+          journal refs, and workspace journal refs through Rust-owned
+          `leaven run blob` byte export, in addition to the graph snapshot blob
+          and assessment evidence export. `RunInspection` exposes separate
+          typed `rust_artifact_blobs`, `rust_stage_journal_blobs`, and
+          `rust_workspace_journal_blobs` buckets so callers do not infer local
+          store paths or collapse unrelated checkpoint byte sources. The
+          mirrored `_runs` scenario test proves the exact CLI call sequence and
+          decoded bytes for graph, artifact, stage, workspace, and evidence
+          readback. The row remains pending until transcript/artifact refs
+          produced by live agentic/Codex runs and generalized Rust-owned receipt
+          storage are proven against the full target workflow.
       - kind: rust_checkpoint_graph_readback_export_foundation
         paths:
           - crates/leaven-run/src/inspection.rs

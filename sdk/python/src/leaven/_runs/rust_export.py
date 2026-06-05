@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 
 from ..run_inspection import (
+    BlobByteReadbackRef,
     BlobReadbackSummary,
     EvidenceReadbackRef,
     RustBlobReadback,
@@ -48,7 +49,7 @@ def load_rust_run_readback(
 
 def load_rust_blob_readback(
     path: str | Path,
-    blob: BlobReadbackSummary,
+    blob: BlobReadbackSummary | BlobByteReadbackRef,
     *,
     leaven_bin: Path | None = None,
     timeout_s: int = 60,

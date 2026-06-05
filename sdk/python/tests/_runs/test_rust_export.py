@@ -32,7 +32,7 @@ def test_load_rust_run_readback_invokes_leaven_run_inspect(tmp_path: Path) -> No
     fake = tmp_path / "leaven"
     fake.write_text(
         "#!/bin/sh\n"
-        "printf '%s\\n' \"$@\" > \"$LEAVEN_TEST_CALLS\"\n"
+        'printf \'%s\\n\' "$@" > "$LEAVEN_TEST_CALLS"\n'
         "cat <<'JSON'\n"
         "{\n"
         '  "schema_version": "leaven.run_inspection_export.v1",\n'
@@ -72,7 +72,7 @@ def test_load_rust_run_readback_invokes_leaven_run_inspect(tmp_path: Path) -> No
         '      {"id": "cand_child", "parent_id": "cand_seed", "artifact": {"template": "child"}}\n'
         "    ],\n"
         '    "assessments": [\n'
-        '      {\n'
+        "      {\n"
         '        "id": "assessment_child",\n'
         '        "request_id": "eval_req_child",\n'
         '        "evaluator": "evaluator/exact",\n'
@@ -136,7 +136,7 @@ def test_load_rust_blob_readback_invokes_leaven_run_blob(tmp_path: Path) -> None
     fake = tmp_path / "leaven"
     fake.write_text(
         "#!/bin/sh\n"
-        "printf '%s\\n' \"$@\" > \"$LEAVEN_TEST_CALLS\"\n"
+        'printf \'%s\\n\' "$@" > "$LEAVEN_TEST_CALLS"\n'
         "cat <<'JSON'\n"
         "{\n"
         '  "schema_version": "leaven.run_blob_export.v1",\n'
@@ -178,7 +178,7 @@ def test_load_rust_evidence_readback_invokes_leaven_run_evidence(tmp_path: Path)
     fake = tmp_path / "leaven"
     fake.write_text(
         "#!/bin/sh\n"
-        "printf '%s\\n' \"$@\" > \"$LEAVEN_TEST_CALLS\"\n"
+        'printf \'%s\\n\' "$@" > "$LEAVEN_TEST_CALLS"\n'
         "cat <<'JSON'\n"
         "{\n"
         '  "schema_version": "leaven.run_evidence_export.v1",\n'
@@ -313,7 +313,7 @@ def test_runs_open_prefers_rust_checkpoint_without_optimized_json(
     )
     fake.write_text(
         "#!/bin/sh\n"
-        "case \"$2\" in\n"
+        'case "$2" in\n'
         f"  inspect) cat {output} ;;\n"
         f"  evidence) cat {evidence} ;;\n"
         "  *) exit 9 ;;\n"
@@ -336,9 +336,9 @@ def test_runs_open_prefers_rust_checkpoint_without_optimized_json(
     assert assessment.case.split == "validation"
     assert assessment.score.value == 0.75
     assert assessment.score.feedback == "exact match"
-    assert [(reward.id, reward.value, reward.weight, reward.feedback) for reward in assessment.rewards] == [
-        ("score", 0.75, 1.0, "exact match")
-    ]
+    assert [
+        (reward.id, reward.value, reward.weight, reward.feedback) for reward in assessment.rewards
+    ] == [("score", 0.75, 1.0, "exact match")]
     assert [fact.surface for fact in result.summary.unsupported] == ["run.cost"]
 
 
@@ -353,6 +353,9 @@ def test_runs_inspect_uses_rust_checkpoint_blob_and_evidence_without_optimized_j
     calls = tmp_path / "calls.txt"
     readback = tmp_path / "readback.json"
     graph_blob = tmp_path / "graph_blob.json"
+    artifact_blob = tmp_path / "artifact_blob.json"
+    stage_blob = tmp_path / "stage_blob.json"
+    workspace_blob = tmp_path / "workspace_blob.json"
     evidence = tmp_path / "evidence.json"
     evidence_bytes = rust_case_assessment_evidence_bytes()
     readback.write_text(
@@ -371,6 +374,42 @@ def test_runs_inspect_uses_rust_checkpoint_blob_and_evidence_without_optimized_j
         ),
         encoding="utf-8",
     )
+    artifact_blob.write_text(
+        json.dumps(
+            {
+                "schema_version": "leaven.run_blob_export.v1",
+                "blob": {"store": "file", "key": "artifact.blob"},
+                "bytes": 15,
+                "sha256": "artifact-sha",
+                "content_base64": "YXJ0aWZhY3QgYnl0ZXMK",
+            }
+        ),
+        encoding="utf-8",
+    )
+    stage_blob.write_text(
+        json.dumps(
+            {
+                "schema_version": "leaven.run_blob_export.v1",
+                "blob": {"store": "file", "key": "stage.blob"},
+                "bytes": 12,
+                "sha256": "stage-sha",
+                "content_base64": "c3RhZ2UgYnl0ZXMK",
+            }
+        ),
+        encoding="utf-8",
+    )
+    workspace_blob.write_text(
+        json.dumps(
+            {
+                "schema_version": "leaven.run_blob_export.v1",
+                "blob": {"store": "file", "key": "workspace.blob"},
+                "bytes": 16,
+                "sha256": "workspace-sha",
+                "content_base64": "d29ya3NwYWNlIGJ5dGVzCg==",
+            }
+        ),
+        encoding="utf-8",
+    )
     evidence.write_text(
         json.dumps(
             {
@@ -385,10 +424,10 @@ def test_runs_inspect_uses_rust_checkpoint_blob_and_evidence_without_optimized_j
     )
     fake.write_text(
         "#!/bin/sh\n"
-        "printf '%s\\n' \"$@\" >> \"$LEAVEN_TEST_CALLS\"\n"
-        "case \"$2\" in\n"
+        'printf \'%s\\n\' "$@" >> "$LEAVEN_TEST_CALLS"\n'
+        'case "$2" in\n'
         f"  inspect) cat {readback} ;;\n"
-        f"  blob) cat {graph_blob} ;;\n"
+        f'  blob) case "$8" in graph.blob) cat {graph_blob} ;; artifact.blob) cat {artifact_blob} ;; stage.blob) cat {stage_blob} ;; workspace.blob) cat {workspace_blob} ;; *) exit 8 ;; esac ;;\n'
         f"  evidence) cat {evidence} ;;\n"
         "  *) exit 9 ;;\n"
         "esac\n",
@@ -406,6 +445,15 @@ def test_runs_inspect_uses_rust_checkpoint_blob_and_evidence_without_optimized_j
     assert inspection.rust_readback is not None
     assert inspection.rust_graph_blob is not None
     assert inspection.rust_graph_blob.content_bytes() == b"durable blob bytes\n"
+    assert [blob.content_bytes() for blob in inspection.rust_artifact_blobs] == [
+        b"artifact bytes\n"
+    ]
+    assert [blob.content_bytes() for blob in inspection.rust_stage_journal_blobs] == [
+        b"stage bytes\n"
+    ]
+    assert [blob.content_bytes() for blob in inspection.rust_workspace_journal_blobs] == [
+        b"workspace bytes\n"
+    ]
     assert len(inspection.rust_evidence) == 1
     assert inspection.evidence[0].case_id == "1"
     assert inspection.evidence[0].candidate_id == "cand_child"
@@ -436,6 +484,30 @@ def test_runs_inspect_uses_rust_checkpoint_blob_and_evidence_without_optimized_j
         "--key",
         "graph.blob",
         "run",
+        "blob",
+        "--run-dir",
+        str(run_dir),
+        "--store",
+        "file",
+        "--key",
+        "artifact.blob",
+        "run",
+        "blob",
+        "--run-dir",
+        str(run_dir),
+        "--store",
+        "file",
+        "--key",
+        "stage.blob",
+        "run",
+        "blob",
+        "--run-dir",
+        str(run_dir),
+        "--store",
+        "file",
+        "--key",
+        "workspace.blob",
+        "run",
         "evidence",
         "--run-dir",
         str(run_dir),
@@ -460,14 +532,14 @@ def load_rust_run_readback_fixture() -> RustRunReadback:
                     "schema": "060606",
                     "format": "Json",
                 },
-                "artifact_refs": [],
-                "artifact_ref_count": 0,
+                "artifact_refs": [{"store": "file", "key": "artifact.blob"}],
+                "artifact_ref_count": 1,
                 "evidence_refs": [],
                 "evidence_ref_count": 0,
-                "stage_journal_refs": [],
-                "stage_journal_ref_count": 0,
-                "workspace_journal_refs": [],
-                "workspace_journal_ref_count": 0,
+                "stage_journal_refs": [{"store": "file", "key": "stage.blob"}],
+                "stage_journal_ref_count": 1,
+                "workspace_journal_refs": [{"store": "file", "key": "workspace.blob"}],
+                "workspace_journal_ref_count": 1,
                 "has_optimizer_state": False,
                 "has_cache_index": False,
             },
