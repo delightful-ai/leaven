@@ -1107,7 +1107,9 @@
         "schema_fingerprint": {
           "$ref": "common.schema.json#/$defs/SchemaFingerprint"
         },
-        "payload": {}
+        "payload": {
+          "$ref": "common.schema.json#/$defs/ExtensionPayload"
+        }
       },
       "required": [
         "kind",
@@ -1117,6 +1119,54 @@
         "payload"
       ],
       "additionalProperties": false
+    },
+    "ExtensionPayload": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "summary"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "data_classes": {
+              "$ref": "common.schema.json#/$defs/DataClassSet"
+            },
+            "source_ref": {
+              "$ref": "common.schema.json#/$defs/InfoRef"
+            }
+          },
+          "required": [
+            "kind",
+            "summary"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "blob_ref"
+            },
+            "blob": {
+              "$ref": "common.schema.json#/$defs/BlobRef"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "data_classes": {
+              "$ref": "common.schema.json#/$defs/DataClassSet"
+            }
+          },
+          "required": [
+            "kind",
+            "blob"
+          ],
+          "additionalProperties": false
+        }
+      ]
     },
     "OutputContract": {
       "oneOf": [

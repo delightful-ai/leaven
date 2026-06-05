@@ -293,8 +293,8 @@ fn extension_payload_with_prose_field_plan() -> Value {
                     "op": "opaque_payload",
                     "schema_fingerprint": "fp_schema_sha256_extension",
                     "payload": {
-                        "field": "user prose, not a JsonPointer",
-                        "path": "also user prose"
+                        "kind": "summary",
+                        "summary": "user prose, not a JsonPointer"
                     }
                 }
             }
@@ -417,7 +417,8 @@ fn schema_valid_precondition_plan(path: &str) -> Value {
                     "event_kind": "plan.dialect.precondition",
                     "payload_schema": "fp_schema_sha256_event",
                     "payload": {
-                        "field": "event payload prose"
+                        "kind": "external_event",
+                        "ok": true
                     },
                     "visibility": "public"
                 }

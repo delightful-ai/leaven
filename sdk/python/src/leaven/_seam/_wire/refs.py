@@ -261,11 +261,40 @@ type InfoRef = (
     | EvaluationAttemptRefRecord
     | ExternalInfoRefRecord
 )
+
+
+class ExtensionSummaryPayload(
+    Struct,
+    frozen=True,
+    forbid_unknown_fields=True,
+    omit_defaults=True,
+    tag="summary",
+    tag_field="kind",
+):
+    summary: str
+    data_classes: DataClassSet | UnsetType = UNSET
+    source_ref: InfoRef | UnsetType = UNSET
+
+
+class ExtensionBlobRefPayload(
+    Struct,
+    frozen=True,
+    forbid_unknown_fields=True,
+    omit_defaults=True,
+    tag="blob_ref",
+    tag_field="kind",
+):
+    blob: BlobRef
+    summary: str | UnsetType = UNSET
+    data_classes: DataClassSet | UnsetType = UNSET
+
+
+type ExtensionPayload = ExtensionSummaryPayload | ExtensionBlobRefPayload
 type MetadataBag = WireJsonObject
 type TraceRef = TraceRefRecord
 
 
 __all__ = (  # noqa: PLE0605, SIM905
-    "AssessmentRef AssessmentRefRecord AssessmentsSubmittedEventPayload BlobRef CandidateRef CandidateRefRecord CaseRef CaseRefRecord EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestRef EvaluationRequestRefRecord EvaluationRequestedEventPayload EventEmittedSummaryPayload EventSummaryPayload ExternalEventPayload ExternalInfoRefRecord InfoRef ProposalBatchAppliedEventPayload ProposalBatchRef ProposalBatchRefRecord ProposalBatchSubmittedEventPayload ProposalRef ProposalRefRecord ReceiptRef RunContextSummaryEventPayload ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility WorkspaceRef WorkspaceRefRecord "
+    "AssessmentRef AssessmentRefRecord AssessmentsSubmittedEventPayload BlobRef CandidateRef CandidateRefRecord CaseRef CaseRefRecord EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestRef EvaluationRequestRefRecord EvaluationRequestedEventPayload EventEmittedSummaryPayload EventSummaryPayload ExtensionBlobRefPayload ExtensionPayload ExtensionSummaryPayload ExternalEventPayload ExternalInfoRefRecord InfoRef ProposalBatchAppliedEventPayload ProposalBatchRef ProposalBatchRefRecord ProposalBatchSubmittedEventPayload ProposalRef ProposalRefRecord ReceiptRef RunContextSummaryEventPayload ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility WorkspaceRef WorkspaceRefRecord "
     "DataClassSet MetadataBag WireJsonArtifactSelector WireJsonAssessmentPreference WireJsonAssessmentRanking WireJsonAssessmentTarget WireJsonCaseInput WireJsonCaseReadInput WireJsonCaseReadMetadata WireJsonCaseReadTarget WireJsonCostScope WireJsonExtensionPayload WireJsonField WireJsonGraphEventFilter WireJsonLeafArray WireJsonLeafObject WireJsonLiteralDepth0 WireJsonLiteralDepth1 WireJsonLiteralDepth2 WireJsonLiteralDepth3 WireJsonLiteralDepth4 WireJsonLiteralDepth5 WireJsonLiteralDepth6 WireJsonLiteralDepth7 WireJsonLiteralDepth8 WireJsonLiteralValue WireJsonObject WireJsonOutputValue WireJsonScalar WireJsonSchema WireJsonSchemaObject WireJsonSchemaTypeName WireJsonValue"
 ).split()

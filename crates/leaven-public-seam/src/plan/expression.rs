@@ -184,7 +184,7 @@ impl PlanExpression {
                     object
                         .get("payload")
                         .ok_or_else(|| invalid_plan("extension expr must carry payload"))?,
-                ),
+                )?,
             }),
             other => Err(invalid_plan(format!(
                 "unknown plan expression kind `{other}`"
@@ -419,18 +419,109 @@ impl PlanLiteralValue {
     }
 }
 
-/// Schema-valid JSON payload carried by a Plan IR extension expression.
+/// Closed payload carried by a Plan IR extension object.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PlanExtensionPayload(Value);
+pub enum PlanExtensionPayload {
+    /// Inline summary payload for small extension facts.
+    Summary(PlanExtensionSummaryPayload),
+    /// Durable blob-reference payload for extension bytes/artifacts.
+    BlobRef(PlanExtensionBlobRefPayload),
+}
 
 impl PlanExtensionPayload {
-    fn from_schema_valid_value(value: &Value) -> Self {
-        Self(value.clone())
+    fn from_schema_valid_value(value: &Value) -> Result<Self, PublicSeamError> {
+        let object = value
+            .as_object()
+            .ok_or_else(|| invalid_plan("extension payload must be an object"))?;
+        match required_object_string(object, "kind")? {
+            "summary" => Ok(Self::Summary(PlanExtensionSummaryPayload::from_object(
+                object,
+            )?)),
+            "blob_ref" => Ok(Self::BlobRef(PlanExtensionBlobRefPayload::from_object(
+                object,
+            )?)),
+            kind => Err(invalid_plan(format!(
+                "extension payload kind `{kind}` is not locked in V1"
+            ))),
+        }
+    }
+}
+
+/// Inline summary payload for an extension object.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanExtensionSummaryPayload {
+    summary: String,
+    data_classes: Vec<String>,
+    source_ref: Option<String>,
+}
+
+impl PlanExtensionSummaryPayload {
+    fn from_object(object: &Map<String, Value>) -> Result<Self, PublicSeamError> {
+        Ok(Self {
+            summary: required_object_string(object, "summary")?.to_owned(),
+            data_classes: optional_string_array(
+                object.get("data_classes"),
+                "payload.data_classes",
+            )?,
+            source_ref: optional_ref_id(object.get("source_ref"), "payload.source_ref")?,
+        })
     }
 
-    /// JSON payload carried on the wire by the extension expression.
-    pub const fn as_json(&self) -> &Value {
-        &self.0
+    pub fn summary(&self) -> &str {
+        &self.summary
+    }
+
+    pub fn data_classes(&self) -> &[String] {
+        &self.data_classes
+    }
+
+    pub fn source_ref(&self) -> Option<&str> {
+        self.source_ref.as_deref()
+    }
+}
+
+/// Durable blob-reference payload for an extension object.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanExtensionBlobRefPayload {
+    blob_id: String,
+    summary: Option<String>,
+    data_classes: Vec<String>,
+}
+
+impl PlanExtensionBlobRefPayload {
+    fn from_object(object: &Map<String, Value>) -> Result<Self, PublicSeamError> {
+        let blob = object
+            .get("blob")
+            .and_then(Value::as_object)
+            .ok_or_else(|| invalid_plan("extension payload.blob must be an object"))?;
+        Ok(Self {
+            blob_id: required_object_string(blob, "id")?.to_owned(),
+            summary: object
+                .get("summary")
+                .map(|value| {
+                    value
+                        .as_str()
+                        .map(ToOwned::to_owned)
+                        .ok_or_else(|| invalid_plan("extension payload.summary must be a string"))
+                })
+                .transpose()?,
+            data_classes: optional_string_array(
+                object.get("data_classes"),
+                "payload.data_classes",
+            )?,
+        })
+    }
+
+    pub fn blob_id(&self) -> &str {
+        &self.blob_id
+    }
+
+    pub fn summary(&self) -> Option<&str> {
+        self.summary.as_deref()
+    }
+
+    pub fn data_classes(&self) -> &[String] {
+        &self.data_classes
     }
 }
 
@@ -781,4 +872,31 @@ fn cost_scopes_from_graph_source(value: &Value) -> Result<Vec<PlanCostScope>, Pu
         .get("scope")
         .ok_or_else(|| invalid_plan("costs graph source must carry scope"))?;
     Ok(vec![PlanCostScope::from_schema_valid_value(scope)])
+}
+
+fn optional_string_array(
+    value: Option<&Value>,
+    field: &str,
+) -> Result<Vec<String>, PublicSeamError> {
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
+    string_array(Some(value), field)
+}
+
+fn optional_ref_id(value: Option<&Value>, field: &str) -> Result<Option<String>, PublicSeamError> {
+    value
+        .map(|value| ref_id(value, field).map(ToOwned::to_owned))
+        .transpose()
+}
+
+fn ref_id<'a>(value: &'a Value, field: &str) -> Result<&'a str, PublicSeamError> {
+    if let Some(id) = value.as_str() {
+        return Ok(id);
+    }
+    value
+        .as_object()
+        .and_then(|object| object.get("id"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_plan(format!("{field} must be a string ref or object ref")))
 }

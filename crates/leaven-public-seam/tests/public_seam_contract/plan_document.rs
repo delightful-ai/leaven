@@ -8,12 +8,13 @@ use leaven_public_seam::{
     AgentCommandOutputRefs, CapabilityDocument, PlanAgentRunOutcome, PlanAgentRunRequest,
     PlanCallKind, PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanCaseTargetValue, PlanCommitKind,
     PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanEvaluationShape, PlanExecutionContext,
-    PlanExecutionHost, PlanExpressionKind, PlanGraphEventFilter, PlanGraphQueryOutcome,
-    PlanGraphQueryRequest, PlanGraphReadScope, PlanLmCompleteOutcome, PlanLmCompleteRequest,
-    PlanMode, PlanOperationKind, PlanQueryKind, PlanSandboxExecOutcome, PlanSandboxExecRequest,
-    PlanSchemaVersion, PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest,
-    PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome,
-    PlanWorkspaceReleaseRequest, PlanWriteKind, PublicSeamError, PublicSeamPackage,
+    PlanExecutionHost, PlanExpressionKind, PlanExtensionPayload, PlanGraphEventFilter,
+    PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope, PlanLmCompleteOutcome,
+    PlanLmCompleteRequest, PlanMode, PlanOperationKind, PlanQueryKind, PlanSandboxExecOutcome,
+    PlanSandboxExecRequest, PlanSchemaVersion, PlanWorkspaceMaterializeOutcome,
+    PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest,
+    PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest, PlanWriteKind, PublicSeamError,
+    PublicSeamPackage,
     WorkspaceQueryOp,
 };
 use serde_json::{Value, json};
@@ -283,8 +284,13 @@ fn plan_ir_extension_expression_preserves_typed_payload() {
                 "op": "literal_payload",
                 "schema_fingerprint": "fp_schema_sha256_extension",
                 "payload": {
-                    "route": ["graph", {"candidate": "cand_1"}],
-                    "enabled": true
+                    "kind": "summary",
+                    "summary": "route graph candidate cand_1",
+                    "data_classes": ["public"],
+                    "source_ref": {
+                        "kind": "candidate",
+                        "id": "cand_1"
+                    }
                 }
             }
         }],
@@ -309,12 +315,54 @@ fn plan_ir_extension_expression_preserves_typed_payload() {
     assert_eq!(namespace, "x.test");
     assert_eq!(operation, "literal_payload");
     assert_eq!(schema_fingerprint, "fp_schema_sha256_extension");
-    assert_eq!(
-        payload.as_json(),
-        &json!({
-            "route": ["graph", {"candidate": "cand_1"}],
-            "enabled": true
-        })
+    let PlanExtensionPayload::Summary(payload) = payload else {
+        panic!("expected typed extension summary payload");
+    };
+    assert_eq!(payload.summary(), "route graph candidate cand_1");
+    assert_eq!(payload.data_classes(), ["public"]);
+    assert_eq!(payload.source_ref(), Some("cand_1"));
+}
+
+#[test]
+fn plan_ir_extension_expression_rejects_open_payload() {
+    let package = package();
+    let mut plan = json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "planextpayloadbad001",
+        "consistency": {"kind": "latest_at_start"},
+        "mode": {"kind": "dry_run"},
+        "ops": [{
+            "kind": "let",
+            "name": "extension_value",
+            "expr": {
+                "kind": "extension",
+                "namespace": "x.test",
+                "op": "literal_payload",
+                "schema_fingerprint": "fp_schema_sha256_extension",
+                "payload": {
+                    "route": ["graph", {"candidate": "cand_1"}],
+                    "enabled": true
+                }
+            }
+        }],
+        "return": ["extension_value"],
+        "commit": {"kind": "no_graph_writes"}
+    });
+
+    let error = package.validate_plan_document(&plan).unwrap_err();
+
+    assert!(
+        matches!(error, PublicSeamError::ExampleValidation { .. }),
+        "{error:?}"
+    );
+    plan["ops"][0]["expr"]["payload"] = json!({
+        "kind": "not_locked",
+        "summary": "bad extension"
+    });
+    let error = package.validate_plan_document(&plan).unwrap_err();
+    assert!(
+        matches!(error, PublicSeamError::ExampleValidation { .. }),
+        "{error:?}"
     );
 }
 
@@ -381,11 +429,8 @@ fn plan_ir_expression_preserves_projection_selector_and_cost_scope_owners() {
                         "op": "opaque_projection",
                         "schema_fingerprint": "fp_schema_sha256_extension",
                         "payload": {
-                            "surface_fingerprint": "fp_surface_decoy",
-                            "projection_schema": "fp_schema_decoy",
-                            "selector": {"must_not_be_collected": true},
-                            "kind": "costs",
-                            "scope": {"must_not_be_collected": true}
+                            "kind": "summary",
+                            "summary": "extension projection"
                         }
                     }
                 }
@@ -3511,7 +3556,17 @@ fn lm_complete_lowering_rejects_deferred_multimodal_or_extension_content() {
             "op": "image_input",
             "schema_fingerprint": "fp_schema_sha256_imageinput",
             "payload": {
-                "image": "blob://image"
+                "kind": "blob_ref",
+                "blob": {
+                    "kind": "blob_ref",
+                    "id": "blob_image_input",
+                    "sha256": FIXTURE_BLOB_SHA256,
+                    "bytes": 12,
+                    "uri": "leaven-blob://image-input",
+                    "data_classes": ["public"]
+                },
+                "summary": "image input",
+                "data_classes": ["public"]
             }
         }
     ]);
@@ -3613,7 +3668,17 @@ fn assert_lm_forged_response_fakes_rejected(package: &PublicSeamPackage) {
             "op": "image_output",
             "schema_fingerprint": "fp_schema_sha256_imageoutput",
             "payload": {
-                "image": "blob://image"
+                "kind": "blob_ref",
+                "blob": {
+                    "kind": "blob_ref",
+                    "id": "blob_image_output",
+                    "sha256": FIXTURE_BLOB_SHA256,
+                    "bytes": 12,
+                    "uri": "leaven-blob://image-output",
+                    "data_classes": ["public"]
+                },
+                "summary": "image output",
+                "data_classes": ["public"]
             }
         }
     ]);

@@ -7,12 +7,14 @@ mod model;
 mod parse;
 
 #[allow(unused_imports)]
-pub use expression::PlanExtensionPayload;
-#[allow(unused_imports)]
 pub use expression::PlanLiteralValue;
 pub use expression::{
     PlanArtifactProjectionSelector, PlanCostScope, PlanExpression, PlanExpressionKind,
     PlanGraphEventFilter, PlanGraphEventFilterPayload, PlanGraphQuerySource,
+};
+#[allow(unused_imports)]
+pub use expression::{
+    PlanExtensionBlobRefPayload, PlanExtensionPayload, PlanExtensionSummaryPayload,
 };
 pub use model::{
     PlanApplyProposalBatchWrite, PlanCallKind, PlanCommitKind, PlanEmitRunEventWrite,

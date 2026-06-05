@@ -32,12 +32,12 @@ from .refs import (
     CandidateRef,
     CaseRef,
     EvaluationRequestRef,
+    ExtensionPayload,
     ProposalBatchRef,
     ProposalRef,
     ReceiptRef,
     WireJsonArtifactSelector,
     WireJsonCostScope,
-    WireJsonExtensionPayload,
     WireJsonGraphEventFilter,
     WireJsonLiteralValue,
     WorkspaceRef,
@@ -181,7 +181,7 @@ class ProjectionExtension(Struct, frozen=True, forbid_unknown_fields=True, tag="
     namespace: str
     op: str
     schema_fingerprint: str
-    payload: WireJsonExtensionPayload
+    payload: ExtensionPayload
 
 
 type Projection = (
@@ -328,7 +328,7 @@ class GraphSourceExtension(Struct, frozen=True, forbid_unknown_fields=True, tag=
     namespace: str
     op: str
     schema_fingerprint: str
-    payload: WireJsonExtensionPayload
+    payload: ExtensionPayload
 
 
 type GraphSource = (
@@ -549,7 +549,7 @@ class ExtensionObjectExpression(Struct, frozen=True, forbid_unknown_fields=True,
     namespace: str
     op: str
     schema_fingerprint: str
-    payload: WireJsonExtensionPayload
+    payload: ExtensionPayload
 
 
 type PlanExpression = (
@@ -586,7 +586,7 @@ class ValueExprExtension(Struct, frozen=True, forbid_unknown_fields=True, tag="e
     namespace: str
     op: str
     schema_fingerprint: str
-    payload: WireJsonExtensionPayload
+    payload: ExtensionPayload
 
 
 type ValueExpr = ValueExprLiteral | ValueExprVar | ValueExprExtract | ValueExprExtension

@@ -3218,6 +3218,52 @@ acceptance:
           extension payload leaves remain explicit JSON-shaped follow-up work;
           this removes recursive expression erasure, not the whole expression
           row.
+      - kind: plan_extension_object_payloads_are_typed_records
+        paths:
+          - docs/specs/public-seam-v1/schemas/common.schema.json
+          - crates/leaven-public-seam/src/plan/expression.rs
+          - crates/leaven-public-seam/src/plan.rs
+          - crates/leaven-public-seam/src/lib.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_document.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_dialects.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/acp_profile.rs
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/codegen/expression_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/refs.py
+          - sdk/python/src/leaven/_seam/_wire/expressions.py
+          - sdk/python/tests/_seam/_wire/test_expressions.py
+        commands:
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_document::plan_ir_extension_expression_preserves_typed_payload -- --exact
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_document::plan_ir_extension_expression_rejects_open_payload -- --exact
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_dialects:: -- --nocapture
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_document::plan_ir_family_accepts_typed_let_call_write_documents -- --exact
+          - cargo check -p leaven-public-seam
+          - cargo fmt --check
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_expressions.py -q
+          - cd sdk/python && uv run ruff check codegen/expression_codegen.py codegen/ref_codegen.py src/leaven/_seam/_wire/expressions.py src/leaven/_seam/_wire/refs.py tests/_seam/_wire/test_expressions.py
+          - cd sdk/python && uv run ty check codegen/expression_codegen.py codegen/ref_codegen.py src/leaven/_seam/_wire/expressions.py src/leaven/_seam/_wire/refs.py tests/_seam/_wire/test_expressions.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - >-
+            rg -n 'payload\.as_json\(\)|class
+            ExtensionObjectExpression[\s\S]*WireJsonExtensionPayload|GraphSourceExtension[\s\S]*WireJsonExtensionPayload|ProjectionExtension[\s\S]*WireJsonExtensionPayload|ValueExprExtension[\s\S]*WireJsonExtensionPayload|payload":
+            \{"route"|payload": \{"cursor"|payload":
+            \{"checks"|"image": "blob://' crates/leaven-public-seam
+            sdk/python/src/leaven/_seam/_wire/expressions.py
+            sdk/python/codegen/expression_codegen.py
+            sdk/python/tests/_seam/_wire/test_expressions.py -S
+        note: >-
+          Common `ExtensionObject.payload` is no longer an arbitrary JSON
+          schema slot. The shared public schema now requires a closed
+          `ExtensionPayload` union with summary and blob-ref variants. Rust
+          Plan IR parsing now exposes `PlanExtensionPayload` instead of a
+          `Value` wrapper, with typed summary/blob accessors and a negative
+          proof for the old open payload object. Python generated Plan
+          expression records now use the generated `ExtensionPayload` msgspec
+          union for extension expressions, graph-source extensions, projection
+          extensions, and value-expression extensions. This removes the Plan
+          `ExtensionObject` erasure; result/evidence parsed payload aliases and
+          other schema-owned JSON leaves remain separate pending owner work.
       - kind: generated_projection_predicate_and_graph_step_exprs_are_typed_records
         paths:
           - sdk/python/codegen/expression_codegen.py

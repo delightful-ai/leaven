@@ -2261,7 +2261,10 @@ fn extension_primary(op: &str) -> Value {
         "namespace": "leaven",
         "op": op,
         "schema_fingerprint": "fp_schema_sha256_acpextension",
-        "payload": {"status": "ok"}
+        "payload": {
+            "kind": "summary",
+            "summary": "ok"
+        }
     })
 }
 

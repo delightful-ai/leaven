@@ -31,6 +31,7 @@ from leaven._seam._wire.expressions import (
     WorkspaceQueryReadFile,
 )
 from leaven._seam._wire.payloads import PlanDocument
+from leaven._seam._wire.refs import ExtensionSummaryPayload
 
 
 def test_schema_valid_precondition_decodes_typed_value_expr() -> None:
@@ -405,7 +406,29 @@ def test_case_query_rejects_unknown_query_kind() -> None:
 
 
 def test_extension_expression_decodes_nested_payload() -> None:
-    """Example: extension expression payload is typed JSON, not a shallow field."""
+    """Example: extension expression payload is a closed typed record."""
+
+    body = (
+        b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
+        b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
+        b'"ops":[{"kind":"let","name":"extension_value",'
+        b'"expr":{"kind":"extension","namespace":"x.test","op":"literal_payload",'
+        b'"schema_fingerprint":"fp_schema","payload":{"kind":"summary",'
+        b'"summary":"route a b","data_classes":["public"]}}}],'
+        b'"return":["extension_value"],"commit":{"kind":"no_graph_writes"}}'
+    )
+
+    decoded = msgspec.json.decode(body, type=PlanDocument)
+    expr = decoded.ops[0].expr
+
+    assert isinstance(expr, ExtensionObjectExpression)
+    assert isinstance(expr.payload, ExtensionSummaryPayload)
+    assert expr.payload.summary == "route a b"
+    assert expr.payload.data_classes == ["public"]
+
+
+def test_extension_expression_rejects_open_payload() -> None:
+    """Regression: ExtensionObject payloads are not arbitrary JSON islands."""
 
     body = (
         b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
@@ -416,11 +439,8 @@ def test_extension_expression_decodes_nested_payload() -> None:
         b'"return":["extension_value"],"commit":{"kind":"no_graph_writes"}}'
     )
 
-    decoded = msgspec.json.decode(body, type=PlanDocument)
-    expr = decoded.ops[0].expr
-
-    assert isinstance(expr, ExtensionObjectExpression)
-    assert expr.payload == {"route": ["a", {"b": [1, 2]}]}
+    with pytest.raises(msgspec.ValidationError):
+        msgspec.json.decode(body, type=PlanDocument)
 
 
 def test_graph_extension_source_decodes_nested_payload() -> None:
@@ -431,7 +451,8 @@ def test_graph_extension_source_decodes_nested_payload() -> None:
         b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
         b'"ops":[{"kind":"let","name":"rows","expr":{"kind":"graph_query",'
         b'"source":{"kind":"extension","namespace":"x.graph","op":"source",'
-        b'"schema_fingerprint":"fp_schema","payload":{"cursor":{"parts":["r",1]}}},'
+        b'"schema_fingerprint":"fp_schema","payload":{"kind":"summary",'
+        b'"summary":"cursor r 1"}},'
         b'"projection":{"kind":"summary","fields":["/score"]}}}],'
         b'"return":["rows"],"commit":{"kind":"no_graph_writes"}}'
     )
@@ -441,11 +462,12 @@ def test_graph_extension_source_decodes_nested_payload() -> None:
 
     assert isinstance(expr, PlanExpressionGraphQuery)
     assert isinstance(expr.source, GraphSourceExtension)
-    assert expr.source.payload == {"cursor": {"parts": ["r", 1]}}
+    assert isinstance(expr.source.payload, ExtensionSummaryPayload)
+    assert expr.source.payload.summary == "cursor r 1"
 
 
 def test_extension_value_expr_decodes_nested_payload() -> None:
-    """Example: ValueExpr extension payloads are typed JSON."""
+    """Example: ValueExpr extension payloads are closed typed records."""
 
     body = (
         b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
@@ -454,7 +476,8 @@ def test_extension_value_expr_decodes_nested_payload() -> None:
         b'"write":{"kind":"submit_proposal_batch","semantics":"sequence","proposals":[]},'
         b'"preconditions":[{"kind":"schema_valid","schema_fingerprint":"fp_schema",'
         b'"value":{"kind":"extension","namespace":"x.value","op":"payload",'
-        b'"schema_fingerprint":"fp_schema","payload":{"checks":[{"ok":true}]}}}]}],'
+        b'"schema_fingerprint":"fp_schema","payload":{"kind":"summary",'
+        b'"summary":"checks ok"}}}]}],'
         b'"return":["proposal_batch"],"commit":{"kind":"no_graph_writes"}}'
     )
 
@@ -464,7 +487,8 @@ def test_extension_value_expr_decodes_nested_payload() -> None:
 
     assert isinstance(precondition, PreconditionSchemaValid)
     assert isinstance(precondition.value, ValueExprExtension)
-    assert precondition.value.payload == {"checks": [{"ok": True}]}
+    assert isinstance(precondition.value.payload, ExtensionSummaryPayload)
+    assert precondition.value.payload.summary == "checks ok"
 
 
 def test_extract_value_expr_decodes_recursive_input_expr() -> None:
