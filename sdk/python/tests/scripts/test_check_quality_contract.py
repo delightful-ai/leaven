@@ -34,6 +34,12 @@ async def reward(output: object, case, cx) -> float:
 def decode(decoded) -> object:
     return decoded.get("result")
 
+def stringify_value(value: object) -> str:
+    return str(value)
+
+def normalize(x: object) -> str:
+    return x if isinstance(x, str) else str(x)
+
 def ref_id(value: object) -> str:
     return getattr(value, "id", "")
 """
@@ -45,7 +51,9 @@ def ref_id(value: object) -> str:
         "tests/scripts/lint_probe.py:3: uses .get(...) on an unparsed domain value",
         "tests/scripts/lint_probe.py:4: uses str(...) to coerce a domain value",
         "tests/scripts/lint_probe.py:7: uses .get(...) on an unparsed domain value",
-        "tests/scripts/lint_probe.py:10: uses getattr(...) to probe a domain value",
+        "tests/scripts/lint_probe.py:10: uses str(...) to coerce a domain value",
+        "tests/scripts/lint_probe.py:13: uses isinstance(..., str) else str(...) defensive fallback",
+        "tests/scripts/lint_probe.py:16: uses getattr(...) to probe a domain value",
     ]
 
 

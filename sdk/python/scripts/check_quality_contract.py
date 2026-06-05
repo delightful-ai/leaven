@@ -27,14 +27,6 @@ TYPED_BOUNDARY_ROOTS = (
     ROOT / "src" / "leaven" / "_seam_worker",
 )
 DOMAIN_VALUE_NAMES = {"output", "raw_output", "target", "payload", "result", "value"}
-MAPPING_ANNOTATION_NAMES = {
-    "Mapping",
-    "MutableMapping",
-    "dict",
-    "JsonObject",
-    "JsonValue",
-    "WireJsonObject",
-}
 MIRRORED_TESTS = {
     ROOT / "src" / "leaven" / "_runs" / "rust_export.py": ROOT
     / "tests"
@@ -169,7 +161,6 @@ class DefensiveTypeErasureVisitor(ast.NodeVisitor):
     def __init__(self, path: Path) -> None:
         self.path = path
         self.failures: list[str] = []
-        self.mapping_names: set[str] = set()
         self.output_contract_names: set[str] = set()
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
@@ -180,16 +171,16 @@ class DefensiveTypeErasureVisitor(ast.NodeVisitor):
         self._check_function_args(node)
         self._visit_function_body(node)
 
-    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
-        if isinstance(node.target, ast.Name) and self._is_mapping_annotation(node.annotation):
-            self.mapping_names.add(node.target.id)
-        self.generic_visit(node)
-
     def visit_If(self, node: ast.If) -> None:
         if self._is_strict_type_guard(node):
             for statement in [*node.body, *node.orelse]:
                 self.visit(statement)
             return
+        self.generic_visit(node)
+
+    def visit_IfExp(self, node: ast.IfExp) -> None:
+        if self._is_str_else_str_fallback(node):
+            self._add(node, "uses isinstance(..., str) else str(...) defensive fallback")
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:
@@ -211,15 +202,11 @@ class DefensiveTypeErasureVisitor(ast.NodeVisitor):
                 self._add(arg, "widens callback output to object")
 
     def _visit_function_body(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
-        outer_mapping_names = set(self.mapping_names)
         for arg in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]:
-            if arg.annotation is not None and self._is_mapping_annotation(arg.annotation):
-                self.mapping_names.add(arg.arg)
             if arg.annotation is not None and self._is_output_contract_annotation(arg.annotation):
                 self.output_contract_names.add(arg.arg)
         for statement in node.body:
             self.visit(statement)
-        self.mapping_names = outer_mapping_names
         self.output_contract_names.clear()
 
     def _is_banned_str_coercion(self, node: ast.Call) -> bool:
@@ -251,13 +238,47 @@ class DefensiveTypeErasureVisitor(ast.NodeVisitor):
             and self._if_body_raises(node)
         )
 
+    def _is_str_else_str_fallback(self, node: ast.IfExp) -> bool:
+        checked_name = self._isinstance_str_checked_name(node.test)
+        if checked_name is None:
+            return False
+        return (
+            isinstance(node.body, ast.Name)
+            and node.body.id == checked_name
+            and self._is_str_call_for_name(node.orelse, checked_name)
+        )
+
+    def _isinstance_str_checked_name(self, node: ast.AST) -> str | None:
+        if not isinstance(node, ast.Call):
+            return None
+        if not isinstance(node.func, ast.Name) or node.func.id != "isinstance":
+            return None
+        if len(node.args) != 2:
+            return None
+        checked, type_expr = node.args
+        if not isinstance(checked, ast.Name):
+            return None
+        if not isinstance(type_expr, ast.Name) or type_expr.id != "str":
+            return None
+        return checked.id
+
+    def _is_str_call_for_name(self, node: ast.AST, name: str) -> bool:
+        return (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "str"
+            and len(node.args) == 1
+            and isinstance(node.args[0], ast.Name)
+            and node.args[0].id == name
+        )
+
     def _is_banned_get_probe(self, node: ast.Call) -> bool:
         if not isinstance(node.func, ast.Attribute) or node.func.attr != "get":
             return False
         owner = node.func.value
         if self._is_os_environ(owner):
             return False
-        return not (isinstance(owner, ast.Name) and owner.id in self.mapping_names)
+        return True
 
     def _is_getattr_probe(self, node: ast.Call) -> bool:
         return (
@@ -299,19 +320,6 @@ class DefensiveTypeErasureVisitor(ast.NodeVisitor):
             and isinstance(rhs, ast.Dict)
             and not rhs.keys
         )
-
-    def _is_mapping_annotation(self, annotation: ast.AST) -> bool:
-        match annotation:
-            case ast.Name(id=name):
-                return name in MAPPING_ANNOTATION_NAMES
-            case ast.Attribute(attr=name):
-                return name in MAPPING_ANNOTATION_NAMES
-            case ast.Subscript(value=value):
-                return self._is_mapping_annotation(value)
-            case ast.BinOp(left=left, right=right, op=ast.BitOr()):
-                return self._is_mapping_annotation(left) or self._is_mapping_annotation(right)
-            case _:
-                return False
 
     def _is_output_contract_annotation(self, annotation: ast.AST) -> bool:
         match annotation:
