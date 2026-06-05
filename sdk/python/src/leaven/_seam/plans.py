@@ -23,6 +23,7 @@ from leaven._seam._wire.calls import (
     OutputFinalMessage,
     OutputJsonSchema,
     OutputWorkspaceDiff,
+    SandboxExecCall,
     WorkspaceMaterializeCall,
 )
 from leaven._seam._wire.codec import RequestParams
@@ -61,6 +62,7 @@ SeamRequestMethod = Literal[
     "leaven/lm.complete",
     "leaven/proposal.apply",
     "leaven/proposal.submit_batch",
+    "leaven/sandbox.exec",
 ]
 
 
@@ -300,6 +302,60 @@ class AssessmentSubmitRequest:
             write=SubmitAssessmentsWrite(
                 evaluation_request_id=self.evaluation_request_id,
                 assessments=list(self.assessments),
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class SandboxExecRequest:
+    """A single public-seam `leaven/sandbox.exec` Plan request."""
+
+    request_id: str
+    plan_id: str
+    idempotency_key: str
+    workspace: str
+    argv: Sequence[str]
+    timeout_s: int
+    output: JsonObject
+    env: dict[str, str] | None = None
+    cwd: str | None = None
+    stream_policy: Literal["buffer", "stream_updates", "blob_refs_only"] = "blob_refs_only"
+    input_classes: Sequence[str] | None = None
+    forbidden_input_classes: Sequence[str] | None = None
+
+    @property
+    def method(self) -> SeamRequestMethod:
+        """Locked sandbox method."""
+        return "leaven/sandbox.exec"
+
+    def to_params(self) -> PlanDocument:
+        """Return the locked sandbox Plan params."""
+        return _plan_document(
+            plan_id=self.plan_id,
+            ops=[self._sandbox_call()],
+            return_names=["sandbox_exec"],
+            commit=CommitPolicyNoGraphWrites(),
+        )
+
+    def _sandbox_call(self) -> PlanOp:
+        return PlanOp(
+            kind="call",
+            name="sandbox_exec",
+            idempotency_key=self.idempotency_key,
+            call=SandboxExecCall(
+                workspace=self.workspace,
+                argv=list(self.argv),
+                timeout_s=self.timeout_s,
+                output=_wire_output_contract(self.output),
+                input_classes=list(self.input_classes or ["public"]),
+                cwd=self.cwd if self.cwd is not None else UNSET,
+                env=dict(self.env) if self.env is not None else UNSET,
+                stream_policy=self.stream_policy,
+                forbidden_input_classes=(
+                    list(self.forbidden_input_classes)
+                    if self.forbidden_input_classes is not None
+                    else UNSET
+                ),
             ),
         )
 
@@ -564,6 +620,7 @@ __all__ = [
     "LmCompleteRequest",
     "ProposalApplyRequest",
     "ProposalSubmitRequest",
+    "SandboxExecRequest",
     "SeamJsonRpcRequest",
     "SeamRequestMethod",
     "StageRunProposeRequest",

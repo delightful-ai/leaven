@@ -3256,6 +3256,33 @@ acceptance:
           default gate. This does not close the SDK quality row; remaining
           public scaffolds and the full Rust-owned generated wire-codegen
           denominator still require later cuts.
+      - kind: public_sandbox_exec_scaffold_removed
+        paths:
+          - sdk/python/src/leaven/_seam/__init__.py
+          - sdk/python/src/leaven/_seam/client.py
+          - sdk/python/src/leaven/_seam/plans.py
+          - sdk/python/src/leaven/builders/sandbox.py
+          - sdk/python/tests/builders/test_sandbox.py
+        commands:
+          - cd sdk/python && uv run pytest tests/builders/test_sandbox.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_seam/plans.py src/leaven/_seam/client.py src/leaven/_seam/__init__.py src/leaven/builders/sandbox.py tests/builders/test_sandbox.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/plans.py src/leaven/_seam/client.py src/leaven/_seam/__init__.py src/leaven/builders/sandbox.py tests/builders/test_sandbox.py
+          - cd sdk/python && just check
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - cd sdk/python && uv run pytest tests/test_product_surface_ring.py tests/test_stage_surface.py tests/builders/test_sandbox.py -q
+        note: >-
+          `SandboxBuilder.exec(...)` is now a seam-backed public builder path
+          instead of a scaffold. The SDK adds typed `SandboxExecRequest`,
+          `SeamClient.sandbox_exec(...)`, and generated `SandboxExecResult`
+          readback; the builder lowers workspace handle id, argv, cwd, env,
+          timeout, stream policy, output contract, input data classes, and
+          forbidden input classes into a generated `SandboxExecCall`. The public
+          result preserves seam-owned stdout, stderr, and output-file `BlobRef`
+          metadata on `SandboxExec` and its `CallReceipt` instead of reducing
+          byte-bound outputs to loose strings. This removes one public backbone
+          scaffold but does not close the SDK quality row; remaining workspace,
+          batch, replay, optional adapter, and full Rust-owned generated
+          wire-codegen cuts still require later work.
       - kind: python_no_unparsed_get_probe_lint_hardened
         paths:
           - sdk/python/scripts/check_quality_contract.py

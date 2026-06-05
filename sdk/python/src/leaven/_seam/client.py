@@ -18,6 +18,7 @@ from ._wire.results import (
     LmCompleteResult,
     ProposalApplyResult,
     ProposalSubmitResult,
+    SandboxExecResult,
     StageRunDispatchResult,
 )
 from .config import SeamServiceConfig
@@ -29,6 +30,7 @@ from .plans import (
     LmCompleteRequest,
     ProposalApplyRequest,
     ProposalSubmitRequest,
+    SandboxExecRequest,
     SeamJsonRpcRequest,
     StageRunProposeRequest,
     StageRunRequest,
@@ -84,6 +86,15 @@ class SeamClient:
     ) -> ProposalApplyResult:
         """Send one `leaven/proposal.apply` request and return its typed result."""
         return self._typed_request(request, ProposalApplyResult, timeout_s=timeout_s)
+
+    def sandbox_exec(
+        self,
+        request: SandboxExecRequest,
+        *,
+        timeout_s: int = 240,
+    ) -> SandboxExecResult:
+        """Send one `leaven/sandbox.exec` request and return its typed result."""
+        return self._typed_request(request, SandboxExecResult, timeout_s=timeout_s)
 
     def case_load(self, request: CaseLoadRequest, *, timeout_s: int = 240) -> CaseLoadResult:
         """Send one case read request and return its typed result."""
