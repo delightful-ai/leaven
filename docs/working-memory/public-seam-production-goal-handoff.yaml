@@ -3027,35 +3027,38 @@ acceptance:
           refs, replayability, and metadata shape. Focused tests prove a valid
           envelope decodes through `SubmitAssessmentRecord.evidence` and an
           envelope missing the required public projection is rejected at the
-          msgspec boundary. `EvidencePrivate.payload` remains msgspec `Raw`
-          by design because the V1 schema permits any JSON there and the
-          concrete semantic owner is selected by `payload_schema_fingerprint`;
-          this is a schema-selected delayed-decode slot, not arbitrary decoded
-          Python object acceptance or row closure.
-      - kind: evidence_private_payload_has_schema_selected_decode_helper
+          msgspec boundary. A later evidence item hard-cut the remaining
+          `EvidencePrivate.payload` Raw buffer to a bounded generated JSON
+          payload owner.
+      - kind: evidence_private_payload_raw_removed
         paths:
+          - sdk/python/src/leaven/builders/assessments.py
           - sdk/python/codegen/evidence_codegen.py
           - sdk/python/src/leaven/_seam/_wire/evidence.py
           - sdk/python/tests/_seam/_wire/test_graph_writes.py
           - docs/working-memory/public-seam-production-goal-handoff.yaml
         commands:
           - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_graph_writes.py -q
           - cd sdk/python && uv run pytest tests/_seam/_wire -q
-          - cd sdk/python && uv run ruff check codegen/evidence_codegen.py src/leaven/_seam/_wire/evidence.py tests/_seam/_wire/test_graph_writes.py
-          - cd sdk/python && uv run ty check codegen/evidence_codegen.py src/leaven/_seam/_wire/evidence.py tests/_seam/_wire/test_graph_writes.py
+          - cd sdk/python && uv run ruff check codegen/evidence_codegen.py src/leaven/_seam/_wire/evidence.py src/leaven/builders/assessments.py tests/_seam/_wire/test_graph_writes.py
+          - cd sdk/python && uv run ty check codegen/evidence_codegen.py src/leaven/_seam/_wire/evidence.py src/leaven/builders/assessments.py tests/_seam/_wire/test_graph_writes.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
           - python3 scripts/lint-line-count.py --root sdk/python
+          - rg -n "payload: Raw|from msgspec import .*Raw" sdk/python/src/leaven/_seam/_wire/evidence.py sdk/python/codegen/evidence_codegen.py sdk/python/src/leaven/builders/assessments.py
         note: >-
-          Generated `EvidencePrivate.payload` remains msgspec `Raw` only as a
-          schema-selected delayed-decode buffer keyed by
-          `payload_schema_fingerprint`; callers no longer need to handle raw
-          bytes directly. The generated `decode_evidence_private_payload[T]`
-          helper requires a caller-owned msgspec payload type and fails loudly
-          when payload bytes are absent. Focused graph-write tests decode a
-          private evidence payload into a concrete `PrivateEvidencePayload`
-          Struct while the full private wire suite still rejects malformed
-          evidence envelopes. This narrows the private evidence Raw slot but
-          does not close JSON-RPC error data or other schema-declared arbitrary
-          JSON leaves.
+          Generated `EvidencePrivate.payload` now carries
+          `WireJsonExtensionPayload | UnsetType` instead of msgspec `Raw`.
+          The assessment builder converts public `EvidencePrivate.payload`
+          into that generated bounded JSON owner rather than pre-encoding raw
+          bytes. The schema-selected helper then uses `msgspec.convert` to
+          produce the caller-owned payload Struct, which matches msgspec's
+          documented converter path for already-decoded builtin values. The
+          focused test asserts the generated wire value itself before decoding
+          it into `PrivateEvidencePayload`, and the full `_seam/_wire` lane
+          stays green. This closes the evidence-private Raw slot; JSON-RPC
+          envelope Raw buffers and remaining method-specific delayed result
+          buffers still need their own owner decisions before the row closes.
       - kind: python_request_envelope_raw_dict_escape_removed
         paths:
           - sdk/python/src/leaven/_seam/client.py

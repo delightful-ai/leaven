@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from typing import Literal, Protocol
 
 import msgspec
-from msgspec import UNSET, Raw, UnsetType
+from msgspec import UNSET, UnsetType
 from pydantic import BaseModel, ConfigDict
 
 from .._errors import UnboundBuilderError
@@ -25,7 +25,11 @@ from .._seam._wire.evidence import (
 from .._seam._wire.evidence import (
     EvidencePublic as WireEvidencePublic,
 )
-from .._seam._wire.refs import ReceiptRef, WireJsonAssessmentRanking
+from .._seam._wire.refs import (
+    ReceiptRef,
+    WireJsonAssessmentRanking,
+    WireJsonExtensionPayload,
+)
 from .._seam._wire.results import AssessmentSubmitResult
 from .._seam._wire.writes import SubmitAssessmentRecord, WriteOutputRecord, WriteScore
 from ..assessment import AssessmentWrite, Replayability
@@ -245,7 +249,7 @@ def _private_evidence_to_wire(private: EvidencePrivate) -> WireEvidencePrivate:
     return WireEvidencePrivate(
         visibility=_private_visibility(private.visibility),
         data_classes=list(private.data_classes),
-        payload=Raw(msgspec.json.encode(private.payload)),
+        payload=msgspec.convert(private.payload, type=WireJsonExtensionPayload),
     )
 
 

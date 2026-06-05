@@ -193,6 +193,7 @@ def test_assessment_evidence_decodes_typed_envelope() -> None:
     assert evidence.private is not UNSET
     assert evidence.private.visibility == "evaluator_only"
     assert isinstance(evidence.private.payload_ref, BlobRef)
+    assert evidence.private.payload == {"rationale": "grader trace", "confidence": 0.75}
     payload = decode_evidence_private_payload(evidence.private, PrivateEvidencePayload)
     assert payload.rationale == "grader trace"
     assert payload.confidence == 0.75
