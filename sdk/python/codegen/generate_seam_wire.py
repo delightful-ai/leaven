@@ -9,6 +9,7 @@ from call_codegen import render_calls
 from case_result_codegen import render_case_results
 from evidence_codegen import render_evidence
 from expression_codegen import render_expressions
+from graph_row_codegen import render_graph_rows
 from method_codegen import MethodCodegenRow, render_methods
 from method_result_codegen import render_method_results
 from payload_codegen import PayloadMethodRow, render_payloads
@@ -24,6 +25,7 @@ CALLS_OUTPUT = WIRE_DIR / "calls.py"
 EVIDENCE_OUTPUT = WIRE_DIR / "evidence.py"
 PAYLOADS_OUTPUT = WIRE_DIR / "payloads.py"
 REFS_OUTPUT = WIRE_DIR / "refs.py"
+GRAPH_ROWS_OUTPUT = WIRE_DIR / "graph_rows.py"
 CASE_RESULTS_OUTPUT = WIRE_DIR / "case_results.py"
 RESULTS_OUTPUT = WIRE_DIR / "results.py"
 METHOD_RESULTS_OUTPUT = WIRE_DIR / "method_results.py"
@@ -64,6 +66,7 @@ def generated_files() -> dict[Path, str]:
     return {
         METHODS_OUTPUT: render_methods(method_rows(rows)),
         REFS_OUTPUT: render_refs(),
+        GRAPH_ROWS_OUTPUT: render_graph_rows(),
         CASE_RESULTS_OUTPUT: render_case_results(),
         EVIDENCE_OUTPUT: render_evidence(),
         EXPRESSIONS_OUTPUT: render_expressions(),

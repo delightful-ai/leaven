@@ -1,6 +1,7 @@
 use crate::support::{bind_plan_result_hashes, fixture_blob_ref, package};
 use leaven_public_seam::{
-    PlanErrorCode, PlanResultReceiptKind, PlanResultValueKind, PublicSeamError,
+    PlanErrorCode, PlanResultProposalEffectKind, PlanResultReceiptKind, PlanResultValueKind,
+    PublicSeamError,
 };
 use serde_json::{Value, json};
 
@@ -64,10 +65,10 @@ fn plan_result_preserves_graph_row_json_fragments_as_typed_owners() {
         &json!({"kind": "prompt", "body": "answer concisely"})
     );
     assert_eq!(fragments.proposal_effects().len(), 1);
-    assert_eq!(
-        fragments.proposal_effects()[0].as_json(),
-        &json!({"kind": "change", "target": "cand_alpha"})
-    );
+    let proposal_effect = &fragments.proposal_effects()[0];
+    assert_eq!(proposal_effect.kind(), PlanResultProposalEffectKind::Change);
+    assert_eq!(proposal_effect.target_candidate_id(), Some("cand_alpha"));
+    assert_eq!(proposal_effect.artifact_type(), None);
     assert_eq!(fragments.event_payloads().len(), 1);
     assert_eq!(
         fragments.event_payloads()[0].as_json(),
@@ -77,6 +78,21 @@ fn plan_result_preserves_graph_row_json_fragments_as_typed_owners() {
     assert_eq!(
         fragments.extension_payloads()[0].as_json(),
         &json!({"vendor": {"score": 7}})
+    );
+}
+
+#[test]
+fn plan_result_rejects_open_proposal_effect_summary_payload() {
+    let package = package();
+    let mut result = graph_row_fragment_result();
+    result["values"]["rows"]["items"][1]["effect"]["prose"] =
+        json!("proposal summaries are typed records");
+
+    let error = package.validate_plan_result_document(&result).unwrap_err();
+
+    assert!(
+        matches!(error, PublicSeamError::ExampleValidation { .. }),
+        "{error:?}"
     );
 }
 

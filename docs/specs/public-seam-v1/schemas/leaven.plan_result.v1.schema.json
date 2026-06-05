@@ -148,7 +148,9 @@
             "batch": {
               "$ref": "common.schema.json#/$defs/ProposalBatchRef"
             },
-            "effect": {}
+            "effect": {
+              "$ref": "#/$defs/ProposalEffectSummary"
+            }
           },
           "required": [
             "kind",
@@ -199,6 +201,103 @@
         },
         {
           "$ref": "common.schema.json#/$defs/ExtensionObject"
+        }
+      ]
+    },
+    "ProposalEffectSummary": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "create"
+            },
+            "artifact_type": {
+              "type": "string"
+            },
+            "artifact_schema": {
+              "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "change"
+            },
+            "target": {
+              "$ref": "common.schema.json#/$defs/CandidateRef"
+            },
+            "surface_fingerprint": {
+              "$ref": "common.schema.json#/$defs/SurfaceFingerprint"
+            },
+            "change_schema": {
+              "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "change_from_workspace_diff"
+            },
+            "target": {
+              "$ref": "common.schema.json#/$defs/CandidateRef"
+            },
+            "workspace": {
+              "$ref": "common.schema.json#/$defs/WorkspaceRef"
+            },
+            "parser": {
+              "type": "string"
+            },
+            "surface_fingerprint": {
+              "$ref": "common.schema.json#/$defs/SurfaceFingerprint"
+            },
+            "change_schema": {
+              "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "change_from_agent_session"
+            },
+            "target": {
+              "$ref": "common.schema.json#/$defs/CandidateRef"
+            },
+            "agent_receipt": {
+              "$ref": "common.schema.json#/$defs/ReceiptRef"
+            },
+            "parser": {
+              "type": "string"
+            },
+            "surface_fingerprint": {
+              "$ref": "common.schema.json#/$defs/SurfaceFingerprint"
+            },
+            "change_schema": {
+              "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
         }
       ]
     },

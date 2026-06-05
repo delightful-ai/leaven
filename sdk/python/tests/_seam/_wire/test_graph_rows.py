@@ -11,6 +11,7 @@ from leaven._seam._wire.payloads import (
     EventSummaryGraphRow,
     ExtensionGraphRow,
     PlanResultDocument,
+    ProposalEffectSummary,
     ProposalSummaryGraphRow,
 )
 
@@ -107,11 +108,35 @@ def test_plan_result_decodes_graph_row_json_fragments_with_owned_names() -> None
     assert rows[0].scores == {"accuracy": 0.9, "checks": ["format", {"pass": True}]}
     assert rows[0].artifact == {"kind": "prompt", "body": "answer concisely"}
     assert isinstance(rows[1], ProposalSummaryGraphRow)
-    assert rows[1].effect == {"kind": "change", "target": "cand_alpha"}
+    assert isinstance(rows[1].effect, ProposalEffectSummary)
+    assert rows[1].effect.kind == "change"
+    assert rows[1].effect.target == "cand_alpha"
     assert isinstance(rows[2], EventSummaryGraphRow)
     assert rows[2].payload == {"note": ["loaded", {"case": "case_1"}]}
     assert isinstance(rows[3], ExtensionGraphRow)
     assert rows[3].payload == {"vendor": {"score": 7}}
+
+
+def test_plan_result_rejects_open_proposal_effect_summary_payload() -> None:
+    """Regression: proposal graph-row effects are closed summaries, not JSON leaves."""
+
+    body = (
+        b'{"jsonrpc":"2.0","id":"req_1","result":{'
+        b'"schema_version":"leaven.plan_result.v1","plan_id":"plan_1",'
+        b'"capability_fingerprint":"fp_cap_sha256_test",'
+        b'"policy_fingerprint":"fp_policy_sha256_test",'
+        b'"base_revision":"rev_base","final_revision":"rev_final",'
+        b'"replayability_summary":"pure_read",'
+        b'"values":{"rows":{"kind":"graph_set","graph_revision":"rev_final",'
+        b'"data_classes":["public"],"replayability":"pure_read",'
+        b'"items":[{"kind":"proposal_summary","proposal":"prop_alpha",'
+        b'"effect":{"kind":"change","target":"cand_alpha",'
+        b'"prose":"proposal summaries are typed records"}}]}},'
+        b'"receipts":[],"redactions":[],"charges":[],"errors":[]}}'
+    )
+
+    with pytest.raises(JsonRpcProtocolError, match="unknown field `prose`"):
+        decode_response(body, PlanResultDocument)
 
 
 def test_plan_result_rejects_malformed_assessment_row_evidence() -> None:

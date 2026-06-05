@@ -92,7 +92,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="graph.query",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -101,7 +101,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="case.read",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -110,7 +110,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="case.read",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -119,7 +119,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="case.read",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -128,7 +128,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="case.read",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -137,7 +137,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="workspace.materialize",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -146,7 +146,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="workspace.read",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -155,7 +155,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="workspace.read",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -164,7 +164,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="workspace.read",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -173,7 +173,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="workspace.read",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -182,7 +182,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="workspace.read",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -191,7 +191,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="workspace.read",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -200,7 +200,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="workspace.read",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -209,7 +209,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="workspace.read",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -218,7 +218,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="workspace.read",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -227,7 +227,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="workspace.release",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -236,7 +236,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="lm.complete",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -245,7 +245,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="agent.run",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -254,7 +254,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="sandbox.exec",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -263,7 +263,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="proposal.submit_batch",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -272,7 +272,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="proposal.apply_batch",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -281,7 +281,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="assessment.submit",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -290,7 +290,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="evaluation.request",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
     LockedMethodBinding(
@@ -299,7 +299,7 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         result_schema="leaven.plan_result.v1.schema.json",
         required_action="event.emit",
         params_schema_fingerprint="fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e",
-        result_schema_fingerprint="fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4",
+        result_schema_fingerprint="fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0",
         produces_receipt=True,
     ),
 )

@@ -82,9 +82,9 @@ pub use proposal_authority::ProposalAuthorityReport;
 pub use result::{
     PlanResultCandidateArtifact, PlanResultCandidateScores, PlanResultChargeFacts,
     PlanResultDocument, PlanResultErrorFacts, PlanResultGraphEventPayload,
-    PlanResultGraphExtensionPayload, PlanResultGraphRowFragments, PlanResultProposalEffectSummary,
-    PlanResultReceiptFact, PlanResultReceiptKind, PlanResultValueFact, PlanResultValueKind,
-    Replayability,
+    PlanResultGraphExtensionPayload, PlanResultGraphRowFragments, PlanResultProposalEffectKind,
+    PlanResultProposalEffectSummary, PlanResultReceiptFact, PlanResultReceiptKind,
+    PlanResultValueFact, PlanResultValueKind, Replayability,
 };
 pub use stage_payload::{
     ReflectProposeHandoffDocument, ReflectProposeSubmissionDocument, RunnerCaseInputDocument,

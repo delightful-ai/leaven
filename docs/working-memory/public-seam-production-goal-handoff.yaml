@@ -1922,6 +1922,46 @@ acceptance:
           inputs and rejection of an open prose payload. This removes the
           proposal-causal leaf blocker; other metadata/evidence/result leaf
           owners remain open.
+      - kind: proposal_effect_summary_result_fragment_is_typed
+        paths:
+          - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
+          - crates/leaven-public-seam/src/result.rs
+          - crates/leaven-public-seam/src/lib.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_result.rs
+          - sdk/python/codegen/graph_row_codegen.py
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/codegen/generate_seam_wire.py
+          - sdk/python/src/leaven/_seam/_wire/graph_rows.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/src/leaven/_seam/_wire/refs.py
+          - sdk/python/tests/_seam/_wire/test_graph_rows.py
+          - sdk/python/scripts/check_quality_contract.py
+        commands:
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_result::plan_result_preserves_graph_row_json_fragments_as_typed_owners -- --exact --nocapture
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_result::plan_result_rejects_open_proposal_effect_summary_payload -- --exact --nocapture
+          - cargo check -p leaven-public-seam
+          - cargo fmt --check
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_graph_rows.py -q
+          - cd sdk/python && uv run ruff check codegen/graph_row_codegen.py codegen/payload_codegen.py codegen/ref_codegen.py src/leaven/_seam/_wire/graph_rows.py src/leaven/_seam/_wire/payloads.py src/leaven/_seam/_wire/refs.py tests/_seam/_wire/test_graph_rows.py scripts/check_quality_contract.py
+          - cd sdk/python && uv run ty check codegen/graph_row_codegen.py codegen/payload_codegen.py codegen/ref_codegen.py src/leaven/_seam/_wire/graph_rows.py src/leaven/_seam/_wire/payloads.py src/leaven/_seam/_wire/refs.py tests/_seam/_wire/test_graph_rows.py scripts/check_quality_contract.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+        note: >-
+          `proposal_summary.effect` in PlanResult graph rows is no longer an
+          open `{}` schema or a Python `WireJsonProposalEffectSummary`
+          depth-limited JSON alias. The result schema now defines a closed
+          `ProposalEffectSummary`; Rust result inspection exposes
+          `PlanResultProposalEffectSummary` and
+          `PlanResultProposalEffectKind` instead of a raw `serde_json::Value`
+          wrapper; and Python codegen emits a separate generated
+          `_wire.graph_rows` module with msgspec `ProposalEffectSummary`.
+          Focused positive and negative Rust/Python tests prove typed decode
+          and unknown-field rejection. The graph-row module split keeps
+          generated Python files under the 650-line cap and is covered by the
+          mirrored-test quality contract. Candidate scores/artifacts,
+          event payloads, extension payloads, and other JSON-shaped result
+          fragments remain typed-owner blockers.
       - kind: generated_method_routing_reaches_retained_effect_methods
         paths:
           - sdk/python/src/leaven/_seam/effect_plans.py

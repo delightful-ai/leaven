@@ -24,8 +24,7 @@ def render_payloads(rows: Sequence[PayloadMethodRow]) -> str:
             f"{REF_EXPORTS} DataClassSet MetadataBag WireJsonField WireJsonLeafArray "
             "WireJsonCandidateArtifact WireJsonCandidateScores WireJsonCaseInput "
             "WireJsonGraphEventPayload WireJsonGraphExtensionPayload WireJsonLeafObject "
-            "WireJsonObject WireJsonOutputValue WireJsonProposalEffectSummary WireJsonScalar"
-        .split()
+            "WireJsonObject WireJsonOutputValue WireJsonScalar".split()
         )
     )
     return f'''"""Generated top-level public-seam payload records.
@@ -40,8 +39,20 @@ from typing import Literal
 from msgspec import UNSET, Struct, UnsetType, field
 
 from .calls import CapabilityCall
-from .evidence import EvidenceEnvelope
 from .expressions import PlanExpression, Precondition, ValidationReceipt
+from .graph_rows import (
+    AssessmentSummaryGraphRow,
+    CandidateSummaryGraphRow,
+    EventSummaryGraphRow,
+    ExtensionGraphRow,
+    GraphRow,
+    OutputRecord,
+    ProposalEffectSummary,
+    ProposalEffectSummaryKind,
+    ProposalSummaryGraphRow,
+    Score,
+    VisibilityClass,
+)
 from .refs import (
 {ref_imports}
 )
@@ -195,110 +206,6 @@ class Cost(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
     sandbox_calls: int | UnsetType = UNSET
     metric_calls: int | UnsetType = UNSET
     wall_ms: int | UnsetType = UNSET
-
-
-type VisibilityClass = Literal[
-    "public",
-    "optimizer_visible",
-    "reflector_visible",
-    "evaluator_only",
-    "operator_only",
-    "private",
-    "redacted",
-]
-
-
-class OutputRecord(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
-    kind: Literal["text", "json", "blob_ref", "structured", "agent_session", "workspace_diff"]
-    visibility: VisibilityClass
-    data_classes: DataClassSet
-    summary: str | UnsetType = UNSET
-    value: WireJsonOutputValue | UnsetType = UNSET
-    blob_ref: BlobRef | UnsetType = UNSET
-    trace_refs: list[TraceRef] | UnsetType = UNSET
-
-
-class Score(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
-    value: float
-    output: OutputRecord
-    metrics: dict[str, float] | UnsetType = UNSET
-    uncertainty: float | UnsetType = UNSET
-    metadata: MetadataBag | UnsetType = UNSET
-
-
-class CandidateSummaryGraphRow(
-    Struct,
-    frozen=True,
-    forbid_unknown_fields=True,
-    omit_defaults=True,
-    tag="candidate_summary",
-    tag_field="kind",
-):
-    candidate: CandidateRef
-    artifact_identity: str | UnsetType = UNSET
-    scores: WireJsonCandidateScores | UnsetType = UNSET
-    artifact: WireJsonCandidateArtifact | UnsetType = UNSET
-
-
-class ProposalSummaryGraphRow(
-    Struct,
-    frozen=True,
-    forbid_unknown_fields=True,
-    omit_defaults=True,
-    tag="proposal_summary",
-    tag_field="kind",
-):
-    proposal: ProposalRef
-    batch: ProposalBatchRef | UnsetType = UNSET
-    effect: WireJsonProposalEffectSummary | UnsetType = UNSET
-
-
-class AssessmentSummaryGraphRow(
-    Struct,
-    frozen=True,
-    forbid_unknown_fields=True,
-    omit_defaults=True,
-    tag="assessment_summary",
-    tag_field="kind",
-):
-    assessment: AssessmentRef
-    score: Score
-    evidence: EvidenceEnvelope
-
-
-class EventSummaryGraphRow(
-    Struct,
-    frozen=True,
-    forbid_unknown_fields=True,
-    omit_defaults=True,
-    tag="event_summary",
-    tag_field="kind",
-):
-    event_kind: str
-    revision: str
-    payload: WireJsonGraphEventPayload | UnsetType = UNSET
-
-
-class ExtensionGraphRow(
-    Struct,
-    frozen=True,
-    forbid_unknown_fields=True,
-    tag="extension",
-    tag_field="kind",
-):
-    namespace: str
-    op: str
-    schema_fingerprint: str
-    payload: WireJsonGraphExtensionPayload
-
-
-type GraphRow = (
-    CandidateSummaryGraphRow
-    | ProposalSummaryGraphRow
-    | AssessmentSummaryGraphRow
-    | EventSummaryGraphRow
-    | ExtensionGraphRow
-)
 
 
 class Redaction(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
@@ -621,7 +528,7 @@ __all__ = (  # noqa: PLE0605, SIM905
     "EvalModeExecute EvalModeReplay EvalModeRequireCached EventSummaryGraphRow ExtensionGraphRow FailureMode "
     "GraphRow GraphWrite InfoRef LeavenValue MetadataBag OperationReceipt OutputRecord PlanDocument PlanExpression Precondition "
     "PlanError PlanErrorCode PlanErrorDetails PlanErrorDetailsObject PlanOp PlanResultDocument ProposalBatchRef ProposalBatchRefRecord ProposalEffect ProposeRequest "
-    "ProposalRef ProposalRefRecord ProposalSummaryGraphRow ReceiptRef Redaction ReflectionResult Replayability "
+    "ProposalEffectSummary ProposalEffectSummaryKind ProposalRef ProposalRefRecord ProposalSummaryGraphRow ReceiptRef Redaction ReflectionResult Replayability "
     "RunnerRequest Score "
     "StageEffectReceipt StageProposalReceipt StageRunKind StageRunPayload StageRunRequest StageRunResult "
     "StaleWritePolicy SurfaceSuggestion TraceRef ValidationReceipt VisibilityClass WireJsonField WireJsonLeafArray "

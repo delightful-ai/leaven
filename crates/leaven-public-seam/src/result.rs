@@ -268,10 +268,6 @@ graph_row_fragment!(
     "Schema-valid JSON carried by `candidate_summary.artifact`."
 );
 graph_row_fragment!(
-    PlanResultProposalEffectSummary,
-    "Schema-valid JSON carried by `proposal_summary.effect`."
-);
-graph_row_fragment!(
     PlanResultGraphEventPayload,
     "Schema-valid JSON carried by `event_summary.payload`."
 );
@@ -279,6 +275,129 @@ graph_row_fragment!(
     PlanResultGraphExtensionPayload,
     "Schema-valid JSON carried by an extension graph row payload."
 );
+
+/// Closed typed summary carried by `proposal_summary.effect`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanResultProposalEffectSummary {
+    kind: PlanResultProposalEffectKind,
+    target_candidate_id: Option<String>,
+    artifact_type: Option<String>,
+    artifact_schema: Option<String>,
+    workspace_id: Option<String>,
+    agent_receipt_id: Option<String>,
+    parser: Option<String>,
+    surface_fingerprint: Option<String>,
+    change_schema: Option<String>,
+}
+
+impl PlanResultProposalEffectSummary {
+    fn from_schema_valid_value(value: &Value) -> Result<Self, PublicSeamError> {
+        let object = value
+            .as_object()
+            .ok_or_else(|| invalid_result("proposal_summary.effect must be an object"))?;
+        let kind = PlanResultProposalEffectKind::parse(required_string(
+            object.get("kind"),
+            "proposal_summary.effect.kind",
+        )?)
+        .ok_or_else(|| invalid_result("unknown proposal_summary.effect kind"))?;
+        Ok(Self {
+            kind,
+            target_candidate_id: optional_ref_id(
+                object.get("target"),
+                "proposal_summary.effect.target",
+            )?,
+            artifact_type: optional_string(object.get("artifact_type"))?,
+            artifact_schema: optional_string(object.get("artifact_schema"))?,
+            workspace_id: optional_ref_id(
+                object.get("workspace"),
+                "proposal_summary.effect.workspace",
+            )?,
+            agent_receipt_id: optional_ref_id(
+                object.get("agent_receipt"),
+                "proposal_summary.effect.agent_receipt",
+            )?,
+            parser: optional_string(object.get("parser"))?,
+            surface_fingerprint: optional_string(object.get("surface_fingerprint"))?,
+            change_schema: optional_string(object.get("change_schema"))?,
+        })
+    }
+
+    /// Proposal effect summary kind.
+    pub const fn kind(&self) -> PlanResultProposalEffectKind {
+        self.kind
+    }
+
+    /// Candidate id referenced by change-like summary effects, when present.
+    pub fn target_candidate_id(&self) -> Option<&str> {
+        self.target_candidate_id.as_deref()
+    }
+
+    /// Artifact type referenced by create summary effects, when present.
+    pub fn artifact_type(&self) -> Option<&str> {
+        self.artifact_type.as_deref()
+    }
+
+    /// Artifact schema fingerprint referenced by create summary effects, when present.
+    pub fn artifact_schema(&self) -> Option<&str> {
+        self.artifact_schema.as_deref()
+    }
+
+    /// Workspace id referenced by workspace-diff summary effects, when present.
+    pub fn workspace_id(&self) -> Option<&str> {
+        self.workspace_id.as_deref()
+    }
+
+    /// Agent receipt id referenced by agent-session summary effects, when present.
+    pub fn agent_receipt_id(&self) -> Option<&str> {
+        self.agent_receipt_id.as_deref()
+    }
+
+    /// Parser selected for imported summary effects, when present.
+    pub fn parser(&self) -> Option<&str> {
+        self.parser.as_deref()
+    }
+
+    /// Surface fingerprint referenced by change-like summary effects, when present.
+    pub fn surface_fingerprint(&self) -> Option<&str> {
+        self.surface_fingerprint.as_deref()
+    }
+
+    /// Change schema fingerprint referenced by change-like summary effects, when present.
+    pub fn change_schema(&self) -> Option<&str> {
+        self.change_schema.as_deref()
+    }
+}
+
+/// Closed proposal effect kinds carried by graph-row summaries.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PlanResultProposalEffectKind {
+    Create,
+    Change,
+    ChangeFromWorkspaceDiff,
+    ChangeFromAgentSession,
+}
+
+impl PlanResultProposalEffectKind {
+    fn parse(value: &str) -> Option<Self> {
+        Some(match value {
+            "create" => Self::Create,
+            "change" => Self::Change,
+            "change_from_workspace_diff" => Self::ChangeFromWorkspaceDiff,
+            "change_from_agent_session" => Self::ChangeFromAgentSession,
+            _ => return None,
+        })
+    }
+
+    /// Wire spelling for this proposal effect summary kind.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Create => "create",
+            Self::Change => "change",
+            Self::ChangeFromWorkspaceDiff => "change_from_workspace_diff",
+            Self::ChangeFromAgentSession => "change_from_agent_session",
+        }
+    }
+}
 
 impl PlanResultValueFact {
     fn new(name: impl Into<String>, kind: PlanResultValueKind, data_classes: Vec<String>) -> Self {
@@ -599,7 +718,7 @@ fn collect_graph_row_fragments(
             Some("proposal_summary") => {
                 if let Some(effect) = item_object.get("effect") {
                     fragments.proposal_effects.push(
-                        PlanResultProposalEffectSummary::from_schema_valid_value(effect),
+                        PlanResultProposalEffectSummary::from_schema_valid_value(effect)?,
                     );
                 }
             }
@@ -622,6 +741,33 @@ fn collect_graph_row_fragments(
         }
     }
     Ok(())
+}
+
+fn optional_string(value: Option<&Value>) -> Result<Option<String>, PublicSeamError> {
+    value
+        .map(|value| {
+            value.as_str().map(ToOwned::to_owned).ok_or_else(|| {
+                invalid_result("optional proposal effect summary field must be a string")
+            })
+        })
+        .transpose()
+}
+
+fn optional_ref_id(value: Option<&Value>, field: &str) -> Result<Option<String>, PublicSeamError> {
+    value
+        .map(|value| ref_id(value, field).map(ToOwned::to_owned))
+        .transpose()
+}
+
+fn ref_id<'a>(value: &'a Value, field: &str) -> Result<&'a str, PublicSeamError> {
+    if let Some(id) = value.as_str() {
+        return Ok(id);
+    }
+    value
+        .as_object()
+        .and_then(|object| object.get("id"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_result(format!("{field} must be a string ref or object ref")))
 }
 
 fn validate_graph_set_assessment_summaries(
