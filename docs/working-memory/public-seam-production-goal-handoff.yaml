@@ -8081,6 +8081,30 @@ acceptance:
           `EvidencePublicPayload.output` field. This is current no-spend
           examples evidence; live-gated examples and live evolution remain
           separate pending requirements.
+      - kind: no_spend_examples_refreshed_after_public_scaffold_cuts
+        paths:
+          - sdk/python/justfile
+          - sdk/python/examples/README.md
+          - sdk/python/examples/run_all.py
+          - sdk/python/tests/examples/test_run_all.py
+          - sdk/python/tests/test_product_surface_ring.py
+        commands:
+          - cd sdk/python && just examples
+          - cd sdk/python && just compile-examples
+          - cd sdk/python && uv run pytest tests/examples/test_run_all.py tests/test_product_surface_ring.py -q
+          - cd sdk/python && uv run ruff check examples tests/examples/test_run_all.py tests/test_product_surface_ring.py
+          - cd sdk/python && PYTHONPATH=examples/live_openai_lm/src uv run ty check examples tests/examples/test_run_all.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Refreshed after the public MIPRO/TextGrad/Firkin scaffold cuts:
+          the no-spend tour completed all 12 current numbered examples with
+          explicit maturity classifications. Example 03 ran the durable seam
+          prompt mechanics path; 04, 06, and 09 stopped only at the declared
+          non-`PromptArtifact` boundary; live examples 10-13 skipped behind
+          their environment gates. The `justfile` comment now matches the
+          current 12-example tour. This is no-spend evidence only; live-gated
+          examples still require explicit live proof.
     closeout_check: A typechecked tour is not a runnable product example.
 
   - id: release_gate_for_public_contract
