@@ -213,7 +213,29 @@ fn dispatch_stage_run_services_worker_initiated_event_emit_through_runcontext() 
     let mut graph = RunGraph::<BridgeProblem>::new(RunId::new());
     let mut budget = BudgetLedger::new(Budget::unlimited());
     let mut context = RunContext::<BridgeProblem>::new(&mut graph, &mut budget);
-    let script = python_worker(
+    let script = event_emit_worker();
+    let mut session = spawn(&script, package, profile);
+    let host = RunContextGraphEffectHost::new(
+        &mut context,
+        [],
+        "fp_cap_sha256_stage_bridge",
+        "fp_policy_sha256_stage_bridge",
+        "rev_stage_bridge_base",
+        "rev_stage_bridge_final",
+    );
+
+    let response = session
+        .dispatch_stage_run(&runner_request("event emit"), &host)
+        .unwrap();
+
+    assert_eq!(response.result().output().as_value()["value"], "emitted");
+    drop(host);
+    assert_worker_emitted_stage_bridge_event(&context);
+    forget(script);
+}
+
+fn event_emit_worker() -> TempDir {
+    python_worker(
         r#"
 import json
 import os
@@ -276,23 +298,10 @@ print(json.dumps({
     },
 }), flush=True)
 "#,
-    );
-    let mut session = spawn(&script, package, profile);
-    let host = RunContextGraphEffectHost::new(
-        &mut context,
-        [],
-        "fp_cap_sha256_stage_bridge",
-        "fp_policy_sha256_stage_bridge",
-        "rev_stage_bridge_base",
-        "rev_stage_bridge_final",
-    );
+    )
+}
 
-    let response = session
-        .dispatch_stage_run(&runner_request("event emit"), &host)
-        .unwrap();
-
-    assert_eq!(response.result().output().as_value()["value"], "emitted");
-    drop(host);
+fn assert_worker_emitted_stage_bridge_event(context: &RunContext<'_, BridgeProblem>) {
     let events = context.graph().events().collect::<Vec<_>>();
     assert_eq!(events.len(), 1);
     let RunEvent::ExternalEventEmitted {
@@ -314,7 +323,6 @@ print(json.dumps({
         Some("sc_dispatch_contract")
     );
     assert_eq!(visibility, "public");
-    forget(script);
 }
 
 #[test]
