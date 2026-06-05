@@ -223,11 +223,11 @@ async fn read_back_live_codex_agent_kit_change(
         let mut instructions = AgentInstructions::task(
             "Read agent/reflection.md, then edit only files under repos/agent. Replace \
              repos/agent/system_prompt.md with exactly:\n\
-             Child system proof requirement: create agent/child-system-proof.txt containing exactly CHILD_SYSTEM_CONSUMED\n\
+             Child system proof requirement: create repos/agent/child-system-proof.txt containing exactly CHILD_SYSTEM_CONSUMED\n\
              \n\
              Replace repos/agent/skills/alpha/SKILL.md with exactly:\n\
              ---\nname: alpha\ndescription: Use when asked for the child alpha proof.\n---\n\n\
-             When this skill is invoked, create agent/child-skill-proof.txt containing exactly CHILD_SKILL_CONSUMED.\n\
+             When this skill is invoked, create repos/agent/child-skill-proof.txt containing exactly CHILD_SKILL_CONSUMED.\n\
              \n\
              Then create repos/agent/proposal-mutation-proof.txt containing exactly:\n\
              LIVE_PROPOSAL_MUTATED\n\
@@ -335,7 +335,7 @@ async fn run_live_codex_child_consumption(
             "Read the active system prompt and the projected alpha skill at \
              .agents/skills/alpha/SKILL.md. Use only those two projected AgentKit \
              sources to determine the required exact file contents, then create \
-             agent/child-system-proof.txt and agent/child-skill-proof.txt.",
+             repos/agent/child-system-proof.txt and repos/agent/child-skill-proof.txt.",
         );
         instructions.system = projection.system_prompt;
         instructions.context.push(AgentContextRef {
@@ -347,8 +347,8 @@ async fn run_live_codex_child_consumption(
             instructions,
             OutputContract::Files {
                 paths: vec![
-                    WorkspacePath::new("agent/child-system-proof.txt").unwrap(),
-                    WorkspacePath::new("agent/child-skill-proof.txt").unwrap(),
+                    WorkspacePath::new("repos/agent/child-system-proof.txt").unwrap(),
+                    WorkspacePath::new("repos/agent/child-skill-proof.txt").unwrap(),
                 ],
             },
         );
@@ -376,8 +376,10 @@ async fn run_live_codex_child_consumption(
             }
         }
         LiveChildConsumption {
-            system_proof: fs::read_to_string(root.join("agent/child-system-proof.txt")).unwrap(),
-            skill_proof: fs::read_to_string(root.join("agent/child-skill-proof.txt")).unwrap(),
+            system_proof: fs::read_to_string(root.join("repos/agent/child-system-proof.txt"))
+                .unwrap(),
+            skill_proof: fs::read_to_string(root.join("repos/agent/child-skill-proof.txt"))
+                .unwrap(),
         }
     };
     workspace.cleanup().await.unwrap();
@@ -410,10 +412,11 @@ fn require_live_codex_success(
 
 fn child_consumption_debug(root: &Path) -> String {
     format!(
-        "workspace: {}\nroot files: {:?}\nagent files: {:?}\nprojected skill: {:?}\nlast message: {:?}",
+        "workspace: {}\nroot files: {:?}\nagent files: {:?}\nrepo agent files: {:?}\nprojected skill: {:?}\nlast message: {:?}",
         root.display(),
         sorted_names(root),
         sorted_names(&root.join("agent")),
+        sorted_names(&root.join("repos/agent")),
         fs::read_to_string(root.join(".agents/skills/alpha/SKILL.md")).ok(),
         fs::read_to_string(root.join(".leaven/codex-last-message.txt")).ok()
     )
@@ -435,12 +438,12 @@ fn assert_live_codex_authored_child_files(root: &Path) -> Result<(), OptimizerEr
     assert_live_file(
         root,
         "repos/agent/system_prompt.md",
-        "Child system proof requirement: create agent/child-system-proof.txt containing exactly CHILD_SYSTEM_CONSUMED\n",
+        "Child system proof requirement: create repos/agent/child-system-proof.txt containing exactly CHILD_SYSTEM_CONSUMED\n",
     )?;
     assert_live_file(
         root,
         "repos/agent/skills/alpha/SKILL.md",
-        "---\nname: alpha\ndescription: Use when asked for the child alpha proof.\n---\n\nWhen this skill is invoked, create agent/child-skill-proof.txt containing exactly CHILD_SKILL_CONSUMED.\n",
+        "---\nname: alpha\ndescription: Use when asked for the child alpha proof.\n---\n\nWhen this skill is invoked, create repos/agent/child-skill-proof.txt containing exactly CHILD_SKILL_CONSUMED.\n",
     )
 }
 
