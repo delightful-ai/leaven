@@ -12,6 +12,7 @@ from leaven._seam._wire.results import (
     ProposalBatchPrimary,
     ProposalSubmitResult,
 )
+from leaven._seam._wire.writes import ProposalEffectAgentSession, ProposalWriteRecord
 from leaven.builders.proposals import ProposalsBuilder, ProposalSubmission
 from leaven.json_value import JsonObject, JsonValue
 from leaven.proposal import ProposalBatch, ProposalEffect
@@ -44,6 +45,8 @@ async def test_proposals_builder_submits_agent_session_batch_through_seam() -> N
     submission = await proposals.submit(batch)
 
     assert client.request_value.method == "leaven/proposal.submit_batch"
+    assert isinstance(client.request_value.proposals[0], ProposalWriteRecord)
+    assert isinstance(client.request_value.proposals[0].effect, ProposalEffectAgentSession)
     params = _params_object(client.request_value.to_params())
     assert params["plan_id"] == "planproposalbuilder001"
     assert params["return"] == ["proposal_batch"]

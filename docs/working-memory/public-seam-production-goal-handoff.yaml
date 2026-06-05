@@ -4395,6 +4395,34 @@ acceptance:
           inputs outside the runner facts owner, and nested Plan Result bodies
           remain raw JSON islands that must be eliminated before typed-seam
           closeout; there is no standing approval for those internal islands.
+      - kind: python_proposal_submit_builder_uses_generated_write_records
+        paths:
+          - sdk/python/src/leaven/_seam/plans.py
+          - sdk/python/src/leaven/builders/proposals.py
+          - sdk/python/tests/test_proposal_submission.py
+          - sdk/python/tests/_seam/test_plans.py
+          - sdk/python/tests/_seam/_wire/test_graph_writes.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/test_proposal_submission.py tests/_seam/test_plans.py tests/_seam/_wire/test_graph_writes.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_seam/plans.py src/leaven/builders/proposals.py tests/test_proposal_submission.py tests/_seam/test_plans.py tests/_seam/_wire/test_graph_writes.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/plans.py src/leaven/builders/proposals.py tests/test_proposal_submission.py tests/_seam/test_plans.py tests/_seam/_wire/test_graph_writes.py
+          - 'cd sdk/python && ! rg -n "proposals: Sequence\\[JsonObject\\]|convert\\(proposal, type=ProposalWriteRecord\\)|def _effect_to_wire\\([^)]*\\) -> JsonObject|def _literal_expr\\([^)]*\\) -> JsonObject|wire_effect: JsonObject" src/leaven/_seam/plans.py src/leaven/builders/proposals.py tests/test_proposal_submission.py'
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+        note: >-
+          Python proposal submission no longer accepts `Sequence[JsonObject]`
+          and then `msgspec.convert`s raw proposal dicts at Plan construction
+          time. `ProposalSubmitRequest.proposals` now carries generated
+          `ProposalWriteRecord` values, and `cx.proposals` constructs generated
+          proposal effect, causal input, and Plan/Value expression records
+          directly. Focused tests assert the builder captures a
+          `ProposalWriteRecord` with a `ProposalEffectAgentSession` before
+          JSON encoding, while graph-write tests continue proving generated
+          msgspec decoding. The negative grep returned no matches for the old
+          raw proposal slot patterns. This closes only the Python proposal
+          submit builder/request raw-record island; other JSON leaves named in
+          this row still require typed owners before closeout.
     closeout_check: >-
       Handwritten Python schema mirrors, pydantic-only wire models, untyped
       dict payloads, response-order batch routing, or msgspec used as a

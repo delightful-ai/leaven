@@ -8,9 +8,16 @@ from pydantic import BaseModel, ConfigDict
 from .._errors import UnboundBuilderError
 from .._receipts import WriteReceipt
 from .._seam import ProposalApplyRequest, ProposalSubmitRequest
-from .._seam._wire import JsonObject
-from .._seam._wire.json_value import json_object
+from .._seam._wire.expressions import PlanExpressionLiteral, ValueExprLiteral
+from .._seam._wire.refs import ReceiptRef
 from .._seam._wire.results import ProposalApplyResult, ProposalSubmitResult
+from .._seam._wire.writes import (
+    ProposalCausalInputs,
+    ProposalEffectAgentSession,
+    ProposalEffectChange,
+    ProposalEffectCreate,
+    ProposalWriteRecord,
+)
 from ..json_value import JsonValue
 from ..proposal import ProposalBatch, ProposalEffect
 
@@ -122,7 +129,7 @@ def _proposal_apply_receipt_from_result(result: ProposalApplyResult) -> WriteRec
     return WriteReceipt(receipt_id=primary.receipt)
 
 
-def _effect_to_wire(effect: ProposalEffect, batch: ProposalBatch) -> JsonObject:
+def _effect_to_wire(effect: ProposalEffect, batch: ProposalBatch) -> ProposalWriteRecord:
     if effect.kind == "create":
         return _create_effect_to_wire(effect, batch)
     if effect.kind in {"change", "change_from_workspace_diff", "change_from_agent_session"}:
@@ -130,60 +137,75 @@ def _effect_to_wire(effect: ProposalEffect, batch: ProposalBatch) -> JsonObject:
     raise TypeError(f"unsupported proposal effect: {effect.kind}")
 
 
-def _create_effect_to_wire(effect: ProposalEffect, batch: ProposalBatch) -> JsonObject:
-    return json_object(
-        {
-            "effect": {
-                "kind": "create",
-                "artifact_type": _required_payload_string(effect, "artifact_type"),
-                "artifact_schema": _required_payload_string(effect, "artifact_schema"),
-                "artifact": _literal_expr(_required_payload(effect, "artifact")),
-            },
-            "causal": {"inputs": []},
-            "informed_by": _literal_expr(_receipt_ids(batch)),
-            "read_receipts": _receipt_ids(batch),
-        }
+def _create_effect_to_wire(effect: ProposalEffect, batch: ProposalBatch) -> ProposalWriteRecord:
+    read_receipts = _receipt_ids(batch)
+    return ProposalWriteRecord(
+        effect=ProposalEffectCreate(
+            artifact_type=_required_payload_string(effect, "artifact_type"),
+            artifact_schema=_required_payload_string(effect, "artifact_schema"),
+            artifact=_literal_expr(_required_payload(effect, "artifact")),
+        ),
+        causal=ProposalCausalInputs(inputs=[]),
+        informed_by=_plan_literal_expr(read_receipts),
+        read_receipts=read_receipts,
     )
 
 
-def _change_effect_to_wire(effect: ProposalEffect, batch: ProposalBatch) -> JsonObject:
+def _change_effect_to_wire(effect: ProposalEffect, batch: ProposalBatch) -> ProposalWriteRecord:
     if effect.parent_candidate_id is None:
         raise ValueError(f"{effect.kind} proposal effects require parent_candidate_id")
-    wire_effect: JsonObject = {
-        "kind": effect.kind,
-        "target": effect.parent_candidate_id,
-        "surface_fingerprint": effect.surface,
-        "change_schema": _required_payload_string(effect, "change_schema"),
-    }
+    wire_effect: ProposalEffectChange | ProposalEffectAgentSession
     if effect.kind == "change":
-        wire_effect["change"] = _literal_expr(_required_payload(effect, "change"))
-    read_receipts = _receipt_ids(batch)
-    if effect.kind == "change_from_agent_session":
+        wire_effect = ProposalEffectChange(
+            target=effect.parent_candidate_id,
+            surface_fingerprint=effect.surface,
+            change_schema=_required_payload_string(effect, "change_schema"),
+            change=_literal_expr(_required_payload(effect, "change")),
+        )
+    elif effect.kind == "change_from_agent_session":
         if effect.agent_session_receipt is None:
             raise ValueError("change_from_agent_session requires agent_session_receipt")
         agent_receipt = effect.agent_session_receipt.receipt_id
-        wire_effect["agent_receipt"] = agent_receipt
-        wire_effect["parser"] = _required_payload_string(effect, "parser")
-        read_receipts = [*read_receipts, agent_receipt]
-    return json_object(
-        {
-            "effect": wire_effect,
-            "causal": {"inputs": [effect.parent_candidate_id]},
-            "informed_by": _literal_expr(read_receipts),
-            "read_receipts": read_receipts,
-        }
+        wire_effect = ProposalEffectAgentSession(
+            target=effect.parent_candidate_id,
+            agent_receipt=agent_receipt,
+            parser=_required_payload_string(effect, "parser"),
+            surface_fingerprint=effect.surface,
+            change_schema=_required_payload_string(effect, "change_schema"),
+        )
+    else:
+        raise TypeError(f"unsupported proposal effect: {effect.kind}")
+    read_receipts = _effect_read_receipts(effect, batch)
+    return ProposalWriteRecord(
+        effect=wire_effect,
+        causal=ProposalCausalInputs(inputs=[effect.parent_candidate_id]),
+        informed_by=_plan_literal_expr(read_receipts),
+        read_receipts=read_receipts,
     )
 
 
-def _receipt_ids(batch: ProposalBatch) -> list[str]:
+def _receipt_ids(batch: ProposalBatch) -> list[ReceiptRef]:
     return [
         *(receipt.receipt_id for receipt in batch.read_receipts),
         *(receipt.receipt_id for receipt in batch.effect_receipts),
     ]
 
 
-def _literal_expr(value: JsonValue) -> JsonObject:
-    return json_object({"kind": "literal", "value": value})
+def _effect_read_receipts(effect: ProposalEffect, batch: ProposalBatch) -> list[ReceiptRef]:
+    receipt_ids = _receipt_ids(batch)
+    if effect.kind == "change_from_agent_session":
+        if effect.agent_session_receipt is None:
+            raise ValueError("change_from_agent_session requires agent_session_receipt")
+        return [*receipt_ids, effect.agent_session_receipt.receipt_id]
+    return receipt_ids
+
+
+def _plan_literal_expr(value: JsonValue) -> PlanExpressionLiteral:
+    return PlanExpressionLiteral(value=value)
+
+
+def _literal_expr(value: JsonValue) -> ValueExprLiteral:
+    return ValueExprLiteral(value=value)
 
 
 def _required_payload_string(effect: ProposalEffect, key: str) -> str:

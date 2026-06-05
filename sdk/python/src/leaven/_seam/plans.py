@@ -421,7 +421,7 @@ class ProposalSubmitRequest:
     request_id: str
     plan_id: str
     idempotency_key: str
-    proposals: Sequence[JsonObject]
+    proposals: Sequence[ProposalWriteRecord]
 
     @property
     def method(self) -> SeamRequestMethod:
@@ -444,9 +444,7 @@ class ProposalSubmitRequest:
             idempotency_key=self.idempotency_key,
             write=SubmitProposalBatchWrite(
                 semantics="sequence",
-                proposals=[
-                    convert(proposal, type=ProposalWriteRecord) for proposal in self.proposals
-                ],
+                proposals=list(self.proposals),
             ),
         )
 
