@@ -79,13 +79,37 @@ class ProposalBatch(BaseModel):
     effect_receipts: list[CallReceipt] = Field(default_factory=list)
 
     @classmethod
-    def from_skill_proposal(cls, parsed: object) -> "ProposalBatch":
+    def from_skill_proposal(cls, proposal: "SkillProposal") -> "ProposalBatch":
         """Convenience: lower a parsed skill proposer output into a batch.
 
         Used by the `@lv.proposer` skill-builder convention; equivalent to
         building the batch by hand for users not on the skill path.
         """
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+        return cls(
+            effects=[
+                ProposalEffect.change(
+                    parent_candidate_id=proposal.parent_candidate_id,
+                    surface=proposal.surface,
+                    change_schema=proposal.change_schema,
+                    change=proposal.change,
+                )
+            ],
+            read_receipts=list(proposal.read_receipts),
+            effect_receipts=list(proposal.effect_receipts),
+        )
 
 
-__all__ = ["ProposalBatch", "ProposalEffect"]
+class SkillProposal(BaseModel):
+    """Parsed structured output for a skill-bank proposal stage."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    parent_candidate_id: str
+    surface: str
+    change_schema: str
+    change: JsonObject
+    read_receipts: list[QueryReceipt] = Field(default_factory=list)
+    effect_receipts: list[CallReceipt] = Field(default_factory=list)
+
+
+__all__ = ["ProposalBatch", "ProposalEffect", "SkillProposal"]

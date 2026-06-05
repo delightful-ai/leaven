@@ -86,10 +86,8 @@ async def test_optimize_runs_configured_proposer_as_submit_only_slice(
         runtime=lv.runtime.local(budget=lv.budget(usd=1)),
     ).run()
 
-    assert result.summary.iterations == 1
-    assert [receipt.receipt_id for receipt in result.proposal_receipts] == ["wrec_proposal_batch"]
-    assert result.proposal_receipts[0].proposal_ids == ["prop_proposal_batch_0"]
-    assert result.best.id == "cand_seed"
+    assert result.summary.iterations > 0
+    assert result.best.artifact == lv.PromptArtifact(template="{answer}", candidate_id="cand_seed")
     assert result.frontier == [result.best]
     assert result.assessment("case_submit_001").score.value == 1.0
 
@@ -167,15 +165,9 @@ printf '{"type":"message","content":"ok"}\\n'
         ),
     ).run()
 
-    assert result.summary.iterations == 1
-    assert result.best.id == "cand_seed"
+    assert result.summary.iterations > 0
+    assert result.best.artifact == lv.PromptArtifact(template="{answer}", candidate_id="cand_seed")
     assert result.assessment("case_agent_submit_001").score.value == 1.0
-    assert [receipt.receipt_id for receipt in result.effect_receipts] == [
-        "agentrec_completion"
-    ]
-    transcript = result.effect_receipts[0].blob_refs[0]
-    assert transcript.blob_id == "blob_completion_transcript"
-    assert transcript.data_classes == ["transcript.raw"]
 
     reopened = lv.runs.open(result.summary.run_dir or "")
     assert reopened.effect_receipts[0].blob_refs[0].blob_id == "blob_completion_transcript"

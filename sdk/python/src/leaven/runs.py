@@ -15,6 +15,7 @@ from ._runs import (
     open_optimized,
     open_rust_optimized,
     optimized_from_rust_readback,
+    overlay_sdk_prompt_receipts,
     rust_assessment_rows,
     rust_evidence_summaries,
 )
@@ -31,7 +32,7 @@ def open(path: str | Path) -> Optimized[object]:
     """
     rust_result = open_rust_optimized(path)
     if rust_result is not None:
-        return rust_result
+        return overlay_sdk_prompt_receipts(rust_result, path)
     return open_optimized(path)
 
 
@@ -67,10 +68,13 @@ def inspect(path: str | Path) -> RunInspection:
         else None
     )
     result = (
-        optimized_from_rust_readback(
-            rust_readback,
-            run_dir=str(_run_dir(path)),
-            assessment_rows=assessment_rows,
+        overlay_sdk_prompt_receipts(
+            optimized_from_rust_readback(
+                rust_readback,
+                run_dir=str(_run_dir(path)),
+                assessment_rows=assessment_rows,
+            ),
+            path,
         )
         if rust_readback is not None
         else open_optimized(path)

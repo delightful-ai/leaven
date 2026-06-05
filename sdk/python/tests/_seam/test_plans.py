@@ -7,7 +7,8 @@ from leaven._seam._wire import JsonObject
 from leaven._seam._wire.calls import AgentRunCall, LmCompleteCall, WorkspaceMaterializeCall
 from leaven._seam._wire.json_value import json_object
 from leaven._seam._wire.payloads import PlanDocument
-from leaven._seam.plans import AgentRunRequest, LmCompleteRequest
+from leaven._seam.lm_plans import LmCompleteRequest
+from leaven._seam.plans import AgentRunRequest
 
 
 def test_case_load_request_names_locked_single_field_routes() -> None:

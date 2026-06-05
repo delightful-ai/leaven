@@ -22,7 +22,7 @@ import leaven as lv
 from leaven.assessment import AssessmentWrite
 from leaven.evidence import EvidenceEnvelope
 from leaven.json_value import JsonValue
-from leaven.proposal import ProposalBatch
+from leaven.proposal import ProposalBatch, SkillProposal
 from leaven.stage_payloads import (
     JudgeRequest,
     ProposeRequest,
@@ -98,6 +98,7 @@ async def propose(req: ProposeRequest, cx: lv.ProposeContext) -> ProposalBatch:
             task="Propose a typed skill-bank change addressing REFLECTION.md.",
             system=lv.roles.SKILL_PROPOSER,
         ),
+        output=lv.output.json_schema(SkillProposal),
         timeout_s=180,
     )
     return ProposalBatch.from_skill_proposal(session.parsed)

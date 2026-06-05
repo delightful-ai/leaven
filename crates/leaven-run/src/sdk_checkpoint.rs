@@ -161,6 +161,7 @@ pub fn materialize_sdk_prompt_checkpoint(
         .build();
     let mut optimizer = SdkPromptCheckpointOptimizer::new(
         record.seed.clone(),
+        record.cases.clone(),
         record.assessments.clone(),
         record.total_lm_tokens,
     );
@@ -185,12 +186,14 @@ impl OptimizationProblem for SdkPromptRunProblem {
 
 struct SdkPromptEvaluator {
     candidate: CandidateId,
+    cases: Vec<SdkPromptCase>,
     assessments: Vec<SdkPromptAssessment>,
     total_lm_tokens: u64,
 }
 
 struct SdkPromptCheckpointOptimizer {
     seed: SdkPromptArtifact,
+    cases: Vec<SdkPromptCase>,
     assessments: Vec<SdkPromptAssessment>,
     total_lm_tokens: u64,
     candidate: Option<CandidateId>,
@@ -200,11 +203,13 @@ struct SdkPromptCheckpointOptimizer {
 impl SdkPromptCheckpointOptimizer {
     fn new(
         seed: SdkPromptArtifact,
+        cases: Vec<SdkPromptCase>,
         assessments: Vec<SdkPromptAssessment>,
         total_lm_tokens: u64,
     ) -> Self {
         Self {
             seed,
+            cases,
             assessments,
             total_lm_tokens,
             candidate: None,
@@ -235,8 +240,12 @@ impl Optimizer<SdkPromptRunProblem> for SdkPromptCheckpointOptimizer {
         let candidate = self.candidate.ok_or_else(|| {
             OptimizerError::Message("SDK prompt seed was not initialized".to_owned())
         })?;
-        let evaluator =
-            SdkPromptEvaluator::new(candidate, self.assessments.clone(), self.total_lm_tokens);
+        let evaluator = SdkPromptEvaluator::new(
+            candidate,
+            self.cases.clone(),
+            self.assessments.clone(),
+            self.total_lm_tokens,
+        );
         ctx.evaluate_with(
             &evaluator,
             EvaluationRequest::Independent {
@@ -263,11 +272,13 @@ impl Optimizer<SdkPromptRunProblem> for SdkPromptCheckpointOptimizer {
 impl SdkPromptEvaluator {
     fn new(
         candidate: CandidateId,
+        cases: Vec<SdkPromptCase>,
         assessments: Vec<SdkPromptAssessment>,
         total_lm_tokens: u64,
     ) -> Self {
         Self {
             candidate,
+            cases,
             assessments,
             total_lm_tokens,
         }
@@ -309,8 +320,9 @@ impl Evaluator<SdkPromptRunProblem> for SdkPromptEvaluator {
             .set
             .case_ids
             .iter()
+            .zip(self.cases.iter())
             .zip(self.assessments.iter())
-            .map(|(case, row)| self.assessment(set, *case, row))
+            .map(|((case, row_case), row)| self.assessment(set, *case, row_case, row))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Metered::new(rows, self.cost()))
     }
@@ -332,6 +344,7 @@ impl SdkPromptEvaluator {
         &self,
         set: EvaluationSetId,
         case: CaseId,
+        row_case: &SdkPromptCase,
         row: &SdkPromptAssessment,
     ) -> Result<Assessment<SdkPromptRunProblem>, EvaluationError> {
         let score = ScalarEvidence::new(row.score)
@@ -368,6 +381,9 @@ impl SdkPromptEvaluator {
             .with_case_data_reads([read]);
         let mut metadata = MetadataBag::new();
         metadata.insert("sdk_case_id", MetadataValue::String(row.case_id.clone()));
+        if let Some(split) = row_case.split.clone() {
+            metadata.insert("split", MetadataValue::String(split));
+        }
         Ok(Assessment::Independent {
             candidate: self.candidate,
             target: AssessmentTarget::Case { set, case },

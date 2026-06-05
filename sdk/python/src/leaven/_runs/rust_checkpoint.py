@@ -4,9 +4,13 @@ import json
 import subprocess
 from pathlib import Path
 
+from pydantic import BaseModel, ConfigDict, Field
+
+from .._receipts import CallReceipt, WriteReceipt
 from .._seam_optimize import PlannedOptimizeCase, SeamOptimizeReport
 from ..artifacts.prompt import PromptArtifact
-from ..result import Optimized
+from ..result import Optimized, RunSummary
+from ..run_status import project_cost_usage
 from .rust_export import resolve_leaven_binary
 from .rust_open import open_rust_optimized
 
@@ -49,7 +53,7 @@ def persist_rust_prompt_checkpoint(
     result = open_rust_optimized(run_dir)
     if result is None:
         raise RuntimeError("Rust prompt checkpoint materialization produced no readback")
-    return result
+    return _with_report_status(result, report)
 
 
 def _write_record(
@@ -99,6 +103,12 @@ def _write_record(
             for assessment in report.assessments
         ],
         "total_lm_tokens": report.total_lm_tokens,
+        "proposal_receipts": [
+            receipt.model_dump(mode="json") for receipt in report.proposal_receipts
+        ],
+        "effect_receipts": [
+            receipt.model_dump(mode="json") for receipt in report.effect_receipts
+        ],
     }
     tmp = path.with_name(f".{path.name}.tmp")
     tmp.write_text(json.dumps(record, sort_keys=True, indent=2) + "\n", encoding="utf-8")
@@ -110,4 +120,63 @@ def _run_dir_name(run_id: str) -> str:
     return cleaned or "leaven_run"
 
 
-__all__ = ["persist_rust_prompt_checkpoint"]
+def _with_report_status(result: Optimized[object], report: SeamOptimizeReport) -> Optimized[object]:
+    status = project_cost_usage(
+        default_cost_usd=report.total_cost_usd,
+        default_lm_tokens=report.total_lm_tokens,
+        unsupported=report.unsupported,
+    )
+    summary = result.summary.model_copy(
+        update={
+            "total_cost_usd": status.total_cost_usd,
+            "cost_status": status.cost_status,
+            "total_lm_tokens": status.total_lm_tokens,
+            "usage_status": status.usage_status,
+            "unsupported": report.unsupported,
+        }
+    )
+    typed_summary = RunSummary.model_validate(summary)
+    return result.model_copy(
+        update={
+            "summary": typed_summary,
+            "proposal_receipts": report.proposal_receipts,
+            "effect_receipts": report.effect_receipts,
+        }
+    )
+
+
+class _SdkPromptReceiptRecord(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    schema_version: str
+    proposal_receipts: list[WriteReceipt] = Field(default_factory=list)
+    effect_receipts: list[CallReceipt] = Field(default_factory=list)
+
+
+def overlay_sdk_prompt_receipts(
+    result: Optimized[object],
+    path: str | Path,
+) -> Optimized[object]:
+    """Attach SDK prompt sidecar receipts to a Rust-opened run when present."""
+    record_path = _run_dir(path) / "sdk_prompt_run_record.json"
+    if not record_path.is_file():
+        return result
+    record = _SdkPromptReceiptRecord.model_validate_json(record_path.read_text(encoding="utf-8"))
+    if record.schema_version != SDK_PROMPT_RUN_RECORD_SCHEMA:
+        return result
+    return result.model_copy(
+        update={
+            "proposal_receipts": record.proposal_receipts,
+            "effect_receipts": record.effect_receipts,
+        }
+    )
+
+
+def _run_dir(path: str | Path) -> Path:
+    candidate = Path(path)
+    if candidate.is_file():
+        return candidate.parent
+    return candidate
+
+
+__all__ = ["overlay_sdk_prompt_receipts", "persist_rust_prompt_checkpoint"]

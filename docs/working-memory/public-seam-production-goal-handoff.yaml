@@ -1120,6 +1120,32 @@ acceptance:
           old `run.inspection` unsupported fact. The public-seam e2e test wraps
           the real CLI and observes the expected `seam serve`, checkpoint,
           inspect, and evidence commands.
+      - kind: sdk_checkpoint_split_and_sidecar_receipt_readback
+        paths:
+          - crates/leaven-run/src/sdk_checkpoint.rs
+          - sdk/python/src/leaven/_runs/rust_checkpoint.py
+          - sdk/python/src/leaven/runs.py
+          - sdk/python/tests/test_optimize.py
+          - sdk/python/tests/test_optimize_proposer_mechanics.py
+          - sdk/python/tests/_runs/test_rust_export.py
+        commands:
+          - cargo build -p leaven-cli
+          - cd sdk/python && uv run pytest tests/_runs/test_rust_export.py::test_runs_open_prefers_rust_checkpoint_without_optimized_json tests/_runs/test_rust_export.py::test_runs_inspect_uses_rust_checkpoint_blob_and_evidence_without_optimized_json tests/test_optimize.py -q
+          - cd sdk/python && uv run pytest tests/test_optimize_proposer_mechanics.py tests/test_optimize_public_seam_e2e.py tests/test_run_receipt_inspection.py -q
+          - cd sdk/python && uv run pytest -q
+        note: >-
+          Rust SDK checkpoint materialization now carries case split metadata
+          into assessment readback, so `Optimized.test_assessments()` is powered
+          by Rust-owned checkpoint inspection instead of SDK-only projection.
+          The Python checkpoint record also persists typed proposal/effect
+          receipt sidecar fields that Rust ignores for graph materialization but
+          Python rehydrates into `lv.runs.open(...)` and `lv.runs.inspect(...)`.
+          Focused tests prove reopened proposal batch receipts, agent transcript
+          blob refs, Rust evidence payload readback, unsupported cost/usage
+          status preservation, and full Python pytest coverage. This is still
+          not full row closeout because broader artifact/transcript blob
+          retrieval and generalized Rust-owned receipt storage remain under
+          acceptance review.
       - kind: rust_checkpoint_graph_readback_export_foundation
         paths:
           - crates/leaven-run/src/inspection.rs
@@ -1535,6 +1561,27 @@ acceptance:
           checked-in wire output matches the codegen source. This narrows one
           generated wire mismatch but does not close the full typed-seam row:
           remaining Plan IR/result JSON islands still need typed owners.
+      - kind: extension_result_receipts_match_rust_audit_shape
+        paths:
+          - sdk/python/codegen/result_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/results.py
+          - sdk/python/src/leaven/_seam_worker/context.py
+          - sdk/python/tests/test_optimize_proposer_mechanics.py
+          - sdk/python/tests/test_run_receipt_inspection.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/test_optimize_proposer_mechanics.py tests/test_optimize_public_seam_e2e.py tests/test_run_receipt_inspection.py -q
+          - cd sdk/python && uv run pytest -q
+        note: >-
+          Generated Python extension result receipts now include the typed
+          audit fields Rust actually returns for locked callback methods,
+          including operation ids, timing, hashes, graph revisions, costs,
+          write metadata, proposal ids, assessment ids, and blob refs. The
+          msgspec struct remains `forbid_unknown_fields` and `kw_only`, so real
+          callback responses decode as typed records rather than being weakened
+          to arbitrary JSON. This fixes the previous mismatch where
+          `leaven/proposal.submit_batch` and `leaven/agent.run` callback
+          responses carried Rust audit fields that Python rejected as unknown.
       - kind: rust_profile_generated_client_result_typing
         paths:
           - crates/leaven-cli/src/seam.rs
@@ -2829,6 +2876,32 @@ acceptance:
           owner types without permitting arbitrary output probing, the oversized
           generated payload test was split into plan/result and stage-payload
           files under the 650-line cap, and `just check` passes after the repair.
+      - kind: public_skill_proposal_constructor_scaffold_removed
+        paths:
+          - sdk/python/src/leaven/proposal.py
+          - sdk/python/tests/test_proposal.py
+          - sdk/python/examples/06_reflect_propose_custom.py
+          - sdk/python/examples/09_full_repro.py
+          - sdk/python/scripts/check_quality_contract.py
+        commands:
+          - cd sdk/python && uv run pytest tests/test_proposal.py tests/test_proposal_submission.py tests/test_product_surface_ring.py -q
+          - cd sdk/python && just compile-examples
+          - cd sdk/python && uv run pytest -q
+          - cd sdk/python && just check
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          `ProposalBatch.from_skill_proposal(...)` no longer accepts an
+          untyped object scaffold. The public SDK now exposes a typed
+          `SkillProposal` pydantic model with declared read/effect receipts,
+          and examples request `lv.output.json_schema(SkillProposal)` before
+          lowering into a proposal batch. The quality contract now requires the
+          source-local mirror test for `src/leaven/proposal.py` and the split LM
+          plan module. Full Python pytest passed with 213 tests, `just check`
+          passed Ruff/ty/quality checks, examples compile, generated seam wire
+          is current, and line-count lint passes. The row remains pending
+          because the whole public API/backbone audit is not complete.
       - kind: private_seam_json_builder_branding
         commits:
           - 414f7d0d
@@ -3561,6 +3634,34 @@ acceptance:
           Callback-backed stage LM still explicitly refuses tool execution
           until that callback route lowers full LM requests, so the broader SDK
           quality row remains pending.
+      - kind: public_skill_proposal_constructor_scaffold_removed
+        paths:
+          - sdk/python/src/leaven/proposal.py
+          - sdk/python/tests/test_proposal.py
+          - sdk/python/tests/test_proposal_submission.py
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/examples/06_reflect_propose_custom.py
+          - sdk/python/examples/09_full_repro.py
+        commands:
+          - cd sdk/python && uv run pytest tests/test_proposal.py tests/test_proposal_submission.py tests/test_product_surface_ring.py -q
+          - cd sdk/python && uv run ruff check src/leaven/proposal.py scripts/check_quality_contract.py examples/06_reflect_propose_custom.py examples/09_full_repro.py tests/test_proposal.py tests/test_proposal_submission.py
+          - cd sdk/python && uv run ty check src/leaven/proposal.py scripts/check_quality_contract.py examples/06_reflect_propose_custom.py examples/09_full_repro.py tests/test_proposal.py tests/test_proposal_submission.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - cd sdk/python && just compile-examples
+          - cd sdk/python && just check
+        note: >-
+          `ProposalBatch.from_skill_proposal(...)` is now a behavior-bearing
+          public typed constructor instead of a scaffold. The SDK adds a
+          concrete `SkillProposal` pydantic record for structured agent output,
+          lowers it to a typed `ProposalEffect.change(...)`, preserves declared
+          read/effect receipts, and mirrors the module with
+          `tests/test_proposal.py` in the custom quality map. The custom
+          proposer examples now request `lv.output.json_schema(SkillProposal)`
+          from `cx.agent.run` before calling the helper, so the helper no
+          longer accepts an untyped parsed blob. This removes one public helper
+          scaffold but does not close the SDK quality row while other public or
+          optional-adapter scaffolds remain.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this

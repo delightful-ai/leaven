@@ -34,6 +34,10 @@ MIRRORED_TESTS = {
     / "_runs"
     / "test_rust_export.py",
     ROOT / "src" / "leaven" / "_seam" / "plans.py": ROOT / "tests" / "_seam" / "test_plans.py",
+    ROOT / "src" / "leaven" / "_seam" / "lm_plans.py": ROOT
+    / "tests"
+    / "_seam"
+    / "test_plans.py",
     ROOT / "src" / "leaven" / "_seam" / "_wire" / "codec.py": ROOT
     / "tests"
     / "_seam"
@@ -85,6 +89,7 @@ MIRRORED_TESTS = {
     ROOT / "src" / "leaven" / "evaluation_job.py": ROOT / "tests" / "test_evaluation_job.py",
     ROOT / "src" / "leaven" / "output.py": ROOT / "tests" / "test_output.py",
     ROOT / "src" / "leaven" / "output_record.py": ROOT / "tests" / "test_output_record.py",
+    ROOT / "src" / "leaven" / "proposal.py": ROOT / "tests" / "test_proposal.py",
     ROOT / "src" / "leaven" / "result.py": ROOT / "tests" / "test_result.py",
     ROOT / "src" / "leaven" / "run_inspection.py": ROOT / "tests" / "test_run_inspection.py",
     ROOT / "src" / "leaven" / "score.py": ROOT / "tests" / "test_score.py",

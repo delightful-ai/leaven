@@ -17,7 +17,7 @@ import asyncio
 from pathlib import Path
 
 import leaven as lv
-from leaven.proposal import ProposalBatch
+from leaven.proposal import ProposalBatch, SkillProposal
 from leaven.stage_payloads import ProposeRequest, ReflectionResult, ReflectRequest, StageSourceRef
 
 HERE = Path(__file__).parent
@@ -91,12 +91,12 @@ async def propose(req: ProposeRequest, cx: lv.ProposeContext) -> ProposalBatch:
             task="Propose a typed change to the candidate that addresses REFLECTION.md.",
             system=lv.roles.SKILL_PROPOSER,
         ),
+        output=lv.output.json_schema(SkillProposal),
         timeout_s=180,
     )
 
-    # The agent's session contains the actual changes; the engine parses
-    # workspace deltas into typed `ProposalEffect`s. `from_skill_proposal` is
-    # the convention helper that does the parse.
+    # The agent's structured output is the public skill-proposal record. The
+    # helper lowers it into typed `ProposalEffect`s.
     return ProposalBatch.from_skill_proposal(session.parsed)
 
 

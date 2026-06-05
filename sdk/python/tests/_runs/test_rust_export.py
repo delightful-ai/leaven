@@ -409,7 +409,7 @@ def test_runs_inspect_uses_rust_checkpoint_blob_and_evidence_without_optimized_j
     assert len(inspection.rust_evidence) == 1
     assert inspection.evidence[0].case_id == "1"
     assert inspection.evidence[0].candidate_id == "cand_child"
-    assert inspection.evidence[0].payload == {"output": "42"}
+    assert inspection.evidence[0].payload == {"output": "42", "reward_count": 1}
     assert inspection.evidence[0].target_derived is True
     assert inspection.evidence[0].data_classes == [
         "candidate.output",
@@ -556,7 +556,7 @@ def rust_case_assessment_evidence_bytes() -> bytes:
                     "case": 1,
                     "fields": ["input", "target"],
                     "data_classes": ["case.input", "case.target"],
-                    "values": {"target": {"answer": "42"}},
+                    "values": {"case_id": "1", "target": {"answer": "42"}},
                 }
             ],
         }

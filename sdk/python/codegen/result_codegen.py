@@ -40,10 +40,13 @@ from .payloads import (
     CaseRef,
     Cost,
     GraphRow,
+    InfoRef,
     OperationReceiptKind,
+    PlanError,
     PlanResultStatus,
     ReceiptRef,
     Replayability,
+    TraceRef,
     WireJsonObject,
     WriteReceiptKind,
 )
@@ -72,17 +75,37 @@ type CaseReadMethod = (
 )
 
 
-class ResultReceipt(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+class ResultReceipt(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, kw_only=True):
     """Typed receipt projection carried by extension method results."""
 
     kind: OperationReceiptKind
     receipt: ReceiptRef
     status: PlanResultStatus
+    op_var: str | UnsetType = UNSET
+    started_at: str | UnsetType = UNSET
+    completed_at: str | UnsetType = UNSET
+    error: PlanError | UnsetType = UNSET
+    trace_refs: list[TraceRef] | UnsetType = UNSET
+    op_hash: str | UnsetType = UNSET
     result_hash: str
+    graph_revision: str | UnsetType = UNSET
+    read_scope_fingerprint: str | UnsetType = UNSET
+    projection_fingerprint: str | UnsetType = UNSET
+    source_refs: list[InfoRef] | UnsetType = UNSET
+    bytes: int | UnsetType = UNSET
     call_kind: CallReceiptKind | UnsetType = UNSET
+    request_hash: str | UnsetType = UNSET
+    runtime_fingerprint: str | UnsetType = UNSET
     write_kind: WriteReceiptKind | UnsetType = UNSET
     cost: Cost | UnsetType = UNSET
+    charge_receipts: list[str] | UnsetType = UNSET
+    base_revision: str | UnsetType = UNSET
+    committed_revision: str | UnsetType = UNSET
+    proposal_batch_id: str | UnsetType = UNSET
     proposal_ids: list[str] | UnsetType = UNSET
+    evaluation_request_id: str | UnsetType = UNSET
+    assessment_ids: list[str] | UnsetType = UNSET
+    created_candidates: list[ReceiptRef] | UnsetType = UNSET
 
 
 class ResultRedaction(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
