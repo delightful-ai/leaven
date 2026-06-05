@@ -17,6 +17,7 @@ leaven-gepa = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+bytes = { workspace = true }
 futures = { workspace = true }
 leaven-agent = { workspace = true }
 leaven-agent-codex-cli = { workspace = true }
@@ -30,6 +31,7 @@ leaven-seam-run = { workspace = true }
 leaven-seam-runtime = { workspace = true }
 leaven-seam-service = { workspace = true }
 leaven-seam-stdio = { workspace = true }
+leaven-store = { workspace = true }
 leaven-store-file = { workspace = true }
 leaven-store-inline = { workspace = true }
 leaven-workspace = { workspace = true }

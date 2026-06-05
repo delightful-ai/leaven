@@ -3487,6 +3487,7 @@ dependencies = [
 name = "leaven-gepa-agentic-agent-kit"
 version = "0.0.0"
 dependencies = [
+ "bytes",
  "futures",
  "leaven-agent",
  "leaven-agent-codex-cli",
@@ -3505,6 +3506,7 @@ dependencies = [
  "leaven-seam-runtime",
  "leaven-seam-service",
  "leaven-seam-stdio",
+ "leaven-store",
  "leaven-store-file",
  "leaven-store-inline",
  "leaven-workspace",

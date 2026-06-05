@@ -3,6 +3,7 @@ use std::fs;
 use std::io::Cursor;
 use std::path::Path;
 
+use bytes::Bytes;
 use leaven_agentic_agent_kit::{AgentKitMountMode, CodexAgentKitMaterializer};
 use leaven_agentic_git::{GitProgramMaterializer, GitProgramReadback, GitProgramStores};
 use leaven_artifact_git::{
@@ -18,6 +19,7 @@ use leaven_engine::{
 use leaven_kernel::{Budget, CandidateId, MetadataBag};
 use leaven_seam_run::RunBoundSdkRoute;
 use leaven_seam_service::RunBoundGraphEffectService;
+use leaven_store::{BlobStore, BlobWrite};
 use leaven_store_file::FileStore;
 use leaven_store_inline::InlineEvidenceStore;
 use leaven_workspace::{Command, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
@@ -29,7 +31,7 @@ fn agent_kit_git_child_applied_through_sdk_route_restores_from_checkpoint() {
     futures::executor::block_on(async {
         let run_dir = tempfile::tempdir().unwrap();
         let store = FileStore::open(run_dir.path()).unwrap();
-        let persistence = StoreRunPersistence::new(store);
+        let persistence = StoreRunPersistence::new(store.clone());
         let fixture = AgentKitRepoFixture::new();
         let parent_artifact = fixture.program_artifact();
         let stores = fixture.stores();
@@ -44,6 +46,7 @@ fn agent_kit_git_child_applied_through_sdk_route_restores_from_checkpoint() {
             seed,
             parent_artifact,
             stores: stores.clone(),
+            store: store.clone(),
             mounted: false,
         };
 
@@ -54,6 +57,13 @@ fn agent_kit_git_child_applied_through_sdk_route_restores_from_checkpoint() {
         assert!(optimizer.mounted, "optimizer must mount the SDK route");
 
         let export = leaven_run::export_local_run_inspection(run_dir.path()).unwrap();
+        assert_eq!(export.checkpoint.stage_journal_ref_count, 1);
+        let transcript = &export.checkpoint.stage_journal_refs[0];
+        let transcript_blob =
+            leaven_run::export_local_run_blob(run_dir.path(), &transcript.store, &transcript.key)
+                .unwrap();
+        assert_eq!(transcript_blob.bytes, AGENT_KIT_TRANSCRIPT_BYTES.len());
+        assert!(!transcript_blob.content_base64.is_empty());
         let restored = persistence
             .latest_checkpoint::<AgentKitCheckpointProblem>()
             .unwrap()
@@ -98,6 +108,7 @@ struct AgentKitCheckpointOptimizer {
     seed: CandidateId,
     parent_artifact: GitProgramArtifact,
     stores: GitProgramStores,
+    store: FileStore,
     mounted: bool,
 }
 
@@ -107,6 +118,18 @@ impl Optimizer<AgentKitCheckpointProblem> for AgentKitCheckpointOptimizer {
         ctx: &mut RunContext<'_, AgentKitCheckpointProblem>,
     ) -> Result<StepStatus, OptimizerError> {
         let change = read_back_agent_kit_change(&self.parent_artifact, self.stores.clone()).await?;
+        let transcript_ref = BlobStore::put(
+            &self.store,
+            BlobWrite {
+                bytes: Bytes::from_static(AGENT_KIT_TRANSCRIPT_BYTES),
+                content_type: Some("application/json".to_owned()),
+            },
+        )
+        .map_err(|source| OptimizerError::with_source("write AgentKit transcript blob", source))?;
+        ctx.record_stage_journal_entry(transcript_ref)
+            .map_err(|source| {
+                OptimizerError::with_source("record AgentKit transcript checkpoint ref", source)
+            })?;
         let seed = self.seed;
         let service = RunBoundGraphEffectService::new(
             ctx,
@@ -176,6 +199,9 @@ impl Optimizer<AgentKitCheckpointProblem> for AgentKitCheckpointOptimizer {
             .or(Some(self.seed))
     }
 }
+
+const AGENT_KIT_TRANSCRIPT_BYTES: &[u8] =
+    br#"{"kind":"agent_kit_checkpoint","edited":["system_prompt.md","skills/alpha/SKILL.md"]}"#;
 
 async fn read_back_agent_kit_change(
     parent_artifact: &GitProgramArtifact,

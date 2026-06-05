@@ -9,6 +9,7 @@ use leaven_kernel::{
 };
 use leaven_store::EvidenceStore;
 
+use crate::CheckpointReadbackRefs;
 use crate::{
     BudgetLedger, Callback, CaseSet, CheckpointContext, DynCallback, DynEvaluator, DynStopper,
     ErrorPolicy, EvaluationCache, Evaluator, Optimizer, OptimizerError, OptimizerStateWrite,
@@ -24,6 +25,7 @@ pub struct Engine<P: OptimizationProblem> {
     callbacks: Vec<Box<dyn DynCallback<P>>>,
     stoppers: Vec<EngineStopper<P>>,
     persistence: Option<Arc<dyn RunPersistence<P>>>,
+    checkpoint_readback_refs: CheckpointReadbackRefs,
     trust: TrustPolicy,
 }
 
@@ -91,7 +93,8 @@ impl<P: OptimizationProblem> Engine<P> {
                 .with_evaluators(&self.evaluators)
                 .with_trust_policy(self.trust.clone())
                 .with_callbacks(self.callbacks.as_mut_slice())
-                .with_persistence(self.persistence.as_deref());
+                .with_persistence(self.persistence.as_deref())
+                .with_checkpoint_readback_refs(&mut self.checkpoint_readback_refs);
             if let Err(error) = optimizer.initialize(&mut ctx).await {
                 self.record_optimizer_error(&error);
                 return Err(error);
@@ -157,6 +160,7 @@ impl<P: OptimizationProblem> Engine<P> {
                     .with_trust_policy(self.trust.clone())
                     .with_callbacks(self.callbacks.as_mut_slice())
                     .with_persistence(self.persistence.as_deref())
+                    .with_checkpoint_readback_refs(&mut self.checkpoint_readback_refs)
                     .with_iteration(iteration);
                 optimizer.step(&mut ctx).await
             };
@@ -319,6 +323,7 @@ impl<P: OptimizationProblem> Engine<P> {
             if let Some(state) = optimizer_state {
                 request = request.with_optimizer_state(state);
             }
+            request = request.with_readback_refs(self.checkpoint_readback_refs.clone());
             persistence.checkpoint(request)?;
         }
         Ok(())
@@ -523,6 +528,7 @@ impl<P: OptimizationProblem> EngineBuilder<P> {
             callbacks: self.callbacks,
             stoppers: self.stoppers,
             persistence: self.persistence,
+            checkpoint_readback_refs: CheckpointReadbackRefs::new(),
             trust: self.trust,
         }
     }

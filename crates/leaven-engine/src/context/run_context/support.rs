@@ -59,6 +59,9 @@ pub enum RunContextError {
     /// Assessment evidence storage or retrieval was requested without a store.
     #[error("evidence store is required")]
     MissingEvidenceStore,
+    /// Checkpoint readback refs were recorded without an engine-owned ref lane.
+    #[error("checkpoint readback refs are required")]
+    MissingCheckpointReadbackRefs,
 }
 
 pub(super) fn resolved_kind(request: &EvaluationRequest) -> ResolvedRequestKind {

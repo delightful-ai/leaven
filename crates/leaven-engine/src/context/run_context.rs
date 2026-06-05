@@ -4,11 +4,12 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use leaven_core::{OptimizationProblem, ProposalBatch};
 use leaven_kernel::{
-    BudgetExceeded, BudgetSnapshot, CandidateId, Cost, ErrorKind, ErrorRecord, EvaluatorId,
-    IterationId, ProposalBatchId, ProposalId, StageCallId, StageId,
+    BlobRef, BudgetExceeded, BudgetSnapshot, CandidateId, Cost, ErrorKind, ErrorRecord,
+    EvaluatorId, EvidenceRef, IterationId, ProposalBatchId, ProposalId, StageCallId, StageId,
 };
 use leaven_store::EvidenceStore;
 
+use crate::CheckpointReadbackRefs;
 use crate::graph::storage::ApplyAttemptOutcome;
 use crate::{
     ApplyOneReport, ApplyOutcome, ApplyReport, BudgetHandle, BudgetLedger, CaseSet, DynCallback,
@@ -37,6 +38,7 @@ pub struct RunContext<'a, P: OptimizationProblem> {
     evaluators: Option<&'a BTreeMap<EvaluatorId, Arc<dyn DynEvaluator<P>>>>,
     callbacks: Option<&'a mut [Box<dyn DynCallback<P>>]>,
     persistence: Option<&'a dyn RunPersistence<P>>,
+    checkpoint_readback_refs: Option<&'a mut CheckpointReadbackRefs>,
 }
 
 impl<'a, P: OptimizationProblem> RunContext<'a, P> {
@@ -53,6 +55,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             evaluators: None,
             callbacks: None,
             persistence: None,
+            checkpoint_readback_refs: None,
         }
     }
 
@@ -96,6 +99,12 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
     }
 
     #[must_use]
+    pub fn with_checkpoint_readback_refs(mut self, refs: &'a mut CheckpointReadbackRefs) -> Self {
+        self.checkpoint_readback_refs = Some(refs);
+        self
+    }
+
+    #[must_use]
     pub fn with_trust_policy(mut self, trust: TrustPolicy) -> Self {
         self.read_scope = trust.optimizer_read_scope();
         self.trust = trust;
@@ -123,6 +132,46 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         self.budget.snapshot()
     }
 
+    pub fn record_artifact_ref(&mut self, reference: BlobRef) -> Result<(), RunContextError> {
+        self.checkpoint_readback_refs_mut()?
+            .artifact_refs
+            .push(reference);
+        self.checkpoint()?;
+        Ok(())
+    }
+
+    pub fn record_evidence_ref(&mut self, reference: EvidenceRef) -> Result<(), RunContextError> {
+        self.checkpoint_readback_refs_mut()?
+            .evidence_refs
+            .push(reference);
+        self.checkpoint()?;
+        Ok(())
+    }
+
+    pub fn record_stage_journal_entry(
+        &mut self,
+        reference: BlobRef,
+    ) -> Result<(), RunContextError> {
+        self.checkpoint_readback_refs_mut()?
+            .stage_journal
+            .entries
+            .push(reference);
+        self.checkpoint()?;
+        Ok(())
+    }
+
+    pub fn record_workspace_journal_entry(
+        &mut self,
+        reference: BlobRef,
+    ) -> Result<(), RunContextError> {
+        self.checkpoint_readback_refs_mut()?
+            .workspace_journal
+            .entries
+            .push(reference);
+        self.checkpoint()?;
+        Ok(())
+    }
+
     /// Looks up one resolved case from the installed case set.
     ///
     /// Returns `None` when no case set is installed or the case is unknown.
@@ -142,10 +191,13 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         state: OptimizerStateWrite,
     ) -> Result<(), RunContextError> {
         if let Some(persistence) = self.persistence {
-            let request =
+            let mut request =
                 RunCheckpointRequest::new(&*self.graph, &*self.budget, self.cache.as_deref())
-                    .with_optimizer_state(state)
-                    .advance_latest();
+                    .with_optimizer_state(state);
+            if let Some(refs) = self.checkpoint_readback_refs.as_ref() {
+                request = request.with_readback_refs((**refs).clone());
+            }
+            request = request.advance_latest();
             persistence.checkpoint(request)?;
         }
         Ok(())
@@ -370,10 +422,22 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
 
     fn checkpoint(&self) -> Result<(), RunContextError> {
         if let Some(persistence) = self.persistence {
-            let request = RunCheckpointRequest::new(self.graph, self.budget, self.cache.as_deref());
+            let mut request =
+                RunCheckpointRequest::new(self.graph, self.budget, self.cache.as_deref());
+            if let Some(refs) = self.checkpoint_readback_refs.as_ref() {
+                request = request.with_readback_refs((**refs).clone());
+            }
             persistence.checkpoint(request)?;
         }
         Ok(())
+    }
+
+    fn checkpoint_readback_refs_mut(
+        &mut self,
+    ) -> Result<&mut CheckpointReadbackRefs, RunContextError> {
+        self.checkpoint_readback_refs
+            .as_deref_mut()
+            .ok_or(RunContextError::MissingCheckpointReadbackRefs)
     }
 
     fn emit_stage_error(
