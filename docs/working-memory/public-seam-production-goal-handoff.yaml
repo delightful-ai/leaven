@@ -3310,6 +3310,33 @@ acceptance:
           stdio submit/apply, checkpoint restore, and next-Codex consumption
           only passed through an over-permissive smoke. The row still remains
           pending until all prerequisite backbone rows close.
+      - kind: live_codex_evolution_current_substrate_rerun
+        paths:
+          - crates/leaven-agentic-git/tests/git_program_materializer.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/agent_kit_seam_checkpoint.rs
+          - crates/leaven-workspace-firkin/tests/firkin_contract/firkin_git_e2e.rs
+          - crates/leaven-agent-codex-cli/tests/codex_cli_runtime.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution.rs
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cargo test -p leaven-agentic-git --test git_program_materializer
+          - cargo test -p leaven-gepa-agentic-agent-kit --test agent_kit_seam_checkpoint agent_kit_git_child_applied_through_sdk_route_restores_from_checkpoint -- --exact
+          - cargo test -p leaven-workspace-firkin --test firkin_contract firkin_git_e2e::firkin_product_pod_materializes_and_reads_back_isolated_git_workspaces -- --exact
+          - cargo test -p leaven-agent-codex-cli --test codex_cli_runtime
+          - cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution --no-run
+          - LEAVEN_CODEX_LIVE=1 LEAVEN_CODEX_BIN="$HOME/.bun/bin/codex" cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution live_codex_agent_kit_evolves_through_stdio_checkpoint_and_next_codex_consumes_child -- --ignored --exact --nocapture
+        note: >-
+          Current rerun after the Rust-owned assessment readback slice proves
+          the explicit criteria for Git repos, filesystem mutation/readback,
+          Codex Kit projection, Firkin-backed Git workspace execution, Codex
+          CLI status parsing, live AgentKit mutation, stdio submit/apply,
+          checkpoint restore, and later live Codex child-artifact consumption.
+          The focused suites passed with normal Cargo incremental settings:
+          git-materializer 13 passed, checkpointed AgentKit SDK route 1 passed,
+          Firkin Git workspace 1 passed, Codex CLI runtime 7 passed, live
+          evolution test build passed, and the ignored live e2e passed in
+          75.24s. This is current substrate proof, not final row closure while
+          prerequisite backbone rows remain pending.
     closeout_check: >-
       A live Codex prompt-consumption test, a deterministic AgentKit projection
       test, or `proposal.submit_batch` without application cannot close this
