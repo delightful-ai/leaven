@@ -10,6 +10,7 @@ from typing import Literal
 from msgspec import UNSET, Struct, UnsetType, field
 
 from .calls import CapabilityCall
+from .evidence import EvidenceEnvelope
 from .expressions import PlanExpression, Precondition, ValidationReceipt
 from .refs import (
     AssessmentRef,
@@ -261,8 +262,8 @@ class AssessmentSummaryGraphRow(
     tag_field="kind",
 ):
     assessment: AssessmentRef
-    score: Score | UnsetType = UNSET
-    evidence: WireJsonField | UnsetType = UNSET
+    score: Score
+    evidence: EvidenceEnvelope
 
 
 class EventSummaryGraphRow(

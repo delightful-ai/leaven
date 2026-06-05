@@ -1834,8 +1834,33 @@ acceptance:
           from `payload_codegen.py` so both authored Python files and generated
           wire modules stay below 650 LOC. This removes graph-set item shape
           erasure, but the inner row payload leaves `scores`, `artifact`,
-          `effect`, `evidence`, and extension `payload` still need deeper
-          owners before the row can close.
+          `effect`, and extension `payload` still need deeper owners before
+          the row can close. Later evidence typed assessment-summary evidence
+          envelopes.
+      - kind: generated_assessment_graph_row_evidence_is_typed_envelope
+        paths:
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/tests/_seam/_wire/test_graph_rows.py
+          - sdk/python/tests/_seam/_wire/test_payloads.py
+        commands:
+          - cd sdk/python && uv run pytest tests/_seam/_wire -q
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run ruff check src/leaven/_seam/_wire tests/_seam/_wire codegen/generate_seam_wire.py codegen/payload_codegen.py codegen/evidence_codegen.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/_wire tests/_seam/_wire codegen/generate_seam_wire.py codegen/payload_codegen.py codegen/evidence_codegen.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Generated `AssessmentSummaryGraphRow` now follows the Rust
+          public-seam result validator rather than the loose JSON Schema row
+          shape: `score` and `evidence` are required, and `evidence` decodes as
+          the generated `EvidenceEnvelope` owner. The graph-row tests moved to
+          their own file to keep `test_payloads.py` under the 650 LOC Python
+          cap. Focused tests prove an assessment graph row preserves typed
+          evidence envelope fields and rejects malformed evidence that omits
+          the required public projection. Candidate scores/artifacts, proposal
+          effects, event payloads, and extension graph-row payloads remain
+          JSON-shaped follow-up leaves.
       - kind: generated_ref_leaves_are_typed_records
         paths:
           - sdk/python/codegen/payload_codegen.py
