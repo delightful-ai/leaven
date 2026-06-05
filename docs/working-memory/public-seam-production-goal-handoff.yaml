@@ -5934,6 +5934,41 @@ acceptance:
           child system prompt and `.agents/skills/alpha/SKILL.md`. This is
           current criteria proof for Git repos, filesystems, and Codex Kit, not
           final row closure while prerequisite backbone rows remain pending.
+      - kind: live_codex_evolution_git_filesystem_codex_kit_2026_06_05_rerun
+        paths:
+          - crates/leaven-agentic-git/tests/git_program_materializer.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/agent_kit_seam_checkpoint.rs
+          - crates/leaven-workspace-firkin/tests/firkin_contract/firkin_git_e2e.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/codex_agent_kit_reflection.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution_support.rs
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cargo test -p leaven-agentic-git --test git_program_materializer
+          - cargo test -p leaven-gepa-agentic-agent-kit --test agent_kit_seam_checkpoint agent_kit_git_child_applied_through_sdk_route_restores_from_checkpoint -- --exact
+          - cargo test -p leaven-workspace-firkin --test firkin_contract firkin_git_e2e::firkin_product_pod_materializes_and_reads_back_isolated_git_workspaces -- --exact
+          - cargo test -p leaven-gepa-agentic-agent-kit --test codex_agent_kit_reflection codex_agent_kit_git_child_applies_through_run_bound_stdio_before_next_projection -- --exact
+          - set -a; source .env; set +a; LEAVEN_CODEX_LIVE=1 LEAVEN_CODEX_BIN="$HOME/.bun/bin/codex" cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution live_codex_agent_kit_evolves_through_stdio_checkpoint_and_next_codex_consumes_child -- --ignored --exact --nocapture
+        note: >-
+          Current rerun on 2026-06-05 directly reconfirmed the criteria the
+          user called out after questioning Git repos, filesystems, and Codex
+          Kit. The typed Git materializer/readback suite passed (13 passed),
+          the checkpointed AgentKit SDK route restored the applied Git child (1
+          passed), the Firkin product-pod Git workspace materialize/readback
+          proof passed (1 passed), the run-bound stdio submit/apply before next
+          projection proof passed (1 passed), and the live `gpt-5.4-mini`
+          AgentKit evolution e2e passed in 74.14s with `.env` loaded and normal
+          Cargo incremental settings. The live e2e still requires live Codex to
+          write inside `repos/agent`, imports that filesystem mutation as a
+          typed `GitProgramChange`, routes `leaven/proposal.submit_batch` and
+          `leaven/proposal.apply` through the run-bound stdio path, restores the
+          checkpointed child, materializes the child AgentKit into a fresh
+          workspace, and has a later live Codex stage consume the projected
+          child system prompt plus `.agents/skills/alpha/SKILL.md`. Firkin is
+          proven as the configured substrate in its own product-pod Git
+          workspace proof, not as the live Codex e2e substrate unless that e2e
+          is explicitly configured to run on Firkin. The row remains pending
+          until prerequisite backbone rows close.
       - kind: live_codex_evolution_git_filesystem_codex_kit_2026_06_04_rerun
         paths:
           - crates/leaven-agentic-git/tests/git_program_materializer.rs
