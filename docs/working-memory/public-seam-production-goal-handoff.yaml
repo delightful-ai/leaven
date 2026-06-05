@@ -5041,6 +5041,26 @@ acceptance:
           model a caller that bypasses static typing. The private normalization
           path copies typed JSON arrays and objects without `.get(...)` probes
           or object widening.
+      - kind: python_seam_config_json_projectors_typed
+        paths:
+          - sdk/python/src/leaven/_seam/config.py
+          - sdk/python/src/leaven/_seam/capability.py
+          - sdk/python/tests/_seam/test_config.py
+          - sdk/python/tests/test_stage_surface.py
+        commands:
+          - cd sdk/python && uv run pytest tests/_seam/test_config.py -q
+          - cd sdk/python && uv run pytest tests/test_stage_surface.py -q -k 'runtime or seam_service or seam or config'
+          - cd sdk/python && uv run ruff check src/leaven/_seam/config.py src/leaven/_seam/capability.py tests/_seam/test_config.py tests/test_stage_surface.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/config.py src/leaven/_seam/capability.py tests/_seam/test_config.py tests/test_stage_surface.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Private seam service config and capability projectors no longer
+          advertise `dict[str, object]` outputs. They now return the private
+          wire `JsonObject` alias and route `msgspec.to_builtins(...)` through
+          the JSON boundary parser before exposing config dictionaries to file
+          and process-client code. This leaves `msgspec` as the typed record
+          owner and makes the JSON escape explicit.
       - kind: prompt_stage_runtime_erasure_narrowed
         paths:
           - sdk/python/src/leaven/stages.py

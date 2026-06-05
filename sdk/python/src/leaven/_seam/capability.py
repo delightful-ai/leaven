@@ -5,6 +5,9 @@ from typing import Literal
 import msgspec
 from msgspec import UNSET, Struct, UnsetType
 
+from ._wire import JsonObject
+from ._wire.json_value import json_object
+
 
 class CapabilityIssuer(Struct, frozen=True, forbid_unknown_fields=True):
     """Capability issuer identity."""
@@ -159,9 +162,9 @@ class CapabilityDocument(Struct, frozen=True, forbid_unknown_fields=True):
     delegation: DelegationPolicy
 
 
-def capability_to_json(capability: CapabilityDocument) -> dict[str, object]:
+def capability_to_json(capability: CapabilityDocument) -> JsonObject:
     """Project a typed capability document to JSON-compatible builtins."""
-    return msgspec.to_builtins(capability)
+    return json_object(msgspec.to_builtins(capability))
 
 
 def effect_capability(

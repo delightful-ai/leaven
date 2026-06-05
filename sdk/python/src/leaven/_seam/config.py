@@ -6,6 +6,8 @@ from typing import Literal
 import msgspec
 from msgspec import Struct, UnsetType
 
+from ._wire import JsonObject
+from ._wire.json_value import json_object
 from .capability import CapabilityDocument
 
 
@@ -99,9 +101,9 @@ class SeamServiceDocument(Struct, frozen=True, forbid_unknown_fields=True):
     stage: StageRuntimeDocument
 
 
-def config_to_json(config: SeamServiceDocument) -> dict[str, object]:
+def config_to_json(config: SeamServiceDocument) -> JsonObject:
     """Project typed service config to JSON-compatible builtins."""
-    return msgspec.to_builtins(config)
+    return json_object(msgspec.to_builtins(config))
 
 
 def config_to_json_bytes(config: SeamServiceDocument) -> bytes:
@@ -129,9 +131,9 @@ class SeamExecutionContext:
             completed_at=self.completed_at,
         )
 
-    def to_json(self) -> dict[str, object]:
+    def to_json(self) -> JsonObject:
         """Return the JSON-compatible service config shape."""
-        return msgspec.to_builtins(self.to_wire())
+        return json_object(msgspec.to_builtins(self.to_wire()))
 
 
 @dataclass(frozen=True)
@@ -154,9 +156,9 @@ class CodexCliRuntimeConfig:
             bypass_approvals_and_sandbox=self.bypass_approvals_and_sandbox,
         )
 
-    def to_json(self) -> dict[str, object]:
+    def to_json(self) -> JsonObject:
         """Return the JSON-compatible service config shape."""
-        return msgspec.to_builtins(self.to_wire())
+        return json_object(msgspec.to_builtins(self.to_wire()))
 
 
 @dataclass(frozen=True)
@@ -179,9 +181,9 @@ class MockLmRuntimeConfig:
             ],
         )
 
-    def to_json(self) -> dict[str, object]:
+    def to_json(self) -> JsonObject:
         """Return the JSON-compatible service config shape."""
-        return msgspec.to_builtins(self.to_wire())
+        return json_object(msgspec.to_builtins(self.to_wire()))
 
 
 @dataclass(frozen=True)
@@ -202,9 +204,9 @@ class OpenAiLmRuntimeConfig:
             max_retries=self.max_retries,
         )
 
-    def to_json(self) -> dict[str, object]:
+    def to_json(self) -> JsonObject:
         """Return the JSON-compatible service config shape."""
-        return msgspec.to_builtins(self.to_wire())
+        return json_object(msgspec.to_builtins(self.to_wire()))
 
 
 @dataclass(frozen=True)
@@ -218,9 +220,9 @@ class MockRunnerStageConfig:
         """Return the typed service config record."""
         return MockRunnerStageDocument(text=self.text, summary=self.summary)
 
-    def to_json(self) -> dict[str, object]:
+    def to_json(self) -> JsonObject:
         """Return the JSON-compatible service config shape."""
-        return msgspec.to_builtins(self.to_wire())
+        return json_object(msgspec.to_builtins(self.to_wire()))
 
 
 @dataclass(frozen=True)
@@ -233,9 +235,9 @@ class CommandRunnerStageConfig:
         """Return the typed service config record."""
         return CommandRunnerStageDocument(argv=list(self.argv))
 
-    def to_json(self) -> dict[str, object]:
+    def to_json(self) -> JsonObject:
         """Return the JSON-compatible service config shape."""
-        return msgspec.to_builtins(self.to_wire())
+        return json_object(msgspec.to_builtins(self.to_wire()))
 
 
 @dataclass(frozen=True)
@@ -252,9 +254,9 @@ class LocalWorkspaceConfig:
             parent=self.parent if self.parent is not None else msgspec.UNSET,
         )
 
-    def to_json(self) -> dict[str, object]:
+    def to_json(self) -> JsonObject:
         """Return the JSON-compatible service config shape."""
-        return msgspec.to_builtins(self.to_wire())
+        return json_object(msgspec.to_builtins(self.to_wire()))
 
 
 @dataclass(frozen=True)
@@ -279,7 +281,7 @@ class SeamServiceConfig:
             stage=self.stage.to_wire() if self.stage is not None else NoneProviderConfig(),
         )
 
-    def to_json(self) -> dict[str, object]:
+    def to_json(self) -> JsonObject:
         """Return the Rust service config JSON shape."""
         return config_to_json(self.to_wire())
 
