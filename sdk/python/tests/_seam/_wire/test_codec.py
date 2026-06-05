@@ -11,6 +11,7 @@ from leaven._seam._wire import (
     JsonRpcProtocolError,
     JsonRpcRemoteError,
     LockedMethod,
+    RequestParams,
     decode_batch_responses,
     decode_method_response,
     decode_response,
@@ -28,6 +29,8 @@ from leaven._seam._wire.payloads import (
     LeavenValue,
     OperationReceipt,
     PlanDocument,
+    RunnerRequest,
+    StageRunRequest,
 )
 from leaven._seam._wire.results import (
     AgentRunResult,
@@ -94,6 +97,27 @@ def test_encode_request_rejects_unknown_method() -> None:
     method = cast("LockedMethod", "leaven/not_a_locked_method")
     with pytest.raises(ValueError, match="unknown locked Leaven public-seam method"):
         encode_request(method=method, request_id="req_1", params=plan_params())
+
+
+def test_encode_request_rejects_untyped_runtime_params() -> None:
+    params = cast("RequestParams", {"schema_version": "leaven.plan.v1"})
+
+    with pytest.raises(TypeError, match="request params must be PlanDocument"):
+        encode_request(method="leaven/lm.complete", request_id="req_1", params=params)
+
+
+def test_encode_request_requires_stage_run_params_for_stage_run_method() -> None:
+    with pytest.raises(TypeError, match=r"leaven/stage\.run request params must be StageRunRequest"):
+        encode_request(method="leaven/stage.run", request_id="req_1", params=plan_params())
+
+
+def test_encode_request_rejects_stage_run_params_for_plan_methods() -> None:
+    with pytest.raises(TypeError, match=r"leaven/lm\.complete request params must be PlanDocument"):
+        encode_request(
+            method="leaven/lm.complete",
+            request_id="req_1",
+            params=stage_run_params(),
+        )
 
 
 def test_boundary_structs_forbid_unknown_fields() -> None:
@@ -265,3 +289,39 @@ def test_decode_batch_rejects_missing_expected_id() -> None:
 
     with pytest.raises(JsonRpcProtocolError, match="missing JSON-RPC response ids"):
         decode_batch_responses(body, expected={1: Widget, 2: Widget})
+
+
+def test_decode_batch_rejects_unexpected_id() -> None:
+    body = b'[{"jsonrpc":"2.0","id":3,"result":{"ok":true,"name":"done"}}]'
+
+    with pytest.raises(JsonRpcProtocolError, match="unexpected JSON-RPC response id"):
+        decode_batch_responses(body, expected={1: Widget})
+
+
+def test_decode_batch_rejects_duplicate_id() -> None:
+    body = (
+        b'[{"jsonrpc":"2.0","id":1,"result":{"ok":true,"name":"first"}},'
+        b'{"jsonrpc":"2.0","id":1,"result":{"ok":true,"name":"second"}}]'
+    )
+
+    with pytest.raises(JsonRpcProtocolError, match="duplicate JSON-RPC response id"):
+        decode_batch_responses(body, expected={1: Widget})
+
+
+def stage_run_params() -> StageRunRequest:
+    """Return a minimal typed stage-run params object."""
+    return StageRunRequest(
+        schema_version="leaven.stage_run.v1",
+        message="stage_run_request",
+        stage="runner",
+        payload=RunnerRequest(
+            schema_version="leaven.stage_payloads.v1",
+            run="run_codec",
+            stage_call_id="sc_codec",
+            candidate="cand_codec",
+            case="case_codec",
+            case_input={"prompt": "Say ok."},
+            target_forbidden=True,
+            capability_fingerprint="fp_cap_codec",
+        ),
+    )

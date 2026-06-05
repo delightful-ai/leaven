@@ -29,6 +29,7 @@ def encode_request(
 ) -> bytes:
     """Encode one locked-method JSON-RPC request or notification."""
     require_locked_method(method)
+    _validate_params(method, params)
     envelope = JsonRpcRequestEnvelope(
         method=method,
         params=_raw_params(params),
@@ -80,6 +81,17 @@ def _raw_params(params: RequestParams | UnsetType) -> Raw | UnsetType:
     if params is UNSET:
         return UNSET
     return Raw(_ENCODER.encode(params))
+
+
+def _validate_params(method: LockedMethod, params: RequestParams | UnsetType) -> None:
+    if params is UNSET:
+        return
+    if method == "leaven/stage.run":
+        if not isinstance(params, StageRunDispatchRequest):
+            raise TypeError("leaven/stage.run request params must be StageRunRequest")
+        return
+    if not isinstance(params, PlanDocument):
+        raise TypeError(f"{method} request params must be PlanDocument")
 
 
 def _decode_envelope_result[T](envelope: JsonRpcResponseEnvelope, result_type: type[T]) -> T:

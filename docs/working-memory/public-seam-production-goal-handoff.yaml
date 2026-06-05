@@ -1801,6 +1801,27 @@ acceptance:
           checked-in wire output matches the codegen source. This narrows one
           generated wire mismatch but does not close the full typed-seam row:
           remaining Plan IR/result JSON islands still need typed owners.
+      - kind: msgspec_codec_rejects_untyped_and_mismatched_request_params
+        paths:
+          - sdk/python/src/leaven/_seam/_wire/codec.py
+          - sdk/python/tests/_seam/_wire/test_codec.py
+        commands:
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_codec.py -q
+          - cd sdk/python && uv run pytest tests/_seam/_wire -q
+          - cd sdk/python && uv run ruff check src/leaven/_seam/_wire/codec.py tests/_seam/_wire/test_codec.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/_wire/codec.py tests/_seam/_wire/test_codec.py
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          The private msgspec JSON-RPC encoder no longer trusts the Python
+          static type annotation alone. Runtime request params must be either
+          generated `PlanDocument` params for ordinary locked methods or a
+          generated `StageRunRequest` for `leaven/stage.run`; raw dicts and
+          method/params mismatches fail before msgspec encoding. The codec
+          tests now also prove unexpected and duplicate batch response ids are
+          rejected, in addition to the existing missing-id and response-order
+          tests. This strengthens the boundary codec row but does not close
+          remaining generated/public SDK JSON islands.
       - kind: lm_message_request_uses_generated_wire_records
         paths:
           - sdk/python/src/leaven/_seam/lm_plans.py
