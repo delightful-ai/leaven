@@ -160,8 +160,6 @@ class AgentBuilder:
         candidate_id = workspace.candidate_id or self._candidate_id
         if candidate_id is None:
             raise ValueError("AgentBuilder.run requires a workspace with a candidate_id")
-        if forbidden_input_classes is not None:
-            raise NotImplementedError("AgentBuilder.run does not lower forbidden_input_classes yet")
 
         request = AgentRunRequest(
             request_id=f"{self._idempotency_prefix}-agent-run",
@@ -175,6 +173,7 @@ class AgentBuilder:
             output=_output_to_wire(output),
             allowed_commands=allowed_commands,
             input_classes=input_classes,
+            forbidden_input_classes=forbidden_input_classes,
         )
         result = await asyncio.to_thread(self._client.agent_run, request)
         return _agent_session_from_result(result, output=output)

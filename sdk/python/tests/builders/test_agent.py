@@ -47,6 +47,8 @@ async def test_agent_builder_run_lowers_json_schema_output_contract() -> None:
         ),
         instructions=lv.AgentInstructions(task="Return JSON status."),
         output=output,
+        input_classes=[lv.data_class.WORKSPACE_FILE],
+        forbidden_input_classes=[lv.data_class.WORKSPACE_SECRET],
     )
 
     params = _params_object(client.request_value.to_params())
@@ -61,6 +63,8 @@ async def test_agent_builder_run_lowers_json_schema_output_contract() -> None:
         ),
         "schema": output.schema_,
     }
+    assert agent_op["input_classes"] == [lv.data_class.WORKSPACE_FILE]
+    assert agent_op["forbidden_input_classes"] == [lv.data_class.WORKSPACE_SECRET]
     assert session.parsed == {"status": "ok"}
 
 

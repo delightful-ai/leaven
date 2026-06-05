@@ -3471,6 +3471,26 @@ acceptance:
           file cap and explicit dependency boundary. `write_file` and
           `write_skills` remain explicit scaffolds because no retained locked
           V1 `leaven/workspace.write_file` method exists to lower them to.
+      - kind: public_agent_forbidden_input_classes_scaffold_removed
+        paths:
+          - sdk/python/src/leaven/_seam/plans.py
+          - sdk/python/src/leaven/builders/agent.py
+          - sdk/python/tests/builders/test_agent.py
+        commands:
+          - cd sdk/python && uv run pytest tests/builders/test_agent.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_seam/plans.py src/leaven/builders/agent.py tests/builders/test_agent.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/plans.py src/leaven/builders/agent.py tests/builders/test_agent.py
+          - cd sdk/python && just check
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - cd sdk/python && uv run pytest tests/test_stage_surface.py tests/builders/test_agent.py -q
+        note: >-
+          `AgentBuilder.run(..., forbidden_input_classes=...)` no longer raises
+          a public partial-implementation error. The typed `AgentRunRequest`
+          now owns forbidden data-class lowering and serializes it into the
+          generated `AgentRunCall.forbidden_input_classes` field; the mirrored
+          builder test asserts both allowed and forbidden input classes on the
+          emitted Plan IR. This removes one more public backbone scaffold while
+          preserving seam-side policy enforcement as the authority.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this

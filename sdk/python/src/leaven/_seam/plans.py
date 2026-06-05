@@ -167,6 +167,7 @@ class AgentRunRequest:
     output: JsonObject | None = None
     allowed_commands: Sequence[str] | None = None
     input_classes: Sequence[str] | None = None
+    forbidden_input_classes: Sequence[str] | None = None
 
     @property
     def method(self) -> SeamRequestMethod:
@@ -221,6 +222,11 @@ class AgentRunRequest:
                     max_usd_micro=self.max_usd_micro,
                 ),
                 input_classes=list(self.input_classes or ["public"]),
+                forbidden_input_classes=(
+                    list(self.forbidden_input_classes)
+                    if self.forbidden_input_classes is not None
+                    else UNSET
+                ),
             ),
         )
 
