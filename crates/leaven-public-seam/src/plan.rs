@@ -18,6 +18,7 @@ pub use model::{
 };
 
 use assessment::AssessmentScoreOutputUsage;
+pub use assessment::PlanScoreOutputValue;
 use dialect_usage::DialectUsage;
 use model::PlanOperationDetail;
 use parse::{invalid_plan, nested_kind, required_object_string, string_array};
@@ -99,7 +100,7 @@ impl PlanDocument {
                 }
                 PlanOperationDetail::Call { .. } => {}
                 PlanOperationDetail::Write { write } => {
-                    assessment_score_outputs.merge(write.submit_assessments);
+                    assessment_score_outputs.merge(&write.submit_assessments);
                 }
             };
             operation_kinds.push(operation_kind);

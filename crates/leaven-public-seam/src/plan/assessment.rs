@@ -5,20 +5,23 @@ use crate::evidence::EvidenceEnvelopeDocument;
 
 use super::parse::invalid_plan;
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(super) struct AssessmentScoreOutputUsage {
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct AssessmentScoreOutputUsage {
     pub(super) independent: usize,
     pub(super) pairwise: usize,
     pub(super) listwise: usize,
     pub(super) evidence_envelopes: usize,
+    output_values: Vec<PlanScoreOutputValue>,
 }
 
 impl AssessmentScoreOutputUsage {
-    pub(super) const fn merge(&mut self, other: Self) {
+    pub(super) fn merge(&mut self, other: &Self) {
         self.independent += other.independent;
         self.pairwise += other.pairwise;
         self.listwise += other.listwise;
         self.evidence_envelopes += other.evidence_envelopes;
+        self.output_values
+            .extend(other.output_values.iter().cloned());
     }
 
     pub(super) fn inspect_submit_assessments(
@@ -49,6 +52,10 @@ impl AssessmentScoreOutputUsage {
             validate_assessment_evidence(object)?;
             validate_assessment_candidates(kind, object)?;
             validate_score_output(kind, object, output)?;
+            if let Some(value) = output.get("value") {
+                self.output_values
+                    .push(PlanScoreOutputValue::from_schema_valid_value(value));
+            }
             match kind {
                 "independent" => self.independent += 1,
                 "pairwise" => self.pairwise += 1,
@@ -62,6 +69,25 @@ impl AssessmentScoreOutputUsage {
 
     pub(super) const fn total(&self) -> usize {
         self.independent + self.pairwise + self.listwise
+    }
+
+    pub(super) fn output_values(&self) -> &[PlanScoreOutputValue] {
+        &self.output_values
+    }
+}
+
+/// Schema-valid JSON value carried by an assessment `Score.output.value`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanScoreOutputValue(Value);
+
+impl PlanScoreOutputValue {
+    fn from_schema_valid_value(value: &Value) -> Self {
+        Self(value.clone())
+    }
+
+    /// JSON value carried on the wire by the score output.
+    pub const fn as_json(&self) -> &Value {
+        &self.0
     }
 }
 

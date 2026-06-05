@@ -3654,6 +3654,18 @@ fn submit_assessments_score_outputs_cover_all_assessment_shapes() {
     assert_eq!(write.independent_assessment_score_output_count(), 1);
     assert_eq!(write.pairwise_assessment_score_output_count(), 1);
     assert_eq!(write.listwise_assessment_score_output_count(), 1);
+    assert_eq!(write.assessment_score_output_values().len(), 3);
+    assert_eq!(
+        write.assessment_score_output_values()[0].as_json(),
+        &json!({"candidate": "cand_a", "output": "independent answer"})
+    );
+    assert_eq!(
+        write.assessment_score_output_values()[1].as_json(),
+        &json!([
+            {"candidate": "cand_a", "output": "answer a"},
+            {"candidate": "cand_b", "output": "answer b"}
+        ])
+    );
 }
 
 #[test]

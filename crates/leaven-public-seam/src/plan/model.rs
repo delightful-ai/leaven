@@ -3,7 +3,7 @@ use serde_json::Value;
 use crate::PublicSeamError;
 
 use super::PlanDocument;
-use super::assessment::AssessmentScoreOutputUsage;
+use super::assessment::{AssessmentScoreOutputUsage, PlanScoreOutputValue};
 use super::expression::{PlanExpression, PlanExpressionKind};
 use super::parse::{invalid_plan, nested_kind, required_object_string};
 
@@ -422,6 +422,11 @@ impl PlanWriteOperation {
     /// Number of listwise assessment outputs carried by this write.
     pub const fn listwise_assessment_score_output_count(&self) -> usize {
         self.submit_assessments.listwise
+    }
+
+    /// Typed assessment `Score.output.value` records carried by this write.
+    pub fn assessment_score_output_values(&self) -> &[PlanScoreOutputValue] {
+        self.submit_assessments.output_values()
     }
 
     /// Typed event write details for `emit_run_event` writes.

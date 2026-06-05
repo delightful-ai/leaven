@@ -58,7 +58,7 @@ pub use plan::{
     PlanCallKind, PlanCommitKind, PlanDocument, PlanEmitRunEventWrite, PlanEventPayload,
     PlanExpression, PlanExpressionKind, PlanExtensionPayload, PlanGraphQuerySource, PlanId,
     PlanLiteralValue, PlanMode, PlanOperation, PlanOperationKind, PlanQueryKind, PlanReturnBinding,
-    PlanSchemaVersion, PlanWriteKind,
+    PlanSchemaVersion, PlanScoreOutputValue, PlanWriteKind,
 };
 pub use plan_error::{PlanErrorCode, PlanErrorDetails, PlanErrorDocument};
 pub use plan_execution::{

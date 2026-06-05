@@ -41,6 +41,7 @@ from .refs import (
     WireJsonLeafArray,
     WireJsonLeafObject,
     WireJsonObject,
+    WireJsonOutputValue,
     WireJsonScalar,
     WorkspaceRef,
     WorkspaceRefRecord,
@@ -213,7 +214,7 @@ class OutputRecord(Struct, frozen=True, forbid_unknown_fields=True, omit_default
     visibility: VisibilityClass
     data_classes: DataClassSet
     summary: str | UnsetType = UNSET
-    value: WireJsonField | UnsetType = UNSET
+    value: WireJsonOutputValue | UnsetType = UNSET
     blob_ref: BlobRef | UnsetType = UNSET
     trace_refs: list[TraceRef] | UnsetType = UNSET
 

@@ -24,6 +24,7 @@ type WireJsonLiteralDepth8 = WireJsonScalar | list[WireJsonLiteralDepth7] | dict
 type WireJsonEventPayload = WireJsonLiteralDepth8
 type WireJsonExtensionPayload = WireJsonLiteralDepth8
 type WireJsonLiteralValue = WireJsonLiteralDepth8
+type WireJsonOutputValue = WireJsonLiteralDepth8
 type WireJsonObject = dict[str, WireJsonField]
 type DataClassSet = list[str]
 type TraceVisibility = Literal["public", "optimizer_visible", "host_private", "external_private"]
@@ -168,5 +169,5 @@ type TraceRef = TraceRefRecord
 
 __all__ = (  # noqa: PLE0605, SIM905
     "AssessmentRef AssessmentRefRecord BlobRef CandidateRef CandidateRefRecord CaseRef CaseRefRecord EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestRef EvaluationRequestRefRecord ExternalInfoRefRecord InfoRef ProposalBatchRef ProposalBatchRefRecord ProposalRef ProposalRefRecord ReceiptRef ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility WorkspaceRef WorkspaceRefRecord "
-    "DataClassSet MetadataBag WireJsonEventPayload WireJsonExtensionPayload WireJsonField WireJsonLeafArray WireJsonLeafObject WireJsonLiteralDepth0 WireJsonLiteralDepth1 WireJsonLiteralDepth2 WireJsonLiteralDepth3 WireJsonLiteralDepth4 WireJsonLiteralDepth5 WireJsonLiteralDepth6 WireJsonLiteralDepth7 WireJsonLiteralDepth8 WireJsonLiteralValue WireJsonObject WireJsonScalar WireJsonSchema WireJsonSchemaObject WireJsonSchemaTypeName WireJsonValue"
+    "DataClassSet MetadataBag WireJsonEventPayload WireJsonExtensionPayload WireJsonField WireJsonLeafArray WireJsonLeafObject WireJsonLiteralDepth0 WireJsonLiteralDepth1 WireJsonLiteralDepth2 WireJsonLiteralDepth3 WireJsonLiteralDepth4 WireJsonLiteralDepth5 WireJsonLiteralDepth6 WireJsonLiteralDepth7 WireJsonLiteralDepth8 WireJsonLiteralValue WireJsonObject WireJsonOutputValue WireJsonScalar WireJsonSchema WireJsonSchemaObject WireJsonSchemaTypeName WireJsonValue"
 ).split()

@@ -71,7 +71,9 @@ def test_assessment_evaluation_and_event_writes_decode_typed_records() -> None:
 
     assert isinstance(assessment, SubmitAssessmentsWrite)
     assert assessment.assessments[0].kind == "independent"
-    assert assessment.assessments[0].score.output.summary == "score evidence"
+    output = assessment.assessments[0].score.output
+    assert output.summary == "score evidence"
+    assert output.value == {"candidate": "cand_seed", "output": ["answer", {"unit": "text"}]}
     assert assessment.assessments[0].cost_attribution is not UNSET
     assert assessment.assessments[0].cost_attribution.kind == "explicit"
     assert isinstance(evaluation, RequestEvaluationWrite)
@@ -90,7 +92,8 @@ def test_assessment_output_decodes_typed_blob_and_trace_refs() -> None:
     decoded = msgspec.json.decode(
         _mixed_write_plan().replace(
             b'"output":{"kind":"text","visibility":"public",'
-            b'"data_classes":["public"],"summary":"score evidence"}',
+            b'"data_classes":["candidate.output"],"summary":"score evidence",'
+            b'"value":{"candidate":"cand_seed","output":["answer",{"unit":"text"}]}}',
             b'"output":{"kind":"blob_ref","visibility":"public",'
             b'"data_classes":["public"],"summary":"score evidence",'
             b'"blob_ref":{"kind":"blob_ref","id":"blob_1","sha256":"abc",'
@@ -117,7 +120,8 @@ def test_assessment_output_rejects_malformed_blob_ref() -> None:
         msgspec.json.decode(
             _mixed_write_plan().replace(
                 b'"output":{"kind":"text","visibility":"public",'
-                b'"data_classes":["public"],"summary":"score evidence"}',
+                b'"data_classes":["candidate.output"],"summary":"score evidence",'
+                b'"value":{"candidate":"cand_seed","output":["answer",{"unit":"text"}]}}',
                 b'"output":{"kind":"blob_ref","visibility":"public",'
                 b'"data_classes":["public"],"summary":"score evidence",'
                 b'"blob_ref":{"id":"blob_1"}}',
@@ -288,7 +292,8 @@ def _mixed_write_plan() -> bytes:
         b'"write":{"kind":"submit_assessments","evaluation_request_id":"evalreq_1",'
         b'"assessments":[{"kind":"independent","candidate":"cand_seed",'
         b'"score":{"value":0.5,"output":{"kind":"text","visibility":"public",'
-        b'"data_classes":["public"],"summary":"score evidence"}},'
+        b'"data_classes":["candidate.output"],"summary":"score evidence",'
+        b'"value":{"candidate":"cand_seed","output":["answer",{"unit":"text"}]}}},'
         b'"evidence":' + _evidence_envelope() + b','
         b'"replayability":"fully_managed",'
         b'"cost_attribution":{"kind":"explicit","cost":{"usd_micro":12}}}]}},'

@@ -1900,6 +1900,46 @@ acceptance:
           pending because assessment target/preference/ranking, output values,
           graph-row fragments, stage case inputs, and nested result fragments
           still need typed owners.
+      - kind: rust_and_python_score_output_values_preserve_typed_json_owner
+        paths:
+          - crates/leaven-public-seam/src/plan/assessment.rs
+          - crates/leaven-public-seam/src/plan/model.rs
+          - crates/leaven-public-seam/src/plan.rs
+          - crates/leaven-public-seam/src/lib.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_document.rs
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/codegen/write_codegen.py
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/refs.py
+          - sdk/python/src/leaven/_seam/_wire/writes.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/tests/_seam/_wire/test_graph_writes.py
+        commands:
+          - cargo fmt --check
+          - cargo check -p leaven-public-seam
+          - cargo test -p leaven-public-seam --test public_seam_contract submit_assessments_score_outputs_cover_all_assessment_shapes -- --exact --nocapture
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_document -- --nocapture
+          - cargo test -p leaven --test topology_contract
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_graph_writes.py -q
+          - cd sdk/python && uv run pytest tests/_seam/_wire -q
+          - cd sdk/python && uv run ruff check codegen/ref_codegen.py codegen/write_codegen.py codegen/payload_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/writes.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_graph_writes.py
+          - cd sdk/python && uv run ty check codegen/ref_codegen.py codegen/write_codegen.py codegen/payload_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/writes.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_graph_writes.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Rust assessment write inspection now stores validated
+          `Score.output.value` records in `PlanScoreOutputValue` instead of
+          only counting assessment output shapes. The public-seam contract
+          proves independent and pairwise candidate-bound score-output values
+          survive `validate_plan_document()` through
+          `PlanWriteOperation::assessment_score_output_values()`. Python
+          generated `WriteOutputRecord.value` and result `OutputRecord.value`
+          now use `WireJsonOutputValue`, a named owner backed by the bounded
+          msgspec JSON ladder, and the graph-write tests decode a nested
+          candidate-bound output value through the generated record. The row
+          remains pending because assessment target/preference/ranking,
+          graph-row scores/artifacts/effects/payloads, stage case inputs, and
+          nested result fragments still need typed owners.
       - kind: typed_private_client_request_cutover
         paths:
           - sdk/python/src/leaven/_seam/plans.py
