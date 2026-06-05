@@ -194,7 +194,8 @@ Phase 1 vendored (2026-05-24) — direct spec citations:
 Paths in the list below are relative to `docs/specs/leaven_py/`.
 
 - `repos/dspy/` — `dspy.BaseLM` + decorator patterns. Read when working
-  on `leaven.lm` or `lv.x.dspy.LeavenDSPyLM`.
+  on a future wired DSPy adapter. There is no current public `lv.x.dspy`
+  surface; do not reintroduce one without seam-backed execution proof.
 - `repos/inspect_ai/` — `@solver`/`@scorer`/`@task` decorators + context
   injection. Read when working on stage decorators or context objects.
 - `repos/mcp-python-sdk/` — stdio JSON-RPC + FastMCP idioms + known

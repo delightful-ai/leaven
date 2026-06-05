@@ -8,7 +8,7 @@ authors = [
 ]
 requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
-keywords = ["llm", "optimization", "gepa", "dspy", "leaven", "evaluation", "agents"]
+keywords = ["llm", "optimization", "gepa", "leaven", "evaluation", "agents"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Developers",
@@ -25,9 +25,6 @@ dependencies = [
     "pydantic>=2.10",
     "typing-extensions>=4.12",
 ]
-
-[project.optional-dependencies]
-dspy = ["dspy-ai>=2.5"]
 
 [project.urls]
 Homepage = "https://github.com/leaven-team/leaven"
@@ -49,9 +46,7 @@ public_runtime = [
     "pydantic",
     "typing-extensions",
 ]
-public_optional = [
-    "dspy-ai",
-]
+public_optional = []
 private_dev = [
     "datamodel-code-generator",
     "pytest",
@@ -62,7 +57,7 @@ private_dev = [
 private_runtime = []
 notes = [
     "Public runtime dependencies are import-time requirements for the leaven package.",
-    "Public optional dependencies are user-selected integration extras.",
+    "Public optional dependencies are user-selected integration extras; none are shipped in this slice.",
     "msgspec owns private public-seam wire parsing/encoding and generated method metadata.",
     "Private dev dependencies support tests, codegen, linting, and typing only.",
     "Live provider examples use the Rust seam service process; they add no Python runtime package dependency.",
@@ -93,7 +88,6 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"examples/08_dspy_dropin.py" = ["F401"]  # dspy is an optional dependency
 "examples/run_all.py" = ["PLC0415"]      # imports inside script-runner are intentional
 
 [tool.ruff.lint.extend-per-file-ignores]

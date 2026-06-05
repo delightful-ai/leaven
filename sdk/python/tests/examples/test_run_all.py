@@ -39,11 +39,11 @@ def test_examples_runner_allows_only_named_scaffold_boundaries() -> None:
         "04_evoskill_skill_bank.py",
         TypeError("this slice optimizes a PromptArtifact seed only"),
     )
-    assert runner._is_expected_boundary_error(
-        "08_dspy_dropin.py",
-        NotImplementedError("optional adapter scaffold"),
-    )
     assert not runner._is_expected_boundary_error(
         "04_evoskill_skill_bank.py",
         NotImplementedError("wrong boundary kind"),
+    )
+    assert not runner._is_expected_boundary_error(
+        "08_dspy_dropin.py",
+        NotImplementedError("removed optional adapter scaffold"),
     )

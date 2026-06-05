@@ -3982,9 +3982,9 @@ acceptance:
           stage payload, and the pure Python reward mechanics context carries
           explicit local stage/capability/workspace facts. Worker tests prove
           user runner code reads `cx.capability_fingerprint` from the real
-          stage request. The broader row remains pending because optional DSPy
-          and remaining workspace/optimize public scaffolds still require
-          removal, privatization, or product-surface classification.
+          stage request. The broader row remains pending because remaining
+          workspace/optimize public scaffolds still require removal,
+          privatization, or product-surface classification.
       - kind: public_optimize_dry_run_scaffold_removed
         paths:
           - sdk/python/AGENTS.md
@@ -5855,9 +5855,8 @@ acceptance:
           The examples tour no longer treats any `NotImplementedError` as a
           harmless scaffold. Expected boundaries are named per example: only
           04, 06, and 09 may stop at the current non-`PromptArtifact`
-          front-door `TypeError`, and only 08 may stop at the optional DSPy
-          adapter scaffold. Product/no-spend/live-gated examples such as 03 and
-          10 now fail loudly if they hit an implementation scaffold. The slice
+          front-door `TypeError`. Product/no-spend/live-gated examples such as
+          03 and 10 now fail loudly if they hit an implementation scaffold. The slice
           also repaired example type drift found by the wider examples ty gate:
           typed local-workspace root access, typed AgentCommand access,
           `InputCaseView` runner signature, and typed `LiveLmOutput` projection
@@ -5887,12 +5886,53 @@ acceptance:
           8 fixture cases. Examples 04, 06, and 09 now catch the typed
           non-`PromptArtifact` front-door `TypeError` when run directly, and
           `run_all.py` names that boundary instead of a generic scaffold. The
-          full `just examples` tour completed all 13 examples: example 03 ran
+          earlier `just examples` tour completed all 13 examples: example 03 ran
           the no-spend seam optimize mechanics path, 04/06/09 stopped at the
           named non-`PromptArtifact` boundary, 08 remained an optional DSPy
           adapter scaffold, and live examples 10-13 skipped behind their
-          environment gates. This improves example honesty but does not make
-          shape examples product proofs.
+          environment gates. Later evidence in this row removes the DSPy
+          scaffold from the current example tour; this historical slice does
+          not make shape examples product proofs.
+      - kind: dspy_scaffold_removed_from_public_python_surface
+        paths:
+          - docs/specs/leaven_python.md
+          - sdk/python/AGENTS.md
+          - sdk/python/pyproject.toml
+          - sdk/python/uv.lock
+          - sdk/python/examples/live_openai_lm/uv.lock
+          - sdk/python/src/leaven/__init__.py
+          - sdk/python/src/leaven/x/__init__.py
+          - sdk/python/src/leaven/x/dspy
+          - sdk/python/examples/08_dspy_dropin.py
+          - sdk/python/examples/README.md
+          - sdk/python/examples/run_all.py
+          - sdk/python/tests/examples/test_run_all.py
+          - sdk/python/tests/test_product_surface_ring.py
+          - sdk/python/scripts/check_quality_contract.py
+        commands:
+          - cd sdk/python && uv run pytest tests/test_product_surface_ring.py tests/examples/test_run_all.py -q
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && uv run ruff check src/leaven examples tests scripts codegen --exclude src/leaven/_types
+          - cd sdk/python && uv run ty check src/leaven tests scripts codegen --exclude src/leaven/_types
+          - cd sdk/python && just examples
+          - cd sdk/python && just compile-examples
+          - cd sdk/python && uv build
+          - cd sdk/python && uv lock --check
+          - cd sdk/python/examples/live_openai_lm && uv lock --check
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - just check
+        note: >-
+          The optional DSPy adapter is no longer an advertised or accepted
+          Python SDK scaffold. Top-level `lv.dspy_context`, `lv.dspy_acall`,
+          and `lv.dspy_call_context` were removed; `lv.x.__all__` is empty;
+          the unwired `lv.x.dspy` module files, mirrored prediction-wrapper
+          test, and `08_dspy_dropin.py` example were deleted; and the package
+          no longer declares a `dspy-ai` optional dependency. The governing
+          Python spec now classifies DSPy as a future adapter candidate that may
+          return only with typed seam-backed execution, receipt preservation,
+          and executable example coverage. This removes the remaining optional
+          adapter `NotImplementedError` exception from the runnable examples
+          matrix.
     closeout_check: A typechecked tour is not a runnable product example.
 
   - id: release_gate_for_public_contract

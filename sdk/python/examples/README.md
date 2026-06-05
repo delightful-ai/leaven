@@ -1,6 +1,6 @@
 # Examples
 
-Thirteen example scripts show the current Leaven Python surface, but they do
+Twelve example scripts show the current Leaven Python surface, but they do
 not all prove the same maturity level. The table below is the contract: cite an
 example only for the proof class it names.
 
@@ -19,7 +19,7 @@ From `sdk/python/`:
 ```bash
 uv sync                           # one-time
 uv run python examples/01_runtime.py
-just examples                     # run all thirteen in order; live-gated examples skip by default
+just examples                     # run all twelve in order; live-gated examples skip by default
 just example 03                   # run just one (by number prefix)
 LEAVEN_LIVE_CODEX=1 just example 10
 LEAVEN_LIVE_OPENAI=1 just example 13
@@ -37,7 +37,6 @@ LEAVEN_LIVE_OPENAI=1 uv run --project examples/live_openai_lm live-openai-lm
 | 05 | `05_evaluator_with_judge.py` | shape scaffold | `just examples` | Advanced evaluator authoring shape and evidence vocabulary. |
 | 06 | `06_reflect_propose_custom.py` | shape scaffold | expected boundary in `just examples` | Separated reflector/proposer authoring shape. Current front door rejects non-`PromptArtifact` seeds here. |
 | 07 | `07_serve_stage_worker.py` | shape scaffold | `just examples` | Advanced judge declaration shape. Standalone worker serving is not public until it is implemented. |
-| 08 | `08_dspy_dropin.py` | optional-adapter scaffold | `just examples` without `dspy-ai` installed | DSPy adapter import/configuration shape. It is not LM execution proof. |
 | 09 | `09_full_repro.py` | shape scaffold | expected boundary in `just examples` | Full front-door role composition shape. It is not a runnable product reproduction. |
 | 10 | `10_live_codex_seam.py` | live-gated substrate proof | skips unless `LEAVEN_LIVE_CODEX=1` | Direct Python client proof for `leaven/agent.run` over `leaven seam serve --stdio --config`; not the finished engine-supplied `cx.agent.run` path. |
 | 11 | `11_live_optimize_codex_stage.py` | live-gated product-path mechanics proof | skips unless `LEAVEN_LIVE_CODEX=1` | `lv.optimize(...).run()` dispatches a Python runner that calls `cx.agent.run` through the seam. Not Codex evolution proof. |
@@ -59,6 +58,10 @@ Shape scaffold examples do not run a real optimization. They exist so:
   example files have a precise boundary to remove
 - Live-gated substrate proofs can exercise the real public seam without
   pretending the high-level SDK path is finished
+
+DSPy is not in the current example tour. Reintroduce it only with a typed
+adapter that executes through the Leaven LM seam; do not add an import-only or
+`NotImplementedError` scaffold example.
 
 When something feels wrong in an example, the spec at
 [`../../../docs/specs/leaven_python.md`](../../../docs/specs/leaven_python.md) is the governing truth;

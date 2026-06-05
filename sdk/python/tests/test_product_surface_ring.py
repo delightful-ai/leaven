@@ -1,3 +1,5 @@
+import importlib.util
+
 import leaven as lv
 
 
@@ -67,6 +69,19 @@ def test_standalone_worker_loop_is_not_public_until_implemented() -> None:
 
     assert "serve_stage" not in lv.__all__
     assert not hasattr(lv, "serve_stage")
+
+
+def test_dspy_adapter_is_absent_until_it_executes() -> None:
+    """Unwired optional adapters must not be exported as public product surface."""
+
+    forbidden = {"dspy_acall", "dspy_call_context", "dspy_context"}
+
+    assert forbidden.isdisjoint(lv.__all__)
+    for name in forbidden:
+        assert not hasattr(lv, name)
+    assert lv.x.__all__ == []
+    assert not hasattr(lv.x, "dspy")
+    assert importlib.util.find_spec("leaven.x.dspy") is None
 
 
 def test_optimize_builder_does_not_advertise_unwired_dry_run() -> None:

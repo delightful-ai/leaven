@@ -14,7 +14,6 @@ HERE = Path(__file__).parent
 EXPECTED_BOUNDARY_EXAMPLES = {
     "04_evoskill_skill_bank.py": "non-PromptArtifact front-door boundary",
     "06_reflect_propose_custom.py": "non-PromptArtifact front-door boundary",
-    "08_dspy_dropin.py": "optional DSPy adapter scaffold boundary",
     "09_full_repro.py": "non-PromptArtifact front-door boundary",
 }
 
@@ -68,8 +67,6 @@ def _is_expected_boundary_error(script_name: str, error: Exception) -> bool:
     """Return whether a named example hit its documented scaffold boundary."""
     if script_name not in EXPECTED_BOUNDARY_EXAMPLES:
         return False
-    if script_name == "08_dspy_dropin.py":
-        return isinstance(error, NotImplementedError)
     return isinstance(error, TypeError) and str(error).startswith(
         "this slice optimizes a PromptArtifact seed"
     )

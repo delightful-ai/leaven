@@ -75,11 +75,6 @@ from .task import Task
 # ----- Trust profile constants ---------------------------------------------
 from .trust import TrustProfile
 
-# ----- Top-level convenience re-exports from x.dspy ------------------------
-# (the locked spec example uses `lv.dspy_context(...)` and `lv.dspy_acall(...)` inline)
-from .x.dspy.context import dspy_call_context, dspy_context
-from .x.dspy.invoke import dspy_acall
-
 # Roles convention alias (used as `lv.roles.EXECUTOR` in evaluator code).
 roles = AgentRoles
 
@@ -171,10 +166,6 @@ __all__ = [
     "budget",
     "cases",
     "data_class",
-    # convenience re-exports from x.dspy
-    "dspy_acall",
-    "dspy_call_context",
-    "dspy_context",
     # decorators + stage registration
     "evaluator",
     "frontier",

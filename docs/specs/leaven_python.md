@@ -170,14 +170,13 @@ reflector. ~70 lines, including stage bodies. The composition glue does
 not grow with the paper's complexity; the stage bodies do.
 
 The locked-spec example at
-`docs/specs/public-seam-v1/examples/evaluator_dspy_codex.v0.3.py` is the
-aspirational evaluator shape. It uses `cx.case.load`, a deferred batch syntax,
+`docs/specs/public-seam-v1/examples/evaluator_dspy_codex.v0.3.py` is an
+archived aspirational evaluator shape, not a current Python SDK promise. It
+uses `cx.case.load`, a deferred batch syntax,
 `cx.workspace.materialize_candidate`, `cx.sandbox.exec`, `cx.agent.run`,
-`lv.dspy_context`, `lv.AssessmentWrite.independent_case`,
-`lv.EvidenceEnvelope.public_private`. That sketch is the shape any
-evaluator takes when it needs to inspect cases, materialize workspaces,
-run sandboxed code, run agents, route through DSPy, and submit
-assessments with public/private evidence and receipts.
+the deferred DSPy adapter shape, and legacy assessment helpers. Current V1
+product claims must be proven through executable examples and the typed seam
+service; do not cite that sketch as SDK maturity evidence.
 
 The full surface inventory lives in
 `docs/working-memory/leaven-py-research/2026-05-24-python-surface-sketches.md`.
@@ -499,31 +498,19 @@ projection.
 The same package serves three purposes: compose + configure + run; author
 a stage; inspect after the fact. One install, one mental model.
 
-## DSPy
+## External adapters
 
-DSPy users live in Python and have specific expectations about LM
-adapters. The integration shape is drop-in:
+External ecosystem adapters live under `lv.x.*` only after they execute through
+typed Leaven seams. DSPy remains a future adapter candidate, not a current SDK
+surface: there is no `lv.x.dspy`, `lv.dspy_context`, or `lv.dspy_acall` claim in
+this slice. Reintroduce DSPy only with a real `dspy.BaseLM` implementation that
+lowers into `leaven-lm` neutral request/response types, routes through the
+public seam service, preserves receipts, and has executable example coverage.
 
-```python
-import dspy
-import leaven as lv
-
-dspy.configure(lm=lv.x.dspy.LeavenDSPyLM(model="claude-opus-4-7"))
-
-# All existing DSPy code works unchanged.
-program = dspy.ChainOfThought("question -> answer")
-result = program(question="...")
-```
-
-`lv.x.dspy.LeavenDSPyLM` is a `dspy.BaseLM` subclass that overrides
-`forward(prompt, messages, **kwargs)` and lowers into Leaven's
-`leaven-lm` neutral types. The adapter is ~30 lines per
-`docs/working-memory/leaven-py-research/2026-05-24-external-worker-prior-art.md` §6.
-
-DSPy lives in the `x.dspy` adapter namespace, not in core. The pattern
-generalizes: future adapters (`x.skill_bank.*`, `x.git_program.*`,
-`x.inspect.*`) follow the same shape — typed integration with an external
-ecosystem, lowered into core Leaven types, lifted back for the user.
+The pattern generalizes: future adapters (`x.skill_bank.*`, `x.git_program.*`,
+`x.inspect.*`) follow the same rule: typed integration with an external
+ecosystem, lowered into core Leaven types, lifted back for the user, with no
+public import-only or `NotImplementedError` scaffolds.
 
 ## The acceptance gate
 
@@ -761,7 +748,7 @@ that walked through:
 - The archived `COMPREHENSIVE_DESIGN_PASS_NOTES.md` from the pre-lock
   seam draft, which named pyo3 as rejected at line 29, evaluator
   interior as host-language at line 33, the 200-line target at line 21,
-  and the DSPy drop-in shape at line 735. Most decisions in this spec
+  and the deferred DSPy drop-in shape at line 735. Most decisions in this spec
   are restatements of design positions reached during the seam lock.
 - Four research files produced by parallel research agents on EvoSkill
   glue, worker-transport/ACP SDK code inventory, multi-language future-proofing, and

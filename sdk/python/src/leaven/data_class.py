@@ -35,7 +35,7 @@ SCORER_PRIVATE: Final = "scorer.private"
 TRANSCRIPT_RAW: Final = "transcript.raw"
 
 # Extension namespace marker — `x.<adapter>.*` data classes follow the same
-# convention as the `x.*` schema namespace; e.g. `x.dspy.completion`.
+# convention as the `x.*` schema namespace.
 EXTENSION_PREFIX: Final = "x."
 
 __all__ = [
