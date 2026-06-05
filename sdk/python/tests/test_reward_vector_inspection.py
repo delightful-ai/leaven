@@ -80,6 +80,7 @@ async def test_reward_vector_aggregate_and_dimensions_survive_inspection(
     assert inspection.best_candidate_id == result.best.id
     assert inspection.evidence[0].payload == EvidencePublicPayload(
         summary="42",
+        output="42",
         metrics={"reward_count": 2.0},
     )
     assert [

@@ -478,6 +478,7 @@ def test_runs_inspect_uses_rust_checkpoint_blob_and_evidence_without_optimized_j
     assert inspection.evidence[0].candidate_id == "cand_child"
     assert inspection.evidence[0].payload == EvidencePublicPayload(
         summary="42",
+        output="42",
         metrics={"reward_count": 1.0},
     )
     assert inspection.evidence[0].target_derived is True

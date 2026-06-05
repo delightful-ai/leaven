@@ -2059,12 +2059,36 @@ acceptance:
           reads typed fields directly and no longer reparses public evidence
           with `_optional_*_payload` helpers or unknown-key filtering. Completed
           run inspection carries the same `EvidencePublicPayload`, and Rust
-          case-assessment readback maps output text to `summary` plus
-          `reward_count` to typed metrics instead of restoring an
-          output/reward_count JSON bag. Focused tests prove construction,
+          case-assessment readback maps output report text to `summary`,
+          inline candidate output to `output`, and `reward_count` to typed
+          metrics instead of restoring an output/reward_count JSON bag.
+          Focused tests prove construction,
           wire lowering, persisted Rust readback, and inspection behavior; the
           spec now names this owner. Private evidence payloads and other
           extension leaves remain pending typed-owner work.
+      - kind: rust_evidence_inline_output_readback_restored
+        paths:
+          - sdk/python/src/leaven/_runs/rust_evidence.py
+          - sdk/python/tests/_runs/test_rust_export.py
+          - sdk/python/tests/test_optimize_public_seam_e2e.py
+          - sdk/python/tests/test_reward_vector_inspection.py
+          - sdk/python/tests/test_run_inspection.py
+          - sdk/python/examples/live_openai_lm/src/live_openai_lm/output.py
+          - sdk/python/examples/live_openai_lm/tests/test_output.py
+        commands:
+          - cd sdk/python && PYTHONPATH=examples/live_openai_lm/src uv run pytest examples/live_openai_lm/tests/test_output.py tests/test_optimize_public_seam_e2e.py tests/_runs/test_rust_export.py tests/test_reward_vector_inspection.py tests/test_run_inspection.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_runs/rust_evidence.py tests/_runs/test_rust_export.py tests/test_optimize_public_seam_e2e.py tests/test_reward_vector_inspection.py tests/test_run_inspection.py examples/live_openai_lm/tests/test_output.py
+          - cd sdk/python && PYTHONPATH=examples/live_openai_lm/src uv run ty check src/leaven/_runs/rust_evidence.py tests/_runs/test_rust_export.py tests/test_optimize_public_seam_e2e.py tests/test_reward_vector_inspection.py tests/test_run_inspection.py examples/live_openai_lm/src examples/live_openai_lm/tests
+          - cd sdk/python && set -a; source ../../.env; set +a; LEAVEN_LIVE_OPENAI=1 uv run python examples/13_live_optimize_openai_lm.py
+        note: >-
+          Rust-owned evidence readback now preserves inline candidate output as
+          `EvidencePublicPayload.output` while keeping compact report text in
+          `summary`; blob-backed outputs still avoid pretending a blob locator
+          is the literal candidate output. This fixed the live OpenAI example's
+          inspection path: the `.env`-loaded example 13 run returned best score
+          1.000, `lmrec_completion`, 35 total tokens, and known cost status.
+          This is focused readback/evidence proof, not closure of the broader
+          generated-wire row.
       - kind: private_service_config_capability_typed_records
         paths:
           - sdk/python/src/leaven/_seam/capability.py
@@ -7820,6 +7844,34 @@ acceptance:
           applied child rather than the seed. This is current criteria proof,
           not final goal closeout while prerequisite typed-backbone rows remain
           pending.
+      - kind: git_filesystem_codex_kit_after_python_evidence_output_fix
+        paths:
+          - crates/leaven-agentic-git/tests/git_program_materializer.rs
+          - crates/leaven-workspace-firkin/tests/firkin_contract/firkin_git_e2e.rs
+          - crates/leaven-agent-codex-cli/tests/codex_cli_runtime.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution_support.rs
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cargo test -p leaven-agentic-git --test git_program_materializer
+          - cargo test -p leaven-workspace-firkin --test firkin_contract firkin_git_e2e::firkin_product_pod_materializes_and_reads_back_isolated_git_workspaces -- --exact
+          - cargo test -p leaven-agent-codex-cli --test codex_cli_runtime
+          - set -a; source .env; set +a; LEAVEN_CODEX_LIVE=1 LEAVEN_CODEX_BIN="$HOME/.bun/bin/codex" cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution live_codex_agent_kit_evolves_through_stdio_checkpoint_and_next_codex_consumes_child -- --ignored --exact --nocapture
+        note: >-
+          Current user-requested recheck after the Python evidence output fix
+          reconfirmed the explicit criteria that Git repositories, filesystem
+          materialization/readback, Firkin workspace substrate, Codex CLI
+          status handling, and Codex Kit evolution work with normal Cargo
+          incremental settings. The GitProgram materializer suite passed all 13
+          tests, the host-backed Firkin product-pod Git workspace proof passed,
+          the Codex CLI runtime/parser suite passed 8 tests, and the
+          `.env`-loaded live `gpt-5.4-mini` Codex evolution e2e passed 1 test
+          in 69.50s. The live e2e still proves live Codex mutation inside the
+          Git repo, typed Git readback, public-seam stdio submit/apply,
+          checkpoint restore, fresh child AgentKit materialization, and a later
+          live Codex stage consuming the applied child rather than the seed.
+          This is current criteria proof, not final goal closeout while
+          prerequisite typed-backbone rows remain pending.
     closeout_check: >-
       A live Codex prompt-consumption test, a deterministic AgentKit projection
       test, or `proposal.submit_batch` without application cannot close this
@@ -8048,6 +8100,31 @@ acceptance:
           timeout is not claimed as success; it keeps this row pending until
           the live tour itself is made reliable or the example matrix is
           reshaped around explicit per-example live proofs.
+      - kind: live_openai_example_rust_output_readback_fix
+        paths:
+          - sdk/python/src/leaven/_runs/rust_evidence.py
+          - sdk/python/examples/13_live_optimize_openai_lm.py
+          - sdk/python/examples/live_openai_lm/src/live_openai_lm/output.py
+          - sdk/python/examples/live_openai_lm/tests/test_output.py
+          - sdk/python/tests/_runs/test_rust_export.py
+          - sdk/python/tests/test_optimize_public_seam_e2e.py
+          - sdk/python/tests/test_reward_vector_inspection.py
+          - sdk/python/tests/test_run_inspection.py
+        commands:
+          - cd sdk/python && PYTHONPATH=examples/live_openai_lm/src uv run pytest examples/live_openai_lm/tests/test_output.py tests/test_optimize_public_seam_e2e.py tests/_runs/test_rust_export.py tests/test_reward_vector_inspection.py tests/test_run_inspection.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_runs/rust_evidence.py tests/_runs/test_rust_export.py tests/test_optimize_public_seam_e2e.py tests/test_reward_vector_inspection.py tests/test_run_inspection.py examples/live_openai_lm/tests/test_output.py
+          - cd sdk/python && PYTHONPATH=examples/live_openai_lm/src uv run ty check src/leaven/_runs/rust_evidence.py tests/_runs/test_rust_export.py tests/test_optimize_public_seam_e2e.py tests/test_reward_vector_inspection.py tests/test_run_inspection.py examples/live_openai_lm/src examples/live_openai_lm/tests
+          - cd sdk/python && set -a; source ../../.env; set +a; LEAVEN_LIVE_OPENAI=1 uv run python examples/13_live_optimize_openai_lm.py
+        note: >-
+          Example 13 now reads real runner output from Rust-owned evidence
+          readback through `EvidencePublicPayload.output`, not from a
+          Python-only projection or a summary field. The focused regression
+          suite passed 16 tests, ruff and ty passed on the touched readback and
+          nested example package, and the `.env`-loaded live OpenAI example
+          returned best score 1.000, `lmrec_completion`, 35 total tokens, and
+          known cost status. This updates live OpenAI example proof; the full
+          examples row remains pending until the live tour reliability question
+          is closed.
       - kind: no_spend_examples_type_gate_refreshed_after_public_payload_hardening
         paths:
           - docs/specs/leaven_python.md

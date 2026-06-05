@@ -82,6 +82,7 @@ async def test_optimize_run_spawns_public_seam_and_returns_inspectable_receipts(
     assert assessment.evidence.public is not None
     assert assessment.evidence.public.payload == EvidencePublicPayload(
         summary="seam-ok",
+        output="seam-ok",
         metrics={"reward_count": 1.0},
     )
     assert [receipt.receipt_id for receipt in assessment.effect_receipts] == ["lmrec_completion"]
@@ -92,6 +93,7 @@ async def test_optimize_run_spawns_public_seam_and_returns_inspectable_receipts(
     assert inspection.receipt_ids(kind="call") == ["lmrec_completion"]
     assert inspection.evidence[0].payload == EvidencePublicPayload(
         summary="seam-ok",
+        output="seam-ok",
         metrics={"reward_count": 1.0},
     )
     assert inspection.total_lm_tokens == 2

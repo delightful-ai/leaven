@@ -91,6 +91,14 @@ class RustOutputRecord(BaseModel):
             return f"blob:{self.blob_ref.reference.store}:{self.blob_ref.reference.key}"
         raise ValueError("Rust OutputRecord must contain exactly one variant")
 
+    def inline_text(self) -> str | None:
+        """Return the public inline output text when Rust exported it inline."""
+        if self.inline is not None and self.blob_ref is None:
+            return self.inline.text
+        if self.blob_ref is not None and self.inline is None:
+            return None
+        raise ValueError("Rust OutputRecord must contain exactly one variant")
+
     def data_classes(self) -> list[str]:
         """Return the output data classes in Rust-provided order."""
         if self.inline is not None and self.blob_ref is None:
@@ -344,6 +352,7 @@ def _assessment_from_rust(
 def _public_payload(evidence: RustCaseAssessmentEvidence) -> EvidencePublicPayload:
     return EvidencePublicPayload(
         summary=evidence.output.report_text(),
+        output=evidence.output.inline_text(),
         metrics={"reward_count": float(len(evidence.rewards()))},
     )
 

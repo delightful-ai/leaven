@@ -96,5 +96,6 @@ async def test_optimize_persists_openable_inspection_result(
     ]
     assert inspection.evidence[0].payload == EvidencePublicPayload(
         summary="42",
+        output="42",
         metrics={"reward_count": 2.0},
     )
