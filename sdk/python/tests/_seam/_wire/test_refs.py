@@ -3,7 +3,7 @@
 import msgspec
 import pytest
 
-from leaven._seam._wire.refs import BlobRef, CaseInputPayload, MetadataBag, WireJsonCaseReadTarget
+from leaven._seam._wire.refs import BlobRef, CaseInputPayload, CaseReadTargetValue, MetadataBag
 
 
 def test_blob_ref_decodes_schema_owned_reference() -> None:
@@ -22,7 +22,7 @@ def test_blob_ref_decodes_schema_owned_reference() -> None:
 def test_case_read_target_alias_accepts_json_scalar() -> None:
     """Regression: case target owner follows the schema's JSON-value slot."""
 
-    decoded = msgspec.json.decode(b'"answer"', type=WireJsonCaseReadTarget)
+    decoded = msgspec.json.decode(b'"answer"', type=CaseReadTargetValue)
 
     assert decoded == "answer"
 

@@ -12,7 +12,7 @@ from typing import Literal
 from msgspec import UNSET, Struct, UnsetType
 
 from .payloads import CaseRef, Replayability
-from .refs import WireJsonCaseReadInput, WireJsonCaseReadMetadata, WireJsonCaseReadTarget
+from .refs import CaseReadInputValue, CaseReadMetadataValue, CaseReadTargetValue
 
 
 class CaseRecordPrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
@@ -21,9 +21,9 @@ class CaseRecordPrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_de
     receipt: str
     data_classes: list[str]
     replayability: Replayability
-    input: WireJsonCaseReadInput | UnsetType = UNSET
-    target: WireJsonCaseReadTarget | UnsetType = UNSET
-    metadata: WireJsonCaseReadMetadata | UnsetType = UNSET
+    input: CaseReadInputValue | UnsetType = UNSET
+    target: CaseReadTargetValue | UnsetType = UNSET
+    metadata: CaseReadMetadataValue | UnsetType = UNSET
 
 
 __all__ = ["CaseRecordPrimary"]

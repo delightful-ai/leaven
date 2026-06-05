@@ -3617,6 +3617,35 @@ acceptance:
           optimize seam e2e still lowers runner stage requests through the
           public-seam path. This removes one active `WireJson*` request
           carrier, while other bounded JSON owners still need separate audit.
+      - kind: case_read_value_owners_branded
+        paths:
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/codegen/case_result_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/refs.py
+          - sdk/python/src/leaven/_seam/_wire/case_results.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/tests/_seam/_wire/test_case_results.py
+          - sdk/python/tests/_seam/_wire/test_refs.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_case_results.py tests/_seam/_wire/test_refs.py tests/_seam/_wire/test_results.py tests/_seam/test_client.py -q
+          - cd sdk/python && uv run pytest tests/_seam/_wire -q
+          - cd sdk/python && uv run ruff check codegen/ref_codegen.py codegen/case_result_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/case_results.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_case_results.py tests/_seam/_wire/test_refs.py tests/_seam/_wire/test_results.py tests/_seam/test_client.py
+          - cd sdk/python && uv run ty check codegen/ref_codegen.py codegen/case_result_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/case_results.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_case_results.py tests/_seam/_wire/test_refs.py tests/_seam/_wire/test_results.py tests/_seam/test_client.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - rg -n "WireJsonCaseRead(Input|Target|Metadata)" sdk/python/codegen sdk/python/src/leaven sdk/python/tests/_seam -g '*.py' -S
+        note: >-
+          Generated case-read result primaries now use branded
+          `CaseReadInputValue`, `CaseReadTargetValue`, and
+          `CaseReadMetadataValue` owners instead of the old
+          `WireJsonCaseRead*` aliases. Focused tests decode those owners
+          directly and through `CaseRecordPrimary`, while generated extension
+          result tests still prove all retained case-read methods decode. The
+          targeted grep has no matches for the old aliases in Python codegen,
+          SDK source, or seam tests. This removes another active `WireJson*`
+          result carrier; graph filters, literal/output/assessment values, and
+          extension payloads still need separate audit.
       - kind: python_request_envelope_raw_dict_escape_removed
         paths:
           - sdk/python/src/leaven/_seam/client.py

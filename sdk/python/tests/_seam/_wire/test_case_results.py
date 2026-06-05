@@ -6,6 +6,7 @@ import msgspec
 
 from leaven._seam._wire.case_results import CaseRecordPrimary
 from leaven._seam._wire.payloads import CaseRefRecord
+from leaven._seam._wire.refs import CaseReadInputValue, CaseReadMetadataValue, CaseReadTargetValue
 
 
 def test_case_record_primary_decodes_owned_case_read_values() -> None:
@@ -28,3 +29,21 @@ def test_case_record_primary_decodes_owned_case_read_values() -> None:
     assert decoded.input == ["question", {"text": "2+2?"}]
     assert decoded.target == "4"
     assert decoded.metadata == {"partition": ["validation", 1]}
+
+
+def test_case_read_value_owners_decode_json_values() -> None:
+    """Regression: case read values use branded owners, not generic wire aliases."""
+
+    input_value = msgspec.json.decode(
+        b'{"question":"2+2?","choices":["3","4"]}',
+        type=CaseReadInputValue,
+    )
+    target_value = msgspec.json.decode(b'"4"', type=CaseReadTargetValue)
+    metadata_value = msgspec.json.decode(
+        b'{"partition":["validation",1]}',
+        type=CaseReadMetadataValue,
+    )
+
+    assert input_value == {"question": "2+2?", "choices": ["3", "4"]}
+    assert target_value == "4"
+    assert metadata_value == {"partition": ["validation", 1]}
