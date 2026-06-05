@@ -206,23 +206,93 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
             "workspace_materialize"
         );
         assert_eq!(response["result"]["receipts"][1]["kind"], "query");
-        if query_name == "captured" {
-            assert_eq!(
-                response["result"]["primary"]["entries"][0]["bytes"],
-                "seeded workspace readme\n".len()
-            );
-            assert_eq!(
-                response["result"]["primary"]["entries"][0]["content_base64"],
-                "c2VlZGVkIHdvcmtzcGFjZSByZWFkbWUK"
-            );
-            assert_eq!(
-                response["result"]["primary"]["entries"][0]["blob_ref"]["bytes"],
-                "seeded workspace readme\n".len()
-            );
-            assert_eq!(
-                response["result"]["primary"]["entries"][0]["blob_ref"]["sha256"],
-                response["result"]["primary"]["entries"][0]["sha256"]
-            );
+        match query_name {
+            "file" => {
+                assert_eq!(
+                    response["result"]["primary"]["content"],
+                    "seeded workspace readme\n"
+                );
+            }
+            "listing" => {
+                assert_eq!(
+                    response["result"]["primary"]["entries"][0]["path"],
+                    "README.md"
+                );
+            }
+            "stat" => {
+                assert_eq!(
+                    response["result"]["primary"]["entries"][0]["bytes"],
+                    "seeded workspace readme\n".len()
+                );
+            }
+            "digest" => {
+                assert!(
+                    response["result"]["primary"]["digest"]
+                        .as_str()
+                        .unwrap()
+                        .starts_with("sha256:")
+                );
+            }
+            "snapshot" => {
+                assert!(
+                    response["result"]["primary"]["digest"]
+                        .as_str()
+                        .unwrap()
+                        .starts_with("blake3:")
+                );
+            }
+            "captured" => {
+                assert_eq!(
+                    response["result"]["primary"]["entries"][0]["bytes"],
+                    "seeded workspace readme\n".len()
+                );
+                assert_eq!(
+                    response["result"]["primary"]["entries"][0]["content_base64"],
+                    "c2VlZGVkIHdvcmtzcGFjZSByZWFkbWUK"
+                );
+                assert_eq!(
+                    response["result"]["primary"]["entries"][0]["blob_ref"]["bytes"],
+                    "seeded workspace readme\n".len()
+                );
+                assert_eq!(
+                    response["result"]["primary"]["entries"][0]["blob_ref"]["sha256"],
+                    response["result"]["primary"]["entries"][0]["sha256"]
+                );
+            }
+            "gitlog" => {
+                assert!(
+                    response["result"]["primary"]["text"]
+                        .as_str()
+                        .unwrap()
+                        .contains("leaven workspace seed")
+                );
+                assert_eq!(
+                    response["result"]["primary"]["source_refs"][0]["namespace"],
+                    "leaven.workspace.git_log.max_entries"
+                );
+            }
+            "gitdiff" => {
+                let text = response["result"]["primary"]["text"].as_str().unwrap();
+                assert!(text.contains("-pub fn answer() -> u8 { 42 }"));
+                assert!(text.contains("+pub fn answer() -> u8 { 43 }"));
+                assert_eq!(
+                    response["result"]["primary"]["source_refs"][0]["namespace"],
+                    "leaven.workspace.git_diff.against"
+                );
+            }
+            "gitstatus" => {
+                assert!(
+                    response["result"]["primary"]["text"]
+                        .as_str()
+                        .unwrap()
+                        .contains(" M src/lib.rs")
+                );
+                assert_eq!(
+                    response["result"]["primary"]["source_refs"][0]["namespace"],
+                    "leaven.workspace.git_status.porcelain"
+                );
+            }
+            other => panic!("unexpected workspace query `{other}`"),
         }
     }
 

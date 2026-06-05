@@ -426,7 +426,7 @@ acceptance:
         commands:
           - cargo test -p leaven-seam-service seam_runtime_executes_finite_workspace_queries_through_configured_service
           - cargo test -p leaven-cli --test seam_stdio_server
-        note: Local workspace view backs finite read methods through capability-scoped Plan execution; capture_artifacts still lacks Rust-owned blob byte retrieval, so this row remains pending.
+        note: Local workspace view backs finite read methods through capability-scoped Plan execution; the process-level CLI proof now checks returned file content, listings, byte counts, SHA-256 digest output, snapshot digest output, and captured artifact bytes/blob metadata through `leaven seam serve --stdio`.
       - kind: partial_git_workspace_query_execution
         methods:
           - "`leaven/workspace.git_log`"
@@ -434,8 +434,11 @@ acceptance:
           - "`leaven/workspace.git_status`"
         commands:
           - cargo test -p leaven-seam-service seam_runtime_executes_finite_workspace_queries_through_configured_service
-          - cargo test -p leaven-cli --test seam_stdio_server
-        note: Configured service initializes a real local Git repo, commits seed files, applies a tracked post-commit edit, and serves source-ref-bound log/diff/status results through `leaven seam serve --stdio`.
+          - cargo test -p leaven-cli --test seam_stdio_server seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers -- --exact
+        paths:
+          - crates/leaven-seam-service/src/git_workspace.rs
+          - crates/leaven-cli/tests/seam_stdio_server.rs
+        note: Configured service initializes a real local Git repo, commits seed files, applies a tracked post-commit edit, and the process-level `leaven seam serve --stdio` proof asserts the returned Git log seed commit, diff hunk from 42 to 43, porcelain status, and source refs.
       - kind: capture_artifacts_byte_execution
         methods:
           - "`leaven/workspace.capture_artifacts`"
