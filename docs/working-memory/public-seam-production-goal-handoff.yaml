@@ -5790,6 +5790,25 @@ acceptance:
           of the projected child system prompt and alpha skill. This is current
           criteria proof, not final row closure while prerequisite backbone rows
           remain pending.
+      - kind: live_codex_evolution_after_output_assessment_owner_slice
+        paths:
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution_support.rs
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - set -a; source .env; set +a; LEAVEN_CODEX_LIVE=1 LEAVEN_CODEX_BIN="$HOME/.bun/bin/codex" cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution live_codex_agent_kit_evolves_through_stdio_checkpoint_and_next_codex_consumes_child -- --ignored --exact --nocapture
+        note: >-
+          Current rerun after the Python output/assessment typed-owner slice
+          passed the live `gpt-5.4-mini` Codex AgentKit evolution e2e in
+          61.44s with `.env` loaded and normal Cargo incremental settings. This
+          reconfirms that the live Codex reflection/proposal path can mutate the
+          AgentKit Git workspace filesystem, import the mutation as a typed Git
+          child, route submit/apply through the run-bound stdio SDK path,
+          restore the checkpointed child, materialize the child into a fresh
+          workspace, and have a later live Codex stage consume the projected
+          child system prompt and `.agents/skills/alpha/SKILL.md`. This is
+          current criteria proof for Git repos, filesystems, and Codex Kit, not
+          final row closure while prerequisite backbone rows remain pending.
       - kind: live_codex_evolution_git_filesystem_codex_kit_2026_06_04_rerun
         paths:
           - crates/leaven-agentic-git/tests/git_program_materializer.rs
