@@ -223,7 +223,7 @@ async fn read_back_live_codex_agent_kit_change(
         let mut instructions = AgentInstructions::task(
             "Read agent/reflection.md, then edit only files under repos/agent. Replace \
              repos/agent/system_prompt.md with exactly:\n\
-             Child system proof requirement: create agent/child-system-proof.txt containing exactly CHILD_SYSTEM_CONSUMED.\n\
+             Child system proof requirement: create agent/child-system-proof.txt containing exactly CHILD_SYSTEM_CONSUMED\n\
              \n\
              Replace repos/agent/skills/alpha/SKILL.md with exactly:\n\
              ---\nname: alpha\ndescription: Use when asked for the child alpha proof.\n---\n\n\
@@ -332,9 +332,17 @@ async fn run_live_codex_child_consumption(
             .materialize(root.join("repos/agent"), &root)
             .unwrap();
         let mut instructions = AgentInstructions::task(
-            "Use $alpha. Follow the active system prompt. Create the required proof files under agent/.",
+            "Read the active system prompt and the projected alpha skill at \
+             .agents/skills/alpha/SKILL.md. Use only those two projected AgentKit \
+             sources to determine the required exact file contents, then create \
+             agent/child-system-proof.txt and agent/child-skill-proof.txt.",
         );
         instructions.system = projection.system_prompt;
+        instructions.context.push(AgentContextRef {
+            label: "alpha-skill".to_owned(),
+            path: WorkspacePath::new(".agents/skills/alpha/SKILL.md").unwrap(),
+            media_type: Some("text/markdown".to_owned()),
+        });
         let mut request = AgentRunRequest::new(
             instructions,
             OutputContract::Files {
@@ -345,14 +353,19 @@ async fn run_live_codex_child_consumption(
             },
         );
         request.limits = live_limits();
-        CodexCliRuntime::new(codex_config())
+        if let Err(source) = CodexCliRuntime::new(codex_config())
             .run_session(
                 &mut view,
                 request,
                 AgentRunContext::new(AgentSessionId::new(), &BudgetSnapshot::default()),
             )
             .await
-            .expect("run live Codex AgentKit child-consumption stage");
+        {
+            panic!(
+                "run live Codex AgentKit child-consumption stage: {source:?}\n{}",
+                child_consumption_debug(&root)
+            );
+        }
         LiveChildConsumption {
             system_proof: fs::read_to_string(root.join("agent/child-system-proof.txt")).unwrap(),
             skill_proof: fs::read_to_string(root.join("agent/child-skill-proof.txt")).unwrap(),
@@ -367,10 +380,33 @@ struct LiveChildConsumption {
     skill_proof: String,
 }
 
+fn child_consumption_debug(root: &Path) -> String {
+    format!(
+        "workspace: {}\nroot files: {:?}\nagent files: {:?}\nprojected skill: {:?}\nlast message: {:?}",
+        root.display(),
+        sorted_names(root),
+        sorted_names(&root.join("agent")),
+        fs::read_to_string(root.join(".agents/skills/alpha/SKILL.md")).ok(),
+        fs::read_to_string(root.join(".leaven/codex-last-message.txt")).ok()
+    )
+}
+
+fn sorted_names(path: &Path) -> Vec<String> {
+    let Ok(entries) = fs::read_dir(path) else {
+        return Vec::new();
+    };
+    let mut names = entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    names.sort();
+    names
+}
+
 fn assert_live_codex_authored_child_files(root: &Path) {
     assert_eq!(
         fs::read_to_string(root.join("repos/agent/system_prompt.md")).unwrap(),
-        "Child system proof requirement: create agent/child-system-proof.txt containing exactly CHILD_SYSTEM_CONSUMED.\n"
+        "Child system proof requirement: create agent/child-system-proof.txt containing exactly CHILD_SYSTEM_CONSUMED\n"
     );
     assert_eq!(
         fs::read_to_string(root.join("repos/agent/skills/alpha/SKILL.md")).unwrap(),
