@@ -2524,6 +2524,22 @@ acceptance:
           `Candidate.summary()` now returns a deterministic one-line candidate
           description instead of a scaffold error. The mirrored-test contract
           now locks both modules to their matching tests.
+      - kind: public_evaluation_job_iterators_scaffold_removed
+        paths:
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/src/leaven/evaluation_job.py
+          - sdk/python/tests/test_evaluation_job.py
+        commands:
+          - cd sdk/python && uv run pytest tests/test_evaluation_job.py -q
+          - cd sdk/python && uv run ruff check src/leaven/evaluation_job.py tests/test_evaluation_job.py
+          - cd sdk/python && uv run ty check src/leaven/evaluation_job.py tests/test_evaluation_job.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+        note: >-
+          `EvaluationJob` now carries typed `EvaluationItem` rows and its
+          independent, pairwise, and listwise iterators validate the job kind
+          and item shape instead of raising scaffold errors. This makes the
+          evaluator invocation record usable without claiming assessment
+          submission or service execution is complete.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this
