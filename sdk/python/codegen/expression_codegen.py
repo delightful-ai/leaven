@@ -136,33 +136,33 @@ class PlanExpressionWorkspaceQuery(Struct, frozen=True, forbid_unknown_fields=Tr
 
 
 class PlanExpressionProject(Struct, frozen=True, forbid_unknown_fields=True, tag="project", tag_field="kind"):
-    input: WireJsonObject
+    input: "PlanExpression"
     projection: WireJsonObject
 
 
 class PlanExpressionFilter(Struct, frozen=True, forbid_unknown_fields=True, tag="filter", tag_field="kind"):
-    input: WireJsonObject
+    input: "PlanExpression"
     predicate: WireJsonObject
 
 
 class PlanExpressionSort(Struct, frozen=True, forbid_unknown_fields=True, tag="sort", tag_field="kind"):
-    input: WireJsonObject
+    input: "PlanExpression"
     keys: list[SortKey]
 
 
 class PlanExpressionLimit(Struct, frozen=True, forbid_unknown_fields=True, tag="limit", tag_field="kind"):
-    input: WireJsonObject
+    input: "PlanExpression"
     limit: int
 
 
 class PlanExpressionTemplate(Struct, frozen=True, forbid_unknown_fields=True, tag="template", tag_field="kind"):
     dialect: str
     template: str
-    vars: dict[str, WireJsonObject]
+    vars: dict[str, "PlanExpression"]
 
 
 class PlanExpressionExtract(Struct, frozen=True, forbid_unknown_fields=True, tag="extract", tag_field="kind"):
-    input: WireJsonObject
+    input: "PlanExpression"
     path: str
 
 
@@ -203,7 +203,7 @@ class ValueExprVar(Struct, frozen=True, forbid_unknown_fields=True, tag="var", t
 
 
 class ValueExprExtract(Struct, frozen=True, forbid_unknown_fields=True, tag="extract", tag_field="kind"):
-    input: WireJsonObject
+    input: "ValueExpr"
     path: str
 
 

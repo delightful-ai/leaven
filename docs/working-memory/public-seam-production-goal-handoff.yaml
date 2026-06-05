@@ -1949,10 +1949,10 @@ acceptance:
           `WireJsonObject` values. The generated expression module covers the
           locked top-level expression variants and typed graph-source refs, and
           focused tests prove graph-query source refs preserve `CandidateRef`
-          identity while unknown expression kinds are rejected. Nested
-          projection, predicate, case-query, workspace-query, and recursive
-          expression input/vars still remain JSON-shaped leaves until their
-          own generated owner slices; this evidence removes the top-level
+          identity while unknown expression kinds are rejected. Later evidence
+          typed recursive expression inputs and template vars; projection,
+          predicate, case-query, and workspace-query payload DSLs still need
+          their own generated owner slices. This evidence removes the top-level
           expression hole but does not close all Plan IR typing.
       - kind: generated_plan_preconditions_are_typed_records
         paths:
@@ -2019,11 +2019,37 @@ acceptance:
           an untagged JSON object. The generated union covers literal, var,
           extract, and extension value expressions, and focused tests prove
           literal and var values preserve their variant identity while unknown
-          value-expression kinds are rejected at msgspec decode time. Literal
-          values, extension payloads, and recursive extract inputs still carry
-          JSON-shaped leaves where the public schema itself leaves arbitrary
-          JSON or recursive expression content; those remain separate leaf
-          owner work rather than implicit approval.
+          value-expression kinds are rejected at msgspec decode time. Later
+          evidence typed recursive extract inputs; literal values and extension
+          payloads still carry JSON-shaped leaves where the public schema
+          itself leaves arbitrary JSON. Those remain separate leaf owner work
+          rather than implicit approval.
+      - kind: generated_recursive_plan_and_value_expr_inputs_are_typed_records
+        paths:
+          - sdk/python/codegen/expression_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/expressions.py
+          - sdk/python/tests/_seam/_wire/test_expressions.py
+        commands:
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_expressions.py tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_results.py -q
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run ruff check codegen/expression_codegen.py src/leaven/_seam/_wire/expressions.py tests/_seam/_wire/test_expressions.py
+          - cd sdk/python && uv run ty check codegen/expression_codegen.py src/leaven/_seam/_wire/expressions.py tests/_seam/_wire/test_expressions.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Generated recursive Plan expression slots now preserve expression
+          identity instead of accepting arbitrary JSON objects:
+          project/filter/sort/limit/extract `input` fields use
+          `PlanExpression`, and template vars use `dict[str, PlanExpression]`.
+          Generated `ValueExpr.extract.input` now uses `ValueExpr`. Focused
+          tests prove nested project input decodes as a concrete
+          `PlanExpressionLiteral`, nested value-extract input decodes as a
+          concrete `ValueExprVar`, and malformed recursive child objects are
+          rejected at the msgspec boundary. Projection, predicate,
+          graph-source filter, case-query, workspace-query, literal value, and
+          extension payload leaves remain explicit JSON-shaped follow-up work;
+          this removes recursive expression erasure, not the whole expression
+          row.
       - kind: generated_graph_write_proposal_effects_are_typed_records
         paths:
           - sdk/python/codegen/generate_seam_wire.py
