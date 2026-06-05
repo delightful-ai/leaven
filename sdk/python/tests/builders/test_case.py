@@ -5,6 +5,11 @@ import msgspec
 import pytest
 
 from leaven._seam import CaseLoadRequest
+from leaven._seam._wire.refs import (
+    CaseReadInputValue,
+    CaseReadMetadataValue,
+    CaseReadTargetValue,
+)
 from leaven._seam._wire.results import CaseLoadResult, CaseRecordPrimary
 from leaven.builders.case import CaseBuilder
 from leaven.json_value import JsonObject, JsonValue
@@ -89,9 +94,20 @@ async def test_target_denial_propagates_seam_error() -> None:
     assert client.request_value.method == "leaven/case.target"
 
 
+async def test_case_read_scalar_field_fails_public_object_projection() -> None:
+    """Regression: public Case fields require object-shaped case projections."""
+
+    client = FakeCaseSeamClient(scalar_input=True)
+    case_builder = CaseBuilder._for_seam(client, idempotency_prefix="case-scalar")
+
+    with pytest.raises(TypeError, match="case input read result must be a JSON object"):
+        await case_builder.load("case_scalar")
+
+
 class FakeCaseSeamClient:
-    def __init__(self, *, deny_target: bool = False) -> None:
+    def __init__(self, *, deny_target: bool = False, scalar_input: bool = False) -> None:
         self.deny_target = deny_target
+        self.scalar_input = scalar_input
         self.request_value = CaseLoadRequest(
             request_id="unset",
             plan_id="unset",
@@ -114,14 +130,17 @@ class FakeCaseSeamClient:
         case = _json_object(query["case"])
         case_id = case["id"]
         assert isinstance(case_id, str)
+        input_value = _case_input_value(
+            "not-an-object" if self.scalar_input else {"question": "2 + 2?"}
+        )
         return CaseLoadResult(
             method=method,
             primary=CaseRecordPrimary(
                 kind="case_record",
                 case=case_id,
-                input={"question": "2 + 2?"},
-                target={"answer": "4"},
-                metadata={"split": "validation"},
+                input=input_value,
+                target=_case_target_value({"answer": "4"}),
+                metadata=_case_metadata_value({"split": "validation"}),
                 receipt="caserec_builder",
                 data_classes=["public"],
                 replayability="fully_managed",
@@ -167,3 +186,15 @@ def _params_object(params: object) -> JsonObject:
     value = json.loads(msgspec.json.encode(params))
     assert isinstance(value, dict)
     return value
+
+
+def _case_input_value(value: JsonValue) -> CaseReadInputValue:
+    return msgspec.convert(value, type=CaseReadInputValue)
+
+
+def _case_target_value(value: JsonValue) -> CaseReadTargetValue:
+    return msgspec.convert(value, type=CaseReadTargetValue)
+
+
+def _case_metadata_value(value: JsonValue) -> CaseReadMetadataValue:
+    return msgspec.convert(value, type=CaseReadMetadataValue)

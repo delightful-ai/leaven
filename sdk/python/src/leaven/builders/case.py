@@ -8,9 +8,15 @@ from msgspec import UNSET
 
 from .._errors import UnboundBuilderError
 from .._seam import CaseLoadRequest
-from .._seam._wire.refs import CaseRef
+from .._seam._wire.refs import (
+    CaseReadInputValue,
+    CaseReadMetadataValue,
+    CaseReadTargetValue,
+    CaseRef,
+)
 from .._seam._wire.results import CaseLoadResult
 from ..case import Case
+from ..json_value import JsonObject
 
 CaseField = Literal["input", "target", "metadata"]
 
@@ -103,9 +109,9 @@ def _case_from_result(result: CaseLoadResult) -> Case:
     record = result.primary
     return Case(
         id=_case_id(record.case),
-        input={} if record.input is UNSET else record.input,
-        target=None if record.target is UNSET else record.target,
-        metadata={} if record.metadata is UNSET else record.metadata,
+        input={} if record.input is UNSET else _case_input_object(record.input),
+        target=None if record.target is UNSET else _case_target_object(record.target),
+        metadata={} if record.metadata is UNSET else _case_metadata_object(record.metadata),
     )
 
 
@@ -113,6 +119,24 @@ def _case_id(value: CaseRef) -> str:
     if isinstance(value, str):
         return value
     return value.id
+
+
+def _case_input_object(value: CaseReadInputValue) -> JsonObject:
+    if isinstance(value, dict):
+        return value
+    raise TypeError("case input read result must be a JSON object")
+
+
+def _case_target_object(value: CaseReadTargetValue) -> JsonObject:
+    if isinstance(value, dict):
+        return value
+    raise TypeError("case target read result must be a JSON object")
+
+
+def _case_metadata_object(value: CaseReadMetadataValue) -> JsonObject:
+    if isinstance(value, dict):
+        return value
+    raise TypeError("case metadata read result must be a JSON object")
 
 
 __all__ = ["CaseBuilder", "CaseField"]
