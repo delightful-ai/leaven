@@ -1,9 +1,11 @@
+import inspect
 import json
 import subprocess
 import sys
 from pathlib import Path
 
 import msgspec
+import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
 import leaven as lv
@@ -80,6 +82,15 @@ def test_optimize_surface_names_the_four_product_inputs() -> None:
     assert environment.task == task
     assert environment.rubric == rubric
     assert rollout.layout == layout
+
+
+def test_gepa_rejects_unimplemented_judge_keyword() -> None:
+    """Boundary check: GEPA does not accept inert public stage knobs."""
+
+    signature = inspect.signature(lv.optimizers.gepa)
+    assert "judge" not in signature.parameters
+    with pytest.raises(TypeError, match="judge"):
+        signature.bind(judge=dummy_reward)
 
 
 @lv.reward

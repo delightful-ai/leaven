@@ -5,8 +5,8 @@ in one file (or a thin orchestration file referencing modules per stage). It
 exercises every role the front door exposes on the new surface:
 
 - the inner loop as an `Environment`: `Rollout.agent()` + a multi-reward `Rubric`
-- the outer loop on the optimizer: a custom reflector, a custom proposer, and an
-  optional pairwise judge, attached via `gepa(reflect=, propose=, judge=, ...)`
+- the outer loop on the optimizer: a custom reflector and a custom proposer,
+  attached via `gepa(reflect=, propose=, ...)`
 
 Scoring here is a `Rubric` of `@lv.reward` functions — the ordinary path. The
 hand-authored `@lv.evaluator` escape hatch is a separate, advanced surface; see
@@ -19,12 +19,8 @@ import asyncio
 from pathlib import Path
 
 import leaven as lv
-from leaven.assessment import AssessmentWrite
-from leaven.evidence import EvidenceEnvelope
-from leaven.json_value import JsonValue
 from leaven.proposal import ProposalBatch, SkillProposal
 from leaven.stage_payloads import (
-    JudgeRequest,
     ProposeRequest,
     ReflectionResult,
     ReflectRequest,
@@ -106,45 +102,6 @@ async def propose(req: ProposeRequest, cx: lv.ProposeContext) -> ProposalBatch:
     return ProposalBatch.from_skill_proposal(session.parsed)
 
 
-# ----- outer loop: judge — pairwise preference between two candidates -------
-
-
-@lv.judge(stage_id="examples/09-pairwise-judge")
-async def judge(req: JudgeRequest, cx: lv.JudgeContext) -> AssessmentWrite:
-    case = await cx.case.load(req.case_id, include=("input", "target"))
-    response = await cx.lm.complete(
-        messages=[
-            {"role": "system", "content": "Pairwise judge: pick the better candidate."},
-            {
-                "role": "user",
-                "content": (
-                    f"Q: {case.input['question']}\nRubric: "
-                    f"{_target_rubric(case)}\nCandidates: {req.candidates}"
-                ),
-            },
-        ],
-        model_role="judge",
-    )
-    return AssessmentWrite.pairwise(
-        candidates=req.candidates,
-        case=req.case_id,
-        preference=req.candidates[0],  # judge picks; demo uses first
-        score=lv.Score(value=1.0, feedback=response.text),
-        evidence=EvidenceEnvelope.public_only(
-            payload={"feedback": response.text},
-            data_classes=[lv.data_class.CANDIDATE_OUTPUT, lv.data_class.OPTIMIZER_VISIBLE],
-        ),
-        effect_receipts=[response.receipt],
-        replayability="boundary_managed",
-    )
-
-
-def _target_rubric(case: lv.Case) -> JsonValue:
-    if case.target is None or "rubric" not in case.target:
-        return "exact match"
-    return case.target["rubric"]
-
-
 # ----- composition: an EvoSkill-shaped optimization, all roles wired --------
 
 
@@ -166,7 +123,6 @@ async def amain() -> None:
         objective="objective",
         reflect=lv.Reflect.fn(reflect),
         propose=lv.Propose.fn(propose),
-        judge=judge,
     )
     result = await lv.optimize(
         seed=lv.SkillBank.empty(),

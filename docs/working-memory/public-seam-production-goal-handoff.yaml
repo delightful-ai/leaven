@@ -4491,6 +4491,27 @@ acceptance:
           `Awaitable[object]`. Dynamic subprocess loading still narrows with
           casts after checking `stage.role`, and GEPA judge typing remains a
           separate stage surface.
+      - kind: gepa_judge_scaffold_removed
+        paths:
+          - sdk/python/src/leaven/optimizers/gepa.py
+          - sdk/python/examples/09_full_repro.py
+          - sdk/python/tests/test_stage_surface.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && uv run pytest tests/test_stage_surface.py tests/test_optimize.py tests/test_optimize_proposer_mechanics.py -q
+          - cd sdk/python && uv run ruff check src/leaven/optimizers/gepa.py tests/test_stage_surface.py examples/09_full_repro.py
+          - cd sdk/python && uv run ty check src/leaven/optimizers/gepa.py tests/test_stage_surface.py examples/09_full_repro.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - rg -n 'judge=|gepa\([^\n]*judge|optional pairwise judge|RegisteredStage\[object, object\]|cast\(' sdk/python/src/leaven/optimizers/gepa.py sdk/python/examples docs/specs/leaven_python.md sdk/python/tests/test_stage_surface.py -g '*.py' -g '*.md'
+        note: >-
+          `lv.optimizers.gepa(...)` no longer accepts or stores the unused
+          `judge` stage option. The option was public configuration scaffolding:
+          the current Python optimize path never consumed it. The full-repro
+          example no longer advertises `gepa(..., judge=...)`, and a focused
+          signature test proves the old keyword is rejected. The targeted grep
+          has no stale GEPA judge advertisement or `RegisteredStage[object,
+          object]`/`cast(...)` erasure in the GEPA config or examples; the only
+          `judge` keyword match is the negative test.
       - kind: sdk_quality_gate_lint_type_tests_package
         paths:
           - sdk/python/pyproject.toml
