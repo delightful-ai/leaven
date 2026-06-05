@@ -19,6 +19,7 @@ from leaven._seam import (
     OpenAiLmRuntimeConfig,
     StageRunRequest,
 )
+from leaven._seam._wire.calls import LmContentText, LmMessage
 from leaven._seam._wire.codec import encode_request
 from leaven._seam._wire.payloads import BlobRef as WireBlobRef
 from leaven._seam._wire.payloads import Cost
@@ -597,7 +598,7 @@ class FakeLmSeamClient:
             request_id="unset",
             plan_id="unset",
             idempotency_key="unset",
-            messages=[{"role": "user", "content": [{"kind": "text", "text": "unset"}]}],
+            messages=[LmMessage(role="user", content=[LmContentText(text="unset")])],
             model="unset",
         )
 

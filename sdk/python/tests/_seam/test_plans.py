@@ -4,7 +4,13 @@ import msgspec
 
 from leaven._seam import CaseLoadRequest
 from leaven._seam._wire import JsonObject
-from leaven._seam._wire.calls import AgentRunCall, LmCompleteCall, WorkspaceMaterializeCall
+from leaven._seam._wire.calls import (
+    AgentRunCall,
+    LmCompleteCall,
+    LmContentText,
+    LmMessage,
+    WorkspaceMaterializeCall,
+)
 from leaven._seam._wire.expressions import CaseQueryLoad, PlanExpressionCaseQuery
 from leaven._seam._wire.json_value import json_object
 from leaven._seam._wire.payloads import (
@@ -98,7 +104,7 @@ def test_lm_request_params_decode_typed_call_variant() -> None:
         request_id="lm-test",
         plan_id="plan-lm-test",
         idempotency_key="idem-lm-test",
-        messages=[{"role": "user", "content": [{"kind": "text", "text": "say ok"}]}],
+        messages=[LmMessage(role="user", content=[LmContentText(text="say ok")])],
         model="gpt-test",
         max_tokens=16,
     )

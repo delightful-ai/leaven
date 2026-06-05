@@ -11,9 +11,16 @@ from pydantic import BaseModel, ConfigDict
 from .._errors import UnboundBuilderError
 from .._receipts import CallReceipt
 from .._seam import LmCompleteRequest
-from .._seam._wire import JsonObject
-from .._seam._wire.calls import LmTool as WireLmTool
-from .._seam._wire.json_value import json_object, json_value
+from .._seam._wire.calls import (
+    LmContentText,
+)
+from .._seam._wire.calls import (
+    LmMessage as WireLmMessage,
+)
+from .._seam._wire.calls import (
+    LmTool as WireLmTool,
+)
+from .._seam._wire.json_value import json_value
 from .._seam._wire.payloads import Cost
 from .._seam._wire.refs import ExtensionJsonPayload, WireJsonSchemaObject
 from .._seam._wire.results import LmCompleteResult
@@ -101,7 +108,7 @@ class LmBuilder:
         self,
         *,
         prompt: str | None = None,
-        messages: Sequence[LmMessage] | Sequence[JsonObject] | None = None,
+        messages: Sequence[LmMessage] | None = None,
         model: str | None = None,
         model_role: str | None = None,
         temperature: float | None = None,
@@ -118,7 +125,7 @@ class LmBuilder:
         self,
         *,
         prompt: str | None = None,
-        messages: Sequence[LmMessage] | Sequence[JsonObject] | None = None,
+        messages: Sequence[LmMessage] | None = None,
         model: str | None = None,
         model_role: str | None = None,
         temperature: float | None = None,
@@ -134,7 +141,7 @@ class LmBuilder:
         self,
         *,
         prompt: str | None = None,
-        messages: Sequence[LmMessage] | Sequence[JsonObject] | None = None,
+        messages: Sequence[LmMessage] | None = None,
         model: str | None = None,
         model_role: str | None = None,
         temperature: float | None = None,
@@ -189,30 +196,23 @@ class _SeamRequester(Protocol):
 def _messages_to_wire(
     *,
     prompt: str | None,
-    messages: Sequence[LmMessage] | Sequence[JsonObject] | None,
-) -> list[JsonObject]:
+    messages: Sequence[LmMessage] | None,
+) -> list[WireLmMessage]:
     if (prompt is None) == (messages is None):
         raise ValueError("exactly one of prompt= or messages= is required")
     if prompt is not None:
-        return [_message_to_wire({"role": "user", "content": prompt})]
+        return [_message_to_wire(LmMessage(role="user", content=prompt))]
     assert messages is not None
     return [_message_to_wire(message) for message in messages]
 
 
-def _message_to_wire(message: LmMessage | JsonObject) -> JsonObject:
-    value = message.model_dump() if isinstance(message, LmMessage) else dict(message)
-    content = value["content"]
-    if isinstance(content, str):
-        content = [{"kind": "text", "text": content}]
-    elif not isinstance(content, list):
-        raise TypeError("LmBuilder.complete requires text message content")
-    wire = {
-        "role": value["role"],
-        "content": content,
-    }
-    if "tool_call_id" in value and value["tool_call_id"] is not None:
-        wire["tool_call_id"] = value["tool_call_id"]
-    return json_object(wire)
+def _message_to_wire(message: LmMessage) -> WireLmMessage:
+    tool_call_id = message.tool_call_id if message.tool_call_id is not None else UNSET
+    return WireLmMessage(
+        role=message.role,
+        content=[LmContentText(text=message.content)],
+        tool_call_id=tool_call_id,
+    )
 
 
 def _tool_to_wire(tool: LmTool) -> WireLmTool:

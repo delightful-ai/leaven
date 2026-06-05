@@ -5,7 +5,6 @@ from dataclasses import dataclass
 
 from msgspec import UNSET, convert
 
-from leaven._seam._wire import JsonObject
 from leaven._seam._wire.calls import (
     LmCompleteCall,
     LmMessage,
@@ -15,6 +14,7 @@ from leaven._seam._wire.calls import (
     LmSampling,
     LmTool,
 )
+from leaven._seam._wire.json_value import JsonObject
 from leaven._seam._wire.payloads import CommitPolicyNoGraphWrites, PlanDocument, PlanOp
 from leaven._seam._wire.refs import WireJsonSchemaObject
 
@@ -28,7 +28,7 @@ class LmCompleteRequest:
     request_id: str
     plan_id: str
     idempotency_key: str
-    messages: Sequence[JsonObject]
+    messages: Sequence[LmMessage]
     model: str
     model_role: str | None = None
     temperature: float | None = None
@@ -69,7 +69,7 @@ class LmCompleteRequest:
                 purpose="python.sdk",
                 model=self.model,
                 model_role=self.model_role if self.model_role is not None else UNSET,
-                messages=[convert(message, type=LmMessage) for message in self.messages],
+                messages=list(self.messages),
                 output=_wire_lm_output_contract(
                     self.output or {"kind": "final_message", "max_bytes": 512}
                 ),

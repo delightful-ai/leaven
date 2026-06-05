@@ -7,7 +7,6 @@ from pydantic import BaseModel
 
 from .._errors import UnsupportedConfigurationError
 from .._receipts import CallReceipt
-from .._seam._wire import JsonObject
 from ..builders.lm import LmBuilder, LmMessage, LmResponse, LmTool, _lm_response_from_result
 from ..json_value import JsonValue
 from ..output import JsonSchemaOutput, JsonSchemaValueOutput
@@ -39,7 +38,7 @@ class CallbackLmBuilder(LmBuilder):
         self,
         *,
         prompt: str | None = None,
-        messages: Sequence[LmMessage] | Sequence[JsonObject] | None = None,
+        messages: Sequence[LmMessage] | None = None,
         model: str | None = None,
         model_role: str | None = None,
         temperature: float | None = None,
@@ -56,7 +55,7 @@ class CallbackLmBuilder(LmBuilder):
         self,
         *,
         prompt: str | None = None,
-        messages: Sequence[LmMessage] | Sequence[JsonObject] | None = None,
+        messages: Sequence[LmMessage] | None = None,
         model: str | None = None,
         model_role: str | None = None,
         temperature: float | None = None,
@@ -72,7 +71,7 @@ class CallbackLmBuilder(LmBuilder):
         self,
         *,
         prompt: str | None = None,
-        messages: Sequence[LmMessage] | Sequence[JsonObject] | None = None,
+        messages: Sequence[LmMessage] | None = None,
         model: str | None = None,
         model_role: str | None = None,
         temperature: float | None = None,

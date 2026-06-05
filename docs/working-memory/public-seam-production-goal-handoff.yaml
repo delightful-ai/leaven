@@ -1801,6 +1801,48 @@ acceptance:
           checked-in wire output matches the codegen source. This narrows one
           generated wire mismatch but does not close the full typed-seam row:
           remaining Plan IR/result JSON islands still need typed owners.
+      - kind: lm_message_request_uses_generated_wire_records
+        paths:
+          - sdk/python/src/leaven/_seam/lm_plans.py
+          - sdk/python/src/leaven/builders/lm.py
+          - sdk/python/src/leaven/_stage_runtime/lm.py
+          - sdk/python/tests/builders/test_lm.py
+          - sdk/python/tests/_seam/test_plans.py
+          - sdk/python/tests/test_stage_surface.py
+          - sdk/python/tests/_stage_runtime/test_lm.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/builders/test_lm.py tests/_seam/test_plans.py tests/test_stage_surface.py::test_lm_builder_complete_uses_bound_public_seam_client tests/_stage_runtime/test_lm.py tests/_seam/_wire/test_calls.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_seam/lm_plans.py src/leaven/builders/lm.py src/leaven/_stage_runtime/lm.py tests/builders/test_lm.py tests/_seam/test_plans.py tests/test_stage_surface.py tests/_stage_runtime/test_lm.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/lm_plans.py src/leaven/builders/lm.py src/leaven/_stage_runtime/lm.py tests/builders/test_lm.py tests/_seam/test_plans.py tests/test_stage_surface.py tests/_stage_runtime/test_lm.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - >-
+            ! rg -n
+            "Sequence\[LmMessage\] \| Sequence\[JsonObject\]|messages:
+            Sequence\[JsonObject\]|convert\(message, type=LmMessage\)|def
+            _message_to_wire\(message: LmMessage \| JsonObject\)|dict\(message\)"
+            sdk/python/src/leaven/_seam/lm_plans.py
+            sdk/python/src/leaven/builders/lm.py
+            sdk/python/src/leaven/_stage_runtime/lm.py
+            sdk/python/tests/builders/test_lm.py
+            sdk/python/tests/_seam/test_plans.py
+            sdk/python/tests/test_stage_surface.py
+        note: >-
+          The Python LM request path no longer accepts or stores raw
+          `JsonObject` messages before the Plan JSON boundary.
+          `LmBuilder.complete(...)` and callback-backed `cx.lm.complete(...)`
+          now accept only public `LmMessage` records for explicit message
+          lists; prompt strings lower directly into generated msgspec
+          `LmMessage`/`LmContentText` records. The private
+          `LmCompleteRequest.messages` field is typed as generated
+          `LmMessage`, and the plan builder passes those generated records into
+          `LmCompleteCall` without `msgspec.convert(...)` over raw message
+          dictionaries. Focused tests assert the request object already carries
+          generated wire records before JSON encoding. This closes the LM
+          message raw-dict island only; other output contracts, capability
+          config records, callback payloads, and run-inspection leaf values
+          still require typed owners before the row can be marked done.
       - kind: extension_result_receipts_match_rust_audit_shape
         paths:
           - sdk/python/codegen/result_codegen.py

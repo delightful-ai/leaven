@@ -7,6 +7,8 @@ from pydantic import BaseModel
 
 import leaven as lv
 from leaven._seam import LmCompleteRequest
+from leaven._seam._wire.calls import LmContentText
+from leaven._seam._wire.calls import LmMessage as WireLmMessage
 from leaven._seam._wire.payloads import Cost
 from leaven._seam._wire.refs import ExtensionJsonPayload
 from leaven._seam._wire.results import (
@@ -15,7 +17,7 @@ from leaven._seam._wire.results import (
     LmMessageRecord,
     LmResponsePrimary,
 )
-from leaven.builders.lm import LmBuilder, LmTool
+from leaven.builders.lm import LmBuilder, LmMessage, LmTool
 from leaven.json_value import JsonObject, JsonValue
 
 
@@ -59,6 +61,10 @@ async def test_lm_builder_complete_lowers_json_schema_response_format() -> None:
         ],
     )
 
+    request_message = client.request_value.messages[0]
+    assert isinstance(request_message, WireLmMessage)
+    assert isinstance(request_message.content[0], LmContentText)
+    assert request_message.content[0].text == "Answer as JSON."
     params = _params_object(client.request_value.to_params())
     ops = _json_array(params["ops"])
     call = _json_object(_json_object(ops[0])["call"])
@@ -88,6 +94,29 @@ async def test_lm_builder_complete_lowers_json_schema_response_format() -> None:
     assert response.parsed == {"answer": "ok"}
 
 
+async def test_lm_builder_complete_lowers_message_records_without_raw_json() -> None:
+    """Example: explicit messages are typed before the Plan JSON boundary."""
+
+    client = FakeLmSeamClient()
+    lm = LmBuilder._for_seam(
+        client,
+        idempotency_prefix="lm-builder-messages",
+        plan_id="planlmbuildermsgs001",
+        model="gpt-4.1-mini",
+    )
+
+    response = await lm.complete(
+        messages=[LmMessage(role="developer", content="Use short answers.")],
+    )
+
+    request_message = client.request_value.messages[0]
+    assert isinstance(request_message, WireLmMessage)
+    assert request_message.role == "developer"
+    assert isinstance(request_message.content[0], LmContentText)
+    assert request_message.content[0].text == "Use short answers."
+    assert response.text == '{"answer":"ok"}'
+
+
 async def test_lm_builder_complete_parses_model_backed_json_schema_output() -> None:
     """Example: model-backed response_format owns the parsed result type."""
 
@@ -114,7 +143,7 @@ class FakeLmSeamClient:
             request_id="unset",
             plan_id="unset",
             idempotency_key="unset",
-            messages=[{"role": "user", "content": [{"kind": "text", "text": "unset"}]}],
+            messages=[WireLmMessage(role="user", content=[LmContentText(text="unset")])],
             model="unset",
         )
 
