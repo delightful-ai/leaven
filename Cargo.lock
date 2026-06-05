@@ -3491,6 +3491,7 @@ dependencies = [
  "leaven-agent",
  "leaven-agent-codex-cli",
  "leaven-agentic-agent-kit",
+ "leaven-agentic-git",
  "leaven-artifact-agent-kit",
  "leaven-artifact-git",
  "leaven-core",

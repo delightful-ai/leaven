@@ -2,10 +2,11 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use leaven_agentic_agent_kit::AgentKitMountMode;
+use leaven_agentic_agent_kit::{AgentKitMountMode, CodexAgentKitMaterializer};
+use leaven_agentic_git::{GitProgramMaterializer, GitProgramReadback, GitProgramStores};
 use leaven_artifact_git::{
-    GitArtifactIdentityMode, GitPath, GitProgramArtifact, GitProgramChange, GitProgramLayout,
-    GitRepoArtifact, GitRevision, RepoKey, RepoRef,
+    GitArtifactIdentityMode, GitObjectId, GitPath, GitProgramArtifact, GitProgramChange,
+    GitProgramLayout, GitRepoArtifact, GitRevision, RepoKey, RepoRef,
 };
 use leaven_core::{InfoRef, OptimizationProblem, Proposal, ProposalBatch, ProposalBatchSemantics};
 use leaven_engine::{
@@ -16,6 +17,8 @@ use leaven_gepa_agentic_agent_kit::{
     AgentKitReflectionPart, CodexAgentKitReflectionInput, CodexAgentKitReflectionSmoke,
 };
 use leaven_kernel::{Budget, Cost, MetadataBag, Metered, ProposerId, RunId};
+use leaven_workspace::{Command, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
+use leaven_workspace_local::LocalWorkspaceFactory;
 
 #[test]
 fn codex_agent_kit_reflection_projects_system_prompt_and_applies_git_child() {
@@ -106,6 +109,115 @@ fn codex_agent_kit_reflection_projects_system_prompt_and_applies_git_child() {
     });
 }
 
+#[test]
+fn codex_agent_kit_reflection_reads_back_git_workspace_child_before_next_projection() {
+    futures::executor::block_on(async {
+        let fixture = AgentKitRepoFixture::new();
+        let parent_artifact = fixture.program_artifact();
+        let stores = fixture.stores();
+        let mut first_workspace = LocalWorkspaceFactory::temp()
+            .allocate(WorkspaceConfig::default())
+            .await
+            .unwrap();
+        let mut view = first_workspace.view();
+        GitProgramMaterializer::new(stores.clone())
+            .materialize_program(&parent_artifact, &mut view)
+            .unwrap();
+        let first_root = view.local_mount().unwrap().to_path_buf();
+
+        let projected = CodexAgentKitMaterializer::new(AgentKitMountMode::Copy)
+            .materialize(first_root.join("repos/agent"), &first_root)
+            .unwrap();
+        assert_eq!(
+            projected.system_prompt.as_deref(),
+            Some("Prefer parent behavior.\n")
+        );
+        assert!(first_root.join(".agents/skills/alpha/SKILL.md").exists());
+
+        write_workspace_file(
+            &mut view,
+            "repos/agent/system_prompt.md",
+            "Prefer applied child behavior.\n",
+        );
+        write_workspace_file(
+            &mut view,
+            "repos/agent/skills/alpha/SKILL.md",
+            "---\nname: alpha\ndescription: Alpha skill.\n---\n\nDo applied child work.\n",
+        );
+        workspace_git(&mut view, "repos/agent", ["add", "."]);
+        workspace_git(
+            &mut view,
+            "repos/agent",
+            ["commit", "-m", "evolve agent kit"],
+        );
+
+        let change = GitProgramReadback::new(stores.clone())
+            .read_back_change(&parent_artifact, &mut view)
+            .unwrap()
+            .expect("dirty AgentKit repo must read back a typed GitProgramChange");
+
+        let mut graph = RunGraph::<AgentKitGitProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::new(Budget::unlimited());
+        let parent = {
+            let mut ctx = RunContext::<AgentKitGitProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(parent_artifact.clone(), 0).unwrap()
+        };
+        let proposal = Proposal::mutate(parent, change.clone())
+            .informed_by([InfoRef::Candidate(parent)])
+            .build();
+        let batch = ProposalBatch {
+            proposals: vec![proposal],
+            semantics: ProposalBatchSemantics::Alternatives,
+            metadata: MetadataBag::new(),
+        };
+        let child = {
+            let mut ctx = RunContext::<AgentKitGitProblem>::new(&mut graph, &mut budget);
+            let proposed = ctx
+                .propose(&PrebuiltProposalProposer::new(batch), ())
+                .await
+                .unwrap();
+            ctx.apply_batch(proposed.batch_id)
+                .unwrap()
+                .successful_candidates()
+                .next()
+                .unwrap()
+        };
+        let child_artifact = {
+            let ctx = RunContext::<AgentKitGitProblem>::new(&mut graph, &mut budget);
+            assert_eq!(ctx.graph().parents(child), vec![parent]);
+            ctx.graph().artifact(child).unwrap().clone()
+        };
+
+        drop(view);
+        first_workspace.cleanup().await.unwrap();
+
+        let mut second_workspace = LocalWorkspaceFactory::temp()
+            .allocate(WorkspaceConfig::default())
+            .await
+            .unwrap();
+        let mut second_view = second_workspace.view();
+        GitProgramMaterializer::new(stores)
+            .materialize_program(&child_artifact, &mut second_view)
+            .unwrap();
+        let second_root = second_view.local_mount().unwrap().to_path_buf();
+        let next_projection = CodexAgentKitMaterializer::new(AgentKitMountMode::Copy)
+            .materialize(second_root.join("repos/agent"), &second_root)
+            .unwrap();
+
+        assert_eq!(
+            next_projection.system_prompt.as_deref(),
+            Some("Prefer applied child behavior.\n")
+        );
+        assert_eq!(
+            fs::read_to_string(second_root.join(".agents/skills/alpha/SKILL.md")).unwrap(),
+            "---\nname: alpha\ndescription: Alpha skill.\n---\n\nDo applied child work.\n"
+        );
+
+        drop(second_view);
+        second_workspace.cleanup().await.unwrap();
+    });
+}
+
 #[derive(Clone, Debug)]
 struct AgentKitGitProblem;
 
@@ -175,6 +287,101 @@ hooks = "hooks/"
     fs::write(root.join("hooks/pre-run.sh"), "exit 1\n").unwrap();
 }
 
+struct AgentKitRepoFixture {
+    _temp: tempfile::TempDir,
+    bare_store: std::path::PathBuf,
+    parent_commit: GitObjectId,
+}
+
+impl AgentKitRepoFixture {
+    fn new() -> Self {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("agent-source");
+        let bare_store = temp.path().join("agent.git");
+        fs::create_dir_all(&source).unwrap();
+        run_host_git(&source, ["init", "--initial-branch=main"]);
+        run_host_git(&source, ["config", "user.name", "Leaven Test"]);
+        run_host_git(&source, ["config", "user.email", "leaven@example.invalid"]);
+        write_agent_kit_repo(&source);
+        run_host_git(&source, ["add", "."]);
+        run_host_git(&source, ["commit", "-m", "seed agent kit"]);
+        let parent_commit = git_object(host_git_output(&source, ["rev-parse", "HEAD"]).trim());
+        let parent = temp.path();
+        run_host_git_at(
+            parent,
+            [
+                "clone",
+                "--bare",
+                source.file_name().unwrap().to_str().unwrap(),
+                "agent.git",
+            ],
+        );
+        Self {
+            _temp: temp,
+            bare_store,
+            parent_commit,
+        }
+    }
+
+    fn stores(&self) -> GitProgramStores {
+        GitProgramStores::new(BTreeMap::from([(
+            repo_key("agent"),
+            self.bare_store.clone(),
+        )]))
+        .unwrap()
+    }
+
+    fn program_artifact(&self) -> GitProgramArtifact {
+        program_artifact(GitRevision::Commit(self.parent_commit.clone()))
+    }
+}
+
+fn write_agent_kit_repo(root: &Path) {
+    fs::create_dir_all(root.join("skills/alpha")).unwrap();
+    fs::create_dir_all(root.join("hooks")).unwrap();
+    fs::write(
+        root.join("manifest.toml"),
+        r#"
+schema = "v1"
+system_prompt = "system_prompt.md"
+agent_docs = "AGENTS.md"
+skills = "skills/"
+hooks = "hooks/"
+"#,
+    )
+    .unwrap();
+    fs::write(root.join("system_prompt.md"), "Prefer parent behavior.\n").unwrap();
+    fs::write(root.join("AGENTS.md"), "Keep child projection visible.\n").unwrap();
+    fs::write(
+        root.join("skills/alpha/SKILL.md"),
+        "---\nname: alpha\ndescription: Alpha skill.\n---\n\nDo parent work.\n",
+    )
+    .unwrap();
+    fs::write(root.join("hooks/pre-run.sh"), "exit 1\n").unwrap();
+}
+
+fn write_workspace_file(view: &mut leaven_workspace::WorkspaceView<'_>, path: &str, body: &str) {
+    view.write_file(&workspace_path(path), body.as_bytes())
+        .unwrap();
+}
+
+fn workspace_git<const N: usize>(
+    view: &mut leaven_workspace::WorkspaceView<'_>,
+    cwd: &str,
+    args: [&str; N],
+) {
+    let mut command = Command::new("git");
+    command.cwd = Some(workspace_path(cwd));
+    command.args = args.iter().map(|arg| (*arg).to_owned()).collect();
+    let output = view.run_command(command).unwrap();
+    assert!(
+        output.status.code == Some(0),
+        "git {} failed: {}",
+        args.join(" "),
+        String::from_utf8_lossy(&output.stderr.bytes)
+    );
+}
+
 fn program_artifact(revision: GitRevision) -> GitProgramArtifact {
     let key = repo_key("agent");
     GitProgramArtifact::new(
@@ -203,4 +410,45 @@ fn git_path(path: &str) -> GitPath {
 
 fn commit(byte: &str) -> GitRevision {
     GitRevision::commit(format!("{byte:0<40}")).unwrap()
+}
+
+fn workspace_path(path: &str) -> WorkspacePath {
+    WorkspacePath::new(path).unwrap()
+}
+
+fn git_object(hex: &str) -> GitObjectId {
+    GitObjectId::new(hex).unwrap()
+}
+
+fn run_host_git<const N: usize>(cwd: &Path, args: [&str; N]) {
+    run_host_git_at(cwd, args);
+}
+
+fn run_host_git_at<const N: usize>(cwd: &Path, args: [&str; N]) {
+    let output = std::process::Command::new("git")
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git {} failed: {}",
+        args.join(" "),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn host_git_output<const N: usize>(cwd: &Path, args: [&str; N]) -> String {
+    let output = std::process::Command::new("git")
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git {} failed: {}",
+        args.join(" "),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).unwrap()
 }

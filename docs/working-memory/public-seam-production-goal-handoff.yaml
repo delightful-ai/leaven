@@ -2637,7 +2637,39 @@ acceptance:
         - durable checkpoint/readback of the applied child artifact
         - a later live Codex stage that sees the evolved skill or system prompt
         - evaluation or assessment evidence showing seed-vs-child behavior
-    evidence: []
+    evidence:
+      - kind: codex_agent_kit_git_materialization_readback_foundation
+        paths:
+          - crates/leaven-gepa-agentic-agent-kit/Cargo.toml
+          - crates/leaven-gepa-agentic-agent-kit/tests/codex_agent_kit_reflection.rs
+          - crates/leaven-agentic-git/tests/git_program_materializer.rs
+          - crates/leaven-agentic-agent-kit/tests/codex_profile.rs
+          - crates/leaven-artifact-agent-kit/tests/agent_kit_contract.rs
+          - crates/leaven-workspace-firkin/tests/firkin_contract/firkin_git_e2e.rs
+        commands:
+          - cargo test -p leaven-gepa-agentic-agent-kit --test codex_agent_kit_reflection
+          - cargo test -p leaven-gepa-agentic-agent-kit
+          - cargo test -p leaven-artifact-agent-kit --test agent_kit_contract
+          - cargo test -p leaven-agentic-agent-kit --test codex_profile
+          - cargo test -p leaven-agentic-git --test git_program_materializer
+          - cargo test -p leaven-workspace-firkin --test firkin_contract firkin_product_pod_materializes_and_reads_back_isolated_git_workspaces
+          - cargo test -p leaven --test topology_contract
+        note: >-
+          The AgentKit bridge now has a deterministic substrate proof that
+          starts from a bare Git repo store, materializes the repo into a local
+          workspace through `leaven-agentic-git`, projects the Codex AgentKit
+          profile, mutates `system_prompt.md` and `.agents/skills` through
+          workspace filesystem/git commands, imports the child with
+          `GitProgramReadback`, applies it through `RunContext::propose` plus
+          `apply_batch`, then materializes the child into a fresh workspace and
+          proves the next Codex projection sees the changed system prompt and
+          skill body. Adjacent focused suites prove AgentKit manifest/profile
+          validation, Codex filesystem projection, Git patch/bundle/dirty
+          readback including no-local-mount cases, and a host-backed Firkin
+          product-pod git workspace path. This is foundation evidence only: it
+          does not run live `gpt-5.4-mini`, route `proposal.submit_batch` or
+          `proposal.apply` through `leaven seam serve --stdio`, or prove durable
+          checkpoint/readback for the applied child.
     closeout_check: >-
       A live Codex prompt-consumption test, a deterministic AgentKit projection
       test, or `proposal.submit_batch` without application cannot close this
