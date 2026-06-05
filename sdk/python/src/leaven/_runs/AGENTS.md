@@ -7,7 +7,9 @@ inspect a completed run after the original Python process exits, and it may
 invoke `leaven run inspect --run-dir ...` to attach Rust-owned checkpoint/graph
 readback to `lv.runs.inspect(...)`, and invoke
 `leaven run blob --run-dir ... --store ... --key ...` to retrieve bytes for
-Rust-owned blob refs exposed by that inspection export.
+Rust-owned blob refs exposed by that inspection export, and invoke
+`leaven run evidence --run-dir ... --store ... --key ...` to retrieve bytes
+for Rust-owned evidence refs exposed by that inspection export.
 
 It may know the private JSON file layout and artifact codecs needed to
 round-trip current SDK result objects. It must not spawn the seam server, own
@@ -22,6 +24,8 @@ inspection namespace.
   `leaven run inspect --run-dir <path>`.
 - The installed/built `leaven` CLI public command:
   `leaven run blob --run-dir <path> --store <store> --key <key>`.
+- The installed/built `leaven` CLI public command:
+  `leaven run evidence --run-dir <path> --store <store> --key <key>`.
 
 ## Private Dependencies
 
@@ -34,6 +38,6 @@ inspection namespace.
 
 - `codec.py`: JSON envelope and current artifact round-trip codecs.
 - `rust_export.py`: private subprocess bridge to Rust-owned checkpoint/graph
-  inspection and run-blob byte exports.
+  inspection, run-blob byte exports, and evidence byte exports.
 - `store.py`: deterministic run-directory write/read/list operations.
 - `__init__.py`: private map-only re-export.

@@ -203,6 +203,7 @@ def test_load_rust_evidence_readback_invokes_leaven_run_evidence(tmp_path: Path)
     assert evidence.evidence.store == "leaven-run"
     assert evidence.evidence.key == "0"
     assert evidence.content_bytes() == b'{"score":1,"case":"a"}\n'
+    assert evidence.content_json() == {"score": 1, "case": "a"}
     assert calls.read_text(encoding="utf-8").splitlines() == [
         "run",
         "evidence",
@@ -305,6 +306,99 @@ def test_runs_open_prefers_rust_checkpoint_without_optimized_json(
     assert [candidate.id for candidate in result.lineage("cand_child")] == [
         "cand_child",
         "cand_seed",
+    ]
+
+
+def test_runs_inspect_uses_rust_checkpoint_blob_and_evidence_without_optimized_json(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_dir = tmp_path / "run"
+    (run_dir / "checkpoints").mkdir(parents=True)
+    (run_dir / "checkpoints" / "LATEST").write_text("checkpoint_1\n", encoding="utf-8")
+    fake = tmp_path / "leaven"
+    calls = tmp_path / "calls.txt"
+    readback = tmp_path / "readback.json"
+    graph_blob = tmp_path / "graph_blob.json"
+    evidence = tmp_path / "evidence.json"
+    readback.write_text(
+        json.dumps(load_rust_run_readback_fixture().model_dump(mode="json", by_alias=True)),
+        encoding="utf-8",
+    )
+    graph_blob.write_text(
+        json.dumps(
+            {
+                "schema_version": "leaven.run_blob_export.v1",
+                "blob": {"store": "file", "key": "graph.blob"},
+                "bytes": 19,
+                "sha256": "cab11e0c83798e18f101ec99395ac4ebbf38c1739abe06a70ec8264954bf0bd8",
+                "content_base64": "ZHVyYWJsZSBibG9iIGJ5dGVzCg==",
+            }
+        ),
+        encoding="utf-8",
+    )
+    evidence.write_text(
+        json.dumps(
+            {
+                "schema_version": "leaven.run_evidence_export.v1",
+                "evidence": {"store": "leaven-run", "key": "0"},
+                "bytes": 23,
+                "sha256": "5369812b12c948efac405e61b4e926b1f639ff019922e88d0c1955f981b103aa",
+                "content_base64": "eyJzY29yZSI6MSwiY2FzZSI6ImEifQo=",
+            }
+        ),
+        encoding="utf-8",
+    )
+    fake.write_text(
+        "#!/bin/sh\n"
+        "printf '%s\\n' \"$@\" >> \"$LEAVEN_TEST_CALLS\"\n"
+        "case \"$2\" in\n"
+        f"  inspect) cat {readback} ;;\n"
+        f"  blob) cat {graph_blob} ;;\n"
+        f"  evidence) cat {evidence} ;;\n"
+        "  *) exit 9 ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    fake.chmod(0o755)
+
+    monkeypatch.setenv("LEAVEN_BIN", str(fake))
+    monkeypatch.setenv("LEAVEN_TEST_CALLS", str(calls))
+
+    inspection = runs.inspect(run_dir)
+
+    assert inspection.run_id == "run_1"
+    assert inspection.best_candidate_id == "cand_child"
+    assert inspection.rust_readback is not None
+    assert inspection.rust_graph_blob is not None
+    assert inspection.rust_graph_blob.content_bytes() == b"durable blob bytes\n"
+    assert len(inspection.rust_evidence) == 1
+    assert inspection.rust_evidence[0].content_json() == {"score": 1, "case": "a"}
+    assert [fact.surface for fact in inspection.unsupported] == [
+        "run.cost",
+        "run.inspection",
+    ]
+    assert calls.read_text(encoding="utf-8").splitlines() == [
+        "run",
+        "inspect",
+        "--run-dir",
+        str(run_dir),
+        "run",
+        "blob",
+        "--run-dir",
+        str(run_dir),
+        "--store",
+        "file",
+        "--key",
+        "graph.blob",
+        "run",
+        "evidence",
+        "--run-dir",
+        str(run_dir),
+        "--store",
+        "leaven-run",
+        "--key",
+        "0",
     ]
 
 

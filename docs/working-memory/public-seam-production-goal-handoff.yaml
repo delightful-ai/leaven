@@ -1289,6 +1289,35 @@ acceptance:
           readable through a product surface; it is still foundation evidence
           until `lv.runs.open(...)` and `lv.runs.inspect(...)` decode the
           evidence payload into owning semantic assessment/reward rows.
+      - kind: rust_evidence_bytes_attached_to_python_inspection
+        paths:
+          - sdk/python/src/leaven/run_inspection.py
+          - sdk/python/src/leaven/runs.py
+          - sdk/python/src/leaven/_runs/AGENTS.md
+          - sdk/python/tests/_runs/test_rust_export.py
+        commands:
+          - cargo test -p leaven-run export_local_run_evidence_reads_bytes_through_evidence_store --lib
+          - cargo test -p leaven-cli tests::run_evidence_exports_rust_owned_evidence_bytes -- --exact
+          - cd sdk/python && uv run pytest tests/_runs/test_rust_export.py tests/test_run_inspection.py -q
+          - cd sdk/python && uv run ruff check src/leaven/run_inspection.py src/leaven/runs.py src/leaven/_runs tests/_runs/test_rust_export.py tests/test_run_inspection.py
+          - cd sdk/python && uv run ty check src/leaven/run_inspection.py src/leaven/runs.py src/leaven/_runs tests/_runs/test_rust_export.py tests/test_run_inspection.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          `lv.runs.inspect(...)` now reuses Rust checkpoint readback when a
+          latest checkpoint exists, so it can inspect a run directory without
+          `optimized.json`. It loads the Rust graph snapshot blob through
+          `leaven run blob` and loads each graph assessment evidence ref
+          through `leaven run evidence`, attaching typed
+          `RustEvidenceReadback` records to `RunInspection.rust_evidence`.
+          `RustEvidenceReadback.content_json()` decodes and validates the
+          Rust-exported evidence bytes as JSON-shaped data. A regression test
+          proves `runs.inspect` invokes `leaven run inspect`, `leaven run blob`,
+          and `leaven run evidence` against a checkpoint-only run directory and
+          exposes the evidence payload bytes without relying on Python-written
+          `optimized.json`. This still does not close the row: the evidence
+          bytes are attached to inspection, but full public `Assessment` /
+          reward rows from Rust-owned evidence need an owning semantic decoder
+          before unsupported `run.inspection` can be removed.
     closeout_check: "Reading only `optimized.json` written by Python is a proxy."
 
   - id: python_wire_codegen_msgspec_boundary

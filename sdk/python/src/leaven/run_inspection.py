@@ -1,6 +1,8 @@
 """Typed completed-run inspection projections for `lv.runs.inspect(...)`."""
 
 import base64
+import json
+from collections.abc import Sequence
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -169,6 +171,10 @@ class RustEvidenceReadback(BaseModel):
         """Decode the evidence JSON contents exported by Rust."""
         return base64.b64decode(self.content_base64, validate=True)
 
+    def content_json(self) -> JsonValue:
+        """Decode and validate the Rust-exported evidence JSON payload."""
+        return _json_value(json.loads(self.content_bytes()))
+
 
 class ReceiptSummary(BaseModel):
     """One opaque receipt visible from a completed run."""
@@ -226,6 +232,7 @@ class RunInspection(BaseModel):
     usage_status: RunUsageStatus
     rust_readback: RustRunReadback | None = None
     rust_graph_blob: RustBlobReadback | None = None
+    rust_evidence: list[RustEvidenceReadback] = Field(default_factory=list)
     unsupported: tuple[UnsupportedRunFact, ...] = ()
 
     def receipt_ids(self, *, kind: ReceiptKind | None = None) -> list[str]:
@@ -240,6 +247,7 @@ def inspect_optimized[A](
     *,
     rust_readback: RustRunReadback | None = None,
     rust_graph_blob: RustBlobReadback | None = None,
+    rust_evidence: Sequence[RustEvidenceReadback] = (),
 ) -> RunInspection:
     """Build a flattened inspection projection from an optimized result."""
     return RunInspection(
@@ -255,8 +263,24 @@ def inspect_optimized[A](
         usage_status=result.summary.usage_status,
         rust_readback=rust_readback,
         rust_graph_blob=rust_graph_blob,
+        rust_evidence=list(rust_evidence),
         unsupported=result.summary.unsupported,
     )
+
+
+def _json_value(value: object) -> JsonValue:
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
+    if isinstance(value, list):
+        return [_json_value(item) for item in value]
+    if isinstance(value, dict):
+        output: JsonObject = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise TypeError("JSON object keys must be strings")
+            output[key] = _json_value(item)
+        return output
+    raise TypeError(f"value is not JSON: {type(value).__name__}")
 
 
 def _receipts[A](result: Optimized[A]) -> list[ReceiptSummary]:
@@ -335,6 +359,7 @@ __all__ = [
     "RewardDimensionSummary",
     "RunInspection",
     "RustBlobReadback",
+    "RustEvidenceReadback",
     "RustRunReadback",
     "inspect_optimized",
 ]
