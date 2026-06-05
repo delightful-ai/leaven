@@ -97,6 +97,223 @@
       "type": "string",
       "pattern": "^fp_schema_sha256_[A-Za-z0-9_-]+$"
     },
+    "ExternalEventPayload": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "external_event"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "stage_call_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "ok"
+      ],
+      "additionalProperties": false
+    },
+    "EventSummaryPayload": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ExternalEventPayload"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "event_emitted"
+            },
+            "event_id": {
+              "type": "string",
+              "pattern": "^event_[A-Za-z0-9_.:-]+$"
+            },
+            "event_kind": {
+              "type": "string"
+            },
+            "payload_schema": {
+              "$ref": "#/$defs/SchemaFingerprint"
+            },
+            "value": {
+              "$ref": "#/$defs/ExternalEventPayload"
+            },
+            "visibility": {
+              "$ref": "#/$defs/VisibilityClass"
+            }
+          },
+          "required": [
+            "kind",
+            "event_id",
+            "event_kind",
+            "payload_schema",
+            "value",
+            "visibility"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "proposal_batch_submitted"
+            },
+            "proposal_batch": {
+              "$ref": "#/$defs/ProposalBatchId"
+            },
+            "proposal_ids": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ProposalId"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "proposal_batch",
+            "proposal_ids"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "proposal_batch_applied"
+            },
+            "proposal_batch": {
+              "$ref": "#/$defs/ProposalBatchId"
+            },
+            "created_candidates": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CandidateId"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "proposal_batch",
+            "created_candidates"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "assessments_submitted"
+            },
+            "evaluation_request_id": {
+              "$ref": "#/$defs/EvaluationRequestId"
+            },
+            "assessment_ids": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AssessmentId"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "evaluation_request_id",
+            "assessment_ids"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "evaluation_requested"
+            },
+            "name": {
+              "type": "string"
+            },
+            "evaluation_request_id": {
+              "$ref": "#/$defs/EvaluationRequestId"
+            },
+            "evaluator_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "evaluation_request_id",
+            "evaluator_id"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "run_context_summary"
+            },
+            "source": {
+              "const": "leaven-seam-service-run-context"
+            },
+            "candidate_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "proposal_batch": {
+              "$ref": "#/$defs/ProposalBatchId"
+            },
+            "created_candidates": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CandidateId"
+              }
+            },
+            "event_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "emitted_events": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/EventSummaryPayload"
+              }
+            },
+            "evaluation_request_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/EvaluationRequestId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "assessment_ids": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AssessmentId"
+              }
+            },
+            "applied": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "source",
+            "candidate_count",
+            "proposal_batch",
+            "created_candidates",
+            "event_count",
+            "emitted_events",
+            "assessment_ids",
+            "applied"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
     "SurfaceFingerprint": {
       "type": "string",
       "pattern": "^fp_surface_sha256_[A-Za-z0-9_-]+$"

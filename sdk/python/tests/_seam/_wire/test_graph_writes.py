@@ -16,7 +16,7 @@ from leaven._seam._wire.expressions import (
 from leaven._seam._wire.payloads import (
     PlanDocument,
 )
-from leaven._seam._wire.refs import BlobRef, TraceRefRecord
+from leaven._seam._wire.refs import BlobRef, ExternalEventPayload, TraceRefRecord
 from leaven._seam._wire.writes import (
     EmitRunEventWrite,
     ProposalCausalInputs,
@@ -105,7 +105,8 @@ def test_assessment_evaluation_and_event_writes_decode_typed_records() -> None:
     assert evaluation.request.set.name == "validation"
     assert isinstance(event, EmitRunEventWrite)
     assert event.visibility == "optimizer_visible"
-    assert event.payload == {"note": ["typed", {"ok": True}]}
+    assert isinstance(event.payload, ExternalEventPayload)
+    assert event.payload.ok is True
 
 
 def test_assessment_output_decodes_typed_blob_and_trace_refs() -> None:
@@ -366,7 +367,7 @@ def _mixed_write_plan() -> bytes:
         b'"granularity":"per_case","purpose":"validation","evaluator":"judge"}}},'
         b'{"kind":"write","name":"event","idempotency_key":"idem_event",'
         b'"write":{"kind":"emit_run_event","event_kind":"optimizer.note",'
-        b'"payload_schema":"fp_schema_event","payload":{"note":["typed",{"ok":true}]},'
+        b'"payload_schema":"fp_schema_event","payload":{"kind":"external_event","ok":true},'
         b'"visibility":"optimizer_visible"}}],'
         b'"return":["assess","eval","event"],'
         b'"commit":{"kind":"graph_writes_atomic","on_stale":"reject"}}'

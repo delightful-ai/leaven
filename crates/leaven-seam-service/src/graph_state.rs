@@ -51,9 +51,11 @@ impl SeamGraphState {
             "event_kind": request.write().event_kind(),
             "revision": revision,
             "payload": {
+                "kind": "event_emitted",
                 "event_id": event_id,
+                "event_kind": request.write().event_kind(),
                 "payload_schema": request.write().payload_schema(),
-                "value": request.write().payload().as_json(),
+                "value": request.write().payload(),
                 "visibility": request.write().visibility()
             }
         }));
@@ -74,6 +76,7 @@ impl SeamGraphState {
             "event_kind": "proposal.submit_batch",
             "revision": revision,
             "payload": {
+                "kind": "proposal_batch_submitted",
                 "proposal_batch": batch_id,
                 "proposal_ids": proposal_ids
             }
@@ -103,6 +106,7 @@ impl SeamGraphState {
             "event_kind": "proposal.apply",
             "revision": revision,
             "payload": {
+                "kind": "proposal_batch_applied",
                 "proposal_batch": batch,
                 "created_candidates": candidates
             }
@@ -124,6 +128,7 @@ impl SeamGraphState {
             "event_kind": "assessment.submit",
             "revision": revision,
             "payload": {
+                "kind": "assessments_submitted",
                 "evaluation_request_id": evaluation_request_id,
                 "assessment_ids": assessment_ids
             }
@@ -143,6 +148,7 @@ impl SeamGraphState {
             "event_kind": "evaluation.request",
             "revision": revision,
             "payload": {
+                "kind": "evaluation_requested",
                 "name": name,
                 "evaluation_request_id": job.request_id(),
                 "evaluator_id": job.evaluator_id()

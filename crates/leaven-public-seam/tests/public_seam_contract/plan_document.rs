@@ -80,7 +80,8 @@ fn plan_ir_family_accepts_typed_let_call_write_documents() {
         .expect("emit_run_event write exposes typed event payload");
     assert_eq!(event_write.event_kind(), "plan.ir.checked");
     assert_eq!(event_write.payload_schema(), "fp_schema_sha256_planir");
-    assert_eq!(event_write.payload().as_json(), &json!({"ok": true}));
+    assert!(event_write.payload().ok());
+    assert_eq!(event_write.payload().stage_call_id(), None);
     assert_eq!(event_write.visibility(), "public");
     assert_eq!(write.assessment_score_output_count(), 0);
 }
@@ -4268,6 +4269,7 @@ fn typed_let_call_write_plan() -> Value {
                     "event_kind": "plan.ir.checked",
                     "payload_schema": "fp_schema_sha256_planir",
                     "payload": {
+                        "kind": "external_event",
                         "ok": true
                     },
                     "visibility": "public"
@@ -5305,7 +5307,8 @@ impl PlanExecutionHost for RecordingPlanHost {
                         "event_kind": "plan.started",
                         "revision": revision,
                         "payload": {
-                            "scope": "latest_at_start"
+                            "kind": "external_event",
+                            "ok": true
                         }
                     })],
                     revision,
@@ -5319,7 +5322,8 @@ impl PlanExecutionHost for RecordingPlanHost {
                         "event_kind": "plan.pinned",
                         "revision": revision,
                         "payload": {
-                            "scope": "at_revision"
+                            "kind": "external_event",
+                            "ok": true
                         }
                     })],
                     revision,
@@ -5337,8 +5341,8 @@ impl PlanExecutionHost for RecordingPlanHost {
                         "event_kind": "plan.changed",
                         "revision": graph_revision,
                         "payload": {
-                            "since": since,
-                            "until": until
+                            "kind": "external_event",
+                            "ok": true
                         }
                     })],
                     graph_revision,
@@ -5747,7 +5751,8 @@ impl PlanExecutionHost for RecordingPlanHost {
         assert_eq!(request.name(), "status");
         assert_eq!(request.write().event_kind(), "plan.ir.checked");
         assert_eq!(request.write().payload_schema(), "fp_schema_sha256_planir");
-        assert_eq!(request.write().payload().as_json(), &json!({"ok": true}));
+        assert!(request.write().payload().ok());
+        assert_eq!(request.write().payload().stage_call_id(), None);
         assert_eq!(request.write().visibility(), "public");
         assert_eq!(request.base_revision(), "rev_planexec_base");
         self.writes.push("status");

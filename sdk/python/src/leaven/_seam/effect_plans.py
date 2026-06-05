@@ -13,7 +13,7 @@ from leaven._seam._wire.payloads import (
     PlanOp,
     VisibilityClass,
 )
-from leaven._seam._wire.refs import CandidateRef, WireJsonEventPayload, WireJsonObject
+from leaven._seam._wire.refs import CandidateRef, ExternalEventPayload, WireJsonObject
 from leaven._seam._wire.writes import (
     EmitRunEventWrite,
     EvaluationRequestWriteRecord,
@@ -80,7 +80,7 @@ class EventEmitRequest:
     idempotency_key: str
     event_kind: str
     payload_schema: str
-    payload: WireJsonEventPayload
+    payload: ExternalEventPayload
     visibility: VisibilityClass
 
     @property

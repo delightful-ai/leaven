@@ -13,12 +13,12 @@ from .refs import (
     BlobRef,
     CandidateRef,
     DataClassSet,
+    EventSummaryPayload,
     MetadataBag,
     ProposalBatchRef,
     ProposalRef,
     ReceiptRef,
     TraceRef,
-    WireJsonGraphEventPayload,
     WireJsonGraphExtensionPayload,
     WireJsonOutputValue,
     WorkspaceRef,
@@ -142,7 +142,7 @@ class EventSummaryGraphRow(
 ):
     event_kind: str
     revision: str
-    payload: WireJsonGraphEventPayload | UnsetType = UNSET
+    payload: EventSummaryPayload | UnsetType = UNSET
 
 
 class ExtensionGraphRow(

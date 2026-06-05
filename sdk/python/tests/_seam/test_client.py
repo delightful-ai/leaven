@@ -18,6 +18,7 @@ from leaven._seam import (
 )
 from leaven._seam._wire.expressions import EvaluationSetNamed
 from leaven._seam._wire.jsonrpc import JsonRpcRequestEnvelope
+from leaven._seam._wire.refs import ExternalEventPayload
 
 
 def test_client_lowers_typed_request_to_locked_json_rpc(monkeypatch: MonkeyPatch) -> None:
@@ -152,7 +153,7 @@ def test_client_lowers_typed_event_emit(monkeypatch: MonkeyPatch) -> None:
             idempotency_key="event-0001",
             event_kind="sdk.test",
             payload_schema="fp_schema_sha256_sdk_test",
-            payload={"ok": True},
+            payload=ExternalEventPayload(ok=True),
             visibility="public",
         )
     )

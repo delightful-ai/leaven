@@ -16,6 +16,7 @@ from leaven._seam._wire.payloads import (
     ProposalEffectSummary,
     ProposalSummaryGraphRow,
 )
+from leaven._seam._wire.refs import ExternalEventPayload
 
 
 def test_plan_result_decodes_graph_rows_as_tagged_records() -> None:
@@ -97,7 +98,7 @@ def test_plan_result_decodes_graph_row_json_fragments_with_owned_names() -> None
         b'{"kind":"proposal_summary","proposal":"prop_alpha","batch":"pb_alpha",'
         b'"effect":{"kind":"change","target":"cand_alpha"}},'
         b'{"kind":"event_summary","event_kind":"case.loaded","revision":"rev_final",'
-        b'"payload":{"note":["loaded",{"case":"case_1"}]}},'
+        b'"payload":{"kind":"external_event","ok":true}},'
         b'{"kind":"extension","namespace":"vendor.eval","op":"row",'
         b'"schema_fingerprint":"fp_schema_sha256_vendor_row",'
         b'"payload":{"vendor":{"score":7}}}]}},'
@@ -125,7 +126,8 @@ def test_plan_result_decodes_graph_row_json_fragments_with_owned_names() -> None
     assert rows[1].effect.kind == "change"
     assert rows[1].effect.target == "cand_alpha"
     assert isinstance(rows[2], EventSummaryGraphRow)
-    assert rows[2].payload == {"note": ["loaded", {"case": "case_1"}]}
+    assert isinstance(rows[2].payload, ExternalEventPayload)
+    assert rows[2].payload.ok is True
     assert isinstance(rows[3], ExtensionGraphRow)
     assert rows[3].payload == {"vendor": {"score": 7}}
 

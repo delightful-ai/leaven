@@ -444,7 +444,7 @@ fn event_request() -> Value {
                 "kind": "emit_run_event",
                 "event_kind": "route.checked",
                 "payload_schema": "fp_schema_sha256_route_test",
-                "payload": {"ok": true},
+                "payload": {"kind": "external_event", "ok": true},
                 "visibility": "public"
             }
         }],

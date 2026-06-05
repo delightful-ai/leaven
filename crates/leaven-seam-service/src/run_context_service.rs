@@ -6,16 +6,16 @@ use leaven_core::{
     ProposalBatch, ProposalBatchSemantics,
 };
 use leaven_engine::{
-    ApplyOutcome, BudgetLedger, CaseSet, ExternalEventPayload, ProposalBatchReport, RunContext,
-    RunEvent, RunGraph,
+    ApplyOutcome, BudgetLedger, CaseSet, ExternalEventPayload, ExternalEventPayloadKind,
+    ProposalBatchReport, RunContext, RunEvent, RunGraph,
 };
 use leaven_kernel::{
     Budget, CandidateId, ContentId, Cost, EvaluationRequestId, EvaluatorId, Fingerprint,
     MetadataBag, Metered, RunId, StageId,
 };
 use leaven_public_seam::{
-    LockedMethod, PlanApplyProposalBatchRequest, PlanDocument, PlanGraphQueryOutcome,
-    PlanGraphQueryRequest, PublicSeamError,
+    LockedMethod, PlanApplyProposalBatchRequest, PlanDocument, PlanEventPayload,
+    PlanGraphQueryOutcome, PlanGraphQueryRequest, PublicSeamError,
 };
 use leaven_run::{
     PublicAssessmentWriteReceiptContext, PublicEvaluationJobContext,
@@ -352,10 +352,11 @@ impl RunContextProposalApplyState {
         });
         self.event_count = run_context.graph().events().count();
         self.emitted_events.push(RunContextEventSummary {
+            kind: "event_emitted",
             event_id,
             event_kind: event.event_kind.to_owned(),
             payload_schema: event.payload_schema.to_owned(),
-            payload: event.payload.clone(),
+            value: event.payload.clone(),
             visibility: event.visibility.to_owned(),
         });
         run_context_event_emit_extension_result(method, &event, context)
@@ -367,6 +368,7 @@ impl RunContextProposalApplyState {
             event_kind: "proposal.apply",
             revision: &self.config.final_revision,
             payload: RunContextGraphQueryPayload {
+                kind: "run_context_summary",
                 source: "leaven-seam-service-run-context",
                 candidate_count: self.candidate_count,
                 proposal_batch: &self.config.proposal_batch_alias,
@@ -465,7 +467,7 @@ fn event_emit_write(plan: &PlanDocument) -> Result<EventEmitWrite<'_>, PublicSea
                 name: operation.name(),
                 event_kind: write.event_kind(),
                 payload_schema: write.payload_schema(),
-                payload: run_context_event_payload(write.payload().as_json())?,
+                payload: run_context_event_payload(write.payload()),
                 visibility: write.visibility(),
             });
         }
@@ -477,10 +479,11 @@ fn event_emit_write(plan: &PlanDocument) -> Result<EventEmitWrite<'_>, PublicSea
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 struct RunContextEventSummary {
+    kind: &'static str,
     event_id: String,
     event_kind: String,
     payload_schema: String,
-    payload: ExternalEventPayload,
+    value: ExternalEventPayload,
     visibility: String,
 }
 
@@ -494,6 +497,7 @@ struct RunContextGraphQueryItem<'a> {
 
 #[derive(Debug, Serialize)]
 struct RunContextGraphQueryPayload<'a> {
+    kind: &'static str,
     source: &'static str,
     candidate_count: usize,
     proposal_batch: &'a str,
@@ -505,10 +509,12 @@ struct RunContextGraphQueryPayload<'a> {
     applied: bool,
 }
 
-fn run_context_event_payload(value: &Value) -> Result<ExternalEventPayload, PublicSeamError> {
-    serde_json::from_value(value.clone()).map_err(|error| PublicSeamError::InvalidPlan {
-        message: format!("run_context.checked payload is not typed: {error}"),
-    })
+fn run_context_event_payload(payload: &PlanEventPayload) -> ExternalEventPayload {
+    ExternalEventPayload {
+        kind: ExternalEventPayloadKind::ExternalEvent,
+        ok: payload.ok(),
+        stage_call_id: payload.stage_call_id().map(ToOwned::to_owned),
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -679,7 +685,7 @@ mod tests {
 
     #[test]
     fn event_emit_write_accepts_typed_run_context_payload() {
-        let params = run_context_event_params(&json!({"ok": true}));
+        let params = run_context_event_params(&json!({"kind": "external_event", "ok": true}));
         let plan = validate_test_plan(&params);
 
         let event = event_emit_write(&plan).unwrap();
@@ -689,6 +695,7 @@ mod tests {
         assert_eq!(
             event.payload,
             ExternalEventPayload {
+                kind: ExternalEventPayloadKind::ExternalEvent,
                 ok: true,
                 stage_call_id: None
             }

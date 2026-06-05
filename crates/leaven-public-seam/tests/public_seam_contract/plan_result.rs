@@ -1,7 +1,7 @@
 use crate::support::{bind_plan_result_hashes, fixture_blob_ref, package};
 use leaven_public_seam::{
-    PlanErrorCode, PlanResultProposalEffectKind, PlanResultReceiptKind, PlanResultValueKind,
-    PublicSeamError,
+    PlanErrorCode, PlanResultGraphEventPayload, PlanResultProposalEffectKind,
+    PlanResultReceiptKind, PlanResultValueKind, PublicSeamError,
 };
 use serde_json::{Value, json};
 
@@ -76,10 +76,12 @@ fn plan_result_preserves_graph_row_json_fragments_as_typed_owners() {
     assert_eq!(proposal_effect.target_candidate_id(), Some("cand_alpha"));
     assert_eq!(proposal_effect.artifact_type(), None);
     assert_eq!(fragments.event_payloads().len(), 1);
-    assert_eq!(
-        fragments.event_payloads()[0].as_json(),
-        &json!({"note": ["loaded", {"case": "case_1"}]})
-    );
+    let PlanResultGraphEventPayload::ExternalEvent(event_payload) = &fragments.event_payloads()[0]
+    else {
+        panic!("expected typed external event payload");
+    };
+    assert!(event_payload.ok());
+    assert_eq!(event_payload.stage_call_id(), None);
     assert_eq!(fragments.extension_payloads().len(), 1);
     assert_eq!(
         fragments.extension_payloads()[0].as_json(),
@@ -856,7 +858,8 @@ fn graph_row_fragment_result() -> Value {
                         "event_kind": "case.loaded",
                         "revision": "rev_base",
                         "payload": {
-                            "note": ["loaded", {"case": "case_1"}]
+                            "kind": "external_event",
+                            "ok": true
                         }
                     },
                     {

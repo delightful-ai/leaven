@@ -28,8 +28,8 @@ pub use context::{
 };
 pub use engine::{Engine, EngineBuilder, RunResult, optimize};
 pub use events::{
-    CausalInputsSummary, ErrorPolicy, EvaluationRequestSummary, ExternalEventPayload, RunEvent,
-    StopReason,
+    CausalInputsSummary, ErrorPolicy, EvaluationRequestSummary, ExternalEventPayload,
+    ExternalEventPayloadKind, RunEvent, StopReason,
 };
 pub use graph::storage::ApplyProposalError;
 pub use graph::{

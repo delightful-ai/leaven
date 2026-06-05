@@ -26,6 +26,7 @@ from .refs import (
     BlobRef,
     CandidateRef,
     DataClassSet,
+    ExternalEventPayload,
     MetadataBag,
     ProposalBatchRef,
     ReceiptRef,
@@ -33,7 +34,6 @@ from .refs import (
     WireJsonAssessmentPreference,
     WireJsonAssessmentRanking,
     WireJsonAssessmentTarget,
-    WireJsonEventPayload,
     WireJsonOutputValue,
     WorkspaceRef,
 )
@@ -220,7 +220,7 @@ class EmitRunEventWrite(
 ):
     event_kind: str
     payload_schema: str
-    payload: WireJsonEventPayload
+    payload: ExternalEventPayload
     visibility: VisibilityClass
 
 

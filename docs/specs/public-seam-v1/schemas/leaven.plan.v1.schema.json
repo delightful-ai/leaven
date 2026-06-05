@@ -2864,7 +2864,9 @@
         "payload_schema": {
           "$ref": "common.schema.json#/$defs/SchemaFingerprint"
         },
-        "payload": {},
+        "payload": {
+          "$ref": "common.schema.json#/$defs/ExternalEventPayload"
+        },
         "visibility": {
           "$ref": "common.schema.json#/$defs/VisibilityClass"
         }

@@ -194,7 +194,9 @@
             "revision": {
               "$ref": "common.schema.json#/$defs/GraphRevision"
             },
-            "payload": {}
+            "payload": {
+              "$ref": "common.schema.json#/$defs/EventSummaryPayload"
+            }
           },
           "required": [
             "kind",

@@ -402,6 +402,10 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         run_context_summary["payload"]["source"],
         "leaven-seam-service-run-context"
     );
+    assert_eq!(
+        run_context_summary["payload"]["kind"],
+        "run_context_summary"
+    );
     assert_eq!(run_context_summary["payload"]["applied"], true);
     assert_eq!(run_context_summary["payload"]["candidate_count"], 2);
     assert_eq!(
@@ -441,7 +445,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
         "run_context.checked"
     );
     assert_eq!(
-        event_readback["emitted_events"][0]["payload"]["ok"],
+        event_readback["emitted_events"][0]["value"]["ok"],
         json!(true)
     );
 
@@ -1210,7 +1214,7 @@ fn run_context_event_emit_request() -> Value {
                     "kind": "emit_run_event",
                     "event_kind": "run_context.checked",
                     "payload_schema": "fp_schema_sha256_run_context_event",
-                    "payload": {"ok": true},
+                    "payload": {"kind": "external_event", "ok": true},
                     "visibility": "public"
                 }
             }],
@@ -1434,6 +1438,7 @@ fn event_emit_request() -> Value {
                         "event_kind": "cli.checked",
                         "payload_schema": "fp_schema_sha256_event",
                         "payload": {
+                            "kind": "external_event",
                             "ok": true
                         },
                         "visibility": "public"

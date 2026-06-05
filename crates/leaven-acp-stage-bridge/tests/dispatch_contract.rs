@@ -239,7 +239,11 @@ print(json.dumps({
                 "kind": "emit_run_event",
                 "event_kind": "stage.bridge.checked",
                 "payload_schema": "fp_schema_sha256_stage_bridge_event",
-                "payload": {"ok": True, "stage_call_id": payload["stage_call_id"]},
+                "payload": {
+                    "kind": "external_event",
+                    "ok": True,
+                    "stage_call_id": payload["stage_call_id"],
+                },
                 "visibility": "public"
             },
         }],

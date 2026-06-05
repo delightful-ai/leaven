@@ -163,7 +163,7 @@ fn run_bound_service_mutates_real_context_and_checkpoint_readback_sees_graph_tru
                         "kind": "emit_run_event",
                         "event_kind": "run_bound.checked",
                         "payload_schema": "fp_schema_sha256_run_bound_test",
-                        "payload": {"ok": true},
+                        "payload": {"kind": "external_event", "ok": true},
                         "visibility": "public"
                     },
                     "deps": {},
@@ -634,7 +634,7 @@ fn event_emit_request() -> Value {
                 "kind": "emit_run_event",
                 "event_kind": "run_bound.checked",
                 "payload_schema": "fp_schema_sha256_run_bound_test",
-                "payload": {"ok": true},
+                "payload": {"kind": "external_event", "ok": true},
                 "visibility": "public"
             }
         }],

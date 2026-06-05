@@ -1,3 +1,4 @@
+use serde::Serialize;
 use serde_json::Value;
 
 use crate::PublicSeamError;
@@ -973,7 +974,7 @@ impl PlanEmitRunEventWrite {
                 object
                     .get("payload")
                     .ok_or_else(|| invalid_plan("emit_run_event write must carry payload"))?,
-            ),
+            )?,
             visibility: required_object_string(object, "visibility")?.to_owned(),
         })
     }
@@ -999,18 +1000,62 @@ impl PlanEmitRunEventWrite {
     }
 }
 
-/// Schema-valid JSON payload carried by an `emit_run_event` write.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PlanEventPayload(Value);
+/// Typed payload carried by an `emit_run_event` write.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct PlanEventPayload {
+    kind: PlanEventPayloadKind,
+    ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stage_call_id: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub enum PlanEventPayloadKind {
+    #[serde(rename = "external_event")]
+    ExternalEvent,
+}
 
 impl PlanEventPayload {
-    fn from_schema_valid_value(value: &Value) -> Self {
-        Self(value.clone())
+    fn from_schema_valid_value(value: &Value) -> Result<Self, PublicSeamError> {
+        let object = value
+            .as_object()
+            .ok_or_else(|| invalid_plan("emit_run_event payload must be an object"))?;
+        let kind = required_object_string(object, "kind")?;
+        if kind != "external_event" {
+            return Err(invalid_plan(format!(
+                "emit_run_event payload kind `{kind}` is not locked in V1"
+            )));
+        }
+        Ok(Self {
+            kind: PlanEventPayloadKind::ExternalEvent,
+            ok: object
+                .get("ok")
+                .and_then(Value::as_bool)
+                .ok_or_else(|| invalid_plan("emit_run_event payload must carry bool `ok`"))?,
+            stage_call_id: object
+                .get("stage_call_id")
+                .map(|value| {
+                    value.as_str().map(ToOwned::to_owned).ok_or_else(|| {
+                        invalid_plan("emit_run_event payload `stage_call_id` must be a string")
+                    })
+                })
+                .transpose()?,
+        })
     }
 
-    /// JSON payload carried on the wire by the event write.
-    pub const fn as_json(&self) -> &Value {
-        &self.0
+    /// Event payload discriminator.
+    pub const fn kind(&self) -> PlanEventPayloadKind {
+        self.kind
+    }
+
+    /// Whether the reported external event succeeded.
+    pub const fn ok(&self) -> bool {
+        self.ok
+    }
+
+    /// Optional originating stage call identifier.
+    pub fn stage_call_id(&self) -> Option<&str> {
+        self.stage_call_id.as_deref()
     }
 }
 

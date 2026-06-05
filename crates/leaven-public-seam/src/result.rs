@@ -260,13 +260,253 @@ macro_rules! graph_row_fragment {
 }
 
 graph_row_fragment!(
-    PlanResultGraphEventPayload,
-    "Schema-valid JSON carried by `event_summary.payload`."
-);
-graph_row_fragment!(
     PlanResultGraphExtensionPayload,
     "Schema-valid JSON carried by an extension graph row payload."
 );
+
+/// Typed payload carried by `event_summary.payload`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PlanResultGraphEventPayload {
+    ExternalEvent(PlanResultExternalEventPayload),
+    EventEmitted(PlanResultEventEmittedPayload),
+    ProposalBatchSubmitted(PlanResultProposalBatchSubmittedPayload),
+    ProposalBatchApplied(PlanResultProposalBatchAppliedPayload),
+    AssessmentsSubmitted(PlanResultAssessmentsSubmittedPayload),
+    EvaluationRequested(PlanResultEvaluationRequestedPayload),
+    RunContextSummary(PlanResultRunContextSummaryPayload),
+}
+
+impl PlanResultGraphEventPayload {
+    fn from_schema_valid_value(value: &Value) -> Result<Self, PublicSeamError> {
+        let object = value
+            .as_object()
+            .ok_or_else(|| invalid_result("event_summary.payload must be an object"))?;
+        match required_string(object.get("kind"), "event_summary.payload.kind")? {
+            "external_event" => Ok(Self::ExternalEvent(
+                PlanResultExternalEventPayload::from_object(object)?,
+            )),
+            "event_emitted" => Ok(Self::EventEmitted(
+                PlanResultEventEmittedPayload::from_object(object)?,
+            )),
+            "proposal_batch_submitted" => Ok(Self::ProposalBatchSubmitted(
+                PlanResultProposalBatchSubmittedPayload::from_object(object)?,
+            )),
+            "proposal_batch_applied" => Ok(Self::ProposalBatchApplied(
+                PlanResultProposalBatchAppliedPayload::from_object(object)?,
+            )),
+            "assessments_submitted" => Ok(Self::AssessmentsSubmitted(
+                PlanResultAssessmentsSubmittedPayload::from_object(object)?,
+            )),
+            "evaluation_requested" => Ok(Self::EvaluationRequested(
+                PlanResultEvaluationRequestedPayload::from_object(object)?,
+            )),
+            "run_context_summary" => Ok(Self::RunContextSummary(
+                PlanResultRunContextSummaryPayload::from_object(object)?,
+            )),
+            kind => Err(invalid_result(format!(
+                "event_summary.payload kind `{kind}` is not locked in V1"
+            ))),
+        }
+    }
+}
+
+/// External event payload details.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanResultExternalEventPayload {
+    ok: bool,
+    stage_call_id: Option<String>,
+}
+
+impl PlanResultExternalEventPayload {
+    fn from_object(object: &serde_json::Map<String, Value>) -> Result<Self, PublicSeamError> {
+        Ok(Self {
+            ok: object
+                .get("ok")
+                .and_then(Value::as_bool)
+                .ok_or_else(|| invalid_result("external_event payload must carry bool `ok`"))?,
+            stage_call_id: optional_string(object, "stage_call_id")?,
+        })
+    }
+
+    pub const fn ok(&self) -> bool {
+        self.ok
+    }
+
+    pub fn stage_call_id(&self) -> Option<&str> {
+        self.stage_call_id.as_deref()
+    }
+}
+
+/// Event-emitted graph summary payload details.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanResultEventEmittedPayload {
+    event_id: String,
+    event_kind: String,
+    payload_schema: String,
+    value: PlanResultExternalEventPayload,
+    visibility: String,
+}
+
+impl PlanResultEventEmittedPayload {
+    fn from_object(object: &serde_json::Map<String, Value>) -> Result<Self, PublicSeamError> {
+        let value = object
+            .get("value")
+            .and_then(Value::as_object)
+            .ok_or_else(|| invalid_result("event_emitted payload must carry object `value`"))?;
+        Ok(Self {
+            event_id: required_string(object.get("event_id"), "event_id")?.to_owned(),
+            event_kind: required_string(object.get("event_kind"), "event_kind")?.to_owned(),
+            payload_schema: required_string(object.get("payload_schema"), "payload_schema")?
+                .to_owned(),
+            value: PlanResultExternalEventPayload::from_object(value)?,
+            visibility: required_string(object.get("visibility"), "visibility")?.to_owned(),
+        })
+    }
+
+    pub fn event_id(&self) -> &str {
+        &self.event_id
+    }
+
+    pub fn event_kind(&self) -> &str {
+        &self.event_kind
+    }
+
+    pub fn payload_schema(&self) -> &str {
+        &self.payload_schema
+    }
+
+    pub const fn value(&self) -> &PlanResultExternalEventPayload {
+        &self.value
+    }
+
+    pub fn visibility(&self) -> &str {
+        &self.visibility
+    }
+}
+
+/// Proposal-batch-submitted event summary payload details.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanResultProposalBatchSubmittedPayload {
+    proposal_batch: String,
+    proposal_ids: Vec<String>,
+}
+
+impl PlanResultProposalBatchSubmittedPayload {
+    fn from_object(object: &serde_json::Map<String, Value>) -> Result<Self, PublicSeamError> {
+        Ok(Self {
+            proposal_batch: required_string(object.get("proposal_batch"), "proposal_batch")?
+                .to_owned(),
+            proposal_ids: required_string_vec(object, "proposal_ids")?,
+        })
+    }
+}
+
+/// Proposal-batch-applied event summary payload details.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanResultProposalBatchAppliedPayload {
+    proposal_batch: String,
+    created_candidates: Vec<String>,
+}
+
+impl PlanResultProposalBatchAppliedPayload {
+    fn from_object(object: &serde_json::Map<String, Value>) -> Result<Self, PublicSeamError> {
+        Ok(Self {
+            proposal_batch: required_string(object.get("proposal_batch"), "proposal_batch")?
+                .to_owned(),
+            created_candidates: required_string_vec(object, "created_candidates")?,
+        })
+    }
+}
+
+/// Assessments-submitted event summary payload details.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanResultAssessmentsSubmittedPayload {
+    evaluation_request_id: String,
+    assessment_ids: Vec<String>,
+}
+
+impl PlanResultAssessmentsSubmittedPayload {
+    fn from_object(object: &serde_json::Map<String, Value>) -> Result<Self, PublicSeamError> {
+        Ok(Self {
+            evaluation_request_id: required_string(
+                object.get("evaluation_request_id"),
+                "evaluation_request_id",
+            )?
+            .to_owned(),
+            assessment_ids: required_string_vec(object, "assessment_ids")?,
+        })
+    }
+}
+
+/// Evaluation-requested event summary payload details.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanResultEvaluationRequestedPayload {
+    name: String,
+    evaluation_request_id: String,
+    evaluator_id: String,
+}
+
+impl PlanResultEvaluationRequestedPayload {
+    fn from_object(object: &serde_json::Map<String, Value>) -> Result<Self, PublicSeamError> {
+        Ok(Self {
+            name: required_string(object.get("name"), "name")?.to_owned(),
+            evaluation_request_id: required_string(
+                object.get("evaluation_request_id"),
+                "evaluation_request_id",
+            )?
+            .to_owned(),
+            evaluator_id: required_string(object.get("evaluator_id"), "evaluator_id")?.to_owned(),
+        })
+    }
+}
+
+/// RunContext graph summary payload details.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanResultRunContextSummaryPayload {
+    source: String,
+    candidate_count: u64,
+    proposal_batch: String,
+    created_candidates: Vec<String>,
+    event_count: u64,
+    emitted_events: Vec<PlanResultEventEmittedPayload>,
+    evaluation_request_id: Option<String>,
+    assessment_ids: Vec<String>,
+    applied: bool,
+}
+
+impl PlanResultRunContextSummaryPayload {
+    fn from_object(object: &serde_json::Map<String, Value>) -> Result<Self, PublicSeamError> {
+        let emitted_events = object
+            .get("emitted_events")
+            .and_then(Value::as_array)
+            .ok_or_else(|| invalid_result("run_context_summary.emitted_events must be an array"))?
+            .iter()
+            .map(|value| {
+                let event = value.as_object().ok_or_else(|| {
+                    invalid_result("run_context_summary.emitted_events entries must be objects")
+                })?;
+                if required_string(event.get("kind"), "emitted_events.kind")? != "event_emitted" {
+                    return Err(invalid_result(
+                        "run_context_summary emitted events must use `event_emitted` payloads",
+                    ));
+                }
+                PlanResultEventEmittedPayload::from_object(event)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self {
+            source: required_string(object.get("source"), "source")?.to_owned(),
+            candidate_count: required_u64(object, "candidate_count")?,
+            proposal_batch: required_string(object.get("proposal_batch"), "proposal_batch")?
+                .to_owned(),
+            created_candidates: required_string_vec(object, "created_candidates")?,
+            event_count: required_u64(object, "event_count")?,
+            emitted_events,
+            evaluation_request_id: optional_nullable_string(object, "evaluation_request_id")?,
+            assessment_ids: required_string_vec(object, "assessment_ids")?,
+            applied: required_bool(object, "applied")?,
+        })
+    }
+}
 
 /// Closed typed score summary carried by `candidate_summary.scores`.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -345,10 +585,10 @@ impl PlanResultCandidateArtifact {
         Ok(Self {
             kind: required_string(object.get("kind"), "candidate_summary.artifact.kind")?
                 .to_owned(),
-            identity: optional_string(object.get("identity"))?,
-            summary: optional_string(object.get("summary"))?,
-            body: optional_string(object.get("body"))?,
-            schema_fingerprint: optional_string(object.get("schema_fingerprint"))?,
+            identity: optional_string(object, "identity")?,
+            summary: optional_string(object, "summary")?,
+            body: optional_string(object, "body")?,
+            schema_fingerprint: optional_string(object, "schema_fingerprint")?,
         })
     }
 
@@ -408,8 +648,8 @@ impl PlanResultProposalEffectSummary {
                 object.get("target"),
                 "proposal_summary.effect.target",
             )?,
-            artifact_type: optional_string(object.get("artifact_type"))?,
-            artifact_schema: optional_string(object.get("artifact_schema"))?,
+            artifact_type: optional_string(object, "artifact_type")?,
+            artifact_schema: optional_string(object, "artifact_schema")?,
             workspace_id: optional_ref_id(
                 object.get("workspace"),
                 "proposal_summary.effect.workspace",
@@ -418,9 +658,9 @@ impl PlanResultProposalEffectSummary {
                 object.get("agent_receipt"),
                 "proposal_summary.effect.agent_receipt",
             )?,
-            parser: optional_string(object.get("parser"))?,
-            surface_fingerprint: optional_string(object.get("surface_fingerprint"))?,
-            change_schema: optional_string(object.get("change_schema"))?,
+            parser: optional_string(object, "parser")?,
+            surface_fingerprint: optional_string(object, "surface_fingerprint")?,
+            change_schema: optional_string(object, "change_schema")?,
         })
     }
 
@@ -827,7 +1067,7 @@ fn collect_graph_row_fragments(
             Some("event_summary") => {
                 if let Some(payload) = item_object.get("payload") {
                     fragments.event_payloads.push(
-                        PlanResultGraphEventPayload::from_schema_valid_value(payload),
+                        PlanResultGraphEventPayload::from_schema_valid_value(payload)?,
                     );
                 }
             }
@@ -845,14 +1085,73 @@ fn collect_graph_row_fragments(
     Ok(())
 }
 
-fn optional_string(value: Option<&Value>) -> Result<Option<String>, PublicSeamError> {
-    value
+fn optional_string(
+    object: &serde_json::Map<String, Value>,
+    field: &str,
+) -> Result<Option<String>, PublicSeamError> {
+    object
+        .get(field)
         .map(|value| {
             value.as_str().map(ToOwned::to_owned).ok_or_else(|| {
-                invalid_result("optional proposal effect summary field must be a string")
+                invalid_result(format!("optional result field `{field}` must be a string"))
             })
         })
         .transpose()
+}
+
+fn optional_nullable_string(
+    object: &serde_json::Map<String, Value>,
+    field: &str,
+) -> Result<Option<String>, PublicSeamError> {
+    match object.get(field) {
+        Some(Value::Null) | None => Ok(None),
+        Some(value) => value
+            .as_str()
+            .map(|value| Some(value.to_owned()))
+            .ok_or_else(|| {
+                invalid_result(format!(
+                    "optional result field `{field}` must be a string or null"
+                ))
+            }),
+    }
+}
+
+fn required_string_vec(
+    object: &serde_json::Map<String, Value>,
+    field: &str,
+) -> Result<Vec<String>, PublicSeamError> {
+    object
+        .get(field)
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_result(format!("{field} must be an array")))?
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .map(ToOwned::to_owned)
+                .ok_or_else(|| invalid_result(format!("{field} entries must be strings")))
+        })
+        .collect()
+}
+
+fn required_u64(
+    object: &serde_json::Map<String, Value>,
+    field: &str,
+) -> Result<u64, PublicSeamError> {
+    object
+        .get(field)
+        .and_then(Value::as_u64)
+        .ok_or_else(|| invalid_result(format!("{field} must be an unsigned integer")))
+}
+
+fn required_bool(
+    object: &serde_json::Map<String, Value>,
+    field: &str,
+) -> Result<bool, PublicSeamError> {
+    object
+        .get(field)
+        .and_then(Value::as_bool)
+        .ok_or_else(|| invalid_result(format!("{field} must be a bool")))
 }
 
 fn optional_number(value: Option<&Value>, field: &str) -> Result<Option<Number>, PublicSeamError> {
