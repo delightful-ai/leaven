@@ -1145,9 +1145,34 @@ acceptance:
           to counts, and Python decodes those refs as typed readback records.
           This makes the `leaven run blob` byte command usable for any
           Rust-exposed blob ref. It remains foundation evidence because normal
-          `StoreRunPersistence` checkpoints do not yet populate artifact,
+          `StoreRunPersistence` checkpoints did not yet populate artifact,
           evidence, stage-journal, or workspace-journal refs for SDK-visible
-          transcript/artifact readback.
+          transcript/artifact readback in this slice.
+      - kind: rust_checkpoint_typed_ref_population_foundation
+        paths:
+          - crates/leaven-engine/src/persistence.rs
+          - crates/leaven-engine/src/lib.rs
+          - crates/leaven-engine/tests/engine_contract/engine_loop.rs
+          - crates/leaven-run/src/inspection.rs
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cargo test -p leaven-engine --test engine_contract engine_loop::store_run_persistence_carries_typed_checkpoint_readback_refs -- --exact
+          - cargo test -p leaven-engine --test engine_contract engine_loop::store_run_persistence_harvests_graph_owned_evidence_refs -- --exact
+          - cargo test -p leaven-run inspection --lib
+          - cargo fmt --check
+        note: >-
+          `RunCheckpointRequest` now carries typed `CheckpointReadbackRefs`
+          for artifact blobs, evidence refs, stage-journal blob entries, and
+          workspace-journal blob entries. `StoreRunPersistence` copies those
+          typed refs into the checkpoint envelope and also harvests graph-owned
+          assessment evidence refs produced through `RunContext` and the
+          configured `EvidenceStore`. Focused contract tests prove both the
+          explicit typed ref lane and the production `request_evaluation` plus
+          `submit_assessments` evidence path. This is still foundation
+          evidence for the Python inspection row: AgentKit/Codex producers must
+          still record their transcript/artifact refs through this typed lane,
+          and `lv.runs.open(...)` still must stop depending on Python-written
+          `optimized.json` before row closure.
     closeout_check: "Reading only `optimized.json` written by Python is a proxy."
 
   - id: python_wire_codegen_msgspec_boundary

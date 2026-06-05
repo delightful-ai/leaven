@@ -8,19 +8,22 @@ use std::{
 
 use bytes::Bytes;
 use futures::executor::block_on;
-use leaven_core::{CacheIdentity, CaseSetVersion, PartitionId, Proposal};
+use leaven_core::{
+    Assessment, AssessmentGranularity, AssessmentTarget, CacheIdentity, CaseSetVersion,
+    EvaluationPurpose, EvaluationRequest, EvaluationSet, PartitionId, Proposal,
+};
 use leaven_engine::{
     CacheIndexSnapshot, CachePolicy, Callback, CaseSet, CheckpointContext, CheckpointError,
-    CheckpointableOptimizer, Engine, EvaluationCache, EvaluationCacheKey, EvaluationCacheSnapshot,
-    GraphSnapshotRef, Optimizer, OptimizerError, OptimizerStateSnapshot, OptimizerStateWrite,
-    PrivateStatePolicy, RestoreContext, RunCheckpoint, RunCheckpointRequest, RunContext, RunEvent,
-    RunGraph, RunGraphSnapshot, RunGraphView, RunPersistence, RunPersistenceError, StateFormat,
-    StepStatus, StopReason, Stopper, StoreRunPersistence, TrustPolicy, optimize,
-    restore_checkpointable_optimizer_state,
+    CheckpointReadbackRefs, CheckpointableOptimizer, Engine, EvaluationCache, EvaluationCacheKey,
+    EvaluationCacheSnapshot, GraphSnapshotRef, Optimizer, OptimizerError, OptimizerStateSnapshot,
+    OptimizerStateWrite, PrivateStatePolicy, RestoreContext, RunCheckpoint, RunCheckpointRequest,
+    RunContext, RunEvent, RunGraph, RunGraphSnapshot, RunGraphView, RunPersistence,
+    RunPersistenceError, StateFormat, StepStatus, StopReason, Stopper, StoreRunPersistence,
+    TrustPolicy, optimize, restore_checkpointable_optimizer_state,
 };
 use leaven_kernel::{
-    AssessmentId, BlobRef, Budget, CandidateId, CaseId, ContentId, Cost, ErrorKind, Fingerprint,
-    RunId, StageId, now,
+    AssessmentId, BlobRef, Budget, CandidateId, CaseId, ContentId, Cost, ErrorKind, EvaluatorId,
+    EvidenceRef, Fingerprint, Metered, RunId, StageId, now,
 };
 use leaven_store::{BlobStore, BlobWrite, CheckpointBytes, CheckpointStore, StoreError};
 use leaven_store_inline::InlineEvidenceStore;
@@ -482,6 +485,107 @@ fn store_run_persistence_writes_graph_cache_and_checkpoint_envelope() {
     let restored_ctx = RunContext::<TestProblem>::new(&mut restored_graph, &mut restored_budget);
     assert!(restored_ctx.graph().candidate(seed).is_some());
     assert_eq!(restored.cache.unwrap().len(), 1);
+}
+
+#[test]
+fn store_run_persistence_carries_typed_checkpoint_readback_refs() {
+    let store = RecordingStore::new("recording");
+    let persistence = StoreRunPersistence::new(store.clone());
+    let (graph, budget) = graph_and_budget();
+    let artifact_ref = BlobRef {
+        store: "recording".to_owned(),
+        key: "artifact.tar".to_owned(),
+    };
+    let evidence_ref = EvidenceRef {
+        store: "evidence".to_owned(),
+        key: "assessment.json".to_owned(),
+    };
+    let stage_ref = BlobRef {
+        store: "recording".to_owned(),
+        key: "stage-transcript.jsonl".to_owned(),
+    };
+    let workspace_ref = BlobRef {
+        store: "recording".to_owned(),
+        key: "workspace-digest.json".to_owned(),
+    };
+
+    persistence
+        .checkpoint(
+            RunCheckpointRequest::new(&graph, &budget, None)
+                .with_readback_refs(
+                    CheckpointReadbackRefs::new()
+                        .with_artifact_refs([artifact_ref.clone()])
+                        .with_evidence_refs([evidence_ref.clone()])
+                        .with_stage_journal_entries([stage_ref.clone()])
+                        .with_workspace_journal_entries([workspace_ref.clone()]),
+                )
+                .advance_latest(),
+        )
+        .unwrap();
+
+    let checkpoint: RunCheckpoint =
+        serde_json::from_slice(&store.latest_checkpoint().unwrap().0).unwrap();
+    assert_eq!(checkpoint.artifact_refs, vec![artifact_ref]);
+    assert_eq!(checkpoint.evidence_refs, vec![evidence_ref]);
+    assert_eq!(checkpoint.stage_journal.entries, vec![stage_ref]);
+    assert_eq!(checkpoint.workspace_journal.entries, vec![workspace_ref]);
+}
+
+#[test]
+fn store_run_persistence_harvests_graph_owned_evidence_refs() {
+    let store = RecordingStore::new("recording");
+    let persistence = StoreRunPersistence::new(store.clone());
+    let (mut graph, mut budget) = graph_and_budget();
+    let evidence = InlineEvidenceStore::<TestEvidence>::new("inline");
+    let cases = CaseSet::new(Vec::<&'static str>::new());
+    let seed = {
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+        ctx.insert_seed(text_artifact("seed"), 0).unwrap()
+    };
+    {
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&cases)
+            .with_evidence_store(&evidence);
+        let request_id = ctx
+            .request_evaluation(
+                EvaluatorId::from("checkpoint-evidence"),
+                Fingerprint::from_bytes([23; 32]),
+                EvaluationRequest::Independent {
+                    candidates: vec![seed],
+                    set: EvaluationSet::Unscoped,
+                    granularity: AssessmentGranularity::Aggregate,
+                    purpose: EvaluationPurpose::Search,
+                },
+            )
+            .unwrap();
+        ctx.submit_assessments(
+            request_id,
+            Metered::new(
+                vec![Assessment::Independent {
+                    candidate: seed,
+                    target: AssessmentTarget::Unscoped,
+                    evidence: TestEvidence { score: 0.7 },
+                    cost: Cost::zero(),
+                    metadata: Default::default(),
+                }],
+                Cost::zero(),
+            ),
+        )
+        .unwrap();
+    }
+
+    persistence
+        .checkpoint(RunCheckpointRequest::new(&graph, &budget, None).advance_latest())
+        .unwrap();
+
+    let checkpoint: RunCheckpoint =
+        serde_json::from_slice(&store.latest_checkpoint().unwrap().0).unwrap();
+    assert_eq!(checkpoint.evidence_refs.len(), 1);
+    assert_eq!(checkpoint.evidence_refs[0].store, "inline");
+    assert!(
+        !checkpoint.evidence_refs[0].key.is_empty(),
+        "evidence ref key must survive checkpoint readback"
+    );
 }
 
 #[test]

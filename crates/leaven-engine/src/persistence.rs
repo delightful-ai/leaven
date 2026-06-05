@@ -247,6 +247,16 @@ where
             },
             request.budget.snapshot(),
         );
+        checkpoint.artifact_refs = request.readback_refs.artifact_refs;
+        checkpoint.evidence_refs = merged_evidence_refs(
+            graph_snapshot
+                .assessments
+                .iter()
+                .map(|assessment| assessment.evidence.clone()),
+            request.readback_refs.evidence_refs,
+        );
+        checkpoint.stage_journal = request.readback_refs.stage_journal;
+        checkpoint.workspace_journal = request.readback_refs.workspace_journal;
 
         if let Some(state) = request.optimizer_state {
             let bytes = BlobStore::put(
@@ -307,6 +317,19 @@ where
     }
 }
 
+fn merged_evidence_refs(
+    graph_refs: impl IntoIterator<Item = EvidenceRef>,
+    request_refs: impl IntoIterator<Item = EvidenceRef>,
+) -> Vec<EvidenceRef> {
+    let mut refs = Vec::new();
+    for reference in graph_refs.into_iter().chain(request_refs) {
+        if !refs.contains(&reference) {
+            refs.push(reference);
+        }
+    }
+    refs
+}
+
 fn put_json_blob<S, T>(
     store: &S,
     state: &'static str,
@@ -343,6 +366,7 @@ pub struct RunCheckpointRequest<'a, P: OptimizationProblem> {
     pub budget: &'a BudgetLedger,
     pub cache: Option<&'a EvaluationCache>,
     pub optimizer_state: Option<OptimizerStateWrite>,
+    pub readback_refs: CheckpointReadbackRefs,
     pub advance_latest: bool,
 }
 
@@ -361,6 +385,7 @@ impl<'a, P: OptimizationProblem> RunCheckpointRequest<'a, P> {
             budget,
             cache,
             optimizer_state: None,
+            readback_refs: CheckpointReadbackRefs::default(),
             advance_latest: false,
         }
     }
@@ -368,6 +393,12 @@ impl<'a, P: OptimizationProblem> RunCheckpointRequest<'a, P> {
     #[must_use]
     pub fn with_optimizer_state(mut self, state: OptimizerStateWrite) -> Self {
         self.optimizer_state = Some(state);
+        self
+    }
+
+    #[must_use]
+    pub fn with_readback_refs(mut self, refs: CheckpointReadbackRefs) -> Self {
+        self.readback_refs = refs;
         self
     }
 
@@ -380,6 +411,62 @@ impl<'a, P: OptimizationProblem> RunCheckpointRequest<'a, P> {
     #[must_use]
     pub fn run_id(&self) -> RunId {
         self.graph.run_id
+    }
+}
+
+/// Typed references that make out-of-graph run material reachable from a
+/// checkpoint envelope.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct CheckpointReadbackRefs {
+    pub artifact_refs: Vec<BlobRef>,
+    pub evidence_refs: Vec<EvidenceRef>,
+    pub stage_journal: StageJournalSnapshot,
+    pub workspace_journal: WorkspaceJournalSnapshot,
+}
+
+impl CheckpointReadbackRefs {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            artifact_refs: Vec::new(),
+            evidence_refs: Vec::new(),
+            stage_journal: StageJournalSnapshot {
+                entries: Vec::new(),
+            },
+            workspace_journal: WorkspaceJournalSnapshot {
+                entries: Vec::new(),
+            },
+        }
+    }
+
+    #[must_use]
+    pub fn with_artifact_refs(mut self, refs: impl IntoIterator<Item = BlobRef>) -> Self {
+        self.artifact_refs.extend(refs);
+        self
+    }
+
+    #[must_use]
+    pub fn with_evidence_refs(mut self, refs: impl IntoIterator<Item = EvidenceRef>) -> Self {
+        self.evidence_refs.extend(refs);
+        self
+    }
+
+    #[must_use]
+    pub fn with_stage_journal_entries(
+        mut self,
+        entries: impl IntoIterator<Item = BlobRef>,
+    ) -> Self {
+        self.stage_journal.entries.extend(entries);
+        self
+    }
+
+    #[must_use]
+    pub fn with_workspace_journal_entries(
+        mut self,
+        entries: impl IntoIterator<Item = BlobRef>,
+    ) -> Self {
+        self.workspace_journal.entries.extend(entries);
+        self
     }
 }
 
