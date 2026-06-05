@@ -23,8 +23,8 @@ async def amain() -> None:
 
     print("run id:          ", result.run_id)
     print("best score:      ", f"{result.best.summary_score:.3f}")
-    print("lm receipt:      ", value["receipt"])
-    print("lm tokens:       ", value["usage"]["total_tokens"])
+    print("lm receipt:      ", value.receipt)
+    print("lm tokens:       ", value.usage.total_tokens)
     print("cost status:     ", result.summary.cost_status)
 
 

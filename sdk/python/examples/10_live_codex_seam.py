@@ -49,9 +49,9 @@ def main() -> None:
 
     assert session.transcript_ref == "blob_completion_transcript"
     assert session.receipt.receipt_id == "agentrec_completion"
-    assert session.commands[1]["status"] == "completed"
+    assert session.commands[1].status == "completed"
 
-    codex_command = session.commands[1]["argv"]
+    codex_command = session.commands[1].argv
     print("agent receipt:    ", session.receipt.receipt_id)
     print("codex model:      ", codex_command[codex_command.index("--model") + 1])
     print("transcript ref:   ", session.transcript_ref)

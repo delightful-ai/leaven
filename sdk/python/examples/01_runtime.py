@@ -35,9 +35,12 @@ def main() -> None:
         cache=lv.runtime.cache.sqlite_default(),
     )
 
+    if not isinstance(runtime.workspace, lv.workspace.LocalWorkspace):
+        raise TypeError("example runtime workspace must be local")
+
     print()
     print("full:")
-    print("  workspace :", runtime.workspace.backend, "@", runtime.workspace.root)  # type: ignore[attr-defined]
+    print("  workspace :", runtime.workspace.backend, "@", runtime.workspace.root)
     print("  lm roles  :", sorted(runtime.lm) if isinstance(runtime.lm, dict) else runtime.lm)
     print(
         "  agent     :", sorted(runtime.agent) if isinstance(runtime.agent, dict) else runtime.agent

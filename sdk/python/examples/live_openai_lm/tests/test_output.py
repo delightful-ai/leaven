@@ -6,7 +6,7 @@ from leaven.evidence import EvidenceEnvelope, EvidencePublic
 from leaven.score import Score
 
 from live_openai_lm.config import EXPECTED_TEXT
-from live_openai_lm.output import live_lm_output_from_assessment
+from live_openai_lm.output import LiveLmOutput, LiveLmUsage, live_lm_output_from_assessment
 
 
 def test_live_lm_output_from_assessment_reads_public_runner_output() -> None:
@@ -41,4 +41,10 @@ def test_live_lm_output_from_assessment_reads_public_runner_output() -> None:
         }
     )
 
-    assert live_lm_output_from_assessment(assessment) == output
+    assert live_lm_output_from_assessment(assessment) == LiveLmOutput(
+        text=EXPECTED_TEXT,
+        receipt="lmrec_completion",
+        usage=LiveLmUsage(total_tokens=35),
+        cost_usd=None,
+        model="gpt-4.1-mini",
+    )

@@ -1,9 +1,8 @@
 """Run every numbered example script in order.
 
-Most scaffold examples raise NotImplementedError at the engine boundary; this
-runner catches that and reports the example as expected-failed so the tour
-completes end-to-end without crashing. Live-gated examples are responsible for
-skipping themselves unless their opt-in env vars are set.
+Only explicitly classified scaffold examples may stop at known boundary errors.
+No-spend and live-gated mechanics examples must fail loudly if they hit a
+scaffold boundary.
 """
 
 import importlib.util
@@ -12,6 +11,12 @@ import traceback
 from pathlib import Path
 
 HERE = Path(__file__).parent
+EXPECTED_BOUNDARY_EXAMPLES = {
+    "04_evoskill_skill_bank.py": "non-PromptArtifact front-door boundary",
+    "06_reflect_propose_custom.py": "non-PromptArtifact front-door boundary",
+    "08_dspy_dropin.py": "optional DSPy adapter scaffold boundary",
+    "09_full_repro.py": "full front-door scaffold boundary",
+}
 
 
 def main() -> int:
@@ -38,11 +43,14 @@ def main() -> int:
                 try:
                     asyncio.run(module.amain())
                 except Exception as e:
-                    if _is_expected_boundary_error(e):
-                        print(f"(expected) {e}")
+                    if _is_expected_boundary_error(script.name, e):
+                        print(f"(expected: {EXPECTED_BOUNDARY_EXAMPLES[script.name]}) {e}")
                     else:
                         raise
         except Exception as e:
+            if _is_expected_boundary_error(script.name, e):
+                print(f"(expected: {EXPECTED_BOUNDARY_EXAMPLES[script.name]}) {e}")
+                continue
             failures.append((script.name, f"{type(e).__name__}: {e}"))
             traceback.print_exc(limit=2)
 
@@ -52,14 +60,16 @@ def main() -> int:
         for name, msg in failures:
             print(f"  {name}: {msg}")
         return 1
-    print(f"all {len(scripts)} examples completed (scaffold engine boundaries are expected).")
+    print(f"all {len(scripts)} examples completed with explicit maturity classifications.")
     return 0
 
 
-def _is_expected_boundary_error(error: Exception) -> bool:
-    """Return whether an example hit a known scaffold engine boundary."""
-    if isinstance(error, NotImplementedError):
-        return True
+def _is_expected_boundary_error(script_name: str, error: Exception) -> bool:
+    """Return whether a named example hit its documented scaffold boundary."""
+    if script_name not in EXPECTED_BOUNDARY_EXAMPLES:
+        return False
+    if script_name == "08_dspy_dropin.py":
+        return isinstance(error, NotImplementedError)
     return isinstance(error, TypeError) and str(error).startswith(
         "this slice optimizes a PromptArtifact seed"
     )

@@ -9,7 +9,7 @@ from live_openai_lm.output import valid_live_lm_output
 
 
 @lv.runner
-async def run(prompt: lv.PromptArtifact, case: lv.Case, cx: lv.RolloutContext) -> str:
+async def run(prompt: lv.PromptArtifact, case: lv.InputCaseView, cx: lv.RolloutContext) -> str:
     """Call the configured live LM through the active stage seam."""
     _ = case
     reply = await cx.lm.complete(
