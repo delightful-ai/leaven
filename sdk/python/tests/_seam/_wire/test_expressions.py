@@ -10,12 +10,15 @@ from leaven._seam._wire.expressions import (
     PlanExpressionGraphQuery,
     PlanExpressionLiteral,
     PlanExpressionProject,
+    PlanExpressionWorkspaceQuery,
     PreconditionSchemaValid,
     PredicateEq,
     ProjectionSummary,
     ValueExprExtract,
     ValueExprLiteral,
     ValueExprVar,
+    WorkspaceQueryGitDiff,
+    WorkspaceQueryReadFile,
 )
 from leaven._seam._wire.payloads import PlanDocument
 
@@ -177,6 +180,65 @@ def test_graph_query_decodes_typed_projection_and_steps() -> None:
     assert expr.steps is not UNSET
     assert isinstance(expr.steps[0], GraphStepFilter)
     assert isinstance(expr.steps[0].predicate, PredicateEq)
+
+
+def test_workspace_query_decodes_typed_filesystem_op() -> None:
+    """Example: workspace_query.op is a tagged workspace operation record."""
+
+    body = (
+        b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
+        b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
+        b'"ops":[{"kind":"let","name":"workspace_file",'
+        b'"expr":{"kind":"workspace_query","workspace":"ws_1",'
+        b'"op":{"kind":"read_file","path":"README.md",'
+        b'"expected_data_classes":["public"],"max_bytes":4096}}}],'
+        b'"return":["workspace_file"],"commit":{"kind":"no_graph_writes"}}'
+    )
+
+    decoded = msgspec.json.decode(body, type=PlanDocument)
+    expr = decoded.ops[0].expr
+
+    assert isinstance(expr, PlanExpressionWorkspaceQuery)
+    assert isinstance(expr.op, WorkspaceQueryReadFile)
+    assert expr.op.path == "README.md"
+    assert expr.op.expected_data_classes == ["public"]
+    assert expr.op.max_bytes == 4096
+
+
+def test_workspace_query_decodes_typed_git_op() -> None:
+    """Example: git operations keep their locked operation variant."""
+
+    body = (
+        b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
+        b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
+        b'"ops":[{"kind":"let","name":"workspace_diff",'
+        b'"expr":{"kind":"workspace_query","workspace":"ws_1",'
+        b'"op":{"kind":"git_diff","against":"seed"}}}],'
+        b'"return":["workspace_diff"],"commit":{"kind":"no_graph_writes"}}'
+    )
+
+    decoded = msgspec.json.decode(body, type=PlanDocument)
+    expr = decoded.ops[0].expr
+
+    assert isinstance(expr, PlanExpressionWorkspaceQuery)
+    assert isinstance(expr.op, WorkspaceQueryGitDiff)
+    assert expr.op.against == "seed"
+
+
+def test_workspace_query_rejects_unknown_op_kind() -> None:
+    """Boundary check: workspace ops are not arbitrary JSON objects."""
+
+    body = (
+        b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
+        b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
+        b'"ops":[{"kind":"let","name":"workspace_unknown",'
+        b'"expr":{"kind":"workspace_query","workspace":"ws_1",'
+        b'"op":{"kind":"rm_rf","path":"."}}}],'
+        b'"return":["workspace_unknown"],"commit":{"kind":"no_graph_writes"}}'
+    )
+
+    with pytest.raises(msgspec.ValidationError):
+        msgspec.json.decode(body, type=PlanDocument)
 
 
 def test_extract_value_expr_decodes_recursive_input_expr() -> None:

@@ -6,14 +6,13 @@ from typing import Literal
 from msgspec import UNSET
 
 from leaven._seam._wire.calls import WorkspaceMaterializeCall, WorkspaceReleaseCall
-from leaven._seam._wire.expressions import PlanExpressionWorkspaceQuery
+from leaven._seam._wire.expressions import PlanExpressionWorkspaceQuery, WorkspaceQuery
 from leaven._seam._wire.payloads import (
     CommitPolicyGraphWritesAtomic,
     CommitPolicyNoGraphWrites,
     PlanDocument,
     PlanOp,
 )
-from leaven._seam._wire.refs import WireJsonObject
 
 from .plans import SeamRequestMethod, _plan_document
 
@@ -114,7 +113,7 @@ class WorkspaceQueryRequest:
     plan_id: str
     method_value: WorkspaceQueryMethod
     workspace: str
-    op: WireJsonObject
+    op: WorkspaceQuery
     op_name: str = "workspace_query"
 
     @property

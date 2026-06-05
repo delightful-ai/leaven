@@ -17,7 +17,9 @@ EXPRESSION_EXPORTS = (
     "PredicateGte PredicateIn PredicateIsNull PredicateLt PredicateLte PredicateMatches PredicateNe PredicateNot PredicateOr "
     "Projection ProjectionArtifact ProjectionAssessment ProjectionCandidate ProjectionDiff ProjectionExtension ProjectionIds "
     "ProjectionSummary SortKey ValidationErrorItem ValidationReceipt ValueExpr "
-    "ValueExprExtension ValueExprExtract ValueExprLiteral ValueExprVar"
+    "ValueExprExtension ValueExprExtract ValueExprLiteral ValueExprVar WorkspaceQuery WorkspaceQueryCaptureArtifacts "
+    "WorkspaceQueryDigest WorkspaceQueryGitDiff WorkspaceQueryGitLog WorkspaceQueryGitStatus WorkspaceQueryList "
+    "WorkspaceQueryReadFile WorkspaceQuerySnapshot WorkspaceQueryStat"
 )
 
 
@@ -367,9 +369,65 @@ class PlanExpressionCaseQuery(Struct, frozen=True, forbid_unknown_fields=True, t
     query: WireJsonObject
 
 
+class WorkspaceQuerySnapshot(Struct, frozen=True, forbid_unknown_fields=True, tag="snapshot", tag_field="kind"):
+    pass
+
+
+class WorkspaceQueryList(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="list", tag_field="kind"):
+    path: str
+    recursive: bool | UnsetType = UNSET
+    max_entries: int | UnsetType = UNSET
+
+
+class WorkspaceQueryReadFile(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="read_file", tag_field="kind"):
+    path: str
+    expected_data_classes: list[str]
+    max_bytes: int | UnsetType = UNSET
+
+
+class WorkspaceQueryStat(Struct, frozen=True, forbid_unknown_fields=True, tag="stat", tag_field="kind"):
+    path: str
+
+
+class WorkspaceQueryDigest(Struct, frozen=True, forbid_unknown_fields=True, tag="digest", tag_field="kind"):
+    path: str
+    algorithm: Literal["sha256", "blake3"]
+
+
+class WorkspaceQueryGitLog(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="git_log", tag_field="kind"):
+    max_entries: int | UnsetType = UNSET
+
+
+class WorkspaceQueryGitDiff(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="git_diff", tag_field="kind"):
+    against: Literal["seed", "parent", "baseline", "head"]
+    max_bytes: int | UnsetType = UNSET
+
+
+class WorkspaceQueryGitStatus(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="git_status", tag_field="kind"):
+    porcelain: bool | UnsetType = UNSET
+
+
+class WorkspaceQueryCaptureArtifacts(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="capture_artifacts", tag_field="kind"):
+    paths: list[str]
+    max_bytes: int | UnsetType = UNSET
+
+
+type WorkspaceQuery = (
+    WorkspaceQuerySnapshot
+    | WorkspaceQueryList
+    | WorkspaceQueryReadFile
+    | WorkspaceQueryStat
+    | WorkspaceQueryDigest
+    | WorkspaceQueryGitLog
+    | WorkspaceQueryGitDiff
+    | WorkspaceQueryGitStatus
+    | WorkspaceQueryCaptureArtifacts
+)
+
+
 class PlanExpressionWorkspaceQuery(Struct, frozen=True, forbid_unknown_fields=True, tag="workspace_query", tag_field="kind"):
     workspace: WorkspaceRef
-    op: WireJsonObject
+    op: WorkspaceQuery
 
 
 class PlanExpressionProject(Struct, frozen=True, forbid_unknown_fields=True, tag="project", tag_field="kind"):

@@ -98,11 +98,7 @@ async def test_workspace_reads_lower_retained_query_methods_through_seam() -> No
     digest = await workspace.digest(handle, "src/lib.rs", algorithm="sha256")
     snapshot = await workspace.snapshot(handle)
     git_log = await workspace.git_log(handle, max_entries=5)
-    git_diff = await workspace.git_diff(
-        handle,
-        against="seed",
-        expected_data_classes=["workspace.file"],
-    )
+    git_diff = await workspace.git_diff(handle, against="seed")
     git_status = await workspace.git_status(handle)
     captured = await workspace.capture_artifacts(handle, ["README.md"], max_bytes=2048)
 
@@ -134,13 +130,18 @@ async def test_workspace_reads_lower_retained_query_methods_through_seam() -> No
         "leaven/workspace.capture_artifacts",
     ]
     assert [_query_op(request) for request in client.query_requests] == [
-        {"kind": "read_file", "path": "README.md", "max_bytes": 4096},
+        {
+            "kind": "read_file",
+            "path": "README.md",
+            "expected_data_classes": ["public"],
+            "max_bytes": 4096,
+        },
         {"kind": "list", "path": "src", "recursive": True, "max_entries": 10},
         {"kind": "stat", "path": "src/lib.rs"},
         {"kind": "digest", "path": "src/lib.rs", "algorithm": "sha256"},
         {"kind": "snapshot"},
         {"kind": "git_log", "max_entries": 5},
-        {"kind": "git_diff", "against": "seed", "expected_data_classes": ["workspace.file"]},
+        {"kind": "git_diff", "against": "seed"},
         {"kind": "git_status", "porcelain": True},
         {"kind": "capture_artifacts", "paths": ["README.md"], "max_bytes": 2048},
     ]

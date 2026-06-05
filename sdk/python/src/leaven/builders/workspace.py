@@ -16,8 +16,19 @@ from pydantic import BaseModel, ConfigDict, Field
 from .._handles import WorkspaceHandle, WorkspaceLifetime, WorkspaceSurface
 from .._receipts import CallReceipt, QueryReceipt
 from .._seam import WorkspaceMaterializeRequest, WorkspaceQueryRequest, WorkspaceReleaseRequest
+from .._seam._wire.expressions import (
+    WorkspaceQueryCaptureArtifacts,
+    WorkspaceQueryDigest,
+    WorkspaceQueryGitDiff,
+    WorkspaceQueryGitLog,
+    WorkspaceQueryGitStatus,
+    WorkspaceQueryList,
+    WorkspaceQueryReadFile,
+    WorkspaceQuerySnapshot,
+    WorkspaceQueryStat,
+)
 from .._seam._wire.refs import BlobRef as WireBlobRef
-from .._seam._wire.refs import ReceiptRefRecord, WireJsonObject, WireJsonScalar
+from .._seam._wire.refs import ReceiptRefRecord
 from .._seam._wire.results import (
     WorkspaceCaptureArtifactsResult,
     WorkspaceDiffPrimary,
@@ -134,6 +145,7 @@ class WorkspaceReads:
         path: str,
         *,
         max_bytes: int | None = None,
+        expected_data_classes: list[str] | None = None,
     ) -> WorkspaceFile:
         """Read one workspace-relative file."""
         result = await asyncio.to_thread(
@@ -143,10 +155,12 @@ class WorkspaceReads:
                 plan_id=self._plan_id,
                 method_value="leaven/workspace.read_file",
                 workspace=handle.workspace_id,
-                op=_query_op(
-                    "read_file",
+                op=WorkspaceQueryReadFile(
                     path=path,
-                    max_bytes=max_bytes,
+                    expected_data_classes=expected_data_classes
+                    if expected_data_classes is not None
+                    else ["public"],
+                    max_bytes=max_bytes if max_bytes is not None else UNSET,
                 ),
                 op_name="workspace_file",
             ),
@@ -174,11 +188,10 @@ class WorkspaceReads:
                 plan_id=self._plan_id,
                 method_value="leaven/workspace.list",
                 workspace=handle.workspace_id,
-                op=_query_op(
-                    "list",
+                op=WorkspaceQueryList(
                     path=path,
                     recursive=recursive,
-                    max_entries=max_entries,
+                    max_entries=max_entries if max_entries is not None else UNSET,
                 ),
                 op_name="workspace_listing",
             ),
@@ -201,7 +214,7 @@ class WorkspaceReads:
                 plan_id=self._plan_id,
                 method_value="leaven/workspace.snapshot",
                 workspace=handle.workspace_id,
-                op={"kind": "snapshot"},
+                op=WorkspaceQuerySnapshot(),
                 op_name="workspace_snapshot",
             ),
         )
@@ -216,7 +229,7 @@ class WorkspaceReads:
                 plan_id=self._plan_id,
                 method_value="leaven/workspace.stat",
                 workspace=handle.workspace_id,
-                op={"kind": "stat", "path": path},
+                op=WorkspaceQueryStat(path=path),
                 op_name="workspace_stat",
             ),
         )
@@ -237,7 +250,7 @@ class WorkspaceReads:
                 plan_id=self._plan_id,
                 method_value="leaven/workspace.digest",
                 workspace=handle.workspace_id,
-                op={"kind": "digest", "path": path, "algorithm": algorithm},
+                op=WorkspaceQueryDigest(path=path, algorithm=algorithm),
                 op_name="workspace_digest",
             ),
         )
@@ -247,8 +260,7 @@ class WorkspaceReads:
         self,
         handle: WorkspaceHandle,
         *,
-        against: str = "parent",
-        expected_data_classes: Sequence[str] | None = None,
+        against: Literal["seed", "parent", "baseline", "head"] = "parent",
     ) -> WorkspaceDiff:
         """Git diff against a ref."""
         result = await asyncio.to_thread(
@@ -258,10 +270,7 @@ class WorkspaceReads:
                 plan_id=self._plan_id,
                 method_value="leaven/workspace.git_diff",
                 workspace=handle.workspace_id,
-                op=_git_diff_op(
-                    against=against,
-                    expected_data_classes=expected_data_classes,
-                ),
+                op=WorkspaceQueryGitDiff(against=against),
                 op_name="workspace_git_diff",
             ),
         )
@@ -276,7 +285,7 @@ class WorkspaceReads:
                 plan_id=self._plan_id,
                 method_value="leaven/workspace.git_status",
                 workspace=handle.workspace_id,
-                op={"kind": "git_status", "porcelain": True},
+                op=WorkspaceQueryGitStatus(porcelain=True),
                 op_name="workspace_git_status",
             ),
         )
@@ -294,7 +303,7 @@ class WorkspaceReads:
                 plan_id=self._plan_id,
                 method_value="leaven/workspace.git_log",
                 workspace=handle.workspace_id,
-                op={"kind": "git_log", "max_entries": max_entries},
+                op=WorkspaceQueryGitLog(max_entries=max_entries),
                 op_name="workspace_git_log",
             ),
         )
@@ -315,7 +324,10 @@ class WorkspaceReads:
                 plan_id=self._plan_id,
                 method_value="leaven/workspace.capture_artifacts",
                 workspace=handle.workspace_id,
-                op=_capture_artifacts_op(paths, max_bytes=max_bytes),
+                op=WorkspaceQueryCaptureArtifacts(
+                    paths=list(paths),
+                    max_bytes=max_bytes if max_bytes is not None else UNSET,
+                ),
                 op_name="workspace_artifacts",
             ),
         )
@@ -428,36 +440,6 @@ class _WorkspaceSeamRequester(Protocol):
     def workspace_capture_artifacts(
         self, request: WorkspaceQueryRequest
     ) -> WorkspaceCaptureArtifactsResult: ...
-
-
-def _query_op(kind: str, **fields: str | int | bool | None) -> WireJsonObject:
-    op: WireJsonObject = {"kind": kind}
-    for name, value in fields.items():
-        if value is not None:
-            op[name] = value
-    return op
-
-
-def _git_diff_op(
-    *,
-    against: str,
-    expected_data_classes: Sequence[str] | None,
-) -> WireJsonObject:
-    op = _query_op("git_diff", against=against)
-    if expected_data_classes is not None:
-        op["expected_data_classes"] = _string_list(expected_data_classes)
-    return op
-
-
-def _capture_artifacts_op(paths: Sequence[str], *, max_bytes: int | None) -> WireJsonObject:
-    op: WireJsonObject = {"kind": "capture_artifacts", "paths": _string_list(paths)}
-    if max_bytes is not None:
-        op["max_bytes"] = max_bytes
-    return op
-
-
-def _string_list(value: Sequence[str]) -> list[WireJsonScalar]:
-    return list(value)
 
 
 def _workspace_handle(

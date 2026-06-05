@@ -1653,6 +1653,36 @@ acceptance:
           method-result decode routing for every retained locked method. The
           row remains pending because remaining Plan/body/result leaf records
           still need typed owners.
+      - kind: generated_workspace_query_ops_are_typed_records
+        paths:
+          - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
+          - sdk/python/codegen/expression_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/expressions.py
+          - sdk/python/src/leaven/_seam/workspace_plans.py
+          - sdk/python/src/leaven/builders/workspace.py
+          - sdk/python/tests/_seam/_wire/test_expressions.py
+          - sdk/python/tests/builders/test_workspace.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_expressions.py tests/builders/test_workspace.py -q
+          - cd sdk/python && uv run pytest tests/_seam/_wire tests/builders/test_workspace.py -q
+          - cd sdk/python && just check
+          - cd sdk/python && uv run pytest -q
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Generated msgspec `WorkspaceQuery` variants now own the locked
+          filesystem and Git query operation records for `workspace_query.op`
+          instead of carrying an untyped `WireJsonObject`. The public workspace
+          builder constructs those records directly for read_file, list, stat,
+          digest, snapshot, git_log, git_diff, git_status, and
+          capture_artifacts. `read_file` now carries the schema-required
+          `expected_data_classes` field by default, and the schema-invalid
+          `git_diff.expected_data_classes` Python builder argument was hard-cut.
+          Focused tests prove typed filesystem and Git op decoding plus
+          unknown-op rejection; the full Python SDK test suite passed 219 tests.
+          The row remains pending because case-query bodies, literal values,
+          extension payloads, JSON-RPC error data, and other schema-owned
+          leaves still need typed owners.
       - kind: typed_private_client_request_cutover
         paths:
           - sdk/python/src/leaven/_seam/plans.py

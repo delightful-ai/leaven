@@ -342,9 +342,65 @@ class PlanExpressionCaseQuery(Struct, frozen=True, forbid_unknown_fields=True, t
     query: WireJsonObject
 
 
+class WorkspaceQuerySnapshot(Struct, frozen=True, forbid_unknown_fields=True, tag="snapshot", tag_field="kind"):
+    pass
+
+
+class WorkspaceQueryList(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="list", tag_field="kind"):
+    path: str
+    recursive: bool | UnsetType = UNSET
+    max_entries: int | UnsetType = UNSET
+
+
+class WorkspaceQueryReadFile(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="read_file", tag_field="kind"):
+    path: str
+    expected_data_classes: list[str]
+    max_bytes: int | UnsetType = UNSET
+
+
+class WorkspaceQueryStat(Struct, frozen=True, forbid_unknown_fields=True, tag="stat", tag_field="kind"):
+    path: str
+
+
+class WorkspaceQueryDigest(Struct, frozen=True, forbid_unknown_fields=True, tag="digest", tag_field="kind"):
+    path: str
+    algorithm: Literal["sha256", "blake3"]
+
+
+class WorkspaceQueryGitLog(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="git_log", tag_field="kind"):
+    max_entries: int | UnsetType = UNSET
+
+
+class WorkspaceQueryGitDiff(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="git_diff", tag_field="kind"):
+    against: Literal["seed", "parent", "baseline", "head"]
+    max_bytes: int | UnsetType = UNSET
+
+
+class WorkspaceQueryGitStatus(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="git_status", tag_field="kind"):
+    porcelain: bool | UnsetType = UNSET
+
+
+class WorkspaceQueryCaptureArtifacts(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="capture_artifacts", tag_field="kind"):
+    paths: list[str]
+    max_bytes: int | UnsetType = UNSET
+
+
+type WorkspaceQuery = (
+    WorkspaceQuerySnapshot
+    | WorkspaceQueryList
+    | WorkspaceQueryReadFile
+    | WorkspaceQueryStat
+    | WorkspaceQueryDigest
+    | WorkspaceQueryGitLog
+    | WorkspaceQueryGitDiff
+    | WorkspaceQueryGitStatus
+    | WorkspaceQueryCaptureArtifacts
+)
+
+
 class PlanExpressionWorkspaceQuery(Struct, frozen=True, forbid_unknown_fields=True, tag="workspace_query", tag_field="kind"):
     workspace: WorkspaceRef
-    op: WireJsonObject
+    op: WorkspaceQuery
 
 
 class PlanExpressionProject(Struct, frozen=True, forbid_unknown_fields=True, tag="project", tag_field="kind"):
@@ -483,5 +539,5 @@ class ValidationReceipt(Struct, frozen=True, forbid_unknown_fields=True, omit_de
 
 
 __all__ = (  # noqa: PLE0605, SIM905
-    "ArtifactProjection AssessmentFilter CandidateFilter ExtensionObjectExpression GraphEdge GraphEdgeAssessments GraphEdgeChildren GraphEdgeDescendants GraphEdgeInformed GraphEdgeInformedBy GraphEdgeLineage GraphEdgePairwiseAssessments GraphEdgeParents GraphEdgeProposalThatCreated GraphEdgeSiblings GraphSource GraphSourceAssessmentSet GraphSourceByCandidate GraphSourceByProposal GraphSourceByProposalBatch GraphSourceCandidateSet GraphSourceCandidateTree GraphSourceCosts GraphSourceEvents GraphSourceExtension GraphSourceRecentFailures GraphStep GraphStepFilter GraphStepLimit GraphStepProject GraphStepSort GraphStepTraverse PageRequest PlanExpression PlanExpressionCaseQuery PlanExpressionExtract PlanExpressionFilter PlanExpressionGraphQuery PlanExpressionLimit PlanExpressionLiteral PlanExpressionProject PlanExpressionRefsFromResult PlanExpressionSort PlanExpressionTemplate PlanExpressionVar PlanExpressionWorkspaceQuery Precondition PreconditionAssessmentExists PreconditionCandidateExists PreconditionCandidateIdentity PreconditionGraphRevisionAtLeast PreconditionGraphRevisionEquals PreconditionReceiptExists PreconditionSchemaValid Predicate PredicateAnd PredicateContains PredicateEq PredicateExists PredicateGt PredicateGte PredicateIn PredicateIsNull PredicateLt PredicateLte PredicateMatches PredicateNe PredicateNot PredicateOr Projection ProjectionArtifact ProjectionAssessment ProjectionCandidate ProjectionDiff ProjectionExtension ProjectionIds ProjectionSummary SortKey ValidationErrorItem ValidationReceipt ValueExpr ValueExprExtension ValueExprExtract ValueExprLiteral ValueExprVar"
+    "ArtifactProjection AssessmentFilter CandidateFilter ExtensionObjectExpression GraphEdge GraphEdgeAssessments GraphEdgeChildren GraphEdgeDescendants GraphEdgeInformed GraphEdgeInformedBy GraphEdgeLineage GraphEdgePairwiseAssessments GraphEdgeParents GraphEdgeProposalThatCreated GraphEdgeSiblings GraphSource GraphSourceAssessmentSet GraphSourceByCandidate GraphSourceByProposal GraphSourceByProposalBatch GraphSourceCandidateSet GraphSourceCandidateTree GraphSourceCosts GraphSourceEvents GraphSourceExtension GraphSourceRecentFailures GraphStep GraphStepFilter GraphStepLimit GraphStepProject GraphStepSort GraphStepTraverse PageRequest PlanExpression PlanExpressionCaseQuery PlanExpressionExtract PlanExpressionFilter PlanExpressionGraphQuery PlanExpressionLimit PlanExpressionLiteral PlanExpressionProject PlanExpressionRefsFromResult PlanExpressionSort PlanExpressionTemplate PlanExpressionVar PlanExpressionWorkspaceQuery Precondition PreconditionAssessmentExists PreconditionCandidateExists PreconditionCandidateIdentity PreconditionGraphRevisionAtLeast PreconditionGraphRevisionEquals PreconditionReceiptExists PreconditionSchemaValid Predicate PredicateAnd PredicateContains PredicateEq PredicateExists PredicateGt PredicateGte PredicateIn PredicateIsNull PredicateLt PredicateLte PredicateMatches PredicateNe PredicateNot PredicateOr Projection ProjectionArtifact ProjectionAssessment ProjectionCandidate ProjectionDiff ProjectionExtension ProjectionIds ProjectionSummary SortKey ValidationErrorItem ValidationReceipt ValueExpr ValueExprExtension ValueExprExtract ValueExprLiteral ValueExprVar WorkspaceQuery WorkspaceQueryCaptureArtifacts WorkspaceQueryDigest WorkspaceQueryGitDiff WorkspaceQueryGitLog WorkspaceQueryGitStatus WorkspaceQueryList WorkspaceQueryReadFile WorkspaceQuerySnapshot WorkspaceQueryStat"
 ).split()
