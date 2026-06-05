@@ -3109,7 +3109,11 @@ acceptance:
           ignored live e2e passed after this hardening, proving the Codex Kit,
           Git repos, filesystem materialization/readback, stdio submit/apply,
           checkpoint restore, and next-Codex consumption path still work
-          together.
+          together. A current rerun on 2026-06-04 reconfirmed the focused
+          git-materializer suite (13 passed), checkpointed AgentKit SDK route
+          (1 passed), Firkin product-pod Git workspace proof (1 passed), and
+          live child-consumption e2e (1 passed in 75.31s) with normal Cargo
+          incremental settings.
     closeout_check: >-
       A live Codex prompt-consumption test, a deterministic AgentKit projection
       test, or `proposal.submit_batch` without application cannot close this
