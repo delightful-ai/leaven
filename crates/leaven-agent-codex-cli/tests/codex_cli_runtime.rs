@@ -50,6 +50,7 @@ fn codex_cli_config_leaves_repo_skills_native() {
     assert!(!setup_text.contains(".agents/skills"));
     assert!(!setup_text.contains("cp -R"));
     assert!(setup_text.contains("mkdir"));
+    assert!(setup_text.contains(": >"));
 }
 
 #[test]
@@ -285,6 +286,73 @@ exit 9
                 }
             )
         }));
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+        remove_dir(&parent);
+    });
+}
+
+#[test]
+fn codex_cli_runtime_clears_stale_last_message_before_each_run() {
+    futures::executor::block_on(async {
+        let parent = temp_parent("codex-cli-stale-last-message");
+        let factory = LocalWorkspaceFactory::new(&parent);
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mut view = workspace.view();
+        view.write_file(
+            &WorkspacePath::new(".leaven/codex-last-message.txt").unwrap(),
+            b"stale assistant message",
+        )
+        .unwrap();
+        view.write_file(
+            &WorkspacePath::new("bin/codex").unwrap(),
+            br"#!/bin/sh
+cat >/dev/null
+printf 'mutation failed before final message' >&2
+exit 1
+",
+        )
+        .unwrap();
+        view.set_executable(&WorkspacePath::new("bin/codex").unwrap(), true)
+            .unwrap();
+
+        let runtime = CodexCliRuntime::new(CodexCliConfig::new("bin/codex"));
+        let session = runtime
+            .run_session(
+                &mut view,
+                AgentRunRequest::new(
+                    AgentInstructions::task("mutate"),
+                    OutputContract::WorkspaceDiff {
+                        roots: vec![],
+                        surface_fingerprint: None,
+                    },
+                ),
+                AgentRunContext::new(AgentSessionId::new(), &BudgetSnapshot::default()),
+            )
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            session.value.status,
+            AgentStatus::Failed { ref reason }
+                if reason.contains("Some(1)")
+                    && reason.contains("mutation failed before final message")
+        ));
+        assert!(!session.value.transcript.events.iter().any(|event| {
+            matches!(
+                event,
+                TranscriptEvent::Message {
+                    role: TranscriptRole::Assistant,
+                    content,
+                } if content == "stale assistant message"
+            )
+        }));
+        assert_eq!(
+            view.read_file(&WorkspacePath::new(".leaven/codex-last-message.txt").unwrap())
+                .unwrap(),
+            b""
+        );
 
         drop(view);
         workspace.cleanup().await.unwrap();

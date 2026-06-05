@@ -221,7 +221,9 @@ async fn read_back_live_codex_agent_kit_change(
             })?;
         run_live_codex_reflection_stage(&mut view, &projection.system_prompt, &root).await?;
         let mut instructions = AgentInstructions::task(
-            "Read agent/reflection.md, then edit only files under repos/agent. Replace \
+            "Read agent/reflection.md, then edit only files under repos/agent. Treat \
+             repos/agent as the Git repository and worktree; the outer workspace is \
+             intentionally not a Git repository. Replace \
              repos/agent/system_prompt.md with exactly:\n\
              Child system proof requirement: create repos/agent/child-system-proof.txt containing exactly CHILD_SYSTEM_CONSUMED\n\
              \n\

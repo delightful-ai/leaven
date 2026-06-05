@@ -74,8 +74,10 @@ async def reflect(req: ReflectRequest, cx: lv.ReflectContext) -> ReflectionResul
     )
 
 
-# ----- custom proposer: agentic, materializes a workspace, writes a change --
-# A `ProposeContext` may materialize the parent candidate and write into it.
+# ----- custom proposer: agentic, materializes a workspace and submits change --
+# A `ProposeContext` may materialize the parent candidate and run an agent
+# against it. Workspace mutation is owned by the agent/proposal path, not a
+# standalone Python `workspace.write_file` helper in V1.
 @lv.proposer(stage_id="examples/custom-proposer", repair_attempts=2)
 async def propose(req: ProposeRequest, cx: lv.ProposeContext) -> ProposalBatch:
     ws = await cx.workspace.materialize_candidate(
@@ -83,12 +85,14 @@ async def propose(req: ProposeRequest, cx: lv.ProposeContext) -> ProposalBatch:
         surface="skills_only",
         lifetime="stage_call",
     )
-    await cx.workspace.write_file(ws, "REFLECTION.md", req.reflection.diagnosis)
 
     session = await cx.agent.run(
         workspace=ws,
         instructions=lv.AgentInstructions(
-            task="Propose a typed change to the candidate that addresses REFLECTION.md.",
+            task=(
+                "Propose a typed change to the candidate that addresses this "
+                f"reflection:\n{req.reflection.diagnosis}"
+            ),
             system=lv.roles.SKILL_PROPOSER,
         ),
         output=lv.output.json_schema(SkillProposal),

@@ -50,7 +50,7 @@ impl CodexCliConfig {
         CommandAgentConfig {
             id: AgentRuntimeId::new_const("codex-cli"),
             fingerprint_seed: "codex-cli-v1".to_owned(),
-            setup: vec![mkdir_leaven_command()],
+            setup: vec![prepare_last_message_command(&self.last_message_path)],
             run: CommandTemplate {
                 program: self.codex_bin.clone(),
                 args: self.exec_args(),
@@ -101,7 +101,7 @@ impl CodexCliConfig {
         let command_config = CommandAgentConfig {
             id: AgentRuntimeId::new_const("codex-cli"),
             fingerprint_seed: "codex-cli-v1".to_owned(),
-            setup: vec![mkdir_leaven_command()],
+            setup: vec![prepare_last_message_command(&last_message_path)],
             run: CommandTemplate {
                 program: codex_bin,
                 args: codex_exec_args(&model, reasoning_effort, approval, &last_message_path),
@@ -228,12 +228,16 @@ impl CodexCliSandbox {
     }
 }
 
-fn mkdir_leaven_command() -> CommandTemplate {
+fn prepare_last_message_command(last_message_path: &WorkspacePath) -> CommandTemplate {
     CommandTemplate {
         program: "sh".to_owned(),
         args: vec![
             CommandTemplateArg::literal("-c"),
-            CommandTemplateArg::literal("mkdir -p .leaven"),
+            CommandTemplateArg::literal(format!(
+                "mkdir -p -- {} && : > {}",
+                shell_quote(parent_dir(last_message_path)),
+                shell_quote(last_message_path.as_str())
+            )),
         ],
         cwd: None,
         env: BTreeMap::new(),
@@ -241,4 +245,14 @@ fn mkdir_leaven_command() -> CommandTemplate {
         limits: CommandLimits::default(),
         user: None,
     }
+}
+
+fn parent_dir(path: &WorkspacePath) -> &str {
+    path.as_str()
+        .rsplit_once('/')
+        .map_or(".", |(parent, _)| parent)
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
 }

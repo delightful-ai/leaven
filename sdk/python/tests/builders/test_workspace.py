@@ -147,6 +147,13 @@ async def test_workspace_reads_lower_retained_query_methods_through_seam() -> No
     ]
 
 
+def test_workspace_builder_does_not_advertise_unretained_write_helpers() -> None:
+    """Workspace writes must go through retained seam methods, not Python-only helpers."""
+
+    assert not hasattr(WorkspaceBuilder, "write_file")
+    assert not hasattr(WorkspaceBuilder, "write_skills")
+
+
 class FakeWorkspaceSeamClient:
     def __init__(self) -> None:
         self.materialize_request = WorkspaceMaterializeRequest(

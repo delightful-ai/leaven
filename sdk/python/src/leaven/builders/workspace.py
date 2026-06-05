@@ -396,23 +396,6 @@ class WorkspaceBuilder(WorkspaceReads):
             ),
         )
 
-    async def write_file(
-        self,
-        handle: WorkspaceHandle,
-        path: str,
-        content: str | bytes,
-    ) -> CallReceipt:
-        """Write a workspace-relative file. Receipt binds the change."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
-
-    async def write_skills(self, handle: WorkspaceHandle, bank: object) -> CallReceipt:
-        """Skill-bank convenience: write a SkillBank into the workspace layout.
-
-        Equivalent to walking the bank and calling `write_file` per file.
-        Exists because the skill-bank → workspace mapping is fixed and common.
-        """
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
-
 
 class _WorkspaceSeamRequester(Protocol):
     def workspace_materialize(

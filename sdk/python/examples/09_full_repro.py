@@ -91,11 +91,13 @@ async def propose(req: ProposeRequest, cx: lv.ProposeContext) -> ProposalBatch:
         surface="skills_only",
         lifetime="stage_call",
     )
-    await cx.workspace.write_file(ws, "REFLECTION.md", req.reflection.diagnosis)
     session = await cx.agent.run(
         workspace=ws,
         instructions=lv.AgentInstructions(
-            task="Propose a typed skill-bank change addressing REFLECTION.md.",
+            task=(
+                "Propose a typed skill-bank change addressing this "
+                f"reflection:\n{req.reflection.diagnosis}"
+            ),
             system=lv.roles.SKILL_PROPOSER,
         ),
         output=lv.output.json_schema(SkillProposal),
