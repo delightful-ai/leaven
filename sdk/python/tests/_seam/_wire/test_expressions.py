@@ -9,6 +9,7 @@ from leaven._seam._wire.expressions import (
     CaseQueryResolveSet,
     EvaluationSetCases,
     ExtensionObjectExpression,
+    GraphSourceCosts,
     GraphSourceExtension,
     GraphStepFilter,
     PlanExpressionCaseQuery,
@@ -19,6 +20,7 @@ from leaven._seam._wire.expressions import (
     PlanExpressionWorkspaceQuery,
     PreconditionSchemaValid,
     PredicateEq,
+    ProjectionArtifact,
     ProjectionSummary,
     ValueExprExtension,
     ValueExprExtract,
@@ -187,6 +189,43 @@ def test_graph_query_decodes_typed_projection_and_steps() -> None:
     assert expr.steps is not UNSET
     assert isinstance(expr.steps[0], GraphStepFilter)
     assert isinstance(expr.steps[0].predicate, PredicateEq)
+
+
+def test_graph_query_decodes_projection_selector_and_cost_scope_owners() -> None:
+    """Example: selector and cost scope leaves keep expression-specific owners."""
+
+    body = (
+        b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
+        b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
+        b'"ops":[{"kind":"let","name":"artifact_view","expr":{"kind":"graph_query",'
+        b'"source":{"kind":"by_candidate","candidate":"cand_alpha"},'
+        b'"projection":{"kind":"artifact_projection","artifact":{'
+        b'"surface_fingerprint":"fp_surface_sha256_prompt",'
+        b'"projection_schema":"fp_schema_sha256_projection",'
+        b'"selector_schema":"fp_schema_sha256_selector",'
+        b'"selector":{"path":["prompt",{"segment":0}]},'
+        b'"data_classes":["candidate.artifact"]}}}},'
+        b'{"kind":"let","name":"costs","expr":{"kind":"graph_query",'
+        b'"source":{"kind":"costs","scope":{"kind":"candidate",'
+        b'"candidate":"cand_alpha","dimensions":["lm",{"unit":"usd_micro"}]}},'
+        b'"projection":{"kind":"summary"}}}],'
+        b'"return":["artifact_view","costs"],"commit":{"kind":"no_graph_writes"}}'
+    )
+
+    decoded = msgspec.json.decode(body, type=PlanDocument)
+    artifact_expr = decoded.ops[0].expr
+    costs_expr = decoded.ops[1].expr
+
+    assert isinstance(artifact_expr, PlanExpressionGraphQuery)
+    assert isinstance(artifact_expr.projection, ProjectionArtifact)
+    assert artifact_expr.projection.artifact.selector == {"path": ["prompt", {"segment": 0}]}
+    assert isinstance(costs_expr, PlanExpressionGraphQuery)
+    assert isinstance(costs_expr.source, GraphSourceCosts)
+    assert costs_expr.source.scope == {
+        "kind": "candidate",
+        "candidate": "cand_alpha",
+        "dimensions": ["lm", {"unit": "usd_micro"}],
+    }
 
 
 def test_workspace_query_decodes_typed_filesystem_op() -> None:

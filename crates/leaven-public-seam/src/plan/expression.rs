@@ -18,28 +18,52 @@ pub enum PlanExpression {
     /// Existing binding reference.
     Var { name: String },
     /// Graph query expression with typed revision-source facts.
-    GraphQuery { source: PlanGraphQuerySource },
+    GraphQuery {
+        source: PlanGraphQuerySource,
+        artifact_selectors: Vec<PlanArtifactProjectionSelector>,
+        cost_scopes: Vec<PlanCostScope>,
+    },
     /// Case query expression.
     CaseQuery,
     /// Workspace query expression.
     WorkspaceQuery { workspace: WorkspaceRefExpression },
     /// Projection over another expression.
-    Project { input: Box<PlanExpression> },
+    Project {
+        input: Box<PlanExpression>,
+        artifact_selectors: Vec<PlanArtifactProjectionSelector>,
+        cost_scopes: Vec<PlanCostScope>,
+    },
     /// Predicate filter over another expression.
-    Filter { input: Box<PlanExpression> },
+    Filter {
+        input: Box<PlanExpression>,
+        artifact_selectors: Vec<PlanArtifactProjectionSelector>,
+        cost_scopes: Vec<PlanCostScope>,
+    },
     /// Sort over another expression.
-    Sort { input: Box<PlanExpression> },
+    Sort {
+        input: Box<PlanExpression>,
+        artifact_selectors: Vec<PlanArtifactProjectionSelector>,
+        cost_scopes: Vec<PlanCostScope>,
+    },
     /// Limit over another expression.
     Limit {
         input: Box<PlanExpression>,
         limit: u64,
+        artifact_selectors: Vec<PlanArtifactProjectionSelector>,
+        cost_scopes: Vec<PlanCostScope>,
     },
     /// Strict-template expression with typed variable expression dependencies.
     Template {
         vars: BTreeMap<String, PlanExpression>,
+        artifact_selectors: Vec<PlanArtifactProjectionSelector>,
+        cost_scopes: Vec<PlanCostScope>,
     },
     /// JSONPath extraction over another expression.
-    Extract { input: Box<PlanExpression> },
+    Extract {
+        input: Box<PlanExpression>,
+        artifact_selectors: Vec<PlanArtifactProjectionSelector>,
+        cost_scopes: Vec<PlanCostScope>,
+    },
     /// Reference extraction from a prior Plan Result binding.
     RefsFromResult { from: String },
     /// Locked extension object expression.
@@ -75,34 +99,75 @@ impl PlanExpression {
                     .ok_or_else(|| invalid_plan("graph_query expr must carry source"))?;
                 Ok(Self::GraphQuery {
                     source: PlanGraphQuerySource::from_schema_valid_value(source)?,
+                    artifact_selectors: graph_query_artifact_selectors(object),
+                    cost_scopes: cost_scopes_from_graph_source(source)?,
                 })
             }
             "case_query" => Ok(Self::CaseQuery),
             "workspace_query" => Ok(Self::WorkspaceQuery {
                 workspace: WorkspaceRefExpression::from_value(object.get("workspace"))?,
             }),
-            "project" => Ok(Self::Project {
-                input: Box::new(required_input_expression(object, "project")?),
-            }),
-            "filter" => Ok(Self::Filter {
-                input: Box::new(required_input_expression(object, "filter")?),
-            }),
-            "sort" => Ok(Self::Sort {
-                input: Box::new(required_input_expression(object, "sort")?),
-            }),
-            "limit" => Ok(Self::Limit {
-                input: Box::new(required_input_expression(object, "limit")?),
-                limit: object
-                    .get("limit")
-                    .and_then(Value::as_u64)
-                    .ok_or_else(|| invalid_plan("limit expr must carry an integer limit"))?,
-            }),
-            "template" => Ok(Self::Template {
-                vars: template_vars(object)?,
-            }),
-            "extract" => Ok(Self::Extract {
-                input: Box::new(required_input_expression(object, "extract")?),
-            }),
+            "project" => {
+                let input = required_input_expression(object, "project")?;
+                Ok(Self::Project {
+                    artifact_selectors: merge_artifact_selectors(
+                        &input,
+                        project_artifact_selectors(object),
+                    ),
+                    cost_scopes: input.cost_scopes().to_vec(),
+                    input: Box::new(input),
+                })
+            }
+            "filter" => {
+                let input = required_input_expression(object, "filter")?;
+                Ok(Self::Filter {
+                    artifact_selectors: input.artifact_selectors().to_vec(),
+                    cost_scopes: input.cost_scopes().to_vec(),
+                    input: Box::new(input),
+                })
+            }
+            "sort" => {
+                let input = required_input_expression(object, "sort")?;
+                Ok(Self::Sort {
+                    artifact_selectors: input.artifact_selectors().to_vec(),
+                    cost_scopes: input.cost_scopes().to_vec(),
+                    input: Box::new(input),
+                })
+            }
+            "limit" => {
+                let input = required_input_expression(object, "limit")?;
+                Ok(Self::Limit {
+                    artifact_selectors: input.artifact_selectors().to_vec(),
+                    cost_scopes: input.cost_scopes().to_vec(),
+                    input: Box::new(input),
+                    limit: object
+                        .get("limit")
+                        .and_then(Value::as_u64)
+                        .ok_or_else(|| invalid_plan("limit expr must carry an integer limit"))?,
+                })
+            }
+            "template" => {
+                let vars = template_vars(object)?;
+                Ok(Self::Template {
+                    artifact_selectors: vars
+                        .values()
+                        .flat_map(|expr| expr.artifact_selectors().iter().cloned())
+                        .collect(),
+                    cost_scopes: vars
+                        .values()
+                        .flat_map(|expr| expr.cost_scopes().iter().cloned())
+                        .collect(),
+                    vars,
+                })
+            }
+            "extract" => {
+                let input = required_input_expression(object, "extract")?;
+                Ok(Self::Extract {
+                    artifact_selectors: input.artifact_selectors().to_vec(),
+                    cost_scopes: input.cost_scopes().to_vec(),
+                    input: Box::new(input),
+                })
+            }
             "refs_from_result" => Ok(Self::RefsFromResult {
                 from: required_object_string(object, "from")?.to_owned(),
             }),
@@ -156,15 +221,17 @@ impl PlanExpression {
         until_revision: Option<&str>,
     ) -> usize {
         match self {
-            Self::GraphQuery { source } => {
+            Self::GraphQuery { source, .. } => {
                 usize::from(source.matches_since_revision(since_revision, until_revision))
             }
-            Self::Project { input }
-            | Self::Filter { input }
-            | Self::Sort { input }
+            Self::Project { input, .. }
+            | Self::Filter { input, .. }
+            | Self::Sort { input, .. }
             | Self::Limit { input, .. }
-            | Self::Extract { input } => input.event_query_count(since_revision, until_revision),
-            Self::Template { vars } => vars
+            | Self::Extract { input, .. } => {
+                input.event_query_count(since_revision, until_revision)
+            }
+            Self::Template { vars, .. } => vars
                 .values()
                 .map(|expr| expr.event_query_count(since_revision, until_revision))
                 .sum(),
@@ -184,19 +251,19 @@ impl PlanExpression {
         until_revision: Option<&str>,
     ) -> Result<(), PublicSeamError> {
         match self {
-            Self::GraphQuery { source } => source.validate_for_plan_consistency(
+            Self::GraphQuery { source, .. } => source.validate_for_plan_consistency(
                 consistency_kind,
                 since_revision,
                 until_revision,
             ),
-            Self::Project { input }
-            | Self::Filter { input }
-            | Self::Sort { input }
+            Self::Project { input, .. }
+            | Self::Filter { input, .. }
+            | Self::Sort { input, .. }
             | Self::Limit { input, .. }
-            | Self::Extract { input } => {
+            | Self::Extract { input, .. } => {
                 input.validate_event_sources(consistency_kind, since_revision, until_revision)
             }
-            Self::Template { vars } => vars.values().try_for_each(|expr| {
+            Self::Template { vars, .. } => vars.values().try_for_each(|expr| {
                 expr.validate_event_sources(consistency_kind, since_revision, until_revision)
             }),
             Self::Literal { .. }
@@ -205,6 +272,58 @@ impl PlanExpression {
             | Self::WorkspaceQuery { .. }
             | Self::RefsFromResult { .. }
             | Self::Extension { .. } => Ok(()),
+        }
+    }
+
+    /// Artifact projection selector fragments carried by this expression tree.
+    pub fn artifact_selectors(&self) -> &[PlanArtifactProjectionSelector] {
+        match self {
+            Self::GraphQuery {
+                artifact_selectors, ..
+            }
+            | Self::Project {
+                artifact_selectors, ..
+            }
+            | Self::Filter {
+                artifact_selectors, ..
+            }
+            | Self::Sort {
+                artifact_selectors, ..
+            }
+            | Self::Limit {
+                artifact_selectors, ..
+            }
+            | Self::Template {
+                artifact_selectors, ..
+            }
+            | Self::Extract {
+                artifact_selectors, ..
+            } => artifact_selectors,
+            Self::Literal { .. }
+            | Self::Var { .. }
+            | Self::CaseQuery
+            | Self::WorkspaceQuery { .. }
+            | Self::RefsFromResult { .. }
+            | Self::Extension { .. } => &[],
+        }
+    }
+
+    /// Cost graph-query scope fragments carried by this expression tree.
+    pub fn cost_scopes(&self) -> &[PlanCostScope] {
+        match self {
+            Self::GraphQuery { cost_scopes, .. }
+            | Self::Project { cost_scopes, .. }
+            | Self::Filter { cost_scopes, .. }
+            | Self::Sort { cost_scopes, .. }
+            | Self::Limit { cost_scopes, .. }
+            | Self::Template { cost_scopes, .. }
+            | Self::Extract { cost_scopes, .. } => cost_scopes,
+            Self::Literal { .. }
+            | Self::Var { .. }
+            | Self::CaseQuery
+            | Self::WorkspaceQuery { .. }
+            | Self::RefsFromResult { .. }
+            | Self::Extension { .. } => &[],
         }
     }
 }
@@ -306,6 +425,36 @@ impl PlanExtensionPayload {
     }
 
     /// JSON payload carried on the wire by the extension expression.
+    pub const fn as_json(&self) -> &Value {
+        &self.0
+    }
+}
+
+/// Schema-valid JSON selector carried by an artifact projection.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanArtifactProjectionSelector(Value);
+
+impl PlanArtifactProjectionSelector {
+    fn from_schema_valid_value(value: &Value) -> Self {
+        Self(value.clone())
+    }
+
+    /// JSON selector carried on the wire by the artifact projection.
+    pub const fn as_json(&self) -> &Value {
+        &self.0
+    }
+}
+
+/// Schema-valid JSON scope carried by a graph cost query.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanCostScope(Value);
+
+impl PlanCostScope {
+    fn from_schema_valid_value(value: &Value) -> Self {
+        Self(value.clone())
+    }
+
+    /// JSON scope carried on the wire by the cost query.
     pub const fn as_json(&self) -> &Value {
         &self.0
     }
@@ -486,4 +635,101 @@ fn template_vars(
             ))
         })
         .collect()
+}
+
+fn merge_artifact_selectors(
+    input: &PlanExpression,
+    mut local: Vec<PlanArtifactProjectionSelector>,
+) -> Vec<PlanArtifactProjectionSelector> {
+    let mut values = input.artifact_selectors().to_vec();
+    values.append(&mut local);
+    values
+}
+
+fn graph_query_artifact_selectors(
+    object: &Map<String, Value>,
+) -> Vec<PlanArtifactProjectionSelector> {
+    let mut selectors = Vec::new();
+    if let Some(projection) = object.get("projection") {
+        collect_projection_artifact_selectors(projection, &mut selectors);
+    }
+    if let Some(steps) = object.get("steps").and_then(Value::as_array) {
+        for step in steps {
+            collect_graph_step_artifact_selectors(step, &mut selectors);
+        }
+    }
+    selectors
+}
+
+fn project_artifact_selectors(object: &Map<String, Value>) -> Vec<PlanArtifactProjectionSelector> {
+    let mut selectors = Vec::new();
+    if let Some(projection) = object.get("projection") {
+        collect_projection_artifact_selectors(projection, &mut selectors);
+    }
+    selectors
+}
+
+fn collect_graph_step_artifact_selectors(
+    value: &Value,
+    selectors: &mut Vec<PlanArtifactProjectionSelector>,
+) {
+    let Some(object) = value.as_object() else {
+        return;
+    };
+    if object.get("kind").and_then(Value::as_str) == Some("project") {
+        if let Some(projection) = object.get("projection") {
+            collect_projection_artifact_selectors(projection, selectors);
+        }
+    }
+}
+
+fn collect_projection_artifact_selectors(
+    value: &Value,
+    selectors: &mut Vec<PlanArtifactProjectionSelector>,
+) {
+    let Some(object) = value.as_object() else {
+        return;
+    };
+    match object.get("kind").and_then(Value::as_str) {
+        Some("candidate_projection") => {
+            if let Some(artifact) = object.get("artifact") {
+                collect_artifact_projection_selector(artifact, selectors);
+            }
+        }
+        Some("artifact_projection") => {
+            if let Some(artifact) = object.get("artifact") {
+                collect_artifact_projection_selector(artifact, selectors);
+            }
+        }
+        Some("ids" | "summary" | "assessment_projection" | "diff_projection" | "extension")
+        | Some(_)
+        | None => {}
+    }
+}
+
+fn collect_artifact_projection_selector(
+    value: &Value,
+    selectors: &mut Vec<PlanArtifactProjectionSelector>,
+) {
+    let Some(object) = value.as_object() else {
+        return;
+    };
+    if let Some(selector) = object.get("selector") {
+        selectors.push(PlanArtifactProjectionSelector::from_schema_valid_value(
+            selector,
+        ));
+    }
+}
+
+fn cost_scopes_from_graph_source(value: &Value) -> Result<Vec<PlanCostScope>, PublicSeamError> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| invalid_plan("graph_query source must be an object"))?;
+    if object.get("kind").and_then(Value::as_str) != Some("costs") {
+        return Ok(Vec::new());
+    }
+    let scope = object
+        .get("scope")
+        .ok_or_else(|| invalid_plan("costs graph source must carry scope"))?;
+    Ok(vec![PlanCostScope::from_schema_valid_value(scope)])
 }

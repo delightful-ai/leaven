@@ -135,6 +135,111 @@ fn plan_ir_extension_expression_preserves_typed_payload() {
 }
 
 #[test]
+fn plan_ir_expression_preserves_projection_selector_and_cost_scope_owners() {
+    let package = package();
+    let plan = json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "planexprjsonowners001",
+        "consistency": {"kind": "latest_at_start"},
+        "mode": {"kind": "dry_run"},
+        "ops": [
+            {
+                "kind": "let",
+                "name": "artifact_view",
+                "expr": {
+                    "kind": "graph_query",
+                    "source": {
+                        "kind": "by_candidate",
+                        "candidate": "cand_alpha"
+                    },
+                    "projection": {
+                        "kind": "artifact_projection",
+                        "artifact": {
+                            "surface_fingerprint": "fp_surface_sha256_prompt",
+                            "projection_schema": "fp_schema_sha256_projection",
+                            "selector_schema": "fp_schema_sha256_selector",
+                            "selector": {
+                                "path": ["prompt", {"segment": 0}]
+                            },
+                            "data_classes": ["candidate.artifact"]
+                        }
+                    }
+                }
+            },
+            {
+                "kind": "let",
+                "name": "costs",
+                "expr": {
+                    "kind": "graph_query",
+                    "source": {
+                        "kind": "costs",
+                        "scope": {
+                            "kind": "candidate",
+                            "candidate": "cand_alpha",
+                            "dimensions": ["lm", {"unit": "usd_micro"}]
+                        }
+                    },
+                    "projection": {"kind": "summary"}
+                }
+            },
+            {
+                "kind": "let",
+                "name": "extension_projection",
+                "expr": {
+                    "kind": "graph_query",
+                    "source": {
+                        "kind": "by_candidate",
+                        "candidate": "cand_alpha"
+                    },
+                    "projection": {
+                        "kind": "extension",
+                        "namespace": "x.test",
+                        "op": "opaque_projection",
+                        "schema_fingerprint": "fp_schema_sha256_extension",
+                        "payload": {
+                            "surface_fingerprint": "fp_surface_decoy",
+                            "projection_schema": "fp_schema_decoy",
+                            "selector": {"must_not_be_collected": true},
+                            "kind": "costs",
+                            "scope": {"must_not_be_collected": true}
+                        }
+                    }
+                }
+            }
+        ],
+        "return": ["artifact_view", "costs", "extension_projection"],
+        "commit": {"kind": "no_graph_writes"}
+    });
+
+    let document = package.validate_plan_document(&plan).unwrap();
+    let artifact_expr = document.operations()[0]
+        .expression()
+        .expect("artifact query exposes typed expression");
+    assert_eq!(artifact_expr.artifact_selectors().len(), 1);
+    assert_eq!(
+        artifact_expr.artifact_selectors()[0].as_json(),
+        &json!({"path": ["prompt", {"segment": 0}]})
+    );
+    let costs_expr = document.operations()[1]
+        .expression()
+        .expect("cost query exposes typed expression");
+    assert_eq!(costs_expr.cost_scopes().len(), 1);
+    assert_eq!(
+        costs_expr.cost_scopes()[0].as_json(),
+        &json!({
+            "kind": "candidate",
+            "candidate": "cand_alpha",
+            "dimensions": ["lm", {"unit": "usd_micro"}]
+        })
+    );
+    let extension_expr = document.operations()[2]
+        .expression()
+        .expect("extension projection exposes typed expression");
+    assert!(extension_expr.artifact_selectors().is_empty());
+    assert!(extension_expr.cost_scopes().is_empty());
+}
+
+#[test]
 fn plan_ir_accessors_classify_direct_query_operation_identity() {
     let package = package();
     let plan = latest_at_start_graph_query_plan();

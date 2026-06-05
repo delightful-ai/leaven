@@ -10,7 +10,10 @@ mod parse;
 pub use expression::PlanExtensionPayload;
 #[allow(unused_imports)]
 pub use expression::PlanLiteralValue;
-pub use expression::{PlanExpression, PlanExpressionKind, PlanGraphQuerySource};
+pub use expression::{
+    PlanArtifactProjectionSelector, PlanCostScope, PlanExpression, PlanExpressionKind,
+    PlanGraphQuerySource,
+};
 pub use model::{
     PlanCallKind, PlanCommitKind, PlanEmitRunEventWrite, PlanEventPayload, PlanId, PlanMode,
     PlanOperation, PlanOperationKind, PlanQueryKind, PlanReturnBinding, PlanSchemaVersion,

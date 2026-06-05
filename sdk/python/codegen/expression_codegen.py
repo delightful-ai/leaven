@@ -35,8 +35,9 @@ from .refs import (
     ProposalBatchRef,
     ProposalRef,
     ReceiptRef,
+    WireJsonArtifactSelector,
+    WireJsonCostScope,
     WireJsonExtensionPayload,
-    WireJsonField,
     WireJsonLiteralValue,
     WireJsonObject,
     WorkspaceRef,
@@ -142,7 +143,7 @@ class ArtifactProjection(Struct, frozen=True, forbid_unknown_fields=True, omit_d
     surface_fingerprint: str
     projection_schema: str
     selector_schema: str | UnsetType = UNSET
-    selector: WireJsonField | UnsetType = UNSET
+    selector: WireJsonArtifactSelector | UnsetType = UNSET
     max_bytes: int | UnsetType = UNSET
     data_classes: list[str] | UnsetType = UNSET
 
@@ -309,7 +310,7 @@ class GraphSourceRecentFailures(Struct, frozen=True, forbid_unknown_fields=True,
 
 
 class GraphSourceCosts(Struct, frozen=True, forbid_unknown_fields=True, tag="costs", tag_field="kind"):
-    scope: WireJsonField
+    scope: WireJsonCostScope
 
 
 class GraphSourceEvents(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="events", tag_field="kind"):
