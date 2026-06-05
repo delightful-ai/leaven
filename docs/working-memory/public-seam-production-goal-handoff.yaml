@@ -8432,7 +8432,7 @@ acceptance:
 
   - id: release_gate_for_public_contract
     claim: The public contract is verified with focused method tests plus the repo's broad gate.
-    status: pending
+    status: proven
     proof_required:
       kind: repo_gate
       must_exercise:
@@ -8466,6 +8466,46 @@ acceptance:
           the affected check/service/stage-bridge commands pass on the default
           path after the change. This is release-gate hygiene, not public-seam
           semantic closeout.
+      - kind: repo_release_gate_closeout
+        date: 2026-06-05
+        commits:
+          - d48c3a87
+          - 092ca75c
+          - ada400f7
+        paths:
+          - crates/leaven-public-seam/src/result.rs
+          - crates/leaven-public-seam/src/result/graph_rows.rs
+          - crates/leaven-public-seam/src/result/visibility.rs
+          - crates/leaven-public-seam/src/plan.rs
+          - crates/leaven-public-seam/src/plan/model.rs
+          - crates/leaven-public-seam/src/plan/evaluation.rs
+          - crates/leaven-acp-stage-bridge/tests/dispatch_contract.rs
+          - crates/leaven-seam-run/tests/run_bound_route.rs
+        commands:
+          - cargo fmt --check
+          - python3 scripts/lint-line-count.py
+          - cargo test -p leaven-public-seam --test public_seam_contract
+          - cargo clippy -p leaven-acp-stage-bridge --test dispatch_contract -- -D warnings
+          - cargo test -p leaven-acp-stage-bridge --test dispatch_contract dispatch_stage_run_services_worker_initiated_event_emit_through_runcontext -- --exact --nocapture
+          - cargo clippy -p leaven-seam-run --test run_bound_route -- -D warnings
+          - cargo test -p leaven-seam-run --test run_bound_route
+          - just check
+          - just coverage
+        note: >-
+          Final release-row verification used the normal local Cargo
+          incremental path. `just check` passed fmt, line-count, clippy, SLA
+          self-tests, and the canonical workspace nextest lane: 1330 tests
+          passed, 2 skipped, 17.28s suite runtime against the 30s warning and
+          600s hard timeout. `just coverage` passed the enforced floors with
+          line coverage 90.71% (46697/51480, floor 80.00%) and branch coverage
+          81.88% (3200/3908, floor 80.00%). The coverage warning targets remain
+          aspirational warnings only: line warning target 92.56%, branch warning
+          target 88.39%. The release gate also exercised the git/filesystem and
+          Codex-kit deterministic surfaces under coverage, including
+          `leaven-agentic-git` materializer/readback, Firkin git workspace
+          readback, AgentKit Codex profile and deterministic reflection
+          readback, run-bound SDK route checkpoint readback, and ACP stage
+          bridge callback paths.
     closeout_check: Broad gates cannot replace method-specific proof, and method-specific proof cannot replace public contract hygiene.
 
 explicit_non_goals:
