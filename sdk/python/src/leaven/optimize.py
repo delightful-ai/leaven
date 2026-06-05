@@ -136,7 +136,7 @@ def _to_optimized(
     cases: list[PlannedOptimizeCase],
     report: SeamOptimizeReport,
     run_id: str,
-) -> Optimized[object]:
+) -> Optimized[PromptArtifact]:
     """Materialize the durable-seam mechanics report through Rust readback."""
     return persist_rust_prompt_checkpoint(seed=seed, cases=cases, report=report, run_id=run_id)
 

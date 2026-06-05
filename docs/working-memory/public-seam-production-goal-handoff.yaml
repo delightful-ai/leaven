@@ -1172,6 +1172,30 @@ acceptance:
           row closeout because broader artifact/transcript blob retrieval and
           generalized Rust-owned receipt storage remain under acceptance
           review.
+      - kind: sdk_run_open_prompt_artifact_type_erasure_removed
+        paths:
+          - sdk/python/src/leaven/_runs/rust_open.py
+          - sdk/python/src/leaven/_runs/rust_checkpoint.py
+          - sdk/python/src/leaven/runs.py
+          - sdk/python/src/leaven/optimize.py
+          - sdk/python/tests/_runs/test_rust_export.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && uv run pytest tests/_runs/test_rust_export.py tests/test_run_inspection.py tests/test_run_receipt_inspection.py tests/test_optimize_proposer_mechanics.py tests/test_reward_vector_inspection.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_runs/rust_open.py src/leaven/_runs/rust_checkpoint.py src/leaven/runs.py src/leaven/optimize.py tests/_runs/test_rust_export.py tests/test_run_inspection.py tests/test_run_receipt_inspection.py tests/test_optimize_proposer_mechanics.py tests/test_reward_vector_inspection.py
+          - cd sdk/python && uv run ty check src/leaven/_runs/rust_open.py src/leaven/_runs/rust_checkpoint.py src/leaven/runs.py src/leaven/optimize.py tests/_runs/test_rust_export.py tests/test_run_inspection.py tests/test_run_receipt_inspection.py tests/test_optimize_proposer_mechanics.py tests/test_reward_vector_inspection.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - rg -n "Optimized\\[object\\]|Candidate\\[object\\]" sdk/python/src/leaven sdk/python/tests -g '*.py'
+        note: >-
+          Python run-open/readback no longer erases Rust checkpoint artifacts to
+          `object`. The current SDK checkpoint reader is explicitly typed as
+          `Optimized[PromptArtifact]`, parses prompt-shaped Rust artifact JSON
+          into `PromptArtifact`, and rejects unsupported artifact shapes instead
+          of returning raw JSON through `Optimized[object]`. Focused tests
+          prove prompt artifact readback and the unsupported-artifact refusal.
+          The targeted grep has no `Optimized[object]` or `Candidate[object]`
+          matches in Python SDK source or tests; remaining stage callable
+          generics are a separate runtime-dispatch typing surface.
       - kind: checkpoint_artifact_and_journal_blob_byte_readback
         paths:
           - sdk/python/src/leaven/run_inspection.py

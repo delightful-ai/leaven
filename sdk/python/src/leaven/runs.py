@@ -12,16 +12,17 @@ from ._runs import (
     rust_assessment_rows,
     rust_evidence_summaries,
 )
+from .artifacts.prompt import PromptArtifact
 from .result import Optimized
 from .run_inspection import RunInspection, inspect_optimized
 
 
-def open(path: str | Path) -> Optimized[object]:
+def open(path: str | Path) -> Optimized[PromptArtifact]:
     """Open a completed run from its run directory.
 
-    The artifact type is `object` because the run's artifact type is
-    determined at write time; callers can narrow if they know the type. A
-    future API revision may make this generic over a passed artifact decoder.
+    The current SDK checkpoint reader supports prompt-artifact runs only. Other
+    artifact families must add typed Rust readback before this surface accepts
+    them.
     """
     rust_result = open_rust_optimized(path)
     if rust_result is None:

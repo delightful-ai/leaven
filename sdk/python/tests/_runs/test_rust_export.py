@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from leaven import runs
+from leaven import PromptArtifact, runs
 from leaven._runs import optimized_from_rust_readback
 from leaven._runs.rust_export import (
     load_rust_blob_readback,
@@ -267,7 +267,7 @@ def test_optimized_from_rust_readback_uses_graph_candidates() -> None:
     assert result.run_id == "run_1"
     assert result.best.id == "cand_child"
     assert result.best.parent_id == "cand_seed"
-    assert result.best.artifact == {"template": "child"}
+    assert result.best.artifact == PromptArtifact(template="child")
     assert [candidate.id for candidate in result.lineage("cand_child")] == [
         "cand_child",
         "cand_seed",
@@ -287,6 +287,17 @@ def test_optimized_from_rust_readback_uses_graph_candidates() -> None:
         "run.cost",
         "run.inspection",
     ]
+
+
+def test_optimized_from_rust_readback_rejects_unknown_artifact_shape() -> None:
+    """Boundary check: Rust run open does not erase unsupported artifacts to object."""
+
+    readback = load_rust_run_readback_fixture()
+    data = readback.model_dump(mode="json", by_alias=True)
+    data["graph"]["candidates"][0]["artifact"] = {"kind": "unknown"}
+
+    with pytest.raises(TypeError, match="not a PromptArtifact"):
+        optimized_from_rust_readback(RustRunReadback.model_validate(data), run_dir="/tmp/run")
 
 
 def test_runs_open_prefers_rust_checkpoint_without_optimized_json(

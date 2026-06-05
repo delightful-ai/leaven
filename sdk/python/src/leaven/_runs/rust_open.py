@@ -13,7 +13,7 @@ from .rust_evidence import rust_assessment_rows
 from .rust_export import load_rust_evidence_readback, load_rust_run_readback
 
 
-def open_rust_optimized(path: str | Path) -> Optimized[object] | None:
+def open_rust_optimized(path: str | Path) -> Optimized[PromptArtifact] | None:
     """Open a completed run from Rust-owned checkpoint state when present."""
     readback = load_rust_run_readback(path)
     if readback is None:
@@ -34,10 +34,10 @@ def optimized_from_rust_readback(
     *,
     run_dir: str | None,
     assessment_rows: list[Assessment] | None = None,
-) -> Optimized[object]:
+) -> Optimized[PromptArtifact]:
     """Project Rust-owned graph readback into the public Optimized handle."""
     frontier = [
-        Candidate[object](
+        Candidate[PromptArtifact](
             id=candidate.id,
             artifact=_artifact_from_readback(candidate.artifact),
             parent_id=candidate.parent_id,
@@ -52,7 +52,7 @@ def optimized_from_rust_readback(
         raise ValueError("Rust run readback has no completed-run best candidate")
     best = _candidate_by_id(frontier, best_id)
     unsupported = _unsupported(readback, assessment_rows)
-    return Optimized[object](
+    return Optimized[PromptArtifact](
         run_id=readback.run_id,
         best=best,
         frontier=frontier,
@@ -94,17 +94,22 @@ def _cost_status(readback: RustRunReadback) -> RunCostStatus:
     return "unsupported_dependency"
 
 
-def _candidate_by_id(candidates: list[Candidate[object]], candidate_id: str) -> Candidate[object]:
+def _candidate_by_id(
+    candidates: list[Candidate[PromptArtifact]],
+    candidate_id: str,
+) -> Candidate[PromptArtifact]:
     for candidate in candidates:
         if candidate.id == candidate_id:
             return candidate
     raise KeyError(f"Rust run readback best candidate {candidate_id!r} is missing")
 
 
-def _artifact_from_readback(value: JsonValue) -> object:
-    if isinstance(value, dict) and "template" in value and "candidate_id" in value:
-        return PromptArtifact.model_validate(value)
-    return value
+def _artifact_from_readback(value: JsonValue) -> PromptArtifact:
+    match value:
+        case {"template": str()}:
+            return PromptArtifact.model_validate(value)
+        case _:
+            raise TypeError("Rust run readback artifact is not a PromptArtifact payload")
 
 
 def _summary_score(candidate_id: str, assessment_rows: list[Assessment] | None) -> float | None:

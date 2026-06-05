@@ -21,7 +21,7 @@ def persist_rust_prompt_checkpoint(
     report: SeamOptimizeReport,
     run_id: str,
     root: str | Path = ".leaven/runs",
-) -> Optimized[object]:
+) -> Optimized[PromptArtifact]:
     """Materialize an SDK prompt mechanics report into a Rust-owned checkpoint."""
     run_dir = Path(root) / _run_dir_name(run_id)
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -136,7 +136,10 @@ def _run_dir_name(run_id: str) -> str:
     return cleaned or "leaven_run"
 
 
-def _with_report_status(result: Optimized[object], report: SeamOptimizeReport) -> Optimized[object]:
+def _with_report_status(
+    result: Optimized[PromptArtifact],
+    report: SeamOptimizeReport,
+) -> Optimized[PromptArtifact]:
     status = project_cost_usage(
         default_cost_usd=report.total_cost_usd,
         default_lm_tokens=report.total_lm_tokens,
