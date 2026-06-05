@@ -5024,6 +5024,23 @@ acceptance:
           `int | UnsetType` shape, treats missing cost fields as zero, and
           raises on negative costs. A mirrored regression test proves negative
           typed cost values fail loudly.
+      - kind: python_output_record_json_value_public_object_ingress_removed
+        paths:
+          - sdk/python/src/leaven/output_record.py
+          - sdk/python/tests/test_output_record.py
+        commands:
+          - cd sdk/python && uv run pytest tests/test_output_record.py -q
+          - cd sdk/python && uv run ruff check src/leaven/output_record.py tests/test_output_record.py
+          - cd sdk/python && uv run ty check src/leaven/output_record.py tests/test_output_record.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Public `OutputRecord.json_value(...)` no longer accepts `object` as
+          an advertised input. The constructor now requires a `JsonValue`, and
+          the non-JSON runtime regression explicitly casts its hostile value to
+          model a caller that bypasses static typing. The private normalization
+          path copies typed JSON arrays and objects without `.get(...)` probes
+          or object widening.
       - kind: prompt_stage_runtime_erasure_narrowed
         paths:
           - sdk/python/src/leaven/stages.py

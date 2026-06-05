@@ -1,6 +1,9 @@
+from typing import cast
+
 import pytest
 
 import leaven as lv
+from leaven.json_value import JsonValue
 from leaven.output_record import OutputRecord
 
 
@@ -32,7 +35,7 @@ def test_json_value_output_record_rejects_non_json() -> None:
     assert record.value == [1, 2, {"ok": True}]
 
     with pytest.raises(TypeError, match="value is not JSON"):
-        OutputRecord.json_value(summary="bad", value=object())
+        OutputRecord.json_value(summary="bad", value=cast("JsonValue", object()))
 
 
 def test_blob_output_record_carries_only_reference() -> None:
