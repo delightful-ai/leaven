@@ -85,6 +85,9 @@ enum SeamSubcommand {
 enum RunSubcommand {
     /// Export Rust-owned inspection JSON from a local run directory.
     Inspect(RunInspectArgs),
+    /// Materialize an SDK prompt mechanics report into a Rust-owned checkpoint.
+    #[command(name = "checkpoint-sdk-prompt")]
+    CheckpointSdkPrompt(RunCheckpointSdkPromptArgs),
     /// Export Rust-owned blob bytes from a local run directory.
     Blob(RunBlobArgs),
     /// Export Rust-owned evidence bytes from a local run directory.
@@ -94,6 +97,16 @@ enum RunSubcommand {
 #[derive(Debug, Args)]
 struct RunInspectArgs {
     /// Local Leaven run directory to inspect.
+    #[arg(long)]
+    run_dir: PathBuf,
+}
+
+#[derive(Debug, Args)]
+struct RunCheckpointSdkPromptArgs {
+    /// Typed SDK prompt mechanics report JSON.
+    #[arg(long)]
+    input: PathBuf,
+    /// Local Leaven run directory to write.
     #[arg(long)]
     run_dir: PathBuf,
 }
@@ -261,6 +274,17 @@ fn run_command(command: RunSubcommand) -> Result<String, CliError> {
                 })
                 .map_err(CliError::from)
         }
+        RunSubcommand::CheckpointSdkPrompt(args) => {
+            let input = std::fs::File::open(args.input)?;
+            let record = serde_json::from_reader(input)?;
+            let report = leaven_run::materialize_sdk_prompt_checkpoint(record, args.run_dir)?;
+            serde_json::to_string_pretty(&report)
+                .map(|mut output| {
+                    output.push('\n');
+                    output
+                })
+                .map_err(CliError::from)
+        }
         RunSubcommand::Blob(args) => {
             let export = leaven_run::export_local_run_blob(args.run_dir, args.store, args.key)?;
             serde_json::to_string_pretty(&export)
@@ -293,7 +317,11 @@ enum CliError {
     #[error(transparent)]
     RunInspection(#[from] leaven_run::RunInspectionExportError),
     #[error(transparent)]
+    SdkPromptCheckpoint(#[from] leaven_run::SdkPromptCheckpointError),
+    #[error(transparent)]
     Serve(#[from] serve::ServeError),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
 }

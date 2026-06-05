@@ -58,7 +58,7 @@ async def test_reward_vector_aggregate_and_dimensions_survive_inspection(
     assessment = result.assessment("case_reward_vector_001")
     assert assessment.score.value == (1.0 * 2.0 + 0.5 * 1.0) / 3.0
     assert result.best.summary_score == assessment.score.value
-    assert result.summary.iterations == 0
+    assert result.summary.iterations > 0
     assert [(reward.id, reward.value, reward.weight, reward.feedback) for reward in assessment.rewards] == [
         ("exact", 1.0, 2.0, ""),
         ("concise", 0.5, 1.0, "2 chars"),
@@ -76,7 +76,7 @@ async def test_reward_vector_aggregate_and_dimensions_survive_inspection(
     ]
 
     inspection = lv.runs.inspect(result.summary.run_dir or "")
-    assert inspection.best_candidate_id == "cand_seed"
+    assert inspection.best_candidate_id == result.best.id
     assert inspection.evidence[0].payload == {"output": "42", "reward_count": 2}
     assert [
         (reward.id, reward.value, reward.weight, reward.feedback)

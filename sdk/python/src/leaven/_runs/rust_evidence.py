@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .._receipts import WriteReceipt
+from .._receipts import CallReceipt, WriteReceipt
 from ..assessment import Assessment, RewardAssessment
 from ..case import Case
 from ..evidence import EvidenceEnvelope
@@ -113,7 +113,12 @@ class RustCaseDataReadEvidence(BaseModel):
 
     def case_id(self) -> str:
         """Return the stable textual case id carried by Rust evidence."""
-        return str(self.case)
+        if "case_id" not in self.values:
+            raise TypeError("Rust case data read must carry case_id")
+        value = self.values["case_id"]
+        if not isinstance(value, str):
+            raise TypeError("Rust case id read value must be a string")
+        return value
 
     def target(self) -> JsonObject | None:
         """Return the target value read by Rust evidence, when present."""
@@ -123,6 +128,40 @@ class RustCaseDataReadEvidence(BaseModel):
         if not isinstance(value, dict):
             raise TypeError("Rust target read value must be a JSON object")
         return value
+
+    def rewards(self) -> list["RustRewardEvidence"]:
+        """Return reward dimensions carried by Rust evidence."""
+        if "rewards" not in self.values:
+            return []
+        value = self.values["rewards"]
+        if not isinstance(value, list):
+            raise TypeError("Rust rewards read value must be a JSON array")
+        return [RustRewardEvidence.model_validate(item) for item in value]
+
+    def effect_receipts(self) -> list[CallReceipt]:
+        """Return effect receipt ids carried by Rust evidence."""
+        if "effect_receipts" not in self.values:
+            return []
+        value = self.values["effect_receipts"]
+        if not isinstance(value, list):
+            raise TypeError("Rust effect receipts read value must be a JSON array")
+        receipts: list[CallReceipt] = []
+        for item in value:
+            if not isinstance(item, str):
+                raise TypeError("Rust effect receipt ids must be strings")
+            receipts.append(CallReceipt(receipt_id=item))
+        return receipts
+
+
+class RustRewardEvidence(BaseModel):
+    """Reward dimension carried through Rust case-data evidence."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str
+    value: float
+    weight: float
+    feedback: str
 
 
 class RustCandidateAssessmentOutput(BaseModel):
@@ -173,6 +212,28 @@ class RustCaseAssessmentEvidence(BaseModel):
             classes.update(read.data_classes)
         return sorted(classes)
 
+    def rewards(self) -> list[RustRewardEvidence]:
+        """Return reward dimensions carried by the first audited case read."""
+        for read in self.case_data_reads:
+            rewards = read.rewards()
+            if rewards:
+                return rewards
+        return [
+            RustRewardEvidence(
+                id="score",
+                value=self.score.score,
+                weight=1.0,
+                feedback=self.feedback,
+            )
+        ]
+
+    def effect_receipts(self) -> list[CallReceipt]:
+        """Return effect receipt ids carried by audited case reads."""
+        receipts: list[CallReceipt] = []
+        for read in self.case_data_reads:
+            receipts.extend(read.effect_receipts())
+        return receipts
+
 
 def rust_evidence_summaries(
     readback: RustRunReadback,
@@ -219,15 +280,16 @@ def _summary_from_rust_assessment(
         case_id=case_id,
         candidate_id=_primary_candidate_id(assessment),
         data_classes=evidence.data_classes(),
-        payload={"output": evidence.output.report_text()},
+        payload=_public_payload(evidence),
         target_derived="case.target" in evidence.data_classes(),
         rewards=[
             RewardDimensionSummary(
-                id="score",
-                value=evidence.score.score,
-                weight=1.0,
-                feedback=evidence.feedback,
+                id=reward.id,
+                value=reward.value,
+                weight=reward.weight,
+                feedback=reward.feedback,
             )
+            for reward in evidence.rewards()
         ],
     )
 
@@ -256,20 +318,22 @@ def _assessment_from_rust(
             data_classes=evidence.data_classes(),
         ),
         receipt=WriteReceipt(receipt_id=assessment.id),
+        effect_receipts=evidence.effect_receipts(),
         replayability="boundary_managed",
         rewards=[
             RewardAssessment(
-                id="score",
-                value=evidence.score.score,
-                weight=1.0,
-                feedback=evidence.feedback,
+                id=reward.id,
+                value=reward.value,
+                weight=reward.weight,
+                feedback=reward.feedback,
             )
+            for reward in evidence.rewards()
         ],
     )
 
 
 def _public_payload(evidence: RustCaseAssessmentEvidence) -> JsonObject:
-    return {"output": evidence.output.report_text()}
+    return {"output": evidence.output.report_text(), "reward_count": len(evidence.rewards())}
 
 
 def _metadata_object(value: JsonValue) -> JsonObject:
@@ -287,7 +351,14 @@ def _split(value: JsonValue) -> str | None:
         return None
     split = value["split"]
     if not isinstance(split, str):
-        raise TypeError("Rust assessment metadata split must be a string")
+        if not isinstance(split, dict):
+            raise TypeError("Rust assessment metadata split must be a string metadata value")
+        if split["kind"] != "string":
+            raise TypeError("Rust assessment metadata split must be string metadata")
+        split_value = split["value"]
+        if not isinstance(split_value, str):
+            raise TypeError("Rust assessment metadata split value must be a string")
+        return split_value
     return split
 
 
@@ -307,6 +378,7 @@ __all__ = [
     "RustOutputBlobAudit",
     "RustOutputMetadata",
     "RustOutputRecord",
+    "RustRewardEvidence",
     "RustScalarEvidence",
     "rust_assessment_rows",
     "rust_evidence_summaries",

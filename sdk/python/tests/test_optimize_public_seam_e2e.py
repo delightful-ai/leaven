@@ -62,9 +62,17 @@ async def test_optimize_run_spawns_public_seam_and_returns_inspectable_receipts(
     ).run()
 
     argv_lines = log_path.read_text(encoding="utf-8").splitlines()
-    assert len(argv_lines) == 1
+    assert len(argv_lines) == 4
     assert argv_lines[0].startswith(
         f"seam serve --stdio --root {Path(__file__).resolve().parents[3]} --config "
+    )
+    assert argv_lines[1].startswith(
+        "run checkpoint-sdk-prompt --input .leaven/runs/public_seam_e2e/"
+    )
+    assert argv_lines[2] == "run inspect --run-dir .leaven/runs/public_seam_e2e"
+    assert argv_lines[3] == (
+        "run evidence --run-dir .leaven/runs/public_seam_e2e "
+        "--store case-assessment --key 0"
     )
 
     assessment = result.assessment("case_public_seam_001")
@@ -76,11 +84,11 @@ async def test_optimize_run_spawns_public_seam_and_returns_inspectable_receipts(
     assert result.summary.total_lm_tokens == 2
 
     inspection = lv.runs.inspect(result.summary.run_dir or "")
-    assert inspection.best_lineage == ["cand_seed"]
+    assert inspection.best_lineage == [result.best.id]
     assert inspection.receipt_ids(kind="call") == ["lmrec_completion"]
     assert inspection.evidence[0].payload == {"output": "seam-ok", "reward_count": 1}
     assert inspection.total_lm_tokens == 2
-    assert [fact.surface for fact in inspection.unsupported] == ["run.inspection"]
+    assert [fact.surface for fact in inspection.unsupported] == ["run.cost"]
 
 
 def _leaven_bin_wrapper(tmp_path: Path, real_bin: Path, log_path: Path) -> Path:

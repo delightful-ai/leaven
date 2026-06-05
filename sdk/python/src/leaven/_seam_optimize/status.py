@@ -7,17 +7,7 @@ from ..runtime import Runtime
 
 def unsupported_facts_for_runtime(runtime: Runtime) -> tuple[UnsupportedRunFact, ...]:
     """Return public unsupported facts caused by private seam dependencies."""
-    facts: list[UnsupportedRunFact] = [
-        UnsupportedRunFact(
-            surface="run.inspection",
-            dependency="python_seam_optimize",
-            reason="blob_readback_not_implemented",
-            detail=(
-                "this optimize mechanics path persists blob ref metadata but does not yet "
-                "provide blob-content fetch for lv.runs.open/readback"
-            ),
-        )
-    ]
+    facts: list[UnsupportedRunFact] = []
     agent = first_agent(runtime.agent)
     if isinstance(agent, CodexAgent) and agent.transport == "cli":
         facts.extend(

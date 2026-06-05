@@ -14,22 +14,16 @@ proposer path submits a proposal batch only; proposal application, admission,
 and real optimizer search remain later slices.
 """
 
-import datetime
 from typing import cast
 
-from ._receipts import WriteReceipt
-from ._runs import persist_optimized
+from ._runs import persist_rust_prompt_checkpoint
 from ._seam_optimize import PlannedOptimizeCase, SeamOptimizeReport, run_prompt_mechanics
 from .artifacts.prompt import PromptArtifact
-from .assessment import Assessment
-from .case import Case
 from .decorators import RegisteredStage
 from .environment import Environment
-from .evidence import EvidenceEnvelope, EvidencePublic
 from .optimizers.config import OptimizerConfig
 from .optimizers.gepa import Gepa
-from .result import Candidate, Optimized, RunSummary
-from .run_status import project_cost_usage
+from .result import Optimized
 from .runtime import Runtime
 
 
@@ -54,7 +48,6 @@ class OptimizeBuilder[A]:
         cases = self._plan_cases()
         run_id = self._run_id()
 
-        started_at = _utcnow()
         report = await run_prompt_mechanics(
             seed=seed,
             cases=cases,
@@ -64,7 +57,7 @@ class OptimizeBuilder[A]:
             run_id=run_id,
             runtime=self.runtime,
         )
-        return cast("Optimized[A]", _to_optimized(seed, report, run_id, started_at, len(cases)))
+        return cast("Optimized[A]", _to_optimized(seed, cases, report, run_id))
 
     def dry_run(self) -> "OptimizeBuilder[A]":
         """Mark the run as dry-run: validates configuration without executing.
@@ -147,78 +140,12 @@ def optimize[A](
 
 def _to_optimized(
     seed: PromptArtifact,
+    cases: list[PlannedOptimizeCase],
     report: SeamOptimizeReport,
     run_id: str,
-    started_at: str,
-    case_count: int,
-) -> Optimized[PromptArtifact]:
-    """Project the durable-seam mechanics report into a typed `Optimized`."""
-    cost = project_cost_usage(
-        default_cost_usd=report.total_cost_usd,
-        default_lm_tokens=report.total_lm_tokens,
-        unsupported=report.unsupported,
-    )
-    best = Candidate(
-        id="cand_seed",
-        artifact=PromptArtifact(template=seed.template, candidate_id="cand_seed"),
-        parent_id=None,
-        summary_score=report.best_score,
-    )
-    assessment_rows = _assessment_rows(report, case_count)
-    summary = RunSummary(
-        run_id=run_id,
-        started_at=started_at,
-        completed_at=_utcnow(),
-        iterations=len(report.proposal_receipts),
-        candidates_evaluated=1,
-        total_cost_usd=cost.total_cost_usd,
-        cost_status=cost.cost_status,
-        total_calls=case_count,
-        total_lm_tokens=cost.total_lm_tokens,
-        usage_status=cost.usage_status,
-        unsupported=report.unsupported,
-        replayability="fully_managed",
-    )
-    result = Optimized(
-        run_id=run_id,
-        best=best,
-        frontier=[best],
-        summary=summary,
-        assessment_rows=assessment_rows,
-        proposal_receipts=report.proposal_receipts,
-        effect_receipts=report.effect_receipts,
-    )
-    return persist_optimized(result)
-
-
-def _assessment_rows(report: SeamOptimizeReport, case_count: int) -> list[Assessment]:
-    return [
-        Assessment(
-            case=Case(
-                id=assessment.case_id,
-                input=dict(assessment.case_input),
-                target=dict(assessment.case_target or {}),
-                metadata=dict(assessment.case_metadata),
-                split=assessment.case_split,
-            ),
-            candidate_id="cand_seed",
-            score=assessment.score,
-            evidence=EvidenceEnvelope(
-                public=EvidencePublic(
-                    data_classes=["public"],
-                    payload={
-                        "output": assessment.output,
-                        "reward_count": len(assessment.rewards),
-                    },
-                )
-            ),
-            receipt=WriteReceipt(receipt_id=f"assessmentrec_{assessment.case_id}_{case_count}"),
-            effect_receipts=assessment.effect_receipts,
-            replayability="fully_managed",
-            rewards=assessment.rewards,
-        )
-        for assessment in report.assessments
-    ]
+) -> Optimized[object]:
+    """Materialize the durable-seam mechanics report through Rust readback."""
+    return persist_rust_prompt_checkpoint(seed=seed, cases=cases, report=report, run_id=run_id)
 
 
 def _wire_case_id(case_id: str) -> str:
@@ -235,10 +162,6 @@ def _slug(name: str) -> str:
     """Lower a free-form name into a run-id-safe slug."""
     cleaned = "".join(ch if ch.isalnum() else "_" for ch in name).strip("_")
     return cleaned or "leaven_optimize"
-
-
-def _utcnow() -> str:
-    return datetime.datetime.now(datetime.UTC).isoformat()
 
 
 __all__ = ["OptimizeBuilder", "optimize"]

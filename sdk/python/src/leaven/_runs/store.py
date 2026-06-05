@@ -44,7 +44,7 @@ def list_run_dirs(root: str | Path = ".leaven/runs") -> list[str]:
     return sorted(
         path.name
         for path in root_path.iterdir()
-        if path.is_dir() and (path / RUN_RESULT_FILE).is_file()
+        if path.is_dir() and _is_run_dir(path)
     )
 
 
@@ -52,6 +52,10 @@ def _result_path(path: Path) -> Path:
     if path.is_dir():
         return path / RUN_RESULT_FILE
     return path
+
+
+def _is_run_dir(path: Path) -> bool:
+    return (path / RUN_RESULT_FILE).is_file() or (path / "checkpoints" / "LATEST").is_file()
 
 
 def _run_dir_name(run_id: str) -> str:

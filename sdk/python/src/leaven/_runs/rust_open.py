@@ -2,10 +2,12 @@
 
 from pathlib import Path
 
+from ..artifacts.prompt import PromptArtifact
 from ..assessment import Assessment, Replayability
+from ..json_value import JsonValue
 from ..result import Candidate, Optimized, RunSummary
 from ..run_inspection import RustRunReadback
-from ..run_status import UnsupportedRunFact
+from ..run_status import RunCostStatus, UnsupportedRunFact
 from .rust_evidence import rust_assessment_rows
 from .rust_export import load_rust_evidence_readback, load_rust_run_readback
 
@@ -36,8 +38,9 @@ def optimized_from_rust_readback(
     frontier = [
         Candidate[object](
             id=candidate.id,
-            artifact=candidate.artifact,
+            artifact=_artifact_from_readback(candidate.artifact),
             parent_id=candidate.parent_id,
+            summary_score=_summary_score(candidate.id, assessment_rows),
         )
         for candidate in readback.graph.candidates
     ]
@@ -58,8 +61,8 @@ def optimized_from_rust_readback(
             completed_at=None,
             iterations=readback.graph.event_count,
             candidates_evaluated=readback.graph.assessment_count,
-            total_cost_usd=None,
-            cost_status="unsupported_dependency",
+            total_cost_usd=_total_cost_usd(readback),
+            cost_status=_cost_status(readback),
             total_calls=readback.graph.event_count,
             total_lm_tokens=readback.cost.lm_tokens,
             usage_status="known",
@@ -71,11 +74,40 @@ def optimized_from_rust_readback(
     )
 
 
+def _total_cost_usd(readback: RustRunReadback) -> float | None:
+    if readback.cost.lm_calls == 0 and readback.cost.lm_tokens == 0:
+        return 0.0
+    return None
+
+
+def _cost_status(readback: RustRunReadback) -> RunCostStatus:
+    if _total_cost_usd(readback) == 0.0:
+        return "known"
+    return "unsupported_dependency"
+
+
 def _candidate_by_id(candidates: list[Candidate[object]], candidate_id: str) -> Candidate[object]:
     for candidate in candidates:
         if candidate.id == candidate_id:
             return candidate
     raise KeyError(f"Rust run readback best candidate {candidate_id!r} is missing")
+
+
+def _artifact_from_readback(value: JsonValue) -> object:
+    if isinstance(value, dict) and "template" in value and "candidate_id" in value:
+        return PromptArtifact.model_validate(value)
+    return value
+
+
+def _summary_score(candidate_id: str, assessment_rows: list[Assessment] | None) -> float | None:
+    rows = [
+        assessment.score.value
+        for assessment in assessment_rows or []
+        if assessment.candidate_id == candidate_id
+    ]
+    if not rows:
+        return None
+    return sum(rows) / len(rows)
 
 
 def _replayability() -> Replayability:
@@ -86,14 +118,16 @@ def _unsupported(
     readback: RustRunReadback,
     assessment_rows: list[Assessment] | None,
 ) -> tuple[UnsupportedRunFact, ...]:
-    facts = [
-        UnsupportedRunFact(
-            surface="run.cost",
-            dependency="Rust checkpoint inspection",
-            reason="provider_cost_not_reported",
-            detail="Rust run-open readback does not yet export cost totals.",
+    facts: list[UnsupportedRunFact] = []
+    if _cost_status(readback) == "unsupported_dependency":
+        facts.append(
+            UnsupportedRunFact(
+                surface="run.cost",
+                dependency="Rust checkpoint inspection",
+                reason="provider_cost_not_reported",
+                detail="Rust run-open readback does not yet export provider dollar totals.",
+            )
         )
-    ]
     if assessment_rows is None and readback.graph.assessment_count > 0:
         facts.append(
             UnsupportedRunFact(

@@ -135,15 +135,21 @@ def _resolve_leaven_binary() -> Path:
     raise FileNotFoundError("could not find leaven binary; set LEAVEN_BIN")
 
 
+def resolve_leaven_binary() -> Path:
+    """Return the configured Leaven CLI binary for private Rust run commands."""
+    return _resolve_leaven_binary()
+
+
 def _resolve_repo_root() -> Path:
     override = os.environ.get("LEAVEN_REPO_ROOT")
     if override:
         return Path(override)
-    for parent in Path.cwd().resolve().parents:
-        if (parent / "Cargo.toml").is_file() and (
-            parent / "crates" / "leaven" / "tests" / "topology_contract.rs"
-        ).is_file():
-            return parent
+    for start in (Path.cwd().resolve(), Path(__file__).resolve()):
+        for parent in (start, *start.parents):
+            if (parent / "Cargo.toml").is_file() and (
+                parent / "crates" / "leaven" / "tests" / "topology_contract.rs"
+            ).is_file():
+                return parent
     raise FileNotFoundError("could not resolve Leaven repo root; set LEAVEN_REPO_ROOT")
 
 
@@ -151,4 +157,5 @@ __all__ = [
     "load_rust_blob_readback",
     "load_rust_evidence_readback",
     "load_rust_run_readback",
+    "resolve_leaven_binary",
 ]

@@ -180,7 +180,7 @@ spec_revisions_before_goal:
       Update example maturity labels so product-proof examples and shape-only
       scaffolds are not mixed under "runnable examples" language.
     rationale: Example labels are part of public maturity truth.
-    status: pending
+    status: proven
   - update: >-
       Replace or supersede the current Python `_types` staging path with a
       Rust-owned public-seam schema/method export that generates msgspec wire
@@ -1083,6 +1083,43 @@ acceptance:
         - receipts, lineage, evidence, cost/usage, unsupported facts
         - blob byte retrieval for transcript/artifact refs
     evidence:
+      - kind: sdk_optimize_hard_cutover_to_rust_checkpoint_readback
+        paths:
+          - crates/leaven-run/src/sdk_checkpoint.rs
+          - crates/leaven-run/src/lib.rs
+          - crates/leaven-cli/src/main.rs
+          - sdk/python/src/leaven/optimize.py
+          - sdk/python/src/leaven/_runs/rust_checkpoint.py
+          - sdk/python/src/leaven/_runs/rust_export.py
+          - sdk/python/src/leaven/_runs/rust_evidence.py
+          - sdk/python/src/leaven/_runs/rust_open.py
+          - sdk/python/src/leaven/_runs/store.py
+          - sdk/python/tests/test_run_inspection.py
+          - sdk/python/tests/test_run_receipt_inspection.py
+          - sdk/python/tests/test_reward_vector_inspection.py
+          - sdk/python/tests/test_optimize_public_seam_e2e.py
+        commands:
+          - cargo check -p leaven-run
+          - cargo build -p leaven-cli
+          - cargo test -p leaven-cli
+          - cd sdk/python && uv run pytest tests/test_run_inspection.py tests/test_run_receipt_inspection.py tests/test_reward_vector_inspection.py tests/test_optimize_public_seam_e2e.py -q
+          - cd sdk/python && uv run ruff check tests/test_run_inspection.py tests/test_run_receipt_inspection.py tests/test_reward_vector_inspection.py tests/test_optimize_public_seam_e2e.py src/leaven/_runs/rust_checkpoint.py src/leaven/_runs/rust_evidence.py src/leaven/_runs/rust_open.py
+          - cd sdk/python && uv run ty check tests/test_run_inspection.py tests/test_run_receipt_inspection.py tests/test_reward_vector_inspection.py tests/test_optimize_public_seam_e2e.py src/leaven/_runs/rust_checkpoint.py src/leaven/_runs/rust_evidence.py src/leaven/_runs/rust_open.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+        note: >-
+          `lv.optimize(...).run()` now hard-cuts from the old Python
+          `optimized.json` projection to a Rust-owned checkpoint materializer:
+          Python writes a typed `leaven.sdk_prompt_run_record.v1` input,
+          `leaven run checkpoint-sdk-prompt` runs an Engine-owned lifecycle
+          with a typed replay optimizer/evaluator, and `lv.runs.open(...)`
+          returns the Rust checkpoint readback. The focused SDK tests assert a
+          real `checkpoints/LATEST`, `rust_readback`, Rust graph blob bytes,
+          Rust evidence bytes, engine-minted candidate lineage, reward-vector
+          dimensions, LM effect receipt ids, token usage, and absence of the
+          old `run.inspection` unsupported fact. The public-seam e2e test wraps
+          the real CLI and observes the expected `seam serve`, checkpoint,
+          inspect, and evidence commands.
       - kind: rust_checkpoint_graph_readback_export_foundation
         paths:
           - crates/leaven-run/src/inspection.rs

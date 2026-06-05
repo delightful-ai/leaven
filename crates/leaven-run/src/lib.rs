@@ -10,6 +10,7 @@ mod public_seam;
 mod result;
 pub(crate) mod run_report;
 pub(crate) mod run_store;
+mod sdk_checkpoint;
 mod store;
 #[cfg(test)]
 pub(crate) mod test_support;
@@ -44,6 +45,11 @@ pub use result::{
     RunReportPaths, RunResumability, RunStorage, StandardRunSummary,
 };
 pub use run_store::default_local_run_dir;
+pub use sdk_checkpoint::{
+    SDK_PROMPT_RUN_RECORD_SCHEMA, SdkPromptArtifact, SdkPromptAssessment, SdkPromptCase,
+    SdkPromptCheckpointError, SdkPromptCheckpointReport, SdkPromptReward, SdkPromptRunRecord,
+    materialize_sdk_prompt_checkpoint,
+};
 pub use store::{IntoOptimizeStore, OptimizeStore};
 
 pub mod prelude {
