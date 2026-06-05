@@ -31,6 +31,13 @@ target Codex surface consumes the projected instructions and skills.
   proves deterministic AgentKit projection, hook scaffold refusal, typed
   `GitProgramChange` construction, and graph application through
   `RunContext::propose` plus `apply_batch`.
+- `cargo test -p leaven-gepa-agentic-agent-kit --test agent_kit_seam_checkpoint`
+  proves the deterministic AgentKit Git/filesystem substrate also survives the
+  run-bound SDK route and Rust-owned durable checkpoint readback: real Git
+  mutation is imported as a typed change, applied through public-seam
+  submit/apply callbacks mounted in `Engine::run`, restored from
+  `StoreRunPersistence<FileStore>`, and projected into the next AgentKit
+  workspace.
 - `cargo test -p leaven-gepa-agentic-agent-kit` includes the ignored live gate
   without spending provider calls.
 - `LEAVEN_CODEX_LIVE=1 cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit -- --ignored`

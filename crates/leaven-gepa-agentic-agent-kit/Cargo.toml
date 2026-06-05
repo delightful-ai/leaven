@@ -25,11 +25,16 @@ leaven-engine = { workspace = true }
 leaven-evidence = { workspace = true }
 leaven-kernel = { workspace = true }
 leaven-public-seam = { workspace = true }
+leaven-run = { workspace = true }
+leaven-seam-run = { workspace = true }
 leaven-seam-runtime = { workspace = true }
 leaven-seam-service = { workspace = true }
 leaven-seam-stdio = { workspace = true }
+leaven-store-file = { workspace = true }
+leaven-store-inline = { workspace = true }
 leaven-workspace = { workspace = true }
 leaven-workspace-local = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 
