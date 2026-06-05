@@ -57,7 +57,7 @@ async def run_prompt_mechanics(
     *,
     seed: PromptArtifact,
     cases: list[PlannedOptimizeCase],
-    runner: RegisteredStage[object, object],
+    runner: RegisteredStage[PromptArtifact, str],
     optimizer: Gepa,
     rubric: Rubric,
     run_id: str,

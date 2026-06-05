@@ -8,14 +8,17 @@ remain the authoring sugar for the function-backed forms (`Rollout.fn`,
 """
 
 from collections.abc import Sequence
-from typing import Literal, cast
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .agent.config import AgentConfig
+from .artifacts.prompt import PromptArtifact
 from .decorators import RegisteredStage
 from .layouts import WorkspaceLayout, case_workspace, edit_artifact
 from .output import OutputContract
+from .proposal import ProposalBatch
+from .stage_payloads import ReflectionResult
 
 
 class Rollout(BaseModel):
@@ -25,23 +28,23 @@ class Rollout(BaseModel):
 
     kind: Literal["function", "command", "agent"]
     layout: WorkspaceLayout
-    stage: RegisteredStage[object, object] | None = None
+    stage: RegisteredStage[PromptArtifact, str] | None = None
     argv: list[str] | None = None
     agent_config: AgentConfig | None = None
     instructions: str | None = None
     output: OutputContract | None = None
 
     @classmethod
-    def fn[A, O](
+    def fn(
         cls,
-        stage: RegisteredStage[A, O],
+        stage: RegisteredStage[PromptArtifact, str],
         *,
         layout: WorkspaceLayout | None = None,
     ) -> "Rollout":
         """Use a registered `@lv.runner` stage as the rollout."""
         return cls(
             kind="function",
-            stage=cast("RegisteredStage[object, object]", stage),
+            stage=stage,
             layout=layout or case_workspace(),
         )
 
@@ -88,12 +91,12 @@ class Reflect(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid")
 
     kind: Literal["function", "default_gepa"]
-    stage: RegisteredStage[object, object] | None = None
+    stage: RegisteredStage[object, ReflectionResult] | None = None
 
     @classmethod
-    def fn[A, O](cls, stage: RegisteredStage[A, O]) -> "Reflect":
+    def fn(cls, stage: RegisteredStage[object, ReflectionResult]) -> "Reflect":
         """Use a registered `@lv.reflector` stage."""
-        return cls(kind="function", stage=cast("RegisteredStage[object, object]", stage))
+        return cls(kind="function", stage=stage)
 
     @classmethod
     def default_gepa(cls) -> "Reflect":
@@ -107,14 +110,14 @@ class Propose(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid")
 
     kind: Literal["function", "agent_edit"]
-    stage: RegisteredStage[object, object] | None = None
+    stage: RegisteredStage[object, ProposalBatch] | None = None
     agent_config: AgentConfig | None = None
     layout: WorkspaceLayout = Field(default_factory=edit_artifact)
 
     @classmethod
-    def fn[A, O](cls, stage: RegisteredStage[A, O]) -> "Propose":
+    def fn(cls, stage: RegisteredStage[object, ProposalBatch]) -> "Propose":
         """Use a registered `@lv.proposer` stage."""
-        return cls(kind="function", stage=cast("RegisteredStage[object, object]", stage))
+        return cls(kind="function", stage=stage)
 
     @classmethod
     def agent_edit(

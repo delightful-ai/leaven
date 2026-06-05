@@ -4465,6 +4465,32 @@ acceptance:
           with a mirrored `tests/_runs/test_store.py`; the quality contract
           enforces that mapping along with line count, no `from __future__`,
           no production `Any`, and the custom defensive-erasure lints.
+      - kind: prompt_stage_runtime_erasure_narrowed
+        paths:
+          - sdk/python/src/leaven/stages.py
+          - sdk/python/src/leaven/optimize.py
+          - sdk/python/src/leaven/_seam_optimize/driver.py
+          - sdk/python/src/leaven/_seam_worker/runner.py
+          - sdk/python/src/leaven/_seam_worker/proposer.py
+          - sdk/python/src/leaven/_seam_worker/main.py
+          - sdk/python/src/leaven/_seam_worker/target.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && uv run pytest tests/test_stage_surface.py tests/test_optimize.py tests/test_run_inspection.py tests/test_optimize_proposer_mechanics.py -q
+          - cd sdk/python && uv run ruff check src/leaven/stages.py src/leaven/optimize.py src/leaven/_seam_optimize/driver.py src/leaven/_seam_worker/runner.py src/leaven/_seam_worker/proposer.py src/leaven/_seam_worker/main.py src/leaven/_seam_worker/target.py tests/test_stage_surface.py tests/test_optimize.py tests/test_run_inspection.py tests/test_optimize_proposer_mechanics.py
+          - cd sdk/python && uv run ty check src/leaven/stages.py src/leaven/optimize.py src/leaven/_seam_optimize/driver.py src/leaven/_seam_worker/runner.py src/leaven/_seam_worker/proposer.py src/leaven/_seam_worker/main.py src/leaven/_seam_worker/target.py tests/test_stage_surface.py tests/test_optimize.py tests/test_run_inspection.py tests/test_optimize_proposer_mechanics.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          The current prompt mechanics stage route no longer exposes the runner
+          stage as `RegisteredStage[object, object]` below the public
+          `Rollout.fn(...)` boundary. `Rollout.fn`, optimize runner selection,
+          the seam optimize driver, and the runner worker now carry
+          `RegisteredStage[PromptArtifact, str]`; the proposer worker carries
+          `RegisteredStage[object, ProposalBatch]`; and worker argv extraction
+          is generic over the stage return type instead of forcing
+          `Awaitable[object]`. Dynamic subprocess loading still narrows with
+          casts after checking `stage.role`, and GEPA judge typing remains a
+          separate stage surface.
       - kind: sdk_quality_gate_lint_type_tests_package
         paths:
           - sdk/python/pyproject.toml

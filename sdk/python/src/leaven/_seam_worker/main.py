@@ -3,10 +3,13 @@
 import argparse
 import asyncio
 from pathlib import Path
+from typing import cast
 
 from .._seam._wire import JsonObject, JsonRpcId
 from .._seam._wire.payloads import StageRunRequest
+from ..artifacts.prompt import PromptArtifact
 from ..decorators import RegisteredStage
+from ..proposal import ProposalBatch
 from .loader import load_stage_from_file
 from .proposer import run_proposer_stage
 from .protocol import read_request, write_error, write_result
@@ -51,9 +54,17 @@ async def run_stage(
 ) -> JsonObject:
     """Dispatch one registered stage by role."""
     if stage.role == "runner":
-        return await run_runner_stage(stage, params, lm_model=lm_model)
+        return await run_runner_stage(
+            cast("RegisteredStage[PromptArtifact, str]", stage),
+            params,
+            lm_model=lm_model,
+        )
     if stage.role == "proposer":
-        return await run_proposer_stage(stage, params, lm_model=lm_model)
+        return await run_proposer_stage(
+            cast("RegisteredStage[object, ProposalBatch]", stage),
+            params,
+            lm_model=lm_model,
+        )
     raise ValueError(f"unsupported worker stage role: {stage.role!r}")
 
 

@@ -35,7 +35,7 @@ from .context import JsonRpcCallbackClient, propose_context
 
 
 async def run_proposer_stage(
-    stage: RegisteredStage[object, object],
+    stage: RegisteredStage[object, ProposalBatch],
     params: StageRunRequest,
     *,
     lm_model: str,

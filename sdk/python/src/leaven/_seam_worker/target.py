@@ -33,12 +33,16 @@ class StageWorkerTarget:
         )
 
 
-class _StageLike(Protocol):
+class _StageLike[O](Protocol):
     id: str
-    func: Callable[..., Awaitable[object]]
+    func: Callable[..., Awaitable[O]]
 
 
-def worker_argv_for_stage(stage: _StageLike, *, lm_model: str = "mock") -> tuple[str, ...]:
+def worker_argv_for_stage[O](
+    stage: _StageLike[O],
+    *,
+    lm_model: str = "mock",
+) -> tuple[str, ...]:
     """Build worker argv for a `RegisteredStage` without importing it here."""
     target = StageWorkerTarget(
         stage_id=stage.id,
@@ -48,7 +52,7 @@ def worker_argv_for_stage(stage: _StageLike, *, lm_model: str = "mock") -> tuple
     return target.argv(lm_model=lm_model)
 
 
-def _module_file(stage: _StageLike) -> Path:
+def _module_file[O](stage: _StageLike[O]) -> Path:
     path = inspect.getsourcefile(stage.func) or inspect.getfile(stage.func)
     if not path:
         raise ValueError(f"registered stage {stage.id!r} has no source file")

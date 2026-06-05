@@ -67,7 +67,7 @@ class OptimizeBuilder[A]:
             )
         return self.seed
 
-    def _runner_stage(self) -> RegisteredStage[object, object]:
+    def _runner_stage(self) -> RegisteredStage[PromptArtifact, str]:
         rollout = self.environment.rollout
         if rollout.kind != "function" or rollout.stage is None:
             raise UnsupportedConfigurationError(

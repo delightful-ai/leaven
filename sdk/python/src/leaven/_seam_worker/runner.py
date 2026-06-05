@@ -11,7 +11,7 @@ from .context import JsonRpcCallbackClient, rollout_context
 
 
 async def run_runner_stage(
-    stage: RegisteredStage[object, object],
+    stage: RegisteredStage[PromptArtifact, str],
     params: StageRunRequest,
     *,
     lm_model: str,
