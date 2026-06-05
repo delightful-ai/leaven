@@ -1125,6 +1125,29 @@ acceptance:
           still foundation evidence because transcript/artifact refs are not yet
           surfaced through the Rust inspection export and `lv.runs.open(...)`
           still opens `optimized.json`.
+      - kind: rust_checkpoint_ref_lists_preserved_foundation
+        paths:
+          - crates/leaven-run/src/inspection.rs
+          - crates/leaven-cli/src/main.rs
+          - sdk/python/src/leaven/run_inspection.py
+          - sdk/python/tests/_runs/test_rust_export.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cargo test -p leaven-run inspection --lib
+          - cargo test -p leaven-cli tests::run_inspect_exports_rust_owned_checkpoint_and_graph_blob_readback -- --exact
+          - cd sdk/python && uv run pytest tests/_runs/test_rust_export.py -q
+          - cd sdk/python && uv run ruff check src/leaven/run_inspection.py src/leaven/runs.py src/leaven/_runs tests/_runs/test_rust_export.py
+          - cd sdk/python && uv run ty check src/leaven/run_inspection.py src/leaven/runs.py src/leaven/_runs tests/_runs/test_rust_export.py
+        note: >-
+          Rust inspection no longer drops checkpoint ref lists. The
+          checkpoint export now carries typed artifact blob refs, evidence refs,
+          stage-journal blob refs, and workspace-journal blob refs in addition
+          to counts, and Python decodes those refs as typed readback records.
+          This makes the `leaven run blob` byte command usable for any
+          Rust-exposed blob ref. It remains foundation evidence because normal
+          `StoreRunPersistence` checkpoints do not yet populate artifact,
+          evidence, stage-journal, or workspace-journal refs for SDK-visible
+          transcript/artifact readback.
     closeout_check: "Reading only `optimized.json` written by Python is a proxy."
 
   - id: python_wire_codegen_msgspec_boundary

@@ -37,10 +37,14 @@ def test_load_rust_run_readback_invokes_leaven_run_inspect(tmp_path: Path) -> No
         '      "schema": "060606",\n'
         '      "format": "Json"\n'
         "    },\n"
-        '    "artifact_ref_count": 0,\n'
-        '    "evidence_ref_count": 0,\n'
-        '    "stage_journal_ref_count": 0,\n'
-        '    "workspace_journal_ref_count": 0,\n'
+        '    "artifact_refs": [{"store": "file", "key": "artifact.blob"}],\n'
+        '    "artifact_ref_count": 1,\n'
+        '    "evidence_refs": [{"store": "evidence", "key": "evidence.json"}],\n'
+        '    "evidence_ref_count": 1,\n'
+        '    "stage_journal_refs": [{"store": "file", "key": "stage.blob"}],\n'
+        '    "stage_journal_ref_count": 1,\n'
+        '    "workspace_journal_refs": [{"store": "file", "key": "workspace.blob"}],\n'
+        '    "workspace_journal_ref_count": 1,\n'
         '    "has_optimizer_state": false,\n'
         '    "has_cache_index": false\n'
         "  },\n"
@@ -73,6 +77,14 @@ def test_load_rust_run_readback_invokes_leaven_run_inspect(tmp_path: Path) -> No
 
     assert readback is not None
     assert readback.latest_checkpoint == "checkpoint_1"
+    assert readback.checkpoint.artifact_refs[0].key == "artifact.blob"
+    assert readback.checkpoint.artifact_ref_count == 1
+    assert readback.checkpoint.evidence_refs[0].key == "evidence.json"
+    assert readback.checkpoint.evidence_ref_count == 1
+    assert readback.checkpoint.stage_journal_refs[0].key == "stage.blob"
+    assert readback.checkpoint.stage_journal_ref_count == 1
+    assert readback.checkpoint.workspace_journal_refs[0].key == "workspace.blob"
+    assert readback.checkpoint.workspace_journal_ref_count == 1
     assert readback.graph.candidate_count == 2
     assert readback.graph.bytes == 128
     assert calls.read_text(encoding="utf-8").splitlines() == [
@@ -163,9 +175,13 @@ def load_rust_run_readback_fixture() -> RustRunReadback:
                     "schema": "060606",
                     "format": "Json",
                 },
+                "artifact_refs": [],
                 "artifact_ref_count": 0,
+                "evidence_refs": [],
                 "evidence_ref_count": 0,
+                "stage_journal_refs": [],
                 "stage_journal_ref_count": 0,
+                "workspace_journal_refs": [],
                 "workspace_journal_ref_count": 0,
                 "has_optimizer_state": False,
                 "has_cache_index": False,

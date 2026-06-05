@@ -4,7 +4,7 @@ use std::path::Path;
 
 use base64::{Engine as _, engine::general_purpose};
 use leaven_engine::RunCheckpoint;
-use leaven_kernel::{BlobRef, CheckpointId, RunId};
+use leaven_kernel::{BlobRef, CheckpointId, EvidenceRef, RunId};
 use leaven_store::{BlobStore, CheckpointStore};
 use leaven_store_file::FileStore;
 use serde::Serialize;
@@ -40,12 +40,20 @@ pub struct CheckpointInspection {
     pub format_version: u32,
     /// Serialized graph snapshot reference.
     pub graph_snapshot: BlobInspectionRef,
+    /// Artifact blob refs carried by the checkpoint envelope.
+    pub artifact_refs: Vec<BlobByteReadbackRef>,
     /// Number of artifact blob refs carried by the checkpoint envelope.
     pub artifact_ref_count: usize,
+    /// Evidence refs carried by the checkpoint envelope.
+    pub evidence_refs: Vec<EvidenceReadbackRef>,
     /// Number of evidence refs carried by the checkpoint envelope.
     pub evidence_ref_count: usize,
+    /// Stage journal blob refs carried by the checkpoint envelope.
+    pub stage_journal_refs: Vec<BlobByteReadbackRef>,
     /// Number of stage journal blob refs carried by the checkpoint envelope.
     pub stage_journal_ref_count: usize,
+    /// Workspace journal blob refs carried by the checkpoint envelope.
+    pub workspace_journal_refs: Vec<BlobByteReadbackRef>,
     /// Number of workspace journal blob refs carried by the checkpoint envelope.
     pub workspace_journal_ref_count: usize,
     /// Whether optimizer private state exists in the checkpoint envelope.
@@ -116,6 +124,15 @@ pub struct BlobByteReadbackRef {
     pub key: String,
 }
 
+/// Evidence reference facts exposed by checkpoint readback.
+#[derive(Clone, Debug, Serialize)]
+pub struct EvidenceReadbackRef {
+    /// Evidence store name.
+    pub store: String,
+    /// Evidence key.
+    pub key: String,
+}
+
 /// Export a Rust-owned inspection artifact from a local run directory.
 ///
 /// This reads the latest checkpoint through [`FileStore`] and resolves the
@@ -165,9 +182,23 @@ pub fn export_local_run_inspection(
     let checkpoint_inspection = CheckpointInspection {
         format_version: checkpoint.format_version,
         graph_snapshot: blob_ref(&checkpoint.graph_snapshot.bytes, &checkpoint.graph_snapshot),
+        artifact_refs: checkpoint.artifact_refs.iter().map(blob_byte_ref).collect(),
         artifact_ref_count: checkpoint.artifact_refs.len(),
+        evidence_refs: checkpoint.evidence_refs.iter().map(evidence_ref).collect(),
         evidence_ref_count: checkpoint.evidence_refs.len(),
+        stage_journal_refs: checkpoint
+            .stage_journal
+            .entries
+            .iter()
+            .map(blob_byte_ref)
+            .collect(),
         stage_journal_ref_count: checkpoint.stage_journal.entries.len(),
+        workspace_journal_refs: checkpoint
+            .workspace_journal
+            .entries
+            .iter()
+            .map(blob_byte_ref)
+            .collect(),
         workspace_journal_ref_count: checkpoint.workspace_journal.entries.len(),
         has_optimizer_state: checkpoint.optimizer_state.is_some(),
         has_cache_index: checkpoint.cache_index.is_some(),
@@ -246,6 +277,20 @@ fn blob_ref(reference: &BlobRef, graph: &leaven_engine::GraphSnapshotRef) -> Blo
     }
 }
 
+fn blob_byte_ref(reference: &BlobRef) -> BlobByteReadbackRef {
+    BlobByteReadbackRef {
+        store: reference.store.clone(),
+        key: reference.key.clone(),
+    }
+}
+
+fn evidence_ref(reference: &EvidenceRef) -> EvidenceReadbackRef {
+    EvidenceReadbackRef {
+        store: reference.store.clone(),
+        key: reference.key.clone(),
+    }
+}
+
 fn array_len(value: &Value, field: &str) -> usize {
     value
         .get(field)
@@ -282,7 +327,10 @@ pub enum RunInspectionExportError {
 #[cfg(test)]
 mod tests {
     use bytes::Bytes;
-    use leaven_engine::{GraphSnapshotRef, RunCheckpoint, StateFormat};
+    use leaven_engine::{
+        GraphSnapshotRef, RunCheckpoint, StageJournalSnapshot, StateFormat,
+        WorkspaceJournalSnapshot,
+    };
     use leaven_kernel::{BudgetSnapshot, Fingerprint, now};
     use leaven_store::{BlobWrite, CheckpointBytes};
 
@@ -310,7 +358,23 @@ mod tests {
             },
         )
         .unwrap();
-        let checkpoint = RunCheckpoint::new(
+        let artifact_ref = BlobRef {
+            store: "file".to_owned(),
+            key: "artifact.blob".to_owned(),
+        };
+        let evidence_ref = EvidenceRef {
+            store: "evidence".to_owned(),
+            key: "evidence.json".to_owned(),
+        };
+        let stage_ref = BlobRef {
+            store: "file".to_owned(),
+            key: "stage-journal.blob".to_owned(),
+        };
+        let workspace_ref = BlobRef {
+            store: "file".to_owned(),
+            key: "workspace-journal.blob".to_owned(),
+        };
+        let mut checkpoint = RunCheckpoint::new(
             leaven_kernel::RunId::new(),
             now(),
             GraphSnapshotRef {
@@ -320,6 +384,14 @@ mod tests {
             },
             BudgetSnapshot::default(),
         );
+        checkpoint.artifact_refs.push(artifact_ref.clone());
+        checkpoint.evidence_refs.push(evidence_ref.clone());
+        checkpoint.stage_journal = StageJournalSnapshot {
+            entries: vec![stage_ref.clone()],
+        };
+        checkpoint.workspace_journal = WorkspaceJournalSnapshot {
+            entries: vec![workspace_ref.clone()],
+        };
         let checkpoint_bytes = serde_json::to_vec(&checkpoint).unwrap();
         let checkpoint_id =
             CheckpointStore::put(&store, CheckpointBytes(Bytes::from(checkpoint_bytes))).unwrap();
@@ -331,6 +403,17 @@ mod tests {
         assert_eq!(export.latest_checkpoint, checkpoint_id);
         assert_eq!(export.run_id, checkpoint.run_id);
         assert_eq!(export.checkpoint.graph_snapshot.key, graph_blob.key);
+        assert_eq!(export.checkpoint.artifact_refs[0].key, artifact_ref.key);
+        assert_eq!(export.checkpoint.artifact_ref_count, 1);
+        assert_eq!(export.checkpoint.evidence_refs[0].key, evidence_ref.key);
+        assert_eq!(export.checkpoint.evidence_ref_count, 1);
+        assert_eq!(export.checkpoint.stage_journal_refs[0].key, stage_ref.key);
+        assert_eq!(export.checkpoint.stage_journal_ref_count, 1);
+        assert_eq!(
+            export.checkpoint.workspace_journal_refs[0].key,
+            workspace_ref.key
+        );
+        assert_eq!(export.checkpoint.workspace_journal_ref_count, 1);
         assert_eq!(export.graph.bytes, graph_json.len());
         assert_eq!(export.graph.run_id.as_deref(), Some("run_export"));
         assert_eq!(export.graph.candidate_count, 2);

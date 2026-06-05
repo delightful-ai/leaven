@@ -25,6 +25,24 @@ class BlobReadbackSummary(BaseModel):
     format: str
 
 
+class BlobByteReadbackRef(BaseModel):
+    """Blob store/key resolved by Rust for byte readback."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    store: str
+    key: str
+
+
+class EvidenceReadbackRef(BaseModel):
+    """Evidence store/key exposed by Rust checkpoint readback."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    store: str
+    key: str
+
+
 class CheckpointReadbackSummary(BaseModel):
     """Checkpoint-envelope facts read by Rust from the local run store."""
 
@@ -32,9 +50,13 @@ class CheckpointReadbackSummary(BaseModel):
 
     format_version: int
     graph_snapshot: BlobReadbackSummary
+    artifact_refs: list[BlobByteReadbackRef] = Field(default_factory=list)
     artifact_ref_count: int
+    evidence_refs: list[EvidenceReadbackRef] = Field(default_factory=list)
     evidence_ref_count: int
+    stage_journal_refs: list[BlobByteReadbackRef] = Field(default_factory=list)
     stage_journal_ref_count: int
+    workspace_journal_refs: list[BlobByteReadbackRef] = Field(default_factory=list)
     workspace_journal_ref_count: int
     has_optimizer_state: bool
     has_cache_index: bool
@@ -67,15 +89,6 @@ class RustRunReadback(BaseModel):
     latest_checkpoint: str
     checkpoint: CheckpointReadbackSummary
     graph: GraphReadbackSummary
-
-
-class BlobByteReadbackRef(BaseModel):
-    """Blob store/key resolved by Rust for byte readback."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    store: str
-    key: str
 
 
 class RustBlobReadback(BaseModel):
@@ -248,6 +261,7 @@ __all__ = [
     "BlobByteReadbackRef",
     "BlobReadbackSummary",
     "CheckpointReadbackSummary",
+    "EvidenceReadbackRef",
     "EvidenceSummary",
     "GraphReadbackSummary",
     "ReceiptKind",

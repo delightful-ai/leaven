@@ -281,9 +281,12 @@ mod tests {
 
     use bytes::Bytes;
     use leaven_artifact_skill::{SkillBank, SkillFile, SkillFolder, SkillName, SkillPath};
-    use leaven_engine::{GraphSnapshotRef, RunCheckpoint, StateFormat};
+    use leaven_engine::{
+        GraphSnapshotRef, RunCheckpoint, StageJournalSnapshot, StateFormat,
+        WorkspaceJournalSnapshot,
+    };
     use leaven_gepa_agentic_skill::SkillBankReflectionInput;
-    use leaven_kernel::{BudgetSnapshot, Fingerprint, now};
+    use leaven_kernel::{BlobRef, BudgetSnapshot, EvidenceRef, Fingerprint, now};
     use leaven_store::{BlobStore, BlobWrite, CheckpointBytes, CheckpointStore};
     use leaven_store_file::FileStore;
 
@@ -444,7 +447,7 @@ mod tests {
             },
         )
         .unwrap();
-        let checkpoint = RunCheckpoint::new(
+        let mut checkpoint = RunCheckpoint::new(
             leaven_kernel::RunId::new(),
             now(),
             GraphSnapshotRef {
@@ -454,6 +457,26 @@ mod tests {
             },
             BudgetSnapshot::default(),
         );
+        checkpoint.artifact_refs.push(BlobRef {
+            store: "file".to_owned(),
+            key: "artifact.blob".to_owned(),
+        });
+        checkpoint.evidence_refs.push(EvidenceRef {
+            store: "evidence".to_owned(),
+            key: "evidence.json".to_owned(),
+        });
+        checkpoint.stage_journal = StageJournalSnapshot {
+            entries: vec![BlobRef {
+                store: "file".to_owned(),
+                key: "stage.blob".to_owned(),
+            }],
+        };
+        checkpoint.workspace_journal = WorkspaceJournalSnapshot {
+            entries: vec![BlobRef {
+                store: "file".to_owned(),
+                key: "workspace.blob".to_owned(),
+            }],
+        };
         let checkpoint_id = CheckpointStore::put(
             &store,
             CheckpointBytes(Bytes::from(serde_json::to_vec(&checkpoint).unwrap())),
@@ -473,6 +496,22 @@ mod tests {
 
         assert_eq!(value["schema_version"], "leaven.run_inspection_export.v1");
         assert_eq!(value["latest_checkpoint"], checkpoint_id.to_string());
+        assert_eq!(
+            value["checkpoint"]["artifact_refs"][0]["key"],
+            "artifact.blob"
+        );
+        assert_eq!(
+            value["checkpoint"]["evidence_refs"][0]["key"],
+            "evidence.json"
+        );
+        assert_eq!(
+            value["checkpoint"]["stage_journal_refs"][0]["key"],
+            "stage.blob"
+        );
+        assert_eq!(
+            value["checkpoint"]["workspace_journal_refs"][0]["key"],
+            "workspace.blob"
+        );
         assert_eq!(value["graph"]["run_id"], "run_cli");
         assert_eq!(value["graph"]["candidate_count"], 1);
         assert_eq!(value["graph"]["event_count"], 1);
