@@ -42,34 +42,33 @@ def normalize(x: object) -> str:
 
 def ref_id(value: object) -> str:
     return getattr(value, "id", "")
+
+def declared_mapping(row: JsonObject) -> object:
+    return row.get("answer")
 """
 
     failures = defensive_type_erasure_failures_for_source(_probe_path(), source)
 
     assert failures == [
-        "tests/scripts/lint_probe.py:2: widens callback output to object",
-        "tests/scripts/lint_probe.py:3: uses .get(...) on an unparsed domain value",
-        "tests/scripts/lint_probe.py:4: uses str(...) to coerce a domain value",
-        "tests/scripts/lint_probe.py:7: uses .get(...) on an unparsed domain value",
-        "tests/scripts/lint_probe.py:10: uses str(...) to coerce a domain value",
-        "tests/scripts/lint_probe.py:13: uses isinstance(..., str) else str(...) defensive fallback",
-        "tests/scripts/lint_probe.py:16: uses getattr(...) to probe a domain value",
+        "tests/scripts/lint_probe.py:2: LEAVEN001 widens callback output to object",
+        "tests/scripts/lint_probe.py:3: LEAVEN005 uses .get(...) on an unparsed domain value",
+        "tests/scripts/lint_probe.py:4: LEAVEN002 uses str(...) to coerce a domain value",
+        "tests/scripts/lint_probe.py:7: LEAVEN005 uses .get(...) on an unparsed domain value",
+        "tests/scripts/lint_probe.py:10: LEAVEN002 uses str(...) to coerce a domain value",
+        "tests/scripts/lint_probe.py:13: LEAVEN003 uses isinstance(..., str) else str(...) defensive fallback",
+        "tests/scripts/lint_probe.py:16: LEAVEN006 uses getattr(...) to probe a domain value",
+        "tests/scripts/lint_probe.py:19: LEAVEN005 uses .get(...) on an unparsed domain value",
     ]
 
 
-def test_defensive_type_erasure_lint_allows_declared_boundaries() -> None:
-    """Example: typed mapping APIs and strict type guards are still idiomatic."""
+def test_defensive_type_erasure_lint_allows_environment_reads_and_strict_guards() -> None:
+    """Example: environment reads and strict type guards are still idiomatic."""
 
     source = """
 import os
 
-from leaven.json_value import JsonObject
-
 def env() -> str | None:
     return os.environ.get("LEAVEN_BIN")
-
-def declared_mapping(row: JsonObject) -> object:
-    return row.get("answer")
 
 def strict_text(raw_output: object) -> str:
     if not isinstance(raw_output, str):
@@ -78,6 +77,28 @@ def strict_text(raw_output: object) -> str:
 """
 
     assert defensive_type_erasure_failures_for_source(_probe_path(), source) == []
+
+
+def test_defensive_type_erasure_noqa_requires_code_and_justification() -> None:
+    """Regression: custom Leaven suppressions stay explicit and auditable."""
+
+    source = """
+def bare(decoded) -> object:
+    return decoded.get("result")  # noqa
+
+def code_only(decoded) -> object:
+    return decoded.get("result")  # noqa: LEAVEN005
+
+def justified(decoded) -> object:
+    return decoded.get("result")  # noqa: LEAVEN005 -- third-party schema probe pending typed adapter
+"""
+
+    failures = defensive_type_erasure_failures_for_source(_probe_path(), source)
+
+    assert failures == [
+        "tests/scripts/lint_probe.py:3: LEAVEN005 uses .get(...) on an unparsed domain value",
+        "tests/scripts/lint_probe.py:6: LEAVEN005 uses .get(...) on an unparsed domain value",
+    ]
 
 
 def _probe_path() -> Path:

@@ -4,7 +4,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-from msgspec import UNSET, convert
+import msgspec
+from msgspec import UNSET, Raw, UnsetType, convert
 
 from leaven._seam._wire import JsonObject
 from leaven._seam._wire.calls import (
@@ -15,8 +16,14 @@ from leaven._seam._wire.calls import (
     LmCompleteCall,
     LmMessage,
     LmOutputContract,
+    LmOutputFinalMessage,
+    LmOutputJsonSchema,
     LmSampling,
     OutputContract,
+    OutputFiles,
+    OutputFinalMessage,
+    OutputJsonSchema,
+    OutputWorkspaceDiff,
     WorkspaceMaterializeCall,
 )
 from leaven._seam._wire.codec import RequestParams
@@ -117,7 +124,10 @@ class CaseLoadRequest:
 
 
 def _case_route(include: Sequence[CaseField]) -> tuple[SeamRequestMethod, str]:
-    return _SINGLE_CASE_METHODS.get(tuple(include), ("leaven/case.load", "case_load"))
+    key = tuple(include)
+    if key in _SINGLE_CASE_METHODS:
+        return _SINGLE_CASE_METHODS[key]
+    return ("leaven/case.load", "case_load")
 
 
 @dataclass(frozen=True)
@@ -404,11 +414,66 @@ def _plan_document(
 
 
 def _wire_output_contract(value: JsonObject) -> OutputContract:
-    return convert(value, type=OutputContract)
+    kind = _string_field(value, "kind")
+    if kind == "final_message":
+        return OutputFinalMessage(max_bytes=_optional_int_field(value, "max_bytes"))
+    if kind == "json_schema":
+        return OutputJsonSchema(
+            schema_fingerprint=_string_field(value, "schema_fingerprint"),
+            schema=_optional_raw_json_field(value, "schema"),
+        )
+    if kind == "files":
+        return OutputFiles(
+            paths=_string_list_field(value, "paths"),
+            max_bytes=_optional_int_field(value, "max_bytes"),
+        )
+    if kind == "workspace_diff":
+        return OutputWorkspaceDiff(
+            surface_fingerprint=_string_field(value, "surface_fingerprint"),
+            max_bytes=_optional_int_field(value, "max_bytes"),
+        )
+    raise ValueError(f"unsupported output contract kind: {kind}")
 
 
 def _wire_lm_output_contract(value: JsonObject) -> LmOutputContract:
-    return convert(value, type=LmOutputContract)
+    kind = _string_field(value, "kind")
+    if kind == "final_message":
+        return LmOutputFinalMessage(max_bytes=_optional_int_field(value, "max_bytes"))
+    if kind == "json_schema":
+        return LmOutputJsonSchema(
+            schema_fingerprint=_string_field(value, "schema_fingerprint"),
+            schema=_optional_raw_json_field(value, "schema"),
+        )
+    raise ValueError(f"unsupported LM output contract kind: {kind}")
+
+
+def _string_field(value: JsonObject, field: str) -> str:
+    item = value[field]
+    if not isinstance(item, str):
+        raise TypeError(f"{field} must be a string")
+    return item
+
+
+def _optional_int_field(value: JsonObject, field: str) -> int | UnsetType:
+    if field not in value:
+        return UNSET
+    item = value[field]
+    if not isinstance(item, int):
+        raise TypeError(f"{field} must be an integer")
+    return item
+
+
+def _string_list_field(value: JsonObject, field: str) -> list[str]:
+    item = value[field]
+    if not isinstance(item, list) or not all(isinstance(member, str) for member in item):
+        raise TypeError(f"{field} must be a list of strings")
+    return [member for member in item if isinstance(member, str)]
+
+
+def _optional_raw_json_field(value: JsonObject, field: str) -> Raw | UnsetType:
+    if field not in value:
+        return UNSET
+    return Raw(msgspec.json.encode(value[field]))
 
 
 __all__ = [

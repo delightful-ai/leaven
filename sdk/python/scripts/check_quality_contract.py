@@ -62,6 +62,18 @@ MIRRORED_TESTS = {
     / "test_skill_bank.py",
     ROOT / "src" / "leaven" / "assessment.py": ROOT / "tests" / "test_assessment.py",
     ROOT / "src" / "leaven" / "builders" / "case.py": ROOT / "tests" / "builders" / "test_case.py",
+    ROOT / "src" / "leaven" / "builders" / "agent.py": ROOT
+    / "tests"
+    / "builders"
+    / "test_agent.py",
+    ROOT / "src" / "leaven" / "builders" / "lm.py": ROOT
+    / "tests"
+    / "builders"
+    / "test_lm.py",
+    ROOT / "src" / "leaven" / "builders" / "_output_contract.py": ROOT
+    / "tests"
+    / "builders"
+    / "test_output_contract.py",
     ROOT / "src" / "leaven" / "cases" / "__init__.py": ROOT
     / "tests"
     / "cases"
@@ -150,7 +162,7 @@ def check_defensive_type_erasure(files: list[Path] | None = None) -> list[str]:
 
 def defensive_type_erasure_failures_for_source(path: Path, source: str) -> list[str]:
     tree = ast.parse(source, filename=str(path))
-    visitor = DefensiveTypeErasureVisitor(path)
+    visitor = DefensiveTypeErasureVisitor(path, source)
     visitor.visit(tree)
     return visitor.failures
 
@@ -158,8 +170,9 @@ def defensive_type_erasure_failures_for_source(path: Path, source: str) -> list[
 class DefensiveTypeErasureVisitor(ast.NodeVisitor):
     """Find Python patterns that hide a bad domain type instead of failing."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, source: str) -> None:
         self.path = path
+        self.lines = source.splitlines()
         self.failures: list[str] = []
         self.output_contract_names: set[str] = set()
 
@@ -180,18 +193,26 @@ class DefensiveTypeErasureVisitor(ast.NodeVisitor):
 
     def visit_IfExp(self, node: ast.IfExp) -> None:
         if self._is_str_else_str_fallback(node):
-            self._add(node, "uses isinstance(..., str) else str(...) defensive fallback")
+            self._add(
+                node,
+                "LEAVEN003",
+                "uses isinstance(..., str) else str(...) defensive fallback",
+            )
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:
         if self._is_banned_str_coercion(node):
-            self._add(node, "uses str(...) to coerce a domain value")
+            self._add(node, "LEAVEN002", "uses str(...) to coerce a domain value")
         if self._is_banned_isinstance_check(node):
-            self._add(node, "branches on isinstance(output, ...) instead of typed output")
+            self._add(
+                node,
+                "LEAVEN004",
+                "branches on isinstance(output, ...) instead of typed output",
+            )
         if self._is_banned_get_probe(node):
-            self._add(node, "uses .get(...) on an unparsed domain value")
+            self._add(node, "LEAVEN005", "uses .get(...) on an unparsed domain value")
         if self._is_getattr_probe(node):
-            self._add(node, "uses getattr(...) to probe a domain value")
+            self._add(node, "LEAVEN006", "uses getattr(...) to probe a domain value")
         self.generic_visit(node)
 
     def _check_function_args(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
@@ -199,7 +220,7 @@ class DefensiveTypeErasureVisitor(ast.NodeVisitor):
             if arg.arg != "output":
                 continue
             if isinstance(arg.annotation, ast.Name) and arg.annotation.id == "object":
-                self._add(arg, "widens callback output to object")
+                self._add(arg, "LEAVEN001", "widens callback output to object")
 
     def _visit_function_body(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         for arg in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]:
@@ -276,9 +297,7 @@ class DefensiveTypeErasureVisitor(ast.NodeVisitor):
         if not isinstance(node.func, ast.Attribute) or node.func.attr != "get":
             return False
         owner = node.func.value
-        if self._is_os_environ(owner):
-            return False
-        return True
+        return not self._is_os_environ(owner)
 
     def _is_getattr_probe(self, node: ast.Call) -> bool:
         return (
@@ -345,9 +364,28 @@ class DefensiveTypeErasureVisitor(ast.NodeVisitor):
             and node.value.id == "os"
         )
 
-    def _add(self, node: ast.AST, message: str) -> None:
+    def _add(self, node: ast.AST, code: str, message: str) -> None:
         lineno = getattr(node, "lineno", 0)
-        self.failures.append(f"{relative(self.path)}:{lineno}: {message}")
+        if self._line_has_noqa(lineno, code):
+            return
+        self.failures.append(f"{relative(self.path)}:{lineno}: {code} {message}")
+
+    def _line_has_noqa(self, lineno: int, code: str) -> bool:
+        if lineno <= 0 or lineno > len(self.lines):
+            return False
+        marker = "# noqa:"
+        comment = self.lines[lineno - 1]
+        marker_index = comment.find(marker)
+        if marker_index == -1:
+            return False
+        suffix = comment[marker_index + len(marker) :].strip()
+        if " -- " not in suffix:
+            return False
+        code_text, justification = suffix.split(" -- ", 1)
+        if not justification.strip():
+            return False
+        codes = {part.strip() for part in code_text.split(",")}
+        return code in codes
 
 
 def check_mirrored_tests() -> list[str]:

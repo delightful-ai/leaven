@@ -251,7 +251,7 @@ def _extension_result(method: str, primary: dict[str, object]) -> dict[str, obje
         "receipts": [
             {
                 "kind": _receipt_kind(method),
-                "receipt": primary.get("receipt", "qrec_result"),
+                "receipt": _primary_receipt(primary),
                 "status": "succeeded",
                 "result_hash": "fp_result",
             }
@@ -261,6 +261,12 @@ def _extension_result(method: str, primary: dict[str, object]) -> dict[str, obje
         "policy_fingerprint": "fp_policy",
         "data_classes": ["public"],
     }
+
+
+def _primary_receipt(primary: dict[str, object]) -> object:
+    if "receipt" not in primary:
+        return "qrec_result"
+    return primary["receipt"]
 
 
 def _receipt_kind(method: str) -> str:

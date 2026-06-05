@@ -20,6 +20,7 @@ from ..agent_instructions import AgentInstructions
 from ..blob_ref import BlobRef
 from ..json_value import JsonValue
 from ..output import FilesOutput, JsonSchemaOutput, OutputContract, TextOutput
+from ._output_contract import json_schema_output_to_wire
 
 
 class AgentCommand(BaseModel):
@@ -168,7 +169,7 @@ def _output_to_wire(output: OutputContract | None) -> JsonObject:
     if isinstance(output, FilesOutput):
         return json_object({"kind": "files", "paths": output.paths})
     if isinstance(output, JsonSchemaOutput):
-        raise NotImplementedError("AgentBuilder.run does not lower json_schema output yet")
+        return json_schema_output_to_wire(output)
     raise TypeError(f"unsupported agent output contract: {type(output).__name__}")
 
 

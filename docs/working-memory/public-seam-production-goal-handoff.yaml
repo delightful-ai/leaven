@@ -2324,6 +2324,45 @@ acceptance:
           `(case.target or {}).get(...)` or `str(output)` fallbacks. The pytest
           config now runs with importlib import mode so the documented plain
           `uv run pytest` gate passes despite mirrored test basenames.
+      - kind: bound_builder_json_schema_output_and_justified_noqa_lint
+        paths:
+          - sdk/python/AGENTS.md
+          - sdk/python/codegen/call_codegen.py
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/src/leaven/_seam/plans.py
+          - sdk/python/src/leaven/_seam/_wire/calls.py
+          - sdk/python/src/leaven/builders/_output_contract.py
+          - sdk/python/src/leaven/builders/agent.py
+          - sdk/python/src/leaven/builders/lm.py
+          - sdk/python/src/leaven/cases/jsonl.py
+          - sdk/python/tests/builders/test_agent.py
+          - sdk/python/tests/builders/test_lm.py
+          - sdk/python/tests/builders/test_output_contract.py
+          - sdk/python/tests/scripts/test_check_quality_contract.py
+        commands:
+          - cd sdk/python && uv run pytest tests/builders/test_output_contract.py tests/builders/test_agent.py tests/builders/test_lm.py tests/scripts/test_check_quality_contract.py -q
+          - cd sdk/python && uv run ruff check src/leaven examples tests scripts codegen --exclude src/leaven/_types
+          - cd sdk/python && uv run ty check src/leaven tests scripts codegen --exclude src/leaven/_types
+          - cd sdk/python && uv run pytest -q
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Bound `AgentBuilder.run(output=lv.output.json_schema(...))` and
+          `LmBuilder.complete(response_format=lv.output.json_schema(...))`
+          now lower real public-seam `json_schema` output contracts instead of
+          raising scaffolds. Python computes the Rust public-seam
+          `fp_schema_sha256_` JCS/SHA-256 fingerprint for the parsed
+          `JsonSchemaOutput`, and generated msgspec call records use
+          `msgspec.Raw` for the inline schema slots so schema JSON is embedded
+          without recursive alias analysis or `Any`. The custom quality
+          contract now reports Leaven-specific lint codes and accepts
+          suppressions only as line-local `# noqa: LEAVENxxx -- justification`
+          exceptions; `.get(...)` field fishing is banned even on declared
+          `JsonObject` variables unless a future approved exception is
+          explicitly justified. This strengthens the SDK quality row but does
+          not close it: remaining public backbone scaffolds, generated wire
+          leaf JSON aliases, and full e2e typed seam generation still require
+          later cuts.
       - kind: public_case_iterable_loader_scaffold_removed
         paths:
           - sdk/python/src/leaven/cases/__init__.py

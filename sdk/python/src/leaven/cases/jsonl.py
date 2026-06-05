@@ -45,13 +45,21 @@ def _row_to_case(
     metadata_field: str | None,
 ) -> Case:
     """Project one JSONL row into a `Case`, reading the configured field names."""
-    metadata = _optional_json_object(row.get(metadata_field)) if metadata_field is not None else {}
+    metadata_value = _optional_field(row, metadata_field)
+    target_value = _optional_field(row, target_field)
+    metadata = _optional_json_object(metadata_value) if metadata_field is not None else {}
     return Case(
         id=str(row[id_field]),
         input=_json_object(row[input_field], input_field),
-        target=_optional_json_object(row.get(target_field)),
+        target=_optional_json_object(target_value),
         metadata=metadata or {},
     )
+
+
+def _optional_field(row: JsonObject, field: str | None) -> JsonValue | None:
+    if field is None or field not in row:
+        return None
+    return row[field]
 
 
 def from_iterable(

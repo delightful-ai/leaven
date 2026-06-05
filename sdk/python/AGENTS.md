@@ -130,9 +130,11 @@ ruff's `RUF022` (sorted `__all__`) is on. No current ruff rule for
   probe arbitrary objects with `.get(...)` / `getattr(...)` to paper over a bad
   type unless the governing spec names that exact sum type. Parse and validate
   at the boundary, keep the owned domain type through the call graph, and let
-  wrong shapes fail loudly. `.get(...)` is only appropriate on declared mapping
-  fields after the container type has already been parsed; untyped mapping field
-  fishing in application logic belongs in the quality-contract lint.
+  wrong shapes fail loudly. Internal logic must use typed attributes or explicit
+  indexing on parsed domain shapes, not optional fallback probes on raw mapping
+  objects. Custom Leaven quality lint suppressions must be line-local
+  `# noqa: LEAVENxxx -- justification` exceptions that explain why the typed
+  owner cannot be introduced in that change.
 - Top-level `lv.*` imports are the public surface; submodule paths
   (`lv.optimizers.gepa`, `lv.lm.anthropic`) are also part of the public
   surface where the spec names them.

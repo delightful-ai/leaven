@@ -14,6 +14,8 @@ from .._seam._wire.json_value import json_object
 from .._seam._wire.payloads import Cost
 from .._seam._wire.results import LmCompleteResult
 from ..json_value import JsonValue
+from ..output import JsonSchemaOutput
+from ._output_contract import json_schema_output_to_wire
 
 LmMessageRole = Literal["system", "developer", "user", "assistant", "tool"]
 
@@ -89,7 +91,7 @@ class LmBuilder:
         temperature: float | None = None,
         max_tokens: int | None = None,
         stop: Sequence[str] | None = None,
-        response_format: object | None = None,
+        response_format: JsonSchemaOutput | None = None,
         tools: Sequence[JsonObject] | None = None,
         input_classes: Sequence[str] | None = None,
         forbidden_input_classes: Sequence[str] | None = None,
@@ -111,8 +113,6 @@ class LmBuilder:
             raise NotImplementedError(
                 "LmBuilder.complete does not lower forbidden_input_classes yet"
             )
-        if response_format is not None:
-            raise NotImplementedError("LmBuilder.complete does not lower response_format yet")
         if tools is not None:
             raise NotImplementedError("LmBuilder.complete does not lower tools yet")
 
@@ -127,6 +127,7 @@ class LmBuilder:
             temperature=temperature,
             max_tokens=max_tokens,
             stop=stop,
+            output=None if response_format is None else json_schema_output_to_wire(response_format),
             input_classes=input_classes,
         )
         self._seq += 1
