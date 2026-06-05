@@ -655,7 +655,7 @@ acceptance:
       a real optimizer/run/stage lifecycle, mutate that run only through
       `RunContext`, persist the mutated graph through the durable run store, and
       read it back from checkpoint state.
-    status: pending
+    status: proven
     proof_required:
       kind: run_bound_service_checkpoint_scenario
       must_exercise:
@@ -814,6 +814,21 @@ acceptance:
           graph truth. This is the successor public SDK route proof; it is not
           the configured process-level `leaven seam serve --stdio` command and
           does not yet prove AgentKit/Codex live execution.
+      - kind: seam_run_successor_route_negative_alias_refusal
+        paths:
+          - crates/leaven-seam-run/tests/run_bound_route.rs
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cargo test -p leaven-seam-run
+          - cargo fmt --check
+        note: >-
+          The successor public SDK route now also has route-level negative
+          proof: a `RunBoundSdkRoute` bound to a live `RunContext` receives
+          `leaven/proposal.apply` for the old configured-service alias batch
+          `pb_configured_run_context` and returns a JSON-RPC refusal requiring a
+          real `pb_<uuid>` proposal batch ref. This prevents the run-bound row
+          from being satisfied by fallback `SeamGraphState` or configured receipt
+          synthesis.
       - kind: typed_run_bound_callback_params_foundation
         commits:
           - a43492a5

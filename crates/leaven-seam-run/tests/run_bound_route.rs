@@ -61,6 +61,47 @@ fn run_bound_sdk_route_mounts_inside_engine_lifecycle_and_restores_graph_truth()
     )));
 }
 
+#[test]
+fn run_bound_sdk_route_refuses_configured_service_alias_batches() {
+    let evidence_store = InlineEvidenceStore::<RouteEvidence>::new("route");
+    let mut graph = leaven_engine::RunGraph::new(leaven_kernel::RunId::new());
+    let mut budget = leaven_engine::BudgetLedger::new(Budget::unlimited());
+    let mut ctx = RunContext::<RouteProblem>::new(&mut graph, &mut budget)
+        .with_evidence_store(&evidence_store);
+    let service = RunBoundGraphEffectService::new(
+        &mut ctx,
+        [],
+        "fp_cap_sha256_route",
+        "fp_policy_sha256_route",
+        "rev_route_base",
+        "rev_route_final",
+    );
+    let route = RunBoundSdkRoute::bind_run_bound_service(workspace_root(), service).unwrap();
+
+    let responses = serve_jsonrpc_lines(
+        &route,
+        [jsonrpc_request(
+            "route-reject-configured-alias",
+            "leaven/proposal.apply",
+            apply_request("pb_configured_run_context"),
+        )],
+    )
+    .unwrap();
+
+    let response = &responses[0];
+    assert_eq!(
+        response["id"],
+        json!("route-reject-configured-alias"),
+        "route must preserve request identity on refusal"
+    );
+    assert!(
+        response["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("proposal_batch must be a pb_<uuid> ref")),
+        "route should refuse configured-service alias batch refs: {response:?}"
+    );
+}
+
 struct RouteMountedOptimizer {
     seed: CandidateId,
     mounted: bool,
