@@ -150,8 +150,8 @@ impl PublicFailedCallReceiptContext {
             "receipt": receipt_id,
             "retryable": true,
             "details": {
-                "engine_error_kind": format!("{:?}", engine_error.kind),
-                "engine_source_chain": engine_error.source_chain
+                "summary": source_chain_summary(&engine_error.source_chain),
+                "reason": format!("{:?}", engine_error.kind)
             }
         });
         let charge_receipts = vec![charge_id.clone()];
@@ -255,6 +255,13 @@ fn prefixed_jcs_hash_for_failed_call(
         }
     })?;
     Ok(format!("{prefix}{digest}"))
+}
+
+fn source_chain_summary(source_chain: &[String]) -> String {
+    if source_chain.is_empty() {
+        return "engine reported no public source chain".to_owned();
+    }
+    source_chain.join(": ")
 }
 
 fn public_cost(cost: &Cost) -> Result<Value, PublicFailedCallReceiptProjectionError> {

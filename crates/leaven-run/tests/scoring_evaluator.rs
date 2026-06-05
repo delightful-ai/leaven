@@ -2176,6 +2176,18 @@ fn assert_failed_paid_lm_result(
     assert_eq!(result["receipts"][0]["cost"]["lm_calls"], 1);
     assert_eq!(result["receipts"][0]["cost"]["input_tokens"], 11);
     assert_eq!(result["receipts"][0]["cost"]["output_tokens"], 3);
+    assert!(result["errors"][0]["details"]["summary"].is_string());
+    assert!(result["errors"][0]["details"]["reason"].is_string());
+    assert!(
+        result["errors"][0]["details"]
+            .get("engine_error_kind")
+            .is_none()
+    );
+    assert!(
+        result["errors"][0]["details"]
+            .get("engine_source_chain")
+            .is_none()
+    );
     assert_eq!(
         result["charges"][0]["source_receipt"],
         result["receipts"][0]["receipt"]
