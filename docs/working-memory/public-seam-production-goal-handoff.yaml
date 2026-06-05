@@ -1100,7 +1100,7 @@ acceptance:
 
   - id: rust_owned_run_readback_powers_python_inspection
     claim: Python run inspection reads Rust-owned durable run/checkpoint state or a Rust-owned exported artifact.
-    status: pending
+    status: proven
     proof_required:
       kind: sdk_integration_test
       must_exercise:
@@ -1647,6 +1647,33 @@ acceptance:
           the public-seam integration fixture target/input types were made
           explicitly serializable, matching the scoring evidence contract that
           records typed case-data read evidence.
+      - kind: rust_owned_run_readback_row_closeout
+        paths:
+          - sdk/python/src/leaven/runs.py
+          - sdk/python/src/leaven/_runs/rust_open.py
+          - sdk/python/src/leaven/run_inspection.py
+          - sdk/python/tests/_runs/test_rust_export.py
+          - sdk/python/tests/test_run_inspection.py
+          - sdk/python/tests/test_run_receipt_inspection.py
+          - sdk/python/tests/test_reward_vector_inspection.py
+          - sdk/python/tests/test_optimize_public_seam_e2e.py
+          - sdk/python/tests/test_optimize_proposer_mechanics.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && uv run pytest tests/_runs/test_rust_export.py tests/test_run_inspection.py tests/test_run_receipt_inspection.py tests/test_reward_vector_inspection.py tests/test_optimize_public_seam_e2e.py tests/test_optimize_proposer_mechanics.py -q
+        note: >-
+          Closeout audit for this row: the current focused suite passes 17
+          tests covering `lv.optimize(...).run()`, checkpoint-only
+          `lv.runs.open(...)`, checkpoint-only `lv.runs.inspect(...)`,
+          Rust-owned graph lineage, proposal receipts, assessment rows,
+          reward/evidence projection, token/call usage, explicit unsupported
+          facts, Rust graph/evidence byte export, and agent transcript blob
+          bytes recovered through Rust-owned stage-journal blob readback. The
+          old Python-only `optimized.json` fallback is gone: no checkpoint
+          means `lv.runs.open`/`inspect` fail instead of reading shadow truth.
+          The remaining `run.cost` unsupported fact is provider-pricing
+          honesty: Rust exports usage axes but not dollar-price conversion. It
+          is not a Python-only readback fallback and does not block this row.
     closeout_check: "Reading only `optimized.json` written by Python is a proxy."
 
   - id: python_wire_codegen_msgspec_boundary
