@@ -7,7 +7,7 @@ analysis, ablation reports, sharing run state with teammates.
 
 from pathlib import Path
 
-from ._runs import list_run_dirs, load_rust_run_readback, open_optimized
+from ._runs import list_run_dirs, load_rust_blob_readback, load_rust_run_readback, open_optimized
 from .result import Optimized
 from .run_inspection import RunInspection, inspect_optimized
 
@@ -29,9 +29,15 @@ def list_local(root: str | Path = ".leaven/runs") -> list[str]:
 
 def inspect(path: str | Path) -> RunInspection:
     """Open a completed run and return a flattened inspection summary."""
+    rust_readback = load_rust_run_readback(path)
     return inspect_optimized(
         open_optimized(path),
-        rust_readback=load_rust_run_readback(path),
+        rust_readback=rust_readback,
+        rust_graph_blob=(
+            load_rust_blob_readback(path, rust_readback.graph.blob)
+            if rust_readback is not None
+            else None
+        ),
     )
 
 

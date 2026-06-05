@@ -2,16 +2,21 @@
 
 use std::path::Path;
 
+use base64::{Engine as _, engine::general_purpose};
 use leaven_engine::RunCheckpoint;
 use leaven_kernel::{BlobRef, CheckpointId, RunId};
 use leaven_store::{BlobStore, CheckpointStore};
 use leaven_store_file::FileStore;
 use serde::Serialize;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 /// Schema name for the Rust-owned run inspection export.
 pub const RUN_INSPECTION_EXPORT_SCHEMA: &str = "leaven.run_inspection_export.v1";
+
+/// Schema name for the Rust-owned run blob export.
+pub const RUN_BLOB_EXPORT_SCHEMA: &str = "leaven.run_blob_export.v1";
 
 /// Rust-owned inspection export for a local Leaven run directory.
 #[derive(Clone, Debug, Serialize)]
@@ -85,6 +90,30 @@ pub struct GraphInspection {
     pub assessment_count: usize,
     /// Number of event records in the graph snapshot.
     pub event_count: usize,
+}
+
+/// Rust-owned byte export for one blob in a local Leaven run directory.
+#[derive(Clone, Debug, Serialize)]
+pub struct RustRunBlobExport {
+    /// Export schema.
+    pub schema_version: &'static str,
+    /// Blob reference resolved through Rust's blob-store capability.
+    pub blob: BlobByteReadbackRef,
+    /// Number of bytes read from the store.
+    pub bytes: usize,
+    /// SHA-256 digest of the retrieved bytes.
+    pub sha256: String,
+    /// Base64-encoded blob contents.
+    pub content_base64: String,
+}
+
+/// Blob reference facts for byte readback.
+#[derive(Clone, Debug, Serialize)]
+pub struct BlobByteReadbackRef {
+    /// Blob store name.
+    pub store: String,
+    /// Blob key.
+    pub key: String,
 }
 
 /// Export a Rust-owned inspection artifact from a local run directory.
@@ -164,6 +193,47 @@ pub fn export_local_run_inspection(
         latest_checkpoint,
         checkpoint: checkpoint_inspection,
         graph,
+    })
+}
+
+/// Export bytes for one blob from a local run store.
+///
+/// This is the Rust-owned byte readback companion to
+/// [`export_local_run_inspection`]. External-language inspection uses it after
+/// Rust has exposed a blob store/key pair; callers must not infer paths or read
+/// the store layout directly.
+pub fn export_local_run_blob(
+    run_dir: impl AsRef<Path>,
+    store_name: impl Into<String>,
+    key: impl Into<String>,
+) -> Result<RustRunBlobExport, RunInspectionExportError> {
+    let store_name = store_name.into();
+    let key = key.into();
+    let store = FileStore::open_named(store_name.clone(), run_dir.as_ref()).map_err(|source| {
+        RunInspectionExportError::Store {
+            operation: "open local run store",
+            source,
+        }
+    })?;
+    let reference = BlobRef {
+        store: store_name,
+        key,
+    };
+    let bytes =
+        BlobStore::get(&store, &reference).map_err(|source| RunInspectionExportError::Store {
+            operation: "read run blob",
+            source,
+        })?;
+    let sha256 = format!("{:x}", Sha256::digest(&bytes));
+    Ok(RustRunBlobExport {
+        schema_version: RUN_BLOB_EXPORT_SCHEMA,
+        blob: BlobByteReadbackRef {
+            store: reference.store,
+            key: reference.key,
+        },
+        bytes: bytes.len(),
+        sha256,
+        content_base64: general_purpose::STANDARD.encode(&bytes),
     })
 }
 
@@ -285,6 +355,36 @@ mod tests {
             error,
             RunInspectionExportError::MissingLatestCheckpoint
         ));
+        std::fs::remove_dir_all(run_dir).unwrap();
+    }
+
+    #[test]
+    fn export_local_run_blob_reads_bytes_through_blob_store() {
+        let run_dir = test_run_dir("blob-readback");
+        let store = FileStore::open(&run_dir).unwrap();
+        let reference = BlobStore::put(
+            &store,
+            BlobWrite {
+                bytes: Bytes::from_static(b"durable blob bytes\n"),
+                content_type: Some("text/plain".to_owned()),
+            },
+        )
+        .unwrap();
+
+        let export =
+            export_local_run_blob(&run_dir, reference.store.clone(), reference.key.clone())
+                .unwrap();
+
+        assert_eq!(export.schema_version, RUN_BLOB_EXPORT_SCHEMA);
+        assert_eq!(export.blob.store, reference.store);
+        assert_eq!(export.blob.key, reference.key);
+        assert_eq!(export.bytes, "durable blob bytes\n".len());
+        assert_eq!(
+            export.sha256,
+            "cab11e0c83798e18f101ec99395ac4ebbf38c1739abe06a70ec8264954bf0bd8"
+        );
+        assert_eq!(export.content_base64, "ZHVyYWJsZSBibG9iIGJ5dGVzCg==");
+
         std::fs::remove_dir_all(run_dir).unwrap();
     }
 

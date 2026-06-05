@@ -1078,8 +1078,8 @@ acceptance:
           - sdk/python/tests/_runs/test_rust_export.py
           - docs/specs/leaven_python.md
         commands:
-          - cargo test -p leaven-run inspection
-          - cargo test -p leaven-cli run_inspect
+          - cargo test -p leaven-run inspection --lib
+          - cargo test -p leaven-cli tests::run_inspect_exports_rust_owned_checkpoint_and_graph_blob_readback -- --exact
           - cargo test -p leaven --test topology_contract
           - cd sdk/python && uv run pytest tests/_runs/test_rust_export.py tests/test_run_inspection.py -q
           - cd sdk/python && uv run ruff check src/leaven/run_inspection.py src/leaven/runs.py src/leaven/_runs tests/_runs/test_rust_export.py
@@ -1095,6 +1095,36 @@ acceptance:
           foundation slice: `lv.runs.open(...)` still depends on the
           Python-written `optimized.json`, and transcript/artifact blob byte
           retrieval is not complete.
+      - kind: rust_blob_byte_readback_export_foundation
+        paths:
+          - crates/leaven-run/Cargo.toml
+          - crates/leaven-run/src/inspection.rs
+          - crates/leaven-run/src/lib.rs
+          - crates/leaven-cli/src/main.rs
+          - sdk/python/src/leaven/_runs/AGENTS.md
+          - sdk/python/src/leaven/_runs/__init__.py
+          - sdk/python/src/leaven/_runs/rust_export.py
+          - sdk/python/src/leaven/run_inspection.py
+          - sdk/python/src/leaven/runs.py
+          - sdk/python/tests/_runs/test_rust_export.py
+        commands:
+          - cargo test -p leaven-run inspection --lib
+          - cargo test -p leaven-cli tests::run_blob_exports_rust_owned_blob_bytes -- --exact
+          - cargo test -p leaven-cli tests::run_inspect_exports_rust_owned_checkpoint_and_graph_blob_readback -- --exact
+          - cd sdk/python && uv run pytest tests/_runs/test_rust_export.py -q
+          - cd sdk/python && uv run ruff check src/leaven/run_inspection.py src/leaven/runs.py src/leaven/_runs tests/_runs/test_rust_export.py
+          - cd sdk/python && uv run ty check src/leaven/run_inspection.py src/leaven/runs.py src/leaven/_runs tests/_runs/test_rust_export.py
+        note: >-
+          `leaven-run` now exposes `leaven.run_blob_export.v1` for one
+          Rust-owned run-store blob ref, returning store/key, byte count,
+          SHA-256, and base64 contents through Rust BlobStore. `leaven run blob
+          --run-dir --store --key` exposes that export. Python `_runs` invokes
+          the command through a private typed bridge, decodes it into
+          `RustBlobReadback`, and `lv.runs.inspect(...)` attaches the Rust-read
+          graph snapshot blob bytes when checkpoint readback exists. This is
+          still foundation evidence because transcript/artifact refs are not yet
+          surfaced through the Rust inspection export and `lv.runs.open(...)`
+          still opens `optimized.json`.
     closeout_check: "Reading only `optimized.json` written by Python is a proxy."
 
   - id: python_wire_codegen_msgspec_boundary

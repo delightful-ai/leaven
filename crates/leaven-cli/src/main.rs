@@ -85,6 +85,8 @@ enum SeamSubcommand {
 enum RunSubcommand {
     /// Export Rust-owned inspection JSON from a local run directory.
     Inspect(RunInspectArgs),
+    /// Export Rust-owned blob bytes from a local run directory.
+    Blob(RunBlobArgs),
 }
 
 #[derive(Debug, Args)]
@@ -92,6 +94,19 @@ struct RunInspectArgs {
     /// Local Leaven run directory to inspect.
     #[arg(long)]
     run_dir: PathBuf,
+}
+
+#[derive(Debug, Args)]
+struct RunBlobArgs {
+    /// Local Leaven run directory containing the blob store.
+    #[arg(long)]
+    run_dir: PathBuf,
+    /// Blob store name from a Rust-owned readback reference.
+    #[arg(long)]
+    store: String,
+    /// Blob key from a Rust-owned readback reference.
+    #[arg(long)]
+    key: String,
 }
 
 #[derive(Debug, Args)]
@@ -224,6 +239,15 @@ fn run_command(command: RunSubcommand) -> Result<String, CliError> {
     match command {
         RunSubcommand::Inspect(args) => {
             let export = leaven_run::export_local_run_inspection(args.run_dir)?;
+            serde_json::to_string_pretty(&export)
+                .map(|mut output| {
+                    output.push('\n');
+                    output
+                })
+                .map_err(CliError::from)
+        }
+        RunSubcommand::Blob(args) => {
+            let export = leaven_run::export_local_run_blob(args.run_dir, args.store, args.key)?;
             serde_json::to_string_pretty(&export)
                 .map(|mut output| {
                     output.push('\n');
@@ -453,6 +477,43 @@ mod tests {
         assert_eq!(value["graph"]["candidate_count"], 1);
         assert_eq!(value["graph"]["event_count"], 1);
         assert!(value["graph"]["bytes"].as_u64().unwrap() > 0);
+    }
+
+    #[test]
+    fn run_blob_exports_rust_owned_blob_bytes() {
+        let run_dir =
+            std::env::temp_dir().join(format!("leaven-cli-run-blob-{}", uuid::Uuid::new_v4()));
+        let store = FileStore::open(&run_dir).unwrap();
+        let blob = BlobStore::put(
+            &store,
+            BlobWrite {
+                bytes: Bytes::from_static(b"cli blob bytes\n"),
+                content_type: Some("text/plain".to_owned()),
+            },
+        )
+        .unwrap();
+
+        let output = run([
+            "run".to_owned(),
+            "blob".to_owned(),
+            "--run-dir".to_owned(),
+            run_dir.display().to_string(),
+            "--store".to_owned(),
+            blob.store,
+            "--key".to_owned(),
+            blob.key,
+        ])
+        .unwrap();
+        let _ = std::fs::remove_dir_all(&run_dir);
+        let value: serde_json::Value = serde_json::from_str(&output).unwrap();
+
+        assert_eq!(value["schema_version"], "leaven.run_blob_export.v1");
+        assert_eq!(value["bytes"], "cli blob bytes\n".len());
+        assert_eq!(value["content_base64"], "Y2xpIGJsb2IgYnl0ZXMK");
+        assert_eq!(
+            value["sha256"],
+            "cfd235c82802e972fe7fb349eda659b4a7cdbfae9f556b1be8a3ab8998928120"
+        );
     }
 
     fn write_input_json(input: &SkillBankReflectionInput<String>) -> PathBuf {

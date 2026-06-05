@@ -26,8 +26,8 @@ pub use evidence::{
     ScoreError, artifact_identity_output,
 };
 pub use inspection::{
-    RUN_INSPECTION_EXPORT_SCHEMA, RunInspectionExportError, RustRunInspectionExport,
-    export_local_run_inspection,
+    RUN_BLOB_EXPORT_SCHEMA, RUN_INSPECTION_EXPORT_SCHEMA, RunInspectionExportError,
+    RustRunBlobExport, RustRunInspectionExport, export_local_run_blob, export_local_run_inspection,
 };
 pub use leaven_engine::CachePolicy;
 pub use public_seam::{

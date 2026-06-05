@@ -1,5 +1,6 @@
 """Typed completed-run inspection projections for `lv.runs.inspect(...)`."""
 
+import base64
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -68,6 +69,31 @@ class RustRunReadback(BaseModel):
     graph: GraphReadbackSummary
 
 
+class BlobByteReadbackRef(BaseModel):
+    """Blob store/key resolved by Rust for byte readback."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    store: str
+    key: str
+
+
+class RustBlobReadback(BaseModel):
+    """Rust-owned bytes read from a local run blob store."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: Literal["leaven.run_blob_export.v1"]
+    blob: BlobByteReadbackRef
+    bytes: int
+    sha256: str
+    content_base64: str
+
+    def content_bytes(self) -> bytes:
+        """Decode the blob contents exported by Rust."""
+        return base64.b64decode(self.content_base64, validate=True)
+
+
 class ReceiptSummary(BaseModel):
     """One opaque receipt visible from a completed run."""
 
@@ -123,6 +149,7 @@ class RunInspection(BaseModel):
     total_lm_tokens: int | None
     usage_status: RunUsageStatus
     rust_readback: RustRunReadback | None = None
+    rust_graph_blob: RustBlobReadback | None = None
     unsupported: tuple[UnsupportedRunFact, ...] = ()
 
     def receipt_ids(self, *, kind: ReceiptKind | None = None) -> list[str]:
@@ -136,6 +163,7 @@ def inspect_optimized[A](
     result: Optimized[A],
     *,
     rust_readback: RustRunReadback | None = None,
+    rust_graph_blob: RustBlobReadback | None = None,
 ) -> RunInspection:
     """Build a flattened inspection projection from an optimized result."""
     return RunInspection(
@@ -150,6 +178,7 @@ def inspect_optimized[A](
         total_lm_tokens=result.summary.total_lm_tokens,
         usage_status=result.summary.usage_status,
         rust_readback=rust_readback,
+        rust_graph_blob=rust_graph_blob,
         unsupported=result.summary.unsupported,
     )
 
@@ -216,6 +245,7 @@ def _evidence_summary(assessment: Assessment) -> EvidenceSummary:
 
 
 __all__ = [
+    "BlobByteReadbackRef",
     "BlobReadbackSummary",
     "CheckpointReadbackSummary",
     "EvidenceSummary",
@@ -224,6 +254,7 @@ __all__ = [
     "ReceiptSummary",
     "RewardDimensionSummary",
     "RunInspection",
+    "RustBlobReadback",
     "RustRunReadback",
     "inspect_optimized",
 ]
