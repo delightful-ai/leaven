@@ -41,7 +41,11 @@ from leaven._seam._wire.payloads import (
 )
 from leaven._seam._wire.payloads import StageRunRequest as StageRunParams
 from leaven._seam._wire.refs import WireJsonField, WireJsonSchemaObject
-from leaven._seam._wire.writes import ProposalWriteRecord, SubmitProposalBatchWrite
+from leaven._seam._wire.writes import (
+    ApplyProposalBatchWrite,
+    ProposalWriteRecord,
+    SubmitProposalBatchWrite,
+)
 
 CaseField = Literal["input", "target", "metadata", "files", "setup", "sandbox", "split"]
 SeamRequestMethod = Literal[
@@ -52,6 +56,7 @@ SeamRequestMethod = Literal[
     "leaven/case.target",
     "leaven/case.metadata",
     "leaven/lm.complete",
+    "leaven/proposal.apply",
     "leaven/proposal.submit_batch",
 ]
 
@@ -394,6 +399,44 @@ class ProposalSubmitRequest:
         )
 
 
+@dataclass(frozen=True)
+class ProposalApplyRequest:
+    """A single public-seam `leaven/proposal.apply` Plan request."""
+
+    request_id: str
+    plan_id: str
+    idempotency_key: str
+    proposal_batch: str
+    policy: Literal["apply_all", "apply_first_valid", "apply_by_optimizer_policy"] = (
+        "apply_first_valid"
+    )
+
+    @property
+    def method(self) -> SeamRequestMethod:
+        """Locked proposal application method."""
+        return "leaven/proposal.apply"
+
+    def to_params(self) -> PlanDocument:
+        """Return the locked proposal application Plan params."""
+        return _plan_document(
+            plan_id=self.plan_id,
+            ops=[self._apply_write()],
+            return_names=["apply"],
+            commit=CommitPolicyGraphWritesAtomic(on_stale="reject"),
+        )
+
+    def _apply_write(self) -> PlanOp:
+        return PlanOp(
+            kind="write",
+            name="apply",
+            idempotency_key=self.idempotency_key,
+            write=ApplyProposalBatchWrite(
+                proposal_batch=self.proposal_batch,
+                policy=self.policy,
+            ),
+        )
+
+
 def _plan_document(
     *,
     plan_id: str,
@@ -479,6 +522,7 @@ __all__ = [
     "AgentRunRequest",
     "CaseLoadRequest",
     "LmCompleteRequest",
+    "ProposalApplyRequest",
     "ProposalSubmitRequest",
     "SeamJsonRpcRequest",
     "SeamRequestMethod",

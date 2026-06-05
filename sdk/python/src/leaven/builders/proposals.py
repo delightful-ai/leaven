@@ -6,10 +6,10 @@ from typing import Protocol
 from pydantic import BaseModel, ConfigDict
 
 from .._receipts import WriteReceipt
-from .._seam import ProposalSubmitRequest
+from .._seam import ProposalApplyRequest, ProposalSubmitRequest
 from .._seam._wire import JsonObject
 from .._seam._wire.json_value import json_object
-from .._seam._wire.results import ProposalSubmitResult
+from .._seam._wire.results import ProposalApplyResult, ProposalSubmitResult
 from ..json_value import JsonValue
 from ..proposal import ProposalBatch, ProposalEffect
 
@@ -20,6 +20,7 @@ class ProposalSubmission(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     receipt: WriteReceipt
+    batch_id: str
     proposal_ids: list[str]
 
 
@@ -27,6 +28,8 @@ class _SeamRequester(Protocol):
     """Small private protocol ProposalsBuilder needs from the seam client."""
 
     def proposal_submit(self, request: ProposalSubmitRequest) -> ProposalSubmitResult: ...
+
+    def proposal_apply(self, request: ProposalApplyRequest) -> ProposalApplyResult: ...
 
 
 class ProposalsBuilder:
@@ -76,19 +79,38 @@ class ProposalsBuilder:
 
     async def apply(self, submission: ProposalSubmission) -> WriteReceipt:
         """Ask the engine to apply a previously-submitted proposal batch."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+        if self._client is None:
+            raise NotImplementedError(
+                "ProposalsBuilder.apply needs an engine-bound public-seam client; "
+                "use the cx.proposals instance supplied to a proposer stage"
+            )
+        request = ProposalApplyRequest(
+            request_id=f"{self._idempotency_prefix}-apply",
+            plan_id=f"{self._plan_id}-apply",
+            idempotency_key=f"{self._idempotency_prefix}-apply",
+            proposal_batch=submission.batch_id,
+        )
+        result = await asyncio.to_thread(self._client.proposal_apply, request)
+        return _proposal_apply_receipt_from_result(result)
 
     async def submit_and_apply(self, batch: ProposalBatch) -> WriteReceipt:
         """Convenience: submit + apply in one round-trip."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+        submission = await self.submit(batch)
+        return await self.apply(submission)
 
 
 def _proposal_submission_from_result(result: ProposalSubmitResult) -> ProposalSubmission:
     primary = result.primary
     return ProposalSubmission(
         receipt=WriteReceipt(receipt_id=primary.receipt),
+        batch_id=primary.batch_id,
         proposal_ids=list(primary.proposal_ids),
     )
+
+
+def _proposal_apply_receipt_from_result(result: ProposalApplyResult) -> WriteReceipt:
+    primary = result.primary
+    return WriteReceipt(receipt_id=primary.receipt)
 
 
 def _effect_to_wire(effect: ProposalEffect, batch: ProposalBatch) -> JsonObject:

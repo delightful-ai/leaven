@@ -3181,6 +3181,30 @@ acceptance:
           through the current `_seam_worker` / `_stage_runtime` route. The
           remaining `serve_stage` matches are negative public-surface tests and
           handoff notes for this removal.
+      - kind: public_proposal_apply_scaffold_removed
+        paths:
+          - sdk/python/src/leaven/_seam/__init__.py
+          - sdk/python/src/leaven/_seam/client.py
+          - sdk/python/src/leaven/_seam/plans.py
+          - sdk/python/src/leaven/builders/proposals.py
+          - sdk/python/tests/test_proposal_submission.py
+        commands:
+          - cd sdk/python && uv run pytest tests/test_proposal_submission.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_seam/plans.py src/leaven/_seam/client.py src/leaven/_seam/__init__.py src/leaven/builders/proposals.py tests/test_proposal_submission.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/plans.py src/leaven/_seam/client.py src/leaven/_seam/__init__.py src/leaven/builders/proposals.py tests/test_proposal_submission.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          `ProposalsBuilder.apply(...)` and `submit_and_apply(...)` are now
+          seam-backed public builder paths instead of scaffolds. Proposal
+          submission carries the typed submitted batch id forward, Python
+          lowers apply through `ProposalApplyRequest` and `leaven/proposal.apply`,
+          `SeamClient.proposal_apply(...)` decodes the generated
+          `ProposalApplyResult`, and the returned write receipt comes from the
+          typed apply primary result. This removes one public backbone scaffold
+          but does not close the SDK quality row; remaining public scaffolds and
+          the full Rust-owned generated wire-codegen denominator still require
+          later cuts.
       - kind: python_no_unparsed_get_probe_lint_hardened
         paths:
           - sdk/python/scripts/check_quality_contract.py
@@ -3705,6 +3729,26 @@ acceptance:
           Codex stage consuming the projected child system prompt and alpha
           skill. This is current criteria proof, not final row closure while
           prerequisite backbone rows remain pending.
+      - kind: git_filesystem_codex_kit_current_substrate_rerun
+        paths:
+          - crates/leaven-agentic-git/tests/git_program_materializer.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/agent_kit_seam_checkpoint.rs
+          - crates/leaven-workspace-firkin/tests/firkin_contract/firkin_git_e2e.rs
+          - crates/leaven-agent-codex-cli/tests/codex_cli_runtime.rs
+        commands:
+          - cargo test -p leaven-agentic-git --test git_program_materializer
+          - cargo test -p leaven-gepa-agentic-agent-kit --test agent_kit_seam_checkpoint agent_kit_git_child_applied_through_sdk_route_restores_from_checkpoint -- --exact
+          - cargo test -p leaven-workspace-firkin --test firkin_contract firkin_git_e2e::firkin_product_pod_materializes_and_reads_back_isolated_git_workspaces -- --exact
+          - cargo test -p leaven-agent-codex-cli --test codex_cli_runtime
+        note: >-
+          Fresh current-checkout rerun during the Python proposal-apply slice
+          reconfirmed the non-live substrate criteria without disabling Cargo
+          incremental compilation: Git program materialization/readback passed
+          13 tests, the checkpointed AgentKit SDK route passed 1 test, the
+          host-backed Firkin product-pod Git workspace proof passed 1 test, and
+          the Codex CLI runtime suite passed 7 tests. The live ignored Codex
+          evolution test was not rerun in this slice; the preceding 2026-06-04
+          live evidence remains the current live proof.
     closeout_check: >-
       A live Codex prompt-consumption test, a deterministic AgentKit projection
       test, or `proposal.submit_batch` without application cannot close this

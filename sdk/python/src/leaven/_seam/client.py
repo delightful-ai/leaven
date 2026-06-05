@@ -15,6 +15,7 @@ from ._wire.results import (
     AgentRunResult,
     CaseLoadResult,
     LmCompleteResult,
+    ProposalApplyResult,
     ProposalSubmitResult,
     StageRunDispatchResult,
 )
@@ -24,6 +25,7 @@ from .plans import (
     AgentRunRequest,
     CaseLoadRequest,
     LmCompleteRequest,
+    ProposalApplyRequest,
     ProposalSubmitRequest,
     SeamJsonRpcRequest,
     StageRunProposeRequest,
@@ -62,6 +64,15 @@ class SeamClient:
     ) -> ProposalSubmitResult:
         """Send one `leaven/proposal.submit_batch` request and return its typed result."""
         return self._typed_request(request, ProposalSubmitResult, timeout_s=timeout_s)
+
+    def proposal_apply(
+        self,
+        request: ProposalApplyRequest,
+        *,
+        timeout_s: int = 240,
+    ) -> ProposalApplyResult:
+        """Send one `leaven/proposal.apply` request and return its typed result."""
+        return self._typed_request(request, ProposalApplyResult, timeout_s=timeout_s)
 
     def case_load(self, request: CaseLoadRequest, *, timeout_s: int = 240) -> CaseLoadResult:
         """Send one case read request and return its typed result."""
