@@ -2597,6 +2597,21 @@
         }
       ]
     },
+    "ProposalCausalInputs": {
+      "type": "object",
+      "properties": {
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/CandidateRef"
+          }
+        }
+      },
+      "required": [
+        "inputs"
+      ],
+      "additionalProperties": false
+    },
     "SubmitProposalBatchWrite": {
       "type": "object",
       "properties": {
@@ -2617,7 +2632,9 @@
               "effect": {
                 "$ref": "#/$defs/ProposalEffectWrite"
               },
-              "causal": {},
+              "causal": {
+                "$ref": "#/$defs/ProposalCausalInputs"
+              },
               "informed_by": {
                 "$ref": "#/$defs/Expr"
               },

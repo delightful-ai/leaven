@@ -394,7 +394,9 @@ impl PlanWriteOperation {
             PlanWriteKind::ApplyProposalBatch => PlanWriteDetail::ApplyProposalBatch(
                 PlanApplyProposalBatchWrite::from_schema_valid_value(value)?,
             ),
-            PlanWriteKind::SubmitProposalBatch => PlanWriteDetail::Other,
+            PlanWriteKind::SubmitProposalBatch => PlanWriteDetail::SubmitProposalBatch(
+                PlanSubmitProposalBatchWrite::from_schema_valid_value(value)?,
+            ),
         };
         Ok(Self {
             kind,
@@ -459,8 +461,8 @@ impl PlanWriteOperation {
             PlanWriteDetail::EmitRunEvent(write) => Some(write),
             PlanWriteDetail::RequestEvaluation(_)
             | PlanWriteDetail::SubmitAssessments(_)
-            | PlanWriteDetail::ApplyProposalBatch(_)
-            | PlanWriteDetail::Other => None,
+            | PlanWriteDetail::SubmitProposalBatch(_)
+            | PlanWriteDetail::ApplyProposalBatch(_) => None,
         }
     }
 
@@ -468,8 +470,8 @@ impl PlanWriteOperation {
     pub const fn request_evaluation(&self) -> Option<&PlanRequestEvaluationWrite> {
         match &self.detail {
             PlanWriteDetail::RequestEvaluation(write) => Some(write),
-            PlanWriteDetail::Other
-            | PlanWriteDetail::EmitRunEvent(_)
+            PlanWriteDetail::EmitRunEvent(_)
+            | PlanWriteDetail::SubmitProposalBatch(_)
             | PlanWriteDetail::SubmitAssessments(_)
             | PlanWriteDetail::ApplyProposalBatch(_) => None,
         }
@@ -480,9 +482,9 @@ impl PlanWriteOperation {
         match &self.detail {
             PlanWriteDetail::SubmitAssessments(write) => Some(write),
             PlanWriteDetail::EmitRunEvent(_)
+            | PlanWriteDetail::SubmitProposalBatch(_)
             | PlanWriteDetail::RequestEvaluation(_)
-            | PlanWriteDetail::ApplyProposalBatch(_)
-            | PlanWriteDetail::Other => None,
+            | PlanWriteDetail::ApplyProposalBatch(_) => None,
         }
     }
 
@@ -493,7 +495,18 @@ impl PlanWriteOperation {
             PlanWriteDetail::EmitRunEvent(_)
             | PlanWriteDetail::RequestEvaluation(_)
             | PlanWriteDetail::SubmitAssessments(_)
-            | PlanWriteDetail::Other => None,
+            | PlanWriteDetail::SubmitProposalBatch(_) => None,
+        }
+    }
+
+    /// Typed request details for `submit_proposal_batch` writes.
+    pub const fn submit_proposal_batch(&self) -> Option<&PlanSubmitProposalBatchWrite> {
+        match &self.detail {
+            PlanWriteDetail::SubmitProposalBatch(write) => Some(write),
+            PlanWriteDetail::EmitRunEvent(_)
+            | PlanWriteDetail::RequestEvaluation(_)
+            | PlanWriteDetail::SubmitAssessments(_)
+            | PlanWriteDetail::ApplyProposalBatch(_) => None,
         }
     }
 }
@@ -501,10 +514,73 @@ impl PlanWriteOperation {
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum PlanWriteDetail {
     EmitRunEvent(PlanEmitRunEventWrite),
+    SubmitProposalBatch(PlanSubmitProposalBatchWrite),
     RequestEvaluation(PlanRequestEvaluationWrite),
     SubmitAssessments(PlanSubmitAssessmentsWrite),
     ApplyProposalBatch(PlanApplyProposalBatchWrite),
-    Other,
+}
+
+/// Typed `submit_proposal_batch` write facts.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanSubmitProposalBatchWrite {
+    proposal_causal_inputs: Vec<PlanProposalCausalInputs>,
+}
+
+impl PlanSubmitProposalBatchWrite {
+    fn from_schema_valid_value(value: &Value) -> Result<Self, PublicSeamError> {
+        let object = value
+            .as_object()
+            .ok_or_else(|| invalid_plan("submit_proposal_batch write must be an object"))?;
+        let proposals = object
+            .get("proposals")
+            .and_then(Value::as_array)
+            .ok_or_else(|| invalid_plan("submit_proposal_batch write must carry proposals"))?;
+        let proposal_causal_inputs = proposals
+            .iter()
+            .map(PlanProposalCausalInputs::from_proposal_value)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self {
+            proposal_causal_inputs,
+        })
+    }
+
+    /// Causal input records carried by each proposal in order.
+    pub fn proposal_causal_inputs(&self) -> &[PlanProposalCausalInputs] {
+        &self.proposal_causal_inputs
+    }
+}
+
+/// Typed causal-input facts carried by one proposal write record.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanProposalCausalInputs {
+    input_candidate_ids: Vec<String>,
+}
+
+impl PlanProposalCausalInputs {
+    fn from_proposal_value(value: &Value) -> Result<Self, PublicSeamError> {
+        let proposal = value
+            .as_object()
+            .ok_or_else(|| invalid_plan("proposal must be an object"))?;
+        let causal = proposal
+            .get("causal")
+            .and_then(Value::as_object)
+            .ok_or_else(|| invalid_plan("proposal causal must be an object"))?;
+        let input_candidate_ids = causal
+            .get("inputs")
+            .and_then(Value::as_array)
+            .ok_or_else(|| invalid_plan("proposal causal.inputs must be an array"))?
+            .iter()
+            .map(candidate_ref_id)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self {
+            input_candidate_ids,
+        })
+    }
+
+    /// Candidate ids that causally informed the proposal.
+    pub fn input_candidate_ids(&self) -> &[String] {
+        &self.input_candidate_ids
+    }
 }
 
 /// Typed `apply_proposal_batch` write facts.

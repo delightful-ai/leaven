@@ -19,6 +19,7 @@ from leaven._seam._wire.payloads import (
 from leaven._seam._wire.refs import BlobRef, TraceRefRecord
 from leaven._seam._wire.writes import (
     EmitRunEventWrite,
+    ProposalCausalInputs,
     ProposalEffectChange,
     ProposalEffectCreate,
     RequestEvaluationWrite,
@@ -44,11 +45,14 @@ def test_submit_proposal_batch_write_decodes_typed_effect_value_exprs() -> None:
     assert isinstance(create.effect, ProposalEffectCreate)
     assert isinstance(create.effect.artifact, ValueExprLiteral)
     assert create.effect.artifact.value == "new prompt"
+    assert isinstance(create.causal, ProposalCausalInputs)
+    assert create.causal.inputs == []
     assert isinstance(create.annotations, ValueExprVar)
     assert create.annotations.name == "annotation_value"
     assert isinstance(change.effect, ProposalEffectChange)
     assert isinstance(change.effect.change, ValueExprLiteral)
     assert change.effect.change.value == "patch text"
+    assert change.causal.inputs == ["cand_seed"]
 
 
 def test_submit_proposal_batch_rejects_unknown_effect_kind() -> None:
@@ -57,6 +61,20 @@ def test_submit_proposal_batch_rejects_unknown_effect_kind() -> None:
     with pytest.raises(msgspec.ValidationError):
         msgspec.json.decode(
             _proposal_plan().replace(b'"kind":"create"', b'"kind":"mystery"', 1),
+            type=PlanDocument,
+        )
+
+
+def test_submit_proposal_batch_rejects_open_causal_payload() -> None:
+    """Boundary check: proposal causal data is a closed typed record."""
+
+    with pytest.raises(msgspec.ValidationError):
+        msgspec.json.decode(
+            _proposal_plan().replace(
+                b'"causal":{"inputs":["cand_seed"]}',
+                b'"causal":{"field":"prose"}',
+                1,
+            ),
             type=PlanDocument,
         )
 
@@ -74,7 +92,10 @@ def test_assessment_evaluation_and_event_writes_decode_typed_records() -> None:
     output = assessment.assessments[0].score.output
     assert output.summary == "score evidence"
     assert output.value == {"candidate": "cand_seed", "output": ["answer", {"unit": "text"}]}
-    assert assessment.assessments[0].target == {"case": "case_1", "answer": ["42", {"unit": "text"}]}
+    assert assessment.assessments[0].target == {
+        "case": "case_1",
+        "answer": ["42", {"unit": "text"}],
+    }
     assert assessment.assessments[0].cost_attribution is not UNSET
     assert assessment.assessments[0].cost_attribution.kind == "explicit"
     assert isinstance(evaluation, RequestEvaluationWrite)
@@ -128,9 +149,7 @@ def test_assessment_preference_and_ranking_decode_owned_json_values() -> None:
         b'"value":[{"candidate":"cand_a","output":"answer a"},'
         b'{"candidate":"cand_b","output":"answer b"}]}},'
         b'"preference":{"winner":"cand_a","margin":[0.2,{"unit":"score"}]},'
-        b'"evidence":'
-        + _evidence_envelope()
-        + b',"replayability":"pure_read"},'
+        b'"evidence":' + _evidence_envelope() + b',"replayability":"pure_read"},'
         b'{"kind":"listwise","candidates":["cand_a","cand_b","cand_c"],'
         b'"target":{"case":"case_1"},'
         b'"score":{"value":0.75,"output":{"kind":"structured",'
@@ -140,9 +159,7 @@ def test_assessment_preference_and_ranking_decode_owned_json_values() -> None:
         b'{"candidate":"cand_b","output":"answer b"},'
         b'{"candidate":"cand_c","output":"answer c"}]}},'
         b'"ranking":["cand_a",{"candidate":"cand_b","rank":2},"cand_c"],'
-        b'"evidence":'
-        + _evidence_envelope()
-        + b',"replayability":"pure_read"}]}',
+        b'"evidence":' + _evidence_envelope() + b',"replayability":"pure_read"}]}',
         type=SubmitAssessmentsWrite,
     )
 
@@ -317,13 +334,13 @@ def _proposal_plan() -> bytes:
         b'{"effect":{"kind":"create","artifact_type":"prompt",'
         b'"artifact_schema":"fp_schema_artifact",'
         b'"artifact":{"kind":"literal","value":"new prompt"}},'
-        b'"causal":{},"informed_by":{"kind":"var","name":"seed"},'
+        b'"causal":{"inputs":[]},"informed_by":{"kind":"var","name":"seed"},'
         b'"annotations":{"kind":"var","name":"annotation_value"}},'
         b'{"effect":{"kind":"change","target":"cand_seed",'
         b'"surface_fingerprint":"fp_surface","change_schema":"fp_schema_change",'
         b'"change":{"kind":"literal","value":"patch text"}},'
-        b'"causal":{},"informed_by":{"kind":"var","name":"seed"}}'
-        b']} }],'
+        b'"causal":{"inputs":["cand_seed"]},"informed_by":{"kind":"var","name":"seed"}}'
+        b"]} }],"
         b'"return":["proposal_batch"],"commit":{"kind":"graph_writes_atomic","on_stale":"reject"}}'
     )
 
@@ -340,7 +357,7 @@ def _mixed_write_plan() -> bytes:
         b'"score":{"value":0.5,"output":{"kind":"text","visibility":"public",'
         b'"data_classes":["candidate.output"],"summary":"score evidence",'
         b'"value":{"candidate":"cand_seed","output":["answer",{"unit":"text"}]}}},'
-        b'"evidence":' + _evidence_envelope() + b','
+        b'"evidence":' + _evidence_envelope() + b","
         b'"replayability":"fully_managed",'
         b'"cost_attribution":{"kind":"explicit","cost":{"usd_micro":12}}}]}},'
         b'{"kind":"write","name":"eval","idempotency_key":"idem_eval",'

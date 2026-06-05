@@ -195,6 +195,63 @@ fn apply_proposal_batch_write_exposes_typed_batch_ref() {
 }
 
 #[test]
+fn submit_proposal_batch_write_exposes_typed_causal_inputs() {
+    let package = package();
+    let plan = json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "planproposalcausal001",
+        "consistency": {"kind": "latest_at_start"},
+        "mode": {"kind": "execute"},
+        "commit": {"kind": "graph_writes_atomic", "on_stale": "reject"},
+        "ops": [{
+            "kind": "write",
+            "name": "proposal_batch",
+            "idempotency_key": "proposal-causal-typed-0001",
+            "write": {
+                "kind": "submit_proposal_batch",
+                "semantics": "sequence",
+                "proposals": [{
+                    "effect": {
+                        "kind": "change",
+                        "target": {"kind": "candidate", "run": "run_1", "id": "cand_parent"},
+                        "surface_fingerprint": "fp_surface_sha256_parent",
+                        "change_schema": "fp_schema_sha256_change",
+                        "change": {"kind": "literal", "value": "patch text"}
+                    },
+                    "causal": {
+                        "inputs": [
+                            {"kind": "candidate", "run": "run_1", "id": "cand_parent"},
+                            "cand_support"
+                        ]
+                    },
+                    "informed_by": {"kind": "literal", "value": ["qrec_reflection"]},
+                    "read_receipts": ["qrec_reflection"]
+                }]
+            }
+        }],
+        "return": ["proposal_batch"]
+    });
+
+    let document = package.validate_plan_document(&plan).unwrap();
+    let [op] = document.operations() else {
+        panic!("expected one submit_proposal_batch op");
+    };
+    assert_eq!(op.write_kind(), Some(PlanWriteKind::SubmitProposalBatch));
+    let write = op
+        .write()
+        .and_then(|write| write.submit_proposal_batch())
+        .expect("submit_proposal_batch write exposes typed facts");
+
+    let [causal] = write.proposal_causal_inputs() else {
+        panic!("expected one proposal causal record");
+    };
+    assert_eq!(
+        causal.input_candidate_ids(),
+        &["cand_parent", "cand_support"]
+    );
+}
+
+#[test]
 fn submit_assessments_write_exposes_typed_evaluation_request_ref() {
     let package = package();
     let document = package

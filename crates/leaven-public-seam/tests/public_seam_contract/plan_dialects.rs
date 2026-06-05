@@ -190,11 +190,18 @@ fn pinned_dialects_do_not_inspect_arbitrary_json_data_slots() {
         .validate_plan_document(&metadata_with_prose_field_plan())
         .unwrap();
     package
-        .validate_plan_document(&proposal_causal_with_prose_field_plan())
-        .unwrap();
-    package
         .validate_plan_document(&assessment_arbitrary_values_with_prose_field_plan())
         .unwrap();
+}
+
+#[test]
+fn proposal_causal_is_a_closed_typed_record_not_arbitrary_json() {
+    let package = package();
+    let error = package
+        .validate_plan_document(&proposal_causal_with_prose_field_plan())
+        .unwrap_err();
+
+    assert!(matches!(error, PublicSeamError::ExampleValidation { .. }));
 }
 
 fn pinned_dialect_plan() -> Value {

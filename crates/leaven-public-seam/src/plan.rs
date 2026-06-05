@@ -17,8 +17,9 @@ pub use expression::{
 pub use model::{
     PlanApplyProposalBatchWrite, PlanCallKind, PlanCommitKind, PlanEmitRunEventWrite,
     PlanEvaluationSetExpr, PlanEvaluationShape, PlanEventPayload, PlanId, PlanMode, PlanOperation,
-    PlanOperationKind, PlanQueryKind, PlanRequestEvaluationWrite, PlanReturnBinding,
-    PlanSchemaVersion, PlanSubmitAssessmentsWrite, PlanWriteKind,
+    PlanOperationKind, PlanProposalCausalInputs, PlanQueryKind, PlanRequestEvaluationWrite,
+    PlanReturnBinding, PlanSchemaVersion, PlanSubmitAssessmentsWrite, PlanSubmitProposalBatchWrite,
+    PlanWriteKind,
 };
 
 use assessment::AssessmentScoreOutputUsage;

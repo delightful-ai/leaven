@@ -1884,6 +1884,44 @@ acceptance:
           `_wire.case_results`, and `_wire.results`. This resolves the
           case-read/result-metadata blocker for this row; remaining leaf JSON
           owners still need the same treatment.
+      - kind: proposal_causal_inputs_are_closed_typed_records
+        paths:
+          - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
+          - crates/leaven-public-seam/src/plan/model.rs
+          - crates/leaven-public-seam/src/plan.rs
+          - crates/leaven-public-seam/src/lib.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_document.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_dialects.rs
+          - sdk/python/codegen/write_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/writes.py
+          - sdk/python/tests/_seam/_wire/test_graph_writes.py
+        commands:
+          - cargo test -p leaven-public-seam --test public_seam_contract submit_proposal_batch_write_exposes_typed_causal_inputs -- --nocapture
+          - cargo test -p leaven-public-seam --test public_seam_contract proposal_causal_is_a_closed_typed_record_not_arbitrary_json -- --nocapture
+          - cargo test -p leaven-public-seam --test public_seam_contract proposal_authority -- --nocapture
+          - cargo check -p leaven-public-seam
+          - cargo fmt --check
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_graph_writes.py -q
+          - cd sdk/python && uv run ruff check codegen/write_codegen.py src/leaven/_seam/_wire/writes.py tests/_seam/_wire/test_graph_writes.py
+          - cd sdk/python && uv run ruff format --check codegen/write_codegen.py src/leaven/_seam/_wire/writes.py tests/_seam/_wire/test_graph_writes.py
+          - cd sdk/python && uv run ty check codegen/write_codegen.py src/leaven/_seam/_wire/writes.py tests/_seam/_wire/test_graph_writes.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+        note: >-
+          Proposal causal data is no longer an open Plan IR JSON slot. The
+          locked schema now defines `ProposalCausalInputs` as a closed record
+          with `inputs: CandidateRef[]`; Rust `PlanWriteOperation` owns
+          `submit_proposal_batch` details through
+          `PlanSubmitProposalBatchWrite` and `PlanProposalCausalInputs`, and
+          tests prove candidate-ref object/string inputs parse to candidate ids.
+          The prior pinned-dialect test that allowed prose under `causal` is
+          now a negative proof, while other genuine arbitrary-value slots remain
+          allowed. Python codegen emits a msgspec `ProposalCausalInputs`
+          record and `ProposalWriteRecord.causal` no longer imports or accepts
+          `WireJsonObject`; graph-write tests prove both valid closed causal
+          inputs and rejection of an open prose payload. This removes the
+          proposal-causal leaf blocker; other metadata/evidence/result leaf
+          owners remain open.
       - kind: generated_method_routing_reaches_retained_effect_methods
         paths:
           - sdk/python/src/leaven/_seam/effect_plans.py

@@ -4,8 +4,8 @@ WRITE_EXPORTS = (
     "ApplyProposalBatchWrite AttributionCost CostAttribution EmitRunEventWrite "
     "EvaluationRequestWriteRecord GraphWrite ProposalEffectAgentSession "
     "ProposalEffectChange ProposalEffectCreate ProposalEffectWorkspaceDiff ProposalEffectWrite "
-    "ProposalWriteRecord RequestEvaluationWrite SubmitAssessmentRecord SubmitAssessmentsWrite "
-    "SubmitProposalBatchWrite WriteOutputRecord WriteScore"
+    "ProposalCausalInputs ProposalWriteRecord RequestEvaluationWrite SubmitAssessmentRecord "
+    "SubmitAssessmentsWrite SubmitProposalBatchWrite WriteOutputRecord WriteScore"
 )
 
 
@@ -34,7 +34,6 @@ from .refs import (
     WireJsonAssessmentRanking,
     WireJsonAssessmentTarget,
     WireJsonEventPayload,
-    WireJsonObject,
     WireJsonOutputValue,
     WorkspaceRef,
 )
@@ -58,20 +57,31 @@ type VisibilityClass = Literal[
 ]
 
 
-class ProposalEffectCreate(Struct, frozen=True, forbid_unknown_fields=True, tag="create", tag_field="kind"):
+class ProposalEffectCreate(
+    Struct, frozen=True, forbid_unknown_fields=True, tag="create", tag_field="kind"
+):
     artifact_type: str
     artifact_schema: str
     artifact: ValueExpr
 
 
-class ProposalEffectChange(Struct, frozen=True, forbid_unknown_fields=True, tag="change", tag_field="kind"):
+class ProposalEffectChange(
+    Struct, frozen=True, forbid_unknown_fields=True, tag="change", tag_field="kind"
+):
     target: CandidateRef
     surface_fingerprint: str
     change_schema: str
     change: ValueExpr
 
 
-class ProposalEffectWorkspaceDiff(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="change_from_workspace_diff", tag_field="kind"):
+class ProposalEffectWorkspaceDiff(
+    Struct,
+    frozen=True,
+    forbid_unknown_fields=True,
+    omit_defaults=True,
+    tag="change_from_workspace_diff",
+    tag_field="kind",
+):
     target: CandidateRef
     workspace: WorkspaceRef
     surface_fingerprint: str
@@ -80,7 +90,14 @@ class ProposalEffectWorkspaceDiff(Struct, frozen=True, forbid_unknown_fields=Tru
     parser: str | UnsetType = UNSET
 
 
-class ProposalEffectAgentSession(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="change_from_agent_session", tag_field="kind"):
+class ProposalEffectAgentSession(
+    Struct,
+    frozen=True,
+    forbid_unknown_fields=True,
+    omit_defaults=True,
+    tag="change_from_agent_session",
+    tag_field="kind",
+):
     target: CandidateRef
     agent_receipt: ReceiptRef
     parser: str
@@ -96,9 +113,13 @@ type ProposalEffectWrite = (
 )
 
 
+class ProposalCausalInputs(Struct, frozen=True, forbid_unknown_fields=True):
+    inputs: list[CandidateRef]
+
+
 class ProposalWriteRecord(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
     effect: ProposalEffectWrite
-    causal: WireJsonObject
+    causal: ProposalCausalInputs
     informed_by: PlanExpression
     annotations: ValueExpr | UnsetType = UNSET
     annotations_schema: str | UnsetType = UNSET
@@ -106,7 +127,9 @@ class ProposalWriteRecord(Struct, frozen=True, forbid_unknown_fields=True, omit_
     metadata: MetadataBag | UnsetType = UNSET
 
 
-class SubmitProposalBatchWrite(Struct, frozen=True, forbid_unknown_fields=True, tag="submit_proposal_batch", tag_field="kind"):
+class SubmitProposalBatchWrite(
+    Struct, frozen=True, forbid_unknown_fields=True, tag="submit_proposal_batch", tag_field="kind"
+):
     semantics: Literal["alternatives", "sequence"]
     proposals: list[ProposalWriteRecord]
 
@@ -160,12 +183,16 @@ class SubmitAssessmentRecord(Struct, frozen=True, forbid_unknown_fields=True, om
     cost_attribution: CostAttribution | UnsetType = UNSET
 
 
-class SubmitAssessmentsWrite(Struct, frozen=True, forbid_unknown_fields=True, tag="submit_assessments", tag_field="kind"):
+class SubmitAssessmentsWrite(
+    Struct, frozen=True, forbid_unknown_fields=True, tag="submit_assessments", tag_field="kind"
+):
     evaluation_request_id: str
     assessments: list[SubmitAssessmentRecord]
 
 
-class EvaluationRequestWriteRecord(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+class EvaluationRequestWriteRecord(
+    Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True
+):
     shape: Literal["independent", "pairwise", "listwise"]
     candidates: list[CandidateRef]
     set: EvaluationSetExpr
@@ -175,16 +202,22 @@ class EvaluationRequestWriteRecord(Struct, frozen=True, forbid_unknown_fields=Tr
     metadata: MetadataBag | UnsetType = UNSET
 
 
-class RequestEvaluationWrite(Struct, frozen=True, forbid_unknown_fields=True, tag="request_evaluation", tag_field="kind"):
+class RequestEvaluationWrite(
+    Struct, frozen=True, forbid_unknown_fields=True, tag="request_evaluation", tag_field="kind"
+):
     request: EvaluationRequestWriteRecord
 
 
-class ApplyProposalBatchWrite(Struct, frozen=True, forbid_unknown_fields=True, tag="apply_proposal_batch", tag_field="kind"):
+class ApplyProposalBatchWrite(
+    Struct, frozen=True, forbid_unknown_fields=True, tag="apply_proposal_batch", tag_field="kind"
+):
     proposal_batch: ProposalBatchRef
     policy: Literal["apply_all", "apply_first_valid", "apply_by_optimizer_policy"]
 
 
-class EmitRunEventWrite(Struct, frozen=True, forbid_unknown_fields=True, tag="emit_run_event", tag_field="kind"):
+class EmitRunEventWrite(
+    Struct, frozen=True, forbid_unknown_fields=True, tag="emit_run_event", tag_field="kind"
+):
     event_kind: str
     payload_schema: str
     payload: WireJsonEventPayload

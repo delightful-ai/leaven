@@ -55,7 +55,7 @@ from .refs import (
 from .writes import GraphWrite
 
 PLAN_SCHEMA_FINGERPRINT = (
-    "fp_schema_sha256_0a95fd2eba6182cadec084f3f04f783f7f41a79fbcd61758f1f767a09e887a76"
+    "fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e"
 )
 PLAN_RESULT_SCHEMA_FINGERPRINT = (
     "fp_schema_sha256_df8b0d4f3c84de73c982c0b381eeb3566c12651d9376d50d43ad11c700ebd0b4"

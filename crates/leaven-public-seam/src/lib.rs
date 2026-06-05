@@ -60,9 +60,9 @@ pub use plan::{
     PlanCostScope, PlanDocument, PlanEmitRunEventWrite, PlanEvaluationSetExpr, PlanEvaluationShape,
     PlanEventPayload, PlanExpression, PlanExpressionKind, PlanExtensionPayload,
     PlanGraphEventFilter, PlanGraphEventFilterPayload, PlanGraphQuerySource, PlanId,
-    PlanLiteralValue, PlanMode, PlanOperation, PlanOperationKind, PlanQueryKind,
-    PlanRequestEvaluationWrite, PlanReturnBinding, PlanSchemaVersion, PlanScoreOutputValue,
-    PlanSubmitAssessmentsWrite, PlanWriteKind,
+    PlanLiteralValue, PlanMode, PlanOperation, PlanOperationKind, PlanProposalCausalInputs,
+    PlanQueryKind, PlanRequestEvaluationWrite, PlanReturnBinding, PlanSchemaVersion,
+    PlanScoreOutputValue, PlanSubmitAssessmentsWrite, PlanSubmitProposalBatchWrite, PlanWriteKind,
 };
 pub use plan_error::{PlanErrorCode, PlanErrorDetails, PlanErrorDocument};
 pub use plan_execution::{
