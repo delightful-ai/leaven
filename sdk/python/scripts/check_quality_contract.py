@@ -64,6 +64,10 @@ MIRRORED_TESTS = {
     / "tests"
     / "_seam_worker"
     / "test_protocol.py",
+    ROOT / "src" / "leaven" / "artifacts" / "skill_bank.py": ROOT
+    / "tests"
+    / "artifacts"
+    / "test_skill_bank.py",
     ROOT / "src" / "leaven" / "assessment.py": ROOT / "tests" / "test_assessment.py",
     ROOT / "src" / "leaven" / "builders" / "case.py": ROOT / "tests" / "builders" / "test_case.py",
     ROOT / "src" / "leaven" / "cases" / "__init__.py": ROOT
@@ -75,6 +79,7 @@ MIRRORED_TESTS = {
     ROOT / "src" / "leaven" / "evidence.py": ROOT / "tests" / "test_evidence.py",
     ROOT / "src" / "leaven" / "output.py": ROOT / "tests" / "test_output.py",
     ROOT / "src" / "leaven" / "output_record.py": ROOT / "tests" / "test_output_record.py",
+    ROOT / "src" / "leaven" / "result.py": ROOT / "tests" / "test_result.py",
     ROOT / "src" / "leaven" / "run_inspection.py": ROOT / "tests" / "test_run_inspection.py",
     ROOT / "src" / "leaven" / "score.py": ROOT / "tests" / "test_score.py",
     ROOT / "src" / "leaven" / "scoring.py": ROOT / "tests" / "test_scoring.py",

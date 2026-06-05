@@ -2506,6 +2506,24 @@ acceptance:
           candidate shapes; output records construct typed text, structured,
           JSON, and blob-reference projections. The mirrored-test contract now
           locks each source module to its matching test file.
+      - kind: public_skillbank_candidate_summary_scaffolds_removed
+        paths:
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/src/leaven/artifacts/skill_bank.py
+          - sdk/python/src/leaven/result.py
+          - sdk/python/tests/artifacts/test_skill_bank.py
+          - sdk/python/tests/test_result.py
+        commands:
+          - cd sdk/python && uv run pytest tests/artifacts/test_skill_bank.py tests/test_result.py -q
+          - cd sdk/python && uv run ruff check src/leaven/artifacts/skill_bank.py src/leaven/result.py tests/artifacts/test_skill_bank.py tests/test_result.py
+          - cd sdk/python && uv run ty check src/leaven/artifacts/skill_bank.py src/leaven/result.py tests/artifacts/test_skill_bank.py tests/test_result.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+        note: >-
+          `SkillBank.from_directory(...)` now loads a local `skills/` plus
+          `references/` markdown layout into typed `SkillFile` records, and
+          `Candidate.summary()` now returns a deterministic one-line candidate
+          description instead of a scaffold error. The mirrored-test contract
+          now locks both modules to their matching tests.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this

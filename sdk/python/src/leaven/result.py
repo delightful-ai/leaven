@@ -27,7 +27,8 @@ class Candidate[A](BaseModel):
 
     def summary(self) -> str:
         """One-line summary of this candidate."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+        score = "unscored" if self.summary_score is None else f"score={self.summary_score:g}"
+        return f"{self.id}: {type(self.artifact).__name__} {score}"
 
 
 class RunSummary(BaseModel):
