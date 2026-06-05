@@ -2363,6 +2363,33 @@ acceptance:
           not close it: remaining public backbone scaffolds, generated wire
           leaf JSON aliases, and full e2e typed seam generation still require
           later cuts.
+      - kind: bound_builder_json_schema_parsed_result_readback
+        paths:
+          - sdk/python/codegen/result_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/results.py
+          - sdk/python/src/leaven/builders/agent.py
+          - sdk/python/src/leaven/builders/lm.py
+          - sdk/python/tests/builders/test_agent.py
+          - sdk/python/tests/builders/test_lm.py
+        commands:
+          - cd sdk/python && uv run pytest tests/builders/test_agent.py tests/builders/test_lm.py tests/_seam/_wire/test_results.py -q
+          - cd sdk/python && uv run ruff check src/leaven/builders/agent.py src/leaven/builders/lm.py src/leaven/_seam/_wire/results.py codegen/result_codegen.py tests/builders/test_agent.py tests/builders/test_lm.py tests/_seam/_wire/test_results.py
+          - cd sdk/python && uv run ty check src/leaven/builders/agent.py src/leaven/builders/lm.py src/leaven/_seam/_wire/results.py codegen/result_codegen.py tests/builders/test_agent.py tests/builders/test_lm.py tests/_seam/_wire/test_results.py
+          - cd sdk/python && uv run ruff check src/leaven examples tests scripts codegen --exclude src/leaven/_types
+          - cd sdk/python && uv run ty check src/leaven tests scripts codegen --exclude src/leaven/_types
+          - cd sdk/python && uv run pytest -q
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Generated Python result records now carry `parsed` as `msgspec.Raw`
+          for `lm_response` and `agent_session` primary values, matching the
+          Rust public-seam structured-output result shape. Bound LM and agent
+          builders parse that Raw payload at the SDK boundary into the public
+          `JsonValue` alias and expose it via `LmResponse.parsed` and
+          `AgentSession.parsed`. This proves Python structured-output request
+          lowering plus result readback for bound builder calls; it still does
+          not prove engine-supplied stage contexts or live provider structured
+          output end to end.
       - kind: public_case_iterable_loader_scaffold_removed
         paths:
           - sdk/python/src/leaven/cases/__init__.py

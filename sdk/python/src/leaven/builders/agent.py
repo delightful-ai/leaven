@@ -5,6 +5,7 @@ import math
 from collections.abc import Sequence
 from typing import Protocol
 
+import msgspec
 from msgspec import UNSET, UnsetType
 from pydantic import BaseModel, ConfigDict
 
@@ -12,7 +13,7 @@ from .._handles import WorkspaceHandle
 from .._receipts import CallReceipt
 from .._seam import AgentRunRequest
 from .._seam._wire import JsonObject
-from .._seam._wire.json_value import json_object
+from .._seam._wire.json_value import json_object, json_value
 from .._seam._wire.payloads import BlobRef as WireBlobRef
 from .._seam._wire.payloads import Cost
 from .._seam._wire.results import AgentRunResult
@@ -179,7 +180,7 @@ def _agent_session_from_result(result: AgentRunResult) -> AgentSession:
     return AgentSession(
         transcript_ref=transcript.blob_id if transcript is not None else "",
         transcript=transcript,
-        parsed=None,
+        parsed=_parsed_json(primary.parsed),
         final_message=None,
         files=None,
         commands=[
@@ -214,6 +215,12 @@ def _blob_ref(value: WireBlobRef | UnsetType) -> BlobRef | None:
         bytes=value.bytes,
         data_classes=list(value.data_classes),
     )
+
+
+def _parsed_json(value: msgspec.Raw | UnsetType) -> JsonValue | None:
+    if value is UNSET:
+        return None
+    return json_value(msgspec.json.decode(value))
 
 
 __all__ = ["AgentBuilder", "AgentCommand", "AgentSession"]

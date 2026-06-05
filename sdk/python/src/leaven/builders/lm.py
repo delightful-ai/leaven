@@ -4,13 +4,14 @@ import asyncio
 from collections.abc import Sequence
 from typing import Literal, Protocol
 
+import msgspec
 from msgspec import UNSET, UnsetType
 from pydantic import BaseModel, ConfigDict
 
 from .._receipts import CallReceipt
 from .._seam import LmCompleteRequest
 from .._seam._wire import JsonObject
-from .._seam._wire.json_value import json_object
+from .._seam._wire.json_value import json_object, json_value
 from .._seam._wire.payloads import Cost
 from .._seam._wire.results import LmCompleteResult
 from ..json_value import JsonValue
@@ -176,7 +177,7 @@ def _lm_response_from_result(result: LmCompleteResult, *, model: str) -> LmRespo
     text = "".join(part.text for part in message.content)
     return LmResponse(
         text=text,
-        parsed=None,
+        parsed=_parsed_json(primary.parsed),
         finish_reason="stop",
         usage=_usage(primary.cost),
         cost_usd=_cost_usd(primary.cost),
@@ -202,6 +203,12 @@ def _cost_usd(cost: Cost | UnsetType) -> float | None:
         return None
     usd_micro = cost.usd_micro
     return None if usd_micro is UNSET else usd_micro / 1_000_000
+
+
+def _parsed_json(value: msgspec.Raw | UnsetType) -> JsonValue | None:
+    if value is UNSET:
+        return None
+    return json_value(msgspec.json.decode(value))
 
 
 __all__ = ["LmBuilder", "LmMessage", "LmMessageRole", "LmResponse"]

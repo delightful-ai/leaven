@@ -36,7 +36,7 @@ async def test_lm_builder_complete_lowers_json_schema_response_format() -> None:
         }
     )
 
-    await lm.complete(prompt="Answer as JSON.", response_format=response_format)
+    response = await lm.complete(prompt="Answer as JSON.", response_format=response_format)
 
     params = _params_object(client.request_value.to_params())
     ops = _json_array(params["ops"])
@@ -50,6 +50,7 @@ async def test_lm_builder_complete_lowers_json_schema_response_format() -> None:
         ),
         "schema": response_format.schema_,
     }
+    assert response.parsed == {"answer": "ok"}
 
 
 class FakeLmSeamClient:
@@ -77,6 +78,7 @@ class FakeLmSeamClient:
                 data_classes=["public"],
                 replayability="boundary_managed",
                 cost=Cost(usd_micro=42, input_tokens=3, output_tokens=2),
+                parsed=msgspec.Raw(msgspec.json.encode({"answer": "ok"})),
             ),
             receipts=[],
             redactions=[],

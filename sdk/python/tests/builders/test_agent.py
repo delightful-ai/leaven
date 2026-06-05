@@ -34,7 +34,7 @@ async def test_agent_builder_run_lowers_json_schema_output_contract() -> None:
         }
     )
 
-    await agent.run(
+    session = await agent.run(
         workspace=WorkspaceHandle(
             workspace_id="ws_agent_builder_materialized",
             candidate_id="cand_agent_builder",
@@ -57,6 +57,7 @@ async def test_agent_builder_run_lowers_json_schema_output_contract() -> None:
         ),
         "schema": output.schema_,
     }
+    assert session.parsed == {"status": "ok"}
 
 
 class FakeAgentSeamClient:
@@ -87,6 +88,7 @@ class FakeAgentSeamClient:
                     bytes=128,
                     data_classes=["transcript.raw"],
                 ),
+                parsed=msgspec.Raw(msgspec.json.encode({"status": "ok"})),
                 commands=[
                     AgentCommandRecord(
                         argv=["codex", "exec"],
