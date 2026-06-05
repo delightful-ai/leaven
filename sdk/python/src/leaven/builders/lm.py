@@ -144,10 +144,6 @@ class LmBuilder:
                 "LmBuilder.complete needs an engine-bound public-seam client; "
                 "use the cx.lm instance supplied to a running stage"
             )
-        if forbidden_input_classes is not None:
-            raise NotImplementedError(
-                "LmBuilder.complete does not lower forbidden_input_classes yet"
-            )
         if tools is not None:
             raise NotImplementedError("LmBuilder.complete does not lower tools yet")
 
@@ -164,6 +160,7 @@ class LmBuilder:
             stop=stop,
             output=None if response_format is None else json_schema_output_to_wire(response_format),
             input_classes=input_classes,
+            forbidden_input_classes=forbidden_input_classes,
         )
         self._seq += 1
         result = await asyncio.to_thread(self._client.lm_complete, request)

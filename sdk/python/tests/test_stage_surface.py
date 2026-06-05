@@ -156,6 +156,7 @@ async def test_lm_builder_complete_uses_bound_public_seam_client() -> None:
         max_tokens=12,
         stop=["DONE"],
         input_classes=["public"],
+        forbidden_input_classes=[lv.data_class.WORKSPACE_SECRET],
     )
 
     assert client.request_value.method == "leaven/lm.complete"
@@ -180,6 +181,7 @@ async def test_lm_builder_complete_uses_bound_public_seam_client() -> None:
         "stop": ["DONE"],
     }
     assert call["input_classes"] == ["public"]
+    assert call["forbidden_input_classes"] == [lv.data_class.WORKSPACE_SECRET]
     assert response.text == "ok"
     assert response.usage == {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}
     assert response.cost_usd == 0.000042

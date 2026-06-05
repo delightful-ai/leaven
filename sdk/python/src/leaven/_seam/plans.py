@@ -76,7 +76,6 @@ SeamRequestMethod = Literal[
     "leaven/workspace.stat",
 ]
 
-
 _SINGLE_CASE_METHODS: dict[tuple[CaseField, ...], tuple[SeamRequestMethod, str]] = {
     ("input",): ("leaven/case.input", "case_input"),
     ("target",): ("leaven/case.target", "case_target"),
@@ -246,6 +245,7 @@ class LmCompleteRequest:
     stop: Sequence[str] | None = None
     output: JsonObject | None = None
     input_classes: Sequence[str] | None = None
+    forbidden_input_classes: Sequence[str] | None = None
 
     @property
     def method(self) -> SeamRequestMethod:
@@ -283,6 +283,11 @@ class LmCompleteRequest:
                 ),
                 sampling=convert(sampling, type=LmSampling) if sampling else UNSET,
                 input_classes=list(self.input_classes or ["public"]),
+                forbidden_input_classes=(
+                    list(self.forbidden_input_classes)
+                    if self.forbidden_input_classes is not None
+                    else UNSET
+                ),
             ),
         )
 
