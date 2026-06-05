@@ -5,6 +5,7 @@ import math
 from collections.abc import Sequence
 from typing import Protocol, cast, overload
 
+import msgspec
 from msgspec import UNSET, UnsetType
 from pydantic import BaseModel, ConfigDict
 
@@ -12,11 +13,18 @@ from .._errors import UnboundBuilderError
 from .._handles import WorkspaceHandle
 from .._receipts import CallReceipt
 from .._seam import AgentRunRequest
-from .._seam._wire import JsonObject
-from .._seam._wire.json_value import json_object, json_value
+from .._seam._wire.calls import (
+    OutputContract as WireOutputContract,
+)
+from .._seam._wire.calls import (
+    OutputFiles,
+    OutputFinalMessage,
+    OutputJsonSchema,
+)
+from .._seam._wire.json_value import json_value
 from .._seam._wire.payloads import BlobRef as WireBlobRef
 from .._seam._wire.payloads import Cost
-from .._seam._wire.refs import ExtensionJsonPayload
+from .._seam._wire.refs import ExtensionJsonPayload, WireJsonSchemaObject
 from .._seam._wire.results import AgentRunResult
 from ..agent_instructions import AgentInstructions
 from ..blob_ref import BlobRef
@@ -28,7 +36,7 @@ from ..output import (
     OutputContract,
     TextOutput,
 )
-from ._output_contract import json_schema_output_to_wire
+from ._output_contract import schema_fingerprint
 
 
 class AgentCommand(BaseModel):
@@ -193,18 +201,20 @@ def _timeout_seconds(timeout_s: float | None) -> int:
     return max(1, math.ceil(timeout_s)) if timeout_s is not None else 180
 
 
-def _output_to_wire(output: OutputContract | None) -> JsonObject:
+def _output_to_wire(output: OutputContract | None) -> WireOutputContract:
     if output is None:
-        return {"kind": "final_message", "max_bytes": 512}
+        return OutputFinalMessage(max_bytes=512)
     if isinstance(output, TextOutput):
-        value: JsonObject = {"kind": "final_message"}
-        if output.max_chars is not None:
-            value["max_bytes"] = output.max_chars
-        return value
+        return OutputFinalMessage(
+            max_bytes=output.max_chars if output.max_chars is not None else UNSET
+        )
     if isinstance(output, FilesOutput):
-        return json_object({"kind": "files", "paths": output.paths})
+        return OutputFiles(paths=list(output.paths))
     if isinstance(output, JsonSchemaOutput | JsonSchemaValueOutput):
-        return json_schema_output_to_wire(output)
+        return OutputJsonSchema(
+            schema_fingerprint=schema_fingerprint(output.schema_),
+            schema=msgspec.convert(output.schema_, type=WireJsonSchemaObject),
+        )
     raise TypeError(f"unsupported agent output contract: {type(output).__name__}")
 
 

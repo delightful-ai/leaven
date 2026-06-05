@@ -9,6 +9,7 @@ from leaven._seam._wire.calls import (
     LmCompleteCall,
     LmContentText,
     LmMessage,
+    OutputFinalMessage,
     WorkspaceMaterializeCall,
 )
 from leaven._seam._wire.expressions import CaseQueryLoad, PlanExpressionCaseQuery
@@ -95,6 +96,8 @@ def test_agent_request_params_decode_typed_call_variants() -> None:
     assert workspace.candidate == "cand_agent"
     assert isinstance(agent, AgentRunCall)
     assert agent.instructions.task == "change the skill"
+    assert isinstance(agent.output, OutputFinalMessage)
+    assert agent.output.max_bytes == 512
     assert agent.tool_policy is not msgspec.UNSET
     assert agent.tool_policy.allowed_commands == ["codex"]
 

@@ -158,7 +158,7 @@ class AgentRunRequest:
     timeout_s: int = 180
     max_turns: int = 1
     max_usd_micro: int = 5_000_000
-    output: JsonObject | None = None
+    output: OutputContract | None = None
     allowed_commands: Sequence[str] | None = None
     input_classes: Sequence[str] | None = None
     forbidden_input_classes: Sequence[str] | None = None
@@ -207,9 +207,7 @@ class AgentRunRequest:
                     allow_shell=False,
                     allowed_commands=allowed_commands,
                 ),
-                output=_wire_output_contract(
-                    self.output or {"kind": "final_message", "max_bytes": 512}
-                ),
+                output=self.output or OutputFinalMessage(max_bytes=512),
                 limits=AgentLimits(
                     timeout_s=self.timeout_s,
                     max_turns=self.max_turns,

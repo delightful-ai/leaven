@@ -9,6 +9,7 @@ import leaven as lv
 from leaven._handles import WorkspaceHandle
 from leaven._receipts import CallReceipt
 from leaven._seam import AgentRunRequest
+from leaven._seam._wire.calls import OutputJsonSchema
 from leaven._seam._wire.payloads import BlobRef as WireBlobRef
 from leaven._seam._wire.payloads import Cost
 from leaven._seam._wire.refs import ExtensionJsonPayload
@@ -52,6 +53,8 @@ async def test_agent_builder_run_lowers_json_schema_output_contract() -> None:
         forbidden_input_classes=[lv.data_class.WORKSPACE_SECRET],
     )
 
+    assert isinstance(client.request_value.output, OutputJsonSchema)
+    assert msgspec.to_builtins(client.request_value.output.schema) == output.schema_
     params = _params_object(client.request_value.to_params())
     ops = _json_array(params["ops"])
     agent_op = _json_object(_json_object(ops[1])["call"])

@@ -1879,6 +1879,42 @@ acceptance:
           already carries a generated output record before JSON encoding. This
           closes the LM output raw-object island only; shared agent/sandbox
           output contracts and other public-seam leaf slots remain pending.
+      - kind: agent_output_request_uses_generated_wire_records
+        paths:
+          - sdk/python/src/leaven/_seam/plans.py
+          - sdk/python/src/leaven/builders/agent.py
+          - sdk/python/tests/builders/test_agent.py
+          - sdk/python/tests/_seam/test_plans.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/builders/test_agent.py tests/_seam/test_plans.py tests/test_stage_surface.py::test_agent_builder_run_uses_bound_public_seam_client -q
+          - cd sdk/python && uv run ruff check src/leaven/_seam/plans.py src/leaven/builders/agent.py tests/builders/test_agent.py tests/_seam/test_plans.py tests/_seam/test_client.py tests/test_stage_surface.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/plans.py src/leaven/builders/agent.py tests/builders/test_agent.py tests/_seam/test_plans.py tests/_seam/test_client.py tests/test_stage_surface.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - >-
+            ! rg -n
+            "AgentRunRequest[\s\S]*output: JsonObject|output: JsonObject \|
+            None|def _output_to_wire\(output: OutputContract \| None\) ->
+            JsonObject|json_schema_output_to_wire\(output\)|\{\"kind\":
+            \"final_message\", \"max_bytes\": 512\}|return \{\"kind\":
+            \"final_message\""
+            sdk/python/src/leaven/_seam/plans.py
+            sdk/python/src/leaven/builders/agent.py
+            sdk/python/tests/builders/test_agent.py
+            sdk/python/tests/_seam/test_plans.py
+        note: >-
+          The Python `leaven/agent.run` request path no longer lowers public
+          SDK output contracts into raw `JsonObject` records before Plan
+          encoding. `AgentBuilder.run(...)` now constructs generated msgspec
+          `OutputFinalMessage`, `OutputFiles`, and `OutputJsonSchema` records
+          directly, including a generated `WireJsonSchemaObject` for structured
+          outputs. The private `AgentRunRequest.output` field is typed as the
+          generated `OutputContract`, and its default final-message contract is
+          generated before entering `AgentRunCall`. Focused tests assert both
+          explicit JSON Schema output and default output are generated records.
+          This closes the agent output raw-object island only; sandbox output
+          still uses the shared parser and remains pending.
       - kind: extension_result_receipts_match_rust_audit_shape
         paths:
           - sdk/python/codegen/result_codegen.py
