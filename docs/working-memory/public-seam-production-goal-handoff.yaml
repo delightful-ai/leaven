@@ -1572,6 +1572,39 @@ acceptance:
           rejection. This removes the Python PlanError details blocker; other
           JSON-shaped result, expression, metadata, and proposal leaf owners
           remain.
+      - kind: generated_output_json_schema_contract_typing
+        paths:
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/codegen/call_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/refs.py
+          - sdk/python/src/leaven/_seam/_wire/calls.py
+          - sdk/python/src/leaven/_seam/plans.py
+          - sdk/python/tests/_seam/_wire/test_calls.py
+          - sdk/python/tests/_seam/test_plans.py
+          - sdk/python/tests/builders/test_lm.py
+          - sdk/python/tests/builders/test_agent.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_calls.py tests/_seam/test_plans.py tests/builders/test_lm.py tests/builders/test_agent.py -q
+          - cd sdk/python && uv run ruff check codegen/ref_codegen.py codegen/call_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/calls.py src/leaven/_seam/plans.py tests/_seam/_wire/test_calls.py
+          - cd sdk/python && uv run ty check codegen/ref_codegen.py codegen/call_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/calls.py src/leaven/_seam/plans.py tests/_seam/_wire/test_calls.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Generated capability-call records no longer carry msgspec `Raw` for
+          agent/LM `json_schema` output contracts. The generator now emits a
+          recursive `WireJsonSchema` msgspec Struct with explicit JSON Schema
+          keyword fields and wire aliases for names such as `$schema`, `$ref`,
+          `additionalProperties`, and `oneOf`; output-contract schema fields
+          use that typed owner. Python Plan request construction converts the
+          public builder schema value into `WireJsonSchemaObject` at the seam
+          boundary and raises on unowned or malformed shapes. Focused tests
+          prove nested agent and LM output schemas decode as typed records,
+          non-object top-level schemas fail validation, typed Plan params still
+          decode, and builder JSON-schema requests serialize the expected
+          external wire JSON. This removes the output-schema Raw blocker; the
+          row remains pending for parsed LM/agent result payloads and other
+          JSON-shaped expression, metadata, proposal/evidence, and result leaf
+          owners.
       - kind: generated_graph_rows_are_typed_records
         paths:
           - sdk/python/codegen/generate_seam_wire.py

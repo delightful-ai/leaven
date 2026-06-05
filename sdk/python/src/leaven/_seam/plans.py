@@ -4,8 +4,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-import msgspec
-from msgspec import UNSET, Raw, UnsetType, convert
+from msgspec import UNSET, UnsetType, convert
 
 from leaven._seam._wire import JsonObject
 from leaven._seam._wire.calls import (
@@ -41,7 +40,7 @@ from leaven._seam._wire.payloads import (
     RunnerRequest,
 )
 from leaven._seam._wire.payloads import StageRunRequest as StageRunParams
-from leaven._seam._wire.refs import WireJsonField
+from leaven._seam._wire.refs import WireJsonField, WireJsonSchemaObject
 from leaven._seam._wire.writes import ProposalWriteRecord, SubmitProposalBatchWrite
 
 CaseField = Literal["input", "target", "metadata", "files", "setup", "sandbox", "split"]
@@ -420,7 +419,7 @@ def _wire_output_contract(value: JsonObject) -> OutputContract:
     if kind == "json_schema":
         return OutputJsonSchema(
             schema_fingerprint=_string_field(value, "schema_fingerprint"),
-            schema=_optional_raw_json_field(value, "schema"),
+            schema=_optional_json_schema_field(value, "schema"),
         )
     if kind == "files":
         return OutputFiles(
@@ -442,7 +441,7 @@ def _wire_lm_output_contract(value: JsonObject) -> LmOutputContract:
     if kind == "json_schema":
         return LmOutputJsonSchema(
             schema_fingerprint=_string_field(value, "schema_fingerprint"),
-            schema=_optional_raw_json_field(value, "schema"),
+            schema=_optional_json_schema_field(value, "schema"),
         )
     raise ValueError(f"unsupported LM output contract kind: {kind}")
 
@@ -470,10 +469,10 @@ def _string_list_field(value: JsonObject, field: str) -> list[str]:
     return [member for member in item if isinstance(member, str)]
 
 
-def _optional_raw_json_field(value: JsonObject, field: str) -> Raw | UnsetType:
+def _optional_json_schema_field(value: JsonObject, field: str) -> WireJsonSchemaObject | UnsetType:
     if field not in value:
         return UNSET
-    return Raw(msgspec.json.encode(value[field]))
+    return convert(value[field], type=WireJsonSchemaObject)
 
 
 __all__ = [

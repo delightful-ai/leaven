@@ -8,7 +8,9 @@ from leaven._seam._wire.calls import (
     CapabilityCall,
     LmCompleteCall,
     LmContentText,
+    LmOutputJsonSchema,
     OutputFiles,
+    OutputJsonSchema,
     SandboxExecCall,
     WorkspaceMaterializeCall,
     WorkspaceReleaseCall,
@@ -73,6 +75,60 @@ def test_lm_complete_rejects_unknown_content_part() -> None:
             ),
             type=CapabilityCall,
         )
+
+
+def test_output_json_schema_decodes_recursive_schema_object() -> None:
+    """Example: agent output schemas are recursive typed JSON objects."""
+
+    output = msgspec.json.decode(
+        (
+            b'{"kind":"json_schema","schema_fingerprint":"fp_schema_sha256_nested",'
+            b'"schema":{"type":"object","properties":{"answer":{"oneOf":['
+            b'{"type":"string"},{"type":"number"}]}},"required":["answer"]}}'
+        ),
+        type=OutputJsonSchema,
+    )
+
+    assert _encoded_json(output.schema) == {
+        "type": "object",
+        "properties": {"answer": {"oneOf": [{"type": "string"}, {"type": "number"}]}},
+        "required": ["answer"],
+    }
+
+
+def test_lm_output_json_schema_decodes_recursive_schema_object() -> None:
+    """Example: LM output schemas use the same typed recursive owner."""
+
+    output = msgspec.json.decode(
+        (
+            b'{"kind":"json_schema","schema_fingerprint":"fp_schema_sha256_nested",'
+            b'"schema":{"type":"array","items":{"type":"object","properties":'
+            b'{"answer":{"type":"string"}}}}}'
+        ),
+        type=LmOutputJsonSchema,
+    )
+
+    assert _encoded_json(output.schema) == {
+        "type": "array",
+        "items": {"type": "object", "properties": {"answer": {"type": "string"}}},
+    }
+
+
+@pytest.mark.parametrize("output_type", [OutputJsonSchema, LmOutputJsonSchema])
+def test_output_json_schema_rejects_non_object_schema(
+    output_type: type[OutputJsonSchema] | type[LmOutputJsonSchema],
+) -> None:
+    """Boundary check: schema payloads are not raw or arbitrary top-level JSON."""
+
+    with pytest.raises(msgspec.ValidationError):
+        msgspec.json.decode(
+            b'{"kind":"json_schema","schema_fingerprint":"fp_schema","schema":["bad"]}',
+            type=output_type,
+        )
+
+
+def _encoded_json(value: object) -> object:
+    return msgspec.json.decode(msgspec.json.encode(value))
 
 
 __all__ = []
