@@ -4,8 +4,10 @@ Thirteen example scripts show the current Leaven Python surface, but they do
 not all prove the same maturity level. The table below is the contract: cite an
 example only for the proof class it names.
 
-Most examples are shape scaffolds that import, typecheck, and demonstrate the
-authoring API while stopping at expected `NotImplementedError` boundaries.
+Some examples are shape scaffolds that import, typecheck, and demonstrate the
+authoring API while stopping at their documented boundary. Those boundaries are
+specific: product/no-spend/live examples must not stop at scaffolds, and shape
+examples must name the exact non-product edge they hit.
 Example 03 is the no-spend wired prompt mechanics path. Examples 10-13 are
 live-gated seam/provider proofs and skip by default unless the required
 environment variables are set.
@@ -53,8 +55,8 @@ Shape scaffold examples do not run a real optimization. They exist so:
 - You can read the file and the SHAPE of user code fires your taste
 - IDE autocomplete works on every decorator, builder, and context object
 - `ty` proves the type signatures hold across the full surface
-- When the engine wires up behind the seam, the same example files run
-  end-to-end without source changes
+- When the matching artifact/runtime path wires up behind the seam, the same
+  example files have a precise boundary to remove
 - Live-gated substrate proofs can exercise the real public seam without
   pretending the high-level SDK path is finished
 

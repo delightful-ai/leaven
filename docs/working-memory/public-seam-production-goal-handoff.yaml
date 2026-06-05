@@ -5540,6 +5540,36 @@ acceptance:
           `InputCaseView` runner signature, and typed `LiveLmOutput` projection
           for the nested OpenAI proof package. This strengthens the examples
           row but does not close live-gated OpenAI/Codex example proof.
+      - kind: examples_match_current_front_door_boundaries
+        paths:
+          - sdk/python/examples/README.md
+          - sdk/python/examples/run_all.py
+          - sdk/python/examples/02_cases_and_artifacts.py
+          - sdk/python/examples/04_evoskill_skill_bank.py
+          - sdk/python/examples/06_reflect_propose_custom.py
+          - sdk/python/examples/09_full_repro.py
+          - sdk/python/tests/examples/test_run_all.py
+        commands:
+          - cd sdk/python && just examples
+          - cd sdk/python && just compile-examples
+          - cd sdk/python && uv run pytest tests/examples/test_run_all.py tests/test_product_surface_ring.py -q
+          - cd sdk/python && uv run ruff check examples/README.md examples/run_all.py examples/02_cases_and_artifacts.py examples/04_evoskill_skill_bank.py examples/06_reflect_propose_custom.py examples/09_full_repro.py tests/examples/test_run_all.py
+          - cd sdk/python && uv run ty check examples/run_all.py examples/02_cases_and_artifacts.py examples/04_evoskill_skill_bank.py examples/06_reflect_propose_custom.py examples/09_full_repro.py tests/examples/test_run_all.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - rg -n "NotImplementedError|scaffold boundary|front-door scaffold|loaders? .*raise" sdk/python/examples/README.md sdk/python/examples/run_all.py sdk/python/examples/02_cases_and_artifacts.py sdk/python/examples/04_evoskill_skill_bank.py sdk/python/examples/06_reflect_propose_custom.py sdk/python/examples/09_full_repro.py
+        note: >-
+          Current examples now match current product truth again. Example 02 no
+          longer says loaders are scaffolds and exercises real JSONL loading for
+          8 fixture cases. Examples 04, 06, and 09 now catch the typed
+          non-`PromptArtifact` front-door `TypeError` when run directly, and
+          `run_all.py` names that boundary instead of a generic scaffold. The
+          full `just examples` tour completed all 13 examples: example 03 ran
+          the no-spend seam optimize mechanics path, 04/06/09 stopped at the
+          named non-`PromptArtifact` boundary, 08 remained an optional DSPy
+          adapter scaffold, and live examples 10-13 skipped behind their
+          environment gates. This improves example honesty but does not make
+          shape examples product proofs.
     closeout_check: A typechecked tour is not a runnable product example.
 
   - id: release_gate_for_public_contract

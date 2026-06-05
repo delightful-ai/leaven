@@ -8,8 +8,7 @@ Two things users build at the boundary:
   are built-in; user code typically constructs the seed by hand.
 
 This file shows both shapes side-by-side. It does not call any loader
-(since they raise NotImplementedError), but the construction pattern is
-exactly what the user writes.
+that needs an engine; JSONL loading is real and returns typed records.
 """
 
 from pathlib import Path
@@ -55,7 +54,8 @@ def main() -> None:
     print("fixture path :", FIXTURE)
     print("fixture lines:", sum(1 for _ in FIXTURE.open()))
 
-    # cases = lv.cases.from_jsonl(str(FIXTURE), name="arithmetic", limit=8)
+    cases = lv.cases.from_jsonl(str(FIXTURE), name="arithmetic", limit=8)
+    print("loaded cases :", len(cases.cases))
     # The engine reads train/val/test from each Case's `split` tag — there is
     # no separate `train=`/`val=` argument. Loaders carry the tag through from
     # the source rows; hand-built cases set it directly (below).

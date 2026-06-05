@@ -134,5 +134,7 @@ async def amain() -> None:
 if __name__ == "__main__":
     try:
         asyncio.run(amain())
-    except NotImplementedError as e:
+    except TypeError as e:
+        if not str(e).startswith("this slice optimizes a PromptArtifact seed"):
+            raise
         print(f"(expected) {e}")

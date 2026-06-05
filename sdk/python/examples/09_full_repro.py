@@ -10,9 +10,9 @@ exercises every role the front door exposes on the new surface:
 
 Scoring here is a `Rubric` of `@lv.reward` functions — the ordinary path. The
 hand-authored `@lv.evaluator` escape hatch is a separate, advanced surface; see
-example 05 for that. This file does not call `.run()` to completion — bodies
-that would hit the engine raise NotImplementedError and the example catches it.
-The point is the SHAPE firing taste, not running an optimization end-to-end.
+example 05 for that. This file currently stops at the non-PromptArtifact
+front-door boundary. The point is the SHAPE firing taste, not claiming a
+runnable SkillBank optimization.
 """
 
 import asyncio
@@ -192,5 +192,7 @@ async def amain() -> None:
 if __name__ == "__main__":
     try:
         asyncio.run(amain())
-    except NotImplementedError as e:
+    except TypeError as e:
+        if not str(e).startswith("this slice optimizes a PromptArtifact seed"):
+            raise
         print(f"(expected) {e}")

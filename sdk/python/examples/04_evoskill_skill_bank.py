@@ -81,13 +81,16 @@ async def amain() -> None:
         ),
     ).run()
 
-    # `.run()` raises NotImplementedError in the scaffold; once wired,
-    # `result.best.artifact` is the optimized `SkillBank`.
+    # This example currently stops at the non-PromptArtifact front-door
+    # boundary; once the SkillBank route is wired, `result.best.artifact` is
+    # the optimized `SkillBank`.
     print(len(result.best.artifact.files), "skill files in the best bank")
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(amain())
-    except NotImplementedError as e:
+    except TypeError as e:
+        if not str(e).startswith("this slice optimizes a PromptArtifact seed"):
+            raise
         print(f"(expected) {e}")

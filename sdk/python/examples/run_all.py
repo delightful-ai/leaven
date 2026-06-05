@@ -1,8 +1,8 @@
 """Run every numbered example script in order.
 
-Only explicitly classified scaffold examples may stop at known boundary errors.
-No-spend and live-gated mechanics examples must fail loudly if they hit a
-scaffold boundary.
+Only explicitly classified shape or optional-adapter examples may stop at known
+boundary errors. No-spend and live-gated mechanics examples must fail loudly if
+they hit a scaffold boundary.
 """
 
 import importlib.util
@@ -15,7 +15,7 @@ EXPECTED_BOUNDARY_EXAMPLES = {
     "04_evoskill_skill_bank.py": "non-PromptArtifact front-door boundary",
     "06_reflect_propose_custom.py": "non-PromptArtifact front-door boundary",
     "08_dspy_dropin.py": "optional DSPy adapter scaffold boundary",
-    "09_full_repro.py": "full front-door scaffold boundary",
+    "09_full_repro.py": "non-PromptArtifact front-door boundary",
 }
 
 
