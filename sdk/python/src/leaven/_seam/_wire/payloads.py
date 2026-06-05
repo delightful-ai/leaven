@@ -19,6 +19,9 @@ from .graph_rows import (
     CandidateSummaryGraphRow,
     EventSummaryGraphRow,
     ExtensionGraphRow,
+    GraphExtensionBlobRefPayload,
+    GraphExtensionPayload,
+    GraphExtensionSummaryPayload,
     GraphRow,
     OutputRecord,
     ProposalEffectSummary,
@@ -62,7 +65,6 @@ from .refs import (
     TraceVisibility,
     WireJsonCaseInput,
     WireJsonField,
-    WireJsonGraphExtensionPayload,
     WireJsonLeafArray,
     WireJsonLeafObject,
     WireJsonObject,
@@ -77,7 +79,7 @@ PLAN_SCHEMA_FINGERPRINT = (
     "fp_schema_sha256_6ecf73476db81c5a7412b6831bce68ce0273c295eee827856042207117e2cd48"
 )
 PLAN_RESULT_SCHEMA_FINGERPRINT = (
-    "fp_schema_sha256_78712bae60c3f9fb727690e5d8fba907a56f688a40d9987b178c2f364db6f300"
+    "fp_schema_sha256_51fcd2b973fdb5ec3936e09607bac98ad9d733d91de9491f5cdd10c11761d000"
 )
 STAGE_RUN_SCHEMA_FINGERPRINT = (
     "fp_schema_sha256_da2d026c060b655ea39850dbd43034e097260eefb88a3667207343fb6353a7ec"
@@ -541,7 +543,7 @@ __all__ = (  # noqa: PLE0605, SIM905
     "CommitPolicyGraphWritesSequential CommitPolicyNoGraphWrites Consistency ConsistencyAtRevision "
     "ConsistencyLatestAtStart ConsistencySinceRevision Cost DataClassSet EvalMode EvalModeDryRun "
     "EvalModeExecute EvalModeReplay EvalModeRequireCached EventSummaryGraphRow ExtensionGraphRow FailureMode "
-    "GraphRow GraphWrite InfoRef LeavenValue MetadataBag OperationReceipt OutputRecord PlanDocument PlanExpression Precondition "
+    "GraphExtensionBlobRefPayload GraphExtensionPayload GraphExtensionSummaryPayload GraphRow GraphWrite InfoRef LeavenValue MetadataBag OperationReceipt OutputRecord PlanDocument PlanExpression Precondition "
     "PlanError PlanErrorCode PlanErrorDetails PlanErrorDetailsObject PlanOp PlanResultDocument ProposalBatchRef ProposalBatchRefRecord ProposalEffect ProposeRequest "
     "ProposalEffectSummary ProposalEffectSummaryKind ProposalRef ProposalRefRecord ProposalSummaryGraphRow ReceiptRef Redaction ReflectionResult Replayability "
     "RunnerRequest Score "

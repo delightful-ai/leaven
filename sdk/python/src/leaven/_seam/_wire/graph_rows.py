@@ -14,12 +14,12 @@ from .refs import (
     CandidateRef,
     DataClassSet,
     EventSummaryPayload,
+    InfoRef,
     MetadataBag,
     ProposalBatchRef,
     ProposalRef,
     ReceiptRef,
     TraceRef,
-    WireJsonGraphExtensionPayload,
     WireJsonOutputValue,
     WorkspaceRef,
 )
@@ -145,6 +145,35 @@ class EventSummaryGraphRow(
     payload: EventSummaryPayload | UnsetType = UNSET
 
 
+class GraphExtensionSummaryPayload(
+    Struct,
+    frozen=True,
+    forbid_unknown_fields=True,
+    omit_defaults=True,
+    tag="summary",
+    tag_field="kind",
+):
+    summary: str
+    data_classes: DataClassSet | UnsetType = UNSET
+    source_ref: InfoRef | UnsetType = UNSET
+
+
+class GraphExtensionBlobRefPayload(
+    Struct,
+    frozen=True,
+    forbid_unknown_fields=True,
+    omit_defaults=True,
+    tag="blob_ref",
+    tag_field="kind",
+):
+    blob: BlobRef
+    summary: str | UnsetType = UNSET
+    data_classes: DataClassSet | UnsetType = UNSET
+
+
+type GraphExtensionPayload = GraphExtensionSummaryPayload | GraphExtensionBlobRefPayload
+
+
 class ExtensionGraphRow(
     Struct,
     frozen=True,
@@ -155,7 +184,7 @@ class ExtensionGraphRow(
     namespace: str
     op: str
     schema_fingerprint: str
-    payload: WireJsonGraphExtensionPayload
+    payload: GraphExtensionPayload
 
 
 type GraphRow = (
@@ -169,6 +198,6 @@ type GraphRow = (
 
 __all__ = (  # noqa: PLE0605, SIM905
     "AssessmentSummaryGraphRow CandidateArtifactSummary CandidateCaseScore CandidateScoresSummary CandidateSummaryGraphRow EventSummaryGraphRow ExtensionGraphRow "
-    "GraphRow OutputRecord ProposalEffectSummary ProposalEffectSummaryKind ProposalSummaryGraphRow "
+    "GraphExtensionBlobRefPayload GraphExtensionPayload GraphExtensionSummaryPayload GraphRow OutputRecord ProposalEffectSummary ProposalEffectSummaryKind ProposalSummaryGraphRow "
     "Score VisibilityClass"
 ).split()

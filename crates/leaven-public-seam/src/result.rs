@@ -240,29 +240,100 @@ impl PlanResultGraphRowFragments {
     }
 }
 
-macro_rules! graph_row_fragment {
-    ($name:ident, $doc:literal) => {
-        #[doc = $doc]
-        #[derive(Clone, Debug, Eq, PartialEq)]
-        pub struct $name(Value);
-
-        impl $name {
-            fn from_schema_valid_value(value: &Value) -> Self {
-                Self(value.clone())
-            }
-
-            /// JSON value carried on the wire by this graph-row fragment.
-            pub const fn as_json(&self) -> &Value {
-                &self.0
-            }
-        }
-    };
+/// Closed payload carried by an extension graph row.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PlanResultGraphExtensionPayload {
+    Summary(PlanResultGraphExtensionSummaryPayload),
+    BlobRef(PlanResultGraphExtensionBlobRefPayload),
 }
 
-graph_row_fragment!(
-    PlanResultGraphExtensionPayload,
-    "Schema-valid JSON carried by an extension graph row payload."
-);
+impl PlanResultGraphExtensionPayload {
+    fn from_schema_valid_value(value: &Value) -> Result<Self, PublicSeamError> {
+        let object = value
+            .as_object()
+            .ok_or_else(|| invalid_result("extension graph row payload must be an object"))?;
+        match required_string(object.get("kind"), "extension graph row payload.kind")? {
+            "summary" => Ok(Self::Summary(
+                PlanResultGraphExtensionSummaryPayload::from_object(object)?,
+            )),
+            "blob_ref" => Ok(Self::BlobRef(
+                PlanResultGraphExtensionBlobRefPayload::from_object(object)?,
+            )),
+            kind => Err(invalid_result(format!(
+                "extension graph row payload kind `{kind}` is not locked in V1"
+            ))),
+        }
+    }
+}
+
+/// Inline summary payload for an extension graph row.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanResultGraphExtensionSummaryPayload {
+    summary: String,
+    data_classes: Vec<String>,
+    source_ref: Option<String>,
+}
+
+impl PlanResultGraphExtensionSummaryPayload {
+    fn from_object(object: &serde_json::Map<String, Value>) -> Result<Self, PublicSeamError> {
+        Ok(Self {
+            summary: required_string(object.get("summary"), "extension graph row payload.summary")?
+                .to_owned(),
+            data_classes: optional_string_vec(object, "data_classes")?,
+            source_ref: optional_ref_id(
+                object.get("source_ref"),
+                "extension graph row payload.source_ref",
+            )?,
+        })
+    }
+
+    pub fn summary(&self) -> &str {
+        &self.summary
+    }
+
+    pub fn data_classes(&self) -> &[String] {
+        &self.data_classes
+    }
+
+    pub fn source_ref(&self) -> Option<&str> {
+        self.source_ref.as_deref()
+    }
+}
+
+/// Durable blob-reference payload for an extension graph row.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanResultGraphExtensionBlobRefPayload {
+    blob_id: String,
+    summary: Option<String>,
+    data_classes: Vec<String>,
+}
+
+impl PlanResultGraphExtensionBlobRefPayload {
+    fn from_object(object: &serde_json::Map<String, Value>) -> Result<Self, PublicSeamError> {
+        let blob = object
+            .get("blob")
+            .and_then(Value::as_object)
+            .ok_or_else(|| invalid_result("extension graph row payload.blob must be an object"))?;
+        Ok(Self {
+            blob_id: required_string(blob.get("id"), "extension graph row payload.blob.id")?
+                .to_owned(),
+            summary: optional_string(object, "summary")?,
+            data_classes: optional_string_vec(object, "data_classes")?,
+        })
+    }
+
+    pub fn blob_id(&self) -> &str {
+        &self.blob_id
+    }
+
+    pub fn summary(&self) -> Option<&str> {
+        self.summary.as_deref()
+    }
+
+    pub fn data_classes(&self) -> &[String] {
+        &self.data_classes
+    }
+}
 
 /// Typed payload carried by `event_summary.payload`.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1076,7 +1147,7 @@ fn collect_graph_row_fragments(
                     .get("payload")
                     .ok_or_else(|| invalid_result("extension graph row must carry payload"))?;
                 fragments.extension_payloads.push(
-                    PlanResultGraphExtensionPayload::from_schema_valid_value(payload),
+                    PlanResultGraphExtensionPayload::from_schema_valid_value(payload)?,
                 );
             }
             _ => {}
@@ -1124,6 +1195,27 @@ fn required_string_vec(
         .get(field)
         .and_then(Value::as_array)
         .ok_or_else(|| invalid_result(format!("{field} must be an array")))?
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .map(ToOwned::to_owned)
+                .ok_or_else(|| invalid_result(format!("{field} entries must be strings")))
+        })
+        .collect()
+}
+
+fn optional_string_vec(
+    object: &serde_json::Map<String, Value>,
+    field: &str,
+) -> Result<Vec<String>, PublicSeamError> {
+    let Some(value) = object.get(field) else {
+        return Ok(Vec::new());
+    };
+    let items = value
+        .as_array()
+        .ok_or_else(|| invalid_result(format!("{field} must be an array")))?;
+    items
         .iter()
         .map(|value| {
             value

@@ -2973,6 +2973,37 @@ acceptance:
           the required public projection. Candidate scores/artifacts, proposal
           effects, event payloads, and extension graph-row payloads remain
           JSON-shaped follow-up leaves.
+      - kind: graph_extension_row_payload_is_closed_typed_union
+        paths:
+          - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
+          - crates/leaven-public-seam/src/result.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_result.rs
+          - sdk/python/codegen/graph_row_codegen.py
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/graph_rows.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/tests/_seam/_wire/test_graph_rows.py
+        commands:
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_result::plan_result_preserves_graph_row_json_fragments_as_typed_owners -- --exact
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_result::plan_result_rejects_open_extension_graph_row_payload -- --exact
+          - cargo check -p leaven-public-seam
+          - cargo fmt --check
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_graph_rows.py -q
+          - cd sdk/python && uv run ruff check codegen/graph_row_codegen.py codegen/payload_codegen.py codegen/ref_codegen.py src/leaven/_seam/_wire/graph_rows.py src/leaven/_seam/_wire/payloads.py src/leaven/_seam/_wire/refs.py tests/_seam/_wire/test_graph_rows.py
+          - cd sdk/python && uv run ty check codegen/graph_row_codegen.py codegen/payload_codegen.py codegen/ref_codegen.py src/leaven/_seam/_wire/graph_rows.py src/leaven/_seam/_wire/payloads.py src/leaven/_seam/_wire/refs.py tests/_seam/_wire/test_graph_rows.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Plan Result graph-row extensions no longer reuse the generic
+          `ExtensionObject` arbitrary payload. The result schema now owns a
+          closed `GraphExtensionPayload` union with summary and blob-ref
+          variants. Rust parses `extension.payload` into
+          `PlanResultGraphExtensionPayload` and rejects the former open vendor
+          object. Python generated msgspec records decode the same closed union
+          and remove `WireJsonGraphExtensionPayload`. This closes the graph-row
+          extension payload leaf only; generic plan `ExtensionObject` payloads
+          remain separate pending work.
       - kind: generated_ref_leaves_are_typed_records
         paths:
           - sdk/python/codegen/payload_codegen.py
@@ -6209,6 +6240,44 @@ acceptance:
           consuming the applied child rather than the seed. This is current
           criteria proof, not final goal closeout while prerequisite backbone
           rows remain pending.
+      - kind: git_filesystem_codex_kit_after_graph_extension_payload_cutover
+        paths:
+          - crates/leaven-gepa-agentic-git/tests/git_reflection.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/codex_agent_kit_reflection.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/agent_kit_seam_checkpoint.rs
+          - crates/leaven-artifact-agent-kit/tests/agent_kit_contract.rs
+          - crates/leaven-agentic-agent-kit/tests/codex_profile.rs
+          - crates/leaven-workspace-firkin/tests/firkin_contract/firkin_git_e2e.rs
+          - crates/leaven-agent-codex-cli/tests/codex_cli_runtime.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution_support.rs
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cargo test -p leaven-gepa-agentic-git --test git_reflection
+          - cargo test -p leaven-gepa-agentic-agent-kit --test agent_kit_seam_checkpoint agent_kit_git_child_applied_through_sdk_route_restores_from_checkpoint -- --exact
+          - cargo test -p leaven-workspace-firkin --test firkin_contract firkin_git_e2e::firkin_product_pod_materializes_and_reads_back_isolated_git_workspaces -- --exact
+          - cargo test -p leaven-agent-codex-cli --test codex_cli_runtime
+          - cargo test -p leaven-gepa-agentic-agent-kit --test codex_agent_kit_reflection
+          - cargo test -p leaven-artifact-agent-kit --test agent_kit_contract
+          - cargo test -p leaven-agentic-agent-kit --test codex_profile
+          - cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution --no-run
+          - set -a; source .env; set +a; LEAVEN_CODEX_LIVE=1 LEAVEN_CODEX_BIN="$HOME/.bun/bin/codex" cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution live_codex_agent_kit_evolves_through_stdio_checkpoint_and_next_codex_consumes_child -- --ignored --exact --nocapture
+        note: >-
+          Fresh current-checkout rerun after graph-row extension payloads were
+          hard-cut from arbitrary vendor JSON to a typed summary/blob-ref union
+          reconfirmed the explicit Git repo, filesystem, Firkin, Codex CLI, and
+          Codex Kit criteria with normal Cargo incremental settings. GitProgram
+          reflection/materialization passed 5 tests. The checkpointed AgentKit
+          SDK route passed and restored the applied Git child from
+          `StoreRunPersistence<FileStore>`. The host-backed Firkin product-pod
+          Git workspace materialization/readback proof passed. The Codex CLI
+          runtime/parser suite passed 8 tests. AgentKit deterministic
+          reflection/projection passed 3 tests, AgentKit manifest/profile
+          passed 6 tests, and Codex profile projection passed 2 tests. The
+          live evolution binary built, and the `.env`-loaded live `gpt-5.4-mini`
+          Codex e2e passed 1 test in 55.15s. This is current criteria proof,
+          not final goal closeout while prerequisite typed-backbone rows remain
+          pending.
     closeout_check: >-
       A live Codex prompt-consumption test, a deterministic AgentKit projection
       test, or `proposal.submit_batch` without application cannot close this

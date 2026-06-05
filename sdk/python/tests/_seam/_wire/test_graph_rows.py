@@ -12,11 +12,12 @@ from leaven._seam._wire.payloads import (
     CandidateSummaryGraphRow,
     EventSummaryGraphRow,
     ExtensionGraphRow,
+    GraphExtensionSummaryPayload,
     PlanResultDocument,
     ProposalEffectSummary,
     ProposalSummaryGraphRow,
 )
-from leaven._seam._wire.refs import ExternalEventPayload
+from leaven._seam._wire.refs import CandidateRefRecord, ExternalEventPayload
 
 
 def test_plan_result_decodes_graph_rows_as_tagged_records() -> None:
@@ -101,7 +102,9 @@ def test_plan_result_decodes_graph_row_json_fragments_with_owned_names() -> None
         b'"payload":{"kind":"external_event","ok":true}},'
         b'{"kind":"extension","namespace":"vendor.eval","op":"row",'
         b'"schema_fingerprint":"fp_schema_sha256_vendor_row",'
-        b'"payload":{"vendor":{"score":7}}}]}},'
+        b'"payload":{"kind":"summary","summary":"vendor score 7",'
+        b'"data_classes":["public"],'
+        b'"source_ref":{"kind":"candidate","id":"cand_alpha"}}}]}},'
         b'"receipts":[],"redactions":[],"charges":[],"errors":[]}}'
     )
 
@@ -129,7 +132,33 @@ def test_plan_result_decodes_graph_row_json_fragments_with_owned_names() -> None
     assert isinstance(rows[2].payload, ExternalEventPayload)
     assert rows[2].payload.ok is True
     assert isinstance(rows[3], ExtensionGraphRow)
-    assert rows[3].payload == {"vendor": {"score": 7}}
+    assert isinstance(rows[3].payload, GraphExtensionSummaryPayload)
+    assert rows[3].payload.summary == "vendor score 7"
+    assert rows[3].payload.data_classes == ["public"]
+    assert isinstance(rows[3].payload.source_ref, CandidateRefRecord)
+    assert rows[3].payload.source_ref.id == "cand_alpha"
+
+
+def test_plan_result_rejects_open_extension_graph_row_payload() -> None:
+    """Regression: extension graph rows carry a closed typed payload union."""
+
+    body = (
+        b'{"jsonrpc":"2.0","id":"req_1","result":{'
+        b'"schema_version":"leaven.plan_result.v1","plan_id":"plan_1",'
+        b'"capability_fingerprint":"fp_cap_sha256_test",'
+        b'"policy_fingerprint":"fp_policy_sha256_test",'
+        b'"base_revision":"rev_base","final_revision":"rev_final",'
+        b'"replayability_summary":"pure_read",'
+        b'"values":{"rows":{"kind":"graph_set","graph_revision":"rev_final",'
+        b'"data_classes":["public"],"replayability":"pure_read",'
+        b'"items":[{"kind":"extension","namespace":"vendor.eval","op":"row",'
+        b'"schema_fingerprint":"fp_schema_sha256_vendor_row",'
+        b'"payload":{"vendor":{"score":7}}}]}},'
+        b'"receipts":[],"redactions":[],"charges":[],"errors":[]}}'
+    )
+
+    with pytest.raises(JsonRpcProtocolError):
+        decode_response(body, PlanResultDocument)
 
 
 def test_plan_result_rejects_open_candidate_summary_fragments() -> None:

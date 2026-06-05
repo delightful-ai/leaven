@@ -206,7 +206,82 @@
           "additionalProperties": false
         },
         {
-          "$ref": "common.schema.json#/$defs/ExtensionObject"
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "extension"
+            },
+            "namespace": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_.:-]*$"
+            },
+            "op": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_.:-]*$"
+            },
+            "schema_fingerprint": {
+              "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+            },
+            "payload": {
+              "$ref": "#/$defs/GraphExtensionPayload"
+            }
+          },
+          "required": [
+            "kind",
+            "namespace",
+            "op",
+            "schema_fingerprint",
+            "payload"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "GraphExtensionPayload": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "summary"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "data_classes": {
+              "$ref": "common.schema.json#/$defs/DataClassSet"
+            },
+            "source_ref": {
+              "$ref": "common.schema.json#/$defs/InfoRef"
+            }
+          },
+          "required": [
+            "kind",
+            "summary"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "blob_ref"
+            },
+            "blob": {
+              "$ref": "common.schema.json#/$defs/BlobRef"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "data_classes": {
+              "$ref": "common.schema.json#/$defs/DataClassSet"
+            }
+          },
+          "required": [
+            "kind",
+            "blob"
+          ],
+          "additionalProperties": false
         }
       ]
     },

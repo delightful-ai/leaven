@@ -22,7 +22,7 @@ def render_payloads(rows: Sequence[PayloadMethodRow]) -> str:
         f"    {name},"
         for name in sorted(
             f"{REF_EXPORTS} DataClassSet MetadataBag WireJsonField WireJsonLeafArray "
-            "WireJsonCaseInput WireJsonGraphExtensionPayload WireJsonLeafObject "
+            "WireJsonCaseInput WireJsonLeafObject "
             "WireJsonObject WireJsonOutputValue WireJsonScalar".split()
         )
     )
@@ -47,6 +47,9 @@ from .graph_rows import (
     CandidateSummaryGraphRow,
     EventSummaryGraphRow,
     ExtensionGraphRow,
+    GraphExtensionBlobRefPayload,
+    GraphExtensionPayload,
+    GraphExtensionSummaryPayload,
     GraphRow,
     OutputRecord,
     ProposalEffectSummary,
@@ -528,7 +531,7 @@ __all__ = (  # noqa: PLE0605, SIM905
     "CommitPolicyGraphWritesSequential CommitPolicyNoGraphWrites Consistency ConsistencyAtRevision "
     "ConsistencyLatestAtStart ConsistencySinceRevision Cost DataClassSet EvalMode EvalModeDryRun "
     "EvalModeExecute EvalModeReplay EvalModeRequireCached EventSummaryGraphRow ExtensionGraphRow FailureMode "
-    "GraphRow GraphWrite InfoRef LeavenValue MetadataBag OperationReceipt OutputRecord PlanDocument PlanExpression Precondition "
+    "GraphExtensionBlobRefPayload GraphExtensionPayload GraphExtensionSummaryPayload GraphRow GraphWrite InfoRef LeavenValue MetadataBag OperationReceipt OutputRecord PlanDocument PlanExpression Precondition "
     "PlanError PlanErrorCode PlanErrorDetails PlanErrorDetailsObject PlanOp PlanResultDocument ProposalBatchRef ProposalBatchRefRecord ProposalEffect ProposeRequest "
     "ProposalEffectSummary ProposalEffectSummaryKind ProposalRef ProposalRefRecord ProposalSummaryGraphRow ReceiptRef Redaction ReflectionResult Replayability "
     "RunnerRequest Score "

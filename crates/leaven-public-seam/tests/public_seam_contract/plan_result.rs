@@ -1,7 +1,7 @@
 use crate::support::{bind_plan_result_hashes, fixture_blob_ref, package};
 use leaven_public_seam::{
-    PlanErrorCode, PlanResultGraphEventPayload, PlanResultProposalEffectKind,
-    PlanResultReceiptKind, PlanResultValueKind, PublicSeamError,
+    PlanErrorCode, PlanResultGraphEventPayload, PlanResultGraphExtensionPayload,
+    PlanResultProposalEffectKind, PlanResultReceiptKind, PlanResultValueKind, PublicSeamError,
 };
 use serde_json::{Value, json};
 
@@ -83,10 +83,14 @@ fn plan_result_preserves_graph_row_json_fragments_as_typed_owners() {
     assert!(event_payload.ok());
     assert_eq!(event_payload.stage_call_id(), None);
     assert_eq!(fragments.extension_payloads().len(), 1);
-    assert_eq!(
-        fragments.extension_payloads()[0].as_json(),
-        &json!({"vendor": {"score": 7}})
-    );
+    let PlanResultGraphExtensionPayload::Summary(extension_payload) =
+        &fragments.extension_payloads()[0]
+    else {
+        panic!("expected typed extension summary payload");
+    };
+    assert_eq!(extension_payload.summary(), "vendor score 7");
+    assert_eq!(extension_payload.data_classes(), ["public"]);
+    assert_eq!(extension_payload.source_ref(), Some("cand_alpha"));
 }
 
 #[test]
@@ -94,6 +98,22 @@ fn plan_result_rejects_open_candidate_summary_fragments() {
     let package = package();
     let mut result = graph_row_fragment_result();
     result["values"]["rows"]["items"][0]["scores"]["checks"] = json!(["format"]);
+
+    let error = package.validate_plan_result_document(&result).unwrap_err();
+
+    assert!(
+        matches!(error, PublicSeamError::ExampleValidation { .. }),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn plan_result_rejects_open_extension_graph_row_payload() {
+    let package = package();
+    let mut result = graph_row_fragment_result();
+    result["values"]["rows"]["items"][3]["payload"] = json!({
+        "vendor": {"score": 7}
+    });
 
     let error = package.validate_plan_result_document(&result).unwrap_err();
 
@@ -868,7 +888,13 @@ fn graph_row_fragment_result() -> Value {
                         "op": "row",
                         "schema_fingerprint": "fp_schema_sha256_vendor_row",
                         "payload": {
-                            "vendor": {"score": 7}
+                            "kind": "summary",
+                            "summary": "vendor score 7",
+                            "data_classes": ["public"],
+                            "source_ref": {
+                                "kind": "candidate",
+                                "id": "cand_alpha"
+                            }
                         }
                     }
                 ],
