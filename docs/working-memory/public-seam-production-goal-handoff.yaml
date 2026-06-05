@@ -1962,6 +1962,42 @@ acceptance:
           mirrored-test quality contract. Candidate scores/artifacts,
           event payloads, extension payloads, and other JSON-shaped result
           fragments remain typed-owner blockers.
+      - kind: candidate_summary_result_fragments_are_typed
+        paths:
+          - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
+          - crates/leaven-public-seam/src/result.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_result.rs
+          - sdk/python/codegen/graph_row_codegen.py
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/graph_rows.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/src/leaven/_seam/_wire/refs.py
+          - sdk/python/tests/_seam/_wire/test_graph_rows.py
+        commands:
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_result::plan_result_preserves_graph_row_json_fragments_as_typed_owners -- --exact --nocapture
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_result::plan_result_rejects_open_candidate_summary_fragments -- --exact --nocapture
+          - cargo check -p leaven-public-seam
+          - cargo fmt --check
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_graph_rows.py -q
+          - cd sdk/python && uv run ruff check codegen/graph_row_codegen.py codegen/payload_codegen.py codegen/ref_codegen.py src/leaven/_seam/_wire/graph_rows.py src/leaven/_seam/_wire/payloads.py src/leaven/_seam/_wire/refs.py tests/_seam/_wire/test_graph_rows.py
+          - cd sdk/python && uv run ty check codegen/graph_row_codegen.py codegen/payload_codegen.py codegen/ref_codegen.py src/leaven/_seam/_wire/graph_rows.py src/leaven/_seam/_wire/payloads.py src/leaven/_seam/_wire/refs.py tests/_seam/_wire/test_graph_rows.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+        note: >-
+          `candidate_summary.scores` and `candidate_summary.artifact` in
+          PlanResult graph rows are no longer open `{}` schema leaves or Python
+          `WireJsonCandidateScores` / `WireJsonCandidateArtifact`
+          depth-limited JSON aliases. The result schema now defines closed
+          `CandidateScoresSummary` and `CandidateArtifactSummary` records;
+          Rust result inspection exposes `PlanResultCandidateScores`,
+          `PlanResultCandidateCaseScore`, and `PlanResultCandidateArtifact`
+          with typed numeric summary fields; and Python graph-row codegen emits
+          msgspec `CandidateScoresSummary`, `CandidateCaseScore`, and
+          `CandidateArtifactSummary`. Focused Rust/Python tests prove typed
+          readback and reject the previous open `checks` score payload. Event
+          payloads, extension payloads, and other JSON-shaped result fragments
+          remain typed-owner blockers.
       - kind: generated_method_routing_reaches_retained_effect_methods
         paths:
           - sdk/python/src/leaven/_seam/effect_plans.py

@@ -13,6 +13,9 @@ from .calls import CapabilityCall
 from .expressions import PlanExpression, Precondition, ValidationReceipt
 from .graph_rows import (
     AssessmentSummaryGraphRow,
+    CandidateArtifactSummary,
+    CandidateCaseScore,
+    CandidateScoresSummary,
     CandidateSummaryGraphRow,
     EventSummaryGraphRow,
     ExtensionGraphRow,
@@ -49,8 +52,6 @@ from .refs import (
     TraceRef,
     TraceRefRecord,
     TraceVisibility,
-    WireJsonCandidateArtifact,
-    WireJsonCandidateScores,
     WireJsonCaseInput,
     WireJsonField,
     WireJsonGraphEventPayload,
@@ -69,7 +70,7 @@ PLAN_SCHEMA_FINGERPRINT = (
     "fp_schema_sha256_e1c00e71d64c49099896dfa354af9e751814739c000d11ab1af111c2c0d3337e"
 )
 PLAN_RESULT_SCHEMA_FINGERPRINT = (
-    "fp_schema_sha256_2685318e0f5f78dbd161a0c5f278f4feba583e1f11f0aa04962496318b0346c0"
+    "fp_schema_sha256_563d3d535d3d3e4d3555bd7c839d431d67e8ee3e03d565bda9e3e3b0209e2a69"
 )
 STAGE_RUN_SCHEMA_FINGERPRINT = (
     "fp_schema_sha256_da2d026c060b655ea39850dbd43034e097260eefb88a3667207343fb6353a7ec"
@@ -529,7 +530,7 @@ class StageRunResult(Struct, frozen=True, forbid_unknown_fields=True, omit_defau
 __all__ = (  # noqa: PLE0605, SIM905
     "PLAN_RESULT_SCHEMA_FINGERPRINT PLAN_SCHEMA_FINGERPRINT STAGE_RUN_SCHEMA_FINGERPRINT "
     "AssessmentRef AssessmentRefRecord BlobRef CandidateRef CandidateRefRecord CaseRef CaseRefRecord EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestRef EvaluationRequestRefRecord ExternalInfoRefRecord InfoRef ProposalBatchRef ProposalBatchRefRecord ProposalRef ProposalRefRecord ReceiptRef ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility WorkspaceRef WorkspaceRefRecord "
-    "AssessmentSummaryGraphRow CandidateSummaryGraphRow CapabilityCall ChargeReceipt CommitPolicy CommitPolicyGraphWritesAtomic "
+    "AssessmentSummaryGraphRow CandidateArtifactSummary CandidateCaseScore CandidateScoresSummary CandidateSummaryGraphRow CapabilityCall ChargeReceipt CommitPolicy CommitPolicyGraphWritesAtomic "
     "CommitPolicyGraphWritesSequential CommitPolicyNoGraphWrites Consistency ConsistencyAtRevision "
     "ConsistencyLatestAtStart ConsistencySinceRevision Cost DataClassSet EvalMode EvalModeDryRun "
     "EvalModeExecute EvalModeReplay EvalModeRequireCached EventSummaryGraphRow ExtensionGraphRow FailureMode "

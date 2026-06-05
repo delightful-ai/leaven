@@ -55,15 +55,21 @@ fn plan_result_preserves_graph_row_json_fragments_as_typed_owners() {
     let fragments = result.graph_row_fragments();
 
     assert_eq!(fragments.candidate_scores().len(), 1);
+    let candidate_scores = &fragments.candidate_scores()[0];
     assert_eq!(
-        fragments.candidate_scores()[0].as_json(),
-        &json!({"accuracy": 0.9, "checks": ["format", {"pass": true}]})
+        candidate_scores.primary().map(ToString::to_string),
+        Some("0.9".to_owned())
     );
+    assert_eq!(candidate_scores.metrics()[0].0, "accuracy");
+    assert_eq!(candidate_scores.metrics()[0].1.to_string(), "0.9");
+    assert_eq!(candidate_scores.cases()[0].case_id(), "case_1");
+    assert_eq!(candidate_scores.cases()[0].score().to_string(), "0.9");
     assert_eq!(fragments.candidate_artifacts().len(), 1);
-    assert_eq!(
-        fragments.candidate_artifacts()[0].as_json(),
-        &json!({"kind": "prompt", "body": "answer concisely"})
-    );
+    let candidate_artifact = &fragments.candidate_artifacts()[0];
+    assert_eq!(candidate_artifact.kind(), "prompt");
+    assert_eq!(candidate_artifact.identity(), Some("artifact_sha256_alpha"));
+    assert_eq!(candidate_artifact.summary(), Some("answer concisely"));
+    assert_eq!(candidate_artifact.body(), Some("answer concisely"));
     assert_eq!(fragments.proposal_effects().len(), 1);
     let proposal_effect = &fragments.proposal_effects()[0];
     assert_eq!(proposal_effect.kind(), PlanResultProposalEffectKind::Change);
@@ -78,6 +84,20 @@ fn plan_result_preserves_graph_row_json_fragments_as_typed_owners() {
     assert_eq!(
         fragments.extension_payloads()[0].as_json(),
         &json!({"vendor": {"score": 7}})
+    );
+}
+
+#[test]
+fn plan_result_rejects_open_candidate_summary_fragments() {
+    let package = package();
+    let mut result = graph_row_fragment_result();
+    result["values"]["rows"]["items"][0]["scores"]["checks"] = json!(["format"]);
+
+    let error = package.validate_plan_result_document(&result).unwrap_err();
+
+    assert!(
+        matches!(error, PublicSeamError::ExampleValidation { .. }),
+        "{error:?}"
     );
 }
 
@@ -804,11 +824,21 @@ fn graph_row_fragment_result() -> Value {
                         "candidate": "cand_alpha",
                         "artifact_identity": "artifact_sha256_alpha",
                         "scores": {
-                            "accuracy": 0.9,
-                            "checks": ["format", {"pass": true}]
+                            "primary": 0.9,
+                            "metrics": {
+                                "accuracy": 0.9
+                            },
+                            "cases": [
+                                {
+                                    "case": "case_1",
+                                    "score": 0.9
+                                }
+                            ]
                         },
                         "artifact": {
                             "kind": "prompt",
+                            "identity": "artifact_sha256_alpha",
+                            "summary": "answer concisely",
                             "body": "answer concisely"
                         }
                     },

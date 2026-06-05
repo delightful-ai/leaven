@@ -22,8 +22,7 @@ def render_payloads(rows: Sequence[PayloadMethodRow]) -> str:
         f"    {name},"
         for name in sorted(
             f"{REF_EXPORTS} DataClassSet MetadataBag WireJsonField WireJsonLeafArray "
-            "WireJsonCandidateArtifact WireJsonCandidateScores WireJsonCaseInput "
-            "WireJsonGraphEventPayload WireJsonGraphExtensionPayload WireJsonLeafObject "
+            "WireJsonCaseInput WireJsonGraphEventPayload WireJsonGraphExtensionPayload WireJsonLeafObject "
             "WireJsonObject WireJsonOutputValue WireJsonScalar".split()
         )
     )
@@ -42,6 +41,9 @@ from .calls import CapabilityCall
 from .expressions import PlanExpression, Precondition, ValidationReceipt
 from .graph_rows import (
     AssessmentSummaryGraphRow,
+    CandidateArtifactSummary,
+    CandidateCaseScore,
+    CandidateScoresSummary,
     CandidateSummaryGraphRow,
     EventSummaryGraphRow,
     ExtensionGraphRow,
@@ -522,7 +524,7 @@ class StageRunResult(Struct, frozen=True, forbid_unknown_fields=True, omit_defau
 __all__ = (  # noqa: PLE0605, SIM905
     "PLAN_RESULT_SCHEMA_FINGERPRINT PLAN_SCHEMA_FINGERPRINT STAGE_RUN_SCHEMA_FINGERPRINT "
     "{REF_EXPORTS} "
-    "AssessmentSummaryGraphRow CandidateSummaryGraphRow CapabilityCall ChargeReceipt CommitPolicy CommitPolicyGraphWritesAtomic "
+    "AssessmentSummaryGraphRow CandidateArtifactSummary CandidateCaseScore CandidateScoresSummary CandidateSummaryGraphRow CapabilityCall ChargeReceipt CommitPolicy CommitPolicyGraphWritesAtomic "
     "CommitPolicyGraphWritesSequential CommitPolicyNoGraphWrites Consistency ConsistencyAtRevision "
     "ConsistencyLatestAtStart ConsistencySinceRevision Cost DataClassSet EvalMode EvalModeDryRun "
     "EvalModeExecute EvalModeReplay EvalModeRequireCached EventSummaryGraphRow ExtensionGraphRow FailureMode "

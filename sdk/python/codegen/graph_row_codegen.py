@@ -22,8 +22,6 @@ from .refs import (
     ProposalRef,
     ReceiptRef,
     TraceRef,
-    WireJsonCandidateArtifact,
-    WireJsonCandidateScores,
     WireJsonGraphEventPayload,
     WireJsonGraphExtensionPayload,
     WireJsonOutputValue,
@@ -59,6 +57,25 @@ class Score(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True)
     metadata: MetadataBag | UnsetType = UNSET
 
 
+class CandidateCaseScore(Struct, frozen=True, forbid_unknown_fields=True):
+    case: str
+    score: float
+
+
+class CandidateScoresSummary(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    primary: float | UnsetType = UNSET
+    metrics: dict[str, float] | UnsetType = UNSET
+    cases: list[CandidateCaseScore] | UnsetType = UNSET
+
+
+class CandidateArtifactSummary(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    kind: str
+    identity: str | UnsetType = UNSET
+    summary: str | UnsetType = UNSET
+    body: str | UnsetType = UNSET
+    schema_fingerprint: str | UnsetType = UNSET
+
+
 class CandidateSummaryGraphRow(
     Struct,
     frozen=True,
@@ -69,8 +86,8 @@ class CandidateSummaryGraphRow(
 ):
     candidate: CandidateRef
     artifact_identity: str | UnsetType = UNSET
-    scores: WireJsonCandidateScores | UnsetType = UNSET
-    artifact: WireJsonCandidateArtifact | UnsetType = UNSET
+    scores: CandidateScoresSummary | UnsetType = UNSET
+    artifact: CandidateArtifactSummary | UnsetType = UNSET
 
 
 type ProposalEffectSummaryKind = Literal[
@@ -155,7 +172,7 @@ type GraphRow = (
 
 
 __all__ = (  # noqa: PLE0605, SIM905
-    "AssessmentSummaryGraphRow CandidateSummaryGraphRow EventSummaryGraphRow ExtensionGraphRow "
+    "AssessmentSummaryGraphRow CandidateArtifactSummary CandidateCaseScore CandidateScoresSummary CandidateSummaryGraphRow EventSummaryGraphRow ExtensionGraphRow "
     "GraphRow OutputRecord ProposalEffectSummary ProposalEffectSummaryKind ProposalSummaryGraphRow "
     "Score VisibilityClass"
 ).split()

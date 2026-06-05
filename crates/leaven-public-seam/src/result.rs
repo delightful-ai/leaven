@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde_json::Value;
+use serde_json::{Number, Value};
 
 use crate::PublicSeamError;
 use crate::evidence::{EvidenceEnvelopeDocument, EvidenceReceiptRef};
@@ -260,14 +260,6 @@ macro_rules! graph_row_fragment {
 }
 
 graph_row_fragment!(
-    PlanResultCandidateScores,
-    "Schema-valid JSON carried by `candidate_summary.scores`."
-);
-graph_row_fragment!(
-    PlanResultCandidateArtifact,
-    "Schema-valid JSON carried by `candidate_summary.artifact`."
-);
-graph_row_fragment!(
     PlanResultGraphEventPayload,
     "Schema-valid JSON carried by `event_summary.payload`."
 );
@@ -275,6 +267,116 @@ graph_row_fragment!(
     PlanResultGraphExtensionPayload,
     "Schema-valid JSON carried by an extension graph row payload."
 );
+
+/// Closed typed score summary carried by `candidate_summary.scores`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanResultCandidateScores {
+    primary: Option<Number>,
+    metrics: Vec<(String, Number)>,
+    cases: Vec<PlanResultCandidateCaseScore>,
+}
+
+impl PlanResultCandidateScores {
+    fn from_schema_valid_value(value: &Value) -> Result<Self, PublicSeamError> {
+        let object = value
+            .as_object()
+            .ok_or_else(|| invalid_result("candidate_summary.scores must be an object"))?;
+        let primary = optional_number(object.get("primary"), "candidate_summary.scores.primary")?;
+        let metrics =
+            optional_number_map(object.get("metrics"), "candidate_summary.scores.metrics")?;
+        let cases = optional_case_scores(object.get("cases"))?;
+        Ok(Self {
+            primary,
+            metrics,
+            cases,
+        })
+    }
+
+    /// Primary candidate score when present.
+    pub const fn primary(&self) -> Option<&Number> {
+        self.primary.as_ref()
+    }
+
+    /// Numeric metric scores in deterministic key order.
+    pub fn metrics(&self) -> &[(String, Number)] {
+        &self.metrics
+    }
+
+    /// Case-level score summaries.
+    pub fn cases(&self) -> &[PlanResultCandidateCaseScore] {
+        &self.cases
+    }
+}
+
+/// One case-level score carried by `candidate_summary.scores`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanResultCandidateCaseScore {
+    case_id: String,
+    score: Number,
+}
+
+impl PlanResultCandidateCaseScore {
+    /// Case id this score belongs to.
+    pub fn case_id(&self) -> &str {
+        &self.case_id
+    }
+
+    /// Numeric score value.
+    pub const fn score(&self) -> &Number {
+        &self.score
+    }
+}
+
+/// Closed typed artifact summary carried by `candidate_summary.artifact`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanResultCandidateArtifact {
+    kind: String,
+    identity: Option<String>,
+    summary: Option<String>,
+    body: Option<String>,
+    schema_fingerprint: Option<String>,
+}
+
+impl PlanResultCandidateArtifact {
+    fn from_schema_valid_value(value: &Value) -> Result<Self, PublicSeamError> {
+        let object = value
+            .as_object()
+            .ok_or_else(|| invalid_result("candidate_summary.artifact must be an object"))?;
+        Ok(Self {
+            kind: required_string(object.get("kind"), "candidate_summary.artifact.kind")?
+                .to_owned(),
+            identity: optional_string(object.get("identity"))?,
+            summary: optional_string(object.get("summary"))?,
+            body: optional_string(object.get("body"))?,
+            schema_fingerprint: optional_string(object.get("schema_fingerprint"))?,
+        })
+    }
+
+    /// Artifact kind.
+    pub fn kind(&self) -> &str {
+        &self.kind
+    }
+
+    /// Artifact identity, when carried inline.
+    pub fn identity(&self) -> Option<&str> {
+        self.identity.as_deref()
+    }
+
+    /// Human-readable artifact summary, when present.
+    pub fn summary(&self) -> Option<&str> {
+        self.summary.as_deref()
+    }
+
+    /// Inline artifact body, when present.
+    pub fn body(&self) -> Option<&str> {
+        self.body.as_deref()
+    }
+
+    /// Schema fingerprint for the artifact body, when present.
+    pub fn schema_fingerprint(&self) -> Option<&str> {
+        self.schema_fingerprint.as_deref()
+    }
+}
 
 /// Closed typed summary carried by `proposal_summary.effect`.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -707,11 +809,11 @@ fn collect_graph_row_fragments(
                 if let Some(scores) = item_object.get("scores") {
                     fragments
                         .candidate_scores
-                        .push(PlanResultCandidateScores::from_schema_valid_value(scores));
+                        .push(PlanResultCandidateScores::from_schema_valid_value(scores)?);
                 }
                 if let Some(artifact) = item_object.get("artifact") {
                     fragments.candidate_artifacts.push(
-                        PlanResultCandidateArtifact::from_schema_valid_value(artifact),
+                        PlanResultCandidateArtifact::from_schema_valid_value(artifact)?,
                     );
                 }
             }
@@ -751,6 +853,76 @@ fn optional_string(value: Option<&Value>) -> Result<Option<String>, PublicSeamEr
             })
         })
         .transpose()
+}
+
+fn optional_number(value: Option<&Value>, field: &str) -> Result<Option<Number>, PublicSeamError> {
+    value
+        .map(|value| {
+            value
+                .as_number()
+                .cloned()
+                .ok_or_else(|| invalid_result(format!("{field} must be a number")))
+        })
+        .transpose()
+}
+
+fn optional_number_map(
+    value: Option<&Value>,
+    field: &str,
+) -> Result<Vec<(String, Number)>, PublicSeamError> {
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
+    let object = value
+        .as_object()
+        .ok_or_else(|| invalid_result(format!("{field} must be an object")))?;
+    object
+        .iter()
+        .map(|(key, value)| {
+            Ok((
+                key.to_owned(),
+                value
+                    .as_number()
+                    .cloned()
+                    .ok_or_else(|| invalid_result(format!("{field}.{key} must be a number")))?,
+            ))
+        })
+        .collect()
+}
+
+fn optional_case_scores(
+    value: Option<&Value>,
+) -> Result<Vec<PlanResultCandidateCaseScore>, PublicSeamError> {
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
+    let items = value
+        .as_array()
+        .ok_or_else(|| invalid_result("candidate_summary.scores.cases must be an array"))?;
+    items
+        .iter()
+        .map(|item| {
+            let object = item.as_object().ok_or_else(|| {
+                invalid_result("candidate_summary.scores.cases item must be an object")
+            })?;
+            Ok(PlanResultCandidateCaseScore {
+                case_id: ref_id(
+                    object.get("case").ok_or_else(|| {
+                        invalid_result("candidate_summary.scores.cases.case missing")
+                    })?,
+                    "candidate_summary.scores.cases.case",
+                )?
+                .to_owned(),
+                score: object
+                    .get("score")
+                    .and_then(Value::as_number)
+                    .cloned()
+                    .ok_or_else(|| {
+                        invalid_result("candidate_summary.scores.cases.score must be a number")
+                    })?,
+            })
+        })
+        .collect()
 }
 
 fn optional_ref_id(value: Option<&Value>, field: &str) -> Result<Option<String>, PublicSeamError> {

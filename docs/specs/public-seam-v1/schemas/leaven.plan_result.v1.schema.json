@@ -127,8 +127,12 @@
             "artifact_identity": {
               "$ref": "common.schema.json#/$defs/ArtifactIdentity"
             },
-            "scores": {},
-            "artifact": {}
+            "scores": {
+              "$ref": "#/$defs/CandidateScoresSummary"
+            },
+            "artifact": {
+              "$ref": "#/$defs/CandidateArtifactSummary"
+            }
           },
           "required": [
             "kind",
@@ -203,6 +207,65 @@
           "$ref": "common.schema.json#/$defs/ExtensionObject"
         }
       ]
+    },
+    "CandidateScoresSummary": {
+      "type": "object",
+      "properties": {
+        "primary": {
+          "type": "number"
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "cases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "case": {
+                "$ref": "common.schema.json#/$defs/CaseRef"
+              },
+              "score": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "case",
+              "score"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "CandidateArtifactSummary": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "identity": {
+          "$ref": "common.schema.json#/$defs/ArtifactIdentity"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "schema_fingerprint": {
+          "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
     },
     "ProposalEffectSummary": {
       "oneOf": [
