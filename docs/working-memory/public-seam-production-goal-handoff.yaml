@@ -5969,6 +5969,43 @@ acceptance:
           workspace proof, not as the live Codex e2e substrate unless that e2e
           is explicitly configured to run on Firkin. The row remains pending
           until prerequisite backbone rows close.
+      - kind: live_codex_typed_proposal_effect_path_rerun
+        paths:
+          - crates/leaven-seam-service/src/lib.rs
+          - crates/leaven-seam-service/src/run_bound_service/mod.rs
+          - crates/leaven-seam-service/src/run_bound_service/params.rs
+          - crates/leaven-seam-service/src/run_bound_service/tests.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/codex_agent_kit_reflection.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/agent_kit_seam_checkpoint.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution_support.rs
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cargo test -p leaven-seam-service run_bound_service -- --nocapture
+          - cargo test -p leaven-gepa-agentic-agent-kit --test codex_agent_kit_reflection codex_agent_kit_git_child_applies_through_run_bound_stdio_before_next_projection -- --exact
+          - cargo test -p leaven-gepa-agentic-agent-kit --test agent_kit_seam_checkpoint agent_kit_git_child_applied_through_sdk_route_restores_from_checkpoint -- --exact
+          - cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution --no-run
+          - set -a; source .env; set +a; LEAVEN_CODEX_LIVE=1 LEAVEN_CODEX_BIN="$HOME/.bun/bin/codex" cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution live_codex_agent_kit_evolves_through_stdio_checkpoint_and_next_codex_consumes_child -- --ignored --exact --nocapture
+          - cargo fmt --check
+          - >-
+            rg -n "proposals_payload\(\)|SubmitProposalBatch \{\s*proposals:
+            Value|pub\(crate\) proposals: Value|\[\"effect"
+            crates/leaven-seam-service crates/leaven-gepa-agentic-agent-kit -g
+            '*.rs'
+        note: >-
+          The run-bound `leaven/proposal.submit_batch` callback path no longer
+          exposes proposal records to host lowerers as a raw `serde_json::Value`
+          or checks `params.proposals_payload()[0]["effect"]["kind"]` in the
+          Codex Kit proofs. `ProposalSubmitParams` now exposes typed submitted
+          proposal records, typed causal inputs, typed informed-by literals, and
+          a typed `change_from_agent_session` effect. A new run-bound service
+          regression mutates a valid proposal into an unknown effect kind and
+          proves decoding refuses it before host lowering. The deterministic
+          stdio submit/apply proof, checkpointed AgentKit SDK route, and live
+          `gpt-5.4-mini` AgentKit evolution e2e all passed after the cutover;
+          the live rerun passed in 72.78s. The negative grep only finds the
+          intentional refusal-test mutation. Other run-bound graph-write leaves,
+          including evaluation request and assessment payloads, still require
+          typed owners under the broader seam-typing prerequisite rows.
       - kind: live_codex_evolution_git_filesystem_codex_kit_2026_06_04_rerun
         paths:
           - crates/leaven-agentic-git/tests/git_program_materializer.rs

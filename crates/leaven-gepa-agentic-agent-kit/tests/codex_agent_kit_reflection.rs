@@ -284,10 +284,8 @@ fn codex_agent_kit_git_child_applies_through_run_bound_stdio_before_next_project
                 move |params| {
                     assert_eq!(params.plan_id(), "plan_agent_kit_submit");
                     assert_eq!(params.op_name(), "proposal_batch");
-                    assert_eq!(
-                        params.proposals_payload()[0]["effect"]["kind"],
-                        "change_from_agent_session"
-                    );
+                    let proposal = params.proposals().first().expect("proposal is present");
+                    assert!(proposal.effect().is_change_from_agent_session());
                     Ok(ProposalBatch {
                         proposals: vec![
                             Proposal::mutate(parent, change.clone())

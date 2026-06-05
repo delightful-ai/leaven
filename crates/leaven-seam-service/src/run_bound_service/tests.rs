@@ -256,6 +256,19 @@ fn run_bound_service_refuses_configured_alias_batch_refs() {
 }
 
 #[test]
+fn run_bound_service_rejects_untyped_proposal_effects_before_host_lowering() {
+    let mut request = proposal_submit_request();
+    request["ops"][0]["write"]["proposals"][0]["effect"]["kind"] = json!("untyped_json_effect");
+
+    let error = params::proposal_submit_params(&request).unwrap_err();
+
+    assert!(matches!(
+        error,
+        RunBoundGraphEffectError::MissingProposalSubmitWrite
+    ));
+}
+
+#[test]
 #[allow(
     clippy::too_many_lines,
     reason = "scenario proof keeps runtime and stdio graph-write routing together"
@@ -504,6 +517,51 @@ fn proposal_apply_request(batch_ref: &str) -> Value {
             }
         }],
         "return": ["apply"],
+        "commit": {
+            "kind": "graph_writes_atomic",
+            "on_stale": "reject"
+        }
+    })
+}
+
+fn proposal_submit_request() -> Value {
+    json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "plan_run_bound_submit",
+        "consistency": {
+            "kind": "latest_at_start"
+        },
+        "mode": {
+            "kind": "execute"
+        },
+        "ops": [{
+            "kind": "write",
+            "name": "proposal_batch",
+            "idempotency_key": "run-bound-submit-0001",
+            "write": {
+                "kind": "submit_proposal_batch",
+                "semantics": "sequence",
+                "proposals": [{
+                    "effect": {
+                        "kind": "change_from_agent_session",
+                        "target": "cand_run_bound_seed",
+                        "agent_receipt": "agentrec_run_bound",
+                        "parser": "leaven.agent_session.skill_patch.v1",
+                        "surface_fingerprint": "fp_surface_sha256_run_bound",
+                        "change_schema": "fp_schema_sha256_run_bound_change"
+                    },
+                    "causal": {
+                        "inputs": ["cand_run_bound_seed"]
+                    },
+                    "informed_by": {
+                        "kind": "literal",
+                        "value": ["qrec_run_bound_seed", "agentrec_run_bound"]
+                    },
+                    "read_receipts": ["qrec_run_bound_seed", "agentrec_run_bound"]
+                }]
+            }
+        }],
+        "return": ["proposal_batch"],
         "commit": {
             "kind": "graph_writes_atomic",
             "on_stale": "reject"

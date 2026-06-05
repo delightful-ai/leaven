@@ -12,14 +12,105 @@ pub(super) struct ProposalApplyParams {
 }
 
 /// Parsed `leaven/proposal.submit_batch` callback params.
+#[derive(Debug)]
 pub struct ProposalSubmitParams {
     pub(crate) plan_id: String,
     pub(crate) write: ProposalSubmitWrite,
 }
 
+#[derive(Debug)]
 pub struct ProposalSubmitWrite {
     pub(crate) name: String,
-    pub(crate) proposals: Value,
+    pub(crate) proposals: Vec<SubmittedProposal>,
+}
+
+/// One typed proposal record carried by a run-bound submit callback.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+pub struct SubmittedProposal {
+    effect: SubmittedProposalEffect,
+    causal: SubmittedProposalCausalInputs,
+    informed_by: SubmittedProposalInformedBy,
+    read_receipts: Vec<String>,
+}
+
+impl SubmittedProposal {
+    /// Typed effect requested by this proposal.
+    #[must_use]
+    pub const fn effect(&self) -> &SubmittedProposalEffect {
+        &self.effect
+    }
+
+    /// Causal candidate inputs carried by this proposal.
+    #[must_use]
+    pub const fn causal(&self) -> &SubmittedProposalCausalInputs {
+        &self.causal
+    }
+
+    /// Receipts and literals that informed this proposal.
+    #[must_use]
+    pub const fn informed_by(&self) -> &SubmittedProposalInformedBy {
+        &self.informed_by
+    }
+
+    /// Public read receipts carried by this proposal.
+    #[must_use]
+    pub fn read_receipts(&self) -> &[String] {
+        &self.read_receipts
+    }
+}
+
+/// Typed proposal effect variants accepted by run-bound submit callbacks.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SubmittedProposalEffect {
+    /// A worker-authored agent session produced a typed change payload.
+    ChangeFromAgentSession {
+        target: String,
+        agent_receipt: String,
+        parser: String,
+        surface_fingerprint: String,
+        change_schema: String,
+    },
+}
+
+impl SubmittedProposalEffect {
+    /// Returns true for the AgentKit/session-change proposal shape.
+    #[must_use]
+    pub const fn is_change_from_agent_session(&self) -> bool {
+        matches!(self, Self::ChangeFromAgentSession { .. })
+    }
+}
+
+/// Typed causal input list for a submitted proposal.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+pub struct SubmittedProposalCausalInputs {
+    inputs: Vec<String>,
+}
+
+impl SubmittedProposalCausalInputs {
+    /// Candidate refs that causally informed the proposal.
+    #[must_use]
+    pub fn inputs(&self) -> &[String] {
+        &self.inputs
+    }
+}
+
+/// Typed informed-by expression for a submitted proposal.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SubmittedProposalInformedBy {
+    /// Literal receipt refs.
+    Literal { value: Vec<String> },
+}
+
+impl SubmittedProposalInformedBy {
+    /// Literal receipt refs carried by this expression.
+    #[must_use]
+    pub fn literal_values(&self) -> &[String] {
+        match self {
+            Self::Literal { value } => value,
+        }
+    }
 }
 
 impl ProposalSubmitParams {
@@ -35,9 +126,9 @@ impl ProposalSubmitParams {
         &self.write.name
     }
 
-    /// Host-domain proposal payloads.
+    /// Host-domain proposal records.
     #[must_use]
-    pub fn proposals_payload(&self) -> &Value {
+    pub fn proposals(&self) -> &[SubmittedProposal] {
         &self.write.proposals
     }
 }
@@ -203,7 +294,7 @@ enum CallbackWrite {
         proposal_batch: String,
     },
     SubmitProposalBatch {
-        proposals: Value,
+        proposals: Vec<SubmittedProposal>,
     },
     RequestEvaluation {
         request: Value,

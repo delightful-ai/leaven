@@ -144,7 +144,11 @@ impl Optimizer<AgentKitCheckpointProblem> for AgentKitCheckpointOptimizer {
                 if params.plan_id() != "plan_agent_kit_checkpoint_submit" {
                     return Err(format!("unexpected AgentKit plan {}", params.plan_id()));
                 }
-                if params.proposals_payload()[0]["effect"]["kind"] != "change_from_agent_session" {
+                let proposal = params
+                    .proposals()
+                    .first()
+                    .ok_or_else(|| "AgentKit submit carried no proposal".to_owned())?;
+                if !proposal.effect().is_change_from_agent_session() {
                     return Err("unexpected AgentKit proposal effect".to_owned());
                 }
                 Ok(ProposalBatch {

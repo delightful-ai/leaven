@@ -139,7 +139,11 @@ impl Optimizer<LiveAgentKitProblem> for LiveAgentKitOptimizer {
                         params.plan_id()
                     ));
                 }
-                if params.proposals_payload()[0]["effect"]["kind"] != "change_from_agent_session" {
+                let proposal = params
+                    .proposals()
+                    .first()
+                    .ok_or_else(|| "live AgentKit submit carried no proposal".to_owned())?;
+                if !proposal.effect().is_change_from_agent_session() {
                     return Err("unexpected live AgentKit proposal effect".to_owned());
                 }
                 Ok(ProposalBatch {

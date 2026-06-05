@@ -12,7 +12,10 @@ mod stage;
 pub use git_workspace::SeamWorkspaceGitConfig;
 pub use lm::{MockLmResponseConfig, SeamLmConfig};
 pub use run_bound_service::{
+    AssessmentSubmitParams, EvaluationRequestParams, ProposalSubmitParams,
     RunBoundEvaluationRequest, RunBoundGraphEffectError, RunBoundGraphEffectService,
+    SubmittedProposal, SubmittedProposalCausalInputs, SubmittedProposalEffect,
+    SubmittedProposalInformedBy,
 };
 pub use service::{
     ConfiguredSeamService, ConfiguredSeamServiceError, SeamAgentConfig, SeamCaseRecordConfig,

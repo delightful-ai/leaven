@@ -23,7 +23,10 @@ mod extension_result;
 mod params;
 
 pub use error::RunBoundGraphEffectError;
-pub use params::{AssessmentSubmitParams, EvaluationRequestParams, ProposalSubmitParams};
+pub use params::{
+    AssessmentSubmitParams, EvaluationRequestParams, ProposalSubmitParams, SubmittedProposal,
+    SubmittedProposalCausalInputs, SubmittedProposalEffect, SubmittedProposalInformedBy,
+};
 
 use extension_result::{
     EventEmitExtensionContext, assessment_submit_extension_result,
