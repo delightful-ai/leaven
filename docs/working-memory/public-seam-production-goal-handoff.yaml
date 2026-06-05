@@ -6153,6 +6153,34 @@ acceptance:
           `AgentConfig` runtime shape instead of accepting `object`. This is a
           quality ratchet for future SDK work, not proof that every remaining
           public API type island has been eliminated.
+      - kind: callable_name_getattr_probes_removed
+        paths:
+          - sdk/python/src/leaven/decorators.py
+          - sdk/python/src/leaven/rubric.py
+          - sdk/python/src/leaven/_seam_worker/target.py
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/tests/test_stage_surface.py
+          - sdk/python/tests/test_scoring.py
+          - sdk/python/tests/_seam_worker/test_target.py
+        commands:
+          - cd sdk/python && uv run ruff check src/leaven/decorators.py src/leaven/rubric.py src/leaven/_seam_worker/target.py tests/test_stage_surface.py tests/test_scoring.py tests/_seam_worker/test_target.py tests/test_proposer_worker.py scripts/check_quality_contract.py
+          - cd sdk/python && uv run ty check src/leaven/decorators.py src/leaven/rubric.py src/leaven/_seam_worker/target.py tests/test_stage_surface.py tests/test_scoring.py tests/_seam_worker/test_target.py tests/test_proposer_worker.py scripts/check_quality_contract.py
+          - cd sdk/python && uv run pytest tests/test_stage_surface.py tests/test_scoring.py tests/_seam_worker/test_target.py tests/test_proposer_worker.py tests/scripts/test_check_quality_contract.py -q
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - cd sdk/python && ! rg -n "getattr\\(" src/leaven/decorators.py src/leaven/rubric.py src/leaven/_seam_worker/target.py tests/test_stage_surface.py tests/test_scoring.py tests/_seam_worker/test_target.py
+        note: >-
+          Stage decorators, reward decorators, and worker argv construction no
+          longer use `getattr(...)` fallback probes to fish names from arbitrary
+          callable objects. The SDK now makes the real constraint explicit:
+          decorated stages/rewards and subprocess stage workers require
+          reloadable Python function objects, then read `__module__` and
+          `__name__` directly. Focused boundary tests reject callable-object
+          stages and rewards instead of inventing fallback ids or worker names,
+          and `target.py` is now covered by the mirrored-test quality map. This
+          removes source-level defensive probing in the callable naming path; it
+          does not close the broader project-quality row until the full module
+          map and remaining typed-backbone rows are audited together.
       - kind: public_agent_forbidden_input_classes_scaffold_removed
         paths:
           - sdk/python/src/leaven/_seam/plans.py

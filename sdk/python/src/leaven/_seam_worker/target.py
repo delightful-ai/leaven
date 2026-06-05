@@ -5,6 +5,7 @@ import sys
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
+from types import FunctionType
 from typing import Protocol
 
 
@@ -44,9 +45,11 @@ def worker_argv_for_stage[O](
     lm_model: str = "mock",
 ) -> tuple[str, ...]:
     """Build worker argv for a `RegisteredStage` without importing it here."""
+    if not isinstance(stage.func, FunctionType):
+        raise TypeError("stage workers require function-backed registered stages")
     target = StageWorkerTarget(
         stage_id=stage.id,
-        stage_name=getattr(stage.func, "__name__", stage.id.rsplit(".", 1)[-1]),
+        stage_name=stage.func.__name__,
         module_file=_module_file(stage),
     )
     return target.argv(lm_model=lm_model)

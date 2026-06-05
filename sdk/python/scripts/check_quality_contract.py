@@ -112,6 +112,10 @@ MIRRORED_TESTS = {
     / "tests"
     / "_seam_worker"
     / "test_runner.py",
+    ROOT / "src" / "leaven" / "_seam_worker" / "target.py": ROOT
+    / "tests"
+    / "_seam_worker"
+    / "test_target.py",
     ROOT / "src" / "leaven" / "artifacts" / "skill_bank.py": ROOT
     / "tests"
     / "artifacts"

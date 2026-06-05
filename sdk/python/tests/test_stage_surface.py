@@ -94,6 +94,23 @@ def test_gepa_rejects_unimplemented_judge_keyword() -> None:
         signature.bind(judge=dummy_reward)
 
 
+def test_stage_decorator_rejects_callable_object() -> None:
+    """Boundary check: decorated stages must be reloadable function objects."""
+
+    class CallableRunner:
+        async def __call__(
+            self,
+            prompt: lv.PromptArtifact,
+            case: lv.InputCaseView,
+            cx: lv.RolloutContext,
+        ) -> str:
+            _ = (prompt, case, cx)
+            return "ok"
+
+    with pytest.raises(TypeError, match="stage decorators require async function objects"):
+        lv.runner(CallableRunner())
+
+
 @lv.reward
 async def dummy_reward(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> float:
     """The reward can inspect scorer-role case data."""

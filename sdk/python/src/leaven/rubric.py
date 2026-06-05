@@ -12,6 +12,7 @@ assessment/evidence/receipt machinery a hand-written evaluator would author.
 """
 
 from collections.abc import Awaitable, Callable
+from types import FunctionType
 from typing import overload
 
 from pydantic import BaseModel, ConfigDict
@@ -73,8 +74,10 @@ def reward(
     """
 
     def wrap(f: RewardFunc) -> RegisteredReward:
+        if not isinstance(f, FunctionType):
+            raise TypeError("reward decorators require async function objects")
         return RegisteredReward(
-            id=id or f"{getattr(f, '__module__', 'leaven')}.{getattr(f, '__name__', 'reward')}",
+            id=id or f"{f.__module__}.{f.__name__}",
             weight=weight,
             func=f,
         )

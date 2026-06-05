@@ -20,6 +20,7 @@ current worker runtime.
 """
 
 from collections.abc import Awaitable, Callable
+from types import FunctionType
 from typing import Literal, overload
 
 from pydantic import BaseModel, ConfigDict
@@ -82,10 +83,11 @@ def _make_registered[A, O](
     Used by all stage decorators. The scaffold returns a real value so user
     code composes cleanly; runner-stage wiring lives in `lv.optimize(...).run()`.
     """
+    if not isinstance(func, FunctionType):
+        raise TypeError("stage decorators require async function objects")
     return RegisteredStage(
         role=role,
-        id=stage_id
-        or f"{getattr(func, '__module__', 'leaven')}.{getattr(func, '__name__', 'stage')}",
+        id=stage_id or f"{func.__module__}.{func.__name__}",
         trust_profile=_resolve_trust(trust_profile),
         granularity=granularity,
         func=func,

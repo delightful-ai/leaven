@@ -1,6 +1,25 @@
 import math
 
+import pytest
+
 import leaven as lv
+
+
+def test_reward_decorator_rejects_callable_object() -> None:
+    """Boundary check: reward ids come from reloadable function objects."""
+
+    class CallableReward:
+        async def __call__(
+            self,
+            output: str,
+            case: lv.ScoringCaseView,
+            cx: lv.RubricContext,
+        ) -> float:
+            _ = (output, case, cx)
+            return 1.0
+
+    with pytest.raises(TypeError, match="reward decorators require async function objects"):
+        lv.reward(CallableReward())
 
 
 def test_exact_match_uses_default_text_normalization() -> None:
@@ -24,4 +43,3 @@ def test_f1_scores_token_overlap() -> None:
     assert lv.scoring.f1("red blue", "blue red") == 1.0
     assert math.isclose(lv.scoring.f1("red blue", "red green"), 0.5)
     assert lv.scoring.f1("", "red") == 0.0
-
