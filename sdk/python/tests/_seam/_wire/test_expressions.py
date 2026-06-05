@@ -35,6 +35,7 @@ from leaven._seam._wire.refs import (
     ArtifactSelectorJsonPointer,
     CandidateCostScope,
     ExtensionSummaryPayload,
+    GraphEventFilterPayload,
 )
 
 
@@ -285,6 +286,12 @@ def test_graph_query_event_filter_decodes_owned_json() -> None:
         "kind": "run_context",
         "data_classes": ["event.public", {"scope": "run"}],
     }
+
+    decoded_filter = msgspec.json.decode(
+        b'{"kind":"run_context","data_classes":["event.public",{"scope":"run"}]}',
+        type=GraphEventFilterPayload,
+    )
+    assert decoded_filter == events_expr.source.filter
 
 
 def test_graph_query_event_filter_rejects_non_object_filter() -> None:

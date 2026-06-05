@@ -3646,6 +3646,33 @@ acceptance:
           SDK source, or seam tests. This removes another active `WireJson*`
           result carrier; graph filters, literal/output/assessment values, and
           extension payloads still need separate audit.
+      - kind: graph_event_filter_payload_owner_branded
+        paths:
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/codegen/expression_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/refs.py
+          - sdk/python/src/leaven/_seam/_wire/expressions.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/tests/_seam/_wire/test_expressions.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_expressions.py -q
+          - cd sdk/python && uv run pytest tests/_seam/_wire -q
+          - cd sdk/python && uv run ruff check codegen/ref_codegen.py codegen/expression_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/expressions.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_expressions.py
+          - cd sdk/python && uv run ty check codegen/ref_codegen.py codegen/expression_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/expressions.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_expressions.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - rg -n "WireJsonGraphEventFilter" sdk/python/codegen sdk/python/src/leaven sdk/python/tests/_seam -g '*.py' -S
+        note: >-
+          Generated graph-query event filters now use the branded
+          `GraphEventFilterPayload` owner instead of `WireJsonGraphEventFilter`.
+          This mirrors Rust's current `PlanGraphEventFilterPayload` treatment:
+          the schema still leaves non-RunContext filters opaque, but Python no
+          longer exposes the active expression field as a generic `WireJson*`
+          carrier. Focused expression tests decode the owner directly and
+          through `GraphSourceEvents`; the full seam-wire lane remains green.
+          The targeted grep has no old alias matches. Literal, output,
+          assessment, and extension JSON value owners remain for later audit.
       - kind: python_request_envelope_raw_dict_escape_removed
         paths:
           - sdk/python/src/leaven/_seam/client.py
