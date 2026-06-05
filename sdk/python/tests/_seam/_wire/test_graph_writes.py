@@ -12,6 +12,8 @@ from leaven._seam._wire.writes import (
     EmitRunEventWrite,
     EvaluationSetCases,
     EvaluationSetNamed,
+    EvaluationSetSample,
+    EvaluationSetUnion,
     ProposalEffectChange,
     ProposalEffectCreate,
     RequestEvaluationWrite,
@@ -110,6 +112,41 @@ def test_evaluation_request_decodes_typed_cases_set() -> None:
     assert isinstance(evaluation.request.set, EvaluationSetCases)
     assert evaluation.request.set.cases == ["case_1"]
     assert evaluation.request.set.requires_partition_resolution is True
+
+
+def test_evaluation_request_decodes_recursive_set_exprs() -> None:
+    """Example: composite evaluation sets recursively preserve set identity."""
+
+    decoded = msgspec.json.decode(
+        _mixed_write_plan().replace(
+            b'"set":{"kind":"named","name":"validation"}',
+            b'"set":{"kind":"union","sets":['
+            b'{"kind":"named","name":"validation"},'
+            b'{"kind":"sample","base":{"kind":"cases","cases":["case_1"],'
+            b'"requires_partition_resolution":true},"n":1,"seed":7}]}',
+        ),
+        type=PlanDocument,
+    )
+    evaluation = decoded.ops[1].write
+
+    assert isinstance(evaluation, RequestEvaluationWrite)
+    assert isinstance(evaluation.request.set, EvaluationSetUnion)
+    assert isinstance(evaluation.request.set.sets[0], EvaluationSetNamed)
+    assert isinstance(evaluation.request.set.sets[1], EvaluationSetSample)
+    assert isinstance(evaluation.request.set.sets[1].base, EvaluationSetCases)
+
+
+def test_evaluation_request_rejects_malformed_recursive_set_expr() -> None:
+    """Boundary check: composite evaluation sets do not accept raw child objects."""
+
+    with pytest.raises(msgspec.ValidationError):
+        msgspec.json.decode(
+            _mixed_write_plan().replace(
+                b'"set":{"kind":"named","name":"validation"}',
+                b'"set":{"kind":"union","sets":[{"name":"validation"}]}',
+            ),
+            type=PlanDocument,
+        )
 
 
 def test_evaluation_request_rejects_unknown_set_kind() -> None:

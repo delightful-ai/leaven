@@ -166,26 +166,26 @@ class EvaluationSetRecent(Struct, frozen=True, forbid_unknown_fields=True, tag="
 
 
 class EvaluationSetUnion(Struct, frozen=True, forbid_unknown_fields=True, tag="union", tag_field="kind"):
-    sets: list[WireJsonObject]
+    sets: list["EvaluationSetExpr"]
 
 
 class EvaluationSetIntersect(Struct, frozen=True, forbid_unknown_fields=True, tag="intersect", tag_field="kind"):
-    sets: list[WireJsonObject]
+    sets: list["EvaluationSetExpr"]
 
 
 class EvaluationSetDifference(Struct, frozen=True, forbid_unknown_fields=True, tag="difference", tag_field="kind"):
-    base: WireJsonObject
-    subtract: WireJsonObject
+    base: "EvaluationSetExpr"
+    subtract: "EvaluationSetExpr"
 
 
 class EvaluationSetSample(Struct, frozen=True, forbid_unknown_fields=True, tag="sample", tag_field="kind"):
-    base: WireJsonObject
+    base: "EvaluationSetExpr"
     n: int
     seed: int
 
 
 class EvaluationSetStratified(Struct, frozen=True, forbid_unknown_fields=True, tag="stratified", tag_field="kind"):
-    base: WireJsonObject
+    base: "EvaluationSetExpr"
     by: str
     per_bucket: int
     seed: int
