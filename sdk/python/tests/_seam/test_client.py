@@ -8,12 +8,15 @@ from _pytest.monkeypatch import MonkeyPatch
 
 from leaven._seam import (
     AgentRunRequest,
+    EvaluationRequestRequest,
+    EventEmitRequest,
     SeamClient,
     SeamExecutionContext,
     SeamServiceConfig,
     StageRunProposeRequest,
     StageRunRequest,
 )
+from leaven._seam._wire.expressions import EvaluationSetNamed
 from leaven._seam._wire.jsonrpc import JsonRpcRequestEnvelope
 
 
@@ -84,6 +87,81 @@ def test_client_lowers_typed_runner_stage_request(monkeypatch: MonkeyPatch) -> N
     assert b"fp_cap_sha256_stage" in captured.input_text.encode()
     assert result.stage == "runner"
     assert result.output.summary == "ok"
+
+
+def test_client_lowers_typed_evaluation_request(monkeypatch: MonkeyPatch) -> None:
+    """Evaluation request is reachable as a typed locked V1 method."""
+
+    captured = CapturedRun(
+        stdout=(
+            '{"jsonrpc":"2.0","id":"req_eval","result":'
+            '{"method":"leaven/evaluation.request","primary":'
+            '{"kind":"evaluation_request_receipt","evaluation_request_id":"evalreq_1",'
+            '"status":"recorded","graph_revision":"rev_eval",'
+            '"data_classes":["public"],"replayability":"fully_managed",'
+            '"receipt":"wrec_eval"},'
+            '"receipts":[],"redactions":[],"capability_fingerprint":"fp_cap_test",'
+            '"policy_fingerprint":"fp_policy_test","data_classes":["public"]}}'
+        )
+    )
+    monkeypatch.setattr(subprocess, "run", captured.run)
+    client = _client()
+
+    result = client.evaluation_request(
+        EvaluationRequestRequest(
+            request_id="req_eval",
+            plan_id="plan_eval",
+            idempotency_key="eval-0001",
+            candidates=["cand_seed"],
+            set=EvaluationSetNamed(name="validation"),
+            granularity="per_case",
+            purpose="validation",
+            evaluator="eval_score",
+            metadata={"source": "client-test"},
+        )
+    )
+
+    envelope = msgspec.json.decode(captured.input_text.encode(), type=JsonRpcRequestEnvelope)
+    assert envelope.method == "leaven/evaluation.request"
+    assert envelope.id == "req_eval"
+    assert b'"kind":"request_evaluation"' in captured.input_text.encode()
+    assert result.primary.evaluation_request_id == "evalreq_1"
+
+
+def test_client_lowers_typed_event_emit(monkeypatch: MonkeyPatch) -> None:
+    """Event emit is reachable as a typed locked V1 method."""
+
+    captured = CapturedRun(
+        stdout=(
+            '{"jsonrpc":"2.0","id":"req_event","result":'
+            '{"method":"leaven/event.emit","primary":'
+            '{"kind":"emit_run_event","event_id":"event_1",'
+            '"data_classes":["public"],"replayability":"fully_managed",'
+            '"receipt":"wrec_event"},'
+            '"receipts":[],"redactions":[],"capability_fingerprint":"fp_cap_test",'
+            '"policy_fingerprint":"fp_policy_test","data_classes":["public"]}}'
+        )
+    )
+    monkeypatch.setattr(subprocess, "run", captured.run)
+    client = _client()
+
+    result = client.event_emit(
+        EventEmitRequest(
+            request_id="req_event",
+            plan_id="plan_event",
+            idempotency_key="event-0001",
+            event_kind="sdk.test",
+            payload_schema="fp_schema_sha256_sdk_test",
+            payload={"ok": True},
+            visibility="public",
+        )
+    )
+
+    envelope = msgspec.json.decode(captured.input_text.encode(), type=JsonRpcRequestEnvelope)
+    assert envelope.method == "leaven/event.emit"
+    assert envelope.id == "req_event"
+    assert b'"kind":"emit_run_event"' in captured.input_text.encode()
+    assert result.primary.event_id == "event_1"
 
 
 def test_client_lowers_typed_proposer_stage_request(monkeypatch: MonkeyPatch) -> None:

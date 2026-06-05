@@ -57,6 +57,10 @@ MIRRORED_TESTS = {
     / "_seam"
     / "_wire"
     / "test_payloads.py",
+    ROOT / "src" / "leaven" / "_seam" / "effect_plans.py": ROOT
+    / "tests"
+    / "_seam"
+    / "test_client.py",
     ROOT / "src" / "leaven" / "_seam_worker" / "callbacks.py": ROOT
     / "tests"
     / "_seam_worker"

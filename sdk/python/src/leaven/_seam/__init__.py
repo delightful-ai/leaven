@@ -17,6 +17,7 @@ from .config import (
     SeamExecutionContext,
     SeamServiceConfig,
 )
+from .effect_plans import EvaluationRequestRequest, EventEmitRequest
 from .errors import SeamClientError
 from .lm_plans import LmCompleteRequest
 from .plans import (
@@ -43,6 +44,8 @@ __all__ = [
     "CaseLoadRequest",
     "CodexCliRuntimeConfig",
     "CommandRunnerStageConfig",
+    "EvaluationRequestRequest",
+    "EventEmitRequest",
     "LmCompleteRequest",
     "LocalWorkspaceConfig",
     "MockLmRuntimeConfig",

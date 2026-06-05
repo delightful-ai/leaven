@@ -1816,6 +1816,37 @@ acceptance:
           method-result decode routing for every retained locked method. The
           row remains pending because remaining Plan/body/result leaf records
           still need typed owners.
+      - kind: generated_method_routing_reaches_retained_effect_methods
+        paths:
+          - sdk/python/src/leaven/_seam/effect_plans.py
+          - sdk/python/src/leaven/_seam/client.py
+          - sdk/python/src/leaven/_seam/__init__.py
+          - sdk/python/src/leaven/_seam/plans.py
+          - sdk/python/tests/_seam/test_client.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && uv run pytest tests/_seam/test_client.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_seam tests/_seam/test_client.py --exclude src/leaven/_types
+          - cd sdk/python && uv run ty check src/leaven tests/_seam/test_client.py --exclude src/leaven/_types
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && uv run pytest -q
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          The generated method-result table already included every retained
+          locked method, including `leaven/evaluation.request` and
+          `leaven/event.emit`, but the hand-written private client did not
+          expose typed request builders for those two graph-effect methods. A
+          new private `_seam.effect_plans` module now owns typed
+          `EvaluationRequestRequest` and `EventEmitRequest` Plan IR builders,
+          and `SeamClient` routes them through the same generated msgspec
+          method-result decoder as the rest of the locked V1 client surface.
+          Focused tests assert both methods lower to locked JSON-RPC envelopes
+          and decode generated typed result records. The split keeps
+          `plans.py` under the 650 LOC gate and leaves transport/process logic
+          outside the msgspec codec layer. This narrows Python locked-method
+          reachability but does not close the row while remaining leaf records
+          and Rust-codegen denominator audit are pending.
       - kind: generated_workspace_query_ops_are_typed_records
         paths:
           - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json

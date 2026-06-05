@@ -35,7 +35,11 @@ from leaven._seam._wire.payloads import (
     RunnerRequest,
 )
 from leaven._seam._wire.payloads import StageRunRequest as StageRunParams
-from leaven._seam._wire.refs import CaseRefRecord, WireJsonCaseInput, WireJsonSchemaObject
+from leaven._seam._wire.refs import (
+    CaseRefRecord,
+    WireJsonCaseInput,
+    WireJsonSchemaObject,
+)
 from leaven._seam._wire.writes import (
     ApplyProposalBatchWrite,
     ProposalWriteRecord,
@@ -53,6 +57,8 @@ SeamRequestMethod = Literal[
     "leaven/case.input",
     "leaven/case.target",
     "leaven/case.metadata",
+    "leaven/evaluation.request",
+    "leaven/event.emit",
     "leaven/lm.complete",
     "leaven/proposal.apply",
     "leaven/proposal.submit_batch",

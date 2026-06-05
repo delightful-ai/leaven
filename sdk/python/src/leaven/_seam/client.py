@@ -15,6 +15,8 @@ from ._wire.results import (
     AgentRunResult,
     AssessmentSubmitResult,
     CaseLoadResult,
+    EvaluationRequestResult,
+    EventEmitResult,
     LmCompleteResult,
     ProposalApplyResult,
     ProposalSubmitResult,
@@ -33,6 +35,7 @@ from ._wire.results import (
     WorkspaceStatResult,
 )
 from .config import SeamServiceConfig
+from .effect_plans import EvaluationRequestRequest, EventEmitRequest
 from .errors import SeamClientError
 from .lm_plans import LmCompleteRequest
 from .plans import (
@@ -80,6 +83,24 @@ class SeamClient:
     ) -> AssessmentSubmitResult:
         """Send one `leaven/assessment.submit` request and return its typed result."""
         return self._typed_request(request, AssessmentSubmitResult, timeout_s=timeout_s)
+
+    def evaluation_request(
+        self,
+        request: EvaluationRequestRequest,
+        *,
+        timeout_s: int = 240,
+    ) -> EvaluationRequestResult:
+        """Send one `leaven/evaluation.request` request and return its typed result."""
+        return self._typed_request(request, EvaluationRequestResult, timeout_s=timeout_s)
+
+    def event_emit(
+        self,
+        request: EventEmitRequest,
+        *,
+        timeout_s: int = 240,
+    ) -> EventEmitResult:
+        """Send one `leaven/event.emit` request and return its typed result."""
+        return self._typed_request(request, EventEmitResult, timeout_s=timeout_s)
 
     def lm_complete(self, request: LmCompleteRequest, *, timeout_s: int = 240) -> LmCompleteResult:
         """Send one `leaven/lm.complete` request and return its typed result."""
