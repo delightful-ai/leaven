@@ -13,6 +13,7 @@ from leaven._seam._wire.results import (
     ProposalSubmitResult,
 )
 from leaven._seam._wire.writes import ProposalEffectAgentSession, ProposalWriteRecord
+from leaven.artifacts.skill_bank import SkillBankChangeFile, SkillBankWriteFileChange
 from leaven.builders.proposals import ProposalsBuilder, ProposalSubmission
 from leaven.json_value import JsonObject, JsonValue
 from leaven.proposal import ProposalBatch, ProposalEffect
@@ -94,6 +95,43 @@ async def test_proposals_builder_requires_bound_seam_client() -> None:
                 ],
             )
         )
+
+
+@pytest.mark.asyncio
+async def test_proposals_builder_projects_skill_bank_change_at_plan_boundary() -> None:
+    """Scenario: typed skill-bank changes stay typed until seam Plan encoding."""
+
+    client = FakeProposalSeamClient()
+    proposals = ProposalsBuilder._for_seam(client)
+    batch = ProposalBatch(
+        effects=[
+            ProposalEffect.change(
+                parent_candidate_id="cand_parent",
+                surface="fp_surface_sha256_skill_bank",
+                change_schema="fp_schema_sha256_skill_bank_change",
+                change=SkillBankWriteFileChange(
+                    skill="alpha",
+                    path="SKILL.md",
+                    file=SkillBankChangeFile(content="improved"),
+                ),
+            )
+        ],
+    )
+
+    await proposals.submit(batch)
+
+    write = _json_object(_json_array(_params_object(client.request_value.to_params())["ops"])[0])["write"]
+    proposal = _json_object(_json_array(_json_object(write)["proposals"])[0])
+    effect = _json_object(proposal["effect"])
+    assert effect["change"] == {
+        "kind": "literal",
+        "value": {
+            "kind": "write_file",
+            "skill": "alpha",
+            "path": "SKILL.md",
+            "file": {"content": "improved", "executable": False},
+        },
+    }
 
 
 @pytest.mark.asyncio

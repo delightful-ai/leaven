@@ -37,7 +37,7 @@ from .agent_instructions import AgentInstructions, AgentRoles
 
 # ----- Built-in artifacts ---------------------------------------------------
 from .artifacts import PromptArtifact, SkillBank
-from .artifacts.skill_bank import SkillFile
+from .artifacts.skill_bank import SkillBankChangeFile, SkillBankWriteFileChange, SkillFile
 from .blob_ref import BlobRef
 
 # ----- Composition + entry -------------------------------------------------
@@ -153,6 +153,8 @@ __all__ = [
     "Score",
     "ScoringCaseView",
     "SkillBank",
+    "SkillBankChangeFile",
+    "SkillBankWriteFileChange",
     "SkillFile",
     "Split",
     "Task",

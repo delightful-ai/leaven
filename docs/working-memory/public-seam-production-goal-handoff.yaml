@@ -2136,6 +2136,44 @@ acceptance:
           actual artifact/change value remains an explicit schema-owned JSON
           leaf until Prompt, SkillBank, GitProgram, and future adapter changes
           gain concrete Python owners.
+      - kind: python_skill_proposal_change_owner_cutover
+        paths:
+          - sdk/python/src/leaven/artifacts/skill_bank.py
+          - sdk/python/src/leaven/artifacts/__init__.py
+          - sdk/python/src/leaven/__init__.py
+          - sdk/python/src/leaven/proposal.py
+          - sdk/python/src/leaven/builders/proposals.py
+          - sdk/python/tests/artifacts/test_skill_bank.py
+          - sdk/python/tests/test_proposal.py
+          - sdk/python/tests/test_proposal_submission.py
+          - docs/specs/leaven_python.md
+        commands:
+          - cd sdk/python && uv run pytest tests/artifacts/test_skill_bank.py tests/test_proposal.py tests/test_proposal_submission.py -q
+          - cd sdk/python && uv run pytest tests/test_optimize_proposer_mechanics.py tests/test_proposer_worker.py tests/test_product_surface_ring.py -q
+          - cd sdk/python && uv run ruff check src/leaven/artifacts/skill_bank.py src/leaven/artifacts/__init__.py src/leaven/__init__.py src/leaven/proposal.py src/leaven/builders/proposals.py tests/artifacts/test_skill_bank.py tests/test_proposal.py tests/test_proposal_submission.py
+          - cd sdk/python && uv run ty check src/leaven/artifacts/skill_bank.py src/leaven/artifacts/__init__.py src/leaven/__init__.py src/leaven/proposal.py src/leaven/builders/proposals.py tests/artifacts/test_skill_bank.py tests/test_proposal.py tests/test_proposal_submission.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - >-
+            cd sdk/python && ! rg -n "change: JsonObject|change=\\{\\\"files\\\"|files\\\": \\{"
+            src/leaven/proposal.py src/leaven/artifacts/skill_bank.py
+            tests/test_proposal.py tests/test_proposal_submission.py
+            tests/artifacts/test_skill_bank.py examples/06_reflect_propose_custom.py
+            examples/09_full_repro.py
+        note: >-
+          Public Python `SkillProposal.change` no longer accepts a raw
+          `JsonObject` or the old `{"files": ...}` bag. `skill_bank.py` now
+          owns a strict Pydantic `SkillBankChange` discriminated union mirroring
+          the Rust skill-bank change variants, including write/remove/rename,
+          executable-bit, folder, and atomic changes. `ProposalEffect.change`
+          can carry that typed domain record through proposal construction, and
+          `ProposalsBuilder` projects it to a JSON literal only at the Plan IR
+          boundary. Focused tests prove typed construction, Rust-field aliases
+          such as `from`, nested atomic projection, top-level common
+          constructors, and the exact generated seam literal for proposal
+          submission. Prompt and GitProgram change leaves still require their
+          own owners before the full Python wire-codegen row can close.
       - kind: extension_result_receipts_match_rust_audit_shape
         paths:
           - sdk/python/codegen/result_codegen.py

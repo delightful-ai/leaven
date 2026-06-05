@@ -18,8 +18,9 @@ from .._seam._wire.writes import (
     ProposalEffectCreate,
     ProposalWriteRecord,
 )
+from ..artifacts.skill_bank import SkillBankChangeRecord
 from ..json_value import JsonValue
-from ..proposal import ProposalBatch, ProposalEffect
+from ..proposal import ProposalBatch, ProposalChangeValue, ProposalEffect
 
 
 class ProposalSubmission(BaseModel):
@@ -210,8 +211,8 @@ def _plan_literal_expr(value: JsonValue) -> PlanExpressionLiteral:
     return PlanExpressionLiteral(value=value)
 
 
-def _literal_expr(value: JsonValue) -> ValueExprLiteral:
-    return ValueExprLiteral(value=value)
+def _literal_expr(value: ProposalChangeValue | JsonValue) -> ValueExprLiteral:
+    return ValueExprLiteral(value=_proposal_value(value))
 
 
 def _required_string(value: str | None, field: str) -> str:
@@ -220,9 +221,15 @@ def _required_string(value: str | None, field: str) -> str:
     return value
 
 
-def _required_value(value: JsonValue | None, field: str) -> JsonValue:
+def _required_value(value: ProposalChangeValue | None, field: str) -> ProposalChangeValue:
     if value is None:
         raise ValueError(f"proposal effect missing {field}")
+    return value
+
+
+def _proposal_value(value: ProposalChangeValue | JsonValue) -> JsonValue:
+    if isinstance(value, SkillBankChangeRecord):
+        return value.to_json_value()
     return value
 
 

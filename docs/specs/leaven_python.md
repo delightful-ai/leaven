@@ -389,9 +389,12 @@ validates against the locked seam before execution.
 the effect kind, causal parent, surface fingerprint, change schema, parser,
 agent-session receipt, artifact fields, artifact value, and `change_value`. It
 does not carry an anonymous `payload` object that builders later reparse by
-key. The remaining artifact/change value is an explicit schema-owned leaf:
-Prompt, SkillBank, GitProgram, and future adapter changes need concrete owners
-before they can count as fully typed artifact semantics.
+key. Public skill-bank proposal output uses a typed `SkillBankChange`
+discriminated union (`write_file`, `rename_file`, `atomic`, etc.) instead of a
+free-form object bag; the builder projects that domain value to a Plan literal
+only at the public-seam boundary. Remaining Prompt, GitProgram, and future
+adapter artifact/change leaves still need concrete owners before they can count
+as fully typed artifact semantics.
 
 The builder geometry:
 

@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from leaven._receipts import CallReceipt, QueryReceipt
+from leaven.artifacts.skill_bank import SkillBankChangeFile, SkillBankWriteFileChange
 from leaven.proposal import ProposalBatch, ProposalEffect, SkillProposal
 
 
@@ -14,7 +15,11 @@ def test_skill_proposal_lowers_to_typed_change_batch() -> None:
         parent_candidate_id="cand_parent",
         surface="fp_surface_sha256_skill_bank",
         change_schema="fp_schema_sha256_skill_bank_change",
-        change={"files": {"alpha/SKILL.md": "improved"}},
+        change=SkillBankWriteFileChange(
+            skill="alpha",
+            path="SKILL.md",
+            file=SkillBankChangeFile(content="improved"),
+        ),
         read_receipts=[QueryReceipt(receipt_id="qrec_reflection")],
         effect_receipts=[CallReceipt(receipt_id="agentrec_codex")],
     )
@@ -26,7 +31,11 @@ def test_skill_proposal_lowers_to_typed_change_batch() -> None:
     assert effect.parent_candidate_id == "cand_parent"
     assert effect.surface == "fp_surface_sha256_skill_bank"
     assert effect.change_schema == "fp_schema_sha256_skill_bank_change"
-    assert effect.change_value == {"files": {"alpha/SKILL.md": "improved"}}
+    assert effect.change_value == SkillBankWriteFileChange(
+        skill="alpha",
+        path="SKILL.md",
+        file=SkillBankChangeFile(content="improved"),
+    )
     assert batch.read_receipts == [QueryReceipt(receipt_id="qrec_reflection")]
     assert batch.effect_receipts == [CallReceipt(receipt_id="agentrec_codex")]
 

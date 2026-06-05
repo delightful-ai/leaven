@@ -9,7 +9,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ._receipts import CallReceipt, QueryReceipt
-from .json_value import JsonObject, JsonValue
+from .artifacts.skill_bank import SkillBankChange, SkillBankChangeRecord
+from .json_value import JsonValue
+
+type ProposalChangeValue = JsonValue | SkillBankChangeRecord
 
 
 class ProposalEffect(BaseModel):
@@ -35,7 +38,7 @@ class ProposalEffect(BaseModel):
     """Artifact value for 'create' effects."""
     change_schema: str | None = None
     """Required for all change effects."""
-    change_value: JsonValue | None = None
+    change_value: ProposalChangeValue | None = None
     """Artifact-native change value for 'change' effects."""
     parser: str | None = None
     """Parser used by workspace-diff or agent-session changes."""
@@ -87,7 +90,7 @@ class ProposalEffect(BaseModel):
         parent_candidate_id: str,
         surface: str,
         change_schema: str,
-        change: JsonValue,
+        change: ProposalChangeValue,
     ) -> "ProposalEffect":
         """Build a lineage-bearing change proposal effect."""
         return cls(
@@ -157,7 +160,7 @@ class SkillProposal(BaseModel):
     parent_candidate_id: str
     surface: str
     change_schema: str
-    change: JsonObject
+    change: SkillBankChange
     read_receipts: list[QueryReceipt] = Field(default_factory=list)
     effect_receipts: list[CallReceipt] = Field(default_factory=list)
 
@@ -168,4 +171,4 @@ def _require[T](value: T | None, message: str) -> T:
     return value
 
 
-__all__ = ["ProposalBatch", "ProposalEffect", "SkillProposal"]
+__all__ = ["ProposalBatch", "ProposalChangeValue", "ProposalEffect", "SkillProposal"]

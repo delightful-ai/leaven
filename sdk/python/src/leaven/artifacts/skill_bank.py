@@ -10,10 +10,13 @@ will eventually replace this hand-written stub with codegen from the
 skill bank's locked JSON schema.
 """
 
+import json
 from pathlib import Path
-from typing import Self
+from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from ..json_value import JsonObject, JsonValue
 
 
 class SkillFile(BaseModel):
@@ -63,6 +66,125 @@ class SkillBank(BaseModel):
         return cls(files=files)
 
 
+class SkillBankChangeRecord(BaseModel):
+    """Base class for typed skill-bank mutation records."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    def to_json_value(self) -> JsonObject:
+        """Project this typed change to the public-seam JSON literal encoding."""
+        raw: object = json.loads(self.model_dump_json(by_alias=True, exclude_none=True))
+        return _json_object(raw)
+
+
+class SkillBankChangeFile(BaseModel):
+    """File contents carried by a skill-bank write change."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    content: str
+    executable: bool = False
+
+
+class SkillBankFolder(BaseModel):
+    """Complete skill folder value for create/replace changes."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    files: list[SkillBankChangeFile] = Field(default_factory=list)
+
+
+class SkillBankCreateSkillChange(SkillBankChangeRecord):
+    """Create a skill folder."""
+
+    kind: Literal["create_skill"] = "create_skill"
+    folder: SkillBankFolder
+
+
+class SkillBankReplaceSkillChange(SkillBankChangeRecord):
+    """Replace one skill folder by name."""
+
+    kind: Literal["replace_skill"] = "replace_skill"
+    name: str
+    folder: SkillBankFolder
+
+
+class SkillBankRemoveSkillChange(SkillBankChangeRecord):
+    """Remove one skill folder."""
+
+    kind: Literal["remove_skill"] = "remove_skill"
+    name: str
+
+
+class SkillBankRenameSkillChange(SkillBankChangeRecord):
+    """Rename one skill folder."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
+
+    kind: Literal["rename_skill"] = "rename_skill"
+    from_name: str = Field(validation_alias="from", serialization_alias="from")
+    to: str
+
+
+class SkillBankWriteFileChange(SkillBankChangeRecord):
+    """Write one file inside a skill."""
+
+    kind: Literal["write_file"] = "write_file"
+    skill: str
+    path: str
+    file: SkillBankChangeFile
+
+
+class SkillBankRemoveFileChange(SkillBankChangeRecord):
+    """Remove one file inside a skill."""
+
+    kind: Literal["remove_file"] = "remove_file"
+    skill: str
+    path: str
+
+
+class SkillBankRenameFileChange(SkillBankChangeRecord):
+    """Rename one file inside a skill."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
+
+    kind: Literal["rename_file"] = "rename_file"
+    skill: str
+    from_path: str = Field(validation_alias="from", serialization_alias="from")
+    to: str
+
+
+class SkillBankSetExecutableChange(SkillBankChangeRecord):
+    """Change one skill file's executable bit."""
+
+    kind: Literal["set_executable"] = "set_executable"
+    skill: str
+    path: str
+    executable: bool
+
+
+class SkillBankAtomicChange(SkillBankChangeRecord):
+    """Apply multiple skill-bank changes atomically."""
+
+    kind: Literal["atomic"] = "atomic"
+    changes: list["SkillBankChange"]
+
+
+type SkillBankChange = Annotated[
+    SkillBankCreateSkillChange
+    | SkillBankReplaceSkillChange
+    | SkillBankRemoveSkillChange
+    | SkillBankRenameSkillChange
+    | SkillBankWriteFileChange
+    | SkillBankRemoveFileChange
+    | SkillBankRenameFileChange
+    | SkillBankSetExecutableChange
+    | SkillBankAtomicChange,
+    Field(discriminator="kind"),
+]
+
+
 def _markdown_paths(directory: Path, *, root: Path) -> list[str]:
     if not directory.exists():
         return []
@@ -75,4 +197,41 @@ def _markdown_paths(directory: Path, *, root: Path) -> list[str]:
     ]
 
 
-__all__ = ["SkillBank", "SkillFile"]
+def _json_object(raw: object) -> JsonObject:
+    if not isinstance(raw, dict):
+        raise TypeError("skill-bank change did not serialize as an object")
+    result: JsonObject = {}
+    for key, value in raw.items():
+        if not isinstance(key, str):
+            raise TypeError("skill-bank change serialized a non-string JSON object key")
+        result[key] = _json_value(value)
+    return result
+
+
+def _json_value(raw: object) -> JsonValue:
+    if raw is None or isinstance(raw, str | int | float | bool):
+        return raw
+    if isinstance(raw, list):
+        return [_json_value(value) for value in raw]
+    if isinstance(raw, dict):
+        return _json_object(raw)
+    raise TypeError(f"skill-bank change contains non-JSON value: {type(raw).__name__}")
+
+
+__all__ = [
+    "SkillBank",
+    "SkillBankAtomicChange",
+    "SkillBankChange",
+    "SkillBankChangeFile",
+    "SkillBankChangeRecord",
+    "SkillBankCreateSkillChange",
+    "SkillBankFolder",
+    "SkillBankRemoveFileChange",
+    "SkillBankRemoveSkillChange",
+    "SkillBankRenameFileChange",
+    "SkillBankRenameSkillChange",
+    "SkillBankReplaceSkillChange",
+    "SkillBankSetExecutableChange",
+    "SkillBankWriteFileChange",
+    "SkillFile",
+]

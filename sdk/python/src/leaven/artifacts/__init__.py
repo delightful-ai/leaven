@@ -10,6 +10,37 @@ namespace owned by its semantics.
 
 from .directory import DirectoryArtifact, directory
 from .prompt import PromptArtifact
-from .skill_bank import SkillBank
+from .skill_bank import (
+    SkillBank,
+    SkillBankAtomicChange,
+    SkillBankChange,
+    SkillBankChangeFile,
+    SkillBankCreateSkillChange,
+    SkillBankFolder,
+    SkillBankRemoveFileChange,
+    SkillBankRemoveSkillChange,
+    SkillBankRenameFileChange,
+    SkillBankRenameSkillChange,
+    SkillBankReplaceSkillChange,
+    SkillBankSetExecutableChange,
+    SkillBankWriteFileChange,
+)
 
-__all__ = ["DirectoryArtifact", "PromptArtifact", "SkillBank", "directory"]
+__all__ = [
+    "DirectoryArtifact",
+    "PromptArtifact",
+    "SkillBank",
+    "SkillBankAtomicChange",
+    "SkillBankChange",
+    "SkillBankChangeFile",
+    "SkillBankCreateSkillChange",
+    "SkillBankFolder",
+    "SkillBankRemoveFileChange",
+    "SkillBankRemoveSkillChange",
+    "SkillBankRenameFileChange",
+    "SkillBankRenameSkillChange",
+    "SkillBankReplaceSkillChange",
+    "SkillBankSetExecutableChange",
+    "SkillBankWriteFileChange",
+    "directory",
+]
