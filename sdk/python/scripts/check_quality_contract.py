@@ -114,6 +114,7 @@ def main() -> None:
     failures = list(check_line_counts())
     failures.extend(check_future_annotations())
     failures.extend(check_no_any())
+    failures.extend(check_no_production_notimplemented())
     failures.extend(check_defensive_type_erasure())
     failures.extend(check_no_public_builder_notimplemented())
     failures.extend(check_mirrored_tests())
@@ -163,6 +164,19 @@ def check_no_any() -> list[str]:
                 text = path.read_text(encoding="utf-8")
                 if "Any" in text:
                     failures.append(f"{relative(path)} contains `Any` in production SDK code")
+    return failures
+
+
+def check_no_production_notimplemented(roots: tuple[Path, ...] = NO_ANY_ROOTS) -> list[str]:
+    failures: list[str] = []
+    for root in roots:
+        for path in sorted(root.rglob("*.py")):
+            if SKIPPED_PARTS.isdisjoint(_parts_for_skip_check(path)):
+                text = path.read_text(encoding="utf-8")
+                if "NotImplementedError" in text:
+                    failures.append(
+                        f"{relative(path)} contains NotImplementedError in production SDK code"
+                    )
     return failures
 
 
@@ -434,6 +448,13 @@ def relative(path: Path) -> str:
         return str(path.relative_to(ROOT))
     except ValueError:
         return str(path)
+
+
+def _parts_for_skip_check(path: Path) -> tuple[str, ...]:
+    try:
+        return path.relative_to(ROOT).parts
+    except ValueError:
+        return path.parts
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ from typing import overload
 
 from pydantic import BaseModel
 
+from .._errors import UnsupportedConfigurationError
 from .._receipts import CallReceipt
 from .._seam._wire import JsonObject
 from ..builders.lm import LmBuilder, LmMessage, LmResponse, LmTool, _lm_response_from_result
@@ -82,11 +83,19 @@ class CallbackLmBuilder(LmBuilder):
         input_classes: Sequence[str] | None = None,
         forbidden_input_classes: Sequence[str] | None = None,
     ) -> LmResponse[ParsedOutputT] | LmResponse[JsonValue]:
-        _ = (messages, forbidden_input_classes)
+        _ = forbidden_input_classes
         if tools is not None:
-            raise NotImplementedError("CallbackLmBuilder.complete does not lower tools yet")
+            raise UnsupportedConfigurationError(
+                "callback-backed cx.lm.complete does not lower tools yet"
+            )
         if prompt is None:
-            raise NotImplementedError("cx.lm.complete requires `prompt=` in this slice")
+            raise UnsupportedConfigurationError(
+                "callback-backed cx.lm.complete requires `prompt=` in this slice"
+            )
+        if messages is not None:
+            raise UnsupportedConfigurationError(
+                "callback-backed cx.lm.complete does not lower messages yet"
+            )
         request_id = f"{self._stage_call_id}::lm::{self._seq}"
         self._seq += 1
         selected_model = model or self._default_model

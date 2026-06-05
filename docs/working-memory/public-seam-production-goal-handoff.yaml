@@ -4881,6 +4881,41 @@ acceptance:
           longer accepts an untyped parsed blob. This removes one public helper
           scaffold but does not close the SDK quality row while other public or
           optional-adapter scaffolds remain.
+      - kind: production_notimplemented_scaffold_ratcheted_out
+        paths:
+          - sdk/python/src/leaven/_errors.py
+          - sdk/python/src/leaven/__init__.py
+          - sdk/python/src/leaven/optimize.py
+          - sdk/python/src/leaven/_seam_optimize/driver.py
+          - sdk/python/src/leaven/_stage_runtime/lm.py
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/tests/scripts/test_check_quality_contract.py
+        commands:
+          - cd sdk/python && uv run pytest tests/scripts/test_check_quality_contract.py tests/test_product_surface_ring.py tests/test_optimize.py tests/_stage_runtime/test_lm.py -q
+          - cd sdk/python && uv run ruff check src/leaven examples tests scripts codegen --exclude src/leaven/_types
+          - cd sdk/python && uv run ty check src/leaven tests scripts codegen --exclude src/leaven/_types
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && uv run pytest -q
+          - cd sdk/python && just examples
+          - cd sdk/python && just compile-examples
+          - rg -n "NotImplementedError" sdk/python/src/leaven sdk/python/examples sdk/python/codegen -g '*.py'
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv build
+          - cd sdk/python && uv run python -c "import leaven; print('import ok', hasattr(leaven, 'UnsupportedConfigurationError'), 'SeamClient' not in dir(leaven))"
+          - just check
+        note: >-
+          Production Python SDK source, examples, and codegen no longer contain
+          `NotImplementedError`. Public optimize and callback-stage LM
+          unsupported branches now raise the public
+          `UnsupportedConfigurationError`, making them explicit configuration
+          guards instead of scaffold crashes. The custom quality contract now
+          scans production SDK roots for `NotImplementedError` and has a
+          regression test proving source, examples, and codegen are rejected
+          while test fixtures remain allowed. Full Python pytest passed with
+          249 tests, the examples tour completed all 12 classified examples,
+          the package builds, generated seam wire is current, and `just check`
+          passed. The row remains pending until the full public/private module
+          map and mirrored-test denominator are audited as a whole.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this

@@ -16,6 +16,7 @@ and real optimizer search remain later slices.
 
 from typing import cast
 
+from ._errors import UnsupportedConfigurationError
 from ._runs import persist_rust_prompt_checkpoint
 from ._seam_optimize import PlannedOptimizeCase, SeamOptimizeReport, run_prompt_mechanics
 from .artifacts.prompt import PromptArtifact
@@ -69,7 +70,7 @@ class OptimizeBuilder[A]:
     def _runner_stage(self) -> RegisteredStage[object, object]:
         rollout = self.environment.rollout
         if rollout.kind != "function" or rollout.stage is None:
-            raise NotImplementedError(
+            raise UnsupportedConfigurationError(
                 "this slice supports a function rollout (`Rollout.fn(runner)`); "
                 f"got rollout kind {rollout.kind!r}"
             )
@@ -81,7 +82,7 @@ class OptimizeBuilder[A]:
 
     def _gepa_config(self) -> Gepa:
         if not isinstance(self.optimizer, Gepa):
-            raise NotImplementedError(
+            raise UnsupportedConfigurationError(
                 "this slice supports the GEPA optimizer (`lv.optimizers.gepa(...)`); "
                 f"got optimizer {self.optimizer.name!r}"
             )

@@ -5,6 +5,7 @@ import os
 
 from msgspec import UNSET, convert
 
+from .._errors import UnsupportedConfigurationError
 from .._seam import (
     CodexCliRuntimeConfig,
     CommandRunnerStageConfig,
@@ -169,7 +170,7 @@ async def _run_configured_proposer(
     if propose is None:
         return ProposerStageReport()
     if propose.kind != "function" or propose.stage is None:
-        raise NotImplementedError(
+        raise UnsupportedConfigurationError(
             "this slice supports a function proposer (`Propose.fn(proposer)`); "
             f"got proposer kind {propose.kind!r}"
         )
@@ -282,7 +283,7 @@ def _lm_config(
             timeout_s=int(lm.timeout_s) if lm.timeout_s is not None else None,
             max_retries=lm.max_retries,
         )
-    raise NotImplementedError(
+    raise UnsupportedConfigurationError(
         f"this slice supports mock and OpenAI LM runtime; got {type(lm).__name__}"
     )
 
@@ -296,11 +297,13 @@ def _agent_config(runtime: Runtime) -> CodexCliRuntimeConfig | None:
     if agent is None:
         return None
     if not isinstance(agent, CodexAgent):
-        raise NotImplementedError(
+        raise UnsupportedConfigurationError(
             f"this slice supports Codex agent runtime; got {type(agent).__name__}"
         )
     if agent.transport != "cli":
-        raise NotImplementedError("this slice supports Codex CLI transport for agent callbacks")
+        raise UnsupportedConfigurationError(
+            "this slice supports Codex CLI transport for agent callbacks"
+        )
     codex_bin = (
         _env_binary(agent.bin_path_env)
         if agent.bin_path_env is not None

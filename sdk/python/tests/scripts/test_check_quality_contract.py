@@ -22,6 +22,7 @@ defensive_type_erasure_failures_for_source = (
     QUALITY_CONTRACT.defensive_type_erasure_failures_for_source
 )
 check_no_public_builder_notimplemented = QUALITY_CONTRACT.check_no_public_builder_notimplemented
+check_no_production_notimplemented = QUALITY_CONTRACT.check_no_production_notimplemented
 
 
 def test_defensive_type_erasure_lint_rejects_failure_hiding_patterns() -> None:
@@ -149,6 +150,46 @@ class AgentBuilder:
 
     assert failures == [
         f"{builder_root / 'agent.py'} contains NotImplementedError in a public builder module"
+    ]
+
+
+def test_production_notimplemented_lint_rejects_source_examples_and_codegen(
+    tmp_path: Path,
+) -> None:
+    """Regression: production SDK code must use typed errors, not scaffolds."""
+
+    sdk_root = tmp_path
+    for part in ("src/leaven", "examples", "codegen", "tests"):
+        (sdk_root / part).mkdir(parents=True)
+    (sdk_root / "src/leaven/optimize.py").write_text(
+        "raise NotImplementedError('public scaffold')\n",
+        encoding="utf-8",
+    )
+    (sdk_root / "examples/01_demo.py").write_text(
+        "raise NotImplementedError('example scaffold')\n",
+        encoding="utf-8",
+    )
+    (sdk_root / "codegen/gen.py").write_text(
+        "raise NotImplementedError('codegen scaffold')\n",
+        encoding="utf-8",
+    )
+    (sdk_root / "tests/test_fixture.py").write_text(
+        "raise NotImplementedError('test fixture is allowed')\n",
+        encoding="utf-8",
+    )
+
+    failures = check_no_production_notimplemented(
+        (
+            sdk_root / "src" / "leaven",
+            sdk_root / "examples",
+            sdk_root / "codegen",
+        )
+    )
+
+    assert failures == [
+        f"{sdk_root / 'src/leaven/optimize.py'} contains NotImplementedError in production SDK code",
+        f"{sdk_root / 'examples/01_demo.py'} contains NotImplementedError in production SDK code",
+        f"{sdk_root / 'codegen/gen.py'} contains NotImplementedError in production SDK code",
     ]
 
 

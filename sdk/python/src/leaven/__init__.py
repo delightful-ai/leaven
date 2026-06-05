@@ -32,6 +32,7 @@ from . import (
     workspace,
     x,
 )
+from ._errors import UnsupportedConfigurationError
 from .agent_instructions import AgentInstructions, AgentRoles
 
 # ----- Built-in artifacts ---------------------------------------------------
@@ -156,6 +157,7 @@ __all__ = [
     "Split",
     "Task",
     "TrustProfile",
+    "UnsupportedConfigurationError",
     "UnsupportedRunFact",
     # versioning
     "__version__",
