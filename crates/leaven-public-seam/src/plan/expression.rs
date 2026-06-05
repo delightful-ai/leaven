@@ -10,10 +10,11 @@ use super::parse::{invalid_plan, nested_kind, required_object_string, string_arr
 /// Typed Plan IR expression shape for top-level `let` bindings.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PlanExpression {
-    /// Literal value expression. The arbitrary literal value is deliberately
-    /// not retained by the contract document; execution still consumes the
-    /// original schema-valid JSON document.
-    Literal { data_classes: Vec<String> },
+    /// Literal value expression with its schema-valid JSON value preserved.
+    Literal {
+        value: PlanLiteralValue,
+        data_classes: Vec<String>,
+    },
     /// Existing binding reference.
     Var { name: String },
     /// Graph query expression with typed revision-source facts.
@@ -56,6 +57,11 @@ impl PlanExpression {
             .ok_or_else(|| invalid_plan("plan expr must be an object"))?;
         match nested_kind(Some(value), "expr")? {
             "literal" => Ok(Self::Literal {
+                value: PlanLiteralValue::from_schema_valid_value(
+                    object
+                        .get("value")
+                        .ok_or_else(|| invalid_plan("literal expr must carry value"))?,
+                ),
                 data_classes: string_array(object.get("data_classes"), "expr.data_classes")
                     .unwrap_or_default(),
             }),
@@ -267,6 +273,21 @@ fn optional_workspace_ref_string(
             })
         })
         .transpose()
+}
+
+/// Schema-valid JSON value carried by a Plan IR literal expression.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanLiteralValue(Value);
+
+impl PlanLiteralValue {
+    fn from_schema_valid_value(value: &Value) -> Self {
+        Self(value.clone())
+    }
+
+    /// JSON value carried on the wire by the literal expression.
+    pub const fn as_json(&self) -> &Value {
+        &self.0
+    }
 }
 
 /// Plan IR expression discriminator.

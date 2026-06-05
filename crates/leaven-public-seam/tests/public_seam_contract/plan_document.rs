@@ -44,6 +44,23 @@ fn plan_ir_family_accepts_typed_let_call_write_documents() {
     assert_eq!(let_op.name(), "prompt");
     assert_eq!(let_op.kind(), PlanOperationKind::Let);
     assert_eq!(let_op.expression_kind(), Some(PlanExpressionKind::Literal));
+    let Some(leaven_public_seam::PlanExpression::Literal {
+        value,
+        data_classes,
+    }) = let_op.expression()
+    else {
+        panic!("literal let op must expose typed literal value");
+    };
+    assert_eq!(
+        value.as_json(),
+        &json!({
+            "messages": [
+                {"role": "user", "content": ["hello", {"topic": "typing"}]}
+            ],
+            "temperature": 0.2
+        })
+    );
+    assert_eq!(data_classes, &["public".to_owned()]);
     assert_eq!(let_op.query_kind(), None);
     assert_eq!(call_op.name(), "completion");
     assert_eq!(call_op.kind(), PlanOperationKind::Call);
@@ -136,7 +153,7 @@ fn plan_ir_family_lowers_and_executes_let_call_write_through_public_seam_owner()
     assert_eq!(host.writes, vec!["status"]);
     assert_eq!(
         host.call_deps.get("prompt"),
-        Some(&json!("Say ok")),
+        Some(&typed_prompt_literal()),
         "let binding must be lowered into the call host"
     );
     assert_eq!(
@@ -1108,7 +1125,7 @@ fn capability_execution_denies_calls_that_drop_literal_expr_data_classes() {
         )
         .unwrap();
     assert_eq!(host.calls, vec!["completion"]);
-    assert_eq!(host.call_deps["prompt"], json!("Say ok"));
+    assert_eq!(host.call_deps["prompt"], typed_prompt_literal());
 }
 
 #[test]
@@ -1152,7 +1169,7 @@ fn write_receipts_bind_literal_dependency_data_classes_without_rewriting_values(
         .unwrap();
 
     assert_eq!(host.writes, vec!["status"]);
-    assert_eq!(host.write_deps["prompt"], json!("Say ok"));
+    assert_eq!(host.write_deps["prompt"], typed_prompt_literal());
     assert_eq!(
         host.write_dependency_data_classes,
         BTreeSet::from(["external.secret".to_owned()])
@@ -3806,6 +3823,15 @@ fn submit_assessments_rejects_schema_valid_but_semantically_invalid_evidence() {
     );
 }
 
+fn typed_prompt_literal() -> Value {
+    json!({
+        "messages": [
+            {"role": "user", "content": ["hello", {"topic": "typing"}]}
+        ],
+        "temperature": 0.2
+    })
+}
+
 fn typed_let_call_write_plan() -> Value {
     json!({
         "schema_version": "leaven.plan.v1",
@@ -3822,7 +3848,7 @@ fn typed_let_call_write_plan() -> Value {
                 "name": "prompt",
                 "expr": {
                     "kind": "literal",
-                    "value": "Say ok",
+                    "value": typed_prompt_literal(),
                     "data_classes": ["public"]
                 }
             },

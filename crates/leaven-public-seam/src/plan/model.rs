@@ -346,6 +346,14 @@ impl PlanOperation {
             _ => None,
         }
     }
+
+    /// Typed expression details for `let` operations.
+    pub const fn expression(&self) -> Option<&PlanExpression> {
+        match &self.detail {
+            PlanOperationDetail::Let { expression } => Some(expression),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

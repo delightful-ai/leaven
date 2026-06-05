@@ -36,7 +36,7 @@ def test_schema_valid_precondition_decodes_typed_value_expr() -> None:
         b'"ops":[{"kind":"write","name":"proposal_batch",'
         b'"write":{"kind":"submit_proposal_batch","semantics":"sequence","proposals":[]},'
         b'"preconditions":[{"kind":"schema_valid","schema_fingerprint":"fp_schema",'
-        b'"value":{"kind":"literal","value":"ok"}}]}],'
+        b'"value":{"kind":"literal","value":{"answer":["ok",{"source":"case"}]}}}]}],'
         b'"return":["proposal_batch"],"commit":{"kind":"no_graph_writes"}}'
     )
 
@@ -46,7 +46,7 @@ def test_schema_valid_precondition_decodes_typed_value_expr() -> None:
 
     assert isinstance(precondition, PreconditionSchemaValid)
     assert isinstance(precondition.value, ValueExprLiteral)
-    assert precondition.value.value == "ok"
+    assert precondition.value.value == {"answer": ["ok", {"source": "case"}]}
 
 
 def test_schema_valid_precondition_rejects_unknown_value_expr_kind() -> None:
@@ -95,7 +95,7 @@ def test_project_expression_decodes_recursive_input_expr() -> None:
         b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
         b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
         b'"ops":[{"kind":"let","name":"projected","expr":{"kind":"project",'
-        b'"input":{"kind":"literal","value":{"answer":"42"}},'
+        b'"input":{"kind":"literal","value":{"answer":["42",{"unit":"text"}]}},'
         b'"projection":{"kind":"summary","fields":["/answer"]}}}],'
         b'"return":["projected"],"commit":{"kind":"no_graph_writes"}}'
     )
@@ -105,7 +105,7 @@ def test_project_expression_decodes_recursive_input_expr() -> None:
 
     assert isinstance(expr, PlanExpressionProject)
     assert isinstance(expr.input, PlanExpressionLiteral)
-    assert expr.input.value == {"answer": "42"}
+    assert expr.input.value == {"answer": ["42", {"unit": "text"}]}
     assert isinstance(expr.projection, ProjectionSummary)
     assert expr.projection.fields == ["/answer"]
 
@@ -134,7 +134,7 @@ def test_filter_expression_decodes_typed_predicate() -> None:
         b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
         b'"ops":[{"kind":"let","name":"filtered","expr":{"kind":"filter",'
         b'"input":{"kind":"literal","value":{"visible":true}},'
-        b'"predicate":{"kind":"eq","field":"/visible","value":true}}}],'
+        b'"predicate":{"kind":"eq","field":"/visible","value":{"flags":[true,{"source":"graph"}]}}}}],'
         b'"return":["filtered"],"commit":{"kind":"no_graph_writes"}}'
     )
 
@@ -144,7 +144,7 @@ def test_filter_expression_decodes_typed_predicate() -> None:
     assert isinstance(expr, PlanExpressionFilter)
     assert isinstance(expr.predicate, PredicateEq)
     assert expr.predicate.field == "/visible"
-    assert expr.predicate.value is True
+    assert expr.predicate.value == {"flags": [True, {"source": "graph"}]}
 
 
 def test_filter_expression_rejects_unknown_predicate_kind() -> None:

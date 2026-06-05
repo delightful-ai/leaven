@@ -6,6 +6,8 @@ mod expression;
 mod model;
 mod parse;
 
+#[allow(unused_imports)]
+pub use expression::PlanLiteralValue;
 pub use expression::{PlanExpression, PlanExpressionKind, PlanGraphQuerySource};
 pub use model::{
     PlanCallKind, PlanCommitKind, PlanId, PlanMode, PlanOperation, PlanOperationKind,

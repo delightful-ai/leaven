@@ -16,6 +16,7 @@ from .refs import (
     ProposalRef,
     ReceiptRef,
     WireJsonField,
+    WireJsonLiteralValue,
     WireJsonObject,
     WorkspaceRef,
 )
@@ -35,47 +36,47 @@ class SortKey(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=Tru
 
 class PredicateEq(Struct, frozen=True, forbid_unknown_fields=True, tag="eq", tag_field="kind"):
     field: str
-    value: WireJsonField
+    value: WireJsonLiteralValue
 
 
 class PredicateNe(Struct, frozen=True, forbid_unknown_fields=True, tag="ne", tag_field="kind"):
     field: str
-    value: WireJsonField
+    value: WireJsonLiteralValue
 
 
 class PredicateGt(Struct, frozen=True, forbid_unknown_fields=True, tag="gt", tag_field="kind"):
     field: str
-    value: WireJsonField
+    value: WireJsonLiteralValue
 
 
 class PredicateGte(Struct, frozen=True, forbid_unknown_fields=True, tag="gte", tag_field="kind"):
     field: str
-    value: WireJsonField
+    value: WireJsonLiteralValue
 
 
 class PredicateLt(Struct, frozen=True, forbid_unknown_fields=True, tag="lt", tag_field="kind"):
     field: str
-    value: WireJsonField
+    value: WireJsonLiteralValue
 
 
 class PredicateLte(Struct, frozen=True, forbid_unknown_fields=True, tag="lte", tag_field="kind"):
     field: str
-    value: WireJsonField
+    value: WireJsonLiteralValue
 
 
 class PredicateContains(Struct, frozen=True, forbid_unknown_fields=True, tag="contains", tag_field="kind"):
     field: str
-    value: WireJsonField
+    value: WireJsonLiteralValue
 
 
 class PredicateMatches(Struct, frozen=True, forbid_unknown_fields=True, tag="matches", tag_field="kind"):
     field: str
-    value: WireJsonField
+    value: WireJsonLiteralValue
 
 
 class PredicateIn(Struct, frozen=True, forbid_unknown_fields=True, tag="in", tag_field="kind"):
     field: str
-    values: list[WireJsonField]
+    values: list[WireJsonLiteralValue]
 
 
 class PredicateExists(Struct, frozen=True, forbid_unknown_fields=True, tag="exists", tag_field="kind"):
@@ -323,7 +324,7 @@ type GraphSource = (
 
 
 class PlanExpressionLiteral(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="literal", tag_field="kind"):
-    value: WireJsonField
+    value: WireJsonLiteralValue
     data_classes: list[str] | UnsetType = UNSET
 
 
@@ -547,7 +548,7 @@ type PlanExpression = (
 
 
 class ValueExprLiteral(Struct, frozen=True, forbid_unknown_fields=True, tag="literal", tag_field="kind"):
-    value: WireJsonField
+    value: WireJsonLiteralValue
 
 
 class ValueExprVar(Struct, frozen=True, forbid_unknown_fields=True, tag="var", tag_field="kind"):
@@ -623,5 +624,5 @@ class ValidationReceipt(Struct, frozen=True, forbid_unknown_fields=True, omit_de
 
 
 __all__ = (  # noqa: PLE0605, SIM905
-    "ArtifactProjection AssessmentFilter CandidateFilter CaseQuery CaseQueryLoad CaseQueryResolveSet EvaluationSetCases EvaluationSetDifference EvaluationSetExpr EvaluationSetIntersect EvaluationSetNamed EvaluationSetRecent EvaluationSetSample EvaluationSetStratified EvaluationSetTagged EvaluationSetUnion ExtensionObjectExpression GraphEdge GraphEdgeAssessments GraphEdgeChildren GraphEdgeDescendants GraphEdgeInformed GraphEdgeInformedBy GraphEdgeLineage GraphEdgePairwiseAssessments GraphEdgeParents GraphEdgeProposalThatCreated GraphEdgeSiblings GraphSource GraphSourceAssessmentSet GraphSourceByCandidate GraphSourceByProposal GraphSourceByProposalBatch GraphSourceCandidateSet GraphSourceCandidateTree GraphSourceCosts GraphSourceEvents GraphSourceExtension GraphSourceRecentFailures GraphStep GraphStepFilter GraphStepLimit GraphStepProject GraphStepSort GraphStepTraverse PageRequest PlanExpression PlanExpressionCaseQuery PlanExpressionExtract PlanExpressionFilter PlanExpressionGraphQuery PlanExpressionLimit PlanExpressionLiteral PlanExpressionProject PlanExpressionRefsFromResult PlanExpressionSort PlanExpressionTemplate PlanExpressionVar PlanExpressionWorkspaceQuery Precondition PreconditionAssessmentExists PreconditionCandidateExists PreconditionCandidateIdentity PreconditionGraphRevisionAtLeast PreconditionGraphRevisionEquals PreconditionReceiptExists PreconditionSchemaValid Predicate PredicateAnd PredicateContains PredicateEq PredicateExists PredicateGt PredicateGte PredicateIn PredicateIsNull PredicateLt PredicateLte PredicateMatches PredicateNe PredicateNot PredicateOr Projection ProjectionArtifact ProjectionAssessment ProjectionCandidate ProjectionDiff ProjectionExtension ProjectionIds ProjectionSummary SortKey ValidationErrorItem ValidationReceipt ValueExpr ValueExprExtension ValueExprExtract ValueExprLiteral ValueExprVar WorkspaceQuery WorkspaceQueryCaptureArtifacts WorkspaceQueryDigest WorkspaceQueryGitDiff WorkspaceQueryGitLog WorkspaceQueryGitStatus WorkspaceQueryList WorkspaceQueryReadFile WorkspaceQuerySnapshot WorkspaceQueryStat"
+    "ArtifactProjection AssessmentFilter CandidateFilter CaseQuery CaseQueryLoad CaseQueryResolveSet EvaluationSetCases EvaluationSetDifference EvaluationSetExpr EvaluationSetIntersect EvaluationSetNamed EvaluationSetRecent EvaluationSetSample EvaluationSetStratified EvaluationSetTagged EvaluationSetUnion ExtensionObjectExpression GraphEdge GraphEdgeAssessments GraphEdgeChildren GraphEdgeDescendants GraphEdgeInformed GraphEdgeInformedBy GraphEdgeLineage GraphEdgePairwiseAssessments GraphEdgeParents GraphEdgeProposalThatCreated GraphEdgeSiblings GraphSource GraphSourceAssessmentSet GraphSourceByCandidate GraphSourceByProposal GraphSourceByProposalBatch GraphSourceCandidateSet GraphSourceCandidateTree GraphSourceCosts GraphSourceEvents GraphSourceExtension GraphSourceRecentFailures GraphStep GraphStepFilter GraphStepLimit GraphStepProject GraphStepSort GraphStepTraverse PageRequest PlanExpression PlanExpressionCaseQuery PlanExpressionExtract PlanExpressionFilter PlanExpressionGraphQuery PlanExpressionLimit PlanExpressionLiteral PlanExpressionProject PlanExpressionRefsFromResult PlanExpressionSort PlanExpressionTemplate PlanExpressionVar PlanExpressionWorkspaceQuery Precondition PreconditionAssessmentExists PreconditionCandidateExists PreconditionCandidateIdentity PreconditionGraphRevisionAtLeast PreconditionGraphRevisionEquals PreconditionReceiptExists PreconditionSchemaValid Predicate PredicateAnd PredicateContains PredicateEq PredicateExists PredicateGt PredicateGte PredicateIn PredicateIsNull PredicateLt PredicateLte PredicateMatches PredicateNe PredicateNot PredicateOr Projection ProjectionArtifact ProjectionAssessment ProjectionCandidate ProjectionDiff ProjectionExtension ProjectionIds ProjectionSummary SortKey ValidationErrorItem ValidationReceipt ValueExpr ValueExprExtension ValueExprExtract ValueExprLiteral ValueExprVar WireJsonLiteralValue WorkspaceQuery WorkspaceQueryCaptureArtifacts WorkspaceQueryDigest WorkspaceQueryGitDiff WorkspaceQueryGitLog WorkspaceQueryGitStatus WorkspaceQueryList WorkspaceQueryReadFile WorkspaceQuerySnapshot WorkspaceQueryStat"
 ).split()
