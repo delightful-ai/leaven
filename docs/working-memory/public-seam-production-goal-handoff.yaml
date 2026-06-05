@@ -1574,6 +1574,35 @@ acceptance:
           was also updated to the generated `leaven/agent.run` result shape,
           proving stale under-shaped smoke results fail the typed decoder
           instead of being silently accepted.
+      - kind: schema_dependent_parsed_payload_decode_helpers
+        paths:
+          - sdk/python/codegen/result_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/results.py
+          - sdk/python/tests/_seam/_wire/test_results.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_results.py tests/_seam/_wire/test_codec.py -q
+          - cd sdk/python && uv run ruff check codegen/generate_seam_wire.py codegen/payload_codegen.py codegen/result_codegen.py src/leaven/_seam/_wire tests/_seam/_wire/test_results.py tests/_seam/_wire/test_codec.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/_wire tests/_seam/_wire/test_results.py tests/_seam/_wire/test_codec.py
+          - rg -n "Raw" sdk/python/src/leaven/_seam/_wire sdk/python/codegen sdk/python/tests/_seam/_wire
+        note: >-
+          Generated LM and agent result records now make schema-dependent
+          structured-output payload decoding explicit. `parsed` remains
+          msgspec `Raw` only because the concrete payload type is selected by
+          the request's JSON Schema, not by the locked method alone; generated
+          `decode_lm_parsed[T]` and `decode_agent_parsed[T]` helpers require a
+          caller-supplied msgspec type and fail loudly when the parsed payload
+          is absent. A regression proved that recursively annotating arbitrary
+          JSON as a msgspec field hits msgspec's recursive-type analysis limit,
+          so this uses the documented delayed-decode pattern rather than
+          pretending a recursive JSON alias is a reliable Struct field. The
+          current Raw inventory is narrow: JSON-RPC envelope params/results,
+          JSON-RPC error data, and these schema-dependent parsed payloads.
+          This is progress on the row, not closure; remaining leaf slots such
+          as metadata/info refs, plan expressions, preconditions, output
+          values, and nested fragments still need typed owners or generated
+          schema-specific decode paths.
       - kind: typed_optimize_stage_client_cutover
         paths:
           - sdk/python/src/leaven/_seam/client.py

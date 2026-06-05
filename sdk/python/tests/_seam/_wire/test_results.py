@@ -30,7 +30,22 @@ from leaven._seam._wire.results import (
     WorkspaceReleaseResult,
     WorkspaceSnapshotResult,
     WorkspaceStatResult,
+    decode_agent_parsed,
+    decode_lm_parsed,
 )
+
+
+class ParsedAnswer(msgspec.Struct, frozen=True):
+    """Typed structured-output fixture."""
+
+    answer: str
+    scores: list[int]
+
+
+class ParsedMutation(msgspec.Struct, frozen=True):
+    """Typed agent structured-output fixture."""
+
+    mutation: dict[str, str | bool]
 
 
 def test_result_bindings_cover_every_locked_method() -> None:
@@ -95,6 +110,82 @@ def test_generated_lm_result_decodes_msgspec_payload() -> None:
             call_kind="lm_complete",
         )
     ]
+
+
+def test_generated_lm_result_decodes_schema_dependent_parsed_payload() -> None:
+    """Regression: structured-output payloads require explicit typed decode."""
+
+    payload = _extension_result(
+        "leaven/lm.complete",
+        {
+            "kind": "lm_response",
+            "message": {
+                "role": "assistant",
+                "content": [{"kind": "text", "text": '{"answer":"ok"}'}],
+            },
+            "receipt": "lmrec_1",
+            "graph_revision": "rev_lm",
+            "data_classes": ["public"],
+            "replayability": "boundary_managed",
+            "parsed": {"answer": "ok", "scores": [1, 2, 3]},
+        },
+    )
+
+    decoded = msgspec.json.decode(json.dumps(payload).encode(), type=LmCompleteResult)
+
+    assert isinstance(decoded.primary.parsed, msgspec.Raw)
+    assert decode_lm_parsed(decoded, ParsedAnswer) == ParsedAnswer(
+        answer="ok",
+        scores=[1, 2, 3],
+    )
+
+
+def test_generated_agent_result_decodes_schema_dependent_parsed_payload() -> None:
+    """Example: agent parsed payloads decode with the caller's schema type."""
+
+    payload = _extension_result(
+        "leaven/agent.run",
+        {
+            "kind": "agent_session",
+            "status": "succeeded",
+            "receipt": "agentrec_1",
+            "graph_revision": "rev_agent",
+            "commands": [],
+            "data_classes": ["public"],
+            "replayability": "boundary_managed",
+            "parsed": {"mutation": {"skill": "alpha", "changed": True}},
+        },
+    )
+
+    decoded = msgspec.json.decode(json.dumps(payload).encode(), type=AgentRunResult)
+
+    assert isinstance(decoded.primary.parsed, msgspec.Raw)
+    assert decode_agent_parsed(decoded, ParsedMutation) == ParsedMutation(
+        mutation={"skill": "alpha", "changed": True}
+    )
+
+
+def test_generated_lm_parsed_helper_rejects_missing_payload() -> None:
+    """Regression: callers cannot silently treat omitted parsed payload as empty."""
+
+    payload = _extension_result(
+        "leaven/lm.complete",
+        {
+            "kind": "lm_response",
+            "message": {
+                "role": "assistant",
+                "content": [{"kind": "text", "text": "plain"}],
+            },
+            "receipt": "lmrec_1",
+            "graph_revision": "rev_lm",
+            "data_classes": ["public"],
+            "replayability": "boundary_managed",
+        },
+    )
+    decoded = msgspec.json.decode(json.dumps(payload).encode(), type=LmCompleteResult)
+
+    with pytest.raises(ValueError, match="did not include parsed payload"):
+        decode_lm_parsed(decoded, ParsedAnswer)
 
 
 def test_generated_agent_result_rejects_wrong_primary_kind() -> None:
