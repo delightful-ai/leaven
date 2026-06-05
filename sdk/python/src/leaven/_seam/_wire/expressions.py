@@ -10,6 +10,8 @@ from msgspec import UNSET, Struct, UnsetType, field
 from .refs import (
     AssessmentRef,
     CandidateRef,
+    CaseRef,
+    EvaluationRequestRef,
     ProposalBatchRef,
     ProposalRef,
     ReceiptRef,
@@ -31,12 +33,241 @@ class SortKey(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=Tru
     nulls: Literal["first", "last"] | UnsetType = UNSET
 
 
+class PredicateEq(Struct, frozen=True, forbid_unknown_fields=True, tag="eq", tag_field="kind"):
+    field: str
+    value: WireJsonField
+
+
+class PredicateNe(Struct, frozen=True, forbid_unknown_fields=True, tag="ne", tag_field="kind"):
+    field: str
+    value: WireJsonField
+
+
+class PredicateGt(Struct, frozen=True, forbid_unknown_fields=True, tag="gt", tag_field="kind"):
+    field: str
+    value: WireJsonField
+
+
+class PredicateGte(Struct, frozen=True, forbid_unknown_fields=True, tag="gte", tag_field="kind"):
+    field: str
+    value: WireJsonField
+
+
+class PredicateLt(Struct, frozen=True, forbid_unknown_fields=True, tag="lt", tag_field="kind"):
+    field: str
+    value: WireJsonField
+
+
+class PredicateLte(Struct, frozen=True, forbid_unknown_fields=True, tag="lte", tag_field="kind"):
+    field: str
+    value: WireJsonField
+
+
+class PredicateContains(Struct, frozen=True, forbid_unknown_fields=True, tag="contains", tag_field="kind"):
+    field: str
+    value: WireJsonField
+
+
+class PredicateMatches(Struct, frozen=True, forbid_unknown_fields=True, tag="matches", tag_field="kind"):
+    field: str
+    value: WireJsonField
+
+
+class PredicateIn(Struct, frozen=True, forbid_unknown_fields=True, tag="in", tag_field="kind"):
+    field: str
+    values: list[WireJsonField]
+
+
+class PredicateExists(Struct, frozen=True, forbid_unknown_fields=True, tag="exists", tag_field="kind"):
+    field: str
+
+
+class PredicateIsNull(Struct, frozen=True, forbid_unknown_fields=True, tag="is_null", tag_field="kind"):
+    field: str
+
+
+class PredicateAnd(Struct, frozen=True, forbid_unknown_fields=True, tag="and", tag_field="kind"):
+    predicates: list["Predicate"]
+
+
+class PredicateOr(Struct, frozen=True, forbid_unknown_fields=True, tag="or", tag_field="kind"):
+    predicates: list["Predicate"]
+
+
+class PredicateNot(Struct, frozen=True, forbid_unknown_fields=True, tag="not", tag_field="kind"):
+    predicate: "Predicate"
+
+
+type Predicate = (
+    PredicateEq
+    | PredicateNe
+    | PredicateGt
+    | PredicateGte
+    | PredicateLt
+    | PredicateLte
+    | PredicateContains
+    | PredicateMatches
+    | PredicateIn
+    | PredicateExists
+    | PredicateIsNull
+    | PredicateAnd
+    | PredicateOr
+    | PredicateNot
+)
+
+
+class ArtifactProjection(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    surface_fingerprint: str
+    projection_schema: str
+    selector_schema: str | UnsetType = UNSET
+    selector: WireJsonField | UnsetType = UNSET
+    max_bytes: int | UnsetType = UNSET
+    data_classes: list[str] | UnsetType = UNSET
+
+
+class ProjectionIds(Struct, frozen=True, forbid_unknown_fields=True, tag="ids", tag_field="kind"):
+    pass
+
+
+class ProjectionSummary(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="summary", tag_field="kind"):
+    fields: list[str] | UnsetType = UNSET
+
+
+class ProjectionCandidate(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="candidate_projection", tag_field="kind"):
+    fields: list[str] | UnsetType = UNSET
+    artifact: ArtifactProjection | UnsetType = UNSET
+
+
+class ProjectionArtifact(Struct, frozen=True, forbid_unknown_fields=True, tag="artifact_projection", tag_field="kind"):
+    artifact: ArtifactProjection
+
+
+class ProjectionAssessment(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="assessment_projection", tag_field="kind"):
+    fields: list[str] | UnsetType = UNSET
+    evidence_visibility: Literal["public", "optimizer_visible", "host_private"] | UnsetType = UNSET
+
+
+class ProjectionDiff(Struct, frozen=True, forbid_unknown_fields=True, tag="diff_projection", tag_field="kind"):
+    surface_fingerprint: str
+    diff_schema: str
+    left: CandidateRef
+    right: CandidateRef
+
+
+class ProjectionExtension(Struct, frozen=True, forbid_unknown_fields=True, tag="extension", tag_field="kind"):
+    namespace: str
+    op: str
+    schema_fingerprint: str
+    payload: WireJsonField
+
+
+type Projection = (
+    ProjectionIds
+    | ProjectionSummary
+    | ProjectionCandidate
+    | ProjectionArtifact
+    | ProjectionAssessment
+    | ProjectionDiff
+    | ProjectionExtension
+)
+
+
+class CandidateFilter(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    ids: list[CandidateRef] | UnsetType = UNSET
+    predicate: Predicate | UnsetType = UNSET
+
+
+class AssessmentFilter(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    candidate: CandidateRef | UnsetType = UNSET
+    case: CaseRef | UnsetType = UNSET
+    request: EvaluationRequestRef | UnsetType = UNSET
+    kind: Literal["independent", "pairwise", "listwise"] | UnsetType = UNSET
+    predicate: Predicate | UnsetType = UNSET
+
+
+class GraphEdgeParents(Struct, frozen=True, forbid_unknown_fields=True, tag="parents", tag_field="kind"):
+    pass
+
+
+class GraphEdgeChildren(Struct, frozen=True, forbid_unknown_fields=True, tag="children", tag_field="kind"):
+    pass
+
+
+class GraphEdgeSiblings(Struct, frozen=True, forbid_unknown_fields=True, tag="siblings", tag_field="kind"):
+    pass
+
+
+class GraphEdgeInformedBy(Struct, frozen=True, forbid_unknown_fields=True, tag="informed_by", tag_field="kind"):
+    pass
+
+
+class GraphEdgeInformed(Struct, frozen=True, forbid_unknown_fields=True, tag="informed", tag_field="kind"):
+    pass
+
+
+class GraphEdgeProposalThatCreated(Struct, frozen=True, forbid_unknown_fields=True, tag="proposal_that_created", tag_field="kind"):
+    pass
+
+
+class GraphEdgeLineage(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="lineage", tag_field="kind"):
+    depth: int | UnsetType = UNSET
+
+
+class GraphEdgeDescendants(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="descendants", tag_field="kind"):
+    depth: int | UnsetType = UNSET
+
+
+class GraphEdgeAssessments(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="assessments", tag_field="kind"):
+    filter: AssessmentFilter | UnsetType = UNSET
+
+
+class GraphEdgePairwiseAssessments(Struct, frozen=True, forbid_unknown_fields=True, tag="pairwise_assessments", tag_field="kind"):
+    other: CandidateRef
+
+
+type GraphEdge = (
+    GraphEdgeParents
+    | GraphEdgeChildren
+    | GraphEdgeSiblings
+    | GraphEdgeInformedBy
+    | GraphEdgeInformed
+    | GraphEdgeProposalThatCreated
+    | GraphEdgeLineage
+    | GraphEdgeDescendants
+    | GraphEdgeAssessments
+    | GraphEdgePairwiseAssessments
+)
+
+
+class GraphStepTraverse(Struct, frozen=True, forbid_unknown_fields=True, tag="traverse", tag_field="kind"):
+    edge: GraphEdge
+
+
+class GraphStepFilter(Struct, frozen=True, forbid_unknown_fields=True, tag="filter", tag_field="kind"):
+    predicate: Predicate
+
+
+class GraphStepSort(Struct, frozen=True, forbid_unknown_fields=True, tag="sort", tag_field="kind"):
+    keys: list[SortKey]
+
+
+class GraphStepLimit(Struct, frozen=True, forbid_unknown_fields=True, tag="limit", tag_field="kind"):
+    limit: int
+
+
+class GraphStepProject(Struct, frozen=True, forbid_unknown_fields=True, tag="project", tag_field="kind"):
+    projection: Projection
+
+
+type GraphStep = GraphStepTraverse | GraphStepFilter | GraphStepSort | GraphStepLimit | GraphStepProject
+
+
 class GraphSourceByCandidate(Struct, frozen=True, forbid_unknown_fields=True, tag="by_candidate", tag_field="kind"):
     candidate: CandidateRef
 
 
 class GraphSourceCandidateSet(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="candidate_set", tag_field="kind"):
-    filter: WireJsonObject | UnsetType = UNSET
+    filter: CandidateFilter | UnsetType = UNSET
 
 
 class GraphSourceByProposal(Struct, frozen=True, forbid_unknown_fields=True, tag="by_proposal", tag_field="kind"):
@@ -48,7 +279,7 @@ class GraphSourceByProposalBatch(Struct, frozen=True, forbid_unknown_fields=True
 
 
 class GraphSourceAssessmentSet(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="assessment_set", tag_field="kind"):
-    filter: WireJsonObject | UnsetType = UNSET
+    filter: AssessmentFilter | UnsetType = UNSET
 
 
 class GraphSourceRecentFailures(Struct, frozen=True, forbid_unknown_fields=True, tag="recent_failures", tag_field="kind"):
@@ -102,8 +333,8 @@ class PlanExpressionVar(Struct, frozen=True, forbid_unknown_fields=True, tag="va
 
 class PlanExpressionGraphQuery(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="graph_query", tag_field="kind"):
     source: GraphSource
-    projection: WireJsonObject
-    steps: list[WireJsonObject] | UnsetType = UNSET
+    projection: Projection
+    steps: list[GraphStep] | UnsetType = UNSET
     page: PageRequest | UnsetType = UNSET
 
 
@@ -118,12 +349,12 @@ class PlanExpressionWorkspaceQuery(Struct, frozen=True, forbid_unknown_fields=Tr
 
 class PlanExpressionProject(Struct, frozen=True, forbid_unknown_fields=True, tag="project", tag_field="kind"):
     input: "PlanExpression"
-    projection: WireJsonObject
+    projection: Projection
 
 
 class PlanExpressionFilter(Struct, frozen=True, forbid_unknown_fields=True, tag="filter", tag_field="kind"):
     input: "PlanExpression"
-    predicate: WireJsonObject
+    predicate: Predicate
 
 
 class PlanExpressionSort(Struct, frozen=True, forbid_unknown_fields=True, tag="sort", tag_field="kind"):
@@ -252,5 +483,5 @@ class ValidationReceipt(Struct, frozen=True, forbid_unknown_fields=True, omit_de
 
 
 __all__ = (  # noqa: PLE0605, SIM905
-    "ExtensionObjectExpression GraphSource GraphSourceAssessmentSet GraphSourceByCandidate GraphSourceByProposal GraphSourceByProposalBatch GraphSourceCandidateSet GraphSourceCandidateTree GraphSourceCosts GraphSourceEvents GraphSourceExtension GraphSourceRecentFailures PageRequest PlanExpression PlanExpressionCaseQuery PlanExpressionExtract PlanExpressionFilter PlanExpressionGraphQuery PlanExpressionLimit PlanExpressionLiteral PlanExpressionProject PlanExpressionRefsFromResult PlanExpressionSort PlanExpressionTemplate PlanExpressionVar PlanExpressionWorkspaceQuery Precondition PreconditionAssessmentExists PreconditionCandidateExists PreconditionCandidateIdentity PreconditionGraphRevisionAtLeast PreconditionGraphRevisionEquals PreconditionReceiptExists PreconditionSchemaValid SortKey ValidationErrorItem ValidationReceipt ValueExpr ValueExprExtension ValueExprExtract ValueExprLiteral ValueExprVar"
+    "ArtifactProjection AssessmentFilter CandidateFilter ExtensionObjectExpression GraphEdge GraphEdgeAssessments GraphEdgeChildren GraphEdgeDescendants GraphEdgeInformed GraphEdgeInformedBy GraphEdgeLineage GraphEdgePairwiseAssessments GraphEdgeParents GraphEdgeProposalThatCreated GraphEdgeSiblings GraphSource GraphSourceAssessmentSet GraphSourceByCandidate GraphSourceByProposal GraphSourceByProposalBatch GraphSourceCandidateSet GraphSourceCandidateTree GraphSourceCosts GraphSourceEvents GraphSourceExtension GraphSourceRecentFailures GraphStep GraphStepFilter GraphStepLimit GraphStepProject GraphStepSort GraphStepTraverse PageRequest PlanExpression PlanExpressionCaseQuery PlanExpressionExtract PlanExpressionFilter PlanExpressionGraphQuery PlanExpressionLimit PlanExpressionLiteral PlanExpressionProject PlanExpressionRefsFromResult PlanExpressionSort PlanExpressionTemplate PlanExpressionVar PlanExpressionWorkspaceQuery Precondition PreconditionAssessmentExists PreconditionCandidateExists PreconditionCandidateIdentity PreconditionGraphRevisionAtLeast PreconditionGraphRevisionEquals PreconditionReceiptExists PreconditionSchemaValid Predicate PredicateAnd PredicateContains PredicateEq PredicateExists PredicateGt PredicateGte PredicateIn PredicateIsNull PredicateLt PredicateLte PredicateMatches PredicateNe PredicateNot PredicateOr Projection ProjectionArtifact ProjectionAssessment ProjectionCandidate ProjectionDiff ProjectionExtension ProjectionIds ProjectionSummary SortKey ValidationErrorItem ValidationReceipt ValueExpr ValueExprExtension ValueExprExtract ValueExprLiteral ValueExprVar"
 ).split()
