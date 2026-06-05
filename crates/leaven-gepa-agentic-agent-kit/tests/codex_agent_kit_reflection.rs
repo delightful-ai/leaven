@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::Cursor;
 use std::path::Path;
 
 use leaven_agentic_agent_kit::{AgentKitMountMode, CodexAgentKitMaterializer};
@@ -17,8 +18,12 @@ use leaven_gepa_agentic_agent_kit::{
     AgentKitReflectionPart, CodexAgentKitReflectionInput, CodexAgentKitReflectionSmoke,
 };
 use leaven_kernel::{Budget, Cost, MetadataBag, Metered, ProposerId, RunId};
+use leaven_seam_runtime::SeamRuntime;
+use leaven_seam_service::RunBoundGraphEffectService;
+use leaven_seam_stdio::serve_reader_writer;
 use leaven_workspace::{Command, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
 use leaven_workspace_local::LocalWorkspaceFactory;
+use serde_json::{Value, json};
 
 #[test]
 fn codex_agent_kit_reflection_projects_system_prompt_and_applies_git_child() {
@@ -213,6 +218,143 @@ fn codex_agent_kit_reflection_reads_back_git_workspace_child_before_next_project
             "---\nname: alpha\ndescription: Alpha skill.\n---\n\nDo applied child work.\n"
         );
 
+        drop(second_view);
+        second_workspace.cleanup().await.unwrap();
+    });
+}
+
+#[test]
+fn codex_agent_kit_git_child_applies_through_run_bound_stdio_before_next_projection() {
+    futures::executor::block_on(async {
+        let fixture = AgentKitRepoFixture::new();
+        let parent_artifact = fixture.program_artifact();
+        let stores = fixture.stores();
+        let mut first_workspace = LocalWorkspaceFactory::temp()
+            .allocate(WorkspaceConfig::default())
+            .await
+            .unwrap();
+        let mut view = first_workspace.view();
+        GitProgramMaterializer::new(stores.clone())
+            .materialize_program(&parent_artifact, &mut view)
+            .unwrap();
+        write_workspace_file(
+            &mut view,
+            "repos/agent/system_prompt.md",
+            "Prefer stdio-applied child behavior.\n",
+        );
+        write_workspace_file(
+            &mut view,
+            "repos/agent/skills/alpha/SKILL.md",
+            "---\nname: alpha\ndescription: Alpha skill.\n---\n\nDo stdio-applied work.\n",
+        );
+        workspace_git(&mut view, "repos/agent", ["add", "."]);
+        workspace_git(
+            &mut view,
+            "repos/agent",
+            ["commit", "-m", "evolve agent kit through seam"],
+        );
+        let change = GitProgramReadback::new(stores.clone())
+            .read_back_change(&parent_artifact, &mut view)
+            .unwrap()
+            .expect("changed AgentKit repo must import a typed GitProgramChange");
+        drop(view);
+        first_workspace.cleanup().await.unwrap();
+
+        let mut graph = RunGraph::<AgentKitGitProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::new(Budget::unlimited());
+        let parent = {
+            let mut ctx = RunContext::<AgentKitGitProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(parent_artifact, 0).unwrap()
+        };
+        let batch = {
+            let mut ctx = RunContext::<AgentKitGitProblem>::new(&mut graph, &mut budget);
+            ctx.record_proposal_batch(
+                leaven_kernel::StageId::custom("agent-kit-run-bound-stdio"),
+                ProposalBatch {
+                    proposals: vec![
+                        Proposal::mutate(parent, change)
+                            .informed_by([InfoRef::Candidate(parent)])
+                            .build(),
+                    ],
+                    semantics: ProposalBatchSemantics::Alternatives,
+                    metadata: MetadataBag::new(),
+                },
+                Cost::zero(),
+            )
+            .unwrap()
+        };
+        let batch_ref = format!("pb_{}", batch.batch_id.as_uuid());
+        {
+            let mut ctx = RunContext::<AgentKitGitProblem>::new(&mut graph, &mut budget);
+            let service = RunBoundGraphEffectService::new(
+                &mut ctx,
+                [batch],
+                "fp_cap_sha256_agent_kit",
+                "fp_policy_sha256_agent_kit",
+                "rev_agent_kit_base",
+                "rev_agent_kit_child",
+            );
+            let package = leaven_public_seam::PublicSeamPackage::active_from_repo(workspace_root())
+                .expect("public seam package loads from workspace");
+            let runtime = SeamRuntime::from_package(package, service).unwrap();
+            let mut output = Vec::new();
+            let report = serve_reader_writer(
+                &runtime,
+                Cursor::new(format!(
+                    "{}\n",
+                    jsonrpc_request(
+                        "agent-kit-apply",
+                        "leaven/proposal.apply",
+                        proposal_apply_request(&batch_ref),
+                    )
+                )),
+                &mut output,
+            )
+            .unwrap();
+            assert_eq!(report.requests, 1);
+            let lines = response_lines(output);
+            assert!(
+                lines.iter().all(|line| line.get("error").is_none()),
+                "stdio runtime returned error responses: {lines:?}"
+            );
+            assert_eq!(lines[0]["result"]["primary"]["kind"], "apply_receipt");
+            assert_eq!(
+                lines[0]["result"]["primary"]["graph_revision"],
+                "rev_agent_kit_child"
+            );
+            assert_eq!(
+                lines[0]["result"]["receipts"][0]["write_kind"],
+                "apply_proposal_batch"
+            );
+        }
+
+        let child_artifact = {
+            let ctx = RunContext::<AgentKitGitProblem>::new(&mut graph, &mut budget);
+            let children = ctx.graph().children(parent);
+            assert_eq!(children.len(), 1, "stdio apply must create one graph child");
+            let child = children[0];
+            ctx.graph().artifact(child).unwrap().clone()
+        };
+        let mut second_workspace = LocalWorkspaceFactory::temp()
+            .allocate(WorkspaceConfig::default())
+            .await
+            .unwrap();
+        let mut second_view = second_workspace.view();
+        GitProgramMaterializer::new(stores)
+            .materialize_program(&child_artifact, &mut second_view)
+            .unwrap();
+        let second_root = second_view.local_mount().unwrap().to_path_buf();
+        let next_projection = CodexAgentKitMaterializer::new(AgentKitMountMode::Copy)
+            .materialize(second_root.join("repos/agent"), &second_root)
+            .unwrap();
+        assert_eq!(
+            next_projection.system_prompt.as_deref(),
+            Some("Prefer stdio-applied child behavior.\n")
+        );
+        assert_eq!(
+            fs::read_to_string(second_root.join(".agents/skills/alpha/SKILL.md")).unwrap(),
+            "---\nname: alpha\ndescription: Alpha skill.\n---\n\nDo stdio-applied work.\n"
+        );
         drop(second_view);
         second_workspace.cleanup().await.unwrap();
     });
@@ -414,6 +556,59 @@ fn commit(byte: &str) -> GitRevision {
 
 fn workspace_path(path: &str) -> WorkspacePath {
     WorkspacePath::new(path).unwrap()
+}
+
+fn jsonrpc_request(id: &str, method: &str, params: Value) -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "method": method,
+        "params": params,
+    })
+}
+
+fn response_lines(output: Vec<u8>) -> Vec<Value> {
+    String::from_utf8(output)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect()
+}
+
+fn proposal_apply_request(batch_ref: &str) -> Value {
+    json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "plan_agent_kit_apply",
+        "consistency": {
+            "kind": "latest_at_start"
+        },
+        "mode": {
+            "kind": "execute"
+        },
+        "ops": [{
+            "kind": "write",
+            "name": "apply",
+            "idempotency_key": "agent-kit-apply-0001",
+            "write": {
+                "kind": "apply_proposal_batch",
+                "proposal_batch": batch_ref,
+                "policy": "apply_first_valid"
+            }
+        }],
+        "return": ["apply"],
+        "commit": {
+            "kind": "graph_writes_atomic",
+            "on_stale": "reject"
+        }
+    })
+}
+
+fn workspace_root() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .unwrap()
+        .to_path_buf()
 }
 
 fn git_object(hex: &str) -> GitObjectId {
