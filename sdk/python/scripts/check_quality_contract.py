@@ -44,6 +44,14 @@ MIRRORED_TESTS = {
     ROOT / "src" / "leaven" / "_runs" / "store.py": ROOT / "tests" / "_runs" / "test_store.py",
     ROOT / "src" / "leaven" / "_seam" / "plans.py": ROOT / "tests" / "_seam" / "test_plans.py",
     ROOT / "src" / "leaven" / "_seam" / "lm_plans.py": ROOT / "tests" / "_seam" / "test_plans.py",
+    ROOT / "src" / "leaven" / "_seam" / "capability.py": ROOT
+    / "tests"
+    / "_seam"
+    / "test_config.py",
+    ROOT / "src" / "leaven" / "_seam" / "config.py": ROOT
+    / "tests"
+    / "_seam"
+    / "test_config.py",
     ROOT / "src" / "leaven" / "_seam" / "_wire" / "codec.py": ROOT
     / "tests"
     / "_seam"

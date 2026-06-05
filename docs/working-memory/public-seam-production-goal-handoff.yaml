@@ -2019,6 +2019,40 @@ acceptance:
           wire lowering, persisted Rust readback, and inspection behavior; the
           spec now names this owner. Private evidence payloads and other
           extension leaves remain pending typed-owner work.
+      - kind: private_service_config_capability_typed_records
+        paths:
+          - sdk/python/src/leaven/_seam/capability.py
+          - sdk/python/src/leaven/_seam/config.py
+          - sdk/python/src/leaven/_seam/client.py
+          - sdk/python/tests/_seam/test_config.py
+          - sdk/python/scripts/check_quality_contract.py
+        commands:
+          - cd sdk/python && uv run pytest tests/_seam/test_config.py tests/_seam/test_client.py tests/test_stage_surface.py tests/test_optimize_proposer_mechanics.py tests/test_optimize_public_seam_e2e.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_seam/capability.py src/leaven/_seam/config.py src/leaven/_seam/client.py tests/_seam/test_config.py tests/_seam/test_client.py tests/test_stage_surface.py tests/test_optimize_proposer_mechanics.py tests/test_optimize_public_seam_e2e.py scripts/check_quality_contract.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/capability.py src/leaven/_seam/config.py src/leaven/_seam/client.py tests/_seam/test_config.py tests/_seam/test_client.py tests/test_stage_surface.py tests/test_optimize_proposer_mechanics.py tests/test_optimize_public_seam_e2e.py scripts/check_quality_contract.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - >-
+            cd sdk/python && ! rg -n
+            "JsonObject|json_object|json\\.dumps|to_json\\(\\).*JsonObject|capability:
+            JsonObject|grants: list\\[JsonObject\\]|dict\\[str, Any\\]|\\bAny\\b|from
+            __future__"
+            src/leaven/_seam/capability.py src/leaven/_seam/config.py
+            src/leaven/_seam/client.py
+        note: >-
+          Python private seam service configuration and capability documents no
+          longer assemble raw `JsonObject` records internally. `_seam/config.py`
+          and `_seam/capability.py` now use frozen msgspec `Struct` owners for
+          provider config, workspace config, execution context, capability
+          issuer/subject/grants/resources/constraints/limits, execution policy,
+          and delegation policy; `SeamClient` writes the config file from
+          msgspec JSON bytes rather than `json.dumps` over anonymous dicts.
+          Focused tests assert semantics on typed records before projection and
+          separately prove the file-boundary JSON shape. This narrows the
+          private config/capability raw-object island only; Rust remains the
+          authority for service execution, capability validation, receipts, and
+          graph mutation, and the broader generated seam row stays pending.
       - kind: extension_result_receipts_match_rust_audit_shape
         paths:
           - sdk/python/codegen/result_codegen.py

@@ -1,6 +1,5 @@
 """One-shot process client for `leaven seam serve --stdio`."""
 
-import json
 import subprocess
 import tempfile
 from pathlib import Path
@@ -253,7 +252,7 @@ class SeamClient:
         with tempfile.TemporaryDirectory(prefix="leaven-seam-client-") as tmp:
             config_path = Path(tmp) / "seam-config.json"
             config_path.write_text(
-                json.dumps(self._config.to_json(), sort_keys=True),
+                self._config.to_json_bytes().decode(),
                 encoding="utf-8",
             )
             process = self._run_process(config_path, request, timeout_s)
