@@ -18,7 +18,7 @@ from .decorators import RegisteredStage
 from .layouts import WorkspaceLayout, case_workspace, edit_artifact
 from .output import OutputContract
 from .proposal import ProposalBatch
-from .stage_payloads import ReflectionResult
+from .stage_payloads import ProposeRequest, ReflectionResult, ReflectRequest
 
 
 class Rollout(BaseModel):
@@ -91,10 +91,10 @@ class Reflect(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid")
 
     kind: Literal["function", "default_gepa"]
-    stage: RegisteredStage[object, ReflectionResult] | None = None
+    stage: RegisteredStage[ReflectRequest, ReflectionResult] | None = None
 
     @classmethod
-    def fn(cls, stage: RegisteredStage[object, ReflectionResult]) -> "Reflect":
+    def fn(cls, stage: RegisteredStage[ReflectRequest, ReflectionResult]) -> "Reflect":
         """Use a registered `@lv.reflector` stage."""
         return cls(kind="function", stage=stage)
 
@@ -110,12 +110,12 @@ class Propose(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid")
 
     kind: Literal["function", "agent_edit"]
-    stage: RegisteredStage[object, ProposalBatch] | None = None
+    stage: RegisteredStage[ProposeRequest, ProposalBatch] | None = None
     agent_config: AgentConfig | None = None
     layout: WorkspaceLayout = Field(default_factory=edit_artifact)
 
     @classmethod
-    def fn(cls, stage: RegisteredStage[object, ProposalBatch]) -> "Propose":
+    def fn(cls, stage: RegisteredStage[ProposeRequest, ProposalBatch]) -> "Propose":
         """Use a registered `@lv.proposer` stage."""
         return cls(kind="function", stage=stage)
 

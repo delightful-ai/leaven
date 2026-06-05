@@ -70,7 +70,7 @@ _RECORD_REF_KINDS: tuple[tuple[_RecordInfoRefType, str], ...] = (
 
 
 async def run_proposer_stage(
-    stage: RegisteredStage[object, ProposalBatch],
+    stage: RegisteredStage[ProposeRequest, ProposalBatch],
     params: StageRunRequest,
     *,
     lm_model: str,

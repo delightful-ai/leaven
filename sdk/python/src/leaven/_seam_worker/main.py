@@ -10,10 +10,12 @@ from .._seam._wire.payloads import StageRunRequest, StageRunResult
 from ..artifacts.prompt import PromptArtifact
 from ..decorators import RegisteredStage
 from ..proposal import ProposalBatch
+from ..stage_payloads import ProposeRequest
 from .loader import load_stage_from_file
 from .proposer import run_proposer_stage
 from .protocol import read_request, write_error, write_result
 from .runner import run_runner_stage
+from .stage_types import WorkerStage
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -47,7 +49,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 async def run_stage(
-    stage: RegisteredStage[object, object],
+    stage: WorkerStage,
     params: StageRunRequest,
     *,
     lm_model: str,
@@ -55,17 +57,29 @@ async def run_stage(
     """Dispatch one registered stage by role."""
     if stage.role == "runner":
         return await run_runner_stage(
-            cast("RegisteredStage[PromptArtifact, str]", stage),
+            _runner_stage(stage),
             params,
             lm_model=lm_model,
         )
     if stage.role == "proposer":
         return await run_proposer_stage(
-            cast("RegisteredStage[object, ProposalBatch]", stage),
+            _proposer_stage(stage),
             params,
             lm_model=lm_model,
         )
     raise ValueError(f"unsupported worker stage role: {stage.role!r}")
+
+
+def _runner_stage(stage: WorkerStage) -> RegisteredStage[PromptArtifact, str]:
+    if stage.role != "runner":
+        raise TypeError(f"worker stage is not a runner: {stage.role!r}")
+    return cast("RegisteredStage[PromptArtifact, str]", stage)
+
+
+def _proposer_stage(stage: WorkerStage) -> RegisteredStage[ProposeRequest, ProposalBatch]:
+    if stage.role != "proposer":
+        raise TypeError(f"worker stage is not a proposer: {stage.role!r}")
+    return cast("RegisteredStage[ProposeRequest, ProposalBatch]", stage)
 
 
 __all__ = ["main", "run_stage"]

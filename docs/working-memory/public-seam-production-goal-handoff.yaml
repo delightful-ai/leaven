@@ -2245,6 +2245,36 @@ acceptance:
           the exact wire effect. This closes the Python Prompt create artifact
           leaf. GitProgram remains a Rust/Firkin/Codex Kit proof path until a
           real Python GitProgram artifact owner is introduced.
+      - kind: python_worker_stage_role_erasure_narrowed
+        paths:
+          - sdk/python/src/leaven/decorators.py
+          - sdk/python/src/leaven/stages.py
+          - sdk/python/src/leaven/_seam_worker/main.py
+          - sdk/python/src/leaven/_seam_worker/loader.py
+          - sdk/python/src/leaven/_seam_worker/proposer.py
+          - sdk/python/src/leaven/_seam_worker/stage_types.py
+          - sdk/python/tests/test_stage_surface.py
+          - sdk/python/tests/test_proposer_worker.py
+          - sdk/python/tests/_seam_worker/test_runner.py
+        commands:
+          - cd sdk/python && uv run pytest tests/test_stage_surface.py tests/test_proposer_worker.py tests/_seam_worker/test_runner.py -q
+          - cd sdk/python && uv run ruff check src/leaven/decorators.py src/leaven/stages.py src/leaven/_seam_worker/main.py src/leaven/_seam_worker/loader.py src/leaven/_seam_worker/proposer.py src/leaven/_seam_worker/stage_types.py
+          - cd sdk/python && uv run ty check src/leaven/decorators.py src/leaven/stages.py src/leaven/_seam_worker/main.py src/leaven/_seam_worker/loader.py src/leaven/_seam_worker/proposer.py src/leaven/_seam_worker/stage_types.py tests/test_stage_surface.py tests/test_proposer_worker.py tests/_seam_worker/test_runner.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && ! rg -n "RegisteredStage\\[object" src/leaven/decorators.py src/leaven/stages.py src/leaven/_seam_worker
+        note: >-
+          Public stage decorators and `Reflect.fn`/`Propose.fn` no longer
+          return or require `RegisteredStage[object, ...]` for known stage
+          roles. Evaluators now carry `EvaluationJob`, reflectors carry
+          `ReflectRequest`, proposers carry `ProposeRequest`, and judges carry
+          `JudgeRequest`. The private subprocess worker now returns a
+          role-checked `WorkerStage` union from its file loader and dispatches
+          through guarded runner/proposer narrowing helpers. This removes
+          avoidable stage-role erasure from the checked-in worker path used by
+          Codex Kit proposal execution. The public function-form
+          `register_stage(...)` now has role-specific overloads for the same
+          known roles instead of advertising `RegisteredStage[object, ...]`,
+          and the unused shapeless `**role_kwargs` placeholder was removed.
       - kind: extension_result_receipts_match_rust_audit_shape
         paths:
           - sdk/python/codegen/result_codegen.py

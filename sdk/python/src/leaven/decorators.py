@@ -93,21 +93,21 @@ def _make_registered[A, O](
 
 
 @overload
-def evaluator[O](func: EvaluatorFunc[O]) -> RegisteredStage[object, O]: ...
+def evaluator[O](func: EvaluatorFunc[O]) -> RegisteredStage[EvaluationJob, O]: ...
 @overload
 def evaluator[O](
     *,
     id: str | None = None,
     trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
     granularity: Granularity = "per_case",
-) -> Callable[[EvaluatorFunc[O]], RegisteredStage[object, O]]: ...
+) -> Callable[[EvaluatorFunc[O]], RegisteredStage[EvaluationJob, O]]: ...
 def evaluator[O](
     func: EvaluatorFunc[O] | None = None,
     *,
     id: str | None = None,
     trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
     granularity: Granularity = "per_case",
-) -> RegisteredStage[object, O] | Callable[[EvaluatorFunc[O]], RegisteredStage[object, O]]:
+) -> RegisteredStage[EvaluationJob, O] | Callable[[EvaluatorFunc[O]], RegisteredStage[EvaluationJob, O]]:
     """Decorate an async function as an evaluator stage (advanced / seam).
 
     Evaluators drive a whole evaluation job with batched effects and custom
@@ -116,28 +116,28 @@ def evaluator[O](
     evidence.
     """
 
-    def wrap(f: EvaluatorFunc[O]) -> RegisteredStage[object, O]:
+    def wrap(f: EvaluatorFunc[O]) -> RegisteredStage[EvaluationJob, O]:
         return _make_registered("evaluator", f, id, trust_profile, granularity=granularity)
 
     return wrap(func) if func is not None else wrap
 
 
 @overload
-def reflector(func: ReflectorFunc) -> RegisteredStage[object, ReflectionResult]: ...
+def reflector(func: ReflectorFunc) -> RegisteredStage[ReflectRequest, ReflectionResult]: ...
 @overload
 def reflector(
     *,
     stage_id: str | None = None,
     trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
-) -> Callable[[ReflectorFunc], RegisteredStage[object, ReflectionResult]]: ...
+) -> Callable[[ReflectorFunc], RegisteredStage[ReflectRequest, ReflectionResult]]: ...
 def reflector(
     func: ReflectorFunc | None = None,
     *,
     stage_id: str | None = None,
     trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
 ) -> (
-    RegisteredStage[object, ReflectionResult]
-    | Callable[[ReflectorFunc], RegisteredStage[object, ReflectionResult]]
+    RegisteredStage[ReflectRequest, ReflectionResult]
+    | Callable[[ReflectorFunc], RegisteredStage[ReflectRequest, ReflectionResult]]
 ):
     """Decorate an async function as a reflector stage.
 
@@ -145,21 +145,21 @@ def reflector(
     carrying `case.target` data classes — the seam enforces target egress.
     """
 
-    def wrap(f: ReflectorFunc) -> RegisteredStage[object, ReflectionResult]:
+    def wrap(f: ReflectorFunc) -> RegisteredStage[ReflectRequest, ReflectionResult]:
         return _make_registered("reflector", f, stage_id, trust_profile)
 
     return wrap(func) if func is not None else wrap
 
 
 @overload
-def proposer(func: ProposerFunc) -> RegisteredStage[object, ProposalBatch]: ...
+def proposer(func: ProposerFunc) -> RegisteredStage[ProposeRequest, ProposalBatch]: ...
 @overload
 def proposer(
     *,
     stage_id: str | None = None,
     trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
     repair_attempts: int = 0,
-) -> Callable[[ProposerFunc], RegisteredStage[object, ProposalBatch]]: ...
+) -> Callable[[ProposerFunc], RegisteredStage[ProposeRequest, ProposalBatch]]: ...
 def proposer(
     func: ProposerFunc | None = None,
     *,
@@ -167,8 +167,8 @@ def proposer(
     trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
     repair_attempts: int = 0,
 ) -> (
-    RegisteredStage[object, ProposalBatch]
-    | Callable[[ProposerFunc], RegisteredStage[object, ProposalBatch]]
+    RegisteredStage[ProposeRequest, ProposalBatch]
+    | Callable[[ProposerFunc], RegisteredStage[ProposeRequest, ProposalBatch]]
 ):
     """Decorate an async function as a proposer stage.
 
@@ -177,7 +177,7 @@ def proposer(
     """
     _ = repair_attempts
 
-    def wrap(f: ProposerFunc) -> RegisteredStage[object, ProposalBatch]:
+    def wrap(f: ProposerFunc) -> RegisteredStage[ProposeRequest, ProposalBatch]:
         return _make_registered("proposer", f, stage_id, trust_profile)
 
     return wrap(func) if func is not None else wrap
@@ -211,40 +211,78 @@ def runner[A, O](
 
 
 @overload
-def judge[O](func: JudgeFunc[O]) -> RegisteredStage[object, O]: ...
+def judge[O](func: JudgeFunc[O]) -> RegisteredStage[JudgeRequest, O]: ...
 @overload
 def judge[O](
     *,
     stage_id: str | None = None,
     trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
-) -> Callable[[JudgeFunc[O]], RegisteredStage[object, O]]: ...
+) -> Callable[[JudgeFunc[O]], RegisteredStage[JudgeRequest, O]]: ...
 def judge[O](
     func: JudgeFunc[O] | None = None,
     *,
     stage_id: str | None = None,
     trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
-) -> RegisteredStage[object, O] | Callable[[JudgeFunc[O]], RegisteredStage[object, O]]:
+) -> RegisteredStage[JudgeRequest, O] | Callable[[JudgeFunc[O]], RegisteredStage[JudgeRequest, O]]:
     """Decorate an async function as a judge stage (pairwise or listwise)."""
 
-    def wrap(f: JudgeFunc[O]) -> RegisteredStage[object, O]:
+    def wrap(f: JudgeFunc[O]) -> RegisteredStage[JudgeRequest, O]:
         return _make_registered("judge", f, stage_id, trust_profile)
 
     return wrap(func) if func is not None else wrap
 
 
+@overload
 def register_stage[O](
+    role: Literal["evaluator"],
+    func: EvaluatorFunc[O],
+    *,
+    id: str | None = None,
+    trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
+) -> RegisteredStage[EvaluationJob, O]: ...
+@overload
+def register_stage(
+    role: Literal["reflector"],
+    func: ReflectorFunc,
+    *,
+    id: str | None = None,
+    trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
+) -> RegisteredStage[ReflectRequest, ReflectionResult]: ...
+@overload
+def register_stage(
+    role: Literal["proposer"],
+    func: ProposerFunc,
+    *,
+    id: str | None = None,
+    trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
+) -> RegisteredStage[ProposeRequest, ProposalBatch]: ...
+@overload
+def register_stage[A, O](
+    role: Literal["runner"],
+    func: RunnerFunc[A, O],
+    *,
+    id: str | None = None,
+    trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
+) -> RegisteredStage[A, O]: ...
+@overload
+def register_stage[O](
+    role: Literal["judge"],
+    func: JudgeFunc[O],
+    *,
+    id: str | None = None,
+    trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
+) -> RegisteredStage[JudgeRequest, O]: ...
+def register_stage[A, O](
     role: StageRole,
     func: Callable[..., Awaitable[O]],
     *,
     id: str | None = None,
     trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
-    **role_kwargs: object,
-) -> RegisteredStage[object, O]:
+) -> RegisteredStage[A, O]:
     """Function form of the stage decorators; equivalent to `@lv.<role>(...)`.
 
     Useful for dynamic registration. The decorator forms are sugar over this.
     """
-    _ = role_kwargs
     return _make_registered(role, func, id, trust_profile)
 
 
