@@ -17,8 +17,8 @@ from .refs import (
     WireJsonArtifactSelector,
     WireJsonCostScope,
     WireJsonExtensionPayload,
+    WireJsonGraphEventFilter,
     WireJsonLiteralValue,
-    WireJsonObject,
     WorkspaceRef,
 )
 
@@ -295,7 +295,7 @@ class GraphSourceCosts(Struct, frozen=True, forbid_unknown_fields=True, tag="cos
 class GraphSourceEvents(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="events", tag_field="kind"):
     since_revision: str | UnsetType = UNSET
     until_revision: str | UnsetType = UNSET
-    filter: WireJsonObject | UnsetType = UNSET
+    filter: WireJsonGraphEventFilter | UnsetType = UNSET
 
 
 class GraphSourceCandidateTree(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="candidate_tree", tag_field="kind"):

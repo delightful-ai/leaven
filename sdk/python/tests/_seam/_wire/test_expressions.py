@@ -10,6 +10,7 @@ from leaven._seam._wire.expressions import (
     EvaluationSetCases,
     ExtensionObjectExpression,
     GraphSourceCosts,
+    GraphSourceEvents,
     GraphSourceExtension,
     GraphStepFilter,
     PlanExpressionCaseQuery,
@@ -226,6 +227,46 @@ def test_graph_query_decodes_projection_selector_and_cost_scope_owners() -> None
         "candidate": "cand_alpha",
         "dimensions": ["lm", {"unit": "usd_micro"}],
     }
+
+
+def test_graph_query_event_filter_decodes_owned_json() -> None:
+    """Example: event graph-source filters use a named bounded JSON owner."""
+
+    body = (
+        b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
+        b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
+        b'"ops":[{"kind":"let","name":"events","expr":{"kind":"graph_query",'
+        b'"source":{"kind":"events","since_revision":"rev_1",'
+        b'"filter":{"kind":"run_context","data_classes":["event.public",{"scope":"run"}]}},'
+        b'"projection":{"kind":"summary"}}}],'
+        b'"return":["events"],"commit":{"kind":"no_graph_writes"}}'
+    )
+
+    decoded = msgspec.json.decode(body, type=PlanDocument)
+    events_expr = decoded.ops[0].expr
+
+    assert isinstance(events_expr, PlanExpressionGraphQuery)
+    assert isinstance(events_expr.source, GraphSourceEvents)
+    assert events_expr.source.filter == {
+        "kind": "run_context",
+        "data_classes": ["event.public", {"scope": "run"}],
+    }
+
+
+def test_graph_query_event_filter_rejects_non_object_filter() -> None:
+    """Boundary check: event filters are object-shaped JSON, not arbitrary values."""
+
+    body = (
+        b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
+        b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
+        b'"ops":[{"kind":"let","name":"events","expr":{"kind":"graph_query",'
+        b'"source":{"kind":"events","filter":["run_context"]},'
+        b'"projection":{"kind":"summary"}}}],'
+        b'"return":["events"],"commit":{"kind":"no_graph_writes"}}'
+    )
+
+    with pytest.raises(msgspec.ValidationError):
+        msgspec.json.decode(body, type=PlanDocument)
 
 
 def test_workspace_query_decodes_typed_filesystem_op() -> None:

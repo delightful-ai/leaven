@@ -2247,6 +2247,34 @@ acceptance:
           stage, graph-row, selector, and scope leaves returns no matches. The
           row remains pending because schema-dependent result fragments and
           remaining public SDK/runtime erasure points still need typed owners.
+      - kind: python_graph_event_filter_uses_object_shaped_owner
+        paths:
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/codegen/expression_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/refs.py
+          - sdk/python/src/leaven/_seam/_wire/expressions.py
+          - sdk/python/tests/_seam/_wire/test_expressions.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_expressions.py -q
+          - cd sdk/python && uv run pytest tests/_seam/_wire -q
+          - cd sdk/python && uv run ruff check codegen/ref_codegen.py codegen/expression_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/expressions.py tests/_seam/_wire/test_expressions.py
+          - cd sdk/python && uv run ty check codegen/ref_codegen.py codegen/expression_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/expressions.py tests/_seam/_wire/test_expressions.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Generated Python `GraphSourceEvents.filter` now uses the named
+          `WireJsonGraphEventFilter` owner instead of the anonymous
+          `WireJsonObject` alias. The owner is object-shaped
+          `dict[str, WireJsonLiteralDepth7]`, not arbitrary bounded JSON, so
+          list-shaped filters fail at msgspec decode time. Focused tests prove
+          a nested RunContext-style event filter decodes through the generated
+          graph-source record and a non-object filter is rejected. This aligns
+          Python codegen with the Rust `PlanGraphEventFilter` owner evidence;
+          the broader row remains pending for remaining public SDK/runtime
+          erasure points and any schema-owned leaves not yet covered by named
+          owners.
       - kind: rust_and_python_lm_provider_hints_are_closed_typed_records
         paths:
           - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
