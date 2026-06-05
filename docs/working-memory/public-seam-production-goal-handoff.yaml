@@ -3177,6 +3177,35 @@ acceptance:
           "plan expressions" from the approval-needed leaf list on the Rust
           public-seam side, but Python generated records and remaining Plan
           execution/result leaves still need typed-owner follow-up.
+      - kind: rust_request_evaluation_write_has_typed_owner
+        paths:
+          - crates/leaven-public-seam/src/plan/model.rs
+          - crates/leaven-public-seam/src/plan.rs
+          - crates/leaven-public-seam/src/lib.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_document.rs
+          - crates/leaven-seam-service/src/configured_extension.rs
+          - crates/leaven-seam-service/src/service.rs
+        commands:
+          - cargo fmt --check
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_document::request_evaluation_write_exposes_typed_request_facts -- --exact
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_document:: -- --nocapture
+          - cargo test -p leaven-seam-service service::tests::seam_runtime_executes_evaluation_request_through_configured_service -- --exact
+          - cargo test -p leaven-seam-service service::tests::seam_runtime_denies_evaluation_request_without_configured_authority -- --exact
+          - cargo check -p leaven-public-seam -p leaven-seam-service
+        note: >-
+          Rust Plan IR now owns typed `request_evaluation` write facts:
+          `PlanRequestEvaluationWrite`, closed `PlanEvaluationShape`, typed
+          candidate-id extraction from string/object candidate refs, and a
+          recursive `PlanEvaluationSetExpr` enum covering named, cases, tagged,
+          recent, union, intersect, difference, sample, and stratified set
+          expressions. The configured service
+          validates the Plan once through `PublicSeamPackage`, selects the
+          single request-evaluation write from `PlanDocument` operations, and
+          authorizes/builds the evaluation job from typed accessors instead of
+          walking `write.request` with raw JSON field probes. This does not
+          close the typed-seam row because configured extension-result
+          projection and non-request-evaluation Plan/Result leaves still carry
+          raw `Value` access.
       - kind: typed_locked_method_identity_foundation
         paths:
           - crates/leaven-public-seam/src/acp_profile/methods.rs

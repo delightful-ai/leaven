@@ -221,18 +221,18 @@ impl ConfiguredSeamService {
         params: &Value,
     ) -> Result<Value, PublicSeamError> {
         let context = self.config.context.to_execution_context();
-        self.package.validate_plan_document(params)?;
+        let plan = self.package.validate_plan_document(params)?;
         let capability = self
             .capability
             .as_ref()
             .ok_or_else(|| PublicSeamError::InvalidPlan {
                 message: "request_evaluation execution requires capability".to_owned(),
             })?;
-        let (name, write) = single_request_evaluation_write(params)?;
-        authorize_evaluation_request_write(write, capability)?;
-        let job_value = evaluation_job_value_from_write(write, &context)?;
+        let selection = single_request_evaluation_write(&plan)?;
+        authorize_evaluation_request_write(&selection.write, capability)?;
+        let job_value = evaluation_job_value_from_write(&selection.write, &context)?;
         let job = self.package.validate_evaluation_job_document(&job_value)?;
-        let result = evaluation_request_plan_result(params, name, &context, &job)?;
+        let result = evaluation_request_plan_result(&plan, &selection.name, &context, &job)?;
         self.package
             .validate_evaluation_request_receipt_document(&job, &result)?;
         self.graph_state
@@ -240,7 +240,7 @@ impl ConfiguredSeamService {
             .map_err(|_| PublicSeamError::InvalidPlan {
                 message: "configured seam graph state lock poisoned".to_owned(),
             })?
-            .record_evaluation_request(name, &job, context.base_revision());
+            .record_evaluation_request(&selection.name, &job, context.base_revision());
         extension_result_for_plan_report(method, params, &result)
     }
 }

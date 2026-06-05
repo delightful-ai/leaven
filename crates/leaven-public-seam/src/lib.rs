@@ -57,9 +57,10 @@ pub use package::{
 pub use plan::{
     PlanArtifactProjectionSelector, PlanAssessmentPreferenceValue, PlanAssessmentRankingValue,
     PlanAssessmentTargetValue, PlanCallKind, PlanCommitKind, PlanCostScope, PlanDocument,
-    PlanEmitRunEventWrite, PlanEventPayload, PlanExpression, PlanExpressionKind,
-    PlanExtensionPayload, PlanGraphQuerySource, PlanId, PlanLiteralValue, PlanMode, PlanOperation,
-    PlanOperationKind, PlanQueryKind, PlanReturnBinding, PlanSchemaVersion, PlanScoreOutputValue,
+    PlanEmitRunEventWrite, PlanEvaluationSetExpr, PlanEvaluationShape, PlanEventPayload,
+    PlanExpression, PlanExpressionKind, PlanExtensionPayload, PlanGraphQuerySource, PlanId,
+    PlanLiteralValue, PlanMode, PlanOperation, PlanOperationKind, PlanQueryKind,
+    PlanRequestEvaluationWrite, PlanReturnBinding, PlanSchemaVersion, PlanScoreOutputValue,
     PlanWriteKind,
 };
 pub use plan_error::{PlanErrorCode, PlanErrorDetails, PlanErrorDocument};

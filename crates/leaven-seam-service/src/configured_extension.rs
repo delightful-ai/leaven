@@ -1,6 +1,7 @@
 use leaven_public_seam::{
     CapabilityDocument, CapabilityGrantRequest, EvaluationJobDocument, LockedMethod,
-    PlanExecutionContext, PublicSeamError,
+    PlanCommitKind, PlanDocument, PlanEvaluationShape, PlanExecutionContext, PlanMode,
+    PlanRequestEvaluationWrite, PlanWriteKind, PublicSeamError,
 };
 use serde_json::{Value, json};
 
@@ -53,47 +54,38 @@ pub(crate) fn extension_result_for_plan_report(
     }))
 }
 
+pub(crate) struct RequestEvaluationWriteSelection {
+    pub(crate) name: String,
+    pub(crate) write: PlanRequestEvaluationWrite,
+}
+
 pub(crate) fn single_request_evaluation_write(
-    plan: &Value,
-) -> Result<(&str, &Value), PublicSeamError> {
-    if plan
-        .get("mode")
-        .and_then(|mode| mode.get("kind"))
-        .and_then(Value::as_str)
-        != Some("execute")
-    {
+    plan: &PlanDocument,
+) -> Result<RequestEvaluationWriteSelection, PublicSeamError> {
+    if plan.mode() != PlanMode::Execute {
         return Err(PublicSeamError::InvalidPlan {
             message: "request_evaluation execution requires execute mode".to_owned(),
         });
     }
-    if plan
-        .get("commit")
-        .and_then(|commit| commit.get("kind"))
-        .and_then(Value::as_str)
-        != Some("graph_writes_atomic")
-    {
+    if plan.commit() != PlanCommitKind::GraphWritesAtomic {
         return Err(PublicSeamError::InvalidPlan {
             message: "request_evaluation execution requires graph_writes_atomic commit".to_owned(),
         });
     }
-    let ops =
-        plan.get("ops")
-            .and_then(Value::as_array)
-            .ok_or_else(|| PublicSeamError::InvalidPlan {
-                message: "request_evaluation plan must carry ops".to_owned(),
-            })?;
     let mut found = None;
-    for op in ops {
-        let Some(write) = op.get("write") else {
-            continue;
-        };
-        if write.get("kind").and_then(Value::as_str) == Some("request_evaluation") {
-            let name = op.get("name").and_then(Value::as_str).ok_or_else(|| {
-                PublicSeamError::InvalidPlan {
-                    message: "request_evaluation op must carry name".to_owned(),
-                }
-            })?;
-            if found.replace((name, write)).is_some() {
+    for op in plan.operations() {
+        if op.write_kind() == Some(PlanWriteKind::RequestEvaluation) {
+            let write = op
+                .write()
+                .and_then(|write| write.request_evaluation())
+                .ok_or_else(|| PublicSeamError::InvalidPlan {
+                    message: "request_evaluation op must expose typed write".to_owned(),
+                })?;
+            let selected = RequestEvaluationWriteSelection {
+                name: op.name().to_owned(),
+                write: write.clone(),
+            };
+            if found.replace(selected).is_some() {
                 return Err(PublicSeamError::InvalidPlan {
                     message: "configured service executes one request_evaluation write at a time"
                         .to_owned(),
@@ -107,26 +99,12 @@ pub(crate) fn single_request_evaluation_write(
 }
 
 pub(crate) fn authorize_evaluation_request_write(
-    write: &Value,
+    write: &PlanRequestEvaluationWrite,
     capability: &CapabilityDocument,
 ) -> Result<(), PublicSeamError> {
-    let request = write
-        .get("request")
-        .ok_or_else(|| PublicSeamError::InvalidPlan {
-            message: "request_evaluation write must carry request".to_owned(),
-        })?;
-    let candidates =
-        request
-            .get("candidates")
-            .cloned()
-            .ok_or_else(|| PublicSeamError::InvalidPlan {
-                message: "request_evaluation request must carry candidates".to_owned(),
-            })?;
     let mut grant = CapabilityGrantRequest::for_action("evaluation.request")
-        .with_resource("candidate_ids", candidates);
-    if let Some(purpose) = request.get("purpose").and_then(Value::as_str) {
-        grant = grant.with_purpose(purpose);
-    }
+        .with_resource("candidate_ids", json!(write.candidate_ids()));
+    grant = grant.with_purpose(write.purpose());
     capability
         .authorize_grant(grant)
         .map_err(|denial| PublicSeamError::InvalidPlan {
@@ -136,47 +114,12 @@ pub(crate) fn authorize_evaluation_request_write(
 }
 
 pub(crate) fn evaluation_job_value_from_write(
-    write: &Value,
+    write: &PlanRequestEvaluationWrite,
     context: &PlanExecutionContext,
 ) -> Result<Value, PublicSeamError> {
-    let request = write
-        .get("request")
-        .ok_or_else(|| PublicSeamError::InvalidPlan {
-            message: "request_evaluation write must carry request".to_owned(),
-        })?;
-    let shape = request
-        .get("shape")
-        .and_then(Value::as_str)
-        .ok_or_else(|| PublicSeamError::InvalidPlan {
-            message: "request_evaluation request must carry shape".to_owned(),
-        })?;
-    let candidates = request
-        .get("candidates")
-        .and_then(Value::as_array)
-        .ok_or_else(|| PublicSeamError::InvalidPlan {
-            message: "request_evaluation request must carry candidates".to_owned(),
-        })?;
-    let candidate_ids = candidates
-        .iter()
-        .map(|candidate| {
-            candidate
-                .as_str()
-                .map(str::to_owned)
-                .ok_or_else(|| PublicSeamError::InvalidPlan {
-                    message: "request_evaluation candidates must be strings".to_owned(),
-                })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let kind = evaluation_job_kind(shape, &candidate_ids)?;
-    let set_name = request
-        .get("set")
-        .and_then(|set| set.get("name"))
-        .and_then(Value::as_str)
-        .unwrap_or("validation");
-    let evaluator = request
-        .get("evaluator")
-        .and_then(Value::as_str)
-        .unwrap_or("eval_configured");
+    let kind = evaluation_job_kind(write.shape(), write.candidate_ids())?;
+    let set_name = write.set().named_set().unwrap_or("validation");
+    let evaluator = write.evaluator().unwrap_or("eval_configured");
     Ok(json!({
         "schema_version": "leaven.evaluation_job.v1",
         "run": "run_demo",
@@ -187,8 +130,8 @@ pub(crate) fn evaluation_job_value_from_write(
         "base_revision": context.base_revision(),
         "deadline_at": "2026-05-23T00:20:00Z",
         "kind": kind,
-        "granularity": request.get("granularity").cloned().unwrap_or_else(|| json!("per_case")),
-        "purpose": request.get("purpose").cloned().unwrap_or_else(|| json!("validation")),
+        "granularity": write.granularity(),
+        "purpose": write.purpose(),
         "resolved_set": {
             "id": format!("rset_{}", sanitize_id_fragment(set_name)),
             "case_ids": ["case_1"],
@@ -203,7 +146,7 @@ pub(crate) fn evaluation_job_value_from_write(
 }
 
 pub(crate) fn evaluation_request_plan_result(
-    plan: &Value,
+    plan: &PlanDocument,
     name: &str,
     context: &PlanExecutionContext,
     job: &EvaluationJobDocument,
@@ -220,7 +163,7 @@ pub(crate) fn evaluation_request_plan_result(
     });
     Ok(json!({
         "schema_version": "leaven.plan_result.v1",
-        "plan_id": plan.get("plan_id").and_then(Value::as_str).unwrap_or("planevaluationrequestconfigured001"),
+        "plan_id": plan.plan_id().as_str(),
         "capability_fingerprint": context.capability_fingerprint(),
         "policy_fingerprint": context.policy_fingerprint(),
         "base_revision": context.base_revision(),
@@ -296,17 +239,20 @@ fn acp_primary_result_hash(
     Ok(format!("fp_result_sha256_{digest}"))
 }
 
-fn evaluation_job_kind(shape: &str, candidates: &[String]) -> Result<Value, PublicSeamError> {
+fn evaluation_job_kind(
+    shape: PlanEvaluationShape,
+    candidates: &[String],
+) -> Result<Value, PublicSeamError> {
     match shape {
-        "independent" => Ok(json!({
+        PlanEvaluationShape::Independent => Ok(json!({
             "kind": "independent",
             "candidates": candidates
         })),
-        "listwise" => Ok(json!({
+        PlanEvaluationShape::Listwise => Ok(json!({
             "kind": "listwise",
             "candidates": candidates
         })),
-        "pairwise" => {
+        PlanEvaluationShape::Pairwise => {
             if candidates.len() < 2 {
                 return Err(PublicSeamError::InvalidPlan {
                     message: "pairwise evaluation request requires at least two candidates"
@@ -327,9 +273,6 @@ fn evaluation_job_kind(shape: &str, candidates: &[String]) -> Result<Value, Publ
                 "pairs": pairs
             }))
         }
-        other => Err(PublicSeamError::InvalidPlan {
-            message: format!("unsupported evaluation request shape `{other}`"),
-        }),
     }
 }
 

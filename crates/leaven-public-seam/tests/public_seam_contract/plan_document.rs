@@ -5,10 +5,10 @@ use leaven_lm::{MessageContentPart, OutputMode, Role};
 use leaven_public_seam::{
     AgentCommandOutputRefs, CapabilityDocument, PlanAgentRunOutcome, PlanAgentRunRequest,
     PlanCallKind, PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanCommitKind,
-    PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
-    PlanExpressionKind, PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope,
-    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanMode, PlanOperationKind, PlanQueryKind,
-    PlanSandboxExecOutcome, PlanSandboxExecRequest, PlanSchemaVersion,
+    PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanEvaluationShape, PlanExecutionContext,
+    PlanExecutionHost, PlanExpressionKind, PlanGraphQueryOutcome, PlanGraphQueryRequest,
+    PlanGraphReadScope, PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanMode, PlanOperationKind,
+    PlanQueryKind, PlanSandboxExecOutcome, PlanSandboxExecRequest, PlanSchemaVersion,
     PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome,
     PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
     PlanWriteKind, PublicSeamError, PublicSeamPackage, WorkspaceQueryOp,
@@ -80,6 +80,80 @@ fn plan_ir_family_accepts_typed_let_call_write_documents() {
     assert_eq!(event_write.payload().as_json(), &json!({"ok": true}));
     assert_eq!(event_write.visibility(), "public");
     assert_eq!(write.assessment_score_output_count(), 0);
+}
+
+#[test]
+fn request_evaluation_write_exposes_typed_request_facts() {
+    let package = package();
+    let mut plan = request_evaluation_plan();
+    plan["ops"][0]["write"]["request"]["shape"] = json!("pairwise");
+    plan["ops"][0]["write"]["request"]["candidates"] = json!([
+        "cand_a",
+        {"kind": "candidate", "run": "run_1", "id": "cand_b"}
+    ]);
+    let document = package.validate_plan_document(&plan).unwrap();
+    let [op] = document.operations() else {
+        panic!("expected one request_evaluation op");
+    };
+    assert_eq!(op.write_kind(), Some(PlanWriteKind::RequestEvaluation));
+    let write = op
+        .write()
+        .and_then(|write| write.request_evaluation())
+        .expect("request_evaluation write exposes typed request facts");
+
+    assert_eq!(write.shape(), PlanEvaluationShape::Pairwise);
+    assert_eq!(write.shape().as_str(), "pairwise");
+    assert_eq!(write.candidate_ids(), &["cand_a", "cand_b"]);
+    assert_eq!(write.set().kind(), "named");
+    assert_eq!(write.set().named_set(), Some("validation"));
+    assert_eq!(write.granularity(), "per_case");
+    assert_eq!(write.purpose(), "validation");
+    assert_eq!(write.evaluator(), Some("eval_score_v1"));
+}
+
+#[test]
+fn request_evaluation_write_preserves_recursive_set_expr() {
+    let package = package();
+    let mut plan = request_evaluation_plan();
+    plan["ops"][0]["write"]["request"]["set"] = json!({
+        "kind": "sample",
+        "base": {
+            "kind": "union",
+            "sets": [
+                {"kind": "named", "name": "validation"},
+                {
+                    "kind": "cases",
+                    "cases": [{"kind": "case", "id": "case_1"}],
+                    "requires_partition_resolution": true
+                }
+            ]
+        },
+        "n": 3,
+        "seed": 42
+    });
+    let document = package.validate_plan_document(&plan).unwrap();
+    let write = document.operations()[0]
+        .write()
+        .and_then(|write| write.request_evaluation())
+        .expect("request_evaluation write exposes typed request facts");
+
+    let leaven_public_seam::PlanEvaluationSetExpr::Sample { base, n, seed } = write.set() else {
+        panic!("expected sample set expression");
+    };
+    assert_eq!((*n, *seed), (3, 42));
+    let leaven_public_seam::PlanEvaluationSetExpr::Union { sets } = base.as_ref() else {
+        panic!("expected union base");
+    };
+    assert_eq!(sets[0].named_set(), Some("validation"));
+    let leaven_public_seam::PlanEvaluationSetExpr::Cases {
+        case_ids,
+        requires_partition_resolution,
+    } = &sets[1]
+    else {
+        panic!("expected cases branch");
+    };
+    assert_eq!(case_ids, &["case_1"]);
+    assert!(*requires_partition_resolution);
 }
 
 #[test]
