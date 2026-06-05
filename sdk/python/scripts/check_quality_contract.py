@@ -131,6 +131,9 @@ MIRRORED_TESTS = {
     / "tests"
     / "builders"
     / "test_batch.py",
+    ROOT / "src" / "leaven" / "builders" / "proposals.py": ROOT
+    / "tests"
+    / "test_proposal_submission.py",
     ROOT / "src" / "leaven" / "cases" / "__init__.py": ROOT
     / "tests"
     / "cases"

@@ -2099,6 +2099,43 @@ acceptance:
           result/receipt/protocol raw-object island only; runner case input and
           proposer reflection metadata still contain explicit JSON leaf slots
           that need typed owners in later slices.
+      - kind: python_proposal_effect_payload_bag_removed
+        paths:
+          - sdk/python/src/leaven/proposal.py
+          - sdk/python/src/leaven/builders/proposals.py
+          - sdk/python/tests/test_proposal.py
+          - sdk/python/tests/test_proposal_submission.py
+          - sdk/python/tests/test_optimize_proposer_mechanics.py
+          - sdk/python/tests/test_proposer_worker.py
+          - sdk/python/scripts/check_quality_contract.py
+          - docs/specs/leaven_python.md
+        commands:
+          - cd sdk/python && uv run pytest tests/test_proposal.py tests/test_proposal_submission.py tests/test_optimize_proposer_mechanics.py tests/test_proposer_worker.py -q
+          - cd sdk/python && uv run ruff check src/leaven/proposal.py src/leaven/builders/proposals.py tests/test_proposal.py tests/test_proposal_submission.py tests/test_optimize_proposer_mechanics.py tests/test_proposer_worker.py scripts/check_quality_contract.py
+          - cd sdk/python && uv run ty check src/leaven/proposal.py src/leaven/builders/proposals.py tests/test_proposal.py tests/test_proposal_submission.py tests/test_optimize_proposer_mechanics.py tests/test_proposer_worker.py scripts/check_quality_contract.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - >-
+            cd sdk/python && ! rg -n
+            "payload: JsonObject|payload=\\{|effect\\.payload|_required_payload|proposal
+            payload|key not in effect\\.payload|\\[\\\"change_schema\\\"\\]|\\[\\\"parser\\\"\\]"
+            src/leaven/proposal.py src/leaven/builders/proposals.py
+            tests/test_proposal.py tests/test_proposal_submission.py
+            tests/test_optimize_proposer_mechanics.py tests/test_proposer_worker.py
+        note: >-
+          Public Python `ProposalEffect` no longer carries an anonymous
+          `payload: JsonObject` that proposal builders later reparse by string
+          key. Effect kind, causal parent, surface fingerprint, artifact fields,
+          change schema, parser, agent-session receipt, artifact value, and
+          `change_value` are now direct pydantic fields with construction-time
+          validation. `ProposalsBuilder` lowers those typed attributes directly
+          into generated seam `ProposalEffect*` records and the old
+          `_required_payload(...)` parser path is gone. This narrows the
+          proposal-submission typing gap on the Codex evolution path; the
+          actual artifact/change value remains an explicit schema-owned JSON
+          leaf until Prompt, SkillBank, GitProgram, and future adapter changes
+          gain concrete Python owners.
       - kind: extension_result_receipts_match_rust_audit_shape
         paths:
           - sdk/python/codegen/result_codegen.py

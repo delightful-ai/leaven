@@ -141,9 +141,9 @@ def _create_effect_to_wire(effect: ProposalEffect, batch: ProposalBatch) -> Prop
     read_receipts = _receipt_ids(batch)
     return ProposalWriteRecord(
         effect=ProposalEffectCreate(
-            artifact_type=_required_payload_string(effect, "artifact_type"),
-            artifact_schema=_required_payload_string(effect, "artifact_schema"),
-            artifact=_literal_expr(_required_payload(effect, "artifact")),
+            artifact_type=_required_string(effect.artifact_type, "create artifact_type"),
+            artifact_schema=_required_string(effect.artifact_schema, "create artifact_schema"),
+            artifact=_literal_expr(_required_value(effect.artifact, "create artifact")),
         ),
         causal=ProposalCausalInputs(inputs=[]),
         informed_by=_plan_literal_expr(read_receipts),
@@ -157,21 +157,27 @@ def _change_effect_to_wire(effect: ProposalEffect, batch: ProposalBatch) -> Prop
     wire_effect: ProposalEffectChange | ProposalEffectAgentSession
     if effect.kind == "change":
         wire_effect = ProposalEffectChange(
-            target=effect.parent_candidate_id,
-            surface_fingerprint=effect.surface,
-            change_schema=_required_payload_string(effect, "change_schema"),
-            change=_literal_expr(_required_payload(effect, "change")),
+            target=_required_string(effect.parent_candidate_id, "change parent_candidate_id"),
+            surface_fingerprint=_required_string(effect.surface, "change surface"),
+            change_schema=_required_string(effect.change_schema, "change change_schema"),
+            change=_literal_expr(_required_value(effect.change_value, "change change")),
         )
     elif effect.kind == "change_from_agent_session":
         if effect.agent_session_receipt is None:
             raise ValueError("change_from_agent_session requires agent_session_receipt")
         agent_receipt = effect.agent_session_receipt.receipt_id
         wire_effect = ProposalEffectAgentSession(
-            target=effect.parent_candidate_id,
+            target=_required_string(
+                effect.parent_candidate_id,
+                "change_from_agent_session parent_candidate_id",
+            ),
             agent_receipt=agent_receipt,
-            parser=_required_payload_string(effect, "parser"),
-            surface_fingerprint=effect.surface,
-            change_schema=_required_payload_string(effect, "change_schema"),
+            parser=_required_string(effect.parser, "change_from_agent_session parser"),
+            surface_fingerprint=_required_string(effect.surface, "change_from_agent_session surface"),
+            change_schema=_required_string(
+                effect.change_schema,
+                "change_from_agent_session change_schema",
+            ),
         )
     else:
         raise TypeError(f"unsupported proposal effect: {effect.kind}")
@@ -208,17 +214,16 @@ def _literal_expr(value: JsonValue) -> ValueExprLiteral:
     return ValueExprLiteral(value=value)
 
 
-def _required_payload_string(effect: ProposalEffect, key: str) -> str:
-    value = _required_payload(effect, key)
-    if not isinstance(value, str):
-        raise TypeError(f"{effect.kind} proposal payload requires string `{key}`")
+def _required_string(value: str | None, field: str) -> str:
+    if value is None:
+        raise ValueError(f"proposal effect missing {field}")
     return value
 
 
-def _required_payload(effect: ProposalEffect, key: str) -> JsonValue:
-    if key not in effect.payload:
-        raise KeyError(f"{effect.kind} proposal payload requires `{key}`")
-    return effect.payload[key]
+def _required_value(value: JsonValue | None, field: str) -> JsonValue:
+    if value is None:
+        raise ValueError(f"proposal effect missing {field}")
+    return value
 
 
 __all__ = ["ProposalSubmission", "ProposalsBuilder"]

@@ -6,10 +6,10 @@ surfaces. Effect kinds are `create` (fresh) and `change` (lineage-bearing).
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ._receipts import CallReceipt, QueryReceipt
-from .json_value import JsonObject
+from .json_value import JsonObject, JsonValue
 
 
 class ProposalEffect(BaseModel):
@@ -24,13 +24,61 @@ class ProposalEffect(BaseModel):
         "change_from_agent_session",
     ]
     parent_candidate_id: str | None = None
-    """Required for 'change' and 'change_from_agent_session'."""
-    surface: str
+    """Required for lineage-bearing change effects."""
+    surface: str | None = None
     """Locked surface fingerprint the change applies to."""
-    payload: JsonObject
-    """Typed change payload (e.g. SkillBankChange JSON)."""
+    artifact_type: str | None = None
+    """Required for 'create' effects."""
+    artifact_schema: str | None = None
+    """Required for 'create' effects."""
+    artifact: JsonValue | None = None
+    """Artifact value for 'create' effects."""
+    change_schema: str | None = None
+    """Required for all change effects."""
+    change_value: JsonValue | None = None
+    """Artifact-native change value for 'change' effects."""
+    parser: str | None = None
+    """Parser used by workspace-diff or agent-session changes."""
     agent_session_receipt: CallReceipt | None = None
     """Required for 'change_from_agent_session'."""
+
+    @model_validator(mode="after")
+    def _validate_effect_shape(self) -> "ProposalEffect":
+        if self.kind == "create":
+            _require(self.artifact_type, "create proposal effects require artifact_type")
+            _require(self.artifact_schema, "create proposal effects require artifact_schema")
+            _require(self.artifact, "create proposal effects require artifact")
+            return self
+        _require(self.parent_candidate_id, f"{self.kind} proposal effects require parent_candidate_id")
+        _require(self.surface, f"{self.kind} proposal effects require surface")
+        _require(self.change_schema, f"{self.kind} proposal effects require change_schema")
+        if self.kind == "change":
+            _require(self.change_value, "change proposal effects require change")
+        if self.kind == "change_from_workspace_diff":
+            _require(self.parser, "change_from_workspace_diff proposal effects require parser")
+        if self.kind == "change_from_agent_session":
+            _require(self.parser, "change_from_agent_session proposal effects require parser")
+            _require(
+                self.agent_session_receipt,
+                "change_from_agent_session proposal effects require agent_session_receipt",
+            )
+        return self
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        artifact_type: str,
+        artifact_schema: str,
+        artifact: JsonValue,
+    ) -> "ProposalEffect":
+        """Build a fresh artifact creation proposal effect."""
+        return cls(
+            kind="create",
+            artifact_type=artifact_type,
+            artifact_schema=artifact_schema,
+            artifact=artifact,
+        )
 
     @classmethod
     def change(
@@ -39,14 +87,15 @@ class ProposalEffect(BaseModel):
         parent_candidate_id: str,
         surface: str,
         change_schema: str,
-        change: JsonObject,
+        change: JsonValue,
     ) -> "ProposalEffect":
         """Build a lineage-bearing change proposal effect."""
         return cls(
             kind="change",
             parent_candidate_id=parent_candidate_id,
             surface=surface,
-            payload={"change_schema": change_schema, "change": change},
+            change_schema=change_schema,
+            change_value=change,
         )
 
     @classmethod
@@ -64,7 +113,8 @@ class ProposalEffect(BaseModel):
             kind="change_from_agent_session",
             parent_candidate_id=parent_candidate_id,
             surface=surface,
-            payload={"change_schema": change_schema, "parser": parser},
+            change_schema=change_schema,
+            parser=parser,
             agent_session_receipt=agent_session_receipt,
         )
 
@@ -110,6 +160,12 @@ class SkillProposal(BaseModel):
     change: JsonObject
     read_receipts: list[QueryReceipt] = Field(default_factory=list)
     effect_receipts: list[CallReceipt] = Field(default_factory=list)
+
+
+def _require[T](value: T | None, message: str) -> T:
+    if value is None:
+        raise ValueError(message)
+    return value
 
 
 __all__ = ["ProposalBatch", "ProposalEffect", "SkillProposal"]

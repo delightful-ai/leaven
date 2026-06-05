@@ -385,6 +385,14 @@ boundary is structural: a runner's `cx` has no `proposals`, and its `case` has
 no `.target`. These builders construct typed Plan IR ops that the engine
 validates against the locked seam before execution.
 
+`ProposalBatch` contains `ProposalEffect` records with direct typed fields for
+the effect kind, causal parent, surface fingerprint, change schema, parser,
+agent-session receipt, artifact fields, artifact value, and `change_value`. It
+does not carry an anonymous `payload` object that builders later reparse by
+key. The remaining artifact/change value is an explicit schema-owned leaf:
+Prompt, SkillBank, GitProgram, and future adapter changes need concrete owners
+before they can count as fully typed artifact semantics.
+
 The builder geometry:
 
 ```python
