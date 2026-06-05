@@ -31,7 +31,11 @@ from leaven._seam._wire.expressions import (
     WorkspaceQueryReadFile,
 )
 from leaven._seam._wire.payloads import PlanDocument
-from leaven._seam._wire.refs import ExtensionSummaryPayload
+from leaven._seam._wire.refs import (
+    ArtifactSelectorJsonPointer,
+    CandidateCostScope,
+    ExtensionSummaryPayload,
+)
 
 
 def test_schema_valid_precondition_decodes_typed_value_expr() -> None:
@@ -205,11 +209,11 @@ def test_graph_query_decodes_projection_selector_and_cost_scope_owners() -> None
         b'"surface_fingerprint":"fp_surface_sha256_prompt",'
         b'"projection_schema":"fp_schema_sha256_projection",'
         b'"selector_schema":"fp_schema_sha256_selector",'
-        b'"selector":{"path":["prompt",{"segment":0}]},'
+        b'"selector":{"kind":"json_pointer","path":"/prompt/0"},'
         b'"data_classes":["candidate.artifact"]}}}},'
         b'{"kind":"let","name":"costs","expr":{"kind":"graph_query",'
         b'"source":{"kind":"costs","scope":{"kind":"candidate",'
-        b'"candidate":"cand_alpha","dimensions":["lm",{"unit":"usd_micro"}]}},'
+        b'"candidate":"cand_alpha","dimensions":["lm","usd_micro"]}},'
         b'"projection":{"kind":"summary"}}}],'
         b'"return":["artifact_view","costs"],"commit":{"kind":"no_graph_writes"}}'
     )
@@ -220,14 +224,43 @@ def test_graph_query_decodes_projection_selector_and_cost_scope_owners() -> None
 
     assert isinstance(artifact_expr, PlanExpressionGraphQuery)
     assert isinstance(artifact_expr.projection, ProjectionArtifact)
-    assert artifact_expr.projection.artifact.selector == {"path": ["prompt", {"segment": 0}]}
+    assert isinstance(artifact_expr.projection.artifact.selector, ArtifactSelectorJsonPointer)
+    assert artifact_expr.projection.artifact.selector.path == "/prompt/0"
     assert isinstance(costs_expr, PlanExpressionGraphQuery)
     assert isinstance(costs_expr.source, GraphSourceCosts)
-    assert costs_expr.source.scope == {
-        "kind": "candidate",
-        "candidate": "cand_alpha",
-        "dimensions": ["lm", {"unit": "usd_micro"}],
-    }
+    assert isinstance(costs_expr.source.scope, CandidateCostScope)
+    assert costs_expr.source.scope.candidate == "cand_alpha"
+    assert costs_expr.source.scope.dimensions == ["lm", "usd_micro"]
+
+
+def test_graph_query_rejects_open_selector_and_cost_scope_payloads() -> None:
+    """Regression: selector and cost scope leaves are closed records."""
+
+    open_selector = (
+        b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
+        b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
+        b'"ops":[{"kind":"let","name":"artifact_view","expr":{"kind":"graph_query",'
+        b'"source":{"kind":"by_candidate","candidate":"cand_alpha"},'
+        b'"projection":{"kind":"artifact_projection","artifact":{'
+        b'"surface_fingerprint":"fp_surface_sha256_prompt",'
+        b'"projection_schema":"fp_schema_sha256_projection",'
+        b'"selector":{"path":["prompt",{"segment":0}]}}}}}],'
+        b'"return":["artifact_view"],"commit":{"kind":"no_graph_writes"}}'
+    )
+    open_scope = (
+        b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
+        b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
+        b'"ops":[{"kind":"let","name":"costs","expr":{"kind":"graph_query",'
+        b'"source":{"kind":"costs","scope":{"kind":"candidate",'
+        b'"candidate":"cand_alpha","dimensions":["lm",{"unit":"usd_micro"}]}},'
+        b'"projection":{"kind":"summary"}}}],'
+        b'"return":["costs"],"commit":{"kind":"no_graph_writes"}}'
+    )
+
+    with pytest.raises(msgspec.ValidationError):
+        msgspec.json.decode(open_selector, type=PlanDocument)
+    with pytest.raises(msgspec.ValidationError):
+        msgspec.json.decode(open_scope, type=PlanDocument)
 
 
 def test_graph_query_event_filter_decodes_owned_json() -> None:

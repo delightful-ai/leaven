@@ -2548,6 +2548,47 @@ acceptance:
           stage, graph-row, selector, and scope leaves returns no matches. The
           row remains pending because schema-dependent result fragments and
           remaining public SDK/runtime erasure points still need typed owners.
+      - kind: plan_selector_and_cost_scope_payloads_are_closed_records
+        paths:
+          - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
+          - crates/leaven-public-seam/src/plan/expression.rs
+          - crates/leaven-public-seam/src/plan.rs
+          - crates/leaven-public-seam/src/lib.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_document.rs
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/codegen/expression_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/refs.py
+          - sdk/python/src/leaven/_seam/_wire/expressions.py
+          - sdk/python/tests/_seam/_wire/test_expressions.py
+        commands:
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_document::plan_ir_expression_preserves_projection_selector_and_cost_scope_owners -- --exact
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_document::plan_ir_expression_rejects_open_selector_and_cost_scope_payloads -- --exact
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_document::plan_ir_family_accepts_typed_let_call_write_documents -- --exact
+          - cargo check -p leaven-public-seam
+          - cargo fmt --check
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_expressions.py -q
+          - cd sdk/python && uv run ruff check codegen/ref_codegen.py codegen/expression_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/expressions.py tests/_seam/_wire/test_expressions.py
+          - cd sdk/python && uv run ty check codegen/ref_codegen.py codegen/expression_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/expressions.py tests/_seam/_wire/test_expressions.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - >-
+            rg -n 'WireJsonArtifactSelector|WireJsonCostScope|selector\.as_json\(\)|cost_scopes\(\)\[0\]\.as_json|"dimensions":
+            \["lm", \{"unit"|"selector": \{"path": \["prompt"'
+            sdk/python/src sdk/python/codegen sdk/python/tests
+            crates/leaven-public-seam -S
+        note: >-
+          Artifact projection selectors and graph cost scopes are no longer
+          arbitrary schema JSON leaves. The Plan schema now owns
+          `ArtifactSelector` as a `json_pointer` record and `CostScope` as a
+          closed candidate/evaluation_request/run union with enum cost
+          dimensions. Rust `PlanArtifactProjectionSelector` now exposes
+          `path()` and `PlanCostScope` exposes typed variants instead of
+          `as_json()`. Python generated expression records now use
+          `ArtifactSelector` and `CostScope` msgspec unions instead of
+          `WireJsonArtifactSelector` and `WireJsonCostScope`. Focused negative
+          tests reject the former open selector object and mixed dimension
+          object. This closes selector/scope erasure; other expression/result
+          JSON leaves remain separate owner work.
       - kind: python_graph_event_filter_uses_object_shaped_owner
         paths:
           - sdk/python/codegen/ref_codegen.py

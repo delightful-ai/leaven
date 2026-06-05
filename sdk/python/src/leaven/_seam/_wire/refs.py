@@ -44,15 +44,23 @@ type WireJsonOutputValue = WireJsonLiteralDepth8
 type WireJsonAssessmentPreference = WireJsonLiteralDepth8
 type WireJsonAssessmentRanking = WireJsonLiteralDepth8
 type WireJsonAssessmentTarget = WireJsonLiteralDepth8
-type WireJsonArtifactSelector = WireJsonLiteralDepth8
 type WireJsonCaseReadInput = WireJsonLiteralDepth8
 type WireJsonCaseReadMetadata = WireJsonLiteralDepth8
 type WireJsonCaseReadTarget = WireJsonLiteralDepth8
 type WireJsonCaseInput = dict[str, WireJsonLiteralDepth7]
-type WireJsonCostScope = WireJsonLiteralDepth8
 type WireJsonObject = dict[str, WireJsonField]
 type DataClassSet = list[str]
 type TraceVisibility = Literal["public", "optimizer_visible", "host_private", "external_private"]
+type CostDimension = Literal[
+    "usd_micro",
+    "input_tokens",
+    "output_tokens",
+    "lm",
+    "agent",
+    "sandbox",
+    "workspace",
+    "evaluator",
+]
 type WireJsonSchemaTypeName = Literal[
     "array",
     "boolean",
@@ -290,11 +298,63 @@ class ExtensionBlobRefPayload(
 
 
 type ExtensionPayload = ExtensionSummaryPayload | ExtensionBlobRefPayload
+
+
+class ArtifactSelectorJsonPointer(
+    Struct,
+    frozen=True,
+    forbid_unknown_fields=True,
+    tag="json_pointer",
+    tag_field="kind",
+):
+    path: str
+
+
+type ArtifactSelector = ArtifactSelectorJsonPointer
+
+
+class CandidateCostScope(
+    Struct,
+    frozen=True,
+    forbid_unknown_fields=True,
+    omit_defaults=True,
+    tag="candidate",
+    tag_field="kind",
+):
+    candidate: CandidateRef
+    dimensions: list[CostDimension] | UnsetType = UNSET
+
+
+class EvaluationRequestCostScope(
+    Struct,
+    frozen=True,
+    forbid_unknown_fields=True,
+    omit_defaults=True,
+    tag="evaluation_request",
+    tag_field="kind",
+):
+    evaluation_request: EvaluationRequestRef
+    dimensions: list[CostDimension] | UnsetType = UNSET
+
+
+class RunCostScope(
+    Struct,
+    frozen=True,
+    forbid_unknown_fields=True,
+    omit_defaults=True,
+    tag="run",
+    tag_field="kind",
+):
+    run: str
+    dimensions: list[CostDimension] | UnsetType = UNSET
+
+
+type CostScope = CandidateCostScope | EvaluationRequestCostScope | RunCostScope
 type MetadataBag = WireJsonObject
 type TraceRef = TraceRefRecord
 
 
 __all__ = (  # noqa: PLE0605, SIM905
-    "AssessmentRef AssessmentRefRecord AssessmentsSubmittedEventPayload BlobRef CandidateRef CandidateRefRecord CaseRef CaseRefRecord EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestRef EvaluationRequestRefRecord EvaluationRequestedEventPayload EventEmittedSummaryPayload EventSummaryPayload ExtensionBlobRefPayload ExtensionPayload ExtensionSummaryPayload ExternalEventPayload ExternalInfoRefRecord InfoRef ProposalBatchAppliedEventPayload ProposalBatchRef ProposalBatchRefRecord ProposalBatchSubmittedEventPayload ProposalRef ProposalRefRecord ReceiptRef RunContextSummaryEventPayload ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility WorkspaceRef WorkspaceRefRecord "
-    "DataClassSet MetadataBag WireJsonArtifactSelector WireJsonAssessmentPreference WireJsonAssessmentRanking WireJsonAssessmentTarget WireJsonCaseInput WireJsonCaseReadInput WireJsonCaseReadMetadata WireJsonCaseReadTarget WireJsonCostScope WireJsonExtensionPayload WireJsonField WireJsonGraphEventFilter WireJsonLeafArray WireJsonLeafObject WireJsonLiteralDepth0 WireJsonLiteralDepth1 WireJsonLiteralDepth2 WireJsonLiteralDepth3 WireJsonLiteralDepth4 WireJsonLiteralDepth5 WireJsonLiteralDepth6 WireJsonLiteralDepth7 WireJsonLiteralDepth8 WireJsonLiteralValue WireJsonObject WireJsonOutputValue WireJsonScalar WireJsonSchema WireJsonSchemaObject WireJsonSchemaTypeName WireJsonValue"
+    "ArtifactSelector ArtifactSelectorJsonPointer AssessmentRef AssessmentRefRecord AssessmentsSubmittedEventPayload BlobRef CandidateCostScope CandidateRef CandidateRefRecord CaseRef CaseRefRecord CostDimension CostScope EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestCostScope EvaluationRequestRef EvaluationRequestRefRecord EvaluationRequestedEventPayload EventEmittedSummaryPayload EventSummaryPayload ExtensionBlobRefPayload ExtensionPayload ExtensionSummaryPayload ExternalEventPayload ExternalInfoRefRecord InfoRef ProposalBatchAppliedEventPayload ProposalBatchRef ProposalBatchRefRecord ProposalBatchSubmittedEventPayload ProposalRef ProposalRefRecord ReceiptRef RunContextSummaryEventPayload RunCostScope ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility WorkspaceRef WorkspaceRefRecord "
+    "DataClassSet MetadataBag WireJsonAssessmentPreference WireJsonAssessmentRanking WireJsonAssessmentTarget WireJsonCaseInput WireJsonCaseReadInput WireJsonCaseReadMetadata WireJsonCaseReadTarget WireJsonExtensionPayload WireJsonField WireJsonGraphEventFilter WireJsonLeafArray WireJsonLeafObject WireJsonLiteralDepth0 WireJsonLiteralDepth1 WireJsonLiteralDepth2 WireJsonLiteralDepth3 WireJsonLiteralDepth4 WireJsonLiteralDepth5 WireJsonLiteralDepth6 WireJsonLiteralDepth7 WireJsonLiteralDepth8 WireJsonLiteralValue WireJsonObject WireJsonOutputValue WireJsonScalar WireJsonSchema WireJsonSchemaObject WireJsonSchemaTypeName WireJsonValue"
 ).split()

@@ -56,14 +56,15 @@ pub use package::{
 };
 pub use plan::{
     PlanApplyProposalBatchWrite, PlanArtifactProjectionSelector, PlanAssessmentPreferenceValue,
-    PlanAssessmentRankingValue, PlanAssessmentTargetValue, PlanCallKind, PlanCommitKind,
-    PlanCostScope, PlanDocument, PlanEmitRunEventWrite, PlanEvaluationSetExpr, PlanEvaluationShape,
-    PlanEventPayload, PlanExpression, PlanExpressionKind, PlanExtensionBlobRefPayload,
-    PlanExtensionPayload, PlanExtensionSummaryPayload, PlanGraphEventFilter,
-    PlanGraphEventFilterPayload, PlanGraphQuerySource, PlanId, PlanLiteralValue, PlanMode,
-    PlanOperation, PlanOperationKind, PlanProposalCausalInputs, PlanQueryKind,
-    PlanRequestEvaluationWrite, PlanReturnBinding, PlanSchemaVersion, PlanScoreOutputValue,
-    PlanSubmitAssessmentsWrite, PlanSubmitProposalBatchWrite, PlanWriteKind,
+    PlanAssessmentRankingValue, PlanAssessmentTargetValue, PlanCallKind, PlanCandidateCostScope,
+    PlanCommitKind, PlanCostScope, PlanDocument, PlanEmitRunEventWrite,
+    PlanEvaluationRequestCostScope, PlanEvaluationSetExpr, PlanEvaluationShape, PlanEventPayload,
+    PlanExpression, PlanExpressionKind, PlanExtensionBlobRefPayload, PlanExtensionPayload,
+    PlanExtensionSummaryPayload, PlanGraphEventFilter, PlanGraphEventFilterPayload,
+    PlanGraphQuerySource, PlanId, PlanLiteralValue, PlanMode, PlanOperation, PlanOperationKind,
+    PlanProposalCausalInputs, PlanQueryKind, PlanRequestEvaluationWrite, PlanReturnBinding,
+    PlanRunCostScope, PlanSchemaVersion, PlanScoreOutputValue, PlanSubmitAssessmentsWrite,
+    PlanSubmitProposalBatchWrite, PlanWriteKind,
 };
 pub use plan_error::{PlanErrorCode, PlanErrorDetails, PlanErrorDocument};
 pub use plan_execution::{

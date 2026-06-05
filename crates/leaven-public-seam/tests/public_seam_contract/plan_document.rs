@@ -7,15 +7,14 @@ use leaven_lm::{MessageContentPart, OutputMode, Role};
 use leaven_public_seam::{
     AgentCommandOutputRefs, CapabilityDocument, PlanAgentRunOutcome, PlanAgentRunRequest,
     PlanCallKind, PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanCaseTargetValue, PlanCommitKind,
-    PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanEvaluationShape, PlanExecutionContext,
-    PlanExecutionHost, PlanExpressionKind, PlanExtensionPayload, PlanGraphEventFilter,
-    PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope, PlanLmCompleteOutcome,
-    PlanLmCompleteRequest, PlanMode, PlanOperationKind, PlanQueryKind, PlanSandboxExecOutcome,
-    PlanSandboxExecRequest, PlanSchemaVersion, PlanWorkspaceMaterializeOutcome,
-    PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest,
-    PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest, PlanWriteKind, PublicSeamError,
-    PublicSeamPackage,
-    WorkspaceQueryOp,
+    PlanCostScope, PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanEvaluationShape,
+    PlanExecutionContext, PlanExecutionHost, PlanExpressionKind, PlanExtensionPayload,
+    PlanGraphEventFilter, PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope,
+    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanMode, PlanOperationKind, PlanQueryKind,
+    PlanSandboxExecOutcome, PlanSandboxExecRequest, PlanSchemaVersion,
+    PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome,
+    PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
+    PlanWriteKind, PublicSeamError, PublicSeamPackage, WorkspaceQueryOp,
 };
 use serde_json::{Value, json};
 
@@ -369,7 +368,32 @@ fn plan_ir_extension_expression_rejects_open_payload() {
 #[test]
 fn plan_ir_expression_preserves_projection_selector_and_cost_scope_owners() {
     let package = package();
-    let plan = json!({
+    let plan = typed_projection_and_cost_plan();
+
+    let document = package.validate_plan_document(&plan).unwrap();
+    let artifact_expr = document.operations()[0]
+        .expression()
+        .expect("artifact query exposes typed expression");
+    assert_eq!(artifact_expr.artifact_selectors().len(), 1);
+    assert_eq!(artifact_expr.artifact_selectors()[0].path(), "/prompt/0");
+    let costs_expr = document.operations()[1]
+        .expression()
+        .expect("cost query exposes typed expression");
+    assert_eq!(costs_expr.cost_scopes().len(), 1);
+    let PlanCostScope::Candidate(cost_scope) = &costs_expr.cost_scopes()[0] else {
+        panic!("expected candidate cost scope");
+    };
+    assert_eq!(cost_scope.candidate_id(), "cand_alpha");
+    assert_eq!(cost_scope.dimensions(), ["lm", "usd_micro"]);
+    let extension_expr = document.operations()[2]
+        .expression()
+        .expect("extension projection exposes typed expression");
+    assert!(extension_expr.artifact_selectors().is_empty());
+    assert!(extension_expr.cost_scopes().is_empty());
+}
+
+fn typed_projection_and_cost_plan() -> Value {
+    json!({
         "schema_version": "leaven.plan.v1",
         "plan_id": "planexprjsonowners001",
         "consistency": {"kind": "latest_at_start"},
@@ -391,7 +415,8 @@ fn plan_ir_expression_preserves_projection_selector_and_cost_scope_owners() {
                             "projection_schema": "fp_schema_sha256_projection",
                             "selector_schema": "fp_schema_sha256_selector",
                             "selector": {
-                                "path": ["prompt", {"segment": 0}]
+                                "kind": "json_pointer",
+                                "path": "/prompt/0"
                             },
                             "data_classes": ["candidate.artifact"]
                         }
@@ -408,7 +433,7 @@ fn plan_ir_expression_preserves_projection_selector_and_cost_scope_owners() {
                         "scope": {
                             "kind": "candidate",
                             "candidate": "cand_alpha",
-                            "dimensions": ["lm", {"unit": "usd_micro"}]
+                            "dimensions": ["lm", "usd_micro"]
                         }
                     },
                     "projection": {"kind": "summary"}
@@ -438,34 +463,29 @@ fn plan_ir_expression_preserves_projection_selector_and_cost_scope_owners() {
         ],
         "return": ["artifact_view", "costs", "extension_projection"],
         "commit": {"kind": "no_graph_writes"}
-    });
+    })
+}
 
-    let document = package.validate_plan_document(&plan).unwrap();
-    let artifact_expr = document.operations()[0]
-        .expression()
-        .expect("artifact query exposes typed expression");
-    assert_eq!(artifact_expr.artifact_selectors().len(), 1);
-    assert_eq!(
-        artifact_expr.artifact_selectors()[0].as_json(),
-        &json!({"path": ["prompt", {"segment": 0}]})
+#[test]
+fn plan_ir_expression_rejects_open_selector_and_cost_scope_payloads() {
+    let package = package();
+    let mut plan = typed_projection_and_cost_plan();
+    plan["ops"][0]["expr"]["projection"]["artifact"]["selector"] = json!({
+        "path": ["prompt", {"segment": 0}]
+    });
+    let error = package.validate_plan_document(&plan).unwrap_err();
+    assert!(
+        matches!(error, PublicSeamError::ExampleValidation { .. }),
+        "{error:?}"
     );
-    let costs_expr = document.operations()[1]
-        .expression()
-        .expect("cost query exposes typed expression");
-    assert_eq!(costs_expr.cost_scopes().len(), 1);
-    assert_eq!(
-        costs_expr.cost_scopes()[0].as_json(),
-        &json!({
-            "kind": "candidate",
-            "candidate": "cand_alpha",
-            "dimensions": ["lm", {"unit": "usd_micro"}]
-        })
+
+    let mut plan = typed_projection_and_cost_plan();
+    plan["ops"][1]["expr"]["source"]["scope"]["dimensions"] = json!(["lm", {"unit": "usd_micro"}]);
+    let error = package.validate_plan_document(&plan).unwrap_err();
+    assert!(
+        matches!(error, PublicSeamError::ExampleValidation { .. }),
+        "{error:?}"
     );
-    let extension_expr = document.operations()[2]
-        .expression()
-        .expect("extension projection exposes typed expression");
-    assert!(extension_expr.artifact_selectors().is_empty());
-    assert!(extension_expr.cost_scopes().is_empty());
 }
 
 #[test]

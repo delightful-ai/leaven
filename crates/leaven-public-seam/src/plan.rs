@@ -9,8 +9,9 @@ mod parse;
 #[allow(unused_imports)]
 pub use expression::PlanLiteralValue;
 pub use expression::{
-    PlanArtifactProjectionSelector, PlanCostScope, PlanExpression, PlanExpressionKind,
-    PlanGraphEventFilter, PlanGraphEventFilterPayload, PlanGraphQuerySource,
+    PlanArtifactProjectionSelector, PlanCandidateCostScope, PlanCostScope,
+    PlanEvaluationRequestCostScope, PlanExpression, PlanExpressionKind, PlanGraphEventFilter,
+    PlanGraphEventFilterPayload, PlanGraphQuerySource, PlanRunCostScope,
 };
 #[allow(unused_imports)]
 pub use expression::{

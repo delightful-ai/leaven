@@ -707,7 +707,9 @@
             "kind": {
               "const": "costs"
             },
-            "scope": {}
+            "scope": {
+              "$ref": "#/$defs/CostScope"
+            }
           },
           "required": [
             "kind",
@@ -757,6 +759,83 @@
           "$ref": "common.schema.json#/$defs/ExtensionObject"
         }
       ]
+    },
+    "CostScope": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "candidate"
+            },
+            "candidate": {
+              "$ref": "common.schema.json#/$defs/CandidateRef"
+            },
+            "dimensions": {
+              "$ref": "#/$defs/CostDimensions"
+            }
+          },
+          "required": [
+            "kind",
+            "candidate"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "evaluation_request"
+            },
+            "evaluation_request": {
+              "$ref": "common.schema.json#/$defs/EvaluationRequestRef"
+            },
+            "dimensions": {
+              "$ref": "#/$defs/CostDimensions"
+            }
+          },
+          "required": [
+            "kind",
+            "evaluation_request"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "run"
+            },
+            "run": {
+              "$ref": "common.schema.json#/$defs/RunId"
+            },
+            "dimensions": {
+              "$ref": "#/$defs/CostDimensions"
+            }
+          },
+          "required": [
+            "kind",
+            "run"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "CostDimensions": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "usd_micro",
+          "input_tokens",
+          "output_tokens",
+          "lm",
+          "agent",
+          "sandbox",
+          "workspace",
+          "evaluator"
+        ]
+      },
+      "uniqueItems": true
     },
     "GraphStep": {
       "oneOf": [
@@ -1445,10 +1524,12 @@
         "projection_schema": {
           "$ref": "common.schema.json#/$defs/SchemaFingerprint"
         },
-        "selector_schema": {
-          "$ref": "common.schema.json#/$defs/SchemaFingerprint"
-        },
-        "selector": {},
+            "selector_schema": {
+              "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+            },
+            "selector": {
+              "$ref": "#/$defs/ArtifactSelector"
+            },
         "max_bytes": {
           "type": "integer",
           "minimum": 1
@@ -1460,6 +1541,22 @@
       "required": [
         "surface_fingerprint",
         "projection_schema"
+      ],
+      "additionalProperties": false
+    },
+    "ArtifactSelector": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "json_pointer"
+        },
+        "path": {
+          "$ref": "common.schema.json#/$defs/JsonPointer"
+        }
+      },
+      "required": [
+        "kind",
+        "path"
       ],
       "additionalProperties": false
     },

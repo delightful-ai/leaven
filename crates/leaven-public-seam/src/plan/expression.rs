@@ -103,7 +103,7 @@ impl PlanExpression {
                     .ok_or_else(|| invalid_plan("graph_query expr must carry source"))?;
                 Ok(Self::GraphQuery {
                     source: PlanGraphQuerySource::from_schema_valid_value(source)?,
-                    artifact_selectors: graph_query_artifact_selectors(object),
+                    artifact_selectors: graph_query_artifact_selectors(object)?,
                     cost_scopes: cost_scopes_from_graph_source(source)?,
                 })
             }
@@ -116,7 +116,7 @@ impl PlanExpression {
                 Ok(Self::Project {
                     artifact_selectors: merge_artifact_selectors(
                         &input,
-                        project_artifact_selectors(object),
+                        project_artifact_selectors(object)?,
                     ),
                     cost_scopes: input.cost_scopes().to_vec(),
                     input: Box::new(input),
@@ -525,33 +525,137 @@ impl PlanExtensionBlobRefPayload {
     }
 }
 
-/// Schema-valid JSON selector carried by an artifact projection.
+/// Closed selector carried by an artifact projection.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PlanArtifactProjectionSelector(Value);
+pub struct PlanArtifactProjectionSelector {
+    path: String,
+}
 
 impl PlanArtifactProjectionSelector {
-    fn from_schema_valid_value(value: &Value) -> Self {
-        Self(value.clone())
+    fn from_schema_valid_value(value: &Value) -> Result<Self, PublicSeamError> {
+        let object = value
+            .as_object()
+            .ok_or_else(|| invalid_plan("artifact selector must be an object"))?;
+        if required_object_string(object, "kind")? != "json_pointer" {
+            return Err(invalid_plan("artifact selector kind is not locked in V1"));
+        }
+        Ok(Self {
+            path: required_object_string(object, "path")?.to_owned(),
+        })
     }
 
-    /// JSON selector carried on the wire by the artifact projection.
-    pub const fn as_json(&self) -> &Value {
-        &self.0
+    /// JSON Pointer path selected from the projected artifact surface.
+    pub fn path(&self) -> &str {
+        &self.path
     }
 }
 
-/// Schema-valid JSON scope carried by a graph cost query.
+/// Closed scope carried by a graph cost query.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PlanCostScope(Value);
+pub enum PlanCostScope {
+    Candidate(PlanCandidateCostScope),
+    EvaluationRequest(PlanEvaluationRequestCostScope),
+    Run(PlanRunCostScope),
+}
 
 impl PlanCostScope {
-    fn from_schema_valid_value(value: &Value) -> Self {
-        Self(value.clone())
+    fn from_schema_valid_value(value: &Value) -> Result<Self, PublicSeamError> {
+        let object = value
+            .as_object()
+            .ok_or_else(|| invalid_plan("cost scope must be an object"))?;
+        match required_object_string(object, "kind")? {
+            "candidate" => Ok(Self::Candidate(PlanCandidateCostScope::from_object(
+                object,
+            )?)),
+            "evaluation_request" => Ok(Self::EvaluationRequest(
+                PlanEvaluationRequestCostScope::from_object(object)?,
+            )),
+            "run" => Ok(Self::Run(PlanRunCostScope::from_object(object)?)),
+            kind => Err(invalid_plan(format!(
+                "cost scope kind `{kind}` is not locked in V1"
+            ))),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanCandidateCostScope {
+    candidate_id: String,
+    dimensions: Vec<String>,
+}
+
+impl PlanCandidateCostScope {
+    fn from_object(object: &Map<String, Value>) -> Result<Self, PublicSeamError> {
+        Ok(Self {
+            candidate_id: ref_id(
+                object
+                    .get("candidate")
+                    .ok_or_else(|| invalid_plan("candidate cost scope must carry candidate"))?,
+                "cost_scope.candidate",
+            )?
+            .to_owned(),
+            dimensions: optional_string_array(object.get("dimensions"), "cost_scope.dimensions")?,
+        })
     }
 
-    /// JSON scope carried on the wire by the cost query.
-    pub const fn as_json(&self) -> &Value {
-        &self.0
+    pub fn candidate_id(&self) -> &str {
+        &self.candidate_id
+    }
+
+    pub fn dimensions(&self) -> &[String] {
+        &self.dimensions
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanEvaluationRequestCostScope {
+    evaluation_request_id: String,
+    dimensions: Vec<String>,
+}
+
+impl PlanEvaluationRequestCostScope {
+    fn from_object(object: &Map<String, Value>) -> Result<Self, PublicSeamError> {
+        Ok(Self {
+            evaluation_request_id: ref_id(
+                object.get("evaluation_request").ok_or_else(|| {
+                    invalid_plan("evaluation_request cost scope must carry evaluation_request")
+                })?,
+                "cost_scope.evaluation_request",
+            )?
+            .to_owned(),
+            dimensions: optional_string_array(object.get("dimensions"), "cost_scope.dimensions")?,
+        })
+    }
+
+    pub fn evaluation_request_id(&self) -> &str {
+        &self.evaluation_request_id
+    }
+
+    pub fn dimensions(&self) -> &[String] {
+        &self.dimensions
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanRunCostScope {
+    run_id: String,
+    dimensions: Vec<String>,
+}
+
+impl PlanRunCostScope {
+    fn from_object(object: &Map<String, Value>) -> Result<Self, PublicSeamError> {
+        Ok(Self {
+            run_id: required_object_string(object, "run")?.to_owned(),
+            dimensions: optional_string_array(object.get("dimensions"), "cost_scope.dimensions")?,
+        })
+    }
+
+    pub fn run_id(&self) -> &str {
+        &self.run_id
+    }
+
+    pub fn dimensions(&self) -> &[String] {
+        &self.dimensions
     }
 }
 
@@ -797,68 +901,73 @@ fn merge_artifact_selectors(
 
 fn graph_query_artifact_selectors(
     object: &Map<String, Value>,
-) -> Vec<PlanArtifactProjectionSelector> {
+) -> Result<Vec<PlanArtifactProjectionSelector>, PublicSeamError> {
     let mut selectors = Vec::new();
     if let Some(projection) = object.get("projection") {
-        collect_projection_artifact_selectors(projection, &mut selectors);
+        collect_projection_artifact_selectors(projection, &mut selectors)?;
     }
     if let Some(steps) = object.get("steps").and_then(Value::as_array) {
         for step in steps {
-            collect_graph_step_artifact_selectors(step, &mut selectors);
+            collect_graph_step_artifact_selectors(step, &mut selectors)?;
         }
     }
-    selectors
+    Ok(selectors)
 }
 
-fn project_artifact_selectors(object: &Map<String, Value>) -> Vec<PlanArtifactProjectionSelector> {
+fn project_artifact_selectors(
+    object: &Map<String, Value>,
+) -> Result<Vec<PlanArtifactProjectionSelector>, PublicSeamError> {
     let mut selectors = Vec::new();
     if let Some(projection) = object.get("projection") {
-        collect_projection_artifact_selectors(projection, &mut selectors);
+        collect_projection_artifact_selectors(projection, &mut selectors)?;
     }
-    selectors
+    Ok(selectors)
 }
 
 fn collect_graph_step_artifact_selectors(
     value: &Value,
     selectors: &mut Vec<PlanArtifactProjectionSelector>,
-) {
+) -> Result<(), PublicSeamError> {
     let Some(object) = value.as_object() else {
-        return;
+        return Ok(());
     };
     if object.get("kind").and_then(Value::as_str) == Some("project") {
         if let Some(projection) = object.get("projection") {
-            collect_projection_artifact_selectors(projection, selectors);
+            collect_projection_artifact_selectors(projection, selectors)?;
         }
     }
+    Ok(())
 }
 
 fn collect_projection_artifact_selectors(
     value: &Value,
     selectors: &mut Vec<PlanArtifactProjectionSelector>,
-) {
+) -> Result<(), PublicSeamError> {
     let Some(object) = value.as_object() else {
-        return;
+        return Ok(());
     };
     if let Some("candidate_projection" | "artifact_projection") =
         object.get("kind").and_then(Value::as_str)
         && let Some(artifact) = object.get("artifact")
     {
-        collect_artifact_projection_selector(artifact, selectors);
+        collect_artifact_projection_selector(artifact, selectors)?;
     }
+    Ok(())
 }
 
 fn collect_artifact_projection_selector(
     value: &Value,
     selectors: &mut Vec<PlanArtifactProjectionSelector>,
-) {
+) -> Result<(), PublicSeamError> {
     let Some(object) = value.as_object() else {
-        return;
+        return Ok(());
     };
     if let Some(selector) = object.get("selector") {
         selectors.push(PlanArtifactProjectionSelector::from_schema_valid_value(
             selector,
-        ));
+        )?);
     }
+    Ok(())
 }
 
 fn cost_scopes_from_graph_source(value: &Value) -> Result<Vec<PlanCostScope>, PublicSeamError> {
@@ -871,7 +980,7 @@ fn cost_scopes_from_graph_source(value: &Value) -> Result<Vec<PlanCostScope>, Pu
     let scope = object
         .get("scope")
         .ok_or_else(|| invalid_plan("costs graph source must carry scope"))?;
-    Ok(vec![PlanCostScope::from_schema_valid_value(scope)])
+    Ok(vec![PlanCostScope::from_schema_valid_value(scope)?])
 }
 
 fn optional_string_array(

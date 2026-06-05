@@ -31,17 +31,23 @@ from .graph_rows import (
     VisibilityClass,
 )
 from .refs import (
+    ArtifactSelector,
+    ArtifactSelectorJsonPointer,
     AssessmentRef,
     AssessmentRefRecord,
     AssessmentsSubmittedEventPayload,
     BlobRef,
+    CandidateCostScope,
     CandidateRef,
     CandidateRefRecord,
     CaseRef,
     CaseRefRecord,
+    CostDimension,
+    CostScope,
     DataClassSet,
     EvaluationAttemptRef,
     EvaluationAttemptRefRecord,
+    EvaluationRequestCostScope,
     EvaluationRequestRef,
     EvaluationRequestRefRecord,
     EvaluationRequestedEventPayload,
@@ -63,6 +69,7 @@ from .refs import (
     ReceiptRef,
     ReceiptRefRecord,
     RunContextSummaryEventPayload,
+    RunCostScope,
     TraceRef,
     TraceRefRecord,
     TraceVisibility,
@@ -79,7 +86,7 @@ from .refs import (
 from .writes import GraphWrite
 
 PLAN_SCHEMA_FINGERPRINT = (
-    "fp_schema_sha256_6ecf73476db81c5a7412b6831bce68ce0273c295eee827856042207117e2cd48"
+    "fp_schema_sha256_64d6502a504af08997e67d1d940186ea4dfa930889d6bd6707267b02bd64be76"
 )
 PLAN_RESULT_SCHEMA_FINGERPRINT = (
     "fp_schema_sha256_51fcd2b973fdb5ec3936e09607bac98ad9d733d91de9491f5cdd10c11761d000"
@@ -541,7 +548,7 @@ class StageRunResult(Struct, frozen=True, forbid_unknown_fields=True, omit_defau
 
 __all__ = (  # noqa: PLE0605, SIM905
     "PLAN_RESULT_SCHEMA_FINGERPRINT PLAN_SCHEMA_FINGERPRINT STAGE_RUN_SCHEMA_FINGERPRINT "
-    "AssessmentRef AssessmentRefRecord AssessmentsSubmittedEventPayload BlobRef CandidateRef CandidateRefRecord CaseRef CaseRefRecord EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestRef EvaluationRequestRefRecord EvaluationRequestedEventPayload EventEmittedSummaryPayload EventSummaryPayload ExtensionBlobRefPayload ExtensionPayload ExtensionSummaryPayload ExternalEventPayload ExternalInfoRefRecord InfoRef ProposalBatchAppliedEventPayload ProposalBatchRef ProposalBatchRefRecord ProposalBatchSubmittedEventPayload ProposalRef ProposalRefRecord ReceiptRef RunContextSummaryEventPayload ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility WorkspaceRef WorkspaceRefRecord "
+    "ArtifactSelector ArtifactSelectorJsonPointer AssessmentRef AssessmentRefRecord AssessmentsSubmittedEventPayload BlobRef CandidateCostScope CandidateRef CandidateRefRecord CaseRef CaseRefRecord CostDimension CostScope EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestCostScope EvaluationRequestRef EvaluationRequestRefRecord EvaluationRequestedEventPayload EventEmittedSummaryPayload EventSummaryPayload ExtensionBlobRefPayload ExtensionPayload ExtensionSummaryPayload ExternalEventPayload ExternalInfoRefRecord InfoRef ProposalBatchAppliedEventPayload ProposalBatchRef ProposalBatchRefRecord ProposalBatchSubmittedEventPayload ProposalRef ProposalRefRecord ReceiptRef RunContextSummaryEventPayload RunCostScope ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility WorkspaceRef WorkspaceRefRecord "
     "AssessmentSummaryGraphRow CandidateArtifactSummary CandidateCaseScore CandidateScoresSummary CandidateSummaryGraphRow CapabilityCall ChargeReceipt CommitPolicy CommitPolicyGraphWritesAtomic "
     "CommitPolicyGraphWritesSequential CommitPolicyNoGraphWrites Consistency ConsistencyAtRevision "
     "ConsistencyLatestAtStart ConsistencySinceRevision Cost DataClassSet EvalMode EvalModeDryRun "
