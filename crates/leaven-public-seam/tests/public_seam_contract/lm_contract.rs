@@ -51,10 +51,6 @@ fn lm_complete_can_execute_through_provider_neutral_lm_trait_and_preserve_cost()
     ));
     assert_eq!(request.tools[0].name, "lookup");
     assert_eq!(
-        request.provider_hints.values["cache:key"],
-        json!("lm-contract")
-    );
-    assert_eq!(
         request.provider_hints.prompt_cache_key.as_deref(),
         Some("suite-stable")
     );
@@ -63,6 +59,7 @@ fn lm_complete_can_execute_through_provider_neutral_lm_trait_and_preserve_cost()
         request.provider_hints.metadata["split"].as_str(),
         "validation"
     );
+    assert!(request.provider_hints.values.is_empty());
 
     assert_eq!(
         report.value()["values"]["completion"]["message"]["content"][0]["text"],
@@ -214,22 +211,11 @@ fn lm_complete_rejects_tool_result_message_id_drift_before_provider_call() {
 #[test]
 fn lm_complete_rejects_typed_provider_hint_shape_drift_before_provider_call() {
     let package = package();
-    for (field, replacement, expected) in [
-        (
-            "prompt_cache_key",
-            json!(["not", "a", "string"]),
-            "provider_hints.prompt_cache_key must be a string",
-        ),
-        (
-            "store",
-            json!("false"),
-            "provider_hints.store must be a boolean",
-        ),
-        (
-            "metadata",
-            json!({"split": 1}),
-            "provider_hints.metadata values must be strings",
-        ),
+    for (field, replacement) in [
+        ("prompt_cache_key", json!(["not", "a", "string"])),
+        ("store", json!("false")),
+        ("metadata", json!({"split": 1})),
+        ("cache:key", json!("lm-contract")),
     ] {
         let lm = Arc::new(ScriptedLm::new(scripted_response(Message::assistant(
             "trait ok",
@@ -243,7 +229,7 @@ fn lm_complete_rejects_typed_provider_hint_shape_drift_before_provider_call() {
             .unwrap_err();
 
         assert!(
-            error.to_string().contains(expected),
+            error.to_string().contains("not valid under any"),
             "unexpected error for {field}: {error:?}"
         );
         assert!(lm.recorded_requests.lock().unwrap().is_empty());
@@ -449,7 +435,6 @@ fn lm_complete_call() -> Value {
             "max_bytes": 256
         },
         "provider_hints": {
-            "cache:key": "lm-contract",
             "prompt_cache_key": "suite-stable",
             "store": false,
             "metadata": {

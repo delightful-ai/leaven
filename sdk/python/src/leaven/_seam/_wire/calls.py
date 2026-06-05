@@ -10,7 +10,6 @@ from msgspec import UNSET, Struct, UnsetType
 from .refs import (
     CandidateRef,
     DataClassSet,
-    WireJsonObject,
     WireJsonSchemaObject,
     WorkspaceRef,
 )
@@ -89,6 +88,12 @@ class LmSampling(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=
     stop: list[str] | UnsetType = UNSET
 
 
+class LmProviderHints(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    prompt_cache_key: str | UnsetType = UNSET
+    store: bool | UnsetType = UNSET
+    metadata: dict[str, str] | UnsetType = UNSET
+
+
 class LmCompleteCall(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="lm_complete", tag_field="kind"):
     purpose: str
     messages: list[LmMessage]
@@ -98,7 +103,7 @@ class LmCompleteCall(Struct, frozen=True, forbid_unknown_fields=True, omit_defau
     model_role: str | UnsetType = UNSET
     tools: list[LmTool] | UnsetType = UNSET
     sampling: LmSampling | UnsetType = UNSET
-    provider_hints: WireJsonObject | UnsetType = UNSET
+    provider_hints: LmProviderHints | UnsetType = UNSET
     cache_policy: Literal["default", "require_cached", "bypass", "record_only"] | UnsetType = UNSET
     forbidden_input_classes: DataClassSet | UnsetType = UNSET
 
@@ -169,5 +174,5 @@ type CapabilityCall = (
 
 
 __all__ = (  # noqa: PLE0605, SIM905
-    "AgentInstructions AgentLimits AgentRunCall AgentToolPolicy CapabilityCall LmCompleteCall LmContentPart LmContentText LmContentToolResult LmMessage LmMessageRole LmOutputContract LmOutputFinalMessage LmOutputJsonSchema LmSampling LmTool OutputContract OutputFiles OutputFinalMessage OutputJsonSchema OutputWorkspaceDiff SandboxExecCall StreamPolicy WorkspaceLifetime WorkspaceMaterializeCall WorkspaceMaterializeMode WorkspaceReleaseCall"
+    "AgentInstructions AgentLimits AgentRunCall AgentToolPolicy CapabilityCall LmCompleteCall LmContentPart LmContentText LmContentToolResult LmMessage LmMessageRole LmOutputContract LmOutputFinalMessage LmOutputJsonSchema LmProviderHints LmSampling LmTool OutputContract OutputFiles OutputFinalMessage OutputJsonSchema OutputWorkspaceDiff SandboxExecCall StreamPolicy WorkspaceLifetime WorkspaceMaterializeCall WorkspaceMaterializeMode WorkspaceReleaseCall"
 ).split()

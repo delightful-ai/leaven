@@ -9,6 +9,7 @@ from leaven._seam._wire.calls import (
     LmCompleteCall,
     LmContentText,
     LmOutputJsonSchema,
+    LmProviderHints,
     OutputFiles,
     OutputJsonSchema,
     SandboxExecCall,
@@ -59,6 +60,42 @@ def test_capability_call_rejects_unknown_kind() -> None:
     with pytest.raises(msgspec.ValidationError):
         msgspec.json.decode(
             b'{"kind":"private_transport","payload":{}}',
+            type=CapabilityCall,
+        )
+
+
+def test_lm_complete_decodes_typed_provider_hints() -> None:
+    """Example: provider_hints is a closed typed record, not an open object."""
+
+    call = msgspec.json.decode(
+        (
+            b'{"kind":"lm_complete","purpose":"python.test",'
+            b'"messages":[{"role":"user","content":[{"kind":"text","text":"hi"}]}],'
+            b'"output":{"kind":"final_message"},"input_classes":["public"],'
+            b'"provider_hints":{"prompt_cache_key":"stable","store":false,'
+            b'"metadata":{"split":"validation"}}}'
+        ),
+        type=CapabilityCall,
+    )
+
+    assert isinstance(call, LmCompleteCall)
+    assert isinstance(call.provider_hints, LmProviderHints)
+    assert call.provider_hints.prompt_cache_key == "stable"
+    assert call.provider_hints.store is False
+    assert call.provider_hints.metadata == {"split": "validation"}
+
+
+def test_lm_complete_rejects_unknown_provider_hint() -> None:
+    """Boundary check: V1 provider hints do not carry arbitrary provider JSON."""
+
+    with pytest.raises(msgspec.ValidationError):
+        msgspec.json.decode(
+            (
+                b'{"kind":"lm_complete","purpose":"python.test",'
+                b'"messages":[{"role":"user","content":[{"kind":"text","text":"hi"}]}],'
+                b'"output":{"kind":"final_message"},"input_classes":["public"],'
+                b'"provider_hints":{"cache:key":"stable"}}'
+            ),
             type=CapabilityCall,
         )
 

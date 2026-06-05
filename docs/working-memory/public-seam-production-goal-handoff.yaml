@@ -2083,9 +2083,46 @@ acceptance:
           schema leaves, and generated expression tests decode nested selector
           and scope values. The targeted `WireJsonField` grep for tracked write,
           stage, graph-row, selector, and scope leaves returns no matches. The
-          row remains pending because provider hints, schema-dependent result
-          fragments, and remaining public SDK/runtime erasure points still need
-          typed owners.
+          row remains pending because schema-dependent result fragments and
+          remaining public SDK/runtime erasure points still need typed owners.
+      - kind: rust_and_python_lm_provider_hints_are_closed_typed_records
+        paths:
+          - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
+          - crates/leaven-public-seam/src/plan_execution/effects/lm.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/lm_contract.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_document.rs
+          - sdk/python/codegen/call_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/calls.py
+          - sdk/python/src/leaven/_seam/_wire/methods.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/tests/_seam/_wire/test_calls.py
+        commands:
+          - cargo fmt --check
+          - cargo check -p leaven-public-seam
+          - cargo test -p leaven-public-seam --test public_seam_contract lm_contract -- --nocapture
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_document::lm_complete_lowering_preserves_json_schema_output_and_provider_hints -- --exact --nocapture
+          - cargo test -p leaven --test topology_contract
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_calls.py tests/_seam/_wire -q
+          - cd sdk/python && uv run ruff check codegen/call_codegen.py src/leaven/_seam/_wire/calls.py tests/_seam/_wire/test_calls.py
+          - cd sdk/python && uv run ty check codegen/call_codegen.py src/leaven/_seam/_wire/calls.py tests/_seam/_wire/test_calls.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - 'rg -n "provider_hints: WireJsonObject|\"cache:key\": \"(planexec|lm-contract)|provider_hints\\.values\\[|provider_hints\\.values\\.get" sdk/python crates/leaven-public-seam docs/specs/public-seam-v1/schemas -g ''*.py'' -g ''*.rs'' -g ''*.json'''
+        note: >-
+          V1 `lm_complete.provider_hints` is no longer an open provider-specific
+          JSON object. The plan schema now permits only `prompt_cache_key`,
+          `store`, and string-valued `metadata`; Rust lowering rejects unknown
+          hint fields and contract tests prove malformed or unknown provider
+          hints fail before any provider call. Generated Python msgspec call
+          records now use a closed `LmProviderHints` Struct with the same typed
+          fields instead of `WireJsonObject`, and generated wire tests prove
+          valid hints decode while arbitrary `"cache:key"` hints are rejected.
+          The profile-driven schema fingerprint changed and regenerated method
+          and payload metadata as expected. The targeted grep for the old open
+          field and arbitrary provider-values access returns no matches. The
+          row remains pending because schema-dependent parsed result fragments,
+          evidence private payloads, case metadata/result leaves, and remaining
+          public SDK/runtime `object` erasure points still need typed owners.
       - kind: typed_private_client_request_cutover
         paths:
           - sdk/python/src/leaven/_seam/plans.py

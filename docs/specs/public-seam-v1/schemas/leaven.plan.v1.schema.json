@@ -2127,10 +2127,24 @@
         },
         "provider_hints": {
           "type": "object",
-          "propertyNames": {
-            "pattern": "^[a-z][a-z0-9_.:-]*$"
+          "properties": {
+            "prompt_cache_key": {
+              "type": "string"
+            },
+            "store": {
+              "type": "boolean"
+            },
+            "metadata": {
+              "type": "object",
+              "propertyNames": {
+                "pattern": "^[a-z][a-z0-9_.:-]*$"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
           },
-          "additionalProperties": {}
+          "additionalProperties": false
         },
         "cache_policy": {
           "enum": [

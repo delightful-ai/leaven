@@ -320,7 +320,9 @@ fn lower_provider_hints(value: &Value) -> Result<ProviderHints, PublicSeamError>
                     .collect::<Result<BTreeMap<_, _>, _>>()?;
             }
             _ => {
-                hints.values.insert(key.clone(), value.clone());
+                return Err(invalid_lm_call(format!(
+                    "unknown provider_hints field `{key}`"
+                )));
             }
         }
     }

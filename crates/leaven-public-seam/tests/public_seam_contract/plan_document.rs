@@ -4140,7 +4140,7 @@ fn lm_complete_call() -> Value {
             "max_bytes": 1024
         },
         "provider_hints": {
-            "cache:key": "planexec-stable"
+            "prompt_cache_key": "planexec-stable"
         },
         "input_classes": ["public"]
     })
@@ -5180,9 +5180,10 @@ impl PlanExecutionHost for RecordingPlanHost {
         assert_eq!(lm_request.sampling.max_output_tokens, Some(128));
         assert_eq!(lm_request.sampling.stop, vec!["DONE".to_owned()]);
         assert_eq!(
-            lm_request.provider_hints.values.get("cache:key"),
-            Some(&json!("planexec-stable"))
+            lm_request.provider_hints.prompt_cache_key.as_deref(),
+            Some("planexec-stable")
         );
+        assert!(lm_request.provider_hints.values.is_empty());
         match &lm_request.output {
             OutputMode::FinalMessage { max_bytes } => {
                 assert!(
