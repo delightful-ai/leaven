@@ -3035,6 +3035,25 @@ acceptance:
           third-party `Predict` API. The final grep returns no matches. This
           strengthens the quality gate but does not close the row while public
           scaffolds remain.
+      - kind: dspy_prediction_wrapper_scaffold_removed
+        paths:
+          - sdk/python/src/leaven/x/dspy/invoke.py
+          - sdk/python/tests/x/dspy/test_invoke.py
+          - sdk/python/scripts/check_quality_contract.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && uv run pytest tests/x/dspy/test_invoke.py tests/scripts/test_check_quality_contract.py -q
+          - cd sdk/python && uv run ruff check src/leaven/x/dspy/invoke.py tests/x/dspy/test_invoke.py scripts/check_quality_contract.py tests/scripts/test_check_quality_contract.py
+          - cd sdk/python && uv run ty check src/leaven/x/dspy/invoke.py tests/x/dspy/test_invoke.py scripts/check_quality_contract.py tests/scripts/test_check_quality_contract.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+        note: >-
+          `DspyPrediction` is now a concrete typed wrapper around
+          JSON-shaped prediction fields plus the Leaven LM call receipt.
+          Attribute access and `to_dict()` are behavior-bearing and covered by
+          a mirrored `tests/x/dspy/test_invoke.py` quality entry. This removes
+          the public prediction wrapper scaffold only; `dspy_acall`,
+          `LeavenDSPyLM`, and DSPy context managers remain explicit optional
+          adapter scaffolds until their seam-backed execution path is wired.
       - kind: public_scoring_helpers_scaffold_removed
         paths:
           - sdk/python/scripts/check_quality_contract.py

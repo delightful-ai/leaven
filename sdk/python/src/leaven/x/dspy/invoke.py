@@ -19,14 +19,18 @@ class DspyPrediction:
     CallReceipt for downstream evidence binding.
     """
 
-    leaven_lm_receipt: CallReceipt
+    def __init__(self, *, fields: JsonObject, leaven_lm_receipt: CallReceipt) -> None:
+        self._fields = dict(fields)
+        self.leaven_lm_receipt = leaven_lm_receipt
 
     def __getattr__(self, name: str) -> object:
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+        if name in self._fields:
+            return self._fields[name]
+        raise AttributeError(name)
 
     def to_dict(self) -> JsonObject:
         """The underlying prediction's data as a dict (DSPy convention)."""
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
+        return dict(self._fields)
 
 
 async def dspy_acall(module: Callable[..., object], **kwargs: object) -> DspyPrediction:

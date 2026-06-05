@@ -89,6 +89,11 @@ MIRRORED_TESTS = {
     ROOT / "src" / "leaven" / "run_inspection.py": ROOT / "tests" / "test_run_inspection.py",
     ROOT / "src" / "leaven" / "score.py": ROOT / "tests" / "test_score.py",
     ROOT / "src" / "leaven" / "scoring.py": ROOT / "tests" / "test_scoring.py",
+    ROOT / "src" / "leaven" / "x" / "dspy" / "invoke.py": ROOT
+    / "tests"
+    / "x"
+    / "dspy"
+    / "test_invoke.py",
     ROOT / "scripts" / "check_quality_contract.py": ROOT
     / "tests"
     / "scripts"
