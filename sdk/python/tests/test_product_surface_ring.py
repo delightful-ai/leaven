@@ -69,6 +69,12 @@ def test_standalone_worker_loop_is_not_public_until_implemented() -> None:
     assert not hasattr(lv, "serve_stage")
 
 
+def test_optimize_builder_does_not_advertise_unwired_dry_run() -> None:
+    """Builder methods should name executable product behavior only."""
+
+    assert not hasattr(lv.OptimizeBuilder, "dry_run")
+
+
 def test_data_class_surface_has_no_pre_publish_compatibility_aliases() -> None:
     """Data classes should expose locked seam names, not draft aliases."""
 

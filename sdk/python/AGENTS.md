@@ -7,9 +7,12 @@ importable, typed, IDE-navigable, and owns Python dependency declarations,
 examples, tests, codegen tooling, and private process clients for the public
 seam.
 
-It is mostly scaffold: nearly every function and method body is
-`raise NotImplementedError(...)` or `...`. Add real behavior only for focused
-foundation slices that are backed by the governing spec and a current proof.
+This started as a scaffold-heavy project, but the active production-honesty
+goal supersedes that old default. Public backbone surfaces must be executable
+or absent. A `raise NotImplementedError(...)` may remain only behind an
+explicitly classified optional adapter, unsupported configuration branch, or
+private guard with tests/docs that name the boundary; it must not be the body
+of a public product/backbone method.
 
 ### The wired paths
 
@@ -117,8 +120,11 @@ ruff's `RUF022` (sorted `__all__`) is on. No current ruff rule for
   the spec disagree, the spec wins; this project is updated to match.
 - Every module gets a docstring at the top explaining what it is and pointing
   to the relevant spec section.
-- Public functions/classes get full type hints, signatures, and docstrings
-  but `raise NotImplementedError(...)` bodies (or `...` for pure-type stubs).
+- Public functions/classes get full type hints, signatures, and docstrings.
+  If the public surface is retained, it must execute the behavior it advertises
+  or fail at a typed unsupported-configuration boundary that the docs/tests
+  name. Do not add public product/backbone methods whose only body is
+  `raise NotImplementedError(...)`.
 - Pydantic v2 models for public SDK/user-facing records. `msgspec` owns the
   private generated public-seam wire codec layer. Dataclasses remain fine for
   internal config shapes. Leaven targets Python 3.12+; use native annotation

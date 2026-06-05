@@ -3836,6 +3836,29 @@ acceptance:
           stage request. The broader row remains pending because optional DSPy
           and remaining workspace/optimize public scaffolds still require
           removal, privatization, or product-surface classification.
+      - kind: public_optimize_dry_run_scaffold_removed
+        paths:
+          - sdk/python/AGENTS.md
+          - sdk/python/src/leaven/optimize.py
+          - sdk/python/tests/test_product_surface_ring.py
+          - sdk/python/tests/test_optimize.py
+          - sdk/python/tests/test_optimize_public_seam_e2e.py
+          - sdk/python/scripts/check_quality_contract.py
+        commands:
+          - cd sdk/python && uv run pytest tests/test_product_surface_ring.py tests/test_optimize.py tests/test_optimize_public_seam_e2e.py -q
+          - cd sdk/python && uv run ruff check src/leaven/optimize.py tests/test_product_surface_ring.py tests/test_optimize.py tests/test_optimize_public_seam_e2e.py
+          - cd sdk/python && uv run ty check src/leaven/optimize.py tests/test_product_surface_ring.py tests/test_optimize.py tests/test_optimize_public_seam_e2e.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+        note: >-
+          `OptimizeBuilder.dry_run()` was an unwired public builder method not
+          named by `docs/specs/leaven_python.md` and not backed by durable seam
+          behavior. It has been removed instead of returning a fake empty
+          `Optimized`, and the product-surface test now rejects the method if
+          it returns. `sdk/python/AGENTS.md` was updated to replace the old
+          scaffold-heavy guidance with the active rule: retained public
+          product/backbone surfaces must execute advertised behavior or be
+          absent. The row remains pending because other optional adapter and
+          workspace scaffolds still need classification or cuts.
       - kind: private_seam_json_builder_branding
         commits:
           - 414f7d0d

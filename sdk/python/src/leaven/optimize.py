@@ -59,14 +59,6 @@ class OptimizeBuilder[A]:
         )
         return cast("Optimized[A]", _to_optimized(seed, cases, report, run_id))
 
-    def dry_run(self) -> "OptimizeBuilder[A]":
-        """Mark the run as dry-run: validates configuration without executing.
-
-        Returns self for chaining. Calling `.run()` afterward returns an
-        empty `Optimized[A]` and writes a validation report.
-        """
-        raise NotImplementedError("scaffold; see docs/specs/leaven_python.md")
-
     def _prompt_seed(self) -> PromptArtifact:
         if not isinstance(self.seed, PromptArtifact):
             raise TypeError(
