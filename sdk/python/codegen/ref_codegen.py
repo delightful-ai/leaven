@@ -46,6 +46,8 @@ type WireJsonCaseReadMetadata = WireJsonLiteralDepth8
 type WireJsonCaseReadTarget = WireJsonLiteralDepth8
 type WireJsonCaseInput = dict[str, WireJsonLiteralDepth7]
 type WireJsonObject = dict[str, WireJsonField]
+type MetadataValue = WireJsonLiteralDepth8
+type MetadataBag = dict[str, MetadataValue]
 type DataClassSet = list[str]
 type TraceVisibility = Literal["public", "optimizer_visible", "host_private", "external_private"]
 type CostDimension = Literal[
@@ -347,7 +349,6 @@ class RunCostScope(
 
 
 type CostScope = CandidateCostScope | EvaluationRequestCostScope | RunCostScope
-type MetadataBag = WireJsonObject
 type TraceRef = TraceRefRecord
 """
 
@@ -356,7 +357,7 @@ REF_EXPORTS = (
     "CandidateCostScope CandidateRef CandidateRefRecord CaseRef CaseRefRecord CostDimension CostScope "
     "EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestCostScope EvaluationRequestRef EvaluationRequestRefRecord EvaluationRequestedEventPayload "
     "EventEmittedSummaryPayload EventSummaryPayload ExtensionBlobRefPayload ExtensionPayload ExtensionSummaryPayload ExternalEventPayload ExternalInfoRefRecord "
-    "InfoRef ProposalBatchAppliedEventPayload ProposalBatchRef ProposalBatchRefRecord ProposalBatchSubmittedEventPayload "
+    "InfoRef MetadataValue ProposalBatchAppliedEventPayload ProposalBatchRef ProposalBatchRefRecord ProposalBatchSubmittedEventPayload "
     "ProposalRef ProposalRefRecord ReceiptRef RunContextSummaryEventPayload RunCostScope "
     "ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility WorkspaceRef WorkspaceRefRecord"
 )

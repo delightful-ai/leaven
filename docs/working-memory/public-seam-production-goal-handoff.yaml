@@ -3541,6 +3541,34 @@ acceptance:
           green. The broad Raw inventory is now limited to JSON-RPC envelope
           params/result buffers in `_wire/jsonrpc.py` and `_wire/codec.py`,
           matching the documented delayed-decode boundary pattern.
+      - kind: metadata_bag_wire_owner_branded
+        paths:
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/refs.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/src/leaven/_seam/effect_plans.py
+          - sdk/python/tests/_seam/_wire/test_refs.py
+          - sdk/python/tests/_seam/test_client.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_refs.py tests/_seam/test_client.py -q
+          - cd sdk/python && uv run ruff check codegen/ref_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/payloads.py src/leaven/_seam/effect_plans.py tests/_seam/_wire/test_refs.py tests/_seam/test_client.py
+          - cd sdk/python && uv run ty check codegen/ref_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/payloads.py src/leaven/_seam/effect_plans.py tests/_seam/_wire/test_refs.py tests/_seam/test_client.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - rg -n "metadata: WireJsonObject|from leaven\\._seam\\._wire\\.refs import .*WireJsonObject|type MetadataBag = WireJsonObject" sdk/python/src/leaven/_seam sdk/python/codegen/ref_codegen.py sdk/python/src/leaven/_seam/_wire/refs.py
+        note: >-
+          Generated Python `MetadataBag` is now a branded recursive
+          `dict[str, MetadataValue]` owner instead of an alias to the generic
+          shallow `WireJsonObject`. This keeps the schema's open metadata
+          semantics but removes the anonymous object carrier from generated
+          plan/result metadata fields and the active evaluation-request effect
+          builder. Focused msgspec tests prove nested metadata decodes and
+          over-depth metadata is rejected at the wire boundary. The targeted
+          grep has no matches for the old `metadata: WireJsonObject` import
+          path or `type MetadataBag = WireJsonObject`. This narrows one
+          remaining Python wire JSON island; other explicit leaf owners still
+          need audit before the row can close.
       - kind: python_request_envelope_raw_dict_escape_removed
         paths:
           - sdk/python/src/leaven/_seam/client.py

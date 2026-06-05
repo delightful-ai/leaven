@@ -60,6 +60,7 @@ from .refs import (
     ExternalInfoRefRecord,
     InfoRef,
     MetadataBag,
+    MetadataValue,
     ProposalBatchAppliedEventPayload,
     ProposalBatchRef,
     ProposalBatchRefRecord,
@@ -548,7 +549,7 @@ class StageRunResult(Struct, frozen=True, forbid_unknown_fields=True, omit_defau
 
 __all__ = (  # noqa: PLE0605, SIM905
     "PLAN_RESULT_SCHEMA_FINGERPRINT PLAN_SCHEMA_FINGERPRINT STAGE_RUN_SCHEMA_FINGERPRINT "
-    "ArtifactSelector ArtifactSelectorJsonPointer AssessmentRef AssessmentRefRecord AssessmentsSubmittedEventPayload BlobRef CandidateCostScope CandidateRef CandidateRefRecord CaseRef CaseRefRecord CostDimension CostScope EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestCostScope EvaluationRequestRef EvaluationRequestRefRecord EvaluationRequestedEventPayload EventEmittedSummaryPayload EventSummaryPayload ExtensionBlobRefPayload ExtensionPayload ExtensionSummaryPayload ExternalEventPayload ExternalInfoRefRecord InfoRef ProposalBatchAppliedEventPayload ProposalBatchRef ProposalBatchRefRecord ProposalBatchSubmittedEventPayload ProposalRef ProposalRefRecord ReceiptRef RunContextSummaryEventPayload RunCostScope ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility WorkspaceRef WorkspaceRefRecord "
+    "ArtifactSelector ArtifactSelectorJsonPointer AssessmentRef AssessmentRefRecord AssessmentsSubmittedEventPayload BlobRef CandidateCostScope CandidateRef CandidateRefRecord CaseRef CaseRefRecord CostDimension CostScope EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestCostScope EvaluationRequestRef EvaluationRequestRefRecord EvaluationRequestedEventPayload EventEmittedSummaryPayload EventSummaryPayload ExtensionBlobRefPayload ExtensionPayload ExtensionSummaryPayload ExternalEventPayload ExternalInfoRefRecord InfoRef MetadataValue ProposalBatchAppliedEventPayload ProposalBatchRef ProposalBatchRefRecord ProposalBatchSubmittedEventPayload ProposalRef ProposalRefRecord ReceiptRef RunContextSummaryEventPayload RunCostScope ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility WorkspaceRef WorkspaceRefRecord "
     "AssessmentSummaryGraphRow CandidateArtifactSummary CandidateCaseScore CandidateScoresSummary CandidateSummaryGraphRow CapabilityCall ChargeReceipt CommitPolicy CommitPolicyGraphWritesAtomic "
     "CommitPolicyGraphWritesSequential CommitPolicyNoGraphWrites Consistency ConsistencyAtRevision "
     "ConsistencyLatestAtStart ConsistencySinceRevision Cost DataClassSet EvalMode EvalModeDryRun "

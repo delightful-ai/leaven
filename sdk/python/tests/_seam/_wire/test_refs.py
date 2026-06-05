@@ -1,8 +1,9 @@
 """Tests for `leaven._seam._wire.refs`."""
 
 import msgspec
+import pytest
 
-from leaven._seam._wire.refs import BlobRef, WireJsonCaseReadTarget
+from leaven._seam._wire.refs import BlobRef, MetadataBag, WireJsonCaseReadTarget
 
 
 def test_blob_ref_decodes_schema_owned_reference() -> None:
@@ -24,3 +25,28 @@ def test_case_read_target_alias_accepts_json_scalar() -> None:
     decoded = msgspec.json.decode(b'"answer"', type=WireJsonCaseReadTarget)
 
     assert decoded == "answer"
+
+
+def test_metadata_bag_is_a_branded_recursive_json_owner() -> None:
+    """Regression: metadata is not the shallow `WireJsonObject` carrier."""
+
+    decoded = msgspec.json.decode(
+        b'{"source":"client-test","labels":["train",{"fold":1}],"nested":{"ok":true}}',
+        type=MetadataBag,
+    )
+
+    assert decoded == {
+        "source": "client-test",
+        "labels": ["train", {"fold": 1}],
+        "nested": {"ok": True},
+    }
+
+
+def test_metadata_bag_rejects_non_json_values() -> None:
+    """Boundary check: metadata uses the bounded recursive JSON owner."""
+
+    with pytest.raises(msgspec.ValidationError):
+        msgspec.json.decode(
+            b'{"too_deep":[[[[[[[[[0]]]]]]]]]}',
+            type=MetadataBag,
+        )

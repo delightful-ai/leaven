@@ -13,7 +13,7 @@ from leaven._seam._wire.payloads import (
     PlanOp,
     VisibilityClass,
 )
-from leaven._seam._wire.refs import CandidateRef, ExternalEventPayload, WireJsonObject
+from leaven._seam._wire.refs import CandidateRef, ExternalEventPayload, MetadataBag
 from leaven._seam._wire.writes import (
     EmitRunEventWrite,
     EvaluationRequestWriteRecord,
@@ -36,7 +36,7 @@ class EvaluationRequestRequest:
     purpose: Literal["train", "validation", "test", "diagnostic", "custom"]
     shape: Literal["independent", "pairwise", "listwise"] = "independent"
     evaluator: str | None = None
-    metadata: WireJsonObject | None = None
+    metadata: MetadataBag | None = None
 
     @property
     def method(self) -> SeamRequestMethod:
