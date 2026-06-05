@@ -4,19 +4,15 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-from msgspec import UNSET, UnsetType, convert
+from msgspec import UNSET, convert
 
-from leaven._seam._wire import JsonObject
 from leaven._seam._wire.calls import (
     AgentInstructions,
     AgentLimits,
     AgentRunCall,
     AgentToolPolicy,
     OutputContract,
-    OutputFiles,
     OutputFinalMessage,
-    OutputJsonSchema,
-    OutputWorkspaceDiff,
     SandboxExecCall,
     WorkspaceMaterializeCall,
 )
@@ -38,7 +34,6 @@ from leaven._seam._wire.payloads import StageRunRequest as StageRunParams
 from leaven._seam._wire.refs import (
     CaseInputPayload,
     CaseRefRecord,
-    WireJsonSchemaObject,
 )
 from leaven._seam._wire.writes import (
     ApplyProposalBatchWrite,
@@ -269,7 +264,7 @@ class SandboxExecRequest:
     workspace: str
     argv: Sequence[str]
     timeout_s: int
-    output: JsonObject
+    output: OutputContract
     env: dict[str, str] | None = None
     cwd: str | None = None
     stream_policy: Literal["buffer", "stream_updates", "blob_refs_only"] = "blob_refs_only"
@@ -299,7 +294,7 @@ class SandboxExecRequest:
                 workspace=self.workspace,
                 argv=list(self.argv),
                 timeout_s=self.timeout_s,
-                output=_wire_output_contract(self.output),
+                output=self.output,
                 input_classes=list(self.input_classes or ["public"]),
                 cwd=self.cwd if self.cwd is not None else UNSET,
                 env=dict(self.env) if self.env is not None else UNSET,
@@ -501,57 +496,6 @@ def _plan_document(
         return_=return_names,
         commit=commit,
     )
-
-
-def _wire_output_contract(value: JsonObject) -> OutputContract:
-    kind = _string_field(value, "kind")
-    if kind == "final_message":
-        return OutputFinalMessage(max_bytes=_optional_int_field(value, "max_bytes"))
-    if kind == "json_schema":
-        return OutputJsonSchema(
-            schema_fingerprint=_string_field(value, "schema_fingerprint"),
-            schema=_optional_json_schema_field(value, "schema"),
-        )
-    if kind == "files":
-        return OutputFiles(
-            paths=_string_list_field(value, "paths"),
-            max_bytes=_optional_int_field(value, "max_bytes"),
-        )
-    if kind == "workspace_diff":
-        return OutputWorkspaceDiff(
-            surface_fingerprint=_string_field(value, "surface_fingerprint"),
-            max_bytes=_optional_int_field(value, "max_bytes"),
-        )
-    raise ValueError(f"unsupported output contract kind: {kind}")
-
-
-def _string_field(value: JsonObject, field: str) -> str:
-    item = value[field]
-    if not isinstance(item, str):
-        raise TypeError(f"{field} must be a string")
-    return item
-
-
-def _optional_int_field(value: JsonObject, field: str) -> int | UnsetType:
-    if field not in value:
-        return UNSET
-    item = value[field]
-    if not isinstance(item, int):
-        raise TypeError(f"{field} must be an integer")
-    return item
-
-
-def _string_list_field(value: JsonObject, field: str) -> list[str]:
-    item = value[field]
-    if not isinstance(item, list) or not all(isinstance(member, str) for member in item):
-        raise TypeError(f"{field} must be a list of strings")
-    return [member for member in item if isinstance(member, str)]
-
-
-def _optional_json_schema_field(value: JsonObject, field: str) -> WireJsonSchemaObject | UnsetType:
-    if field not in value:
-        return UNSET
-    return convert(value[field], type=WireJsonSchemaObject)
 
 
 __all__ = [

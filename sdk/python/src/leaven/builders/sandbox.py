@@ -5,6 +5,7 @@ import math
 from collections.abc import Sequence
 from typing import Literal, Protocol
 
+import msgspec
 from msgspec import UNSET, UnsetType
 from pydantic import BaseModel, ConfigDict
 
@@ -12,11 +13,19 @@ from .._errors import UnboundBuilderError
 from .._handles import WorkspaceHandle
 from .._receipts import CallReceipt
 from .._seam import SandboxExecRequest
+from .._seam._wire.calls import (
+    OutputContract as WireOutputContract,
+)
+from .._seam._wire.calls import (
+    OutputFiles,
+    OutputFinalMessage,
+    OutputJsonSchema,
+)
 from .._seam._wire.payloads import Cost
 from .._seam._wire.refs import BlobRef as WireBlobRef
+from .._seam._wire.refs import WireJsonSchemaObject
 from .._seam._wire.results import SandboxExecResult
 from ..blob_ref import BlobRef
-from ..json_value import JsonObject
 from ..output import (
     FilesOutput,
     JsonSchemaOutput,
@@ -24,7 +33,7 @@ from ..output import (
     OutputContract,
     TextOutput,
 )
-from ._output_contract import json_schema_output_to_wire
+from ._output_contract import schema_fingerprint
 
 
 class SandboxExec(BaseModel):
@@ -140,21 +149,23 @@ def _sandbox_exec_from_result(result: SandboxExecResult) -> SandboxExec:
     )
 
 
-def _output_to_wire(output: OutputContract | None) -> JsonObject:
+def _output_to_wire(output: OutputContract | None) -> WireOutputContract:
     if output is None:
-        return {"kind": "files", "paths": []}
+        return OutputFiles(paths=[])
     if isinstance(output, FilesOutput):
-        value: JsonObject = {"kind": "files", "paths": list(output.paths)}
-        if output.max_bytes is not None:
-            value["max_bytes"] = output.max_bytes
-        return value
+        return OutputFiles(
+            paths=list(output.paths),
+            max_bytes=output.max_bytes if output.max_bytes is not None else UNSET,
+        )
     if isinstance(output, TextOutput):
-        value: JsonObject = {"kind": "final_message"}
-        if output.max_chars is not None:
-            value["max_bytes"] = output.max_chars
-        return value
+        return OutputFinalMessage(
+            max_bytes=output.max_chars if output.max_chars is not None else UNSET
+        )
     if isinstance(output, JsonSchemaOutput | JsonSchemaValueOutput):
-        return json_schema_output_to_wire(output)
+        return OutputJsonSchema(
+            schema_fingerprint=schema_fingerprint(output.schema_),
+            schema=msgspec.convert(output.schema_, type=WireJsonSchemaObject),
+        )
     raise TypeError(f"unsupported sandbox output contract: {type(output).__name__}")
 
 

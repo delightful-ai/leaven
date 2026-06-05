@@ -1915,6 +1915,41 @@ acceptance:
           explicit JSON Schema output and default output are generated records.
           This closes the agent output raw-object island only; sandbox output
           still uses the shared parser and remains pending.
+      - kind: sandbox_output_request_uses_generated_wire_records
+        paths:
+          - sdk/python/src/leaven/_seam/plans.py
+          - sdk/python/src/leaven/builders/sandbox.py
+          - sdk/python/tests/builders/test_sandbox.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/builders/test_sandbox.py tests/_seam/test_plans.py tests/_seam/_wire/test_calls.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_seam/plans.py src/leaven/builders/sandbox.py tests/builders/test_sandbox.py tests/_seam/test_plans.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/plans.py src/leaven/builders/sandbox.py tests/builders/test_sandbox.py tests/_seam/test_plans.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - >-
+            ! rg -n
+            "def _wire_output_contract|def _output_to_wire\(output:
+            OutputContract \| None\) -> JsonObject|json_schema_output_to_wire\(output\)|output:
+            JsonObject$|output: JsonObject \| None|\{\"kind\": \"files\",
+            \"paths\": \[\]\}|return \{\"kind\": \"final_message\""
+            sdk/python/src/leaven/_seam/plans.py
+            sdk/python/src/leaven/builders/sandbox.py
+            sdk/python/tests/builders/test_sandbox.py
+        note: >-
+          The Python `leaven/sandbox.exec` request path no longer lowers public
+          SDK output contracts into raw `JsonObject` records before Plan
+          encoding. `SandboxBuilder.exec(...)` now constructs generated msgspec
+          `OutputFiles`, `OutputFinalMessage`, and `OutputJsonSchema` records
+          directly, including a generated `WireJsonSchemaObject` for structured
+          outputs. The private `SandboxExecRequest.output` field is typed as
+          the generated `OutputContract`, and the previous shared
+          `_wire_output_contract(...)` parser plus its optional-field helpers
+          were removed rather than retained as a compatibility path. Focused
+          tests assert the sandbox request carries generated output records
+          before JSON encoding. This closes the shared agent/sandbox output
+          raw-object parser island; other capability/config/callback/readback
+          leaf slots remain pending.
       - kind: extension_result_receipts_match_rust_audit_shape
         paths:
           - sdk/python/codegen/result_codegen.py

@@ -6,6 +6,7 @@ import leaven as lv
 from leaven._handles import WorkspaceHandle
 from leaven._receipts import CallReceipt
 from leaven._seam import SandboxExecRequest
+from leaven._seam._wire.calls import OutputFiles
 from leaven._seam._wire.payloads import Cost
 from leaven._seam._wire.refs import BlobRef as WireBlobRef
 from leaven._seam._wire.results import SandboxExecPrimary, SandboxExecResult
@@ -40,6 +41,9 @@ async def test_sandbox_builder_exec_lowers_files_output_contract_through_seam() 
     )
 
     assert client.request_value.method == "leaven/sandbox.exec"
+    assert isinstance(client.request_value.output, OutputFiles)
+    assert client.request_value.output.paths == ["reports/out.txt"]
+    assert client.request_value.output.max_bytes == 1024
     params = _params_object(client.request_value.to_params())
     assert params["plan_id"] == "plansandboxbuilder001"
     assert params["return"] == ["sandbox_exec"]
@@ -102,7 +106,7 @@ class FakeSandboxSeamClient:
             workspace="unset",
             argv=["true"],
             timeout_s=1,
-            output={"kind": "files", "paths": []},
+            output=OutputFiles(paths=[]),
         )
 
     def sandbox_exec(self, request: SandboxExecRequest) -> SandboxExecResult:
