@@ -15,6 +15,7 @@ from leaven._runs.rust_export import (
     load_rust_run_readback,
 )
 from leaven.run_inspection import RustRunReadback
+from tests.support.rust_evidence import rust_case_assessment_evidence_bytes
 
 
 def test_load_rust_run_readback_skips_runs_without_latest_checkpoint(tmp_path: Path) -> None:
@@ -344,6 +345,8 @@ def test_runs_open_prefers_rust_checkpoint_without_optimized_json(
         (reward.id, reward.value, reward.weight, reward.feedback) for reward in assessment.rewards
     ] == [("score", 0.75, 1.0, "exact match")]
     assert [fact.surface for fact in result.summary.unsupported] == ["run.cost"]
+    assert result.assessment("1").effect_receipts[0].receipt_id == "lmrec_completion"
+    assert result.assessment("1").effect_receipts[0].blob_refs[0].blob_id == "blob_transcript"
 
 
 def test_runs_inspect_uses_rust_checkpoint_blob_and_evidence_without_optimized_json(
@@ -473,6 +476,9 @@ def test_runs_inspect_uses_rust_checkpoint_blob_and_evidence_without_optimized_j
         (reward.id, reward.value, reward.weight, reward.feedback)
         for reward in inspection.evidence[0].rewards
     ] == [("score", 0.75, 1.0, "exact match")]
+    call_receipts = [receipt for receipt in inspection.receipts if receipt.kind == "call"]
+    assert [receipt.receipt_id for receipt in call_receipts] == ["lmrec_completion"]
+    assert call_receipts[0].blob_refs[0].blob_id == "blob_transcript"
     assert [fact.surface for fact in inspection.unsupported] == ["run.cost"]
     assert calls.read_text(encoding="utf-8").splitlines() == [
         "run",
@@ -613,33 +619,3 @@ def load_rust_run_readback_fixture() -> RustRunReadback:
             },
         }
     )
-
-
-def rust_case_assessment_evidence_bytes() -> bytes:
-    return json.dumps(
-        {
-            "score": {"score": 0.75},
-            "output": {
-                "Inline": {
-                    "text": "42",
-                    "truncated": False,
-                    "metadata": {
-                        "visibility": "public",
-                        "data_classes": ["candidate.output", "public"],
-                    },
-                }
-            },
-            "feedback": "exact match",
-            "trace": [],
-            "case_data_reads": [
-                {
-                    "operation": "case_query.load",
-                    "receipt": "qrec_case_1",
-                    "case": 1,
-                    "fields": ["input", "target"],
-                    "data_classes": ["case.input", "case.target"],
-                    "values": {"case_id": "1", "target": {"answer": "42"}},
-                }
-            ],
-        }
-    ).encode()

@@ -94,7 +94,19 @@ def _write_record(
                     for reward in assessment.rewards
                 ],
                 "effect_receipts": [
-                    receipt.receipt_id for receipt in assessment.effect_receipts
+                    {
+                        "receipt_id": receipt.receipt_id,
+                        "blob_refs": [
+                            {
+                                "blob_id": blob.blob_id,
+                                "sha256": blob.sha256,
+                                "bytes": blob.bytes,
+                                "data_classes": blob.data_classes,
+                            }
+                            for blob in receipt.blob_refs
+                        ],
+                    }
+                    for receipt in assessment.effect_receipts
                 ],
             }
             for assessment in report.assessments

@@ -1564,6 +1564,38 @@ acceptance:
           lists directories with `checkpoints/LATEST`, `_runs.codec` and its
           projection test were deleted, and the remaining store module has a
           mirrored same-path test proving `optimized.json` alone is ignored.
+      - kind: rust_checkpoint_effect_receipt_blob_refs_survive_python_inspection
+        paths:
+          - crates/leaven-run/src/sdk_checkpoint.rs
+          - sdk/python/src/leaven/_runs/rust_checkpoint.py
+          - sdk/python/src/leaven/_runs/rust_evidence.py
+          - sdk/python/tests/test_run_receipt_inspection.py
+          - sdk/python/tests/_runs/test_rust_export.py
+          - sdk/python/tests/support/rust_evidence.py
+          - sdk/python/tests/AGENTS.md
+        commands:
+          - cargo build -p leaven-cli
+          - cargo test -p leaven-run inspection --lib
+          - cargo test -p leaven-cli tests::run_inspect_exports_rust_owned_checkpoint_and_graph_blob_readback -- --exact
+          - cargo check -p leaven-run -p leaven-cli
+          - cd sdk/python && uv run pytest tests/test_run_receipt_inspection.py tests/_runs/test_rust_export.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_runs/rust_checkpoint.py src/leaven/_runs/rust_evidence.py tests/test_run_receipt_inspection.py tests/_runs/test_rust_export.py tests/support/rust_evidence.py tests/__init__.py tests/support/__init__.py
+          - cd sdk/python && uv run ty check src/leaven/_runs/rust_checkpoint.py src/leaven/_runs/rust_evidence.py tests/test_run_receipt_inspection.py tests/_runs/test_rust_export.py tests/support/rust_evidence.py tests/__init__.py tests/support/__init__.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && python3 ../../scripts/lint-line-count.py --root .
+        note: >-
+          SDK prompt checkpoint input now carries structured assessment effect
+          receipts with attached blob refs instead of reducing them to receipt
+          id strings before Rust sees the record. Rust persists that structured
+          shape through case-data evidence, and Python validates the Rust
+          evidence bytes back into public `CallReceipt` values with
+          `blob_refs`. Focused tests prove a fake Codex CLI agent run writes a
+          filesystem-backed transcript ref, `lv.optimize(...).run()` sends the
+          receipt/blob metadata through `leaven run checkpoint-sdk-prompt`, and
+          both `lv.runs.open(...)` and `lv.runs.inspect(...)` recover the
+          transcript blob id and data class from Rust-owned checkpoint/evidence
+          readback. The row remains pending because this does not yet prove
+          every live Codex artifact byte path and final release gate.
     closeout_check: "Reading only `optimized.json` written by Python is a proxy."
 
   - id: python_wire_codegen_msgspec_boundary

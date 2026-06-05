@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .._receipts import CallReceipt, WriteReceipt
 from ..assessment import Assessment, RewardAssessment
+from ..blob_ref import BlobRef
 from ..case import Case
 from ..evidence import EvidenceEnvelope
 from ..json_value import JsonObject, JsonValue
@@ -139,18 +140,13 @@ class RustCaseDataReadEvidence(BaseModel):
         return [RustRewardEvidence.model_validate(item) for item in value]
 
     def effect_receipts(self) -> list[CallReceipt]:
-        """Return effect receipt ids carried by Rust evidence."""
+        """Return effect receipts carried by Rust evidence."""
         if "effect_receipts" not in self.values:
             return []
         value = self.values["effect_receipts"]
         if not isinstance(value, list):
             raise TypeError("Rust effect receipts read value must be a JSON array")
-        receipts: list[CallReceipt] = []
-        for item in value:
-            if not isinstance(item, str):
-                raise TypeError("Rust effect receipt ids must be strings")
-            receipts.append(CallReceipt(receipt_id=item))
-        return receipts
+        return [RustEffectReceiptEvidence.model_validate(item).to_public() for item in value]
 
 
 class RustRewardEvidence(BaseModel):
@@ -162,6 +158,19 @@ class RustRewardEvidence(BaseModel):
     value: float
     weight: float
     feedback: str
+
+
+class RustEffectReceiptEvidence(BaseModel):
+    """Effect receipt metadata carried through Rust case-data evidence."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    receipt_id: str
+    blob_refs: list[BlobRef] = Field(default_factory=list)
+
+    def to_public(self) -> CallReceipt:
+        """Return the public SDK receipt handle."""
+        return CallReceipt(receipt_id=self.receipt_id, blob_refs=list(self.blob_refs))
 
 
 class RustCandidateAssessmentOutput(BaseModel):
@@ -374,6 +383,7 @@ __all__ = [
     "RustCandidateAssessmentOutput",
     "RustCaseAssessmentEvidence",
     "RustCaseDataReadEvidence",
+    "RustEffectReceiptEvidence",
     "RustInlineOutput",
     "RustOutputBlobAudit",
     "RustOutputMetadata",

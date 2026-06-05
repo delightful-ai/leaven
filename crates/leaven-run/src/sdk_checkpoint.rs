@@ -109,9 +109,35 @@ pub struct SdkPromptAssessment {
     /// Reward-vector dimensions that contributed to the score.
     #[serde(default)]
     pub rewards: Vec<SdkPromptReward>,
-    /// Effect receipt ids produced while computing this assessment.
+    /// Effect receipts produced while computing this assessment.
     #[serde(default)]
-    pub effect_receipts: Vec<String>,
+    pub effect_receipts: Vec<SdkPromptEffectReceipt>,
+}
+
+/// One effect receipt and its public blob metadata from the SDK mechanics route.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SdkPromptEffectReceipt {
+    /// Opaque receipt id.
+    pub receipt_id: String,
+    /// Blob refs attached to the receipt, such as agent transcripts.
+    #[serde(default)]
+    pub blob_refs: Vec<SdkPromptBlobRef>,
+}
+
+/// Public blob metadata attached to an effect receipt.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SdkPromptBlobRef {
+    /// Opaque blob id.
+    pub blob_id: String,
+    /// Optional SHA-256 digest.
+    #[serde(default)]
+    pub sha256: Option<String>,
+    /// Optional byte count.
+    #[serde(default)]
+    pub bytes: Option<u64>,
+    /// Public data classes associated with the blob.
+    #[serde(default)]
+    pub data_classes: Vec<String>,
 }
 
 /// One reward-vector dimension from the SDK scorer.
