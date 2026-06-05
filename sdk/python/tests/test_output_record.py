@@ -3,7 +3,7 @@ from typing import cast
 import pytest
 
 import leaven as lv
-from leaven.json_value import JsonValue
+from leaven.json_value import JsonObject, JsonValue
 from leaven.output_record import OutputRecord
 
 
@@ -29,12 +29,20 @@ def test_structured_output_record_preserves_json_object() -> None:
     assert record.data_classes == [lv.data_class.OPTIMIZER_VISIBLE]
 
 
+def test_structured_output_record_rejects_non_json_object_value() -> None:
+    with pytest.raises(TypeError, match="output record object must be a JSON object"):
+        OutputRecord.structured(
+            summary="bad",
+            value=cast("JsonObject", ["not", "object"]),
+        )
+
+
 def test_json_value_output_record_rejects_non_json() -> None:
     record = OutputRecord.json_value(summary="numbers", value=[1, 2, {"ok": True}])
     assert record.kind == "json"
     assert record.value == [1, 2, {"ok": True}]
 
-    with pytest.raises(TypeError, match="value is not JSON"):
+    with pytest.raises(TypeError, match="output record value contains non-JSON value"):
         OutputRecord.json_value(summary="bad", value=cast("JsonValue", object()))
 
 

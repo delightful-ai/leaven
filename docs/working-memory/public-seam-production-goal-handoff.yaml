@@ -5157,14 +5157,18 @@ acceptance:
           - cd sdk/python && uv run ruff check src/leaven/output_record.py tests/test_output_record.py
           - cd sdk/python && uv run ty check src/leaven/output_record.py tests/test_output_record.py
           - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - uv run --with pyyaml python -c "from pathlib import Path; import yaml; yaml.safe_load(Path('docs/working-memory/public-seam-production-goal-handoff.yaml').read_text())"
           - python3 scripts/lint-line-count.py --root sdk/python
         note: >-
           Public `OutputRecord.json_value(...)` no longer accepts `object` as
           an advertised input. The constructor now requires a `JsonValue`, and
           the non-JSON runtime regression explicitly casts its hostile value to
-          model a caller that bypasses static typing. The private normalization
-          path copies typed JSON arrays and objects without `.get(...)` probes
-          or object widening.
+          model a caller that bypasses static typing. The structured-output
+          constructor now rejects non-object JSON through the shared
+          `_json_parse` boundary, and the local duplicate recursive parser was
+          removed. The private normalization path copies typed JSON arrays and
+          objects without `.get(...)` probes or object widening.
       - kind: python_seam_config_json_projectors_typed
         paths:
           - sdk/python/src/leaven/_seam/config.py

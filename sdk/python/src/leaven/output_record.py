@@ -9,6 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ._json_parse import parse_json_object, parse_json_value
 from .data_class import PUBLIC
 from .json_value import JsonObject, JsonValue
 
@@ -115,20 +116,11 @@ def _data_classes(data_classes: list[str] | None) -> list[str]:
 
 
 def _json_object(raw_json: JsonObject) -> JsonObject:
-    output: JsonObject = {}
-    for key, item in raw_json.items():
-        output[key] = _json_value(item)
-    return output
+    return parse_json_object(raw_json, context="output record object")
 
 
 def _json_value(raw_json: JsonValue) -> JsonValue:
-    if raw_json is None or isinstance(raw_json, str | int | float | bool):
-        return raw_json
-    if isinstance(raw_json, dict):
-        return _json_object(raw_json)
-    if isinstance(raw_json, list):
-        return [_json_value(item) for item in raw_json]
-    raise TypeError(f"value is not JSON: {type(raw_json).__name__}")
+    return parse_json_value(raw_json, context="output record value")
 
 
 __all__ = ["OutputKind", "OutputRecord", "Visibility"]
