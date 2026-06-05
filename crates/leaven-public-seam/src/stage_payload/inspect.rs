@@ -12,8 +12,8 @@ use super::inspect_helpers::{
     source_ref_set, string_array,
 };
 use super::{
-    ReflectProposeSubmissionDocument, RunnerCaseInputDocument, StagePayloadDocument,
-    StagePayloadRole, StageProposalEffect,
+    ReflectProposeSubmissionDocument, RunnerCaseInputDocument, RunnerCaseInputValue,
+    StagePayloadDocument, StagePayloadRole, StageProposalEffect,
 };
 
 pub(super) fn inspect_reflect_request(
@@ -535,6 +535,7 @@ pub(super) fn inspect_runner_request(
     Ok(RunnerCaseInputDocument::new(
         candidate,
         case,
+        RunnerCaseInputValue::from_schema_valid_value(case_input_value),
         case_input_fingerprint,
         case_input_keys,
     ))

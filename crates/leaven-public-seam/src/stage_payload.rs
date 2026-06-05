@@ -45,9 +45,14 @@ pub struct StagePayloadDocument {
 pub struct RunnerCaseInputDocument {
     candidate: String,
     case: String,
+    case_input: RunnerCaseInputValue,
     case_input_fingerprint: String,
     case_input_keys: Vec<String>,
 }
+
+/// Schema-valid target-free JSON object carried by a runner-stage case input.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RunnerCaseInputValue(Value);
 
 /// Validated reflect-then-propose handoff across separate public-seam stages.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -486,12 +491,14 @@ impl RunnerCaseInputDocument {
     pub(super) fn new(
         candidate: String,
         case: String,
+        case_input: RunnerCaseInputValue,
         case_input_fingerprint: String,
         case_input_keys: Vec<String>,
     ) -> Self {
         Self {
             candidate,
             case,
+            case_input,
             case_input_fingerprint,
             case_input_keys,
         }
@@ -507,6 +514,11 @@ impl RunnerCaseInputDocument {
         &self.case
     }
 
+    /// Target-free JSON object received by the runner.
+    pub const fn case_input(&self) -> &RunnerCaseInputValue {
+        &self.case_input
+    }
+
     /// Stable JCS SHA-256 fingerprint of the exact case-input object.
     pub fn case_input_fingerprint(&self) -> &str {
         &self.case_input_fingerprint
@@ -515,6 +527,17 @@ impl RunnerCaseInputDocument {
     /// Sorted top-level keys present in the case-input object.
     pub fn case_input_keys(&self) -> &[String] {
         &self.case_input_keys
+    }
+}
+
+impl RunnerCaseInputValue {
+    pub(super) fn from_schema_valid_value(value: &Value) -> Self {
+        Self(value.clone())
+    }
+
+    /// JSON object carried on the wire by the runner case input.
+    pub const fn as_json(&self) -> &Value {
+        &self.0
     }
 }
 

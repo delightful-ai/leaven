@@ -28,6 +28,7 @@ type WireJsonOutputValue = WireJsonLiteralDepth8
 type WireJsonAssessmentPreference = WireJsonLiteralDepth8
 type WireJsonAssessmentRanking = WireJsonLiteralDepth8
 type WireJsonAssessmentTarget = WireJsonLiteralDepth8
+type WireJsonCaseInput = dict[str, WireJsonLiteralDepth7]
 type WireJsonObject = dict[str, WireJsonField]
 type DataClassSet = list[str]
 type TraceVisibility = Literal["public", "optimizer_visible", "host_private", "external_private"]
@@ -172,5 +173,5 @@ type TraceRef = TraceRefRecord
 
 __all__ = (  # noqa: PLE0605, SIM905
     "AssessmentRef AssessmentRefRecord BlobRef CandidateRef CandidateRefRecord CaseRef CaseRefRecord EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestRef EvaluationRequestRefRecord ExternalInfoRefRecord InfoRef ProposalBatchRef ProposalBatchRefRecord ProposalRef ProposalRefRecord ReceiptRef ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility WorkspaceRef WorkspaceRefRecord "
-    "DataClassSet MetadataBag WireJsonAssessmentPreference WireJsonAssessmentRanking WireJsonAssessmentTarget WireJsonEventPayload WireJsonExtensionPayload WireJsonField WireJsonLeafArray WireJsonLeafObject WireJsonLiteralDepth0 WireJsonLiteralDepth1 WireJsonLiteralDepth2 WireJsonLiteralDepth3 WireJsonLiteralDepth4 WireJsonLiteralDepth5 WireJsonLiteralDepth6 WireJsonLiteralDepth7 WireJsonLiteralDepth8 WireJsonLiteralValue WireJsonObject WireJsonOutputValue WireJsonScalar WireJsonSchema WireJsonSchemaObject WireJsonSchemaTypeName WireJsonValue"
+    "DataClassSet MetadataBag WireJsonAssessmentPreference WireJsonAssessmentRanking WireJsonAssessmentTarget WireJsonCaseInput WireJsonEventPayload WireJsonExtensionPayload WireJsonField WireJsonLeafArray WireJsonLeafObject WireJsonLiteralDepth0 WireJsonLiteralDepth1 WireJsonLiteralDepth2 WireJsonLiteralDepth3 WireJsonLiteralDepth4 WireJsonLiteralDepth5 WireJsonLiteralDepth6 WireJsonLiteralDepth7 WireJsonLiteralDepth8 WireJsonLiteralValue WireJsonObject WireJsonOutputValue WireJsonScalar WireJsonSchema WireJsonSchemaObject WireJsonSchemaTypeName WireJsonValue"
 ).split()

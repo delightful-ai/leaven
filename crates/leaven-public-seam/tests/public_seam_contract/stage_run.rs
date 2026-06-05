@@ -15,6 +15,10 @@ fn stage_run_validates_generic_runner_dispatch_request_and_text_result() {
     let case_input = request.payload().runner_case_input().unwrap();
     assert_eq!(case_input.candidate(), "cand_stagerun_parent");
     assert_eq!(case_input.case(), "case_stagerun");
+    assert_eq!(
+        case_input.case_input().as_json(),
+        &json!({"question": "5 + 7"})
+    );
     assert_eq!(case_input.case_input_keys(), &["question".to_owned()]);
     assert!(
         case_input

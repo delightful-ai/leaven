@@ -81,7 +81,7 @@ pub use result::{
 };
 pub use stage_payload::{
     ReflectProposeHandoffDocument, ReflectProposeSubmissionDocument, RunnerCaseInputDocument,
-    StagePayloadDocument, StagePayloadRole, StageProposalEffect,
+    RunnerCaseInputValue, StagePayloadDocument, StagePayloadRole, StageProposalEffect,
 };
 pub use stage_run::{
     StageEffectReceipt, StageProposalReceipt, StageRunKind, StageRunRequestDocument,

@@ -22,7 +22,7 @@ def render_payloads(rows: Sequence[PayloadMethodRow]) -> str:
         f"    {name},"
         for name in sorted(
             f"{REF_EXPORTS} DataClassSet MetadataBag WireJsonField WireJsonLeafArray "
-            "WireJsonLeafObject WireJsonObject WireJsonOutputValue WireJsonScalar"
+            "WireJsonCaseInput WireJsonLeafObject WireJsonObject WireJsonOutputValue WireJsonScalar"
         .split()
         )
     )
@@ -427,7 +427,7 @@ class RunnerRequest(
     stage_call_id: str
     candidate: CandidateRef
     case: CaseRef
-    case_input: WireJsonField
+    case_input: WireJsonCaseInput
     target_forbidden: bool
 
 

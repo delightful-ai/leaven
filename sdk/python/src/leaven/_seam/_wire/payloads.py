@@ -37,6 +37,7 @@ from .refs import (
     TraceRef,
     TraceRefRecord,
     TraceVisibility,
+    WireJsonCaseInput,
     WireJsonField,
     WireJsonLeafArray,
     WireJsonLeafObject,
@@ -430,7 +431,7 @@ class RunnerRequest(
     stage_call_id: str
     candidate: CandidateRef
     case: CaseRef
-    case_input: WireJsonField
+    case_input: WireJsonCaseInput
     target_forbidden: bool
 
 

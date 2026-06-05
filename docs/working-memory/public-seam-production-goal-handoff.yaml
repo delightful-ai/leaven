@@ -1976,8 +1976,41 @@ acceptance:
           use named bounded msgspec JSON owners, and graph-write tests decode
           nested target/preference/ranking values through the generated records.
           The row remains pending because graph-row
-          scores/artifacts/effects/payloads, stage case inputs, and nested
-          result fragments still need typed owners.
+          scores/artifacts/effects/payloads and nested result fragments still
+          need typed owners.
+      - kind: rust_and_python_runner_case_input_preserves_typed_json_owner
+        paths:
+          - crates/leaven-public-seam/src/stage_payload.rs
+          - crates/leaven-public-seam/src/stage_payload/inspect.rs
+          - crates/leaven-public-seam/src/lib.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/stage_run.rs
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/refs.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/tests/_seam/_wire/test_stage_payloads.py
+        commands:
+          - cargo fmt --check
+          - cargo check -p leaven-public-seam
+          - cargo test -p leaven-public-seam --test public_seam_contract stage_run -- --nocapture
+          - cargo test -p leaven --test topology_contract
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_stage_payloads.py -q
+          - cd sdk/python && uv run pytest tests/_seam/_wire -q
+          - cd sdk/python && uv run ruff check codegen/ref_codegen.py codegen/payload_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_stage_payloads.py
+          - cd sdk/python && uv run ty check codegen/ref_codegen.py codegen/payload_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/payloads.py tests/_seam/_wire/test_stage_payloads.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Rust runner-stage payload inspection now stores the exact validated,
+          target-free case-input object in `RunnerCaseInputValue` alongside the
+          fingerprint and top-level key summary, so downstream inspection does
+          not have to re-walk an unowned raw payload to recover the runner
+          input. Python generated `RunnerRequest.case_input` now uses
+          `WireJsonCaseInput`, an object-shaped bounded msgspec JSON owner, and
+          stage-payload tests reject non-object case inputs through the
+          generated dispatch record. The row remains pending because graph-row
+          scores/artifacts/effects/payloads and nested result fragments still
+          need typed owners.
       - kind: typed_private_client_request_cutover
         paths:
           - sdk/python/src/leaven/_seam/plans.py

@@ -84,6 +84,20 @@ def test_stage_run_request_rejects_arbitrary_runner_ref_objects() -> None:
         msgspec.json.decode(body, type=StageRunRequest)
 
 
+def test_stage_run_request_rejects_non_object_case_input() -> None:
+    body = (
+        b'{"schema_version":"leaven.stage_run.v1","message":"stage_run_request",'
+        b'"stage":"runner","payload":{'
+        b'"schema_version":"leaven.stage_payloads.v1","role":"runner",'
+        b'"run":"run_1","stage_call_id":"sc_1",'
+        b'"candidate":"cand_1","case":"case_1",'
+        b'"case_input":["prompt","hello"],"target_forbidden":true}}'
+    )
+
+    with pytest.raises(msgspec.ValidationError):
+        msgspec.json.decode(body, type=StageRunRequest)
+
+
 def test_stage_run_request_rejects_untyped_payload_role() -> None:
     body = (
         b'{"schema_version":"leaven.stage_run.v1","message":"stage_run_request",'
