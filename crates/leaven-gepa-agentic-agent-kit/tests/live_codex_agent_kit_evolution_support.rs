@@ -87,8 +87,8 @@ pub async fn run_live_codex_agentkit_evolution() {
     let child_artifact = restored_ctx.graph().artifact(child).unwrap().clone();
 
     let consumed = run_live_codex_child_consumption(&child_artifact, stores).await;
-    assert_eq!(consumed.system_proof, "CHILD_SYSTEM_CONSUMED\n");
-    assert_eq!(consumed.skill_proof, "CHILD_SKILL_CONSUMED\n");
+    assert_live_child_proof_token(&consumed.system_proof, "CHILD_SYSTEM_CONSUMED");
+    assert_live_child_proof_token(&consumed.skill_proof, "CHILD_SKILL_CONSUMED");
 }
 
 struct LiveAgentKitOptimizer {
@@ -387,6 +387,10 @@ async fn run_live_codex_child_consumption(
 struct LiveChildConsumption {
     system_proof: String,
     skill_proof: String,
+}
+
+fn assert_live_child_proof_token(actual: &str, expected: &str) {
+    assert_eq!(actual.trim_end_matches(['\r', '\n']), expected);
 }
 
 fn require_live_codex_success(
