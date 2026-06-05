@@ -112,6 +112,7 @@ MIRRORED_TESTS = {
     / "scripts"
     / "test_check_quality_contract.py",
 }
+PUBLIC_BUILDER_MODULE = ROOT / "src" / "leaven" / "builders"
 
 
 def main() -> None:
@@ -119,6 +120,7 @@ def main() -> None:
     failures.extend(check_future_annotations())
     failures.extend(check_no_any())
     failures.extend(check_defensive_type_erasure())
+    failures.extend(check_no_public_builder_notimplemented())
     failures.extend(check_mirrored_tests())
     if failures:
         joined = "\n".join(f"- {failure}" for failure in failures)
@@ -176,6 +178,21 @@ def check_defensive_type_erasure(files: list[Path] | None = None) -> list[str]:
             continue
         text = path.read_text(encoding="utf-8")
         failures.extend(defensive_type_erasure_failures_for_source(path, text))
+    return failures
+
+
+def check_no_public_builder_notimplemented(
+    builder_root: Path = PUBLIC_BUILDER_MODULE,
+) -> list[str]:
+    failures: list[str] = []
+    for path in sorted(builder_root.glob("*.py")):
+        if path.name.startswith("_"):
+            continue
+        text = path.read_text(encoding="utf-8")
+        if "NotImplementedError" in text:
+            failures.append(
+                f"{relative(path)} contains NotImplementedError in a public builder module"
+            )
     return failures
 
 
@@ -418,7 +435,10 @@ def check_mirrored_tests() -> list[str]:
 
 
 def relative(path: Path) -> str:
-    return str(path.relative_to(ROOT))
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
 
 
 if __name__ == "__main__":

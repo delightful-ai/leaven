@@ -8,6 +8,7 @@ import msgspec
 from msgspec import UNSET, Raw, UnsetType
 from pydantic import BaseModel, ConfigDict
 
+from .._errors import UnboundBuilderError
 from .._receipts import WriteReceipt
 from .._seam import AssessmentSubmitRequest
 from .._seam._wire.evidence import (
@@ -98,7 +99,7 @@ class AssessmentsBuilder:
         per-assessment denial details.
         """
         if self._client is None:
-            raise NotImplementedError(
+            raise UnboundBuilderError(
                 "AssessmentsBuilder.submit needs an engine-bound public-seam client; "
                 "use the cx.assessments instance supplied to an evaluator stage"
             )

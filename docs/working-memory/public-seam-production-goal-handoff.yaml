@@ -4568,6 +4568,40 @@ acceptance:
           owned by `cx.agent.run` plus typed proposal submission. Grep proof
           found only the explanatory example comment and the negative surface
           test assertions.
+      - kind: public_builder_scaffold_errors_replaced_with_typed_guard
+        paths:
+          - sdk/python/src/leaven/_errors.py
+          - sdk/python/src/leaven/builders/AGENTS.md
+          - sdk/python/src/leaven/builders/agent.py
+          - sdk/python/src/leaven/builders/lm.py
+          - sdk/python/src/leaven/builders/sandbox.py
+          - sdk/python/src/leaven/builders/case.py
+          - sdk/python/src/leaven/builders/workspace.py
+          - sdk/python/src/leaven/builders/proposals.py
+          - sdk/python/src/leaven/builders/assessments.py
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/tests/scripts/test_check_quality_contract.py
+          - sdk/python/tests/test_proposal_submission.py
+          - sdk/python/tests/builders/test_assessments.py
+        commands:
+          - cd sdk/python && uv run pytest tests/builders/test_agent.py tests/builders/test_lm.py tests/builders/test_sandbox.py tests/builders/test_case.py tests/builders/test_workspace.py tests/test_proposal_submission.py tests/builders/test_assessments.py tests/scripts/test_check_quality_contract.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_errors.py src/leaven/builders scripts/check_quality_contract.py tests/scripts/test_check_quality_contract.py tests/test_proposal_submission.py tests/builders/test_assessments.py
+          - cd sdk/python && uv run ty check src/leaven/_errors.py src/leaven/builders scripts/check_quality_contract.py tests/scripts/test_check_quality_contract.py tests/test_proposal_submission.py tests/builders/test_assessments.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - rg -n "NotImplementedError|UnboundBuilderError" sdk/python/src/leaven/builders sdk/python/tests/test_proposal_submission.py sdk/python/tests/builders/test_assessments.py sdk/python/scripts/check_quality_contract.py
+        note: >-
+          Public builder modules no longer raise `NotImplementedError` for
+          unbound context use. They now raise the typed private
+          `UnboundBuilderError`, making the failure an explicit unsupported
+          configuration guard rather than a public implementation scaffold.
+          `LmBuilder` also rejects unsupported message content with `TypeError`
+          instead of scaffold language. The local builders `AGENTS.md` now
+          forbids `NotImplementedError` in public builder modules, and the
+          Python quality contract has a regression-tested ratchet for that
+          invariant. This does not claim optional DSPy or private optimize
+          runtime branches are complete; it removes scaffold-shaped failures
+          from the public builder backbone.
       - kind: public_agent_forbidden_input_classes_scaffold_removed
         paths:
           - sdk/python/src/leaven/_seam/plans.py

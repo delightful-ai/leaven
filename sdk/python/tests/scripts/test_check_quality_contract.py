@@ -21,6 +21,7 @@ QUALITY_CONTRACT = _load_quality_contract()
 defensive_type_erasure_failures_for_source = (
     QUALITY_CONTRACT.defensive_type_erasure_failures_for_source
 )
+check_no_public_builder_notimplemented = QUALITY_CONTRACT.check_no_public_builder_notimplemented
 
 
 def test_defensive_type_erasure_lint_rejects_failure_hiding_patterns() -> None:
@@ -98,6 +99,32 @@ def justified(decoded) -> object:
     assert failures == [
         "tests/scripts/lint_probe.py:3: LEAVEN005 uses .get(...) on an unparsed domain value",
         "tests/scripts/lint_probe.py:6: LEAVEN005 uses .get(...) on an unparsed domain value",
+    ]
+
+
+def test_public_builder_notimplemented_lint_rejects_scaffold_bodies(
+    tmp_path: Path,
+) -> None:
+    """Regression: public builder modules must not carry scaffold errors."""
+
+    builder_root = tmp_path / "builders"
+    builder_root.mkdir()
+    (builder_root / "agent.py").write_text(
+        """
+class AgentBuilder:
+    async def run(self) -> None:
+        raise NotImplementedError("scaffold")
+""",
+        encoding="utf-8",
+    )
+    (builder_root / "_private.py").write_text(
+        "raise NotImplementedError('private sentinel')\n",
+        encoding="utf-8",
+    )
+    failures = check_no_public_builder_notimplemented(builder_root)
+
+    assert failures == [
+        f"{builder_root / 'agent.py'} contains NotImplementedError in a public builder module"
     ]
 
 

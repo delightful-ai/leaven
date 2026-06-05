@@ -4,6 +4,7 @@ import msgspec
 import pytest
 
 import leaven as lv
+from leaven._errors import UnboundBuilderError
 from leaven._receipts import CallReceipt, QueryReceipt
 from leaven._seam import AssessmentSubmitRequest
 from leaven._seam._wire.payloads import PlanDocument
@@ -138,7 +139,7 @@ async def test_assessments_builder_preserves_listwise_ranking_owner() -> None:
 
 @pytest.mark.asyncio
 async def test_assessments_builder_requires_bound_seam_client() -> None:
-    """Regression: unbound public builders remain explicit about missing engine context."""
+    """Regression: unbound builders fail as configuration errors, not scaffolds."""
 
     assessment = AssessmentWrite.independent_case(
         candidate="cand_seed",
@@ -150,7 +151,7 @@ async def test_assessments_builder_requires_bound_seam_client() -> None:
         ),
     )
 
-    with pytest.raises(NotImplementedError, match="engine-bound public-seam client"):
+    with pytest.raises(UnboundBuilderError, match="engine-bound public-seam client"):
         await AssessmentsBuilder().submit("evalreq_1", [assessment])
 
 

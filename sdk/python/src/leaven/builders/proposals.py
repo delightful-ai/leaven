@@ -5,6 +5,7 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict
 
+from .._errors import UnboundBuilderError
 from .._receipts import WriteReceipt
 from .._seam import ProposalApplyRequest, ProposalSubmitRequest
 from .._seam._wire import JsonObject
@@ -72,7 +73,7 @@ class ProposalsBuilder:
     async def submit(self, batch: ProposalBatch) -> ProposalSubmission:
         """Submit a proposal batch. Engine validates against capability + surface."""
         if self._client is None:
-            raise NotImplementedError(
+            raise UnboundBuilderError(
                 "ProposalsBuilder.submit needs an engine-bound public-seam client; "
                 "use the cx.proposals instance supplied to a proposer stage"
             )
@@ -88,7 +89,7 @@ class ProposalsBuilder:
     async def apply(self, submission: ProposalSubmission) -> WriteReceipt:
         """Ask the engine to apply a previously-submitted proposal batch."""
         if self._apply_client is None:
-            raise NotImplementedError(
+            raise UnboundBuilderError(
                 "ProposalsBuilder.apply needs an engine-bound public-seam client; "
                 "use the cx.proposals instance supplied to a proposer stage"
             )

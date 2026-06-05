@@ -22,7 +22,9 @@ private seam requester when they are supplied by a running stage context.
 
 ## Invariants
 
-- Unbound builders stay scaffolded with explicit `NotImplementedError`.
+- Unbound builders fail with the typed private `UnboundBuilderError`; they are
+  unsupported configuration guards, not public implementation scaffolds. Do not
+  add `NotImplementedError` to public builder modules.
 - Bound builders may perform real seam calls only by lowering to locked
   `leaven/*` JSON-RPC methods.
 - Proposal submission and proposal application are separate capabilities; do

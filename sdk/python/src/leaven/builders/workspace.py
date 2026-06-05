@@ -13,6 +13,7 @@ from typing import Literal, Protocol, Self
 from msgspec import UNSET, UnsetType
 from pydantic import BaseModel, ConfigDict, Field
 
+from .._errors import UnboundBuilderError
 from .._handles import WorkspaceHandle, WorkspaceLifetime, WorkspaceSurface
 from .._receipts import CallReceipt, QueryReceipt
 from .._seam import WorkspaceMaterializeRequest, WorkspaceQueryRequest, WorkspaceReleaseRequest
@@ -335,7 +336,7 @@ class WorkspaceReads:
 
     def _require_client(self) -> "_WorkspaceSeamRequester":
         if self._client is None:
-            raise NotImplementedError(
+            raise UnboundBuilderError(
                 "WorkspaceReads requires an engine-bound public-seam client"
             )
         return self._client

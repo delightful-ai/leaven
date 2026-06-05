@@ -6,6 +6,7 @@ from typing import Literal, Protocol
 
 from msgspec import UNSET
 
+from .._errors import UnboundBuilderError
 from .._seam import CaseLoadRequest
 from .._seam._wire.refs import CaseRef
 from .._seam._wire.results import CaseLoadResult
@@ -66,7 +67,7 @@ class CaseBuilder:
         capability authorizes it.
         """
         if self._client is None:
-            raise NotImplementedError(
+            raise UnboundBuilderError(
                 "CaseBuilder.load needs an engine-bound public-seam client; "
                 "use the cx.case instance supplied to a running evaluator or judge"
             )

@@ -3,6 +3,7 @@ import json
 import msgspec
 import pytest
 
+from leaven._errors import UnboundBuilderError
 from leaven._receipts import CallReceipt, QueryReceipt, WriteReceipt
 from leaven._seam import ProposalApplyRequest, ProposalSubmitRequest
 from leaven._seam._wire.results import (
@@ -75,9 +76,9 @@ async def test_proposals_builder_submits_agent_session_batch_through_seam() -> N
 
 @pytest.mark.asyncio
 async def test_proposals_builder_requires_bound_seam_client() -> None:
-    """Regression: unbound public builders remain explicit scaffold."""
+    """Regression: unbound builders fail as configuration errors, not scaffolds."""
 
-    with pytest.raises(NotImplementedError, match="engine-bound public-seam client"):
+    with pytest.raises(UnboundBuilderError, match="engine-bound public-seam client"):
         await ProposalsBuilder().submit(
             ProposalBatch(
                 effects=[

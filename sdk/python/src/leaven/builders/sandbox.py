@@ -8,6 +8,7 @@ from typing import Literal, Protocol
 from msgspec import UNSET, UnsetType
 from pydantic import BaseModel, ConfigDict
 
+from .._errors import UnboundBuilderError
 from .._handles import WorkspaceHandle
 from .._receipts import CallReceipt
 from .._seam import SandboxExecRequest
@@ -99,7 +100,7 @@ class SandboxBuilder:
         outside the contract.
         """
         if self._client is None:
-            raise NotImplementedError(
+            raise UnboundBuilderError(
                 "SandboxBuilder.exec needs an engine-bound public-seam client; "
                 "use the cx.sandbox instance supplied to a running stage"
             )

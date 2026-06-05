@@ -8,6 +8,7 @@ import msgspec
 from msgspec import UNSET, UnsetType
 from pydantic import BaseModel, ConfigDict
 
+from .._errors import UnboundBuilderError
 from .._receipts import CallReceipt
 from .._seam import LmCompleteRequest
 from .._seam._wire import JsonObject
@@ -153,7 +154,7 @@ class LmBuilder:
         the seam enforces.
         """
         if self._client is None:
-            raise NotImplementedError(
+            raise UnboundBuilderError(
                 "LmBuilder.complete needs an engine-bound public-seam client; "
                 "use the cx.lm instance supplied to a running stage"
             )
@@ -204,7 +205,7 @@ def _message_to_wire(message: LmMessage | JsonObject) -> JsonObject:
     if isinstance(content, str):
         content = [{"kind": "text", "text": content}]
     elif not isinstance(content, list):
-        raise NotImplementedError("LmBuilder.complete only lowers text message content yet")
+        raise TypeError("LmBuilder.complete requires text message content")
     wire = {
         "role": value["role"],
         "content": content,

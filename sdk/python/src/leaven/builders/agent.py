@@ -9,6 +9,7 @@ import msgspec
 from msgspec import UNSET, UnsetType
 from pydantic import BaseModel, ConfigDict
 
+from .._errors import UnboundBuilderError
 from .._handles import WorkspaceHandle
 from .._receipts import CallReceipt
 from .._seam import AgentRunRequest
@@ -152,7 +153,7 @@ class AgentBuilder:
         return; without it the session text is the result.
         """
         if self._client is None:
-            raise NotImplementedError(
+            raise UnboundBuilderError(
                 "AgentBuilder.run needs an engine-bound public-seam client; "
                 "use the cx.agent instance supplied to a running stage"
             )
