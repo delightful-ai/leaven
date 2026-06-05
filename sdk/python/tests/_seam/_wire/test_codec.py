@@ -81,7 +81,7 @@ def test_encode_request_omits_notification_id() -> None:
 
 
 def test_encode_request_rejects_unknown_method() -> None:
-    method = cast("LockedMethod", "leaven/human.review")
+    method = cast("LockedMethod", "leaven/not_a_locked_method")
     with pytest.raises(ValueError, match="unknown locked Leaven public-seam method"):
         encode_request(method=method, request_id="req_1", params=plan_params())
 

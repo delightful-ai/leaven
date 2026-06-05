@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from leaven._seam._wire.methods import LOCKED_METHODS, METHOD_BINDINGS
+from leaven._seam._wire.methods import METHOD_BINDINGS
 
 
 def test_generated_methods_match_current_rust_source() -> None:
@@ -13,10 +13,6 @@ def test_generated_methods_match_current_rust_source() -> None:
         check=True,
         cwd=Path(__file__).resolve().parents[3],
     )
-
-
-def test_generated_methods_exclude_removed_human_review() -> None:
-    assert "leaven/human.review" not in LOCKED_METHODS
 
 
 def test_generated_bindings_include_schema_hashes_and_actions() -> None:

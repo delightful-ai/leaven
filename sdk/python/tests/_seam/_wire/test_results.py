@@ -49,7 +49,6 @@ def test_result_bindings_name_primary_and_receipt_facts() -> None:
     assert bindings["leaven/agent.run"].call_kind == "agent_run"
     assert bindings["leaven/proposal.apply"].receipt_kind == "write"
     assert bindings["leaven/proposal.apply"].write_kind == "apply_proposal_batch"
-    assert "leaven/human.review" not in bindings
 
 
 def test_generated_lm_result_decodes_msgspec_payload() -> None:

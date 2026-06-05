@@ -94,7 +94,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
     {
         let mut stdin = child.stdin.take().expect("child stdin is piped");
         write_json_line(&mut stdin, &invalid_envelope());
-        write_json_line(&mut stdin, &removed_human_review_request());
+        write_json_line(&mut stdin, &unknown_locked_method_request());
         write_json_line(&mut stdin, &workspace_release_request());
         write_json_line(&mut stdin, &workspace_query_after_release_request());
         for request in &workspace_queries {
@@ -156,7 +156,7 @@ fn seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers() 
             .contains("must carry method")
     );
 
-    assert_eq!(responses[1]["id"], json!("removed-human-review"));
+    assert_eq!(responses[1]["id"], json!("unknown-locked-method"));
     assert_eq!(responses[1]["error"]["code"], json!(-32601));
     assert!(
         responses[1]["error"]["message"]
@@ -672,14 +672,14 @@ fn invalid_envelope() -> Value {
     })
 }
 
-fn removed_human_review_request() -> Value {
+fn unknown_locked_method_request() -> Value {
     json!({
         "jsonrpc": "2.0",
-        "id": "removed-human-review",
-        "method": "leaven/human.review",
+        "id": "unknown-locked-method",
+        "method": "leaven/not_a_locked_method",
         "params": {
             "schema_version": "leaven.plan.v1",
-            "plan_id": "removedhumanreview001",
+            "plan_id": "unknownlockedmethod001",
             "consistency": {
                 "kind": "latest_at_start"
             },

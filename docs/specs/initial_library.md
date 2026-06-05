@@ -1721,7 +1721,6 @@ Advanced users install multiple evaluators:
 optimize(seed)
     .evaluator(EvaluatorId::PRIMARY, task_evaluator)
     .evaluator(EvaluatorId::PAIRWISE_JUDGE, pairwise_judge)
-    .evaluator(EvaluatorId::HUMAN_REVIEW, human_review)
 ```
 
 ### 7.2 Engine run loop
