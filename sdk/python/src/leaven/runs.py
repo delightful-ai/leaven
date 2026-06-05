@@ -1,9 +1,4 @@
-"""`lv.runs.open(path)` — inspect a completed run from outside.
-
-Same `Optimized[A]` type as `lv.optimize(...).run()` returns; the engine is
-spawned read-only against the run directory. Useful for retrospective
-analysis, ablation reports, sharing run state with teammates.
-"""
+"""`lv.runs.open(path)` — inspect a completed Rust-checkpointed run."""
 
 from pathlib import Path
 
@@ -12,7 +7,6 @@ from ._runs import (
     load_rust_blob_readback,
     load_rust_evidence_readback,
     load_rust_run_readback,
-    open_optimized,
     open_rust_optimized,
     optimized_from_rust_readback,
     rust_assessment_rows,
@@ -30,9 +24,9 @@ def open(path: str | Path) -> Optimized[object]:
     future API revision may make this generic over a passed artifact decoder.
     """
     rust_result = open_rust_optimized(path)
-    if rust_result is not None:
-        return rust_result
-    return open_optimized(path)
+    if rust_result is None:
+        raise FileNotFoundError(f"no Rust checkpoint readback found at {Path(path)}")
+    return rust_result
 
 
 def list_local(root: str | Path = ".leaven/runs") -> list[str]:
@@ -43,54 +37,29 @@ def list_local(root: str | Path = ".leaven/runs") -> list[str]:
 def inspect(path: str | Path) -> RunInspection:
     """Open a completed run and return a flattened inspection summary."""
     rust_readback = load_rust_run_readback(path)
-    rust_graph_blob = (
-        load_rust_blob_readback(path, rust_readback.graph.blob)
-        if rust_readback is not None
-        else None
-    )
-    rust_artifact_blobs = (
-        [load_rust_blob_readback(path, blob) for blob in rust_readback.checkpoint.artifact_refs]
-        if rust_readback is not None
-        else []
-    )
-    rust_stage_journal_blobs = (
-        [
-            load_rust_blob_readback(path, blob)
-            for blob in rust_readback.checkpoint.stage_journal_refs
-        ]
-        if rust_readback is not None
-        else []
-    )
-    rust_workspace_journal_blobs = (
-        [
-            load_rust_blob_readback(path, blob)
-            for blob in rust_readback.checkpoint.workspace_journal_refs
-        ]
-        if rust_readback is not None
-        else []
-    )
-    rust_evidence = (
-        [
-            load_rust_evidence_readback(path, assessment.evidence)
-            for assessment in rust_readback.graph.assessments
-        ]
-        if rust_readback is not None
-        else []
-    )
-    evidence_summaries = (
-        rust_evidence_summaries(rust_readback, rust_evidence) if rust_readback is not None else None
-    )
-    assessment_rows = (
-        rust_assessment_rows(rust_readback, rust_evidence) if rust_readback is not None else None
-    )
-    result = (
-        optimized_from_rust_readback(
-            rust_readback,
-            run_dir=str(_run_dir(path)),
-            assessment_rows=assessment_rows,
-        )
-        if rust_readback is not None
-        else open_optimized(path)
+    if rust_readback is None:
+        raise FileNotFoundError(f"no Rust checkpoint readback found at {Path(path)}")
+    rust_graph_blob = load_rust_blob_readback(path, rust_readback.graph.blob)
+    rust_artifact_blobs = [
+        load_rust_blob_readback(path, blob) for blob in rust_readback.checkpoint.artifact_refs
+    ]
+    rust_stage_journal_blobs = [
+        load_rust_blob_readback(path, blob) for blob in rust_readback.checkpoint.stage_journal_refs
+    ]
+    rust_workspace_journal_blobs = [
+        load_rust_blob_readback(path, blob)
+        for blob in rust_readback.checkpoint.workspace_journal_refs
+    ]
+    rust_evidence = [
+        load_rust_evidence_readback(path, assessment.evidence)
+        for assessment in rust_readback.graph.assessments
+    ]
+    evidence_summaries = rust_evidence_summaries(rust_readback, rust_evidence)
+    assessment_rows = rust_assessment_rows(rust_readback, rust_evidence)
+    result = optimized_from_rust_readback(
+        rust_readback,
+        run_dir=str(_run_dir(path)),
+        assessment_rows=assessment_rows,
     )
     return inspect_optimized(
         result,

@@ -33,6 +33,10 @@ MIRRORED_TESTS = {
     / "tests"
     / "_runs"
     / "test_rust_export.py",
+    ROOT / "src" / "leaven" / "_runs" / "store.py": ROOT
+    / "tests"
+    / "_runs"
+    / "test_store.py",
     ROOT / "src" / "leaven" / "_seam" / "plans.py": ROOT / "tests" / "_seam" / "test_plans.py",
     ROOT / "src" / "leaven" / "_seam" / "lm_plans.py": ROOT
     / "tests"

@@ -1137,15 +1137,13 @@ acceptance:
           Rust SDK checkpoint materialization now carries case split metadata
           into assessment readback, so `Optimized.test_assessments()` is powered
           by Rust-owned checkpoint inspection instead of SDK-only projection.
-          The Python checkpoint record also persists typed proposal/effect
-          receipt sidecar fields that Rust ignores for graph materialization but
-          Python rehydrates into `lv.runs.open(...)` and `lv.runs.inspect(...)`.
-          Focused tests prove reopened proposal batch receipts, agent transcript
-          blob refs, Rust evidence payload readback, unsupported cost/usage
-          status preservation, and full Python pytest coverage. This is still
-          not full row closeout because broader artifact/transcript blob
-          retrieval and generalized Rust-owned receipt storage remain under
-          acceptance review.
+          The earlier Python receipt sidecar overlay has since been hard-cut;
+          retained proof from this entry is the split metadata and Rust
+          checkpoint route. Later evidence proves Rust graph proposal receipts
+          and removal of Python-only fallback readback. This is still not full
+          row closeout because broader artifact/transcript blob retrieval and
+          generalized Rust-owned receipt storage remain under acceptance
+          review.
       - kind: checkpoint_artifact_and_journal_blob_byte_readback
         paths:
           - sdk/python/src/leaven/run_inspection.py
@@ -1518,6 +1516,26 @@ acceptance:
           reopened/inspected durable state does not resurrect unowned
           proposer-stage sidecar receipts. Assessment call receipts still come
           from Rust-owned evidence bytes.
+      - kind: python_optimized_json_fallback_removed
+        paths:
+          - sdk/python/src/leaven/runs.py
+          - sdk/python/src/leaven/_runs/__init__.py
+          - sdk/python/src/leaven/_runs/store.py
+          - sdk/python/src/leaven/_runs/AGENTS.md
+          - sdk/python/AGENTS.md
+          - sdk/python/tests/_runs/test_store.py
+        commands:
+          - cd sdk/python && uv run pytest tests/_runs/test_store.py tests/_runs/test_rust_export.py tests/test_run_inspection.py tests/test_reward_vector_inspection.py tests/test_run_receipt_inspection.py tests/test_optimize_public_seam_e2e.py tests/test_optimize_proposer_mechanics.py -q
+          - cd sdk/python && uv run ruff check src/leaven/runs.py src/leaven/_runs tests/_runs tests/test_run_inspection.py tests/test_reward_vector_inspection.py tests/test_run_receipt_inspection.py tests/test_optimize_public_seam_e2e.py tests/test_optimize_proposer_mechanics.py scripts/check_quality_contract.py
+          - cd sdk/python && uv run ty check src/leaven/runs.py src/leaven/_runs tests/_runs tests/test_run_inspection.py tests/test_reward_vector_inspection.py tests/test_run_receipt_inspection.py tests/test_optimize_public_seam_e2e.py tests/test_optimize_proposer_mechanics.py scripts/check_quality_contract.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+        note: >-
+          `lv.runs.open(...)` and `lv.runs.inspect(...)` now fail when a run
+          lacks Rust checkpoint readback instead of falling back to a
+          Python-only `optimized.json` projection. The private run store only
+          lists directories with `checkpoints/LATEST`, `_runs.codec` and its
+          projection test were deleted, and the remaining store module has a
+          mirrored same-path test proving `optimized.json` alone is ignored.
     closeout_check: "Reading only `optimized.json` written by Python is a proxy."
 
   - id: python_wire_codegen_msgspec_boundary
@@ -3079,10 +3097,10 @@ acceptance:
         paths:
           - sdk/python/codegen/result_codegen.py
           - sdk/python/src/leaven/_seam/_wire/results.py
-          - sdk/python/src/leaven/_runs/codec.py
+          - sdk/python/src/leaven/_runs/rust_open.py
           - sdk/python/src/leaven/_runs/store.py
           - sdk/python/src/leaven/runs.py
-          - sdk/python/tests/_runs/test_codec.py
+          - sdk/python/tests/_runs/test_store.py
           - sdk/python/tests/_seam/_wire/test_results.py
           - sdk/python/tests/_seam_worker/test_callbacks.py
           - sdk/python/tests/test_stage_surface.py
@@ -3101,14 +3119,11 @@ acceptance:
           stdout/stderr/file blob refs, and proposal batch replayability facts.
           This keeps strict `forbid_unknown_fields` viable after callback
           responses moved to generated msgspec decoding. The Python
-          `optimized.json` projection codec no longer uses `typing.Any` or
-          `dict[str, Any]`; it validates the persisted JSON envelope as a
-          `JsonObject`, reconstructs prompt artifacts explicitly, and returns
-          `Optimized[object]` from `lv.runs.open(...)` to make the unknown
-          artifact type honest. This is not Rust-owned checkpoint readback
-          closeout: `lv.runs.open(...)` still reads the Python-written
-          projection until the durable Rust run/checkpoint export path owns
-          the reopen surface.
+          run-open surface now returns `Optimized[object]` from Rust checkpoint
+          readback to make the unknown artifact type honest. The older
+          `optimized.json` projection codec evidence has since been superseded:
+          Python-only projection fallback is removed, and later evidence proves
+          `lv.runs.open(...)` requires Rust-owned checkpoint readback.
       - kind: python_optimize_mechanics_cases_are_typed_records
         paths:
           - sdk/python/src/leaven/_seam_optimize/__init__.py
@@ -3458,34 +3473,28 @@ acceptance:
           exactly 650 lines. The broader project-quality row remains pending
           until all public SDK/wire `Any` and public backbone scaffolds are
           audited and removed or explicitly kept private.
-      - kind: private_run_codec_msgspec_boundary_and_line_cap
+      - kind: rust_checkpoint_run_store_hard_cut_and_mirrored_test
         paths:
-          - sdk/python/src/leaven/_runs/codec.py
+          - sdk/python/src/leaven/runs.py
+          - sdk/python/src/leaven/_runs/__init__.py
           - sdk/python/src/leaven/_runs/store.py
-          - sdk/python/codegen/expression_codegen.py
-          - sdk/python/src/leaven/_seam/_wire/expressions.py
-          - sdk/python/tests/_runs/test_codec.py
-          - sdk/python/tests/_runs/test_rust_export.py
-          - sdk/python/tests/test_run_inspection.py
+          - sdk/python/src/leaven/_runs/AGENTS.md
+          - sdk/python/AGENTS.md
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/tests/_runs/test_store.py
         commands:
-          - cd sdk/python && uv run pytest tests/_runs/test_codec.py tests/_runs/test_rust_export.py tests/test_run_inspection.py -q
-          - cd sdk/python && uv run ruff check src/leaven/_runs/codec.py src/leaven/_runs/store.py codegen/expression_codegen.py src/leaven/_seam/_wire/expressions.py tests/_runs/test_codec.py tests/_runs/test_rust_export.py tests/test_run_inspection.py
-          - cd sdk/python && uv run ty check src/leaven/_runs/codec.py src/leaven/_runs/store.py codegen/expression_codegen.py src/leaven/_seam/_wire/expressions.py tests/_runs/test_codec.py tests/_runs/test_rust_export.py tests/test_run_inspection.py
+          - cd sdk/python && uv run pytest tests/_runs/test_store.py tests/_runs/test_rust_export.py tests/test_run_inspection.py tests/test_reward_vector_inspection.py tests/test_run_receipt_inspection.py tests/test_optimize_public_seam_e2e.py tests/test_optimize_proposer_mechanics.py -q
+          - cd sdk/python && uv run ruff check src/leaven/runs.py src/leaven/_runs tests/_runs tests/test_run_inspection.py tests/test_reward_vector_inspection.py tests/test_run_receipt_inspection.py tests/test_optimize_public_seam_e2e.py tests/test_optimize_proposer_mechanics.py scripts/check_quality_contract.py
+          - cd sdk/python && uv run ty check src/leaven/runs.py src/leaven/_runs tests/_runs tests/test_run_inspection.py tests/test_reward_vector_inspection.py tests/test_run_receipt_inspection.py tests/test_optimize_public_seam_e2e.py tests/test_optimize_proposer_mechanics.py scripts/check_quality_contract.py
           - cd sdk/python && uv run python scripts/check_quality_contract.py
-          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
-          - cd sdk/python && just check
         note: >-
-          Private run-result persistence no longer opens `optimized.json` by
-          loading an untyped object tree and walking mapping fields by hand.
-          `_runs.codec` now parses a msgspec `Struct` envelope, keeps the
-          delayed `optimized` payload as `Raw`, decodes the selected payload
-          after the artifact kind is known, and `store.py` reads/writes through
-          the byte codec. The generated expression template also lost the extra
-          blank line that pushed generated `expressions.py` over the 650-line
-          Python cap, and the generated stale check plus custom quality
-          contract both pass. This is a project-quality and private run-codec
-          cleanup; it does not close the broader Rust-owned public-seam
-          codegen row.
+          The Python SDK no longer carries private `optimized.json` persistence
+          code, no longer exports `persist_optimized` or `open_optimized`, and
+          `lv.runs.open(...)` / `lv.runs.inspect(...)` require Rust checkpoint
+          readback. `_runs/store.py` is now a checkpoint-run directory lister
+          with a mirrored `tests/_runs/test_store.py`; the quality contract
+          enforces that mapping along with line count, no `from __future__`,
+          no production `Any`, and the custom defensive-erasure lints.
       - kind: sdk_quality_gate_lint_type_tests_package
         paths:
           - sdk/python/pyproject.toml
@@ -4047,15 +4056,15 @@ acceptance:
           - sdk/python/tests/scripts/test_check_quality_contract.py
           - sdk/python/codegen/preprocess_schemas.py
           - sdk/python/codegen/result_codegen.py
-          - sdk/python/src/leaven/_runs/codec.py
+          - sdk/python/src/leaven/_runs/store.py
           - sdk/python/src/leaven/_seam_worker/loader.py
           - sdk/python/src/leaven/builders/proposals.py
           - sdk/python/src/leaven/result.py
           - sdk/python/examples/live_openai_lm/src/live_openai_lm/output.py
         commands:
           - cd sdk/python && uv run pytest tests/scripts/test_check_quality_contract.py tests/test_product_surface_ring.py -q
-          - cd sdk/python && uv run ruff check scripts/check_quality_contract.py tests/scripts/test_check_quality_contract.py codegen/result_codegen.py src/leaven/_runs/codec.py src/leaven/_seam_worker/loader.py src/leaven/builders/proposals.py src/leaven/result.py src/leaven/decorators.py src/leaven/__init__.py examples/07_serve_stage_worker.py examples/live_openai_lm/src/live_openai_lm/output.py tests/test_product_surface_ring.py
-          - cd sdk/python && uv run ty check scripts/check_quality_contract.py tests/scripts/test_check_quality_contract.py codegen/result_codegen.py src/leaven/_runs/codec.py src/leaven/_seam_worker/loader.py src/leaven/builders/proposals.py src/leaven/result.py src/leaven/decorators.py src/leaven/__init__.py examples/07_serve_stage_worker.py examples/live_openai_lm/src/live_openai_lm/output.py tests/test_product_surface_ring.py
+          - cd sdk/python && uv run ruff check scripts/check_quality_contract.py tests/scripts/test_check_quality_contract.py codegen/result_codegen.py src/leaven/_runs/store.py src/leaven/_seam_worker/loader.py src/leaven/builders/proposals.py src/leaven/result.py src/leaven/decorators.py src/leaven/__init__.py examples/07_serve_stage_worker.py examples/live_openai_lm/src/live_openai_lm/output.py tests/test_product_surface_ring.py
+          - cd sdk/python && uv run ty check scripts/check_quality_contract.py tests/scripts/test_check_quality_contract.py codegen/result_codegen.py src/leaven/_runs/store.py src/leaven/_seam_worker/loader.py src/leaven/builders/proposals.py src/leaven/result.py src/leaven/decorators.py src/leaven/__init__.py examples/07_serve_stage_worker.py examples/live_openai_lm/src/live_openai_lm/output.py tests/test_product_surface_ring.py
           - cd sdk/python && uv run python scripts/check_quality_contract.py
         note: >-
           The Python quality contract now rejects any `.get(...)` call whose

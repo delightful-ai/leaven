@@ -32,10 +32,10 @@ server for runner `leaven/stage.run` mechanics, executes the user's Python
 vectors, optionally dispatches a configured `Propose.fn(...)` proposer that can
 run `cx.agent.run` against `cx.parent_workspace` and submit a proposal batch
 over `leaven/proposal.submit_batch`, returns a typed
-`Optimized[PromptArtifact]`, and writes an `optimized.json` projection under
-`.leaven/runs/<run_id>/`. It still does not apply submitted proposals, run real
-GEPA proposal search, persist Rust graph checkpoints, provide durable blob
-readback, or close live LM-provider acceptance by itself.
+`Optimized[PromptArtifact]`, writes Rust-owned checkpoints under
+`.leaven/runs/<run_id>/`, and reopens runs only through Rust checkpoint
+readback. It still does not apply submitted proposals, run real GEPA proposal
+search, or close live LM-provider acceptance by itself.
 
 #### 2. Example 10, live Codex agent.run over the public seam
 
