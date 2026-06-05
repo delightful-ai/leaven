@@ -3,7 +3,7 @@
 import asyncio
 import os
 
-from msgspec import UNSET
+from msgspec import UNSET, convert
 
 from .._seam import (
     CodexCliRuntimeConfig,
@@ -19,12 +19,12 @@ from .._seam import (
     proposer_stage_capability,
     resolve_codex_binary,
 )
-from .._seam._wire.refs import WireJsonField, WireJsonLeafArray, WireJsonLeafObject
+from .._seam._wire.refs import WireJsonCaseInput
 from .._seam_worker import worker_argv_for_stage
 from ..agent.codex import CodexAgent
 from ..artifacts.prompt import PromptArtifact
 from ..decorators import RegisteredStage
-from ..json_value import JsonObject, JsonValue
+from ..json_value import JsonObject
 from ..lm.config import LmConfig
 from ..lm.mock import MockLm
 from ..lm.openai import OpenAiLm
@@ -250,27 +250,13 @@ def _materialized_workspace_id(candidate_id: str) -> str:
     return f"ws_{sanitized}_materialized"
 
 
-def _case_input(seed: PromptArtifact, case: PlannedOptimizeCase) -> WireJsonField:
+def _case_input(seed: PromptArtifact, case: PlannedOptimizeCase) -> WireJsonCaseInput:
     value: JsonObject = dict(case.input)
     try:
         value["prompt"] = seed.template.format(**value)
     except KeyError:
         value["prompt"] = seed.template
-    return _wire_leaf_object(value)
-
-
-def _wire_leaf_object(value: JsonObject) -> WireJsonLeafObject:
-    return {key: _wire_leaf_field(item) for key, item in value.items()}
-
-
-def _wire_leaf_field(value: JsonValue) -> str | int | float | bool | None | WireJsonLeafArray:
-    if value is None or isinstance(value, str | int | float | bool):
-        return value
-    if isinstance(value, list):
-        if not all(item is None or isinstance(item, str | int | float | bool) for item in value):
-            raise ValueError("runner case_input arrays must contain only JSON scalar values")
-        return value
-    raise ValueError("runner case_input fields must be JSON scalars or scalar arrays")
+    return convert(value, type=WireJsonCaseInput)
 
 
 def _runner_text(runtime: Runtime) -> str:

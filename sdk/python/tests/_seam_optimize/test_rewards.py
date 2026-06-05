@@ -1,7 +1,5 @@
 """Tests for `leaven._seam_optimize.rewards`."""
 
-import pytest
-
 import leaven as lv
 from leaven._seam_optimize.driver import _case_input
 from leaven._seam_optimize.rewards import evaluate_reward_vector
@@ -45,8 +43,8 @@ async def test_reward_vector_executes_all_registered_rewards() -> None:
     ]
 
 
-def test_optimize_case_input_rejects_nested_stage_run_values() -> None:
-    """Regression: planned cases do not erase nested JSON into runner case_input."""
+def test_optimize_case_input_preserves_nested_stage_run_values() -> None:
+    """Regression: planned cases keep nested JSON inside runner case_input."""
 
     case = PlannedOptimizeCase(
         case_id="case_nested_input",
@@ -56,8 +54,11 @@ def test_optimize_case_input_rejects_nested_stage_run_values() -> None:
         split=None,
     )
 
-    with pytest.raises(ValueError, match="runner case_input fields"):
-        _case_input(PromptArtifact(template="{question}"), case)
+    assert _case_input(PromptArtifact(template="{question}"), case) == {
+        "question": "2 + 2",
+        "nested": {"answer": "4"},
+        "prompt": "2 + 2",
+    }
 
 
 __all__ = []

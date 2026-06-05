@@ -7,9 +7,15 @@ from leaven._seam._wire import JsonObject
 from leaven._seam._wire.calls import AgentRunCall, LmCompleteCall, WorkspaceMaterializeCall
 from leaven._seam._wire.expressions import CaseQueryLoad, PlanExpressionCaseQuery
 from leaven._seam._wire.json_value import json_object
-from leaven._seam._wire.payloads import PlanDocument
+from leaven._seam._wire.payloads import (
+    PlanDocument,
+    RunnerRequest,
+)
+from leaven._seam._wire.payloads import (
+    StageRunRequest as StageRunParams,
+)
 from leaven._seam.lm_plans import LmCompleteRequest
-from leaven._seam.plans import AgentRunRequest
+from leaven._seam.plans import AgentRunRequest, StageRunRequest
 
 
 def test_case_load_request_names_locked_single_field_routes() -> None:
@@ -104,6 +110,25 @@ def test_lm_request_params_decode_typed_call_variant() -> None:
     assert call.model == "gpt-test"
     assert call.sampling is not msgspec.UNSET
     assert call.sampling.max_output_tokens == 16
+
+
+def test_stage_run_request_preserves_typed_case_input_owner() -> None:
+    request = StageRunRequest(
+        request_id="stage-test",
+        run_id="run_stage",
+        stage_call_id="stage_call",
+        candidate="cand_stage",
+        case="case_stage",
+        case_input={"question": "2 + 2", "nested": {"answer": "4"}},
+    )
+
+    decoded = msgspec.json.decode(msgspec.json.encode(request.to_params()), type=StageRunParams)
+
+    assert isinstance(decoded.payload, RunnerRequest)
+    assert decoded.payload.case_input == {
+        "question": "2 + 2",
+        "nested": {"answer": "4"},
+    }
 
 
 def _decode_plan_params(params: object) -> PlanDocument:

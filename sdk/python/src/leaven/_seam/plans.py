@@ -35,7 +35,7 @@ from leaven._seam._wire.payloads import (
     RunnerRequest,
 )
 from leaven._seam._wire.payloads import StageRunRequest as StageRunParams
-from leaven._seam._wire.refs import CaseRefRecord, WireJsonField, WireJsonSchemaObject
+from leaven._seam._wire.refs import CaseRefRecord, WireJsonCaseInput, WireJsonSchemaObject
 from leaven._seam._wire.writes import (
     ApplyProposalBatchWrite,
     ProposalWriteRecord,
@@ -318,7 +318,7 @@ class StageRunRequest:
     stage_call_id: str
     candidate: str
     case: str
-    case_input: WireJsonField
+    case_input: WireJsonCaseInput
 
     @property
     def method(self) -> SeamRequestMethod:

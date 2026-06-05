@@ -2123,6 +2123,37 @@ acceptance:
           row remains pending because schema-dependent parsed result fragments,
           evidence private payloads, case metadata/result leaves, and remaining
           public SDK/runtime `object` erasure points still need typed owners.
+      - kind: python_stage_run_case_input_uses_generated_owner
+        paths:
+          - sdk/python/src/leaven/_seam/plans.py
+          - sdk/python/src/leaven/_seam_optimize/driver.py
+          - sdk/python/tests/_seam/test_plans.py
+          - sdk/python/tests/_seam/_wire/test_stage_payloads.py
+          - sdk/python/tests/_seam_optimize/test_rewards.py
+        commands:
+          - cd sdk/python && uv run pytest tests/_seam/test_plans.py tests/_seam_optimize/test_rewards.py tests/_seam/_wire/test_stage_payloads.py -q
+          - cd sdk/python && uv run pytest tests/_seam/_wire -q
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run ruff check src/leaven/_seam/plans.py src/leaven/_seam_optimize/driver.py tests/_seam/test_plans.py tests/_seam_optimize/test_rewards.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/plans.py src/leaven/_seam_optimize/driver.py tests/_seam/test_plans.py tests/_seam_optimize/test_rewards.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - 'rg -n "WireJsonField" sdk/python/src/leaven/_seam/plans.py sdk/python/src/leaven/_seam_optimize/driver.py sdk/python/tests/_seam sdk/python/tests/_seam_optimize -g ''*.py'''
+        note: >-
+          Hand-authored Python stage-run request construction now uses the same
+          generated `WireJsonCaseInput` owner as `RunnerRequest.case_input`
+          instead of a shallow `WireJsonField`. The private optimize mechanics
+          driver validates planned runner case input into that generated owner
+          with msgspec conversion and preserves nested JSON case input values
+          rather than rejecting or flattening them. Focused tests prove
+          `StageRunRequest.to_params()` decodes through the generated
+          `RunnerRequest`, optimize lowering preserves nested case input, and
+          generated stage payloads still reject non-object case input. The
+          targeted grep for `WireJsonField` in the hand-authored stage-run and
+          optimize test paths returns no matches. The row remains pending
+          because case read/result metadata, schema-dependent parsed result
+          fragments, evidence private payloads, and public SDK/runtime `object`
+          erasure points still need typed owners or explicit generated
+          schema-selected decode paths.
       - kind: typed_private_client_request_cutover
         paths:
           - sdk/python/src/leaven/_seam/plans.py
