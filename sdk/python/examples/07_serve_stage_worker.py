@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 import leaven as lv
 from leaven.assessment import AssessmentWrite
-from leaven.evidence import EvidenceEnvelope
+from leaven.evidence import EvidenceEnvelope, EvidencePublicPayload
 from leaven.json_value import JsonValue
 from leaven.stage_payloads import JudgeRequest
 
@@ -28,21 +28,21 @@ async def judge(req: JudgeRequest, cx: lv.JudgeContext) -> AssessmentWrite:
 
     response = await cx.lm.complete(
         messages=[
-            {
-                "role": "system",
-                "content": (
+            lv.lm.LmMessage(
+                role="system",
+                content=(
                     "You are a pairwise judge. Prefer the candidate whose answer "
                     "is correct, or — if both are correct — clearer."
                 ),
-            },
-            {
-                "role": "user",
-                "content": (
+            ),
+            lv.lm.LmMessage(
+                role="user",
+                content=(
                     f"Question: {case.input['question']}\n"
                     f"Rubric  : {_target_rubric(case)}\n"
                     f"Candidates ({req.kind}): {', '.join(req.candidates)}"
                 ),
-            },
+            ),
         ],
         response_format=lv.output.json_schema(JudgeOutcome),
         model_role="judge",
@@ -55,7 +55,10 @@ async def judge(req: JudgeRequest, cx: lv.JudgeContext) -> AssessmentWrite:
         preference=req.candidates[0],  # judge picks; demo uses first
         score=lv.Score(value=outcome.score, feedback=outcome.feedback),
         evidence=EvidenceEnvelope.public_only(
-            payload={"feedback": outcome.feedback, "metrics": {"judge_score": outcome.score}},
+            payload=EvidencePublicPayload(
+                feedback=outcome.feedback,
+                metrics={"judge_score": outcome.score},
+            ),
             data_classes=[lv.data_class.CANDIDATE_OUTPUT, lv.data_class.OPTIMIZER_VISIBLE],
         ),
         effect_receipts=[response.receipt],

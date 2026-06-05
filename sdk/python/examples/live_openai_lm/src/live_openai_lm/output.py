@@ -36,11 +36,9 @@ def live_lm_output_from_assessment(assessment: Assessment) -> LiveLmOutput:
     public = assessment.evidence.public
     if public is None:
         raise ValueError(f"assessment {assessment.case.id!r} has no public evidence")
-    if "output" not in public.payload:
+    raw = public.payload.output
+    if raw is None:
         raise ValueError(f"assessment {assessment.case.id!r} public evidence has no output")
-    raw = public.payload["output"]
-    if not isinstance(raw, str):
-        raise ValueError(f"assessment {assessment.case.id!r} public output is not inline text")
     return live_lm_output_from_text(
         raw,
         context=f"assessment {assessment.case.id!r} public output",

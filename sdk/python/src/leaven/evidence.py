@@ -18,6 +18,7 @@ class EvidencePublicPayload(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
     summary: str | None = None
+    output: str | None = None
     feedback: str | None = None
     metrics: dict[str, float] | None = None
 

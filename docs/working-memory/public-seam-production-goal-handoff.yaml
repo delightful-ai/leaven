@@ -7730,6 +7730,39 @@ acceptance:
           timeout is not claimed as success; it keeps this row pending until
           the live tour itself is made reliable or the example matrix is
           reshaped around explicit per-example live proofs.
+      - kind: no_spend_examples_type_gate_refreshed_after_public_payload_hardening
+        paths:
+          - docs/specs/leaven_python.md
+          - sdk/python/src/leaven/evidence.py
+          - sdk/python/src/leaven/lm/__init__.py
+          - sdk/python/examples/05_evaluator_with_judge.py
+          - sdk/python/examples/07_serve_stage_worker.py
+          - sdk/python/examples/live_openai_lm/src/live_openai_lm/output.py
+          - sdk/python/examples/live_openai_lm/tests/test_output.py
+          - sdk/python/tests/test_evidence.py
+          - sdk/python/tests/test_product_surface_ring.py
+        commands:
+          - cd sdk/python && just examples
+          - cd sdk/python && just compile-examples
+          - cd sdk/python && PYTHONPATH=examples/live_openai_lm/src uv run ty check examples tests/examples/test_run_all.py
+          - cd sdk/python && uv run ruff check examples tests/examples/test_run_all.py src/leaven/evidence.py src/leaven/lm/__init__.py tests/test_evidence.py tests/test_product_surface_ring.py
+          - cd sdk/python && PYTHONPATH=examples/live_openai_lm/src uv run pytest tests/test_evidence.py tests/test_product_surface_ring.py tests/examples/test_run_all.py examples/live_openai_lm/tests -q
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          A refreshed no-spend example tour after Python public-surface
+          hardening completed all 12 current examples with explicit maturity
+          classifications: example 03 ran the durable seam prompt mechanics
+          path, 04/06/09 stopped only at the declared non-`PromptArtifact`
+          boundary, and live examples 10-13 skipped behind environment gates.
+          The wider examples `ty` gate found real drift and forced repairs:
+          evaluator/judge examples now construct typed `EvidencePublic`,
+          `EvidencePrivate`, `EvidencePublicPayload`, and `lv.lm.LmMessage`
+          records instead of raw dictionaries, and the nested live OpenAI
+          proof reads runner output through the closed
+          `EvidencePublicPayload.output` field. This is current no-spend
+          examples evidence; live-gated examples and live evolution remain
+          separate pending requirements.
     closeout_check: A typechecked tour is not a runnable product example.
 
   - id: release_gate_for_public_contract

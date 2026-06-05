@@ -49,4 +49,4 @@ def test_target_private_evidence_must_be_declared() -> None:
 
 def test_public_payload_rejects_unknown_fields_at_construction() -> None:
     with pytest.raises(ValueError, match="extra_forbidden"):
-        EvidencePublicPayload.model_validate({"output": "42"})
+        EvidencePublicPayload.model_validate({"verdict": "correct"})

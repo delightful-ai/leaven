@@ -98,3 +98,10 @@ def test_data_class_surface_has_no_pre_publish_compatibility_aliases() -> None:
     assert forbidden.isdisjoint(lv.data_class.__all__)
     assert lv.data_class.CANDIDATE_ARTIFACT == "candidate.artifact"
     assert lv.data_class.TRANSCRIPT_RAW == "transcript.raw"
+
+
+def test_lm_namespace_exports_message_records_needed_by_public_builder() -> None:
+    """Message-based LM calls should not require importing private builder modules."""
+
+    assert "LmMessage" in lv.lm.__all__
+    assert lv.lm.LmMessage(role="user", content="say ok").role == "user"

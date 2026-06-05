@@ -2,7 +2,7 @@ import json
 
 from leaven.assessment import Assessment, RewardAssessment
 from leaven.case import Case
-from leaven.evidence import EvidenceEnvelope, EvidencePublic
+from leaven.evidence import EvidenceEnvelope, EvidencePublic, EvidencePublicPayload
 from leaven.score import Score
 
 from live_openai_lm.config import EXPECTED_TEXT
@@ -30,7 +30,7 @@ def test_live_lm_output_from_assessment_reads_public_runner_output() -> None:
             "evidence": EvidenceEnvelope(
                 public=EvidencePublic(
                     data_classes=["public"],
-                    payload={"output": json.dumps(output, sort_keys=True), "reward_count": 1},
+                    payload=EvidencePublicPayload(output=json.dumps(output, sort_keys=True)),
                 )
             ),
             "receipt": {"receipt_id": "assessmentrec_case_live_openai_lm_001_1"},
