@@ -22,6 +22,17 @@ from leaven.proposal import ProposalBatch, ProposalEffect
 
 @lv.proposer(stage_id="proposer_stage.propose")
 async def propose(req, cx):
+    assert req.reflection.diagnosis == "empty inputs fail"
+    assert req.reflection.diagnosis_source_refs[0].kind == "candidate"
+    assert req.reflection.diagnosis_source_refs[0].id == "cand_proposer_worker_parent"
+    assert req.reflection.failure_modes[0].label == "missing_empty_input_guard"
+    assert req.reflection.failure_modes[0].source_refs[0].kind == "candidate"
+    assert req.reflection.failure_modes[0].source_refs[0].id == "cand_proposer_worker_parent"
+    assert req.reflection.surface_suggestions == []
+    assert req.reflection.negative_constraints == []
+    assert req.reflection.positive_constraints == []
+    assert req.reflection.confidence == 0.8
+    assert not hasattr(req.reflection, "metadata")
     return ProposalBatch(
         effects=[
             ProposalEffect.change_from_agent_session(

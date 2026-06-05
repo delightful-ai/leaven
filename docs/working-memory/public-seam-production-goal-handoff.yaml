@@ -2174,6 +2174,45 @@ acceptance:
           constructors, and the exact generated seam literal for proposal
           submission. Prompt and GitProgram change leaves still require their
           own owners before the full Python wire-codegen row can close.
+      - kind: python_reflection_payload_metadata_owner_cutover
+        paths:
+          - sdk/python/src/leaven/stage_payloads.py
+          - sdk/python/src/leaven/_seam_worker/proposer.py
+          - sdk/python/tests/test_stage_payloads.py
+          - sdk/python/tests/test_proposer_worker.py
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/examples/06_reflect_propose_custom.py
+          - sdk/python/examples/09_full_repro.py
+        commands:
+          - cd sdk/python && uv run pytest tests/test_stage_payloads.py tests/test_proposer_worker.py tests/_seam_worker/test_runner.py -q
+          - cd sdk/python && uv run pytest tests/test_stage_surface.py tests/test_optimize_proposer_mechanics.py tests/test_proposer_worker.py tests/test_stage_payloads.py -q
+          - cd sdk/python && uv run ruff check src/leaven/stage_payloads.py src/leaven/_seam_worker/proposer.py tests/test_stage_payloads.py tests/test_proposer_worker.py examples/06_reflect_propose_custom.py examples/09_full_repro.py scripts/check_quality_contract.py
+          - cd sdk/python && uv run ty check src/leaven/stage_payloads.py src/leaven/_seam_worker/proposer.py tests/test_stage_payloads.py tests/test_proposer_worker.py examples/06_reflect_propose_custom.py examples/09_full_repro.py scripts/check_quality_contract.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - >-
+            cd sdk/python && ! rg -n
+            "metadata=\\{|reflection\\.metadata|\\\"failure_modes\\\":
+            _reflection_failure_modes|list\\[JsonObject\\]|_failure_mode_json|_surface_suggestion_json"
+            src/leaven/stage_payloads.py src/leaven/_seam_worker/proposer.py
+            tests/test_stage_payloads.py tests/test_proposer_worker.py
+            examples/06_reflect_propose_custom.py examples/09_full_repro.py
+        note: >-
+          Public Python `ReflectionResult` no longer carries a raw
+          `metadata: JsonObject` bag for proposer-stage diagnostics.
+          `stage_payloads.py` now owns typed `ReflectionFailureMode` and
+          `ReflectionSurfaceSuggestion` records plus explicit constraint and
+          confidence fields. The private proposer worker maps generated
+          msgspec `FailureMode`/`SurfaceSuggestion` and `InfoRef` records into
+          those public owners instead of rebuilding JSON objects under
+          `metadata`. Focused tests prove the public model rejects the old
+          metadata bag and that checked-in proposer workers receive typed
+          source refs, failure modes, constraints, and confidence. Examples 06
+          and 09 now author typed failure modes and use prompt strings instead
+          of raw LM message dictionaries. This closes the proposer reflection
+          metadata bag only; other stage payload case/output leaves remain
+          typed-owner work.
       - kind: extension_result_receipts_match_rust_audit_shape
         paths:
           - sdk/python/codegen/result_codegen.py

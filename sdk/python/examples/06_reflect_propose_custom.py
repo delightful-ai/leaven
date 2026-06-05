@@ -18,7 +18,13 @@ from pathlib import Path
 
 import leaven as lv
 from leaven.proposal import ProposalBatch, SkillProposal
-from leaven.stage_payloads import ProposeRequest, ReflectionResult, ReflectRequest, StageSourceRef
+from leaven.stage_payloads import (
+    ProposeRequest,
+    ReflectionFailureMode,
+    ReflectionResult,
+    ReflectRequest,
+    StageSourceRef,
+)
 
 HERE = Path(__file__).parent
 FIXTURE = HERE / "fixtures" / "arithmetic.jsonl"
@@ -53,13 +59,10 @@ async def reflect(req: ReflectRequest, cx: lv.ReflectContext) -> ReflectionResul
     sample = ", ".join(f"{ex.case_id}={ex.score:.2f}" for ex in failing[:5])
 
     diagnosis = await cx.lm.complete(
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a reflection agent. Diagnose why these examples failed.",
-            },
-            {"role": "user", "content": f"Failing examples ({len(failing)} total): {sample}"},
-        ],
+        prompt=(
+            "You are a reflection agent. Diagnose why these examples failed.\n\n"
+            f"Failing examples ({len(failing)} total): {sample}"
+        ),
         max_tokens=512,
         model_role="reflector",
     )
@@ -70,7 +73,15 @@ async def reflect(req: ReflectRequest, cx: lv.ReflectContext) -> ReflectionResul
         diagnosis_source_refs=[
             StageSourceRef(kind="reflection_example", id=ex.case_id) for ex in failing
         ],
-        metadata={"failing_count": len(failing)},
+        failure_modes=[
+            ReflectionFailureMode(
+                label="failing_examples",
+                description=f"{len(failing)} examples failed in this reflection batch.",
+                source_refs=[
+                    StageSourceRef(kind="reflection_example", id=ex.case_id) for ex in failing
+                ],
+            )
+        ],
     )
 
 

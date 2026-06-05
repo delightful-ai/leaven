@@ -14,7 +14,6 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from ._receipts import CallReceipt, QueryReceipt
-from .json_value import JsonObject
 
 
 class StageSourceRef(BaseModel):
@@ -51,6 +50,30 @@ class ReflectRequest(BaseModel):
     read_receipts: list[QueryReceipt] = Field(default_factory=list)
 
 
+class ReflectionFailureMode(BaseModel):
+    """One typed failure mode produced by reflection."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    label: str
+    description: str
+    severity: Literal["low", "medium", "high", "blocking"] | None = None
+    source_refs: list[StageSourceRef] = Field(default_factory=list)
+
+
+class ReflectionSurfaceSuggestion(BaseModel):
+    """One typed surface suggestion produced by reflection."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    surface_fingerprint: str
+    diagnosis: str
+    part_label: str | None = None
+    suggested_direction: str | None = None
+    constraints: list[str] = Field(default_factory=list)
+    source_refs: list[StageSourceRef] = Field(default_factory=list)
+
+
 class ReflectionResult(BaseModel):
     """What `@lv.reflector` stages return."""
 
@@ -60,7 +83,11 @@ class ReflectionResult(BaseModel):
     """Structured diagnostic text the proposer will consume."""
     diagnosis_source_refs: list[StageSourceRef] = Field(default_factory=list)
     """Required: refs back to the examples the diagnosis depends on."""
-    metadata: JsonObject = Field(default_factory=dict)
+    failure_modes: list[ReflectionFailureMode] = Field(default_factory=list)
+    surface_suggestions: list[ReflectionSurfaceSuggestion] = Field(default_factory=list)
+    negative_constraints: list[str] = Field(default_factory=list)
+    positive_constraints: list[str] = Field(default_factory=list)
+    confidence: float | None = None
 
 
 class ProposeRequest(BaseModel):
@@ -96,6 +123,8 @@ __all__ = [
     "ProposeRequest",
     "ReflectExample",
     "ReflectRequest",
+    "ReflectionFailureMode",
     "ReflectionResult",
+    "ReflectionSurfaceSuggestion",
     "StageSourceRef",
 ]

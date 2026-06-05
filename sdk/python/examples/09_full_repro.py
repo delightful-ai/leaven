@@ -22,6 +22,7 @@ import leaven as lv
 from leaven.proposal import ProposalBatch, SkillProposal
 from leaven.stage_payloads import (
     ProposeRequest,
+    ReflectionFailureMode,
     ReflectionResult,
     ReflectRequest,
     StageSourceRef,
@@ -61,10 +62,10 @@ async def reflect(req: ReflectRequest, cx: lv.ReflectContext) -> ReflectionResul
     failing = [ex for ex in req.examples if (ex.score or 0.0) < 0.5]
     summary = ", ".join(f"{ex.case_id}={ex.score:.2f}" for ex in failing[:8])
     diagnostic = await cx.lm.complete(
-        messages=[
-            {"role": "system", "content": "Diagnose why these examples failed."},
-            {"role": "user", "content": f"Failing ({len(failing)}): {summary}"},
-        ],
+        prompt=(
+            "Diagnose why these examples failed.\n\n"
+            f"Failing ({len(failing)}): {summary}"
+        ),
         max_tokens=512,
         model_role="reflector",
     )
@@ -73,7 +74,15 @@ async def reflect(req: ReflectRequest, cx: lv.ReflectContext) -> ReflectionResul
         diagnosis_source_refs=[
             StageSourceRef(kind="reflection_example", id=ex.case_id) for ex in failing
         ],
-        metadata={"failing_count": len(failing)},
+        failure_modes=[
+            ReflectionFailureMode(
+                label="failing_examples",
+                description=f"{len(failing)} examples failed in this reflection batch.",
+                source_refs=[
+                    StageSourceRef(kind="reflection_example", id=ex.case_id) for ex in failing
+                ],
+            )
+        ],
     )
 
 
