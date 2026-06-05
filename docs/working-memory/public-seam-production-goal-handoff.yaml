@@ -1744,6 +1744,45 @@ acceptance:
           workspace-query service routing consume typed operation facts instead
           of JSON indexing. The row remains pending because non-error,
           non-workspace schema-owned leaves still need typed owners.
+      - kind: generated_case_query_and_evaluation_sets_are_typed_records
+        paths:
+          - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
+          - sdk/python/codegen/expression_codegen.py
+          - sdk/python/codegen/write_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/expressions.py
+          - sdk/python/src/leaven/_seam/_wire/writes.py
+          - sdk/python/src/leaven/_seam/plans.py
+          - sdk/python/src/leaven/builders/case.py
+          - sdk/python/tests/_seam/_wire/test_expressions.py
+          - sdk/python/tests/_seam/_wire/test_graph_writes.py
+          - sdk/python/tests/_seam/test_plans.py
+          - sdk/python/tests/builders/test_case.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_expressions.py tests/_seam/test_plans.py tests/builders/test_case.py -q
+          - cd sdk/python && uv run pytest tests/_seam/_wire -q
+          - cd sdk/python && uv run ruff check codegen/expression_codegen.py codegen/write_codegen.py src/leaven/_seam/_wire/expressions.py src/leaven/_seam/_wire/writes.py src/leaven/_seam/plans.py src/leaven/builders/case.py tests/_seam/_wire/test_expressions.py tests/_seam/_wire/test_graph_writes.py tests/_seam/test_plans.py tests/builders/test_case.py
+          - cd sdk/python && uv run ty check codegen/expression_codegen.py codegen/write_codegen.py src/leaven/_seam/_wire/expressions.py src/leaven/_seam/_wire/writes.py src/leaven/_seam/plans.py src/leaven/builders/case.py tests/_seam/_wire/test_expressions.py tests/_seam/_wire/test_graph_writes.py tests/_seam/test_plans.py tests/builders/test_case.py
+          - cd sdk/python && just check
+          - cd sdk/python && uv run pytest -q
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Generated msgspec `CaseQuery` variants now own `case_query.query`
+          for both `load` and `resolve_set`, replacing the previous
+          `WireJsonObject` island. The shared `EvaluationSetExpr` owner moved
+          from graph writes into expressions so both case-query resolution and
+          evaluation-request writes decode the same typed set records. Public
+          Python case builders now hard-cut unsupported case fields and emit
+          `CaseQueryLoad` with a typed `CaseRefRecord`. Unknown case-query
+          kinds fail typed decode, and schema-required
+          `requires_partition_resolution: true` is enforced through msgspec
+          decode-time `__post_init__` validation because the installed
+          msgspec 0.21.1 rejects `Literal[True]` even though current docs show
+          boolean literal examples. The largest touched Python file is exactly
+          650 LOC, the generated wire suite passed 111 tests, and the full SDK
+          suite passed 224 tests. The row remains pending because literal
+          values, extension payloads, and other schema-owned leaves still need
+          typed owners.
       - kind: typed_private_client_request_cutover
         paths:
           - sdk/python/src/leaven/_seam/plans.py

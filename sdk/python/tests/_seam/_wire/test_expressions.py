@@ -5,7 +5,11 @@ import pytest
 from msgspec import UNSET
 
 from leaven._seam._wire.expressions import (
+    CaseQueryLoad,
+    CaseQueryResolveSet,
+    EvaluationSetCases,
     GraphStepFilter,
+    PlanExpressionCaseQuery,
     PlanExpressionFilter,
     PlanExpressionGraphQuery,
     PlanExpressionLiteral,
@@ -235,6 +239,82 @@ def test_workspace_query_rejects_unknown_op_kind() -> None:
         b'"expr":{"kind":"workspace_query","workspace":"ws_1",'
         b'"op":{"kind":"rm_rf","path":"."}}}],'
         b'"return":["workspace_unknown"],"commit":{"kind":"no_graph_writes"}}'
+    )
+
+    with pytest.raises(msgspec.ValidationError):
+        msgspec.json.decode(body, type=PlanDocument)
+
+
+def test_case_query_decodes_typed_load_query() -> None:
+    """Example: case_query.query load bodies are tagged records."""
+
+    body = (
+        b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
+        b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
+        b'"ops":[{"kind":"let","name":"case_load",'
+        b'"expr":{"kind":"case_query","query":{"kind":"load",'
+        b'"case":{"kind":"case","run":"run_1","id":"case_1"},'
+        b'"include":["input","metadata"],"projection_schema":"fp_schema"}}}],'
+        b'"return":["case_load"],"commit":{"kind":"no_graph_writes"}}'
+    )
+
+    decoded = msgspec.json.decode(body, type=PlanDocument)
+    expr = decoded.ops[0].expr
+
+    assert isinstance(expr, PlanExpressionCaseQuery)
+    assert isinstance(expr.query, CaseQueryLoad)
+    assert expr.query.include == ["input", "metadata"]
+    assert expr.query.projection_schema == "fp_schema"
+
+
+def test_case_query_decodes_typed_resolve_set_query() -> None:
+    """Example: resolve_set reuses the shared EvaluationSetExpr owner."""
+
+    body = (
+        b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
+        b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
+        b'"ops":[{"kind":"let","name":"cases",'
+        b'"expr":{"kind":"case_query","query":{"kind":"resolve_set",'
+        b'"set":{"kind":"cases","cases":["case_1"],"requires_partition_resolution":true},'
+        b'"purpose":"validation"}}}],'
+        b'"return":["cases"],"commit":{"kind":"no_graph_writes"}}'
+    )
+
+    decoded = msgspec.json.decode(body, type=PlanDocument)
+    expr = decoded.ops[0].expr
+
+    assert isinstance(expr, PlanExpressionCaseQuery)
+    assert isinstance(expr.query, CaseQueryResolveSet)
+    assert isinstance(expr.query.set, EvaluationSetCases)
+    assert expr.query.set.requires_partition_resolution is True
+
+
+def test_case_query_rejects_unresolved_case_sets() -> None:
+    """Boundary check: schema-required partition resolution cannot be false."""
+
+    body = (
+        b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
+        b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
+        b'"ops":[{"kind":"let","name":"cases",'
+        b'"expr":{"kind":"case_query","query":{"kind":"resolve_set",'
+        b'"set":{"kind":"cases","cases":["case_1"],"requires_partition_resolution":false},'
+        b'"purpose":"validation"}}}],'
+        b'"return":["cases"],"commit":{"kind":"no_graph_writes"}}'
+    )
+
+    with pytest.raises(msgspec.ValidationError):
+        msgspec.json.decode(body, type=PlanDocument)
+
+
+def test_case_query_rejects_unknown_query_kind() -> None:
+    """Boundary check: case_query.query is not an arbitrary object."""
+
+    body = (
+        b'{"schema_version":"leaven.plan.v1","plan_id":"plan_1",'
+        b'"consistency":{"kind":"latest_at_start"},"mode":{"kind":"execute"},'
+        b'"ops":[{"kind":"let","name":"cases",'
+        b'"expr":{"kind":"case_query","query":{"kind":"lookup","case":"case_1"}}}],'
+        b'"return":["cases"],"commit":{"kind":"no_graph_writes"}}'
     )
 
     with pytest.raises(msgspec.ValidationError):

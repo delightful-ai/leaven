@@ -8,11 +8,10 @@ from typing import Literal
 from msgspec import UNSET, Struct, UnsetType
 
 from .evidence import EvidenceEnvelope
-from .expressions import PlanExpression, ValueExpr
+from .expressions import EvaluationSetExpr, PlanExpression, ValueExpr
 from .refs import (
     BlobRef,
     CandidateRef,
-    CaseRef,
     DataClassSet,
     MetadataBag,
     ProposalBatchRef,
@@ -149,64 +148,6 @@ class SubmitAssessmentsWrite(Struct, frozen=True, forbid_unknown_fields=True, ta
     assessments: list[SubmitAssessmentRecord]
 
 
-class EvaluationSetNamed(Struct, frozen=True, forbid_unknown_fields=True, tag="named", tag_field="kind"):
-    name: str
-
-
-class EvaluationSetCases(Struct, frozen=True, forbid_unknown_fields=True, tag="cases", tag_field="kind"):
-    cases: list[CaseRef]
-    requires_partition_resolution: bool
-
-
-class EvaluationSetTagged(Struct, frozen=True, forbid_unknown_fields=True, tag="tagged", tag_field="kind"):
-    tag: str
-    requires_partition_resolution: bool
-
-
-class EvaluationSetRecent(Struct, frozen=True, forbid_unknown_fields=True, tag="recent", tag_field="kind"):
-    limit: int
-    requires_partition_resolution: bool
-
-
-class EvaluationSetUnion(Struct, frozen=True, forbid_unknown_fields=True, tag="union", tag_field="kind"):
-    sets: list["EvaluationSetExpr"]
-
-
-class EvaluationSetIntersect(Struct, frozen=True, forbid_unknown_fields=True, tag="intersect", tag_field="kind"):
-    sets: list["EvaluationSetExpr"]
-
-
-class EvaluationSetDifference(Struct, frozen=True, forbid_unknown_fields=True, tag="difference", tag_field="kind"):
-    base: "EvaluationSetExpr"
-    subtract: "EvaluationSetExpr"
-
-
-class EvaluationSetSample(Struct, frozen=True, forbid_unknown_fields=True, tag="sample", tag_field="kind"):
-    base: "EvaluationSetExpr"
-    n: int
-    seed: int
-
-
-class EvaluationSetStratified(Struct, frozen=True, forbid_unknown_fields=True, tag="stratified", tag_field="kind"):
-    base: "EvaluationSetExpr"
-    by: str
-    per_bucket: int
-    seed: int
-
-
-type EvaluationSetExpr = (
-    EvaluationSetNamed
-    | EvaluationSetCases
-    | EvaluationSetTagged
-    | EvaluationSetRecent
-    | EvaluationSetUnion
-    | EvaluationSetIntersect
-    | EvaluationSetDifference
-    | EvaluationSetSample
-    | EvaluationSetStratified
-)
-
-
 class EvaluationRequestWriteRecord(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
     shape: Literal["independent", "pairwise", "listwise"]
     candidates: list[CandidateRef]
@@ -243,5 +184,5 @@ type GraphWrite = (
 
 
 __all__ = (  # noqa: PLE0605, SIM905
-    "ApplyProposalBatchWrite AttributionCost CostAttribution EmitRunEventWrite EvaluationSetCases EvaluationSetDifference EvaluationSetExpr EvaluationSetIntersect EvaluationSetNamed EvaluationSetRecent EvaluationSetSample EvaluationSetStratified EvaluationSetTagged EvaluationSetUnion EvaluationRequestWriteRecord GraphWrite ProposalEffectAgentSession ProposalEffectChange ProposalEffectCreate ProposalEffectWorkspaceDiff ProposalEffectWrite ProposalWriteRecord RequestEvaluationWrite SubmitAssessmentRecord SubmitAssessmentsWrite SubmitProposalBatchWrite WriteOutputRecord WriteScore"
+    "ApplyProposalBatchWrite AttributionCost CostAttribution EmitRunEventWrite EvaluationRequestWriteRecord GraphWrite ProposalEffectAgentSession ProposalEffectChange ProposalEffectCreate ProposalEffectWorkspaceDiff ProposalEffectWrite ProposalWriteRecord RequestEvaluationWrite SubmitAssessmentRecord SubmitAssessmentsWrite SubmitProposalBatchWrite WriteOutputRecord WriteScore"
 ).split()

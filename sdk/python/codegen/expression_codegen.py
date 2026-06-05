@@ -1,27 +1,22 @@
 """Render generated Plan expression records for public-seam payloads."""
 
 EXPRESSION_EXPORTS = (
-    "ArtifactProjection AssessmentFilter CandidateFilter ExtensionObjectExpression GraphEdge GraphEdgeAssessments "
+    "ArtifactProjection AssessmentFilter CandidateFilter CaseQuery CaseQueryLoad CaseQueryResolveSet EvaluationSetCases "
+    "EvaluationSetDifference EvaluationSetExpr EvaluationSetIntersect EvaluationSetNamed EvaluationSetRecent EvaluationSetSample "
+    "EvaluationSetStratified EvaluationSetTagged EvaluationSetUnion ExtensionObjectExpression GraphEdge GraphEdgeAssessments "
     "GraphEdgeChildren GraphEdgeDescendants GraphEdgeInformed GraphEdgeInformedBy GraphEdgeLineage GraphEdgePairwiseAssessments "
     "GraphEdgeParents GraphEdgeProposalThatCreated GraphEdgeSiblings GraphSource GraphSourceAssessmentSet GraphSourceByCandidate "
-    "GraphSourceByProposal GraphSourceByProposalBatch GraphSourceCandidateSet "
-    "GraphSourceCandidateTree GraphSourceCosts GraphSourceEvents GraphSourceExtension "
-    "GraphSourceRecentFailures GraphStep GraphStepFilter GraphStepLimit GraphStepProject GraphStepSort GraphStepTraverse "
-    "PageRequest PlanExpression PlanExpressionCaseQuery "
-    "PlanExpressionExtract PlanExpressionFilter PlanExpressionGraphQuery PlanExpressionLimit "
-    "PlanExpressionLiteral PlanExpressionProject PlanExpressionRefsFromResult "
+    "GraphSourceByProposal GraphSourceByProposalBatch GraphSourceCandidateSet GraphSourceCandidateTree GraphSourceCosts "
+    "GraphSourceEvents GraphSourceExtension GraphSourceRecentFailures GraphStep GraphStepFilter GraphStepLimit GraphStepProject "
+    "GraphStepSort GraphStepTraverse PageRequest PlanExpression PlanExpressionCaseQuery PlanExpressionExtract PlanExpressionFilter "
+    "PlanExpressionGraphQuery PlanExpressionLimit PlanExpressionLiteral PlanExpressionProject PlanExpressionRefsFromResult "
     "PlanExpressionSort PlanExpressionTemplate PlanExpressionVar PlanExpressionWorkspaceQuery Precondition "
-    "PreconditionAssessmentExists PreconditionCandidateExists PreconditionCandidateIdentity "
-    "PreconditionGraphRevisionAtLeast PreconditionGraphRevisionEquals PreconditionReceiptExists "
-    "PreconditionSchemaValid Predicate PredicateAnd PredicateContains PredicateEq PredicateExists PredicateGt "
-    "PredicateGte PredicateIn PredicateIsNull PredicateLt PredicateLte PredicateMatches PredicateNe PredicateNot PredicateOr "
-    "Projection ProjectionArtifact ProjectionAssessment ProjectionCandidate ProjectionDiff ProjectionExtension ProjectionIds "
-    "ProjectionSummary SortKey ValidationErrorItem ValidationReceipt ValueExpr "
-    "ValueExprExtension ValueExprExtract ValueExprLiteral ValueExprVar WorkspaceQuery WorkspaceQueryCaptureArtifacts "
-    "WorkspaceQueryDigest WorkspaceQueryGitDiff WorkspaceQueryGitLog WorkspaceQueryGitStatus WorkspaceQueryList "
-    "WorkspaceQueryReadFile WorkspaceQuerySnapshot WorkspaceQueryStat"
+    "PreconditionAssessmentExists PreconditionCandidateExists PreconditionCandidateIdentity PreconditionGraphRevisionAtLeast "
+    "PreconditionGraphRevisionEquals PreconditionReceiptExists PreconditionSchemaValid Predicate PredicateAnd PredicateContains "
+    "PredicateEq PredicateExists PredicateGt PredicateGte PredicateIn PredicateIsNull PredicateLt PredicateLte PredicateMatches "
+    "PredicateNe PredicateNot PredicateOr Projection ProjectionArtifact ProjectionAssessment ProjectionCandidate ProjectionDiff "
+    "ProjectionExtension ProjectionIds ProjectionSummary SortKey ValidationErrorItem ValidationReceipt ValueExpr ValueExprExtension ValueExprExtract ValueExprLiteral ValueExprVar WorkspaceQuery WorkspaceQueryCaptureArtifacts WorkspaceQueryDigest WorkspaceQueryGitDiff WorkspaceQueryGitLog WorkspaceQueryGitStatus WorkspaceQueryList WorkspaceQueryReadFile WorkspaceQuerySnapshot WorkspaceQueryStat"
 )
-
 
 def render_expressions() -> str:
     """Render generated Plan expression records as their own private wire module."""
@@ -366,7 +361,91 @@ class PlanExpressionGraphQuery(Struct, frozen=True, forbid_unknown_fields=True, 
 
 
 class PlanExpressionCaseQuery(Struct, frozen=True, forbid_unknown_fields=True, tag="case_query", tag_field="kind"):
-    query: WireJsonObject
+    query: "CaseQuery"
+
+
+class EvaluationSetNamed(Struct, frozen=True, forbid_unknown_fields=True, tag="named", tag_field="kind"):
+    name: str
+
+
+class EvaluationSetCases(Struct, frozen=True, forbid_unknown_fields=True, tag="cases", tag_field="kind"):
+    cases: list[CaseRef]
+    requires_partition_resolution: bool
+
+    def __post_init__(self) -> None:
+        if self.requires_partition_resolution is not True:
+            raise ValueError("requires_partition_resolution must be true")
+
+
+class EvaluationSetTagged(Struct, frozen=True, forbid_unknown_fields=True, tag="tagged", tag_field="kind"):
+    tag: str
+    requires_partition_resolution: bool
+
+    def __post_init__(self) -> None:
+        if self.requires_partition_resolution is not True:
+            raise ValueError("requires_partition_resolution must be true")
+
+
+class EvaluationSetRecent(Struct, frozen=True, forbid_unknown_fields=True, tag="recent", tag_field="kind"):
+    limit: int
+    requires_partition_resolution: bool
+
+    def __post_init__(self) -> None:
+        if self.requires_partition_resolution is not True:
+            raise ValueError("requires_partition_resolution must be true")
+
+
+class EvaluationSetUnion(Struct, frozen=True, forbid_unknown_fields=True, tag="union", tag_field="kind"):
+    sets: list["EvaluationSetExpr"]
+
+
+class EvaluationSetIntersect(Struct, frozen=True, forbid_unknown_fields=True, tag="intersect", tag_field="kind"):
+    sets: list["EvaluationSetExpr"]
+
+
+class EvaluationSetDifference(Struct, frozen=True, forbid_unknown_fields=True, tag="difference", tag_field="kind"):
+    base: "EvaluationSetExpr"
+    subtract: "EvaluationSetExpr"
+
+
+class EvaluationSetSample(Struct, frozen=True, forbid_unknown_fields=True, tag="sample", tag_field="kind"):
+    base: "EvaluationSetExpr"
+    n: int
+    seed: int
+
+
+class EvaluationSetStratified(Struct, frozen=True, forbid_unknown_fields=True, tag="stratified", tag_field="kind"):
+    base: "EvaluationSetExpr"
+    by: str
+    per_bucket: int
+    seed: int
+
+
+type EvaluationSetExpr = (
+    EvaluationSetNamed
+    | EvaluationSetCases
+    | EvaluationSetTagged
+    | EvaluationSetRecent
+    | EvaluationSetUnion
+    | EvaluationSetIntersect
+    | EvaluationSetDifference
+    | EvaluationSetSample
+    | EvaluationSetStratified
+)
+
+
+class CaseQueryResolveSet(Struct, frozen=True, forbid_unknown_fields=True, tag="resolve_set", tag_field="kind"):
+    set: EvaluationSetExpr
+    purpose: Literal["train", "validation", "test", "diagnostic", "custom"]
+
+
+class CaseQueryLoad(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True, tag="load", tag_field="kind"):
+    case: CaseRef
+    include: list[Literal["input", "target", "metadata"]]
+    projection_schema: str | UnsetType = UNSET
+
+
+type CaseQuery = CaseQueryResolveSet | CaseQueryLoad
 
 
 class WorkspaceQuerySnapshot(Struct, frozen=True, forbid_unknown_fields=True, tag="snapshot", tag_field="kind"):

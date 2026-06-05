@@ -5,17 +5,20 @@ import pytest
 from msgspec import UNSET, Struct
 
 from leaven._seam._wire.evidence import decode_evidence_private_payload
-from leaven._seam._wire.expressions import ValueExprLiteral, ValueExprVar
+from leaven._seam._wire.expressions import (
+    EvaluationSetCases,
+    EvaluationSetNamed,
+    EvaluationSetSample,
+    EvaluationSetUnion,
+    ValueExprLiteral,
+    ValueExprVar,
+)
 from leaven._seam._wire.payloads import (
     PlanDocument,
 )
 from leaven._seam._wire.refs import BlobRef, TraceRefRecord
 from leaven._seam._wire.writes import (
     EmitRunEventWrite,
-    EvaluationSetCases,
-    EvaluationSetNamed,
-    EvaluationSetSample,
-    EvaluationSetUnion,
     ProposalEffectChange,
     ProposalEffectCreate,
     RequestEvaluationWrite,

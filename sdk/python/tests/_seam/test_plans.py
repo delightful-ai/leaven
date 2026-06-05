@@ -5,6 +5,7 @@ import msgspec
 from leaven._seam import CaseLoadRequest
 from leaven._seam._wire import JsonObject
 from leaven._seam._wire.calls import AgentRunCall, LmCompleteCall, WorkspaceMaterializeCall
+from leaven._seam._wire.expressions import CaseQueryLoad, PlanExpressionCaseQuery
 from leaven._seam._wire.json_value import json_object
 from leaven._seam._wire.payloads import PlanDocument
 from leaven._seam.lm_plans import LmCompleteRequest
@@ -55,6 +56,12 @@ def test_case_load_request_uses_composite_route_for_multi_field_projection() -> 
     assert query["case"] == {"kind": "case", "run": "run_case_builder", "id": "case_sdk"}
     assert query["include"] == ["input", "target", "metadata"]
     assert query["projection_schema"] == "fp_schema_sha256_python_case_projection"
+
+    decoded = _decode_plan_params(request.to_params())
+    decoded_expr = decoded.ops[0].expr
+    assert isinstance(decoded_expr, PlanExpressionCaseQuery)
+    assert isinstance(decoded_expr.query, CaseQueryLoad)
+    assert decoded_expr.query.include == ["input", "target", "metadata"]
 
 
 def test_agent_request_params_decode_typed_call_variants() -> None:

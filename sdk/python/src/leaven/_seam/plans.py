@@ -21,7 +21,7 @@ from leaven._seam._wire.calls import (
     WorkspaceMaterializeCall,
 )
 from leaven._seam._wire.codec import RequestParams
-from leaven._seam._wire.expressions import PlanExpressionCaseQuery
+from leaven._seam._wire.expressions import CaseQueryLoad, PlanExpressionCaseQuery
 from leaven._seam._wire.payloads import (
     CommitPolicyGraphWritesAtomic,
     CommitPolicyNoGraphWrites,
@@ -35,7 +35,7 @@ from leaven._seam._wire.payloads import (
     RunnerRequest,
 )
 from leaven._seam._wire.payloads import StageRunRequest as StageRunParams
-from leaven._seam._wire.refs import WireJsonField, WireJsonSchemaObject
+from leaven._seam._wire.refs import CaseRefRecord, WireJsonField, WireJsonSchemaObject
 from leaven._seam._wire.writes import (
     ApplyProposalBatchWrite,
     ProposalWriteRecord,
@@ -44,7 +44,7 @@ from leaven._seam._wire.writes import (
     SubmitProposalBatchWrite,
 )
 
-CaseField = Literal["input", "target", "metadata", "files", "setup", "sandbox", "split"]
+CaseField = Literal["input", "target", "metadata"]
 SeamRequestMethod = Literal[
     "leaven/stage.run",
     "leaven/agent.run",
@@ -122,16 +122,11 @@ class CaseLoadRequest:
             kind="let",
             name=op_name,
             expr=PlanExpressionCaseQuery(
-                query={
-                    "kind": "load",
-                    "case": {
-                        "kind": "case",
-                        "run": self.run_id,
-                        "id": self.case_id,
-                    },
-                    "include": list(self.include),
-                    "projection_schema": "fp_schema_sha256_python_case_projection",
-                }
+                query=CaseQueryLoad(
+                    case=CaseRefRecord(run=self.run_id, id=self.case_id),
+                    include=list(self.include),
+                    projection_schema="fp_schema_sha256_python_case_projection",
+                )
             ),
         )
 

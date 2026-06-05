@@ -11,7 +11,7 @@ from .._seam._wire.refs import CaseRef
 from .._seam._wire.results import CaseLoadResult
 from ..case import Case
 
-CaseField = Literal["input", "target", "metadata", "files", "setup", "sandbox", "split"]
+CaseField = Literal["input", "target", "metadata"]
 
 
 class CaseBuilder:
