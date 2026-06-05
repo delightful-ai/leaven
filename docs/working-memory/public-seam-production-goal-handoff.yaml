@@ -1950,6 +1950,38 @@ acceptance:
           before JSON encoding. This closes the shared agent/sandbox output
           raw-object parser island; other capability/config/callback/readback
           leaf slots remain pending.
+      - kind: raw_output_lowering_helper_removed
+        paths:
+          - sdk/python/src/leaven/builders/_output_contract.py
+          - sdk/python/src/leaven/builders/lm.py
+          - sdk/python/src/leaven/builders/agent.py
+          - sdk/python/src/leaven/builders/sandbox.py
+          - sdk/python/tests/builders/test_output_contract.py
+        commands:
+          - cd sdk/python && uv run pytest tests/builders/test_output_contract.py tests/builders/test_lm.py tests/builders/test_agent.py tests/builders/test_sandbox.py -q
+          - cd sdk/python && uv run ruff check src/leaven/builders/_output_contract.py src/leaven/builders/lm.py src/leaven/builders/agent.py src/leaven/builders/sandbox.py tests/builders/test_output_contract.py tests/builders/test_lm.py tests/builders/test_agent.py tests/builders/test_sandbox.py
+          - cd sdk/python && uv run ty check src/leaven/builders/_output_contract.py src/leaven/builders/lm.py src/leaven/builders/agent.py src/leaven/builders/sandbox.py tests/builders/test_output_contract.py tests/builders/test_lm.py tests/builders/test_agent.py tests/builders/test_sandbox.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - >-
+            ! rg -n
+            "json_schema_output_to_wire|from \\.?_output_contract import
+            .*json_schema_output_to_wire|JsonObject|json_object"
+            sdk/python/src/leaven/builders/_output_contract.py
+            sdk/python/src/leaven/builders/lm.py
+            sdk/python/src/leaven/builders/agent.py
+            sdk/python/src/leaven/builders/sandbox.py
+            sdk/python/tests/builders/test_output_contract.py
+        note: >-
+          After LM, agent, and sandbox output contracts were hard-cut to
+          generated msgspec records, the old `json_schema_output_to_wire(...)`
+          helper in `builders/_output_contract.py` was dead code that still
+          returned raw `JsonObject` output-contract dictionaries. It has been
+          removed, leaving only the schema fingerprint function used by typed
+          builders. Focused tests and negative grep prove no builder imports or
+          exposes that raw JSON lowering helper. This prevents the old
+          output-contract dict path from returning as an internal convenience
+          shim.
       - kind: extension_result_receipts_match_rust_audit_shape
         paths:
           - sdk/python/codegen/result_codegen.py

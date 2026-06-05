@@ -4,25 +4,7 @@ import hashlib
 import json
 import math
 
-from pydantic import BaseModel
-
-from .._seam._wire import JsonObject
-from .._seam._wire.json_value import json_object
 from ..json_value import JsonSchema, JsonValue
-from ..output import JsonSchemaOutput, JsonSchemaValueOutput
-
-
-def json_schema_output_to_wire[ParsedModelT: BaseModel](
-    output: JsonSchemaOutput[ParsedModelT] | JsonSchemaValueOutput,
-) -> JsonObject:
-    """Lower a public JSON Schema output contract to public-seam wire JSON."""
-    return json_object(
-        {
-            "kind": "json_schema",
-            "schema_fingerprint": schema_fingerprint(output.schema_),
-            "schema": output.schema_,
-        }
-    )
 
 
 def schema_fingerprint(schema: JsonSchema) -> str:
@@ -79,4 +61,4 @@ def _canonical_exponent(exponent: str) -> str:
     return sign + digits
 
 
-__all__ = ["json_schema_output_to_wire", "schema_fingerprint"]
+__all__ = ["schema_fingerprint"]
