@@ -3234,6 +3234,38 @@ acceptance:
           close the typed-seam row because configured extension-result
           projection and non-request-evaluation Plan/Result leaves still carry
           raw `Value` access.
+      - kind: configured_extension_projection_typed_selector_hard_cut
+        paths:
+          - crates/leaven-seam-service/src/configured_extension.rs
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cargo fmt --check -p leaven-seam-service
+          - cargo check -p leaven-seam-service
+          - cargo test -p leaven-seam-service configured_extension::tests -- --nocapture
+          - cargo test -p leaven-seam-service service::tests::seam_runtime_executes_agent_run_in_materialized_workspace_through_codex_adapter -- --exact
+          - cargo test -p leaven-seam-service service::tests::seam_runtime_services_agent_callback_from_command_worker -- --exact
+          - cargo test -p leaven-seam-service service::tests::seam_runtime_executes_event_emit_through_configured_service -- --exact
+          - cargo test -p leaven-seam-service service::tests::seam_runtime_executes_evaluation_request_through_configured_service -- --exact
+          - cargo test -p leaven-seam-service service::tests::seam_runtime_executes_proposal_apply_through_configured_service -- --exact
+          - cargo test -p leaven-seam-service service::tests::seam_runtime_executes_workspace_release_through_configured_service -- --exact
+          - cargo test -p leaven-seam-service
+          - rg -n "event_missing|wrec_missing|\\.get\\(" crates/leaven-seam-service/src/configured_extension.rs
+        note: >-
+          Configured-service ACP extension projection no longer walks Plan or
+          PlanResult objects with `.get(...)` selectors and no longer
+          fabricates `event_missing` or `wrec_missing` fallback values for
+          `event.emit`. `configured_extension.rs` now deserializes private
+          `ConfiguredPlanProjection`, `ConfiguredPlanResultProjection`,
+          `ConfiguredPrimaryProjection`, and `ConfiguredReceiptProjection`
+          records, searches all declared return values for the method-required
+          primary kind, rejects plans that return only the wrong primary kind,
+          recomputes the evaluation-request result hash through typed receipt
+          facts, and requires typed `event_id`/`receipt` facts before building
+          the event primary. This removes the configured projection blocker
+          named in `rust_request_evaluation_write_has_typed_owner`, but does
+          not close typed-seam work: selected primary values, receipt extras,
+          redactions, and payload/body families still carry schema-valid JSON
+          leaves that need narrower owners or generated records.
       - kind: typed_locked_method_identity_foundation
         paths:
           - crates/leaven-public-seam/src/acp_profile/methods.rs

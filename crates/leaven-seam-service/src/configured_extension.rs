@@ -1,8 +1,11 @@
+use std::collections::BTreeMap;
+
 use leaven_public_seam::{
     CapabilityDocument, CapabilityGrantRequest, EvaluationJobDocument, LockedMethod,
     PlanCommitKind, PlanDocument, PlanEvaluationShape, PlanExecutionContext, PlanMode,
     PlanRequestEvaluationWrite, PlanWriteKind, PublicSeamError,
 };
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 pub(crate) fn extension_result_for_plan_report(
@@ -13,45 +16,23 @@ pub(crate) fn extension_result_for_plan_report(
     if method == LockedMethod::EventEmit {
         return event_emit_result_for_plan_report(method, result);
     }
-    let values = result
-        .get("values")
-        .and_then(Value::as_object)
-        .ok_or_else(|| PublicSeamError::InvalidPlan {
-            message: "public seam method result missing values".to_owned(),
-        })?;
+    let plan = ConfiguredPlanProjection::parse(plan)?;
+    let result = ConfiguredPlanResultProjection::parse(result)?;
     let primary_kind = method_primary_kind(method);
-    let primary = plan
-        .get("return")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .filter_map(|name| values.get(name))
-        .find(|value| value.get("kind").and_then(Value::as_str) == Some(primary_kind))
-        .or_else(|| {
-            plan.get("return")
-                .and_then(Value::as_array)
-                .and_then(|returns| returns.first())
-                .and_then(Value::as_str)
-                .and_then(|name| values.get(name))
-        })
-        .ok_or_else(|| PublicSeamError::InvalidPlan {
-            message: format!("public seam method result missing returned `{primary_kind}` value"),
-        })?;
-    let data_classes = primary
-        .get("data_classes")
-        .cloned()
-        .unwrap_or_else(|| serde_json::json!([]));
-    let receipts = acp_extension_receipts_for_plan_report(method, result, primary)?;
-    Ok(serde_json::json!({
-        "method": method.as_str(),
-        "primary": primary,
-        "receipts": receipts,
-        "redactions": result.get("redactions").cloned().unwrap_or_else(|| serde_json::json!([])),
-        "capability_fingerprint": result.get("capability_fingerprint").cloned().unwrap_or_else(|| serde_json::json!("fp_cap_sha256_missing")),
-        "policy_fingerprint": result.get("policy_fingerprint").cloned().unwrap_or_else(|| serde_json::json!("fp_policy_sha256_missing")),
-        "data_classes": data_classes
-    }))
+    let primary = result.primary_from_return(plan.return_values(), primary_kind)?;
+    let receipts = result.extension_receipts(method, &primary)?;
+    let projection = ConfiguredExtensionResultProjection {
+        method: method.as_str(),
+        primary: &primary.value,
+        receipts,
+        redactions: result.redactions,
+        capability_fingerprint: result.capability_fingerprint,
+        policy_fingerprint: result.policy_fingerprint,
+        data_classes: primary.data_classes,
+    };
+    serde_json::to_value(projection).map_err(|error| PublicSeamError::InvalidPlan {
+        message: format!("configured extension projection failed: {error}"),
+    })
 }
 
 pub(crate) struct RequestEvaluationWriteSelection {
@@ -192,37 +173,6 @@ pub(crate) fn evaluation_request_plan_result(
     }))
 }
 
-fn acp_extension_receipts_for_plan_report(
-    method: LockedMethod,
-    result: &Value,
-    primary: &Value,
-) -> Result<Value, PublicSeamError> {
-    let Some(receipts) = result.get("receipts").cloned() else {
-        return Ok(serde_json::json!([]));
-    };
-    if method != LockedMethod::EvaluationRequest {
-        return Ok(receipts);
-    }
-    let mut receipts = receipts;
-    let Some(receipt_items) = receipts.as_array_mut() else {
-        return Ok(receipts);
-    };
-    for receipt in receipt_items {
-        if receipt.get("write_kind").and_then(Value::as_str) == Some("request_evaluation") {
-            let op_name = receipt
-                .get("op_var")
-                .and_then(Value::as_str)
-                .unwrap_or("primary");
-            receipt["result_hash"] = json!(acp_primary_result_hash(
-                "leaven.plan_write_result.v1",
-                op_name,
-                primary
-            )?);
-        }
-    }
-    Ok(receipts)
-}
-
 fn acp_primary_result_hash(
     schema_version: &str,
     op_name: &str,
@@ -280,31 +230,244 @@ fn event_emit_result_for_plan_report(
     method: LockedMethod,
     result: &Value,
 ) -> Result<Value, PublicSeamError> {
-    let receipt = result
-        .get("receipts")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .find(|receipt| receipt.get("write_kind").and_then(Value::as_str) == Some("emit_run_event"))
-        .ok_or_else(|| PublicSeamError::InvalidPlan {
-            message: "public seam event.emit result missing emit_run_event receipt".to_owned(),
-        })?;
-    let primary = serde_json::json!({
+    let result = ConfiguredPlanResultProjection::parse(result)?;
+    let receipt = result.event_emit_receipt()?;
+    let event_id = receipt.event_id()?;
+    let primary = json!({
         "kind": "emit_run_event",
-        "event_id": receipt.get("event_id").cloned().unwrap_or_else(|| serde_json::json!("event_missing")),
-        "receipt": receipt.get("receipt").cloned().unwrap_or_else(|| serde_json::json!("wrec_missing")),
+        "event_id": event_id,
+        "receipt": receipt.receipt.as_str(),
         "data_classes": ["public"],
         "replayability": "fully_managed"
     });
-    Ok(serde_json::json!({
-        "method": method.as_str(),
-        "primary": primary,
-        "receipts": result.get("receipts").cloned().unwrap_or_else(|| serde_json::json!([])),
-        "redactions": result.get("redactions").cloned().unwrap_or_else(|| serde_json::json!([])),
-        "capability_fingerprint": result.get("capability_fingerprint").cloned().unwrap_or_else(|| serde_json::json!("fp_cap_sha256_missing")),
-        "policy_fingerprint": result.get("policy_fingerprint").cloned().unwrap_or_else(|| serde_json::json!("fp_policy_sha256_missing")),
-        "data_classes": ["public"]
-    }))
+    let projection = ConfiguredExtensionResultProjection {
+        method: method.as_str(),
+        primary: &primary,
+        receipts: result.receipt_values()?,
+        redactions: result.redactions,
+        capability_fingerprint: result.capability_fingerprint,
+        policy_fingerprint: result.policy_fingerprint,
+        data_classes: vec!["public".to_owned()],
+    };
+    serde_json::to_value(projection).map_err(|error| PublicSeamError::InvalidPlan {
+        message: format!("configured event.emit projection failed: {error}"),
+    })
+}
+
+#[derive(Deserialize)]
+struct ConfiguredPlanProjection {
+    #[serde(default, rename = "return")]
+    return_values: Vec<String>,
+}
+
+impl ConfiguredPlanProjection {
+    fn parse(value: &Value) -> Result<Self, PublicSeamError> {
+        serde_json::from_value(value.clone()).map_err(|error| PublicSeamError::InvalidPlan {
+            message: format!("configured extension plan projection failed: {error}"),
+        })
+    }
+
+    fn return_values(&self) -> &[String] {
+        &self.return_values
+    }
+}
+
+#[derive(Deserialize)]
+struct ConfiguredPlanResultProjection {
+    values: BTreeMap<String, Value>,
+    #[serde(default)]
+    receipts: Vec<ConfiguredReceiptProjection>,
+    #[serde(default)]
+    redactions: Vec<Value>,
+    #[serde(default = "missing_capability_fingerprint")]
+    capability_fingerprint: String,
+    #[serde(default = "missing_policy_fingerprint")]
+    policy_fingerprint: String,
+}
+
+impl ConfiguredPlanResultProjection {
+    fn parse(value: &Value) -> Result<Self, PublicSeamError> {
+        serde_json::from_value(value.clone()).map_err(|error| PublicSeamError::InvalidPlan {
+            message: format!("configured extension result projection failed: {error}"),
+        })
+    }
+
+    fn primary_from_return(
+        &self,
+        return_values: &[String],
+        primary_kind: &'static str,
+    ) -> Result<ConfiguredPrimaryProjection, PublicSeamError> {
+        let mut first_returned_kind = None;
+        for name in return_values {
+            let Some((_, value)) = self
+                .values
+                .iter()
+                .find(|(value_name, _)| value_name.as_str() == name.as_str())
+            else {
+                continue;
+            };
+            let primary = ConfiguredPrimaryProjection::parse(value)?;
+            if primary.kind == primary_kind {
+                return Ok(primary);
+            }
+            first_returned_kind.get_or_insert(primary.kind);
+        }
+        if let Some(kind) = first_returned_kind {
+            return Err(PublicSeamError::InvalidPlan {
+                message: format!(
+                    "public seam method returned `{kind}` without required `{primary_kind}` value"
+                ),
+            });
+        }
+        Err(PublicSeamError::InvalidPlan {
+            message: format!("public seam method result missing returned `{primary_kind}` value"),
+        })
+    }
+
+    fn extension_receipts(
+        &self,
+        method: LockedMethod,
+        primary: &ConfiguredPrimaryProjection,
+    ) -> Result<Vec<Value>, PublicSeamError> {
+        self.receipts
+            .iter()
+            .map(|receipt| receipt.extension_value(method, primary))
+            .collect()
+    }
+
+    fn receipt_values(&self) -> Result<Vec<Value>, PublicSeamError> {
+        self.receipts
+            .iter()
+            .map(ConfiguredReceiptProjection::to_value)
+            .collect()
+    }
+
+    fn event_emit_receipt(&self) -> Result<&ConfiguredReceiptProjection, PublicSeamError> {
+        self.receipts
+            .iter()
+            .find(|receipt| receipt.write_kind.as_deref() == Some("emit_run_event"))
+            .ok_or_else(|| PublicSeamError::InvalidPlan {
+                message: "public seam event.emit result missing emit_run_event receipt".to_owned(),
+            })?
+            .require_event_emit()
+    }
+}
+
+struct ConfiguredPrimaryProjection {
+    kind: String,
+    data_classes: Vec<String>,
+    value: Value,
+}
+
+impl ConfiguredPrimaryProjection {
+    fn parse(value: &Value) -> Result<Self, PublicSeamError> {
+        let facts: ConfiguredPrimaryFacts =
+            serde_json::from_value(value.clone()).map_err(|error| {
+                PublicSeamError::InvalidPlan {
+                    message: format!("configured extension primary projection failed: {error}"),
+                }
+            })?;
+        Ok(Self {
+            kind: facts.kind,
+            data_classes: facts.data_classes,
+            value: value.clone(),
+        })
+    }
+}
+
+#[derive(Deserialize)]
+struct ConfiguredPrimaryFacts {
+    kind: String,
+    #[serde(default)]
+    data_classes: Vec<String>,
+}
+
+#[derive(Deserialize, Serialize)]
+struct ConfiguredReceiptProjection {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    kind: Option<String>,
+    receipt: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    op_var: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    write_kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    event_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    result_hash: Option<String>,
+    #[serde(flatten)]
+    extra: BTreeMap<String, Value>,
+}
+
+impl ConfiguredReceiptProjection {
+    fn extension_value(
+        &self,
+        method: LockedMethod,
+        primary: &ConfiguredPrimaryProjection,
+    ) -> Result<Value, PublicSeamError> {
+        let mut receipt = self.clone_for_projection();
+        if method == LockedMethod::EvaluationRequest
+            && receipt.write_kind.as_deref() == Some("request_evaluation")
+        {
+            let op_name = receipt.op_var.as_deref().unwrap_or("primary");
+            receipt.result_hash = Some(acp_primary_result_hash(
+                "leaven.plan_write_result.v1",
+                op_name,
+                &primary.value,
+            )?);
+        }
+        receipt.to_value()
+    }
+
+    fn to_value(&self) -> Result<Value, PublicSeamError> {
+        serde_json::to_value(self).map_err(|error| PublicSeamError::InvalidPlan {
+            message: format!("configured extension receipt projection failed: {error}"),
+        })
+    }
+
+    fn require_event_emit(&self) -> Result<&Self, PublicSeamError> {
+        self.event_id()?;
+        Ok(self)
+    }
+
+    fn event_id(&self) -> Result<&str, PublicSeamError> {
+        self.event_id
+            .as_deref()
+            .ok_or_else(|| PublicSeamError::InvalidPlan {
+                message: "public seam event.emit receipt missing event_id".to_owned(),
+            })
+    }
+
+    fn clone_for_projection(&self) -> Self {
+        Self {
+            kind: self.kind.clone(),
+            receipt: self.receipt.clone(),
+            op_var: self.op_var.clone(),
+            write_kind: self.write_kind.clone(),
+            event_id: self.event_id.clone(),
+            result_hash: self.result_hash.clone(),
+            extra: self.extra.clone(),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct ConfiguredExtensionResultProjection<'a> {
+    method: &'static str,
+    primary: &'a Value,
+    receipts: Vec<Value>,
+    redactions: Vec<Value>,
+    capability_fingerprint: String,
+    policy_fingerprint: String,
+    data_classes: Vec<String>,
+}
+
+fn missing_capability_fingerprint() -> String {
+    "fp_cap_sha256_missing".to_owned()
+}
+
+fn missing_policy_fingerprint() -> String {
+    "fp_policy_sha256_missing".to_owned()
 }
 
 fn method_primary_kind(method: LockedMethod) -> &'static str {
@@ -346,4 +509,72 @@ fn sanitize_id_fragment(value: &str) -> String {
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use leaven_public_seam::LockedMethod;
+    use serde_json::json;
+
+    use super::extension_result_for_plan_report;
+
+    #[test]
+    fn configured_projection_rejects_wrong_returned_primary_kind() {
+        let plan = json!({
+            "return": ["primary"]
+        });
+        let result = json!({
+            "values": {
+                "primary": {
+                    "kind": "agent_session",
+                    "data_classes": ["public"]
+                }
+            },
+            "receipts": [],
+            "redactions": [],
+            "capability_fingerprint": "fp_cap_sha256_configured",
+            "policy_fingerprint": "fp_policy_sha256_configured"
+        });
+
+        let error = extension_result_for_plan_report(LockedMethod::LmComplete, &plan, &result)
+            .expect_err("configured projection must reject wrong primary kind");
+
+        assert!(
+            error
+                .to_string()
+                .contains("without required `lm_response` value"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn configured_event_projection_requires_event_id_receipt_field() {
+        let plan = json!({
+            "return": ["event"]
+        });
+        let result = json!({
+            "values": {},
+            "receipts": [{
+                "kind": "write",
+                "receipt": "wrec_event",
+                "write_kind": "emit_run_event",
+                "op_var": "event",
+                "started_at": "2026-06-05T00:00:00Z",
+                "completed_at": "2026-06-05T00:00:01Z",
+                "request_hash": "fp_request_sha256_event",
+                "result_hash": "fp_result_sha256_event",
+                "base_revision": "rev_base",
+                "committed_revision": "rev_base",
+                "status": "succeeded"
+            }],
+            "redactions": [],
+            "capability_fingerprint": "fp_cap_sha256_configured",
+            "policy_fingerprint": "fp_policy_sha256_configured"
+        });
+
+        let error = extension_result_for_plan_report(LockedMethod::EventEmit, &plan, &result)
+            .expect_err("configured event projection must not synthesize event ids");
+
+        assert!(error.to_string().contains("missing event_id"), "{error}");
+    }
 }
