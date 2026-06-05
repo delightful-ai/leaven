@@ -1,17 +1,21 @@
 """Private callback receipt capture for Python command workers."""
 
 from dataclasses import dataclass
+from typing import Literal
 
-from msgspec import UNSET
+from msgspec import UNSET, UnsetType
 
-from .._seam._wire import JsonObject
-from .._seam._wire.json_value import json_value
 from .._seam._wire.payloads import (
     BlobRef,
+    CallReceiptKind,
     Cost,
     ReceiptRef,
     ReceiptRefRecord,
+    StageCost,
     StageEffectBlobContent,
+    StageEffectReceipt,
+    StageProposalReceipt,
+    WriteReceiptKind,
 )
 from .._seam._wire.results import AgentRunResult, LmCompleteResult, ProposalSubmitResult
 
@@ -19,6 +23,8 @@ EFFECT_CALLBACK_METHODS = frozenset({"leaven/lm.complete", "leaven/agent.run"})
 PROPOSAL_CALLBACK_METHOD = "leaven/proposal.submit_batch"
 
 type CallbackResult = LmCompleteResult | AgentRunResult | ProposalSubmitResult
+type EffectCallbackMethod = Literal["leaven/lm.complete", "leaven/agent.run"]
+type EffectCallKind = Literal["lm_complete", "agent_run"]
 
 
 @dataclass(frozen=True)
@@ -27,30 +33,12 @@ class CallbackReceipt:
 
     method: str
     receipt_id: str
-    call_kind: str | None = None
-    write_kind: str | None = None
+    call_kind: CallReceiptKind | None = None
+    write_kind: WriteReceiptKind | None = None
     cost: Cost | None = None
     proposal_ids: list[str] | None = None
     blob_refs: list[BlobRef] | None = None
     blob_contents: list[StageEffectBlobContent] | None = None
-
-    def to_json(self) -> JsonObject:
-        value: JsonObject = {"method": self.method, "receipt": self.receipt_id}
-        if self.call_kind is not None:
-            value["call_kind"] = self.call_kind
-        if self.write_kind is not None:
-            value["write_kind"] = self.write_kind
-        if self.cost is not None:
-            value["cost"] = _cost_json(self.cost)
-        if self.proposal_ids is not None:
-            value["proposal_ids"] = json_value(self.proposal_ids)
-        if self.blob_refs is not None:
-            value["blob_refs"] = json_value([_blob_ref_json(ref) for ref in self.blob_refs])
-        if self.blob_contents is not None:
-            value["blob_contents"] = json_value(
-                [_blob_content_json(content) for content in self.blob_contents]
-            )
-        return value
 
 
 class CallbackReceiptLog:
@@ -63,21 +51,23 @@ class CallbackReceiptLog:
         """Capture callback receipts carried by one public-seam callback result."""
         self._records.extend(_receipts_from_result(result))
 
-    def effect_receipts_json(self) -> list[JsonObject]:
+    def effect_receipts(self) -> list[StageEffectReceipt]:
         """Return effect-call receipts safe to attach to a private stage result."""
-        return [
-            record.to_json()
-            for record in self._records
-            if record.method in EFFECT_CALLBACK_METHODS and _is_effect_receipt(record)
-        ]
+        receipts: list[StageEffectReceipt] = []
+        for record in self._records:
+            receipt = _effect_receipt(record)
+            if receipt is not None:
+                receipts.append(receipt)
+        return receipts
 
-    def proposal_receipts_json(self) -> list[JsonObject]:
+    def proposal_receipts(self) -> list[StageProposalReceipt]:
         """Return proposal-write receipts observed during a proposer stage."""
-        return [
-            record.to_json()
-            for record in self._records
-            if record.method == PROPOSAL_CALLBACK_METHOD
-        ]
+        receipts: list[StageProposalReceipt] = []
+        for record in self._records:
+            receipt = _proposal_receipt(record)
+            if receipt is not None:
+                receipts.append(receipt)
+        return receipts
 
 
 def _receipts_from_result(result: CallbackResult) -> list[CallbackReceipt]:
@@ -157,47 +147,73 @@ def _receipt_id(value: ReceiptRef) -> str:
     raise TypeError(f"unsupported receipt ref: {value!r}")
 
 
-def _cost_json(cost: Cost) -> JsonObject:
-    value: JsonObject = {}
-    if cost.usd_micro is not UNSET:
-        value["usd_micro"] = cost.usd_micro
-    if cost.input_tokens is not UNSET:
-        value["input_tokens"] = cost.input_tokens
-    if cost.output_tokens is not UNSET:
-        value["output_tokens"] = cost.output_tokens
-    if cost.lm_calls is not UNSET:
-        value["lm_calls"] = cost.lm_calls
+def _effect_receipt(record: CallbackReceipt) -> StageEffectReceipt | None:
+    if not _is_effect_receipt(record):
+        return None
+    return StageEffectReceipt(
+        method=_effect_method(record.method),
+        receipt=record.receipt_id,
+        call_kind=_effect_call_kind(record.call_kind),
+        cost=_stage_cost(record.cost),
+        blob_refs=record.blob_refs if record.blob_refs is not None else UNSET,
+        blob_contents=record.blob_contents if record.blob_contents is not None else UNSET,
+    )
+
+
+def _proposal_receipt(record: CallbackReceipt) -> StageProposalReceipt | None:
+    if record.method != PROPOSAL_CALLBACK_METHOD:
+        return None
+    return StageProposalReceipt(
+        method="leaven/proposal.submit_batch",
+        receipt=record.receipt_id,
+        write_kind=_proposal_write_kind(record.write_kind),
+        proposal_ids=record.proposal_ids if record.proposal_ids is not None else UNSET,
+    )
+
+
+def _effect_method(method: str) -> EffectCallbackMethod:
+    if method == "leaven/lm.complete":
+        return "leaven/lm.complete"
+    if method == "leaven/agent.run":
+        return "leaven/agent.run"
+    raise TypeError(f"unsupported effect callback method: {method!r}")
+
+
+def _effect_call_kind(kind: CallReceiptKind | None) -> EffectCallKind | UnsetType:
+    if kind is None:
+        return UNSET
+    if kind == "lm_complete":
+        return "lm_complete"
+    if kind == "agent_run":
+        return "agent_run"
+    raise TypeError(f"unsupported effect callback call kind: {kind!r}")
+
+
+def _proposal_write_kind(kind: WriteReceiptKind | None) -> Literal["submit_proposal_batch"] | UnsetType:
+    if kind is None:
+        return UNSET
+    if kind == "submit_proposal_batch":
+        return "submit_proposal_batch"
+    raise TypeError(f"unsupported proposal callback write kind: {kind!r}")
+
+
+def _stage_cost(cost: Cost | None) -> StageCost | UnsetType:
+    if cost is None:
+        return UNSET
     if cost.agent_calls is not UNSET:
-        value["agent_calls"] = cost.agent_calls
+        raise TypeError("stage effect receipt cost cannot carry agent_calls")
     if cost.sandbox_calls is not UNSET:
-        value["sandbox_calls"] = cost.sandbox_calls
+        raise TypeError("stage effect receipt cost cannot carry sandbox_calls")
     if cost.metric_calls is not UNSET:
-        value["metric_calls"] = cost.metric_calls
+        raise TypeError("stage effect receipt cost cannot carry metric_calls")
     if cost.wall_ms is not UNSET:
-        value["wall_ms"] = cost.wall_ms
-    return value
-
-
-def _blob_ref_json(blob: BlobRef) -> JsonObject:
-    value: JsonObject = {
-        "kind": "blob_ref",
-        "id": blob.id,
-        "sha256": blob.sha256,
-        "bytes": blob.bytes,
-        "data_classes": list(blob.data_classes),
-    }
-    if blob.media_type is not UNSET:
-        value["media_type"] = blob.media_type
-    if blob.uri is not UNSET:
-        value["uri"] = blob.uri
-    return value
-
-
-def _blob_content_json(content: StageEffectBlobContent) -> JsonObject:
-    return {
-        "blob_ref": _blob_ref_json(content.blob_ref),
-        "content_base64": content.content_base64,
-    }
+        raise TypeError("stage effect receipt cost cannot carry wall_ms")
+    return StageCost(
+        usd_micro=cost.usd_micro,
+        input_tokens=cost.input_tokens,
+        output_tokens=cost.output_tokens,
+        lm_calls=cost.lm_calls,
+    )
 
 
 def _is_effect_receipt(record: CallbackReceipt) -> bool:

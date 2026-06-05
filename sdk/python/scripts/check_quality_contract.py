@@ -95,10 +95,23 @@ MIRRORED_TESTS = {
     / "tests"
     / "_seam_worker"
     / "test_callbacks.py",
+    ROOT / "src" / "leaven" / "_seam_worker" / "context.py": ROOT
+    / "tests"
+    / "test_proposer_worker.py",
+    ROOT / "src" / "leaven" / "_seam_worker" / "main.py": ROOT
+    / "tests"
+    / "test_proposer_worker.py",
+    ROOT / "src" / "leaven" / "_seam_worker" / "proposer.py": ROOT
+    / "tests"
+    / "test_proposer_worker.py",
     ROOT / "src" / "leaven" / "_seam_worker" / "protocol.py": ROOT
     / "tests"
     / "_seam_worker"
     / "test_protocol.py",
+    ROOT / "src" / "leaven" / "_seam_worker" / "runner.py": ROOT
+    / "tests"
+    / "_seam_worker"
+    / "test_runner.py",
     ROOT / "src" / "leaven" / "artifacts" / "skill_bank.py": ROOT
     / "tests"
     / "artifacts"

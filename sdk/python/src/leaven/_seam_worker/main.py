@@ -5,8 +5,8 @@ import asyncio
 from pathlib import Path
 from typing import cast
 
-from .._seam._wire import JsonObject, JsonRpcId
-from .._seam._wire.payloads import StageRunRequest
+from .._seam._wire import JsonRpcId
+from .._seam._wire.payloads import StageRunRequest, StageRunResult
 from ..artifacts.prompt import PromptArtifact
 from ..decorators import RegisteredStage
 from ..proposal import ProposalBatch
@@ -51,7 +51,7 @@ async def run_stage(
     params: StageRunRequest,
     *,
     lm_model: str,
-) -> JsonObject:
+) -> StageRunResult:
     """Dispatch one registered stage by role."""
     if stage.role == "runner":
         return await run_runner_stage(

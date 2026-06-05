@@ -4,10 +4,11 @@ from msgspec import UNSET, UnsetType
 
 from .._receipts import CallReceipt, QueryReceipt
 from .._seam._wire import JsonObject
-from .._seam._wire.json_value import json_object
 from .._seam._wire.payloads import (
     FailureMode,
+    OutputRecord,
     StageRunRequest,
+    StageRunResult,
     SurfaceSuggestion,
 )
 from .._seam._wire.payloads import (
@@ -39,7 +40,7 @@ async def run_proposer_stage(
     params: StageRunRequest,
     *,
     lm_model: str,
-) -> JsonObject:
+) -> StageRunResult:
     """Execute one proposer request and return a text stage_run_result summary."""
     payload = params.payload
     if not isinstance(payload, WireProposeRequest):
@@ -60,22 +61,20 @@ async def run_proposer_stage(
     if not isinstance(batch, ProposalBatch):
         raise TypeError(f"proposer stage must return ProposalBatch; got {type(batch).__name__}")
     submission = await cx.proposals.submit(batch)
-    return json_object(
-        {
-            "schema_version": "leaven.stage_run.v1",
-            "message": "stage_run_result",
-            "stage": "proposer",
-            "stage_call_id": payload.stage_call_id,
-            "output": {
-                "kind": "text",
-                "summary": f"submitted {len(submission.proposal_ids)} proposal(s)",
-                "value": submission.receipt.receipt_id,
-                "visibility": "optimizer_visible",
-                "data_classes": ["public"],
-            },
-            "effect_receipts": callback.effect_receipts_json(),
-            "proposal_receipts": callback.proposal_receipts_json(),
-        }
+    return StageRunResult(
+        schema_version="leaven.stage_run.v1",
+        message="stage_run_result",
+        stage="proposer",
+        stage_call_id=payload.stage_call_id,
+        output=OutputRecord(
+            kind="text",
+            summary=f"submitted {len(submission.proposal_ids)} proposal(s)",
+            value=submission.receipt.receipt_id,
+            visibility="optimizer_visible",
+            data_classes=["public"],
+        ),
+        effect_receipts=callback.effect_receipts(),
+        proposal_receipts=callback.proposal_receipts(),
     )
 
 

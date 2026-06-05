@@ -5,7 +5,7 @@ import sys
 import pytest
 
 from leaven._seam._wire.codec import encode_request
-from leaven._seam._wire.payloads import RunnerRequest, StageRunRequest
+from leaven._seam._wire.payloads import OutputRecord, RunnerRequest, StageRunRequest, StageRunResult
 from leaven._seam_worker.protocol import (
     WorkerProtocolError,
     WorkerRequest,
@@ -62,12 +62,36 @@ def test_read_request_rejects_untyped_stage_params(monkeypatch: pytest.MonkeyPat
 
 
 def test_write_result_preserves_json_rpc_id(capsys: pytest.CaptureFixture[str]) -> None:
-    write_result(WorkerRequest(request_id=12, params=_runner_params()), {"ok": True})
+    result = StageRunResult(
+        schema_version="leaven.stage_run.v1",
+        message="stage_run_result",
+        stage="runner",
+        stage_call_id="sc_worker_protocol",
+        output=OutputRecord(
+            kind="text",
+            visibility="optimizer_visible",
+            data_classes=["candidate.output"],
+            value="ok",
+        ),
+    )
+
+    write_result(WorkerRequest(request_id=12, params=_runner_params()), result)
 
     assert json.loads(capsys.readouterr().out) == {
         "jsonrpc": "2.0",
         "id": 12,
-        "result": {"ok": True},
+        "result": {
+            "schema_version": "leaven.stage_run.v1",
+            "message": "stage_run_result",
+            "stage": "runner",
+            "stage_call_id": "sc_worker_protocol",
+            "output": {
+                "kind": "text",
+                "visibility": "optimizer_visible",
+                "data_classes": ["candidate.output"],
+                "value": "ok",
+            },
+        },
     }
 
 

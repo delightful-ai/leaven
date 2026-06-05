@@ -4,9 +4,10 @@ import sys
 from collections.abc import Sequence
 
 from .._seam import AgentRunRequest, LmCompleteRequest, ProposalSubmitRequest, SeamJsonRpcRequest
-from .._seam._wire import JsonObject
+from .._seam._wire.calls import LmContentText, LmMessage
 from .._seam._wire.codec import decode_method_response, encode_request
 from .._seam._wire.errors import JsonRpcProtocolError, JsonRpcRemoteError
+from .._seam._wire.payloads import StageEffectReceipt, StageProposalReceipt
 from .._seam._wire.results import AgentRunResult, LmCompleteResult, ProposalSubmitResult
 from .._stage_runtime import CallbackProposeContext, CallbackRolloutContext
 from .callbacks import CallbackReceiptLog, CallbackResult
@@ -55,13 +56,13 @@ class JsonRpcCallbackClient:
         """Send one `leaven/proposal.submit_batch` callback and decode the typed result."""
         return self._request_result(request, ProposalSubmitResult)
 
-    def effect_receipts_json(self) -> list[JsonObject]:
+    def effect_receipts(self) -> list[StageEffectReceipt]:
         """Return effect receipts observed while running the current stage."""
-        return self._receipts.effect_receipts_json()
+        return self._receipts.effect_receipts()
 
-    def proposal_receipts_json(self) -> list[JsonObject]:
+    def proposal_receipts(self) -> list[StageProposalReceipt]:
         """Return proposal write receipts observed while running the current stage."""
-        return self._receipts.proposal_receipts_json()
+        return self._receipts.proposal_receipts()
 
     async def lm_complete(
         self,
@@ -80,12 +81,7 @@ class JsonRpcCallbackClient:
             request_id=request_id,
             plan_id=_plan_id(request_id),
             idempotency_key=_idempotency_key(request_id),
-            messages=[
-                {
-                    "role": "user",
-                    "content": [{"kind": "text", "text": prompt}],
-                }
-            ],
+            messages=[LmMessage(role="user", content=[LmContentText(text=prompt)])],
             model=model,
             model_role=model_role,
             temperature=temperature,

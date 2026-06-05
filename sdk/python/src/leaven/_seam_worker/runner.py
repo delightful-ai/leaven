@@ -2,7 +2,7 @@
 
 from .._seam._wire import JsonObject
 from .._seam._wire.json_value import json_object
-from .._seam._wire.payloads import RunnerRequest, StageRunRequest
+from .._seam._wire.payloads import OutputRecord, RunnerRequest, StageRunRequest, StageRunResult
 from .._seam._wire.refs import CandidateRef, CandidateRefRecord, CaseRef, CaseRefRecord
 from ..artifacts.prompt import PromptArtifact
 from ..case import InputCaseView
@@ -15,7 +15,7 @@ async def run_runner_stage(
     params: StageRunRequest,
     *,
     lm_model: str,
-) -> JsonObject:
+) -> StageRunResult:
     """Execute one target-free runner request and return a stage_run_result."""
     payload = params.payload
     if not isinstance(payload, RunnerRequest):
@@ -44,21 +44,19 @@ async def run_runner_stage(
     raw_output = await stage.func(prompt, case, cx)
     if not isinstance(raw_output, str):
         raise TypeError("runner stages must return str for the current text output contract")
-    return json_object(
-        {
-            "schema_version": "leaven.stage_run.v1",
-            "message": "stage_run_result",
-            "stage": "runner",
-            "stage_call_id": stage_call_id,
-            "output": {
-                "kind": "text",
-                "summary": f"runner output for {case_id}",
-                "value": raw_output.strip(),
-                "visibility": "optimizer_visible",
-                "data_classes": ["candidate.output"],
-            },
-            "effect_receipts": callback.effect_receipts_json(),
-        }
+    return StageRunResult(
+        schema_version="leaven.stage_run.v1",
+        message="stage_run_result",
+        stage="runner",
+        stage_call_id=stage_call_id,
+        output=OutputRecord(
+            kind="text",
+            summary=f"runner output for {case_id}",
+            value=raw_output.strip(),
+            visibility="optimizer_visible",
+            data_classes=["candidate.output"],
+        ),
+        effect_receipts=callback.effect_receipts(),
     )
 
 

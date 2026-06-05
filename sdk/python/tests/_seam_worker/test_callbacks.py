@@ -1,4 +1,10 @@
-from leaven._seam._wire.payloads import BlobRef, Cost
+from leaven._seam._wire.payloads import (
+    BlobRef,
+    Cost,
+    StageCost,
+    StageEffectReceipt,
+    StageProposalReceipt,
+)
 from leaven._seam._wire.results import (
     AgentCommandRecord,
     AgentRunResult,
@@ -48,13 +54,13 @@ def test_callback_receipts_extract_typed_lm_cost() -> None:
         )
     )
 
-    assert log.effect_receipts_json() == [
-        {
-            "method": "leaven/lm.complete",
-            "receipt": "lmrec_main",
-            "call_kind": "lm_complete",
-            "cost": {"input_tokens": 7, "output_tokens": 3},
-        }
+    assert log.effect_receipts() == [
+        StageEffectReceipt(
+            method="leaven/lm.complete",
+            receipt="lmrec_main",
+            call_kind="lm_complete",
+            cost=StageCost(input_tokens=7, output_tokens=3),
+        )
     ]
 
 
@@ -101,21 +107,20 @@ def test_callback_receipts_extract_typed_agent_blob_refs() -> None:
         )
     )
 
-    assert log.effect_receipts_json() == [
-        {
-            "method": "leaven/agent.run",
-            "receipt": "agentrec_main",
-            "call_kind": "agent_run",
-            "blob_refs": [
-                {
-                    "kind": "blob_ref",
-                    "id": "blob_transcript",
-                    "sha256": "abc123",
-                    "bytes": 42,
-                    "data_classes": ["public"],
-                }
+    assert log.effect_receipts() == [
+        StageEffectReceipt(
+            method="leaven/agent.run",
+            receipt="agentrec_main",
+            call_kind="agent_run",
+            blob_refs=[
+                BlobRef(
+                    id="blob_transcript",
+                    sha256="abc123",
+                    bytes=42,
+                    data_classes=["public"],
+                )
             ],
-        }
+        )
     ]
 
 
@@ -151,11 +156,11 @@ def test_proposal_receipts_extract_typed_submitted_ids() -> None:
         )
     )
 
-    assert log.proposal_receipts_json() == [
-        {
-            "method": "leaven/proposal.submit_batch",
-            "receipt": "proprec_main",
-            "write_kind": "submit_proposal_batch",
-            "proposal_ids": ["proposal_1", "proposal_2"],
-        }
+    assert log.proposal_receipts() == [
+        StageProposalReceipt(
+            method="leaven/proposal.submit_batch",
+            receipt="proprec_main",
+            write_kind="submit_proposal_batch",
+            proposal_ids=["proposal_1", "proposal_2"],
+        )
     ]
