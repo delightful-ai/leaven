@@ -27,8 +27,8 @@ from .._seam._wire.evidence import (
 )
 from .._seam._wire.refs import (
     AssessmentRankingValue,
+    ExtensionJsonPayload,
     ReceiptRef,
-    WireJsonExtensionPayload,
 )
 from .._seam._wire.results import AssessmentSubmitResult
 from .._seam._wire.writes import SubmitAssessmentRecord, WriteOutputRecord, WriteScore
@@ -249,7 +249,7 @@ def _private_evidence_to_wire(private: EvidencePrivate) -> WireEvidencePrivate:
     return WireEvidencePrivate(
         visibility=_private_visibility(private.visibility),
         data_classes=list(private.data_classes),
-        payload=msgspec.convert(private.payload, type=WireJsonExtensionPayload),
+        payload=msgspec.convert(private.payload, type=ExtensionJsonPayload),
     )
 
 

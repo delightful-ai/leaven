@@ -16,7 +16,7 @@ from .._seam._wire import JsonObject
 from .._seam._wire.json_value import json_object, json_value
 from .._seam._wire.payloads import BlobRef as WireBlobRef
 from .._seam._wire.payloads import Cost
-from .._seam._wire.refs import WireJsonExtensionPayload
+from .._seam._wire.refs import ExtensionJsonPayload
 from .._seam._wire.results import AgentRunResult
 from ..agent_instructions import AgentInstructions
 from ..blob_ref import BlobRef
@@ -256,7 +256,7 @@ def _blob_ref(value: WireBlobRef | UnsetType) -> BlobRef | None:
 
 
 def _parsed_json[ParsedOutputT: BaseModel](
-    value: WireJsonExtensionPayload | UnsetType,
+    value: ExtensionJsonPayload | UnsetType,
     output: OutputContract | None,
 ) -> JsonValue | ParsedOutputT:
     if value is UNSET:

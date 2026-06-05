@@ -15,7 +15,7 @@ from .._seam._wire import JsonObject
 from .._seam._wire.calls import LmTool as WireLmTool
 from .._seam._wire.json_value import json_object, json_value
 from .._seam._wire.payloads import Cost
-from .._seam._wire.refs import WireJsonExtensionPayload, WireJsonSchemaObject
+from .._seam._wire.refs import ExtensionJsonPayload, WireJsonSchemaObject
 from .._seam._wire.results import LmCompleteResult
 from ..json_value import JsonSchema, JsonValue
 from ..output import JsonSchemaOutput, JsonSchemaValueOutput
@@ -270,7 +270,7 @@ def _cost_usd(cost: Cost | UnsetType) -> float | None:
 
 
 def _parsed_json[ParsedOutputT: BaseModel](
-    value: WireJsonExtensionPayload | UnsetType,
+    value: ExtensionJsonPayload | UnsetType,
     output: JsonSchemaOutput[ParsedOutputT] | JsonSchemaValueOutput | None,
 ) -> ParsedOutputT | JsonValue:
     if value is UNSET:

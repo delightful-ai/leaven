@@ -52,7 +52,7 @@ from .payloads import (
 from .payloads import (
     StageRunResult as StageRunDispatchResult,
 )
-from .refs import BlobRef, WireJsonExtensionPayload
+from .refs import BlobRef, ExtensionJsonPayload
 
 
 class MethodResultBinding(Struct, frozen=True, forbid_unknown_fields=True):
@@ -211,7 +211,7 @@ class LmResponsePrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_de
     data_classes: list[str]
     replayability: Replayability
     cost: Cost | UnsetType = UNSET
-    parsed: WireJsonExtensionPayload | UnsetType = UNSET
+    parsed: ExtensionJsonPayload | UnsetType = UNSET
 
 
 class AgentCommandRecord(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
@@ -234,7 +234,7 @@ class AgentSessionPrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_
     transcript_ref: BlobRef | UnsetType = UNSET
     transcript_content_base64: str | UnsetType = UNSET
     cost: Cost | UnsetType = UNSET
-    parsed: WireJsonExtensionPayload | UnsetType = UNSET
+    parsed: ExtensionJsonPayload | UnsetType = UNSET
 
 
 class SandboxExecPrimary(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
@@ -424,7 +424,7 @@ def decode_agent_parsed[T](result: AgentRunResult, parsed_type: type[T]) -> T:
 
 
 def _decode_parsed_payload[T](
-    payload: WireJsonExtensionPayload | UnsetType,
+    payload: ExtensionJsonPayload | UnsetType,
     parsed_type: type[T],
 ) -> T:
     if payload is UNSET:

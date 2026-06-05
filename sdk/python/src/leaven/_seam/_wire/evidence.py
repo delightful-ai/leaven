@@ -11,10 +11,10 @@ from msgspec import UNSET, Struct, UnsetType
 from .refs import (
     BlobRef,
     DataClassSet,
+    ExtensionJsonPayload,
     MetadataBag,
     ReceiptRef,
     TraceRef,
-    WireJsonExtensionPayload,
 )
 
 type EvidenceVisibility = Literal[
@@ -43,7 +43,7 @@ class EvidencePublic(Struct, frozen=True, forbid_unknown_fields=True, omit_defau
 class EvidencePrivate(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
     visibility: Literal["evaluator_only", "operator_only", "scorer_private"]
     data_classes: DataClassSet
-    payload: WireJsonExtensionPayload | UnsetType = UNSET
+    payload: ExtensionJsonPayload | UnsetType = UNSET
     payload_ref: BlobRef | UnsetType = UNSET
     payload_schema_fingerprint: str | UnsetType = UNSET
 

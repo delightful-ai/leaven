@@ -11,7 +11,7 @@ from leaven._receipts import CallReceipt
 from leaven._seam import AgentRunRequest
 from leaven._seam._wire.payloads import BlobRef as WireBlobRef
 from leaven._seam._wire.payloads import Cost
-from leaven._seam._wire.refs import WireJsonExtensionPayload
+from leaven._seam._wire.refs import ExtensionJsonPayload
 from leaven._seam._wire.results import AgentCommandRecord, AgentRunResult, AgentSessionPrimary
 from leaven.builders.agent import AgentBuilder
 from leaven.json_value import JsonObject, JsonValue
@@ -148,8 +148,8 @@ def _params_object(params: object) -> JsonObject:
     return value
 
 
-def _wire_json(value: JsonObject) -> WireJsonExtensionPayload:
-    return msgspec.convert(value, type=WireJsonExtensionPayload)
+def _wire_json(value: JsonObject) -> ExtensionJsonPayload:
+    return msgspec.convert(value, type=ExtensionJsonPayload)
 
 
 def _json_array(value: JsonValue) -> list[JsonValue]:
