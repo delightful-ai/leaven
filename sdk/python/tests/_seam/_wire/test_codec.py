@@ -214,6 +214,16 @@ def test_decode_error_rejects_unknown_fields() -> None:
         decode_response(body, Widget)
 
 
+def test_decode_error_rejects_untyped_error_data() -> None:
+    body = (
+        b'{"jsonrpc":"2.0","id":"req_1","error":{"code":-32000,'
+        b'"message":"no","data":{"debug":"raw"}}}'
+    )
+
+    with pytest.raises(JsonRpcProtocolError, match="unknown field `data`"):
+        decode_response(body, Widget)
+
+
 def test_decode_response_raises_remote_error() -> None:
     body = b'{"jsonrpc":"2.0","id":"req_1","error":{"code":-32000,"message":"no"}}'
 

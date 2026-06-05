@@ -1713,6 +1713,37 @@ acceptance:
           the plan-execution and public-seam contract-test paths. The row
           remains pending because other non-workspace Plan leaves still need
           typed owners.
+      - kind: jsonrpc_error_data_hard_cut_and_workspace_op_service_integration
+        paths:
+          - crates/leaven-seam-runtime/src/runtime.rs
+          - crates/leaven-seam-runtime/tests/runtime_contract.rs
+          - crates/leaven-seam-service/src/git_workspace.rs
+          - crates/leaven-seam-service/src/service.rs
+          - sdk/python/src/leaven/_seam/_wire/errors.py
+          - sdk/python/tests/_seam/_wire/test_codec.py
+        commands:
+          - cargo fmt --check
+          - cargo test -p leaven-seam-runtime --test runtime_contract
+          - cargo check -p leaven-seam-service -p leaven-cli
+          - cd sdk/python && uv run pytest tests/_seam/_wire -q
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run ruff check src/leaven/_seam/_wire/errors.py tests/_seam/_wire/test_codec.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/_wire/errors.py tests/_seam/_wire/test_codec.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - "! rg -n 'op_kind\\(\\)\\?|expected_data_classes\\(\\)\\?|\\.op\\(\\)\\.get|request\\.op\\.get|request\\.op\\[' crates/leaven-seam-service crates/leaven-public-seam/src crates/leaven-public-seam/tests -g '*.rs'"
+        note: >-
+          Leaven's JSON-RPC runtime currently emits no `error.data`, and the
+          runtime contract now asserts error objects omit that field. The Python
+          msgspec `JsonRpcError` record no longer carries `Raw` error data; any
+          incoming `error.data` is rejected as an unknown field until Leaven owns
+          a typed Rust/Python error-data schema. This removes the explicit
+          JSON-RPC error-data Raw island instead of accepting arbitrary
+          extension data. The slice also finished integrating the previously
+          introduced Rust `WorkspaceQueryOp` enum through `leaven-seam-service`
+          and the CLI profile export path, so Git workspace execution and local
+          workspace-query service routing consume typed operation facts instead
+          of JSON indexing. The row remains pending because non-error,
+          non-workspace schema-owned leaves still need typed owners.
       - kind: typed_private_client_request_cutover
         paths:
           - sdk/python/src/leaven/_seam/plans.py

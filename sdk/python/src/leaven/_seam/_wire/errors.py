@@ -1,6 +1,6 @@
 """Exceptions raised by the private public-seam wire codec."""
 
-from msgspec import UNSET, Raw, Struct, UnsetType
+from msgspec import Struct
 
 
 class JsonRpcProtocolError(ValueError):
@@ -8,11 +8,10 @@ class JsonRpcProtocolError(ValueError):
 
 
 class JsonRpcError(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
-    """A JSON-RPC error object with raw optional extension data."""
+    """A JSON-RPC error object emitted by Leaven's public-seam runtime."""
 
     code: int
     message: str
-    data: Raw | UnsetType = UNSET
 
 
 class JsonRpcRemoteError(RuntimeError):

@@ -45,6 +45,25 @@ fn runtime_rejects_unknown_methods_without_reaching_service() {
 }
 
 #[test]
+fn runtime_error_objects_omit_untyped_data() {
+    let service = RecordingService::default();
+    let runtime = runtime(service);
+
+    let response = runtime.handle_value(&json!({
+        "jsonrpc": "2.0",
+        "id": "req_unknown",
+        "method": "leaven/not.real",
+        "params": plan_params()
+    }));
+
+    assert_eq!(
+        error_code(response.value()),
+        JsonRpcErrorCode::MethodNotFound
+    );
+    assert!(response.value()["error"].get("data").is_none());
+}
+
+#[test]
 fn runtime_delivers_typed_plan_document_to_service() {
     let service = PlanDocumentRecordingService::default();
     let runtime = runtime(service.clone());

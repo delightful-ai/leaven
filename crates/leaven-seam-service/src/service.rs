@@ -724,14 +724,14 @@ impl PlanExecutionHost for ConfiguredPlanHost {
                 .ok_or_else(|| PublicSeamError::InvalidPlan {
                     message: format!("workspace `{workspace_id}` is not materialized"),
                 })?;
-        let expected = request.expected_data_classes()?;
+        let expected = request.expected_data_classes();
         let data_classes = if expected.is_empty() {
             vec!["workspace.file".to_owned()]
         } else {
             expected.into_iter().map(str::to_owned).collect()
         };
         let mut view = workspace.view();
-        if matches!(request.op_kind()?, "git_log" | "git_diff" | "git_status") {
+        if matches!(request.op_kind(), "git_log" | "git_diff" | "git_status") {
             execute_git_workspace_query(
                 &request,
                 &mut view,

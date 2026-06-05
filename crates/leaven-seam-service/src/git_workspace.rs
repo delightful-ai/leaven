@@ -1,7 +1,10 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use leaven_public_seam::{PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest, PublicSeamError};
+use leaven_public_seam::{
+    PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest, PublicSeamError, WorkspaceGitAgainst,
+    WorkspaceQueryOp,
+};
 use leaven_workspace::{Command, WorkspacePath, WorkspaceView};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -54,7 +57,7 @@ pub(crate) fn execute_git_workspace_query(
     graph_revision: String,
     data_classes: Vec<String>,
 ) -> Result<PlanWorkspaceQueryOutcome, PublicSeamError> {
-    let value = match request.op_kind()? {
+    let value = match request.op_kind() {
         "git_log" => git_log_value(request, view)?,
         "git_diff" => git_diff_value(request, view)?,
         "git_status" => git_status_value(request, view)?,
@@ -73,11 +76,12 @@ fn git_log_value(
     request: &PlanWorkspaceQueryRequest<'_>,
     view: &mut WorkspaceView<'_>,
 ) -> Result<Value, PublicSeamError> {
-    let max_entries = request
-        .op()
-        .get("max_entries")
-        .and_then(Value::as_u64)
-        .unwrap_or(50);
+    let WorkspaceQueryOp::GitLog { max_entries } = request.op() else {
+        return Err(PublicSeamError::InvalidPlan {
+            message: "workspace_query git_log must carry typed op".to_owned(),
+        });
+    };
+    let max_entries = max_entries.unwrap_or(50);
     let max_entries_arg = max_entries.to_string();
     let text = run_git_command(
         view,
@@ -99,27 +103,23 @@ fn git_diff_value(
     request: &PlanWorkspaceQueryRequest<'_>,
     view: &mut WorkspaceView<'_>,
 ) -> Result<Value, PublicSeamError> {
-    let against = request
-        .op()
-        .get("against")
-        .and_then(Value::as_str)
-        .ok_or_else(|| PublicSeamError::InvalidPlan {
-            message: "workspace_query git_diff must carry against".to_owned(),
-        })?;
+    let WorkspaceQueryOp::GitDiff { against, max_bytes } = request.op() else {
+        return Err(PublicSeamError::InvalidPlan {
+            message: "workspace_query git_diff must carry typed op".to_owned(),
+        });
+    };
     let rev = match against {
-        "seed" | "baseline" | "head" => "HEAD",
-        "parent" => "HEAD~1",
-        other => {
-            return Err(PublicSeamError::InvalidPlan {
-                message: format!("unsupported git_diff against `{other}`"),
-            });
+        WorkspaceGitAgainst::Seed | WorkspaceGitAgainst::Baseline | WorkspaceGitAgainst::Head => {
+            "HEAD"
         }
+        WorkspaceGitAgainst::Parent => "HEAD~1",
     };
     let text = run_git_command(
         view,
         &["diff", "--no-ext-diff", "--text", rev, "--"],
-        request.op().get("max_bytes").and_then(Value::as_u64),
+        *max_bytes,
     )?;
+    let against = against.as_str();
     Ok(json!({
         "kind": "workspace_diff",
         "text": text,
@@ -135,11 +135,12 @@ fn git_status_value(
     request: &PlanWorkspaceQueryRequest<'_>,
     view: &mut WorkspaceView<'_>,
 ) -> Result<Value, PublicSeamError> {
-    let porcelain = request
-        .op()
-        .get("porcelain")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
+    let WorkspaceQueryOp::GitStatus { porcelain } = request.op() else {
+        return Err(PublicSeamError::InvalidPlan {
+            message: "workspace_query git_status must carry typed op".to_owned(),
+        });
+    };
+    let porcelain = porcelain.unwrap_or(false);
     let args = if porcelain {
         &["status", "--porcelain=v1"][..]
     } else {
