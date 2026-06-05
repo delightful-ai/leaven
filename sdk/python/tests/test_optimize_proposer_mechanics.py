@@ -29,7 +29,7 @@ async def submit_change(req: ProposeRequest, cx: lv.ProposeContext) -> ProposalB
                 parent_candidate_id=req.parent_candidate_id,
                 surface=req.allowed_surfaces[0],
                 change_schema=req.allowed_change_schemas[0],
-                change={"template": "{answer}!"},
+                change=lv.PromptTemplateChange(template="{answer}!"),
             )
         ]
     )

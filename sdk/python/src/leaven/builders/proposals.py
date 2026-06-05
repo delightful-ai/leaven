@@ -21,7 +21,7 @@ from .._seam._wire.writes import (
     ProposalWriteRecord,
 )
 from ..artifacts.directory import DirectoryArtifact
-from ..artifacts.prompt import PromptArtifact
+from ..artifacts.prompt import PromptArtifact, PromptTemplateChange
 from ..artifacts.skill_bank import SkillBank, SkillBankChangeRecord
 from ..json_value import JsonValue
 from ..proposal import ProposalArtifactValue, ProposalBatch, ProposalChangeValue, ProposalEffect
@@ -215,7 +215,7 @@ def _plan_literal_expr(value: JsonValue) -> PlanExpressionLiteral:
     return PlanExpressionLiteral(value=value)
 
 
-def _literal_expr(value: ProposalChangeValue | JsonValue) -> ValueExprLiteral:
+def _literal_expr(value: ProposalChangeValue) -> ValueExprLiteral:
     return ValueExprLiteral(value=_proposal_value(value))
 
 
@@ -250,10 +250,12 @@ def _artifact_value(value: ProposalArtifactValue) -> JsonValue:
     raise TypeError(f"unsupported proposal artifact: {type(value).__name__}")
 
 
-def _proposal_value(value: ProposalChangeValue | JsonValue) -> JsonValue:
+def _proposal_value(value: ProposalChangeValue) -> JsonValue:
+    if isinstance(value, PromptTemplateChange):
+        return value.to_json_value()
     if isinstance(value, SkillBankChangeRecord):
         return value.to_json_value()
-    return value
+    raise TypeError(f"unsupported proposal change: {type(value).__name__}")
 
 
 __all__ = ["ProposalSubmission", "ProposalsBuilder"]

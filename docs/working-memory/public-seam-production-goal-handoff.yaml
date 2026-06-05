@@ -2269,6 +2269,39 @@ acceptance:
           constructors, and the exact generated seam literal for proposal
           submission. Prompt and GitProgram change leaves still require their
           own owners before the full Python wire-codegen row can close.
+      - kind: python_prompt_proposal_change_owner_cutover
+        paths:
+          - sdk/python/src/leaven/artifacts/prompt.py
+          - sdk/python/src/leaven/artifacts/__init__.py
+          - sdk/python/src/leaven/__init__.py
+          - sdk/python/src/leaven/proposal.py
+          - sdk/python/src/leaven/builders/proposals.py
+          - sdk/python/tests/test_proposal_submission.py
+          - sdk/python/tests/test_proposal.py
+          - sdk/python/tests/test_optimize_proposer_mechanics.py
+        commands:
+          - cd sdk/python && uv run pytest tests/test_proposal_submission.py tests/test_proposal.py tests/test_optimize_proposer_mechanics.py -q
+          - cd sdk/python && uv run pytest tests/_seam/test_client.py::test_client_lowers_typed_proposer_stage_request tests/test_proposal_submission.py tests/test_optimize_proposer_mechanics.py -q
+          - cd sdk/python && uv run ruff check src/leaven/proposal.py src/leaven/builders/proposals.py src/leaven/artifacts/prompt.py src/leaven/artifacts/__init__.py src/leaven/__init__.py tests/test_proposal_submission.py tests/test_proposal.py tests/test_optimize_proposer_mechanics.py
+          - cd sdk/python && uv run ty check src/leaven/proposal.py src/leaven/builders/proposals.py src/leaven/artifacts/prompt.py src/leaven/artifacts/__init__.py src/leaven/__init__.py tests/test_proposal_submission.py tests/test_proposal.py tests/test_optimize_proposer_mechanics.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - >-
+            ! rg -n "change=\\{|change=\\{\\\"template\\\"|change=\\{\\\"patch\\\"|ProposalChangeValue = JsonValue|change_value: JsonValue|def _proposal_value\\(value: ProposalChangeValue \\| JsonValue\\)"
+            sdk/python/src/leaven sdk/python/tests sdk/python/examples -g '*.py'
+        note: >-
+          Public prompt proposal changes now have a typed owner:
+          `PromptTemplateChange`. `ProposalEffect.change(...)` no longer
+          accepts arbitrary `JsonValue` changes, and raw dict changes are
+          rejected before private seam lowering. `ProposalsBuilder` projects
+          prompt and skill-bank changes through typed artifact-native records
+          into generated Plan IR literal values only at the boundary. The
+          optimize proposer fixture now submits `PromptTemplateChange` instead
+          of `{"template": ...}`, and the negative source search returned no
+          raw prompt/patch proposal-change call sites. GitProgram and future
+          adapter change leaves still need their own typed owners before this
+          row can close.
       - kind: python_reflection_payload_metadata_owner_cutover
         paths:
           - sdk/python/src/leaven/stage_payloads.py
@@ -5368,6 +5401,29 @@ acceptance:
           passed Ruff/ty/quality checks, examples compile, generated seam wire
           is current, and line-count lint passes. The row remains pending
           because the whole public API/backbone audit is not complete.
+      - kind: public_prompt_proposal_change_requires_typed_owner
+        paths:
+          - sdk/python/src/leaven/artifacts/prompt.py
+          - sdk/python/src/leaven/artifacts/__init__.py
+          - sdk/python/src/leaven/__init__.py
+          - sdk/python/src/leaven/proposal.py
+          - sdk/python/src/leaven/builders/proposals.py
+          - sdk/python/tests/test_proposal_submission.py
+          - sdk/python/tests/test_optimize_proposer_mechanics.py
+        commands:
+          - cd sdk/python && uv run pytest tests/test_proposal_submission.py tests/test_proposal.py tests/test_optimize_proposer_mechanics.py -q
+          - cd sdk/python && uv run ruff check src/leaven/proposal.py src/leaven/builders/proposals.py src/leaven/artifacts/prompt.py src/leaven/artifacts/__init__.py src/leaven/__init__.py tests/test_proposal_submission.py tests/test_proposal.py tests/test_optimize_proposer_mechanics.py
+          - cd sdk/python && uv run ty check src/leaven/proposal.py src/leaven/builders/proposals.py src/leaven/artifacts/prompt.py src/leaven/artifacts/__init__.py src/leaven/__init__.py tests/test_proposal_submission.py tests/test_proposal.py tests/test_optimize_proposer_mechanics.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Public proposal authors now use `lv.PromptTemplateChange` for prompt
+          template edits instead of passing raw dictionaries to
+          `ProposalEffect.change(...)`. Direct Pydantic validation of a raw
+          `change_value` dict now fails as an authoring error. This removes a
+          public SDK proposal-change erasure point on the Codex/proposer path;
+          the broader SDK quality row remains pending for the full public API
+          and generated-boundary audit.
       - kind: public_result_replay_scaffold_removed
         paths:
           - sdk/python/src/leaven/result.py

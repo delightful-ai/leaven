@@ -36,7 +36,7 @@ from ._errors import UnsupportedConfigurationError
 from .agent_instructions import AgentInstructions, AgentRoles
 
 # ----- Built-in artifacts ---------------------------------------------------
-from .artifacts import PromptArtifact, SkillBank
+from .artifacts import PromptArtifact, PromptTemplateChange, SkillBank
 from .artifacts.skill_bank import SkillBankChangeFile, SkillBankWriteFileChange, SkillFile
 from .blob_ref import BlobRef
 
@@ -135,6 +135,7 @@ __all__ = [
     "OptimizeBuilder",
     "Optimized",
     "PromptArtifact",
+    "PromptTemplateChange",
     "Propose",
     "ProposeContext",
     "Reflect",

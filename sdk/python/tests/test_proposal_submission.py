@@ -13,7 +13,7 @@ from leaven._seam._wire.results import (
     ProposalSubmitResult,
 )
 from leaven._seam._wire.writes import ProposalEffectAgentSession, ProposalWriteRecord
-from leaven.artifacts.prompt import PromptArtifact
+from leaven.artifacts.prompt import PromptArtifact, PromptTemplateChange
 from leaven.artifacts.skill_bank import SkillBankChangeFile, SkillBankWriteFileChange
 from leaven.builders.proposals import ProposalsBuilder, ProposalSubmission
 from leaven.json_value import JsonObject, JsonValue
@@ -91,7 +91,7 @@ async def test_proposals_builder_requires_bound_seam_client() -> None:
                         parent_candidate_id="cand_parent",
                         surface="fp_surface_sha256_program",
                         change_schema="fp_schema_sha256_patch",
-                        change={"patch": "demo"},
+                        change=PromptTemplateChange(template="{answer}!"),
                     )
                 ],
             )
@@ -226,7 +226,7 @@ async def test_proposals_builder_submit_and_apply_uses_batch_ref_from_submit() -
                 parent_candidate_id="cand_parent",
                 surface="fp_surface_sha256_program",
                 change_schema="fp_schema_sha256_patch",
-                change={"patch": "demo"},
+                change=PromptTemplateChange(template="{answer}!"),
             )
         ],
         read_receipts=[QueryReceipt(receipt_id="qrec_reflection")],
@@ -236,6 +236,21 @@ async def test_proposals_builder_submit_and_apply_uses_batch_ref_from_submit() -
 
     assert client.apply_request_value.proposal_batch == "pb_submitted"
     assert receipt.receipt_id == "wrec_proposal_apply"
+
+
+def test_proposal_effect_rejects_raw_change_dict() -> None:
+    """Regression: public proposal changes need typed artifact-native owners."""
+
+    with pytest.raises(TypeError, match="typed artifact change object"):
+        ProposalEffect.model_validate(
+            {
+                "kind": "change",
+                "parent_candidate_id": "cand_parent",
+                "surface": "fp_surface_sha256_program",
+                "change_schema": "fp_schema_sha256_patch",
+                "change_value": {"template": "{answer}!"},
+            }
+        )
 
 
 def _json_object(value: JsonValue) -> JsonObject:

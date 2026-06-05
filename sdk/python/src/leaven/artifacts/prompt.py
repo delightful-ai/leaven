@@ -1,8 +1,12 @@
 """PromptArtifact — the simplest case: a template string the optimizer evolves."""
 
-from typing import Self
+import json
+from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from .._json_parse import parse_json_object
+from ..json_value import JsonObject
 
 
 class PromptArtifact(BaseModel):
@@ -30,4 +34,20 @@ class PromptArtifact(BaseModel):
         return cls(template="")
 
 
-__all__ = ["PromptArtifact"]
+class PromptTemplateChange(BaseModel):
+    """Replace the prompt template text for a prompt artifact candidate."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: Literal["replace_template"] = "replace_template"
+    template: str
+
+    def to_json_value(self) -> JsonObject:
+        """Project this typed prompt change into the seam literal encoding."""
+        return parse_json_object(
+            json.loads(self.model_dump_json(exclude_none=True)),
+            context="prompt template change",
+        )
+
+
+__all__ = ["PromptArtifact", "PromptTemplateChange"]

@@ -10,12 +10,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from ._receipts import CallReceipt, QueryReceipt
 from .artifacts.directory import DirectoryArtifact
-from .artifacts.prompt import PromptArtifact
+from .artifacts.prompt import PromptArtifact, PromptTemplateChange
 from .artifacts.skill_bank import SkillBank, SkillBankChange, SkillBankChangeRecord
 from .json_value import JsonValue
 
 type ProposalArtifactValue = DirectoryArtifact | PromptArtifact | SkillBank
-type ProposalChangeValue = JsonValue | SkillBankChangeRecord
+type ProposalChangeValue = PromptTemplateChange | SkillBankChangeRecord
 
 
 class ProposalEffect(BaseModel):
@@ -50,10 +50,23 @@ class ProposalEffect(BaseModel):
 
     @field_validator("artifact", mode="before")
     @classmethod
-    def _reject_raw_artifact_dict(cls, artifact: ProposalArtifactValue | JsonValue | None) -> ProposalArtifactValue | JsonValue | None:
+    def _reject_raw_artifact_dict(
+        cls,
+        artifact: ProposalArtifactValue | JsonValue | None,
+    ) -> ProposalArtifactValue | JsonValue | None:
         if isinstance(artifact, dict):
             raise TypeError("create proposal effects require a typed artifact object")
         return artifact
+
+    @field_validator("change_value", mode="before")
+    @classmethod
+    def _reject_raw_change_dict(
+        cls,
+        change: ProposalChangeValue | JsonValue | None,
+    ) -> ProposalChangeValue | JsonValue | None:
+        if isinstance(change, dict):
+            raise TypeError("change proposal effects require a typed artifact change object")
+        return change
 
     @model_validator(mode="after")
     def _validate_effect_shape(self) -> "ProposalEffect":

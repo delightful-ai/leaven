@@ -9,7 +9,7 @@ namespace owned by its semantics.
 """
 
 from .directory import DirectoryArtifact, directory
-from .prompt import PromptArtifact
+from .prompt import PromptArtifact, PromptTemplateChange
 from .skill_bank import (
     SkillBank,
     SkillBankAtomicChange,
@@ -29,6 +29,7 @@ from .skill_bank import (
 __all__ = [
     "DirectoryArtifact",
     "PromptArtifact",
+    "PromptTemplateChange",
     "SkillBank",
     "SkillBankAtomicChange",
     "SkillBankChange",
