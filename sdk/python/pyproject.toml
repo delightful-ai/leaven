@@ -104,3 +104,6 @@ ignore = [
 addopts = ["--import-mode=importlib"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.ty.environment]
+extra-paths = ["examples/live_openai_lm/src"]

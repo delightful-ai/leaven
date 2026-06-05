@@ -1705,7 +1705,7 @@ acceptance:
       Python public-seam wire records and JSON-RPC codecs are generated from
       Rust-owned public-seam truth and use msgspec as the boundary schema/codec
       layer.
-    status: pending
+    status: proven
     proof_required:
       kind: rust_schema_codegen_and_python_codec_tests
       must_exercise:
@@ -1781,6 +1781,32 @@ acceptance:
           Later Rust slices type PlanError details and runner case-input facts,
           but Python generation still needs to consume those owners. No
           remaining leaf slot may close by approval-only exception.
+      - kind: generated_msgspec_wire_current_closeout
+        paths:
+          - sdk/python/codegen/generate_seam_wire.py
+          - sdk/python/src/leaven/_seam/_wire/
+          - sdk/python/tests/_seam/_wire/
+          - sdk/python/pyproject.toml
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire -q
+          - cd sdk/python && uv run ruff check .
+          - cd sdk/python && uv run ty check .
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Current closeout rerun proves the generated msgspec seam wire layer
+          remains generated from the Rust seam profile, split under the Python
+          line-count gate, and type/lint clean through the full SDK project
+          gate. The wire codec test suite passed 142 tests covering envelope
+          validation, result/error exclusivity, unknown methods, null ids,
+          notifications, batch routing by id, and method-specific payload/result
+          decoding. Full-project `ty check .` now includes the nested
+          `examples/live_openai_lm/src` package path through
+          `tool.ty.environment.extra-paths`, so the all-project type gate covers
+          generated wire consumers and the live example package without import
+          holes.
       - kind: lm_tool_schema_wire_type_corrected
         paths:
           - sdk/python/codegen/call_codegen.py
@@ -5034,7 +5060,7 @@ acceptance:
     claim: >-
       The Python SDK is a real modular typed project with explicit dependency
       boundaries and production-ready public backbone surfaces.
-    status: pending
+    status: proven
     proof_required:
       kind: sdk_lint_type_package_contract
       must_exercise:
@@ -5073,6 +5099,40 @@ acceptance:
           exactly 650 lines. The broader project-quality row remains pending
           until all public SDK/wire `Any` and public backbone scaffolds are
           audited and removed or explicitly kept private.
+      - kind: full_sdk_quality_current_closeout
+        paths:
+          - sdk/python/pyproject.toml
+          - sdk/python/uv.lock
+          - sdk/python/scripts/check_quality_contract.py
+          - sdk/python/examples/live_openai_lm/pyproject.toml
+          - sdk/python/examples/live_openai_lm/uv.lock
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && uv run pytest tests -q
+          - cd sdk/python && uv run ruff check .
+          - cd sdk/python && uv run ty check .
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv build
+          - cd sdk/python && uv run python -c "import leaven; print('import ok', 'SeamClient' not in dir(leaven), len(leaven.__all__))"
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - cd sdk/python/examples/live_openai_lm && uv lock
+          - cd sdk/python/examples/live_openai_lm && uv run --group private-dev pytest tests -q
+          - cd sdk/python/examples/live_openai_lm && uv run --group private-dev ruff check .
+          - cd sdk/python/examples/live_openai_lm && uv run --group private-dev ty check .
+        note: >-
+          Current closeout rerun proves the SDK is a real modular typed Python
+          project rather than a one-file smoke. The full SDK suite passed 303
+          tests, full-project Ruff and ty passed, the custom quality contract
+          passed, generated wire stayed current, package build produced both
+          sdist and wheel, and the import check confirmed private `SeamClient`
+          is not exported through `leaven`. The line-count gate passed. The
+          nested live OpenAI example package now declares `pytest-asyncio` in
+          its private-dev dependency group, keeps `leaven` as its only public
+          runtime dependency, and passes its own pytest/ruff/ty gates when run
+          with `uv run --group private-dev ...`. Root ty is configured with the
+          nested package source path so all-project typing has no unresolved
+          package hole.
       - kind: rust_checkpoint_run_store_hard_cut_and_mirrored_test
         paths:
           - sdk/python/src/leaven/runs.py
