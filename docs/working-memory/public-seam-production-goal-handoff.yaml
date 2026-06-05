@@ -1257,6 +1257,38 @@ acceptance:
           semantics need an owning Rust evidence export before `lv.runs.open`
           and `lv.runs.inspect` can expose complete assessment rows without
           falling back to Python-only `optimized.json`.
+      - kind: rust_evidence_byte_readback_export_foundation
+        paths:
+          - crates/leaven-store-file/src/evidence.rs
+          - crates/leaven-run/src/inspection.rs
+          - crates/leaven-run/src/lib.rs
+          - crates/leaven-cli/src/main.rs
+          - sdk/python/src/leaven/_runs/__init__.py
+          - sdk/python/src/leaven/_runs/rust_export.py
+          - sdk/python/src/leaven/run_inspection.py
+          - sdk/python/tests/_runs/test_rust_export.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cargo test -p leaven-store-file
+          - cargo test -p leaven-run export_local_run_evidence_reads_bytes_through_evidence_store --lib
+          - cargo test -p leaven-cli tests::run_evidence_exports_rust_owned_evidence_bytes -- --exact
+          - cd sdk/python && uv run pytest tests/_runs/test_rust_export.py -q
+          - cd sdk/python && uv run ruff check src/leaven/run_inspection.py src/leaven/_runs/__init__.py src/leaven/_runs/rust_export.py tests/_runs/test_rust_export.py
+          - cd sdk/python && uv run ty check src/leaven/run_inspection.py src/leaven/_runs/__init__.py src/leaven/_runs/rust_export.py tests/_runs/test_rust_export.py
+          - cargo fmt --check
+          - uv run --with pyyaml python -c "from pathlib import Path; import yaml; yaml.safe_load(Path('docs/working-memory/public-seam-production-goal-handoff.yaml').read_text())"
+        note: >-
+          `leaven-store-file` now owns raw JSON byte readback for a typed
+          evidence store/key through the same backend validation path as typed
+          evidence reads. `leaven-run` exposes
+          `leaven.run_evidence_export.v1` for one Rust-owned evidence ref,
+          returning store/key, byte count, SHA-256, and base64 contents without
+          Python knowing the filesystem layout. `leaven run evidence --run-dir
+          --store --key` exposes the export, and Python `_runs` decodes it into
+          typed `RustEvidenceReadback`. This proves evidence filesystem refs are
+          readable through a product surface; it is still foundation evidence
+          until `lv.runs.open(...)` and `lv.runs.inspect(...)` decode the
+          evidence payload into owning semantic assessment/reward rows.
     closeout_check: "Reading only `optimized.json` written by Python is a proxy."
 
   - id: python_wire_codegen_msgspec_boundary

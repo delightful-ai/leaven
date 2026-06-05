@@ -7,7 +7,11 @@ import pytest
 
 from leaven import runs
 from leaven._runs import optimized_from_rust_readback
-from leaven._runs.rust_export import load_rust_blob_readback, load_rust_run_readback
+from leaven._runs.rust_export import (
+    load_rust_blob_readback,
+    load_rust_evidence_readback,
+    load_rust_run_readback,
+)
 from leaven.run_inspection import RustRunReadback
 
 
@@ -73,7 +77,7 @@ def test_load_rust_run_readback_invokes_leaven_run_inspect(tmp_path: Path) -> No
         '        "target_kind": "independent",\n'
         '        "candidate_ids": ["cand_child"],\n'
         '        "target": {"Independent": {"candidate": "cand_child", "target": "Unscoped"}},\n'
-        '        "evidence": {"store": "evidence", "key": "assessment-child.json"},\n'
+        '        "evidence": {"store": "leaven-run", "key": "0"},\n'
         '        "metadata": {"split": "validation"},\n'
         '        "created_at": "2026-06-04T00:00:02Z"\n'
         "      }\n"
@@ -165,6 +169,52 @@ def test_load_rust_blob_readback_invokes_leaven_run_blob(tmp_path: Path) -> None
     ]
 
 
+def test_load_rust_evidence_readback_invokes_leaven_run_evidence(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    calls = tmp_path / "calls.txt"
+    fake = tmp_path / "leaven"
+    fake.write_text(
+        "#!/bin/sh\n"
+        "printf '%s\\n' \"$@\" > \"$LEAVEN_TEST_CALLS\"\n"
+        "cat <<'JSON'\n"
+        "{\n"
+        '  "schema_version": "leaven.run_evidence_export.v1",\n'
+        '  "evidence": {"store": "leaven-run", "key": "0"},\n'
+        '  "bytes": 23,\n'
+        '  "sha256": "5369812b12c948efac405e61b4e926b1f639ff019922e88d0c1955f981b103aa",\n'
+        '  "content_base64": "eyJzY29yZSI6MSwiY2FzZSI6ImEifQo="\n'
+        "}\n"
+        "JSON\n",
+        encoding="utf-8",
+    )
+    fake.chmod(0o755)
+    readback = load_rust_run_readback_fixture()
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setenv("LEAVEN_TEST_CALLS", str(calls))
+        evidence = load_rust_evidence_readback(
+            run_dir,
+            readback.graph.assessments[0].evidence,
+            leaven_bin=fake,
+        )
+
+    assert evidence.bytes == 23
+    assert evidence.evidence.store == "leaven-run"
+    assert evidence.evidence.key == "0"
+    assert evidence.content_bytes() == b'{"score":1,"case":"a"}\n'
+    assert calls.read_text(encoding="utf-8").splitlines() == [
+        "run",
+        "evidence",
+        "--run-dir",
+        str(run_dir),
+        "--store",
+        "leaven-run",
+        "--key",
+        "0",
+    ]
+
+
 def test_load_rust_run_readback_reports_cli_failure(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     (run_dir / "checkpoints").mkdir(parents=True)
@@ -189,6 +239,22 @@ def test_load_rust_blob_readback_reports_cli_failure(tmp_path: Path) -> None:
         load_rust_blob_readback(run_dir, readback.graph.blob, leaven_bin=fake)
 
 
+def test_load_rust_evidence_readback_reports_cli_failure(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    fake = tmp_path / "leaven"
+    fake.write_text("#!/bin/sh\necho nope >&2\nexit 7\n", encoding="utf-8")
+    fake.chmod(0o755)
+    readback = load_rust_run_readback_fixture()
+
+    with pytest.raises(RuntimeError, match="leaven run evidence failed"):
+        load_rust_evidence_readback(
+            run_dir,
+            readback.graph.assessments[0].evidence,
+            leaven_bin=fake,
+        )
+
+
 def test_optimized_from_rust_readback_uses_graph_candidates() -> None:
     readback = load_rust_run_readback_fixture()
 
@@ -205,7 +271,7 @@ def test_optimized_from_rust_readback_uses_graph_candidates() -> None:
     assert result.summary.run_dir == "/tmp/run"
     assert readback.graph.assessments[0].id == "assessment_child"
     assert readback.graph.assessments[0].candidate_ids == ["cand_child"]
-    assert readback.graph.assessments[0].evidence.key == "assessment-child.json"
+    assert readback.graph.assessments[0].evidence.key == "0"
     assert result.summary.cost_status == "unsupported_dependency"
     assert result.summary.total_lm_tokens == 18
     assert result.summary.usage_status == "known"
@@ -303,8 +369,8 @@ def load_rust_run_readback_fixture() -> RustRunReadback:
                             }
                         },
                         "evidence": {
-                            "store": "evidence",
-                            "key": "assessment-child.json",
+                            "store": "leaven-run",
+                            "key": "0",
                         },
                         "metadata": {"split": "validation"},
                         "created_at": "2026-06-04T00:00:02Z",

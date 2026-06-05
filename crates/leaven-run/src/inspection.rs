@@ -6,7 +6,7 @@ use base64::{Engine as _, engine::general_purpose};
 use leaven_engine::RunCheckpoint;
 use leaven_kernel::{BlobRef, CheckpointId, Cost, EvidenceRef, RunId};
 use leaven_store::{BlobStore, CheckpointStore};
-use leaven_store_file::FileStore;
+use leaven_store_file::{FileEvidenceStore, FileStore};
 use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -17,6 +17,9 @@ pub const RUN_INSPECTION_EXPORT_SCHEMA: &str = "leaven.run_inspection_export.v1"
 
 /// Schema name for the Rust-owned run blob export.
 pub const RUN_BLOB_EXPORT_SCHEMA: &str = "leaven.run_blob_export.v1";
+
+/// Schema name for the Rust-owned run evidence export.
+pub const RUN_EVIDENCE_EXPORT_SCHEMA: &str = "leaven.run_evidence_export.v1";
 
 /// Rust-owned inspection export for a local Leaven run directory.
 #[derive(Clone, Debug, Serialize)]
@@ -190,6 +193,21 @@ pub struct RustRunBlobExport {
     pub content_base64: String,
 }
 
+/// Rust-owned byte export for one evidence item in a local Leaven run directory.
+#[derive(Clone, Debug, Serialize)]
+pub struct RustRunEvidenceExport {
+    /// Export schema.
+    pub schema_version: &'static str,
+    /// Evidence reference resolved through Rust's evidence-store capability.
+    pub evidence: EvidenceReadbackRef,
+    /// Number of bytes read from the store.
+    pub bytes: usize,
+    /// SHA-256 digest of the retrieved bytes.
+    pub sha256: String,
+    /// Base64-encoded evidence JSON contents.
+    pub content_base64: String,
+}
+
 /// Blob reference facts for byte readback.
 #[derive(Clone, Debug, Serialize)]
 pub struct BlobByteReadbackRef {
@@ -338,6 +356,51 @@ pub fn export_local_run_blob(
     Ok(RustRunBlobExport {
         schema_version: RUN_BLOB_EXPORT_SCHEMA,
         blob: BlobByteReadbackRef {
+            store: reference.store,
+            key: reference.key,
+        },
+        bytes: bytes.len(),
+        sha256,
+        content_base64: general_purpose::STANDARD.encode(&bytes),
+    })
+}
+
+/// Export bytes for one evidence item from a local run store.
+///
+/// This is the Rust-owned byte readback companion for evidence refs exposed by
+/// [`export_local_run_inspection`]. External-language inspection uses it after
+/// Rust has exposed an evidence store/key pair; callers must not infer paths or
+/// read the store layout directly.
+pub fn export_local_run_evidence(
+    run_dir: impl AsRef<Path>,
+    store_name: impl Into<String>,
+    key: impl Into<String>,
+) -> Result<RustRunEvidenceExport, RunInspectionExportError> {
+    let store_name = store_name.into();
+    let key = key.into();
+    let store = FileEvidenceStore::<serde_json::Value>::open(
+        store_name.clone(),
+        run_dir.as_ref().join("evidence"),
+    )
+    .map_err(|source| RunInspectionExportError::Store {
+        operation: "open local run evidence store",
+        source,
+    })?;
+    let reference = EvidenceRef {
+        store: store_name,
+        key,
+    };
+    let bytes =
+        store
+            .get_json_bytes(&reference)
+            .map_err(|source| RunInspectionExportError::Store {
+                operation: "read run evidence",
+                source,
+            })?;
+    let sha256 = format!("{:x}", Sha256::digest(&bytes));
+    Ok(RustRunEvidenceExport {
+        schema_version: RUN_EVIDENCE_EXPORT_SCHEMA,
+        evidence: EvidenceReadbackRef {
             store: reference.store,
             key: reference.key,
         },
@@ -536,7 +599,8 @@ mod tests {
         WorkspaceJournalSnapshot,
     };
     use leaven_kernel::{BudgetSnapshot, Fingerprint, now};
-    use leaven_store::{BlobWrite, CheckpointBytes};
+    use leaven_store::{BlobWrite, CheckpointBytes, Evidence};
+    use serde::{Deserialize, Serialize};
 
     use super::*;
 
@@ -572,7 +636,7 @@ mod tests {
                     "request_id":"eval_req_child",
                     "evaluator":"evaluator/exact",
                     "target":{"Independent":{"candidate":"cand_child","target":"Unscoped"}},
-                    "evidence":{"store":"evidence","key":"assessment-child.json"},
+                    "evidence":{"store":"leaven-run","key":"0"},
                     "metadata":{"split":"validation"},
                     "created_at":"2026-06-04T00:00:02Z"
                 },
@@ -682,10 +746,7 @@ mod tests {
             export.graph.assessments[0].candidate_ids,
             vec!["cand_child".to_owned()]
         );
-        assert_eq!(
-            export.graph.assessments[0].evidence.key,
-            "assessment-child.json"
-        );
+        assert_eq!(export.graph.assessments[0].evidence.key, "0");
         assert_eq!(export.graph.assessments[0].metadata["split"], "validation");
         assert_eq!(export.graph.event_count, 3);
         assert_eq!(export.cost.lm_calls, 2);
@@ -740,10 +801,62 @@ mod tests {
         std::fs::remove_dir_all(run_dir).unwrap();
     }
 
+    #[test]
+    fn export_local_run_evidence_reads_bytes_through_evidence_store() {
+        let run_dir = test_run_dir("evidence-readback");
+        let evidence_store = FileEvidenceStore::<InspectionTestEvidence>::open(
+            "leaven-run",
+            run_dir.join("evidence"),
+        )
+        .unwrap();
+        let reference = leaven_store::EvidenceStore::put(
+            &evidence_store,
+            InspectionTestEvidence {
+                case_id: "case_1".to_owned(),
+                candidate_id: "cand_1".to_owned(),
+                score: 0.75,
+            },
+        )
+        .unwrap();
+
+        let export =
+            export_local_run_evidence(&run_dir, reference.store.clone(), reference.key.clone())
+                .unwrap();
+
+        assert_eq!(export.schema_version, RUN_EVIDENCE_EXPORT_SCHEMA);
+        assert_eq!(export.evidence.store, reference.store);
+        assert_eq!(export.evidence.key, reference.key);
+        assert_eq!(export.bytes, 70);
+        assert_eq!(
+            export.sha256,
+            "caeb9bc212575c0d9d0c1c30aa1f916f40997ca19dd2cac754d5a062c5dbe3e3"
+        );
+        assert_eq!(
+            String::from_utf8(
+                general_purpose::STANDARD
+                    .decode(export.content_base64)
+                    .unwrap()
+            )
+            .unwrap(),
+            "{\n  \"case_id\": \"case_1\",\n  \"candidate_id\": \"cand_1\",\n  \"score\": 0.75\n}"
+        );
+
+        std::fs::remove_dir_all(run_dir).unwrap();
+    }
+
     fn test_run_dir(label: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!(
             "leaven-run-inspection-{label}-{}",
             uuid::Uuid::new_v4()
         ))
     }
+
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    struct InspectionTestEvidence {
+        case_id: String,
+        candidate_id: String,
+        score: f64,
+    }
+
+    impl Evidence for InspectionTestEvidence {}
 }

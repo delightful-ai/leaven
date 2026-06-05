@@ -154,6 +154,22 @@ class RustBlobReadback(BaseModel):
         return base64.b64decode(self.content_base64, validate=True)
 
 
+class RustEvidenceReadback(BaseModel):
+    """Rust-owned bytes read from a local run evidence store."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: Literal["leaven.run_evidence_export.v1"]
+    evidence: EvidenceReadbackRef
+    bytes: int
+    sha256: str
+    content_base64: str
+
+    def content_bytes(self) -> bytes:
+        """Decode the evidence JSON contents exported by Rust."""
+        return base64.b64decode(self.content_base64, validate=True)
+
+
 class ReceiptSummary(BaseModel):
     """One opaque receipt visible from a completed run."""
 

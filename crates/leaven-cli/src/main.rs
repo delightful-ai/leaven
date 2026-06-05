@@ -87,6 +87,8 @@ enum RunSubcommand {
     Inspect(RunInspectArgs),
     /// Export Rust-owned blob bytes from a local run directory.
     Blob(RunBlobArgs),
+    /// Export Rust-owned evidence bytes from a local run directory.
+    Evidence(RunEvidenceArgs),
 }
 
 #[derive(Debug, Args)]
@@ -105,6 +107,19 @@ struct RunBlobArgs {
     #[arg(long)]
     store: String,
     /// Blob key from a Rust-owned readback reference.
+    #[arg(long)]
+    key: String,
+}
+
+#[derive(Debug, Args)]
+struct RunEvidenceArgs {
+    /// Local Leaven run directory containing the evidence store.
+    #[arg(long)]
+    run_dir: PathBuf,
+    /// Evidence store name from a Rust-owned readback reference.
+    #[arg(long)]
+    store: String,
+    /// Evidence key from a Rust-owned readback reference.
     #[arg(long)]
     key: String,
 }
@@ -255,6 +270,15 @@ fn run_command(command: RunSubcommand) -> Result<String, CliError> {
                 })
                 .map_err(CliError::from)
         }
+        RunSubcommand::Evidence(args) => {
+            let export = leaven_run::export_local_run_evidence(args.run_dir, args.store, args.key)?;
+            serde_json::to_string_pretty(&export)
+                .map(|mut output| {
+                    output.push('\n');
+                    output
+                })
+                .map_err(CliError::from)
+        }
     }
 }
 
@@ -287,8 +311,9 @@ mod tests {
     };
     use leaven_gepa_agentic_skill::SkillBankReflectionInput;
     use leaven_kernel::{BlobRef, BudgetSnapshot, EvidenceRef, Fingerprint, now};
-    use leaven_store::{BlobStore, BlobWrite, CheckpointBytes, CheckpointStore};
-    use leaven_store_file::FileStore;
+    use leaven_store::{BlobStore, BlobWrite, CheckpointBytes, CheckpointStore, EvidenceStore};
+    use leaven_store_file::{FileEvidenceStore, FileStore};
+    use serde::{Deserialize, Serialize};
 
     use super::run;
 
@@ -555,10 +580,60 @@ mod tests {
         );
     }
 
+    #[test]
+    fn run_evidence_exports_rust_owned_evidence_bytes() {
+        let run_dir =
+            std::env::temp_dir().join(format!("leaven-cli-run-evidence-{}", uuid::Uuid::new_v4()));
+        let evidence_store =
+            FileEvidenceStore::<CliTestEvidence>::open("leaven-run", run_dir.join("evidence"))
+                .unwrap();
+        let evidence_ref = evidence_store
+            .put(CliTestEvidence {
+                case_id: "case_cli".to_owned(),
+                candidate_id: "cand_cli".to_owned(),
+                score: 1.0,
+            })
+            .unwrap();
+
+        let output = run([
+            "run".to_owned(),
+            "evidence".to_owned(),
+            "--run-dir".to_owned(),
+            run_dir.display().to_string(),
+            "--store".to_owned(),
+            evidence_ref.store,
+            "--key".to_owned(),
+            evidence_ref.key,
+        ])
+        .unwrap();
+        let _ = std::fs::remove_dir_all(&run_dir);
+        let value: serde_json::Value = serde_json::from_str(&output).unwrap();
+
+        assert_eq!(value["schema_version"], "leaven.run_evidence_export.v1");
+        assert_eq!(value["bytes"], 73);
+        assert_eq!(
+            value["sha256"],
+            "99724bc98aa63966b8da9f30b42afe4126073364c38c123a897ea1ebf2812c42"
+        );
+        assert_eq!(
+            value["content_base64"],
+            "ewogICJjYXNlX2lkIjogImNhc2VfY2xpIiwKICAiY2FuZGlkYXRlX2lkIjogImNhbmRfY2xpIiwKICAic2NvcmUiOiAxLjAKfQ=="
+        );
+    }
+
     fn write_input_json(input: &SkillBankReflectionInput<String>) -> PathBuf {
         let path =
             std::env::temp_dir().join(format!("leaven-doctor-input-{}.json", uuid::Uuid::new_v4()));
         std::fs::write(&path, serde_json::to_vec(input).unwrap()).unwrap();
         path
     }
+
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    struct CliTestEvidence {
+        case_id: String,
+        candidate_id: String,
+        score: f64,
+    }
+
+    impl leaven_store::Evidence for CliTestEvidence {}
 }

@@ -215,6 +215,26 @@ impl<E> FileEvidenceStore<E> {
     pub fn root(&self) -> &Path {
         &self.root
     }
+
+    /// Reads one evidence JSON payload as raw bytes.
+    ///
+    /// This keeps filesystem layout knowledge in the file-store backend while
+    /// allowing schema-specific inspection layers to defer semantic decoding to
+    /// their typed owner.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError`] when the reference names another store, the key is
+    /// invalid for this backend, or the evidence file is absent.
+    pub fn get_json_bytes(&self, reference: &EvidenceRef) -> Result<Bytes, StoreError> {
+        if reference.store != self.name {
+            return Err(StoreError::EvidenceNotFound(reference.clone()));
+        }
+        let path = evidence_path(&self.root, &reference.key)?;
+        std::fs::read(&path)
+            .map(Bytes::from)
+            .map_err(|_| StoreError::EvidenceNotFound(reference.clone()))
+    }
 }
 
 impl<E> EvidenceStore<E> for FileEvidenceStore<E>
@@ -236,12 +256,7 @@ where
     }
 
     fn get(&self, reference: &EvidenceRef) -> Result<E, StoreError> {
-        if reference.store != self.name {
-            return Err(StoreError::EvidenceNotFound(reference.clone()));
-        }
-        let path = evidence_path(&self.root, &reference.key)?;
-        let bytes =
-            std::fs::read(&path).map_err(|_| StoreError::EvidenceNotFound(reference.clone()))?;
+        let bytes = self.get_json_bytes(reference)?;
         serde_json::from_slice(&bytes).map_err(|err| StoreError::Serialization(err.to_string()))
     }
 }
