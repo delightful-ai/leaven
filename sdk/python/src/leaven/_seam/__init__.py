@@ -31,6 +31,11 @@ from .plans import (
     StageRunRequest,
 )
 from .resolve import resolve_codex_binary, resolve_leaven_binary, resolve_repo_root
+from .workspace_plans import (
+    WorkspaceMaterializeRequest,
+    WorkspaceQueryRequest,
+    WorkspaceReleaseRequest,
+)
 
 __all__ = [
     "AgentRunRequest",
@@ -53,6 +58,9 @@ __all__ = [
     "SeamServiceConfig",
     "StageRunProposeRequest",
     "StageRunRequest",
+    "WorkspaceMaterializeRequest",
+    "WorkspaceQueryRequest",
+    "WorkspaceReleaseRequest",
     "effect_capability",
     "proposer_stage_capability",
     "resolve_codex_binary",

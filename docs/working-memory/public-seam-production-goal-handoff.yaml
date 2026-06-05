@@ -3443,6 +3443,34 @@ acceptance:
           and item shape instead of raising scaffold errors. This makes the
           evaluator invocation record usable without claiming assessment
           submission or service execution is complete.
+      - kind: public_workspace_builder_scaffold_removed
+        paths:
+          - sdk/python/src/leaven/_seam/__init__.py
+          - sdk/python/src/leaven/_seam/client.py
+          - sdk/python/src/leaven/_seam/plans.py
+          - sdk/python/src/leaven/_seam/workspace_plans.py
+          - sdk/python/src/leaven/builders/workspace.py
+          - sdk/python/tests/builders/test_workspace.py
+        commands:
+          - cd sdk/python && uv run pytest tests/builders/test_workspace.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_seam/plans.py src/leaven/_seam/workspace_plans.py src/leaven/_seam/client.py src/leaven/_seam/__init__.py src/leaven/builders/workspace.py tests/builders/test_workspace.py
+          - cd sdk/python && uv run ty check src/leaven/_seam/plans.py src/leaven/_seam/workspace_plans.py src/leaven/_seam/client.py src/leaven/_seam/__init__.py src/leaven/builders/workspace.py tests/builders/test_workspace.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - cd sdk/python && just check
+          - cd sdk/python && uv run pytest tests/test_product_surface_ring.py tests/test_stage_surface.py tests/builders/test_workspace.py -q
+        note: >-
+          `WorkspaceReads` and `WorkspaceBuilder` now lower the retained V1
+          workspace lifecycle/read/query family through typed private
+          public-seam request records instead of raising public scaffolds:
+          materialize, release, read_file, list, stat, digest, snapshot,
+          git_log, git_diff, git_status, and capture_artifacts. The public
+          projection keeps typed workspace handles, entries, blob refs, and
+          query/call receipts, while wrong or missing content/result receipts
+          fail loudly. The Plan request records live in a separate private
+          `_seam.workspace_plans` module so the SDK keeps the 650-line Python
+          file cap and explicit dependency boundary. `write_file` and
+          `write_skills` remain explicit scaffolds because no retained locked
+          V1 `leaven/workspace.write_file` method exists to lower them to.
     closeout_check: >-
       Passing tests with broad Ruff ignores, untyped public/wire surfaces,
       future-annotation imports, or public backbone scaffolds cannot close this

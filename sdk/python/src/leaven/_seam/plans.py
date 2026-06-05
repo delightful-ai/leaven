@@ -63,6 +63,17 @@ SeamRequestMethod = Literal[
     "leaven/proposal.apply",
     "leaven/proposal.submit_batch",
     "leaven/sandbox.exec",
+    "leaven/workspace.capture_artifacts",
+    "leaven/workspace.digest",
+    "leaven/workspace.git_diff",
+    "leaven/workspace.git_log",
+    "leaven/workspace.git_status",
+    "leaven/workspace.list",
+    "leaven/workspace.materialize",
+    "leaven/workspace.read_file",
+    "leaven/workspace.release",
+    "leaven/workspace.snapshot",
+    "leaven/workspace.stat",
 ]
 
 

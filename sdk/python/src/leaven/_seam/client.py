@@ -20,6 +20,17 @@ from ._wire.results import (
     ProposalSubmitResult,
     SandboxExecResult,
     StageRunDispatchResult,
+    WorkspaceCaptureArtifactsResult,
+    WorkspaceDigestResult,
+    WorkspaceGitDiffResult,
+    WorkspaceGitLogResult,
+    WorkspaceGitStatusResult,
+    WorkspaceListResult,
+    WorkspaceMaterializeResult,
+    WorkspaceReadFileResult,
+    WorkspaceReleaseResult,
+    WorkspaceSnapshotResult,
+    WorkspaceStatResult,
 )
 from .config import SeamServiceConfig
 from .errors import SeamClientError
@@ -36,6 +47,11 @@ from .plans import (
     StageRunRequest,
 )
 from .resolve import resolve_leaven_binary, resolve_repo_root
+from .workspace_plans import (
+    WorkspaceMaterializeRequest,
+    WorkspaceQueryRequest,
+    WorkspaceReleaseRequest,
+)
 
 
 class SeamClient:
@@ -95,6 +111,105 @@ class SeamClient:
     ) -> SandboxExecResult:
         """Send one `leaven/sandbox.exec` request and return its typed result."""
         return self._typed_request(request, SandboxExecResult, timeout_s=timeout_s)
+
+    def workspace_materialize(
+        self,
+        request: WorkspaceMaterializeRequest,
+        *,
+        timeout_s: int = 240,
+    ) -> WorkspaceMaterializeResult:
+        """Send one `leaven/workspace.materialize` request and return its typed result."""
+        return self._typed_request(request, WorkspaceMaterializeResult, timeout_s=timeout_s)
+
+    def workspace_release(
+        self,
+        request: WorkspaceReleaseRequest,
+        *,
+        timeout_s: int = 240,
+    ) -> WorkspaceReleaseResult:
+        """Send one `leaven/workspace.release` request and return its typed result."""
+        return self._typed_request(request, WorkspaceReleaseResult, timeout_s=timeout_s)
+
+    def workspace_read_file(
+        self,
+        request: WorkspaceQueryRequest,
+        *,
+        timeout_s: int = 240,
+    ) -> WorkspaceReadFileResult:
+        """Send one `leaven/workspace.read_file` request and return its typed result."""
+        return self._typed_request(request, WorkspaceReadFileResult, timeout_s=timeout_s)
+
+    def workspace_list(
+        self,
+        request: WorkspaceQueryRequest,
+        *,
+        timeout_s: int = 240,
+    ) -> WorkspaceListResult:
+        """Send one `leaven/workspace.list` request and return its typed result."""
+        return self._typed_request(request, WorkspaceListResult, timeout_s=timeout_s)
+
+    def workspace_snapshot(
+        self,
+        request: WorkspaceQueryRequest,
+        *,
+        timeout_s: int = 240,
+    ) -> WorkspaceSnapshotResult:
+        """Send one `leaven/workspace.snapshot` request and return its typed result."""
+        return self._typed_request(request, WorkspaceSnapshotResult, timeout_s=timeout_s)
+
+    def workspace_stat(
+        self,
+        request: WorkspaceQueryRequest,
+        *,
+        timeout_s: int = 240,
+    ) -> WorkspaceStatResult:
+        """Send one `leaven/workspace.stat` request and return its typed result."""
+        return self._typed_request(request, WorkspaceStatResult, timeout_s=timeout_s)
+
+    def workspace_digest(
+        self,
+        request: WorkspaceQueryRequest,
+        *,
+        timeout_s: int = 240,
+    ) -> WorkspaceDigestResult:
+        """Send one `leaven/workspace.digest` request and return its typed result."""
+        return self._typed_request(request, WorkspaceDigestResult, timeout_s=timeout_s)
+
+    def workspace_git_log(
+        self,
+        request: WorkspaceQueryRequest,
+        *,
+        timeout_s: int = 240,
+    ) -> WorkspaceGitLogResult:
+        """Send one `leaven/workspace.git_log` request and return its typed result."""
+        return self._typed_request(request, WorkspaceGitLogResult, timeout_s=timeout_s)
+
+    def workspace_git_diff(
+        self,
+        request: WorkspaceQueryRequest,
+        *,
+        timeout_s: int = 240,
+    ) -> WorkspaceGitDiffResult:
+        """Send one `leaven/workspace.git_diff` request and return its typed result."""
+        return self._typed_request(request, WorkspaceGitDiffResult, timeout_s=timeout_s)
+
+    def workspace_git_status(
+        self,
+        request: WorkspaceQueryRequest,
+        *,
+        timeout_s: int = 240,
+    ) -> WorkspaceGitStatusResult:
+        """Send one `leaven/workspace.git_status` request and return its typed result."""
+        return self._typed_request(request, WorkspaceGitStatusResult, timeout_s=timeout_s)
+
+    def workspace_capture_artifacts(
+        self,
+        request: WorkspaceQueryRequest,
+        *,
+        timeout_s: int = 240,
+    ) -> WorkspaceCaptureArtifactsResult:
+        """Send one `leaven/workspace.capture_artifacts` request and return its typed result."""
+        return self._typed_request(request, WorkspaceCaptureArtifactsResult, timeout_s=timeout_s)
 
     def case_load(self, request: CaseLoadRequest, *, timeout_s: int = 240) -> CaseLoadResult:
         """Send one case read request and return its typed result."""
