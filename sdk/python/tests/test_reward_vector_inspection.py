@@ -3,6 +3,7 @@ from pathlib import Path
 from _pytest.monkeypatch import MonkeyPatch
 
 import leaven as lv
+from leaven.evidence import EvidencePublicPayload
 
 
 @lv.runner
@@ -77,7 +78,10 @@ async def test_reward_vector_aggregate_and_dimensions_survive_inspection(
 
     inspection = lv.runs.inspect(result.summary.run_dir or "")
     assert inspection.best_candidate_id == result.best.id
-    assert inspection.evidence[0].payload == {"output": "42", "reward_count": 2}
+    assert inspection.evidence[0].payload == EvidencePublicPayload(
+        summary="42",
+        metrics={"reward_count": 2.0},
+    )
     assert [
         (reward.id, reward.value, reward.weight, reward.feedback)
         for reward in inspection.evidence[0].rewards

@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from typing import Literal, Protocol
 
 import msgspec
-from msgspec import UNSET, UnsetType
+from msgspec import UNSET
 from pydantic import BaseModel, ConfigDict
 
 from .._errors import UnboundBuilderError
@@ -35,7 +35,6 @@ from .._seam._wire.writes import SubmitAssessmentRecord, WriteOutputRecord, Writ
 from ..assessment import AssessmentWrite, Replayability
 from ..data_class import CANDIDATE_ARTIFACT, CANDIDATE_OUTPUT
 from ..evidence import EvidenceEnvelope, EvidencePrivate, EvidencePublic
-from ..json_value import JsonObject
 from ..score import Score
 
 PrivateEvidenceVisibility = Literal["evaluator_only", "operator_only", "scorer_private"]
@@ -236,12 +235,11 @@ def _required_public_evidence(evidence: EvidenceEnvelope) -> EvidencePublic:
 
 def _public_evidence_to_wire(public: EvidencePublic) -> WireEvidencePublic:
     payload = public.payload
-    _reject_unknown_public_payload_keys(payload)
     return WireEvidencePublic(
         data_classes=list(public.data_classes),
-        summary=_optional_string_payload(payload, "summary"),
-        feedback=_optional_string_payload(payload, "feedback"),
-        metrics=_optional_metrics_payload(payload),
+        summary=payload.summary if payload.summary is not None else UNSET,
+        feedback=payload.feedback if payload.feedback is not None else UNSET,
+        metrics=payload.metrics if payload.metrics is not None else UNSET,
     )
 
 
@@ -254,52 +252,12 @@ def _private_evidence_to_wire(private: EvidencePrivate) -> WireEvidencePrivate:
 
 
 def _score_summary(score: Score, public: EvidencePublic) -> str:
-    if "summary" in public.payload:
-        summary = public.payload["summary"]
-        if not isinstance(summary, str):
-            raise TypeError("assessment evidence `summary` must be a string")
-        if summary:
-            return summary
+    summary = public.payload.summary
+    if summary:
+        return summary
     if score.feedback:
         return score.feedback
     return f"score={score.value:.6g}"
-
-
-def _optional_string_payload(
-    payload: JsonObject,
-    key: str,
-) -> str | UnsetType:
-    if key not in payload:
-        return UNSET
-    value = payload[key]
-    if not isinstance(value, str):
-        raise TypeError(f"assessment evidence `{key}` must be a string")
-    return value
-
-
-def _optional_metrics_payload(payload: JsonObject) -> dict[str, float] | UnsetType:
-    if "metrics" not in payload:
-        return UNSET
-    value = payload["metrics"]
-    if not isinstance(value, dict):
-        raise TypeError("assessment evidence `metrics` must be an object")
-    metrics: dict[str, float] = {}
-    for key, metric in value.items():
-        if not isinstance(key, str):
-            raise TypeError("assessment evidence metric names must be strings")
-        if not isinstance(metric, int | float) or isinstance(metric, bool):
-            raise TypeError("assessment evidence metric values must be numbers")
-        metrics[key] = float(metric)
-    return metrics
-
-
-def _reject_unknown_public_payload_keys(payload: JsonObject) -> None:
-    allowed = {"summary", "feedback", "metrics"}
-    unknown = [key for key in payload if key not in allowed]
-    if unknown:
-        raise ValueError(
-            "assessment public evidence payload supports only summary, feedback, and metrics"
-        )
 
 
 def _evidence_data_classes(

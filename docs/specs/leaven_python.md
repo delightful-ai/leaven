@@ -326,7 +326,10 @@ the wire carries:
   reflector receipt; etc.).
 - **Evidence visibility.** Public / private / trace projection data
   classes preserved through the wire. Target-derived evidence flagged
-  honestly. Source receipts present and typed.
+  honestly. Source receipts present and typed. Python public assessment
+  evidence uses the closed `EvidencePublicPayload` owner (`summary`,
+  `feedback`, `metrics`) and must not be re-parsed from an arbitrary
+  JSON object by SDK builders or inspection surfaces.
 - **Replay determinism.** Receipts plus inputs plus locked seam validation
   reproduce the assessment.
 

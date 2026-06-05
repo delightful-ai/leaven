@@ -1982,6 +1982,43 @@ acceptance:
           exposes that raw JSON lowering helper. This prevents the old
           output-contract dict path from returning as an internal convenience
           shim.
+      - kind: assessment_public_evidence_payload_owner_cutover
+        paths:
+          - sdk/python/src/leaven/evidence.py
+          - sdk/python/src/leaven/builders/assessments.py
+          - sdk/python/src/leaven/run_inspection.py
+          - sdk/python/src/leaven/_runs/rust_evidence.py
+          - sdk/python/tests/test_evidence.py
+          - sdk/python/tests/builders/test_assessments.py
+          - sdk/python/tests/test_run_inspection.py
+          - docs/specs/leaven_python.md
+        commands:
+          - cd sdk/python && uv run pytest tests/test_evidence.py tests/test_assessment.py tests/builders/test_assessments.py tests/test_result.py tests/test_run_inspection.py tests/test_reward_vector_inspection.py tests/test_optimize_public_seam_e2e.py tests/_runs/test_rust_export.py -q
+          - cd sdk/python && uv run ruff check src/leaven/evidence.py src/leaven/builders/assessments.py src/leaven/run_inspection.py src/leaven/_runs/rust_evidence.py tests/test_evidence.py tests/test_assessment.py tests/builders/test_assessments.py tests/test_result.py tests/test_run_inspection.py tests/test_reward_vector_inspection.py tests/test_optimize_public_seam_e2e.py tests/_runs/test_rust_export.py
+          - cd sdk/python && uv run ty check src/leaven/evidence.py src/leaven/builders/assessments.py src/leaven/run_inspection.py src/leaven/_runs/rust_evidence.py tests/test_evidence.py tests/test_assessment.py tests/builders/test_assessments.py tests/test_result.py tests/test_run_inspection.py tests/test_reward_vector_inspection.py tests/test_optimize_public_seam_e2e.py tests/_runs/test_rust_export.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - python3 scripts/lint-line-count.py --root sdk/python
+          - >-
+            ! rg -n
+            "_optional_string_payload|_optional_metrics_payload|_reject_unknown_public_payload_keys|dict\(public\.payload\)|payload=\{\"feedback\"|public:
+            JsonObject|private: JsonObject"
+            sdk/python/src/leaven sdk/python/tests
+        note: >-
+          Python public assessment evidence now has a closed public owner:
+          `EvidencePublicPayload(summary, feedback, metrics)` with strict
+          Pydantic construction and forbidden extras. `EvidenceEnvelope`
+          classmethods no longer accept dict records that smuggle
+          `data_classes` beside arbitrary payload keys. The assessment builder
+          reads typed fields directly and no longer reparses public evidence
+          with `_optional_*_payload` helpers or unknown-key filtering. Completed
+          run inspection carries the same `EvidencePublicPayload`, and Rust
+          case-assessment readback maps output text to `summary` plus
+          `reward_count` to typed metrics instead of restoring an
+          output/reward_count JSON bag. Focused tests prove construction,
+          wire lowering, persisted Rust readback, and inspection behavior; the
+          spec now names this owner. Private evidence payloads and other
+          extension leaves remain pending typed-owner work.
       - kind: extension_result_receipts_match_rust_audit_shape
         paths:
           - sdk/python/codegen/result_codegen.py

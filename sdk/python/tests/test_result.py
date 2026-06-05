@@ -3,7 +3,7 @@ import pytest
 import leaven as lv
 from leaven._receipts import WriteReceipt
 from leaven.assessment import Assessment, Replayability
-from leaven.evidence import EvidenceEnvelope
+from leaven.evidence import EvidenceEnvelope, EvidencePublicPayload
 
 
 def _result_with_assessments(*assessments: Assessment) -> lv.Optimized[lv.PromptArtifact]:
@@ -43,7 +43,7 @@ def _assessment(
         candidate_id=candidate_id,
         score=lv.Score(value=score, feedback="ok"),
         evidence=EvidenceEnvelope.public_only(
-            payload={"feedback": "ok"},
+            payload=EvidencePublicPayload(feedback="ok"),
             data_classes=[lv.data_class.OPTIMIZER_VISIBLE],
         ),
         receipt=WriteReceipt(receipt_id=f"w_{case_id}_{candidate_id}"),

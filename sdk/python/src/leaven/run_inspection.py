@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .assessment import Assessment
 from .blob_ref import BlobRef
+from .evidence import EvidencePublicPayload
 from .json_value import JsonObject, JsonValue
 from .result import Optimized
 from .run_status import RunCostStatus, RunUsageStatus, UnsupportedRunFact
@@ -209,7 +210,7 @@ class EvidenceSummary(BaseModel):
     case_id: str
     candidate_id: str
     data_classes: list[str] = Field(default_factory=list)
-    payload: JsonObject = Field(default_factory=dict)
+    payload: EvidencePublicPayload = Field(default_factory=EvidencePublicPayload)
     target_derived: bool
     rewards: list["RewardDimensionSummary"] = Field(default_factory=list)
 
@@ -352,7 +353,7 @@ def _evidence_summary(assessment: Assessment) -> EvidenceSummary:
         case_id=assessment.case.id,
         candidate_id=assessment.candidate_id,
         data_classes=list(public.data_classes) if public is not None else [],
-        payload=dict(public.payload) if public is not None else {},
+        payload=public.payload if public is not None else EvidencePublicPayload(),
         target_derived=assessment.evidence.target_derived,
         rewards=[
             RewardDimensionSummary(

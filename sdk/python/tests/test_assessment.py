@@ -3,12 +3,12 @@ import pytest
 import leaven as lv
 from leaven._receipts import CallReceipt, QueryReceipt
 from leaven.assessment import AssessmentWrite
-from leaven.evidence import EvidenceEnvelope
+from leaven.evidence import EvidenceEnvelope, EvidencePublicPayload
 
 
 def _evidence() -> EvidenceEnvelope:
     return EvidenceEnvelope.public_only(
-        payload={"feedback": "ok"},
+        payload=EvidencePublicPayload(feedback="ok"),
         data_classes=[lv.data_class.OPTIMIZER_VISIBLE],
     )
 

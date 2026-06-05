@@ -9,7 +9,17 @@ hide target material under non-target labels.
 from pydantic import BaseModel, ConfigDict, Field
 
 from .data_class import CASE_TARGET
-from .json_value import JsonObject, JsonValue
+from .json_value import JsonObject
+
+
+class EvidencePublicPayload(BaseModel):
+    """Optimizer-visible assessment evidence payload."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+
+    summary: str | None = None
+    feedback: str | None = None
+    metrics: dict[str, float] | None = None
 
 
 class EvidencePublic(BaseModel):
@@ -19,8 +29,8 @@ class EvidencePublic(BaseModel):
 
     data_classes: list[str]
     """Must cover every data class in the public payload."""
-    payload: JsonObject = Field(default_factory=dict)
-    """Arbitrary JSON-shaped public state."""
+    payload: EvidencePublicPayload = Field(default_factory=EvidencePublicPayload)
+    """Closed optimizer-visible assessment payload."""
 
 
 class EvidencePrivate(BaseModel):
@@ -48,78 +58,32 @@ class EvidenceEnvelope(BaseModel):
     def public_private(
         cls,
         *,
-        public: JsonObject,
-        private: JsonObject,
+        public: EvidencePublic,
+        private: EvidencePrivate,
         target_derived: bool = False,
     ) -> "EvidenceEnvelope":
         """Build an envelope with both visibility projections.
 
-        Public dict must include a `data_classes` key listing all public classes.
-        Private dict must include `data_classes` and optionally `visibility`.
         Target_derived must be true when private carries case.target classes.
         """
-        public_projection = _public_from_record(public)
-        private_projection = _private_from_record(private)
-        if CASE_TARGET in private_projection.data_classes and not target_derived:
+        if CASE_TARGET in private.data_classes and not target_derived:
             raise ValueError("private case.target evidence requires target_derived=True")
-        return cls(
-            public=public_projection,
-            private=private_projection,
-            target_derived=target_derived,
-        )
+        return cls(public=public, private=private, target_derived=target_derived)
 
     @classmethod
     def public_only(
         cls,
         *,
-        payload: JsonObject,
+        payload: EvidencePublicPayload,
         data_classes: list[str],
     ) -> "EvidenceEnvelope":
         """Public evidence with no private payload."""
-        return cls(public=EvidencePublic(data_classes=list(data_classes), payload=dict(payload)))
+        return cls(public=EvidencePublic(data_classes=list(data_classes), payload=payload))
 
 
-def _public_from_record(record: JsonObject) -> EvidencePublic:
-    data_classes = _required_data_classes(record)
-    payload = _payload_without_reserved(record, reserved={"data_classes"})
-    return EvidencePublic(data_classes=data_classes, payload=payload)
-
-
-def _private_from_record(record: JsonObject) -> EvidencePrivate:
-    data_classes = _required_data_classes(record)
-    visibility = _optional_string(record, "visibility", default="evaluator_only")
-    payload = _payload_without_reserved(record, reserved={"data_classes", "visibility"})
-    return EvidencePrivate(visibility=visibility, data_classes=data_classes, payload=payload)
-
-
-def _required_data_classes(record: JsonObject) -> list[str]:
-    if "data_classes" not in record:
-        raise KeyError("evidence record requires `data_classes`")
-    value = record["data_classes"]
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise TypeError("evidence `data_classes` must be a list of strings")
-    return list(value)
-
-
-def _optional_string(record: JsonObject, key: str, *, default: str) -> str:
-    if key not in record:
-        return default
-    value = record[key]
-    if not isinstance(value, str):
-        raise TypeError(f"evidence `{key}` must be a string")
-    return value
-
-
-def _payload_without_reserved(record: JsonObject, *, reserved: set[str]) -> JsonObject:
-    payload: JsonObject = {}
-    for key, value in record.items():
-        if key not in reserved:
-            payload[key] = _json_value(value)
-    return payload
-
-
-def _json_value(value: JsonValue) -> JsonValue:
-    return value
-
-
-__all__ = ["EvidenceEnvelope", "EvidencePrivate", "EvidencePublic"]
+__all__ = [
+    "EvidenceEnvelope",
+    "EvidencePrivate",
+    "EvidencePublic",
+    "EvidencePublicPayload",
+]

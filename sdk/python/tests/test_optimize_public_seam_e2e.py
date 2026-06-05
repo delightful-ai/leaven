@@ -5,6 +5,7 @@ from _pytest.monkeypatch import MonkeyPatch
 
 import leaven as lv
 from leaven._seam.resolve import resolve_leaven_binary
+from leaven.evidence import EvidencePublicPayload
 
 
 @lv.runner
@@ -79,14 +80,20 @@ async def test_optimize_run_spawns_public_seam_and_returns_inspectable_receipts(
     assert result.best.summary_score == 1.0
     assert assessment.score.value == 1.0
     assert assessment.evidence.public is not None
-    assert assessment.evidence.public.payload == {"output": "seam-ok", "reward_count": 1}
+    assert assessment.evidence.public.payload == EvidencePublicPayload(
+        summary="seam-ok",
+        metrics={"reward_count": 1.0},
+    )
     assert [receipt.receipt_id for receipt in assessment.effect_receipts] == ["lmrec_completion"]
     assert result.summary.total_lm_tokens == 2
 
     inspection = lv.runs.inspect(result.summary.run_dir or "")
     assert inspection.best_lineage == [result.best.id]
     assert inspection.receipt_ids(kind="call") == ["lmrec_completion"]
-    assert inspection.evidence[0].payload == {"output": "seam-ok", "reward_count": 1}
+    assert inspection.evidence[0].payload == EvidencePublicPayload(
+        summary="seam-ok",
+        metrics={"reward_count": 1.0},
+    )
     assert inspection.total_lm_tokens == 2
     assert [fact.surface for fact in inspection.unsupported] == ["run.cost"]
 

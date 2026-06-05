@@ -3,6 +3,7 @@ from pathlib import Path
 from _pytest.monkeypatch import MonkeyPatch
 
 import leaven as lv
+from leaven.evidence import EvidencePublicPayload
 
 
 @lv.runner
@@ -93,4 +94,7 @@ async def test_optimize_persists_openable_inspection_result(
         "case.target",
         "public",
     ]
-    assert inspection.evidence[0].payload == {"output": "42", "reward_count": 2}
+    assert inspection.evidence[0].payload == EvidencePublicPayload(
+        summary="42",
+        metrics={"reward_count": 2.0},
+    )

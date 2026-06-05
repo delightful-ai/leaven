@@ -14,6 +14,7 @@ from leaven._runs.rust_export import (
     load_rust_evidence_readback,
     load_rust_run_readback,
 )
+from leaven.evidence import EvidencePublicPayload
 from leaven.run_inspection import RustRunReadback
 from tests.support.rust_evidence import rust_case_assessment_evidence_bytes
 
@@ -475,7 +476,10 @@ def test_runs_inspect_uses_rust_checkpoint_blob_and_evidence_without_optimized_j
     assert len(inspection.rust_evidence) == 1
     assert inspection.evidence[0].case_id == "1"
     assert inspection.evidence[0].candidate_id == "cand_child"
-    assert inspection.evidence[0].payload == {"output": "42", "reward_count": 1}
+    assert inspection.evidence[0].payload == EvidencePublicPayload(
+        summary="42",
+        metrics={"reward_count": 1.0},
+    )
     assert inspection.evidence[0].target_derived is True
     assert inspection.evidence[0].data_classes == [
         "candidate.output",

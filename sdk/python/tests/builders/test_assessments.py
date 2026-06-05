@@ -12,7 +12,7 @@ from leaven._seam._wire.results import AssessmentBatchPrimary, AssessmentSubmitR
 from leaven._seam._wire.writes import SubmitAssessmentsWrite
 from leaven.assessment import AssessmentWrite
 from leaven.builders.assessments import AssessmentsBuilder
-from leaven.evidence import EvidenceEnvelope
+from leaven.evidence import EvidenceEnvelope, EvidencePublicPayload
 from leaven.json_value import JsonObject, JsonValue
 
 
@@ -32,7 +32,7 @@ async def test_assessments_builder_submits_independent_assessment_through_seam()
         case="case_1",
         score=lv.Score(value=0.75, feedback="candidate answered correctly"),
         evidence=EvidenceEnvelope.public_only(
-            payload={"feedback": "candidate answered correctly"},
+            payload=EvidencePublicPayload(feedback="candidate answered correctly"),
             data_classes=[lv.data_class.CANDIDATE_OUTPUT, lv.data_class.OPTIMIZER_VISIBLE],
         ),
         read_receipts=[QueryReceipt(receipt_id="qrec_case")],
@@ -100,7 +100,7 @@ async def test_assessments_builder_requires_candidate_output_data_class() -> Non
         case="case_1",
         score=lv.Score(value=0.75, feedback="ok"),
         evidence=EvidenceEnvelope.public_only(
-            payload={"feedback": "ok"},
+            payload=EvidencePublicPayload(feedback="ok"),
             data_classes=[lv.data_class.OPTIMIZER_VISIBLE],
         ),
     )
@@ -121,7 +121,7 @@ async def test_assessments_builder_preserves_listwise_ranking_owner() -> None:
         ranking=["cand_c", "cand_a", "cand_b"],
         score=lv.Score(value=0.9, feedback="cand_c best"),
         evidence=EvidenceEnvelope.public_only(
-            payload={"feedback": "cand_c best"},
+            payload=EvidencePublicPayload(feedback="cand_c best"),
             data_classes=[lv.data_class.CANDIDATE_OUTPUT],
         ),
     )
@@ -146,7 +146,7 @@ async def test_assessments_builder_requires_bound_seam_client() -> None:
         case="case_1",
         score=lv.Score(value=0.75, feedback="ok"),
         evidence=EvidenceEnvelope.public_only(
-            payload={"feedback": "ok"},
+            payload=EvidencePublicPayload(feedback="ok"),
             data_classes=[lv.data_class.CANDIDATE_OUTPUT],
         ),
     )

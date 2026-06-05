@@ -6,7 +6,7 @@ from .._receipts import CallReceipt, WriteReceipt
 from ..assessment import Assessment, RewardAssessment
 from ..blob_ref import BlobRef
 from ..case import Case
-from ..evidence import EvidenceEnvelope
+from ..evidence import EvidenceEnvelope, EvidencePublicPayload
 from ..json_value import JsonObject, JsonValue
 from ..run_inspection import (
     AssessmentReadback,
@@ -341,8 +341,11 @@ def _assessment_from_rust(
     )
 
 
-def _public_payload(evidence: RustCaseAssessmentEvidence) -> JsonObject:
-    return {"output": evidence.output.report_text(), "reward_count": len(evidence.rewards())}
+def _public_payload(evidence: RustCaseAssessmentEvidence) -> EvidencePublicPayload:
+    return EvidencePublicPayload(
+        summary=evidence.output.report_text(),
+        metrics={"reward_count": float(len(evidence.rewards()))},
+    )
 
 
 def _metadata_object(value: JsonValue) -> JsonObject:
