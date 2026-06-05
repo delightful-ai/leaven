@@ -5196,6 +5196,27 @@ acceptance:
           through the SDK's named `_json_parse` boundary before being exposed as
           `JsonValue`. This keeps Rust-owned readback as the authority while
           removing another domain-local unknown-value parser.
+      - kind: python_rust_prompt_artifact_readback_uses_named_owner
+        paths:
+          - sdk/python/src/leaven/_runs/rust_open.py
+          - sdk/python/tests/_runs/test_rust_export.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && uv run pytest tests/_runs/test_rust_export.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_runs/rust_open.py tests/_runs/test_rust_export.py
+          - cd sdk/python && uv run ty check src/leaven/_runs/rust_open.py tests/_runs/test_rust_export.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          `lv.runs.open(...)` no longer narrows Rust candidate artifacts with
+          an unnamed `JsonValue` pattern match. The current prompt-artifact
+          readback path has a strict private `RustPromptArtifactReadback`
+          owner with forbidden extras and explicit public projection into
+          `PromptArtifact`. The existing unsupported-artifact regression still
+          proves non-prompt Rust graph artifacts fail loudly instead of being
+          erased into generic Python objects. The Rust graph export remains
+          artifact-family polymorphic; future artifact families must add their
+          own typed readback owner before `runs.open` accepts them.
       - kind: prompt_stage_runtime_erasure_narrowed
         paths:
           - sdk/python/src/leaven/stages.py

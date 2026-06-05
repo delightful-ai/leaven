@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
 from .._receipts import WriteReceipt
 from ..artifacts.prompt import PromptArtifact
 from ..assessment import Assessment, Replayability
@@ -11,6 +13,24 @@ from ..run_inspection import RustRunReadback
 from ..run_status import RunCostStatus, UnsupportedRunFact
 from .rust_evidence import rust_assessment_rows
 from .rust_export import load_rust_evidence_readback, load_rust_run_readback
+
+
+class RustPromptArtifactReadback(BaseModel):
+    """Prompt artifact payload read from a Rust-owned candidate row."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    template: str
+    examples: list[str] = Field(default_factory=list)
+    candidate_id: str | None = None
+
+    def to_public(self) -> PromptArtifact:
+        """Project the Rust readback payload into the public SDK artifact."""
+        return PromptArtifact(
+            template=self.template,
+            examples=list(self.examples),
+            candidate_id=self.candidate_id,
+        )
 
 
 def open_rust_optimized(path: str | Path) -> Optimized[PromptArtifact] | None:
@@ -105,11 +125,10 @@ def _candidate_by_id(
 
 
 def _artifact_from_readback(value: JsonValue) -> PromptArtifact:
-    match value:
-        case {"template": str()}:
-            return PromptArtifact.model_validate(value)
-        case _:
-            raise TypeError("Rust run readback artifact is not a PromptArtifact payload")
+    try:
+        return RustPromptArtifactReadback.model_validate(value).to_public()
+    except ValidationError as error:
+        raise TypeError("Rust run readback artifact is not a PromptArtifact payload") from error
 
 
 def _summary_score(candidate_id: str, assessment_rows: list[Assessment] | None) -> float | None:
@@ -160,4 +179,4 @@ def _run_dir(path: str | Path) -> Path:
     return candidate
 
 
-__all__ = ["open_rust_optimized", "optimized_from_rust_readback"]
+__all__ = ["RustPromptArtifactReadback", "open_rust_optimized", "optimized_from_rust_readback"]
