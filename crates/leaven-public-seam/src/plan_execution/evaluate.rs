@@ -10,7 +10,7 @@ use super::{
     validate_workspace_query_value_shape, workspace_query_expected_value_kind,
     workspace_query_projection, workspace_query_request,
 };
-use crate::PublicSeamError;
+use crate::{PlanExpression, PublicSeamError};
 
 pub(super) struct ResolvedDependencies {
     pub(super) values: BTreeMap<String, Value>,
@@ -141,7 +141,14 @@ pub(super) fn execute_graph_query_expr(
     host: &mut impl PlanExecutionHost,
 ) -> Result<EvaluatedExpr, PublicSeamError> {
     let scope = graph_read_scope(plan_document, context)?;
-    let outcome = host.graph_query(PlanGraphQueryRequest { name, expr, scope })?;
+    let source = graph_query_source(plan_document, name)?;
+    let outcome = host.graph_query(PlanGraphQueryRequest {
+        name,
+        plan_id: plan_document.plan_id().as_str(),
+        expr,
+        source,
+        scope,
+    })?;
     let receipt_id = format!("qrec_{name}");
     let mut value = json!({
         "kind": "graph_set",
@@ -195,6 +202,23 @@ pub(super) fn execute_graph_query_expr(
             "status": "succeeded"
         })),
     })
+}
+
+fn graph_query_source(
+    plan_document: &crate::PlanDocument,
+    name: &str,
+) -> Result<crate::PlanGraphQuerySource, PublicSeamError> {
+    for operation in plan_document.operations() {
+        if operation.name() != name {
+            continue;
+        }
+        if let Some(PlanExpression::GraphQuery { source, .. }) = operation.expression() {
+            return Ok(source.clone());
+        }
+    }
+    Err(invalid_plan(format!(
+        "graph_query `{name}` must have typed source facts"
+    )))
 }
 
 pub(super) fn execute_case_query_expr(

@@ -12,7 +12,7 @@ pub use expression::PlanExtensionPayload;
 pub use expression::PlanLiteralValue;
 pub use expression::{
     PlanArtifactProjectionSelector, PlanCostScope, PlanExpression, PlanExpressionKind,
-    PlanGraphQuerySource,
+    PlanGraphEventFilter, PlanGraphEventFilterPayload, PlanGraphQuerySource,
 };
 pub use model::{
     PlanApplyProposalBatchWrite, PlanCallKind, PlanCommitKind, PlanEmitRunEventWrite,

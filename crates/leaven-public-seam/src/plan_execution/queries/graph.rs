@@ -1,5 +1,7 @@
 use serde_json::Value;
 
+use crate::PlanGraphQuerySource;
+
 /// Lowered graph-read consistency scope for a Plan IR `graph_query`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PlanGraphReadScope<'a> {
@@ -15,10 +17,12 @@ pub enum PlanGraphReadScope<'a> {
 }
 
 /// Lowered `graph_query` request passed to a plan execution host.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct PlanGraphQueryRequest<'a> {
     pub(in crate::plan_execution) name: &'a str,
+    pub(in crate::plan_execution) plan_id: &'a str,
     pub(in crate::plan_execution) expr: &'a Value,
+    pub(in crate::plan_execution) source: PlanGraphQuerySource,
     pub(in crate::plan_execution) scope: PlanGraphReadScope<'a>,
 }
 
@@ -28,9 +32,19 @@ impl<'a> PlanGraphQueryRequest<'a> {
         self.name
     }
 
+    /// Plan id that owns this graph read.
+    pub const fn plan_id(&self) -> &'a str {
+        self.plan_id
+    }
+
     /// Typed `graph_query` expression body from the Plan IR.
     pub const fn expr(&self) -> &'a Value {
         self.expr
+    }
+
+    /// Typed graph-query source facts from the Plan IR.
+    pub const fn source(&self) -> &PlanGraphQuerySource {
+        &self.source
     }
 
     /// Consistency-derived graph read scope.

@@ -167,19 +167,9 @@ impl RunContextProposalApplyState {
             .unwrap_or(false)
     }
 
-    pub(crate) fn accepts_graph_query_plan_id(&self, expr: &Value) -> bool {
-        expr.get("source")
-            .and_then(|source| source.get("filter"))
-            .and_then(|filter| filter.get("kind"))
-            .and_then(Value::as_str)
-            == Some("run_context")
-            || expr
-                .get("source")
-                .and_then(|source| source.get("kind"))
-                .and_then(Value::as_str)
-                == Some("run_context")
-            || expr.get("plan_id").and_then(Value::as_str)
-                == Some(self.config.readback_plan_id.as_str())
+    pub(crate) fn accepts_graph_query(&self, request: &PlanGraphQueryRequest<'_>) -> bool {
+        request.source().selects_run_context_events()
+            || request.plan_id() == self.config.readback_plan_id.as_str()
     }
 
     pub(crate) fn apply_proposal_batch(

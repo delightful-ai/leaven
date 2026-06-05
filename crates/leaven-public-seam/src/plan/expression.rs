@@ -491,6 +491,7 @@ pub enum PlanGraphQuerySource {
     Events {
         since_revision: Option<String>,
         until_revision: Option<String>,
+        filter: Option<PlanGraphEventFilter>,
     },
     CandidateTree,
     Extension,
@@ -518,6 +519,7 @@ impl PlanGraphQuerySource {
                     .get("until_revision")
                     .and_then(Value::as_str)
                     .map(str::to_owned),
+                filter: object.get("filter").map(PlanGraphEventFilter::from_value),
             }),
             "candidate_tree" => Ok(Self::CandidateTree),
             "extension" => Ok(Self::Extension),
@@ -536,6 +538,7 @@ impl PlanGraphQuerySource {
         let Self::Events {
             since_revision: source_since,
             until_revision: source_until,
+            ..
         } = self
         else {
             return Ok(());
@@ -571,6 +574,7 @@ impl PlanGraphQuerySource {
         let Self::Events {
             since_revision: source_since,
             until_revision: source_until,
+            ..
         } = self
         else {
             return false;
@@ -585,6 +589,56 @@ impl PlanGraphQuerySource {
             Some(until_revision) => source_until.as_deref() == Some(until_revision),
             None => true,
         }
+    }
+
+    /// Returns true when this source selects RunContext-owned service events.
+    pub fn selects_run_context_events(&self) -> bool {
+        matches!(
+            self,
+            Self::Events {
+                filter: Some(PlanGraphEventFilter::RunContext),
+                ..
+            }
+        )
+    }
+}
+
+/// Typed event-filter facts carried by a graph event query.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PlanGraphEventFilter {
+    /// Service-local RunContext event summary filter.
+    RunContext,
+    /// Schema-valid event filter not interpreted by this owner.
+    Other(PlanGraphEventFilterPayload),
+}
+
+impl PlanGraphEventFilter {
+    fn from_value(value: &Value) -> Self {
+        if value
+            .as_object()
+            .and_then(|object| object.get("kind"))
+            .and_then(Value::as_str)
+            == Some("run_context")
+        {
+            Self::RunContext
+        } else {
+            Self::Other(PlanGraphEventFilterPayload::from_schema_valid_value(value))
+        }
+    }
+}
+
+/// Opaque schema-valid event-filter payload for filters not owned by V1 Rust.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanGraphEventFilterPayload(Value);
+
+impl PlanGraphEventFilterPayload {
+    fn from_schema_valid_value(value: &Value) -> Self {
+        Self(value.clone())
+    }
+
+    /// JSON payload carried by an event filter outside the RunContext filter.
+    pub const fn as_json(&self) -> &Value {
+        &self.0
     }
 }
 

@@ -3302,6 +3302,42 @@ acceptance:
           full typed-seam closeout: graph-query expression routing,
           extension-result payload leaves, and generated Python owners still
           have separate evidence rows.
+      - kind: runcontext_graph_query_route_uses_typed_source_facts
+        paths:
+          - crates/leaven-public-seam/src/lib.rs
+          - crates/leaven-public-seam/src/plan.rs
+          - crates/leaven-public-seam/src/plan/expression.rs
+          - crates/leaven-public-seam/src/plan_execution/evaluate.rs
+          - crates/leaven-public-seam/src/plan_execution/queries/graph.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_document.rs
+          - crates/leaven-seam-service/src/run_context_service.rs
+          - crates/leaven-seam-service/src/service.rs
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cargo fmt --check -p leaven-public-seam -p leaven-seam-service
+          - cargo check -p leaven-public-seam -p leaven-seam-service
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_document::graph_query_request_exposes_typed_run_context_event_filter -- --exact
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_document::plan_revision_modes_execute_graph_queries_at_declared_scope -- --exact
+          - cargo test -p leaven-seam-service service::tests::seam_runtime_executes_graph_and_case_reads_through_configured_service -- --exact
+          - cargo test -p leaven-seam-service run_bound_service::tests::run_bound_service_routes_graph_writes_through_runtime_and_stdio -- --exact
+          - cargo test -p leaven-cli --test seam_stdio_server seam_serve_stdio_executes_configured_methods_and_reports_unwired_providers -- --exact
+          - cargo test -p leaven-seam-service
+          - rg -n "accepts_graph_query_plan_id|expr\\.get\\(\\\"source\\\"|expr\\.get\\(\\\"plan_id\\\"|request\\.expr\\(\\).*run_context|source\\)\\.and_then|filter\\)\\.and_then" crates/leaven-seam-service/src/run_context_service.rs crates/leaven-seam-service/src/service.rs
+        note: >-
+          RunContext graph-query readback routing no longer inspects
+          `PlanGraphQueryRequest::expr()` with raw JSON selectors. The Plan
+          expression owner now parses event filters into
+          `PlanGraphEventFilter`, preserving unowned filters in an opaque typed
+          payload while exposing `RunContext` as a closed enum case.
+          `PlanGraphQueryRequest` carries the validated plan id and typed
+          `PlanGraphQuerySource` from the already validated `PlanDocument`, and
+          `leaven-seam-service` routes RunContext readback by those typed facts.
+          Focused public-seam tests prove the host receives the typed
+          RunContext event filter, and service/CLI tests prove the configured
+          stdio readback route still executes. This removes the graph-query
+          selector blocker named in the previous RunContext selector slice; it
+          does not close full typed-seam work while extension-result payload
+          leaves and generated Python owners remain.
       - kind: typed_locked_method_identity_foundation
         paths:
           - crates/leaven-public-seam/src/acp_profile/methods.rs

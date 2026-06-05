@@ -498,7 +498,7 @@ impl PlanExecutionHost for ConfiguredPlanHost {
             let state = state.lock().map_err(|_| PublicSeamError::InvalidPlan {
                 message: "RunContext seam service state lock poisoned".to_owned(),
             })?;
-            if state.accepts_graph_query_plan_id(request.expr()) {
+            if state.accepts_graph_query(&request) {
                 return Ok(state.graph_query(request));
             }
         }

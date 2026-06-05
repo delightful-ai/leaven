@@ -6,12 +6,13 @@ use leaven_public_seam::{
     AgentCommandOutputRefs, CapabilityDocument, PlanAgentRunOutcome, PlanAgentRunRequest,
     PlanCallKind, PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanCommitKind,
     PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanEvaluationShape, PlanExecutionContext,
-    PlanExecutionHost, PlanExpressionKind, PlanGraphQueryOutcome, PlanGraphQueryRequest,
-    PlanGraphReadScope, PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanMode, PlanOperationKind,
-    PlanQueryKind, PlanSandboxExecOutcome, PlanSandboxExecRequest, PlanSchemaVersion,
-    PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome,
-    PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
-    PlanWriteKind, PublicSeamError, PublicSeamPackage, WorkspaceQueryOp,
+    PlanExecutionHost, PlanExpressionKind, PlanGraphEventFilter, PlanGraphQueryOutcome,
+    PlanGraphQueryRequest, PlanGraphReadScope, PlanLmCompleteOutcome, PlanLmCompleteRequest,
+    PlanMode, PlanOperationKind, PlanQueryKind, PlanSandboxExecOutcome, PlanSandboxExecRequest,
+    PlanSchemaVersion, PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest,
+    PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome,
+    PlanWorkspaceReleaseRequest, PlanWriteKind, PublicSeamError, PublicSeamPackage,
+    WorkspaceQueryOp,
 };
 use serde_json::{Value, json};
 
@@ -376,6 +377,23 @@ fn plan_ir_accessors_classify_direct_query_operation_identity() {
         Some(PlanExpressionKind::GraphQuery)
     );
     assert_eq!(query_op.query_kind(), Some(PlanQueryKind::GraphQuery));
+}
+
+#[test]
+fn graph_query_request_exposes_typed_run_context_event_filter() {
+    let package = package();
+    let context = plan_execution_context();
+    let mut plan = latest_at_start_graph_query_plan();
+    plan["plan_id"] = json!("planruncontextfilter001");
+    plan["ops"][0]["expr"]["source"]["filter"] = json!({"kind": "run_context"});
+
+    let mut host = RecordingPlanHost::default();
+    package
+        .execute_plan_document(&plan, &context, &mut host)
+        .unwrap();
+
+    assert_eq!(host.graph_read_plan_ids, vec!["planruncontextfilter001"]);
+    assert_eq!(host.run_context_event_filter_reads, 1);
 }
 
 #[test]
@@ -4913,6 +4931,8 @@ fn evidence_envelope(summary: &'static str) -> Value {
 #[derive(Default)]
 struct RecordingPlanHost {
     graph_reads: Vec<String>,
+    graph_read_plan_ids: Vec<String>,
+    run_context_event_filter_reads: usize,
     case_reads: Vec<String>,
     calls: Vec<&'static str>,
     cached_calls: Vec<&'static str>,
@@ -5203,6 +5223,16 @@ impl PlanExecutionHost for RecordingPlanHost {
     ) -> Result<PlanGraphQueryOutcome, PublicSeamError> {
         assert_eq!(request.name(), "events");
         assert_eq!(request.expr()["kind"].as_str(), Some("graph_query"));
+        self.graph_read_plan_ids.push(request.plan_id().to_owned());
+        if matches!(
+            request.source(),
+            leaven_public_seam::PlanGraphQuerySource::Events {
+                filter: Some(PlanGraphEventFilter::RunContext),
+                ..
+            }
+        ) {
+            self.run_context_event_filter_reads += 1;
+        }
         match request.scope() {
             PlanGraphReadScope::LatestAtStart { revision } => {
                 self.graph_reads.push(format!("latest_at_start:{revision}"));
