@@ -3,6 +3,7 @@
 import json
 
 import msgspec
+from pydantic import BaseModel
 
 import leaven as lv
 from leaven._seam import LmCompleteRequest
@@ -17,6 +18,10 @@ from leaven.builders.lm import LmBuilder
 from leaven.json_value import JsonObject, JsonValue
 
 
+class StructuredAnswer(BaseModel):
+    answer: str
+
+
 async def test_lm_builder_complete_lowers_json_schema_response_format() -> None:
     """Example: bound `lm.complete` carries structured output schema authority."""
 
@@ -27,14 +32,13 @@ async def test_lm_builder_complete_lowers_json_schema_response_format() -> None:
         plan_id="planlmbuilderjson001",
         model="gpt-4.1-mini",
     )
-    response_format = lv.output.json_schema(
-        {
-            "type": "object",
-            "properties": {"answer": {"type": "string"}},
-            "required": ["answer"],
-            "additionalProperties": False,
-        }
-    )
+    schema: JsonObject = {
+        "type": "object",
+        "properties": {"answer": {"type": "string"}},
+        "required": ["answer"],
+        "additionalProperties": False,
+    }
+    response_format = lv.output.json_schema(schema)
 
     response = await lm.complete(prompt="Answer as JSON.", response_format=response_format)
 
@@ -51,6 +55,26 @@ async def test_lm_builder_complete_lowers_json_schema_response_format() -> None:
         "schema": response_format.schema_,
     }
     assert response.parsed == {"answer": "ok"}
+
+
+async def test_lm_builder_complete_parses_model_backed_json_schema_output() -> None:
+    """Example: model-backed response_format owns the parsed result type."""
+
+    client = FakeLmSeamClient()
+    lm = LmBuilder._for_seam(
+        client,
+        idempotency_prefix="lm-builder-model-schema",
+        plan_id="planlmbuildermodel001",
+        model="gpt-4.1-mini",
+    )
+
+    response = await lm.complete(
+        prompt="Answer as JSON.",
+        response_format=lv.output.json_schema(StructuredAnswer),
+    )
+
+    assert response.parsed == StructuredAnswer(answer="ok")
+    assert response.parsed.answer == "ok"
 
 
 class FakeLmSeamClient:

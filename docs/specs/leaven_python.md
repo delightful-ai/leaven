@@ -291,6 +291,17 @@ These prove the public seam can be the Python/Codex substrate. They are not
 proposal application/admission, persisted blob inspection, full live LM-provider
 acceptance, or the full GEPA search loop named by the acceptance gate.
 
+Structured output has two Python types. `lv.output.json_schema(Model)` returns
+a model-backed `JsonSchemaOutput[Model]`: Rust still validates the provider's
+parsed payload against the inline JSON Schema and `schema_fingerprint`, and the
+Python SDK then parses the returned bytes into `Model` before exposing
+`response.parsed` / `session.parsed`. `lv.output.json_schema(schema)` returns
+`JsonSchemaValueOutput`: the wire is still schema-validated by Rust, but Python
+exposes the parsed value as explicit `JsonValue` because no Python domain model
+was supplied. User examples must rely on the output contract's typed owner, not
+`isinstance(..., Model)` fallback checks or string/dict coercion after the
+seam has returned.
+
 ## What is preserved
 
 The Python SDK does not relax any seam property. The user writes Python;

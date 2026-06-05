@@ -68,8 +68,6 @@ async def evaluate(job: EvaluationJob, cx: lv.EvaluatorContext) -> AssessmentSub
             forbidden_input_classes=[lv.data_class.WORKSPACE_SECRET],
         )
 
-        if not isinstance(judgment.parsed, JudgeResult):
-            raise TypeError("judge response did not match JudgeResult")
         parsed = judgment.parsed
         composite = 0.7 * parsed.score + 0.3 * (1.0 if tests.exit_code == 0 else 0.0)
 

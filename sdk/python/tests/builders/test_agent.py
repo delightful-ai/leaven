@@ -3,6 +3,7 @@
 import json
 
 import msgspec
+from pydantic import BaseModel
 
 import leaven as lv
 from leaven._handles import WorkspaceHandle
@@ -15,6 +16,10 @@ from leaven.builders.agent import AgentBuilder
 from leaven.json_value import JsonObject, JsonValue
 
 
+class StructuredStatus(BaseModel):
+    status: str
+
+
 async def test_agent_builder_run_lowers_json_schema_output_contract() -> None:
     """Example: bound `agent.run` carries structured output schema authority."""
 
@@ -25,14 +30,13 @@ async def test_agent_builder_run_lowers_json_schema_output_contract() -> None:
         idempotency_prefix="agent-builder-json-schema",
         plan_id="planagentbuilderjson001",
     )
-    output = lv.output.json_schema(
-        {
-            "type": "object",
-            "properties": {"status": {"type": "string"}},
-            "required": ["status"],
-            "additionalProperties": False,
-        }
-    )
+    schema: JsonObject = {
+        "type": "object",
+        "properties": {"status": {"type": "string"}},
+        "required": ["status"],
+        "additionalProperties": False,
+    }
+    output = lv.output.json_schema(schema)
 
     session = await agent.run(
         workspace=WorkspaceHandle(
@@ -58,6 +62,32 @@ async def test_agent_builder_run_lowers_json_schema_output_contract() -> None:
         "schema": output.schema_,
     }
     assert session.parsed == {"status": "ok"}
+
+
+async def test_agent_builder_run_parses_model_backed_json_schema_output() -> None:
+    """Example: model-backed agent output owns the parsed result type."""
+
+    client = FakeAgentSeamClient()
+    agent = AgentBuilder._for_seam(
+        client,
+        candidate_id="cand_agent_builder",
+        idempotency_prefix="agent-builder-model-schema",
+        plan_id="planagentbuildermodel001",
+    )
+
+    session = await agent.run(
+        workspace=WorkspaceHandle(
+            workspace_id="ws_agent_builder_materialized",
+            candidate_id="cand_agent_builder",
+            lifetime="manual",
+            receipt=CallReceipt(receipt_id="wrec_agent_builder"),
+        ),
+        instructions=lv.AgentInstructions(task="Return JSON status."),
+        output=lv.output.json_schema(StructuredStatus),
+    )
+
+    assert session.parsed == StructuredStatus(status="ok")
+    assert session.parsed.status == "ok"
 
 
 class FakeAgentSeamClient:

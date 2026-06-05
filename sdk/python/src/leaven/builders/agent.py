@@ -3,7 +3,7 @@
 import asyncio
 import math
 from collections.abc import Sequence
-from typing import Protocol
+from typing import Protocol, cast, overload
 
 import msgspec
 from msgspec import UNSET, UnsetType
@@ -20,7 +20,13 @@ from .._seam._wire.results import AgentRunResult
 from ..agent_instructions import AgentInstructions
 from ..blob_ref import BlobRef
 from ..json_value import JsonValue
-from ..output import FilesOutput, JsonSchemaOutput, OutputContract, TextOutput
+from ..output import (
+    FilesOutput,
+    JsonSchemaOutput,
+    JsonSchemaValueOutput,
+    OutputContract,
+    TextOutput,
+)
 from ._output_contract import json_schema_output_to_wire
 
 
@@ -34,7 +40,7 @@ class AgentCommand(BaseModel):
     receipt: str | None = None
 
 
-class AgentSession(BaseModel):
+class AgentSession[ParsedOutputT](BaseModel):
     """Result of `cx.agent.run(...)`."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -44,7 +50,7 @@ class AgentSession(BaseModel):
     transcript: BlobRef | None = None
     """Full transcript blob metadata when the provider reports it."""
 
-    parsed: JsonValue | None = None
+    parsed: ParsedOutputT
     """Parsed structured output when `output=lv.output.json_schema(...)`."""
 
     final_message: str | None = None
@@ -99,7 +105,35 @@ class AgentBuilder:
             _plan_id=plan_id,
         )
 
+    @overload
+    async def run[ParsedOutputT: BaseModel](
+        self,
+        *,
+        workspace: WorkspaceHandle,
+        instructions: AgentInstructions,
+        runtime: str | None = None,
+        output: JsonSchemaOutput[ParsedOutputT],
+        timeout_s: float | None = None,
+        allowed_commands: Sequence[str] | None = None,
+        input_classes: Sequence[str] | None = None,
+        forbidden_input_classes: Sequence[str] | None = None,
+    ) -> AgentSession[ParsedOutputT]: ...
+
+    @overload
     async def run(
+        self,
+        *,
+        workspace: WorkspaceHandle,
+        instructions: AgentInstructions,
+        runtime: str | None = None,
+        output: FilesOutput | JsonSchemaValueOutput | TextOutput | None = None,
+        timeout_s: float | None = None,
+        allowed_commands: Sequence[str] | None = None,
+        input_classes: Sequence[str] | None = None,
+        forbidden_input_classes: Sequence[str] | None = None,
+    ) -> AgentSession[JsonValue]: ...
+
+    async def run[ParsedOutputT: BaseModel](
         self,
         *,
         workspace: WorkspaceHandle,
@@ -110,7 +144,7 @@ class AgentBuilder:
         allowed_commands: Sequence[str] | None = None,
         input_classes: Sequence[str] | None = None,
         forbidden_input_classes: Sequence[str] | None = None,
-    ) -> AgentSession:
+    ) -> AgentSession[ParsedOutputT] | AgentSession[JsonValue]:
         """Run an agent session against the workspace.
 
         `runtime` selects a configured agent (default if only one is configured;
@@ -143,7 +177,7 @@ class AgentBuilder:
             input_classes=input_classes,
         )
         result = await asyncio.to_thread(self._client.agent_run, request)
-        return _agent_session_from_result(result)
+        return _agent_session_from_result(result, output=output)
 
 
 def _instructions_to_wire(instructions: AgentInstructions) -> dict[str, str]:
@@ -169,18 +203,22 @@ def _output_to_wire(output: OutputContract | None) -> JsonObject:
         return value
     if isinstance(output, FilesOutput):
         return json_object({"kind": "files", "paths": output.paths})
-    if isinstance(output, JsonSchemaOutput):
+    if isinstance(output, JsonSchemaOutput | JsonSchemaValueOutput):
         return json_schema_output_to_wire(output)
     raise TypeError(f"unsupported agent output contract: {type(output).__name__}")
 
 
-def _agent_session_from_result(result: AgentRunResult) -> AgentSession:
+def _agent_session_from_result[ParsedOutputT: BaseModel](
+    result: AgentRunResult,
+    *,
+    output: OutputContract | None,
+) -> AgentSession[JsonValue] | AgentSession[ParsedOutputT]:
     primary = result.primary
     transcript = _blob_ref(primary.transcript_ref)
     return AgentSession(
         transcript_ref=transcript.blob_id if transcript is not None else "",
         transcript=transcript,
-        parsed=_parsed_json(primary.parsed),
+        parsed=_parsed_json(primary.parsed, output),
         final_message=None,
         files=None,
         commands=[
@@ -217,9 +255,17 @@ def _blob_ref(value: WireBlobRef | UnsetType) -> BlobRef | None:
     )
 
 
-def _parsed_json(value: msgspec.Raw | UnsetType) -> JsonValue | None:
+def _parsed_json[ParsedOutputT: BaseModel](
+    value: msgspec.Raw | UnsetType,
+    output: OutputContract | None,
+) -> JsonValue | ParsedOutputT:
     if value is UNSET:
+        if isinstance(output, JsonSchemaOutput):
+            raise TypeError("model-backed agent session is missing parsed payload")
         return None
+    if isinstance(output, JsonSchemaOutput):
+        model = cast("type[ParsedOutputT]", output.parse_to)
+        return model.model_validate_json(bytes(value))
     return json_value(msgspec.json.decode(value))
 
 

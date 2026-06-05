@@ -2,6 +2,7 @@ import pytest
 from pydantic import BaseModel
 
 import leaven as lv
+from leaven.json_value import JsonObject
 
 
 class StructuredAnswer(BaseModel):
@@ -23,10 +24,11 @@ def test_json_schema_output_from_pydantic_model() -> None:
 
 
 def test_json_schema_output_from_raw_schema() -> None:
-    schema = {"type": "object", "properties": {"answer": {"type": "string"}}}
+    schema: JsonObject = {"type": "object", "properties": {"answer": {"type": "string"}}}
 
     output = lv.output.json_schema(schema)
 
+    assert isinstance(output, lv.output.JsonSchemaValueOutput)
     assert output.parse_to is None
     assert output.schema_ == schema
 

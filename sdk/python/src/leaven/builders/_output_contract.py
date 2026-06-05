@@ -4,13 +4,17 @@ import hashlib
 import json
 import math
 
+from pydantic import BaseModel
+
 from .._seam._wire import JsonObject
 from .._seam._wire.json_value import json_object
 from ..json_value import JsonSchema, JsonValue
-from ..output import JsonSchemaOutput
+from ..output import JsonSchemaOutput, JsonSchemaValueOutput
 
 
-def json_schema_output_to_wire(output: JsonSchemaOutput) -> JsonObject:
+def json_schema_output_to_wire[ParsedModelT: BaseModel](
+    output: JsonSchemaOutput[ParsedModelT] | JsonSchemaValueOutput,
+) -> JsonObject:
     """Lower a public JSON Schema output contract to public-seam wire JSON."""
     return json_object(
         {

@@ -6,7 +6,7 @@ and shape the typed result the user reads.
 """
 
 from collections.abc import Sequence
-from typing import Literal
+from typing import Literal, Never, overload
 
 from pydantic import BaseModel, ConfigDict
 
@@ -31,14 +31,27 @@ class FilesOutput(OutputContract):
     """Cap on captured bytes per path."""
 
 
-class JsonSchemaOutput(OutputContract):
-    """Enforce a JSON-schema-shaped return value."""
+class JsonSchemaOutput[ParsedModelT: BaseModel](OutputContract):
+    """Enforce a JSON-schema-shaped return value parsed as a pydantic model."""
 
     kind: Literal["json_schema"] = "json_schema"
     schema_: JsonSchema
     """JSON Schema 2020-12 the response must validate against."""
-    parse_to: type[BaseModel] | None = None
-    """Optional pydantic model class to parse the response into."""
+    parse_to: type[ParsedModelT]
+    """Pydantic model class to parse the response into."""
+
+    def parse_json(self, payload: bytes) -> ParsedModelT:
+        """Parse provider output JSON into the declared pydantic model."""
+        return self.parse_to.model_validate_json(payload)
+
+
+class JsonSchemaValueOutput(OutputContract):
+    """Enforce a JSON-schema-shaped return value parsed as public JSON."""
+
+    kind: Literal["json_schema"] = "json_schema"
+    schema_: JsonSchema
+    """JSON Schema 2020-12 the response must validate against."""
+    parse_to: None = None
 
 
 class TextOutput(OutputContract):
@@ -53,7 +66,23 @@ def files(paths: Sequence[str], *, max_bytes: int | None = None) -> FilesOutput:
     return FilesOutput(paths=list(paths), max_bytes=max_bytes)
 
 
-def json_schema(model_or_schema: object) -> JsonSchemaOutput:
+@overload
+def json_schema[ParsedModelT: BaseModel](
+    model_or_schema: type[ParsedModelT],
+) -> JsonSchemaOutput[ParsedModelT]: ...
+
+
+@overload
+def json_schema(model_or_schema: JsonObject) -> JsonSchemaValueOutput: ...
+
+
+@overload
+def json_schema(model_or_schema: object) -> Never: ...
+
+
+def json_schema(
+    model_or_schema: object,
+) -> JsonSchemaOutput[BaseModel] | JsonSchemaValueOutput:
     """Output contract: response must match the given JSON Schema or pydantic model.
 
     Accepts a pydantic `BaseModel` subclass (extracts its JSON schema) or a
@@ -66,7 +95,7 @@ def json_schema(model_or_schema: object) -> JsonSchemaOutput:
             parse_to=model_or_schema,
         )
     if isinstance(model_or_schema, dict):
-        return JsonSchemaOutput(schema_=_json_object(model_or_schema))
+        return JsonSchemaValueOutput(schema_=_json_object(model_or_schema))
     raise TypeError("expected a pydantic model class or JSON schema object")
 
 
@@ -103,6 +132,7 @@ def _json_array(value: Sequence[object]) -> JsonArray:
 __all__ = [
     "FilesOutput",
     "JsonSchemaOutput",
+    "JsonSchemaValueOutput",
     "OutputContract",
     "TextOutput",
     "files",

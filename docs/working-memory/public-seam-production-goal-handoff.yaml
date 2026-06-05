@@ -1605,6 +1605,39 @@ acceptance:
           row remains pending for parsed LM/agent result payloads and other
           JSON-shaped expression, metadata, proposal/evidence, and result leaf
           owners.
+      - kind: model_backed_structured_output_parses_to_public_type
+        paths:
+          - sdk/python/src/leaven/output.py
+          - sdk/python/src/leaven/builders/_output_contract.py
+          - sdk/python/src/leaven/builders/lm.py
+          - sdk/python/src/leaven/builders/agent.py
+          - sdk/python/tests/test_output.py
+          - sdk/python/tests/builders/test_lm.py
+          - sdk/python/tests/builders/test_agent.py
+          - sdk/python/examples/05_evaluator_with_judge.py
+          - sdk/python/examples/07_serve_stage_worker.py
+          - docs/specs/leaven_python.md
+        commands:
+          - cd sdk/python && uv run pytest tests/test_output.py tests/builders/test_lm.py tests/builders/test_agent.py -q
+          - cd sdk/python && uv run ruff check src/leaven/output.py src/leaven/builders/_output_contract.py src/leaven/builders/lm.py src/leaven/builders/agent.py tests/test_output.py tests/builders/test_lm.py tests/builders/test_agent.py examples/05_evaluator_with_judge.py examples/07_serve_stage_worker.py
+          - cd sdk/python && uv run ty check src/leaven/output.py src/leaven/builders/_output_contract.py src/leaven/builders/lm.py src/leaven/builders/agent.py tests/test_output.py tests/builders/test_lm.py tests/builders/test_agent.py examples/05_evaluator_with_judge.py examples/07_serve_stage_worker.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Python model-backed structured output now has a public typed owner.
+          `lv.output.json_schema(Model)` returns `JsonSchemaOutput[Model]`,
+          while raw JSON Schema dictionaries return `JsonSchemaValueOutput`
+          and expose parsed output as explicit `JsonValue`. `LmResponse[T]`
+          and `AgentSession[T]` carry a required generic `parsed: T`; when a
+          model-backed output contract is used, missing parsed bytes fail at
+          the SDK boundary and returned bytes are parsed through the declared
+          pydantic model. Focused tests prove model-backed LM and agent parsed
+          values are pydantic model instances, raw-schema output stays a JSON
+          value, and active examples no longer defend with
+          `isinstance(parsed, Model)` fallback checks. This removes the public
+          SDK parsed-output erasure for model-backed structured output. The
+          generated wire result records still use msgspec `Raw` as the
+          immediate delayed decode buffer for `parsed`, and raw-schema output
+          remains `JsonValue`; those are still blockers for complete closure.
       - kind: generated_graph_rows_are_typed_records
         paths:
           - sdk/python/codegen/generate_seam_wire.py

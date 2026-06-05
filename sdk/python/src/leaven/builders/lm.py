@@ -2,7 +2,7 @@
 
 import asyncio
 from collections.abc import Sequence
-from typing import Literal, Protocol
+from typing import Literal, Protocol, overload
 
 import msgspec
 from msgspec import UNSET, UnsetType
@@ -15,7 +15,7 @@ from .._seam._wire.json_value import json_object, json_value
 from .._seam._wire.payloads import Cost
 from .._seam._wire.results import LmCompleteResult
 from ..json_value import JsonValue
-from ..output import JsonSchemaOutput
+from ..output import JsonSchemaOutput, JsonSchemaValueOutput
 from ._output_contract import json_schema_output_to_wire
 
 LmMessageRole = Literal["system", "developer", "user", "assistant", "tool"]
@@ -31,14 +31,14 @@ class LmMessage(BaseModel):
     tool_call_id: str | None = None
 
 
-class LmResponse(BaseModel):
+class LmResponse[ParsedOutputT](BaseModel):
     """Result of `cx.lm.complete(...)`."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     text: str
     """Assistant-authored final response text."""
-    parsed: JsonValue | None = None
+    parsed: ParsedOutputT
     """Parsed structured output when `response_format` was used."""
     finish_reason: str
     usage: dict[str, int]
@@ -82,6 +82,24 @@ class LmBuilder:
             _model=model,
         )
 
+    @overload
+    async def complete[ParsedOutputT: BaseModel](
+        self,
+        *,
+        prompt: str | None = None,
+        messages: Sequence[LmMessage] | Sequence[JsonObject] | None = None,
+        model: str | None = None,
+        model_role: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        stop: Sequence[str] | None = None,
+        response_format: JsonSchemaOutput[ParsedOutputT],
+        tools: Sequence[JsonObject] | None = None,
+        input_classes: Sequence[str] | None = None,
+        forbidden_input_classes: Sequence[str] | None = None,
+    ) -> LmResponse[ParsedOutputT]: ...
+
+    @overload
     async def complete(
         self,
         *,
@@ -92,11 +110,27 @@ class LmBuilder:
         temperature: float | None = None,
         max_tokens: int | None = None,
         stop: Sequence[str] | None = None,
-        response_format: JsonSchemaOutput | None = None,
+        response_format: JsonSchemaValueOutput | None = None,
         tools: Sequence[JsonObject] | None = None,
         input_classes: Sequence[str] | None = None,
         forbidden_input_classes: Sequence[str] | None = None,
-    ) -> LmResponse:
+    ) -> LmResponse[JsonValue]: ...
+
+    async def complete[ParsedOutputT: BaseModel](
+        self,
+        *,
+        prompt: str | None = None,
+        messages: Sequence[LmMessage] | Sequence[JsonObject] | None = None,
+        model: str | None = None,
+        model_role: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        stop: Sequence[str] | None = None,
+        response_format: JsonSchemaOutput[ParsedOutputT] | JsonSchemaValueOutput | None = None,
+        tools: Sequence[JsonObject] | None = None,
+        input_classes: Sequence[str] | None = None,
+        forbidden_input_classes: Sequence[str] | None = None,
+    ) -> LmResponse[ParsedOutputT] | LmResponse[JsonValue]:
         """Complete a prompt or message list.
 
         Either `prompt` or `messages` is required (not both). `model` selects
@@ -133,7 +167,7 @@ class LmBuilder:
         )
         self._seq += 1
         result = await asyncio.to_thread(self._client.lm_complete, request)
-        return _lm_response_from_result(result, model=selected_model)
+        return _lm_response_from_result(result, model=selected_model, output=response_format)
 
 
 class _SeamRequester(Protocol):
@@ -171,13 +205,18 @@ def _message_to_wire(message: LmMessage | JsonObject) -> JsonObject:
     return json_object(wire)
 
 
-def _lm_response_from_result(result: LmCompleteResult, *, model: str) -> LmResponse:
+def _lm_response_from_result[ParsedOutputT: BaseModel](
+    result: LmCompleteResult,
+    *,
+    model: str,
+    output: JsonSchemaOutput[ParsedOutputT] | JsonSchemaValueOutput | None,
+) -> LmResponse[ParsedOutputT] | LmResponse[JsonValue]:
     primary = result.primary
     message = primary.message
     text = "".join(part.text for part in message.content)
     return LmResponse(
         text=text,
-        parsed=_parsed_json(primary.parsed),
+        parsed=_parsed_json(primary.parsed, output),
         finish_reason="stop",
         usage=_usage(primary.cost),
         cost_usd=_cost_usd(primary.cost),
@@ -205,9 +244,17 @@ def _cost_usd(cost: Cost | UnsetType) -> float | None:
     return None if usd_micro is UNSET else usd_micro / 1_000_000
 
 
-def _parsed_json(value: msgspec.Raw | UnsetType) -> JsonValue | None:
+def _parsed_json[ParsedOutputT: BaseModel](
+    value: msgspec.Raw | UnsetType,
+    output: JsonSchemaOutput[ParsedOutputT] | JsonSchemaValueOutput | None,
+) -> ParsedOutputT | JsonValue:
     if value is UNSET:
+        if isinstance(output, JsonSchemaOutput):
+            raise TypeError("model-backed LM response is missing parsed payload")
         return None
+    if isinstance(output, JsonSchemaOutput):
+        model = output.parse_to
+        return model.model_validate_json(bytes(value))
     return json_value(msgspec.json.decode(value))
 
 
