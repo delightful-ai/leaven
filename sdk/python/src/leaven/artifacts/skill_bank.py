@@ -16,7 +16,8 @@ from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..json_value import JsonObject, JsonValue
+from .._json_parse import parse_json_object
+from ..json_value import JsonObject
 
 
 class SkillFile(BaseModel):
@@ -73,8 +74,10 @@ class SkillBankChangeRecord(BaseModel):
 
     def to_json_value(self) -> JsonObject:
         """Project this typed change to the public-seam JSON literal encoding."""
-        raw: object = json.loads(self.model_dump_json(by_alias=True, exclude_none=True))
-        return _json_object(raw)
+        return parse_json_object(
+            json.loads(self.model_dump_json(by_alias=True, exclude_none=True)),
+            context="skill-bank change",
+        )
 
 
 class SkillBankChangeFile(BaseModel):
@@ -195,27 +198,6 @@ def _markdown_paths(directory: Path, *, root: Path) -> list[str]:
         for path in directory.rglob("*.md")
         if path.is_file()
     ]
-
-
-def _json_object(raw: object) -> JsonObject:
-    if not isinstance(raw, dict):
-        raise TypeError("skill-bank change did not serialize as an object")
-    result: JsonObject = {}
-    for key, value in raw.items():
-        if not isinstance(key, str):
-            raise TypeError("skill-bank change serialized a non-string JSON object key")
-        result[key] = _json_value(value)
-    return result
-
-
-def _json_value(raw: object) -> JsonValue:
-    if raw is None or isinstance(raw, str | int | float | bool):
-        return raw
-    if isinstance(raw, list):
-        return [_json_value(value) for value in raw]
-    if isinstance(raw, dict):
-        return _json_object(raw)
-    raise TypeError(f"skill-bank change contains non-JSON value: {type(raw).__name__}")
 
 
 __all__ = [

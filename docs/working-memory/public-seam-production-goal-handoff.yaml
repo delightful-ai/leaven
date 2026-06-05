@@ -5086,6 +5086,31 @@ acceptance:
           the JSON boundary parser before exposing config dictionaries to file
           and process-client code. This leaves `msgspec` as the typed record
           owner and makes the JSON escape explicit.
+      - kind: python_json_parse_boundary_consolidated
+        paths:
+          - sdk/python/src/leaven/_json_parse.py
+          - sdk/python/src/leaven/output.py
+          - sdk/python/src/leaven/builders/proposals.py
+          - sdk/python/src/leaven/artifacts/skill_bank.py
+          - sdk/python/tests/test_output.py
+          - sdk/python/tests/builders/test_output_contract.py
+          - sdk/python/tests/test_proposal_submission.py
+          - sdk/python/tests/artifacts/test_skill_bank.py
+        commands:
+          - cd sdk/python && uv run pytest tests/test_output.py tests/builders/test_output_contract.py tests/test_proposal_submission.py tests/artifacts/test_skill_bank.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_json_parse.py src/leaven/output.py src/leaven/builders/proposals.py src/leaven/artifacts/skill_bank.py tests/test_output.py tests/builders/test_output_contract.py tests/test_proposal_submission.py tests/artifacts/test_skill_bank.py
+          - cd sdk/python && uv run ty check src/leaven/_json_parse.py src/leaven/output.py src/leaven/builders/proposals.py src/leaven/artifacts/skill_bank.py tests/test_output.py tests/builders/test_output_contract.py tests/test_proposal_submission.py tests/artifacts/test_skill_bank.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          The Python SDK now has one private `_json_parse` boundary for
+          converting unknown Python values into `JsonValue`/`JsonObject` when
+          crossing from Pydantic/json APIs into typed SDK records. Public
+          output contracts, proposal artifact lowering, and skill-bank change
+          projection no longer carry their own local `object` parsers. This
+          does not eliminate all JSON-shaped leaves, but it names the remaining
+          unknown-value parse boundary and removes duplicated domain-local
+          erasure helpers.
       - kind: prompt_stage_runtime_erasure_narrowed
         paths:
           - sdk/python/src/leaven/stages.py

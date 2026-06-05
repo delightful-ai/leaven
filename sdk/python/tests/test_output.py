@@ -37,7 +37,7 @@ def test_json_schema_output_from_raw_schema() -> None:
 
 def test_json_schema_output_rejects_non_json_schema_values() -> None:
     bad_key_schema = cast("JsonObject", {"properties": {1: {"type": "string"}}})
-    with pytest.raises(TypeError, match="JSON object keys must be strings"):
+    with pytest.raises(TypeError, match="JSON schema object keys must be strings"):
         lv.output.json_schema(bad_key_schema)
 
     not_a_schema = cast("JsonObject", "not a schema")

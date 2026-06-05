@@ -10,7 +10,8 @@ from typing import Literal, overload
 
 from pydantic import BaseModel, ConfigDict
 
-from .json_value import JsonArray, JsonObject, JsonSchema, JsonValue
+from ._json_parse import parse_json_object
+from .json_value import JsonObject, JsonSchema
 
 
 class OutputContract(BaseModel):
@@ -87,42 +88,22 @@ def json_schema(
     """
     if isinstance(model_or_schema, type) and issubclass(model_or_schema, BaseModel):
         return JsonSchemaOutput(
-            schema_=_json_object(model_or_schema.model_json_schema()),
+            schema_=parse_json_object(
+                model_or_schema.model_json_schema(),
+                context="pydantic model JSON schema",
+            ),
             parse_to=model_or_schema,
         )
     if isinstance(model_or_schema, dict):
-        return JsonSchemaValueOutput(schema_=_json_object(model_or_schema))
+        return JsonSchemaValueOutput(
+            schema_=parse_json_object(model_or_schema, context="JSON schema")
+        )
     raise TypeError("expected a pydantic model class or JSON schema object")
 
 
 def text(*, max_chars: int | None = None) -> TextOutput:
     """Output contract: plain text response with optional length cap."""
     return TextOutput(max_chars=max_chars)
-
-
-def _json_object(raw_json: object) -> JsonObject:
-    if not isinstance(raw_json, dict):
-        raise TypeError("JSON value must be an object")
-    output: JsonObject = {}
-    for key, item in raw_json.items():
-        if not isinstance(key, str):
-            raise TypeError("JSON object keys must be strings")
-        output[key] = _json_value(item)
-    return output
-
-
-def _json_value(raw_json: object) -> JsonValue:
-    if raw_json is None or isinstance(raw_json, str | int | float | bool):
-        return raw_json
-    if isinstance(raw_json, list):
-        return _json_array(raw_json)
-    if isinstance(raw_json, dict):
-        return _json_object(raw_json)
-    raise TypeError(f"value is not JSON: {type(raw_json).__name__}")
-
-
-def _json_array(value: Sequence[object]) -> JsonArray:
-    return [_json_value(item) for item in value]
 
 
 __all__ = [

@@ -7,6 +7,7 @@ from typing import Protocol
 from pydantic import BaseModel, ConfigDict
 
 from .._errors import UnboundBuilderError
+from .._json_parse import parse_json_value
 from .._receipts import WriteReceipt
 from .._seam import ProposalApplyRequest, ProposalSubmitRequest
 from .._seam._wire.expressions import PlanExpressionLiteral, ValueExprLiteral
@@ -242,8 +243,10 @@ def _required_artifact(value: ProposalArtifactValue | None, field: str) -> Propo
 
 def _artifact_value(value: ProposalArtifactValue) -> JsonValue:
     if isinstance(value, DirectoryArtifact | PromptArtifact | SkillBank):
-        raw: object = json.loads(value.model_dump_json(exclude_none=True))
-        return _json_value(raw)
+        return parse_json_value(
+            json.loads(value.model_dump_json(exclude_none=True)),
+            context="proposal artifact",
+        )
     raise TypeError(f"unsupported proposal artifact: {type(value).__name__}")
 
 
@@ -251,21 +254,6 @@ def _proposal_value(value: ProposalChangeValue | JsonValue) -> JsonValue:
     if isinstance(value, SkillBankChangeRecord):
         return value.to_json_value()
     return value
-
-
-def _json_value(raw: object) -> JsonValue:
-    if raw is None or isinstance(raw, str | int | float | bool):
-        return raw
-    if isinstance(raw, list):
-        return [_json_value(item) for item in raw]
-    if isinstance(raw, dict):
-        result: dict[str, JsonValue] = {}
-        for key, value in raw.items():
-            if not isinstance(key, str):
-                raise TypeError("artifact JSON object keys must be strings")
-            result[key] = _json_value(value)
-        return result
-    raise TypeError(f"artifact value is not JSON: {type(raw).__name__}")
 
 
 __all__ = ["ProposalSubmission", "ProposalsBuilder"]
