@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::Value;
 
 use crate::PublicSeamError;
-use crate::evidence::EvidenceEnvelopeDocument;
+use crate::evidence::{EvidenceEnvelopeDocument, EvidenceReceiptRef};
 use crate::result::audit::ReceiptAudit;
 use crate::result::helpers::{invalid_result, required_string_set};
 
@@ -242,7 +242,7 @@ fn collect_evidence_data_classes_from_value(
                 required.extend(private.iter().cloned());
             }
             required.extend(envelope.trace_data_classes().iter().cloned());
-            super::validate_evidence_source_receipts(&envelope, receipt_index)
+            validate_evidence_source_receipts(&envelope, receipt_index)
         }
         Value::Object(object) => {
             for value in object.values() {
@@ -258,4 +258,100 @@ fn collect_evidence_data_classes_from_value(
         }
         _ => Ok(()),
     }
+}
+
+pub(super) fn validate_evidence_source_receipts(
+    envelope: &EvidenceEnvelopeDocument,
+    receipt_index: &BTreeMap<String, ReceiptAudit>,
+) -> Result<(), PublicSeamError> {
+    let envelope_data_classes = evidence_data_class_set(envelope);
+    validate_evidence_receipts(
+        envelope.read_receipt_refs(),
+        receipt_index,
+        "query",
+        "read",
+        &envelope_data_classes,
+        envelope.is_target_derived(),
+    )?;
+    validate_evidence_receipts(
+        envelope.effect_receipt_refs(),
+        receipt_index,
+        "call",
+        "effect",
+        &envelope_data_classes,
+        false,
+    )?;
+    validate_evidence_receipts(
+        envelope.write_receipt_refs(),
+        receipt_index,
+        "write",
+        "write",
+        &envelope_data_classes,
+        false,
+    )
+}
+
+fn validate_evidence_receipts(
+    receipts: &[EvidenceReceiptRef],
+    receipt_index: &BTreeMap<String, ReceiptAudit>,
+    expected_kind: &str,
+    receipt_role: &str,
+    envelope_data_classes: &BTreeSet<String>,
+    require_receipt_visibility: bool,
+) -> Result<(), PublicSeamError> {
+    for receipt in receipts {
+        let Some(audit) = receipt_index.get(receipt.id()) else {
+            return Err(invalid_result(format!(
+                "evidence {receipt_role} receipt `{}` is missing from plan result receipts",
+                receipt.id()
+            )));
+        };
+        if audit.kind != expected_kind {
+            return Err(invalid_result(format!(
+                "evidence {receipt_role} receipt `{}` references `{}` receipt, expected `{expected_kind}`",
+                receipt.id(),
+                audit.kind
+            )));
+        }
+        if let Some(fingerprint) = receipt.fingerprint()
+            && fingerprint != audit.fingerprint
+        {
+            return Err(invalid_result(format!(
+                "evidence {receipt_role} receipt `{}` fingerprint does not match plan result receipt",
+                receipt.id()
+            )));
+        }
+        if require_receipt_visibility && audit.trace_data_classes.is_empty() {
+            return Err(invalid_result(format!(
+                "target-derived evidence {receipt_role} receipt `{}` must carry receipt trace data classes",
+                receipt.id()
+            )));
+        }
+        if require_receipt_visibility && !audit.trace_data_classes.contains("case.target") {
+            return Err(invalid_result(format!(
+                "target-derived evidence {receipt_role} receipt `{}` must carry case.target receipt trace data class",
+                receipt.id()
+            )));
+        }
+        for data_class in &audit.trace_data_classes {
+            if !envelope_data_classes.contains(data_class) {
+                return Err(invalid_result(format!(
+                    "evidence {receipt_role} receipt `{}` trace data class `{data_class}` is not covered by evidence data_classes",
+                    receipt.id()
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn evidence_data_class_set(envelope: &EvidenceEnvelopeDocument) -> BTreeSet<String> {
+    let mut data_classes = BTreeSet::new();
+    data_classes.extend(envelope.data_classes().iter().cloned());
+    data_classes.extend(envelope.public_data_classes().iter().cloned());
+    if let Some(private) = envelope.private_data_classes() {
+        data_classes.extend(private.iter().cloned());
+    }
+    data_classes.extend(envelope.trace_data_classes().iter().cloned());
+    data_classes
 }

@@ -2,11 +2,13 @@ use serde_json::Value;
 
 mod assessment;
 mod dialect_usage;
+mod evaluation;
 mod expression;
 mod model;
 mod parse;
 
 #[allow(unused_imports)]
+pub use evaluation::{PlanEvaluationSetExpr, PlanEvaluationShape};
 pub use expression::PlanLiteralValue;
 pub use expression::{
     PlanArtifactProjectionSelector, PlanCandidateCostScope, PlanCostScope,
@@ -19,10 +21,9 @@ pub use expression::{
 };
 pub use model::{
     PlanApplyProposalBatchWrite, PlanCallKind, PlanCommitKind, PlanEmitRunEventWrite,
-    PlanEvaluationSetExpr, PlanEvaluationShape, PlanEventPayload, PlanId, PlanMode, PlanOperation,
-    PlanOperationKind, PlanProposalCausalInputs, PlanQueryKind, PlanRequestEvaluationWrite,
-    PlanReturnBinding, PlanSchemaVersion, PlanSubmitAssessmentsWrite, PlanSubmitProposalBatchWrite,
-    PlanWriteKind,
+    PlanEventPayload, PlanId, PlanMode, PlanOperation, PlanOperationKind, PlanProposalCausalInputs,
+    PlanQueryKind, PlanRequestEvaluationWrite, PlanReturnBinding, PlanSchemaVersion,
+    PlanSubmitAssessmentsWrite, PlanSubmitProposalBatchWrite, PlanWriteKind,
 };
 
 use assessment::AssessmentScoreOutputUsage;
