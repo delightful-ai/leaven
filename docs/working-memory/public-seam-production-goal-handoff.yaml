@@ -2967,6 +2967,36 @@ acceptance:
           submitted through `leaven/proposal.submit_batch`, applied through
           `leaven/proposal.apply`, checkpointed, restored, and consumed by a
           later live Codex stage in one e2e scenario.
+      - kind: live_codex_agentkit_evolution_e2e_proof
+        paths:
+          - crates/leaven-gepa-agentic-agent-kit/AGENTS.md
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_evolution_support.rs
+          - crates/leaven-gepa-agentic-agent-kit/tests/live_codex_agent_kit_fixture.rs
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution --no-run
+          - LEAVEN_CODEX_LIVE=1 LEAVEN_CODEX_BIN="$HOME/.bun/bin/codex" cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution live_codex_agent_kit_evolves_through_stdio_checkpoint_and_next_codex_consumes_child -- --ignored --exact --nocapture
+          - cargo fmt --check
+        note: >-
+          A single ignored live scenario now proves the requested Codex
+          evolution loop directly. Starting from a Git-backed AgentKit seed,
+          the test runs a live `gpt-5.4-mini` Codex reflection stage that writes
+          a diagnosis artifact, then a separate live Codex proposal stage that
+          mutates the AgentKit system prompt and alpha skill in the Git
+          workspace. Leaven imports that live workspace mutation as a typed
+          `GitProgramChange`, submits it through the run-bound SDK stdio route
+          as `leaven/proposal.submit_batch`, applies the returned batch through
+          `leaven/proposal.apply`, checkpoints the run with
+          `StoreRunPersistence<FileStore>`, exports and reads back the real
+          stage-journal transcript blob, restores the checkpointed child
+          candidate and lineage, materializes the child AgentKit in a fresh
+          workspace, and runs a later live Codex stage that must consume the
+          child system prompt and child skill by creating separate proof files.
+          The direct Codex evolution mechanics are proven here; the acceptance
+          row remains pending only because its declared prerequisite backbone
+          rows still need their own closure before this becomes final goal
+          closeout evidence.
     closeout_check: >-
       A live Codex prompt-consumption test, a deterministic AgentKit projection
       test, or `proposal.submit_batch` without application cannot close this

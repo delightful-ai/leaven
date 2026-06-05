@@ -46,5 +46,11 @@ target Codex surface consumes the projected instructions and skills.
   `system_prompt.md`, `AGENTS.md`, and `.agents/skills` surfaces before
   promoting this path to an ordinary default product route for that Codex
   surface.
+- `LEAVEN_CODEX_LIVE=1 LEAVEN_CODEX_BIN="$HOME/.bun/bin/codex" cargo test -p leaven-gepa-agentic-agent-kit --test live_codex_agent_kit_evolution live_codex_agent_kit_evolves_through_stdio_checkpoint_and_next_codex_consumes_child -- --ignored --exact --nocapture`
+  is the full live AgentKit evolution proof. It runs a live Codex reflection
+  stage, a separate live Codex proposal/mutation stage, typed Git readback,
+  public-seam SDK-route `proposal.submit_batch` and `proposal.apply`,
+  checkpoint export/restore, and a later live Codex stage that consumes the
+  applied child prompt and skill.
 - `cargo test -p leaven --test topology_contract` proves this bridge stays free
   of Codex provider protocol dependencies.
