@@ -1,5 +1,6 @@
 """Private persisted-run helpers for `lv.runs`."""
 
+from .rust_evidence import rust_evidence_summaries
 from .rust_export import (
     load_rust_blob_readback,
     load_rust_evidence_readback,
@@ -18,4 +19,5 @@ __all__ = [
     "open_rust_optimized",
     "optimized_from_rust_readback",
     "persist_optimized",
+    "rust_evidence_summaries",
 ]

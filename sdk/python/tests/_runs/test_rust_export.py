@@ -1,5 +1,7 @@
 """Tests for `leaven._runs.rust_export`."""
 
+import base64
+import hashlib
 import json
 from pathlib import Path
 
@@ -321,6 +323,32 @@ def test_runs_inspect_uses_rust_checkpoint_blob_and_evidence_without_optimized_j
     readback = tmp_path / "readback.json"
     graph_blob = tmp_path / "graph_blob.json"
     evidence = tmp_path / "evidence.json"
+    evidence_bytes = json.dumps(
+        {
+            "score": {"score": 0.75},
+            "output": {
+                "Inline": {
+                    "text": "42",
+                    "truncated": False,
+                    "metadata": {
+                        "visibility": "public",
+                        "data_classes": ["candidate.output", "public"],
+                    },
+                }
+            },
+            "feedback": "exact match",
+            "trace": [],
+            "case_data_reads": [
+                {
+                    "operation": "case_query.load",
+                    "receipt": "qrec_case_1",
+                    "case": 1,
+                    "fields": ["input", "target"],
+                    "data_classes": ["case.input", "case.target"],
+                }
+            ],
+        }
+    ).encode()
     readback.write_text(
         json.dumps(load_rust_run_readback_fixture().model_dump(mode="json", by_alias=True)),
         encoding="utf-8",
@@ -342,9 +370,9 @@ def test_runs_inspect_uses_rust_checkpoint_blob_and_evidence_without_optimized_j
             {
                 "schema_version": "leaven.run_evidence_export.v1",
                 "evidence": {"store": "leaven-run", "key": "0"},
-                "bytes": 23,
-                "sha256": "5369812b12c948efac405e61b4e926b1f639ff019922e88d0c1955f981b103aa",
-                "content_base64": "eyJzY29yZSI6MSwiY2FzZSI6ImEifQo=",
+                "bytes": len(evidence_bytes),
+                "sha256": hashlib.sha256(evidence_bytes).hexdigest(),
+                "content_base64": base64.b64encode(evidence_bytes).decode(),
             }
         ),
         encoding="utf-8",
@@ -373,7 +401,20 @@ def test_runs_inspect_uses_rust_checkpoint_blob_and_evidence_without_optimized_j
     assert inspection.rust_graph_blob is not None
     assert inspection.rust_graph_blob.content_bytes() == b"durable blob bytes\n"
     assert len(inspection.rust_evidence) == 1
-    assert inspection.rust_evidence[0].content_json() == {"score": 1, "case": "a"}
+    assert inspection.evidence[0].case_id == "1"
+    assert inspection.evidence[0].candidate_id == "cand_child"
+    assert inspection.evidence[0].payload == {"output": "42"}
+    assert inspection.evidence[0].target_derived is True
+    assert inspection.evidence[0].data_classes == [
+        "candidate.output",
+        "case.input",
+        "case.target",
+        "public",
+    ]
+    assert [
+        (reward.id, reward.value, reward.weight, reward.feedback)
+        for reward in inspection.evidence[0].rewards
+    ] == [("score", 0.75, 1.0, "exact match")]
     assert [fact.surface for fact in inspection.unsupported] == [
         "run.cost",
         "run.inspection",

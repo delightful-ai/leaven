@@ -15,6 +15,7 @@ from ._runs import (
     open_optimized,
     open_rust_optimized,
     optimized_from_rust_readback,
+    rust_evidence_summaries,
 )
 from .result import Optimized
 from .run_inspection import RunInspection, inspect_optimized
@@ -54,6 +55,11 @@ def inspect(path: str | Path) -> RunInspection:
         if rust_readback is not None
         else []
     )
+    evidence_summaries = (
+        rust_evidence_summaries(rust_readback, rust_evidence)
+        if rust_readback is not None
+        else None
+    )
     result = (
         optimized_from_rust_readback(rust_readback, run_dir=str(_run_dir(path)))
         if rust_readback is not None
@@ -64,6 +70,7 @@ def inspect(path: str | Path) -> RunInspection:
         rust_readback=rust_readback,
         rust_graph_blob=rust_graph_blob,
         rust_evidence=rust_evidence,
+        evidence_summaries=evidence_summaries,
     )
 
 

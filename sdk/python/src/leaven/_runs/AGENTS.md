@@ -37,6 +37,11 @@ inspection namespace.
 ## Map
 
 - `codec.py`: JSON envelope and current artifact round-trip codecs.
+- `rust_evidence.py`: typed Python projection from Rust-owned
+  `CaseAssessmentEvidence` byte exports into `RunInspection` summaries. It may
+  decode the Rust serde shape for SDK inspection, but it must not define new
+  Rust evidence semantics or synthesize reward-vector rows that Rust did not
+  persist.
 - `rust_export.py`: private subprocess bridge to Rust-owned checkpoint/graph
   inspection, run-blob byte exports, and evidence byte exports.
 - `store.py`: deterministic run-directory write/read/list operations.

@@ -248,6 +248,7 @@ def inspect_optimized[A](
     rust_readback: RustRunReadback | None = None,
     rust_graph_blob: RustBlobReadback | None = None,
     rust_evidence: Sequence[RustEvidenceReadback] = (),
+    evidence_summaries: Sequence[EvidenceSummary] | None = None,
 ) -> RunInspection:
     """Build a flattened inspection projection from an optimized result."""
     return RunInspection(
@@ -256,7 +257,9 @@ def inspect_optimized[A](
         best_candidate_id=result.best.id,
         best_lineage=[candidate.id for candidate in result.lineage(result.best.id)],
         receipts=_receipts(result),
-        evidence=[_evidence_summary(assessment) for assessment in result.assessment_rows],
+        evidence=list(evidence_summaries)
+        if evidence_summaries is not None
+        else [_evidence_summary(assessment) for assessment in result.assessment_rows],
         total_cost_usd=result.summary.total_cost_usd,
         cost_status=result.summary.cost_status,
         total_lm_tokens=result.summary.total_lm_tokens,

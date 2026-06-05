@@ -1318,6 +1318,36 @@ acceptance:
           bytes are attached to inspection, but full public `Assessment` /
           reward rows from Rust-owned evidence need an owning semantic decoder
           before unsupported `run.inspection` can be removed.
+      - kind: rust_case_assessment_evidence_projects_to_python_inspection
+        paths:
+          - sdk/python/src/leaven/_runs/rust_evidence.py
+          - sdk/python/src/leaven/_runs/__init__.py
+          - sdk/python/src/leaven/_runs/AGENTS.md
+          - sdk/python/src/leaven/run_inspection.py
+          - sdk/python/src/leaven/runs.py
+          - sdk/python/tests/_runs/test_rust_export.py
+          - docs/working-memory/public-seam-production-goal-handoff.yaml
+        commands:
+          - cd sdk/python && uv run pytest tests/_runs/test_rust_export.py tests/test_run_inspection.py -q
+          - cd sdk/python && uv run ruff check src/leaven/run_inspection.py src/leaven/runs.py src/leaven/_runs tests/_runs/test_rust_export.py tests/test_run_inspection.py
+          - cd sdk/python && uv run ty check src/leaven/run_inspection.py src/leaven/runs.py src/leaven/_runs tests/_runs/test_rust_export.py tests/test_run_inspection.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Python `_runs.rust_evidence` now has typed Pydantic owners for the
+          Rust serde shape of `CaseAssessmentEvidence`, `ScalarEvidence`, and
+          inline/blob `OutputRecord` variants. `lv.runs.inspect(...)` uses those
+          typed models to turn Rust-owned evidence byte exports into
+          `EvidenceSummary` rows and fails if assessment evidence does not
+          validate as Rust `CaseAssessmentEvidence`:
+          case id from audited case-data reads, candidate id from Rust graph
+          assessment readback, output report text, data classes, target-derived
+          status, and a scalar score row with feedback. The regression uses a
+          checkpoint-only run directory, no `optimized.json`, and a fake
+          `leaven run evidence` response carrying the actual Rust evidence
+          shape. This still does not close the row because public
+          `Assessment` handles and Python reward-vector rows are not fully
+          reconstructed from Rust-owned state; Rust currently persists scalar
+          `CaseAssessmentEvidence`, not the Python reward-vector dimensions.
     closeout_check: "Reading only `optimized.json` written by Python is a proxy."
 
   - id: python_wire_codegen_msgspec_boundary
