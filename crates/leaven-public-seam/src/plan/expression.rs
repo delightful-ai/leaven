@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::PublicSeamError;
 
@@ -21,7 +21,7 @@ pub enum PlanExpression {
     /// Case query expression.
     CaseQuery,
     /// Workspace query expression.
-    WorkspaceQuery { workspace: String },
+    WorkspaceQuery { workspace: WorkspaceRefExpression },
     /// Projection over another expression.
     Project { input: Box<PlanExpression> },
     /// Predicate filter over another expression.
@@ -72,7 +72,7 @@ impl PlanExpression {
             }
             "case_query" => Ok(Self::CaseQuery),
             "workspace_query" => Ok(Self::WorkspaceQuery {
-                workspace: required_object_string(object, "workspace")?.to_owned(),
+                workspace: WorkspaceRefExpression::from_value(object.get("workspace"))?,
             }),
             "project" => Ok(Self::Project {
                 input: Box::new(required_input_expression(object, "project")?),
@@ -195,6 +195,78 @@ impl PlanExpression {
             | Self::Extension { .. } => Ok(()),
         }
     }
+}
+
+/// Typed workspace reference carried by workspace-shaped Plan expressions.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkspaceRefExpression {
+    id: String,
+    run: Option<String>,
+    snapshot_fingerprint: Option<String>,
+}
+
+impl WorkspaceRefExpression {
+    fn from_value(value: Option<&Value>) -> Result<Self, PublicSeamError> {
+        let value = value.ok_or_else(|| invalid_plan("workspace_query must carry workspace"))?;
+        if let Some(id) = value.as_str() {
+            return Ok(Self {
+                id: id.to_owned(),
+                run: None,
+                snapshot_fingerprint: None,
+            });
+        }
+        let object = value
+            .as_object()
+            .ok_or_else(|| invalid_plan("workspace_query workspace must be string or object"))?;
+        if object.get("kind").and_then(Value::as_str) != Some("workspace") {
+            return Err(invalid_plan(
+                "workspace_query workspace object must have kind `workspace`",
+            ));
+        }
+        Ok(Self {
+            id: required_workspace_ref_string(object, "id")?.to_owned(),
+            run: optional_workspace_ref_string(object, "run")?,
+            snapshot_fingerprint: optional_workspace_ref_string(object, "snapshot_fingerprint")?,
+        })
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn run(&self) -> Option<&str> {
+        self.run.as_deref()
+    }
+
+    pub fn snapshot_fingerprint(&self) -> Option<&str> {
+        self.snapshot_fingerprint.as_deref()
+    }
+}
+
+fn required_workspace_ref_string<'a>(
+    object: &'a Map<String, Value>,
+    field: &str,
+) -> Result<&'a str, PublicSeamError> {
+    object
+        .get(field)
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_plan(format!("workspace_query workspace must carry `{field}`")))
+}
+
+fn optional_workspace_ref_string(
+    object: &Map<String, Value>,
+    field: &str,
+) -> Result<Option<String>, PublicSeamError> {
+    object
+        .get(field)
+        .map(|value| {
+            value.as_str().map(str::to_owned).ok_or_else(|| {
+                invalid_plan(format!(
+                    "workspace_query workspace `{field}` must be a string"
+                ))
+            })
+        })
+        .transpose()
 }
 
 /// Plan IR expression discriminator.

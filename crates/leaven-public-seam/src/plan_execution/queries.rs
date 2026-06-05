@@ -35,8 +35,372 @@ pub struct PlanWorkspaceQueryRequest<'a> {
     pub(super) name: &'a str,
     pub(super) expr: &'a Value,
     pub(super) workspace: WorkspaceRefFacts,
-    pub(super) op: &'a Value,
+    pub(super) op: WorkspaceQueryOp<'a>,
     pub(super) deps: &'a BTreeMap<String, Value>,
+}
+
+/// Typed `workspace_query.op` shape from the locked Plan IR.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum WorkspaceQueryOp<'a> {
+    Snapshot,
+    List {
+        path: &'a str,
+        recursive: Option<bool>,
+        max_entries: Option<u64>,
+    },
+    ReadFile {
+        path: &'a str,
+        max_bytes: Option<u64>,
+        expected_data_classes: BTreeSet<&'a str>,
+    },
+    Stat {
+        path: &'a str,
+    },
+    Digest {
+        path: &'a str,
+        algorithm: WorkspaceDigestAlgorithm,
+    },
+    GitLog {
+        max_entries: Option<u64>,
+    },
+    GitDiff {
+        against: WorkspaceGitAgainst,
+        max_bytes: Option<u64>,
+    },
+    GitStatus {
+        porcelain: Option<bool>,
+    },
+    CaptureArtifacts {
+        paths: BTreeSet<&'a str>,
+        max_bytes: Option<u64>,
+    },
+}
+
+impl<'a> WorkspaceQueryOp<'a> {
+    fn from_value(value: &'a Value) -> Result<Self, PublicSeamError> {
+        let object = object(value, "workspace_query op")?;
+        match object
+            .get("kind")
+            .and_then(Value::as_str)
+            .ok_or_else(|| invalid_plan("workspace_query op must carry kind"))?
+        {
+            "snapshot" => Ok(Self::Snapshot),
+            "list" => Ok(Self::List {
+                path: required_workspace_op_path(object, "list")?,
+                recursive: optional_bool(object, "recursive", "workspace_query list.recursive")?,
+                max_entries: optional_positive_u64(
+                    object,
+                    "max_entries",
+                    "workspace_query list.max_entries",
+                )?,
+            }),
+            "read_file" => Ok(Self::ReadFile {
+                path: required_workspace_op_path(object, "read_file")?,
+                max_bytes: optional_positive_u64(
+                    object,
+                    "max_bytes",
+                    "workspace_query read_file.max_bytes",
+                )?,
+                expected_data_classes: required_string_set(
+                    object,
+                    "expected_data_classes",
+                    "workspace_query read_file.expected_data_classes",
+                )?,
+            }),
+            "stat" => Ok(Self::Stat {
+                path: required_workspace_op_path(object, "stat")?,
+            }),
+            "digest" => Ok(Self::Digest {
+                path: required_workspace_op_path(object, "digest")?,
+                algorithm: WorkspaceDigestAlgorithm::from_str(required_object_str(
+                    object,
+                    "algorithm",
+                    "workspace_query digest.algorithm",
+                )?)?,
+            }),
+            "git_log" => Ok(Self::GitLog {
+                max_entries: optional_positive_u64(
+                    object,
+                    "max_entries",
+                    "workspace_query git_log.max_entries",
+                )?,
+            }),
+            "git_diff" => Ok(Self::GitDiff {
+                against: WorkspaceGitAgainst::from_str(required_object_str(
+                    object,
+                    "against",
+                    "workspace_query git_diff.against",
+                )?)?,
+                max_bytes: optional_positive_u64(
+                    object,
+                    "max_bytes",
+                    "workspace_query git_diff.max_bytes",
+                )?,
+            }),
+            "git_status" => Ok(Self::GitStatus {
+                porcelain: optional_bool(
+                    object,
+                    "porcelain",
+                    "workspace_query git_status.porcelain",
+                )?,
+            }),
+            "capture_artifacts" => Ok(Self::CaptureArtifacts {
+                paths: required_string_set(
+                    object,
+                    "paths",
+                    "workspace_query capture_artifacts.paths",
+                )?,
+                max_bytes: optional_positive_u64(
+                    object,
+                    "max_bytes",
+                    "workspace_query capture_artifacts.max_bytes",
+                )?,
+            }),
+            other => Err(invalid_plan(format!(
+                "unknown workspace_query op `{other}`"
+            ))),
+        }
+    }
+
+    pub const fn kind(&self) -> &'static str {
+        match self {
+            Self::Snapshot => "snapshot",
+            Self::List { .. } => "list",
+            Self::ReadFile { .. } => "read_file",
+            Self::Stat { .. } => "stat",
+            Self::Digest { .. } => "digest",
+            Self::GitLog { .. } => "git_log",
+            Self::GitDiff { .. } => "git_diff",
+            Self::GitStatus { .. } => "git_status",
+            Self::CaptureArtifacts { .. } => "capture_artifacts",
+        }
+    }
+
+    pub const fn path(&self) -> Option<&'a str> {
+        match self {
+            Self::List { path, .. }
+            | Self::ReadFile { path, .. }
+            | Self::Stat { path }
+            | Self::Digest { path, .. } => Some(path),
+            Self::Snapshot
+            | Self::GitLog { .. }
+            | Self::GitDiff { .. }
+            | Self::GitStatus { .. }
+            | Self::CaptureArtifacts { .. } => None,
+        }
+    }
+
+    pub const fn max_bytes(&self) -> Option<u64> {
+        match self {
+            Self::ReadFile { max_bytes, .. }
+            | Self::GitDiff { max_bytes, .. }
+            | Self::CaptureArtifacts { max_bytes, .. } => *max_bytes,
+            Self::Snapshot
+            | Self::List { .. }
+            | Self::Stat { .. }
+            | Self::Digest { .. }
+            | Self::GitLog { .. }
+            | Self::GitStatus { .. } => None,
+        }
+    }
+
+    pub fn to_value(&self) -> Value {
+        match self {
+            Self::Snapshot => json!({"kind": "snapshot"}),
+            Self::List {
+                path,
+                recursive,
+                max_entries,
+            } => {
+                let mut value = json!({"kind": "list", "path": path});
+                insert_optional(&mut value, "recursive", recursive.map(Value::Bool));
+                insert_optional(
+                    &mut value,
+                    "max_entries",
+                    max_entries.map(|entry| json!(entry)),
+                );
+                value
+            }
+            Self::ReadFile {
+                path,
+                max_bytes,
+                expected_data_classes,
+            } => {
+                let mut value = json!({
+                    "kind": "read_file",
+                    "path": path,
+                    "expected_data_classes": expected_data_classes
+                });
+                insert_optional(&mut value, "max_bytes", max_bytes.map(|bytes| json!(bytes)));
+                value
+            }
+            Self::Stat { path } => json!({"kind": "stat", "path": path}),
+            Self::Digest { path, algorithm } => {
+                json!({"kind": "digest", "path": path, "algorithm": algorithm.as_str()})
+            }
+            Self::GitLog { max_entries } => {
+                let mut value = json!({"kind": "git_log"});
+                insert_optional(
+                    &mut value,
+                    "max_entries",
+                    max_entries.map(|entry| json!(entry)),
+                );
+                value
+            }
+            Self::GitDiff { against, max_bytes } => {
+                let mut value = json!({"kind": "git_diff", "against": against.as_str()});
+                insert_optional(&mut value, "max_bytes", max_bytes.map(|bytes| json!(bytes)));
+                value
+            }
+            Self::GitStatus { porcelain } => {
+                let mut value = json!({"kind": "git_status"});
+                insert_optional(&mut value, "porcelain", porcelain.map(Value::Bool));
+                value
+            }
+            Self::CaptureArtifacts { paths, max_bytes } => {
+                let mut value = json!({"kind": "capture_artifacts", "paths": paths});
+                insert_optional(&mut value, "max_bytes", max_bytes.map(|bytes| json!(bytes)));
+                value
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WorkspaceDigestAlgorithm {
+    Sha256,
+    Blake3,
+}
+
+impl WorkspaceDigestAlgorithm {
+    fn from_str(value: &str) -> Result<Self, PublicSeamError> {
+        match value {
+            "sha256" => Ok(Self::Sha256),
+            "blake3" => Ok(Self::Blake3),
+            other => Err(invalid_plan(format!(
+                "workspace_query digest algorithm `{other}` is not supported"
+            ))),
+        }
+    }
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Sha256 => "sha256",
+            Self::Blake3 => "blake3",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WorkspaceGitAgainst {
+    Seed,
+    Parent,
+    Baseline,
+    Head,
+}
+
+impl WorkspaceGitAgainst {
+    fn from_str(value: &str) -> Result<Self, PublicSeamError> {
+        match value {
+            "seed" => Ok(Self::Seed),
+            "parent" => Ok(Self::Parent),
+            "baseline" => Ok(Self::Baseline),
+            "head" => Ok(Self::Head),
+            other => Err(invalid_plan(format!(
+                "workspace_query git_diff against `{other}` is not supported"
+            ))),
+        }
+    }
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Seed => "seed",
+            Self::Parent => "parent",
+            Self::Baseline => "baseline",
+            Self::Head => "head",
+        }
+    }
+}
+
+fn required_object_str<'a>(
+    object: &'a Map<String, Value>,
+    key: &str,
+    context: &str,
+) -> Result<&'a str, PublicSeamError> {
+    object
+        .get(key)
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_plan(format!("{context} must be a string")))
+}
+
+fn required_workspace_op_path<'a>(
+    object: &'a Map<String, Value>,
+    op: &str,
+) -> Result<&'a str, PublicSeamError> {
+    let path = required_object_str(object, "path", &format!("workspace_query {op}.path"))?;
+    validate_workspace_path(&format!("workspace_query {op} path"), path)?;
+    Ok(path)
+}
+
+fn required_string_set<'a>(
+    object: &'a Map<String, Value>,
+    key: &str,
+    context: &str,
+) -> Result<BTreeSet<&'a str>, PublicSeamError> {
+    let values = object
+        .get(key)
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_plan(format!("{context} must be an array")))?;
+    let mut set = BTreeSet::new();
+    for value in values {
+        let string = value
+            .as_str()
+            .ok_or_else(|| invalid_plan(format!("{context} entries must be strings")))?;
+        set.insert(string);
+    }
+    Ok(set)
+}
+
+fn optional_bool(
+    object: &Map<String, Value>,
+    key: &str,
+    context: &str,
+) -> Result<Option<bool>, PublicSeamError> {
+    object
+        .get(key)
+        .map(|value| {
+            value
+                .as_bool()
+                .ok_or_else(|| invalid_plan(format!("{context} must be a boolean")))
+        })
+        .transpose()
+}
+
+fn optional_positive_u64(
+    object: &Map<String, Value>,
+    key: &str,
+    context: &str,
+) -> Result<Option<u64>, PublicSeamError> {
+    object
+        .get(key)
+        .map(|value| {
+            let value = value
+                .as_u64()
+                .ok_or_else(|| invalid_plan(format!("{context} must be a positive integer")))?;
+            if value == 0 {
+                return Err(invalid_plan(format!(
+                    "{context} must be greater than or equal to 1"
+                )));
+            }
+            Ok(value)
+        })
+        .transpose()
+}
+
+fn insert_optional(value: &mut Value, key: &'static str, field: Option<Value>) {
+    if let (Value::Object(object), Some(field)) = (value, field) {
+        object.insert(key.to_owned(), field);
+    }
 }
 
 impl<'a> PlanWorkspaceQueryRequest<'a> {
@@ -60,8 +424,8 @@ impl<'a> PlanWorkspaceQueryRequest<'a> {
     }
 
     /// Workspace query operation.
-    pub const fn op(&self) -> &'a Value {
-        self.op
+    pub const fn op(&self) -> &WorkspaceQueryOp<'a> {
+        &self.op
     }
 
     /// Resolved dependency bindings visible to this query.
@@ -70,37 +434,31 @@ impl<'a> PlanWorkspaceQueryRequest<'a> {
     }
 
     /// Workspace query operation kind.
-    pub fn op_kind(&self) -> Result<&'a str, PublicSeamError> {
-        self.op
-            .get("kind")
-            .and_then(Value::as_str)
-            .ok_or_else(|| invalid_plan("workspace_query op must carry kind"))
+    pub const fn op_kind(&self) -> &'static str {
+        self.op.kind()
     }
 
     /// Workspace path requested by path-shaped operations.
-    pub fn path(&self) -> Result<Option<&'a str>, PublicSeamError> {
-        match self.op.get("path") {
-            Some(Value::String(path)) => Ok(Some(path)),
-            Some(_) => Err(invalid_plan("workspace_query path must be a string")),
-            None => Ok(None),
-        }
+    pub const fn path(&self) -> Option<&'a str> {
+        self.op.path()
     }
 
     /// Expected data classes declared by `read_file`.
-    pub fn expected_data_classes(&self) -> Result<BTreeSet<&'a str>, PublicSeamError> {
-        let Some(values) = self.op.get("expected_data_classes") else {
-            return Ok(BTreeSet::new());
-        };
-        values
-            .as_array()
-            .ok_or_else(|| invalid_plan("workspace_query expected_data_classes must be an array"))?
-            .iter()
-            .map(|value| {
-                value.as_str().ok_or_else(|| {
-                    invalid_plan("workspace_query expected data classes must be strings")
-                })
-            })
-            .collect()
+    pub fn expected_data_classes(&self) -> BTreeSet<&'a str> {
+        match &self.op {
+            WorkspaceQueryOp::ReadFile {
+                expected_data_classes,
+                ..
+            } => expected_data_classes.clone(),
+            WorkspaceQueryOp::Snapshot
+            | WorkspaceQueryOp::List { .. }
+            | WorkspaceQueryOp::Stat { .. }
+            | WorkspaceQueryOp::Digest { .. }
+            | WorkspaceQueryOp::GitLog { .. }
+            | WorkspaceQueryOp::GitDiff { .. }
+            | WorkspaceQueryOp::GitStatus { .. }
+            | WorkspaceQueryOp::CaptureArtifacts { .. } => BTreeSet::new(),
+        }
     }
 
     /// Executes finite workspace reads through the provider-neutral workspace substrate.
@@ -181,9 +539,11 @@ pub(super) fn workspace_query_request_from_values<'a>(
         object.get("workspace"),
         "workspace_query must carry workspace",
     )?;
-    let op = object
-        .get("op")
-        .ok_or_else(|| invalid_plan("workspace_query must carry op"))?;
+    let op = WorkspaceQueryOp::from_value(
+        object
+            .get("op")
+            .ok_or_else(|| invalid_plan("workspace_query must carry op"))?,
+    )?;
     let request = PlanWorkspaceQueryRequest {
         name,
         expr,
@@ -197,15 +557,13 @@ pub(super) fn workspace_query_request_from_values<'a>(
 
 pub(super) fn workspace_query_expected_value_kind(
     request: &PlanWorkspaceQueryRequest<'_>,
-) -> Result<&'static str, PublicSeamError> {
-    match request.op_kind()? {
-        "snapshot" | "digest" => Ok("workspace_snapshot"),
-        "list" | "stat" | "capture_artifacts" => Ok("workspace_listing"),
-        "read_file" => Ok("workspace_file"),
-        "git_log" | "git_diff" | "git_status" => Ok("workspace_diff"),
-        other => Err(invalid_plan(format!(
-            "unknown workspace_query op `{other}`"
-        ))),
+) -> &'static str {
+    match request.op_kind() {
+        "snapshot" | "digest" => "workspace_snapshot",
+        "list" | "stat" | "capture_artifacts" => "workspace_listing",
+        "read_file" => "workspace_file",
+        "git_log" | "git_diff" | "git_status" => "workspace_diff",
+        _ => unreachable!("workspace query op was parsed before dispatch"),
     }
 }
 
@@ -213,7 +571,7 @@ pub(super) fn validate_workspace_query_value_shape(
     request: &PlanWorkspaceQueryRequest<'_>,
     value: &Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
-    match request.op_kind()? {
+    match request.op_kind() {
         "read_file" => validate_workspace_read_file_value(request, value),
         "list" => validate_workspace_list_value(request, value),
         "stat" => validate_workspace_stat_value(request, value),
@@ -232,7 +590,7 @@ fn validate_workspace_read_file_value(
     value: &Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
     let requested_path = request
-        .path()?
+        .path()
         .ok_or_else(|| invalid_plan("workspace_query read_file must carry path"))?;
     validate_workspace_path("workspace_query read_file path", requested_path)?;
     let path = value
@@ -258,7 +616,7 @@ fn validate_workspace_list_value(
     value: &Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
     let requested_path = request
-        .path()?
+        .path()
         .ok_or_else(|| invalid_plan("workspace_query list must carry path"))?;
     validate_workspace_path("workspace_query list path", requested_path)?;
     let entries = workspace_listing_entries(value, "list")?;
@@ -279,7 +637,7 @@ fn validate_workspace_stat_value(
     value: &Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
     let requested_path = request
-        .path()?
+        .path()
         .ok_or_else(|| invalid_plan("workspace_query stat must carry path"))?;
     validate_workspace_path("workspace_query stat path", requested_path)?;
     let entries = workspace_listing_entries(value, "stat")?;
@@ -303,21 +661,20 @@ fn validate_workspace_digest_value(
     value: &Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
     let requested_path = request
-        .path()?
+        .path()
         .ok_or_else(|| invalid_plan("workspace_query digest must carry path"))?;
     validate_workspace_path("workspace_query digest path", requested_path)?;
-    let algorithm = request
-        .op()
-        .get("algorithm")
-        .and_then(Value::as_str)
-        .ok_or_else(|| invalid_plan("workspace_query digest must carry algorithm"))?;
+    let WorkspaceQueryOp::Digest { algorithm, .. } = request.op() else {
+        return Err(invalid_plan("workspace_query digest must carry algorithm"));
+    };
     let digest = value
         .get("digest")
         .and_then(Value::as_str)
         .ok_or_else(|| invalid_plan("workspace_query digest result must carry digest"))?;
-    if !digest.starts_with(&format!("{algorithm}:")) {
+    if !digest.starts_with(&format!("{}:", algorithm.as_str())) {
         return Err(invalid_plan(format!(
-            "workspace_query digest result `{digest}` does not match requested algorithm `{algorithm}`"
+            "workspace_query digest result `{digest}` does not match requested algorithm `{}`",
+            algorithm.as_str()
         )));
     }
     let workspace = value
@@ -359,12 +716,15 @@ fn validate_workspace_diff_value(
     if value.get("text").and_then(Value::as_str).is_none() && value.get("blob_ref").is_none() {
         return Err(invalid_plan(format!(
             "workspace_query {} result must carry text or blob_ref",
-            request.op_kind()?
+            request.op_kind()
         )));
     }
-    match request.op_kind()? {
+    match request.op_kind() {
         "git_log" => {
-            if let Some(max_entries) = request.op().get("max_entries").and_then(Value::as_u64) {
+            if let WorkspaceQueryOp::GitLog {
+                max_entries: Some(max_entries),
+            } = request.op()
+            {
                 require_external_source_ref(
                     value,
                     "leaven.workspace.git_log.max_entries",
@@ -374,24 +734,25 @@ fn validate_workspace_diff_value(
             }
         }
         "git_diff" => {
-            let against = request
-                .op()
-                .get("against")
-                .and_then(Value::as_str)
-                .ok_or_else(|| invalid_plan("workspace_query git_diff must carry against"))?;
+            let WorkspaceQueryOp::GitDiff { against, .. } = request.op() else {
+                return Err(invalid_plan("workspace_query git_diff must carry against"));
+            };
             require_external_source_ref(
                 value,
                 "leaven.workspace.git_diff.against",
-                against,
+                against.as_str(),
                 "workspace_query git_diff result",
             )?;
         }
         "git_status" => {
-            if let Some(porcelain) = request.op().get("porcelain").and_then(Value::as_bool) {
+            if let WorkspaceQueryOp::GitStatus {
+                porcelain: Some(porcelain),
+            } = request.op()
+            {
                 require_external_source_ref(
                     value,
                     "leaven.workspace.git_status.porcelain",
-                    if porcelain { "true" } else { "false" },
+                    if *porcelain { "true" } else { "false" },
                     "workspace_query git_status result",
                 )?;
             }
@@ -425,28 +786,28 @@ fn validate_workspace_capture_artifacts_value(
 fn validate_workspace_query_request_op(
     request: &PlanWorkspaceQueryRequest<'_>,
 ) -> Result<(), PublicSeamError> {
-    match request.op_kind()? {
+    match request.op_kind() {
         "read_file" => {
             let path = request
-                .path()?
+                .path()
                 .ok_or_else(|| invalid_plan("workspace_query read_file must carry path"))?;
             validate_workspace_path("workspace_query read_file path", path)?;
         }
         "list" => {
             let path = request
-                .path()?
+                .path()
                 .ok_or_else(|| invalid_plan("workspace_query list must carry path"))?;
             validate_workspace_path("workspace_query list path", path)?;
         }
         "stat" => {
             let path = request
-                .path()?
+                .path()
                 .ok_or_else(|| invalid_plan("workspace_query stat must carry path"))?;
             validate_workspace_path("workspace_query stat path", path)?;
         }
         "digest" => {
             let path = request
-                .path()?
+                .path()
                 .ok_or_else(|| invalid_plan("workspace_query digest must carry path"))?;
             validate_workspace_path("workspace_query digest path", path)?;
         }
@@ -466,25 +827,20 @@ fn validate_workspace_query_request_op(
 fn workspace_capture_requested_paths<'a>(
     request: &'a PlanWorkspaceQueryRequest<'a>,
 ) -> Result<BTreeSet<&'a str>, PublicSeamError> {
-    let mut requested = BTreeSet::new();
-    let paths = request
-        .op()
-        .get("paths")
-        .and_then(Value::as_array)
-        .ok_or_else(|| invalid_plan("workspace_query capture_artifacts must carry paths"))?;
+    let WorkspaceQueryOp::CaptureArtifacts { paths, .. } = request.op() else {
+        return Err(invalid_plan(
+            "workspace_query capture_artifacts must carry paths",
+        ));
+    };
     if paths.is_empty() {
         return Err(invalid_plan(
             "workspace_query capture_artifacts must request at least one path",
         ));
     }
     for path in paths {
-        let path = path.as_str().ok_or_else(|| {
-            invalid_plan("workspace_query capture_artifacts paths must be strings")
-        })?;
         validate_workspace_path("workspace_query capture_artifacts path", path)?;
-        requested.insert(path);
     }
-    Ok(requested)
+    Ok(paths.clone())
 }
 
 fn validate_workspace_snapshot_workspace(
@@ -585,6 +941,6 @@ fn validate_workspace_path(field: &str, path: &str) -> Result<(), PublicSeamErro
 pub(super) fn workspace_query_projection(request: &PlanWorkspaceQueryRequest<'_>) -> Value {
     json!({
         "workspace": request.workspace_ref().to_value(),
-        "op": request.op()
+        "op": request.op().to_value()
     })
 }

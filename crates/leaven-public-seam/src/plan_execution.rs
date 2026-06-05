@@ -33,7 +33,7 @@ use effects_tail::{
 use evaluate::{ResolvedDependencies, evaluate_expr, resolved_dependency_values};
 pub use queries::{
     PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanGraphQueryOutcome, PlanGraphQueryRequest,
-    PlanGraphReadScope, PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest,
+    PlanGraphReadScope, PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest, WorkspaceQueryOp,
 };
 use queries::{
     case_query_include, case_query_projection, plan_contains_case_query,

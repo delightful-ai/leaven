@@ -11,7 +11,7 @@ use leaven_public_seam::{
     PlanSandboxExecOutcome, PlanSandboxExecRequest, PlanSchemaVersion,
     PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome,
     PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
-    PlanWriteKind, PublicSeamError, PublicSeamPackage,
+    PlanWriteKind, PublicSeamError, PublicSeamPackage, WorkspaceQueryOp,
 };
 use serde_json::{Value, json};
 
@@ -5282,7 +5282,7 @@ impl PlanExecutionHost for RecordingPlanHost {
             request.deps()["workspace"]["workspace"].as_str(),
             Some("ws_planexec_materialized")
         );
-        match (request.name(), request.op_kind()?) {
+        match (request.name(), request.op_kind()) {
             ("file", "read_file") => self.workspace_read_file(&request),
             ("listing", "list") => self.workspace_list(&request),
             ("stat", "stat") => self.workspace_stat(&request),
@@ -5415,9 +5415,9 @@ impl RecordingPlanHost {
         &mut self,
         request: &PlanWorkspaceQueryRequest<'_>,
     ) -> Result<PlanWorkspaceQueryOutcome, PublicSeamError> {
-        assert_eq!(request.path()?, Some("README.md"));
+        assert_eq!(request.path(), Some("README.md"));
         assert_eq!(
-            request.expected_data_classes()?,
+            request.expected_data_classes(),
             BTreeSet::from(["candidate.artifact"])
         );
         self.calls.push("workspace_read_file");
@@ -5432,7 +5432,7 @@ impl RecordingPlanHost {
         &mut self,
         request: &PlanWorkspaceQueryRequest<'_>,
     ) -> Result<PlanWorkspaceQueryOutcome, PublicSeamError> {
-        assert_eq!(request.path()?, Some("."));
+        assert_eq!(request.path(), Some("."));
         self.calls.push("workspace_list");
         Ok(workspace_query_outcome(workspace_listing_value()))
     }
@@ -5441,7 +5441,7 @@ impl RecordingPlanHost {
         &mut self,
         request: &PlanWorkspaceQueryRequest<'_>,
     ) -> Result<PlanWorkspaceQueryOutcome, PublicSeamError> {
-        assert_eq!(request.path()?, Some("README.md"));
+        assert_eq!(request.path(), Some("README.md"));
         self.calls.push("workspace_stat");
         Ok(workspace_query_outcome(json!({
             "kind": "workspace_listing",
@@ -5458,8 +5458,11 @@ impl RecordingPlanHost {
         &mut self,
         request: &PlanWorkspaceQueryRequest<'_>,
     ) -> Result<PlanWorkspaceQueryOutcome, PublicSeamError> {
-        assert_eq!(request.path()?, Some("README.md"));
-        assert_eq!(request.op()["algorithm"].as_str(), Some("sha256"));
+        assert_eq!(request.path(), Some("README.md"));
+        assert!(matches!(
+            request.op(),
+            WorkspaceQueryOp::Digest { algorithm, .. } if algorithm.as_str() == "sha256"
+        ));
         self.calls.push("workspace_digest");
         Ok(workspace_query_outcome(json!({
             "kind": "workspace_snapshot",
@@ -5486,7 +5489,12 @@ impl RecordingPlanHost {
         &mut self,
         request: &PlanWorkspaceQueryRequest<'_>,
     ) -> PlanWorkspaceQueryOutcome {
-        assert_eq!(request.op()["max_entries"].as_u64(), Some(5));
+        assert!(matches!(
+            request.op(),
+            WorkspaceQueryOp::GitLog {
+                max_entries: Some(5),
+            }
+        ));
         self.calls.push("workspace_git_log");
         workspace_query_outcome(json!({
             "kind": "workspace_diff",

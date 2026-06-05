@@ -161,7 +161,7 @@ pub(super) fn validate_workspace_query_receipt(
         &state.live_workspaces,
         "workspace_query",
     )?;
-    let expected_kind = workspace_query_expected_value_kind(&request)?;
+    let expected_kind = workspace_query_expected_value_kind(&request);
     let value_kind = value
         .get("kind")
         .and_then(Value::as_str)
@@ -169,7 +169,7 @@ pub(super) fn validate_workspace_query_receipt(
     if value_kind != expected_kind {
         return Err(invalid_plan(format!(
             "workspace_query `{}` result value kind `{value_kind}` does not match `{expected_kind}`",
-            request.op_kind()?
+            request.op_kind()
         )));
     }
     let value_object = value
@@ -246,7 +246,7 @@ fn validate_workspace_file_data_classes(
             })
         })
         .collect::<Result<BTreeSet<_>, _>>()?;
-    for expected in request.expected_data_classes()? {
+    for expected in request.expected_data_classes() {
         if !data_classes.contains(expected) {
             return Err(invalid_plan(format!(
                 "workspace_query read_file result missing expected data class `{expected}`"

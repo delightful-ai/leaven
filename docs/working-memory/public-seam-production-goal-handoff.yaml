@@ -1683,6 +1683,36 @@ acceptance:
           The row remains pending because case-query bodies, literal values,
           extension payloads, JSON-RPC error data, and other schema-owned
           leaves still need typed owners.
+      - kind: rust_workspace_query_op_internal_erasure_removed
+        paths:
+          - crates/leaven-public-seam/src/plan/expression.rs
+          - crates/leaven-public-seam/src/plan_execution/queries.rs
+          - crates/leaven-public-seam/src/plan_execution/queries/workspace_values.rs
+          - crates/leaven-public-seam/src/plan_execution/evaluate.rs
+          - crates/leaven-public-seam/src/plan_execution/receipts/queries.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_document.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/workspace_ref_contract.rs
+        commands:
+          - cargo fmt --check
+          - cargo check -p leaven-public-seam
+          - cargo test -p leaven-public-seam --test public_seam_contract workspace_query -- --nocapture
+          - cargo test -p leaven-public-seam --test public_seam_contract workspace_ref_contract -- --nocapture
+          - "! rg -n 'op_kind\\(\\)\\?|path\\(\\)\\?|expected_data_classes\\(\\)\\?|\\.op\\(\\)\\.get|request\\.op\\.get|request\\.op\\[' crates/leaven-public-seam/src/plan_execution crates/leaven-public-seam/tests/public_seam_contract"
+        note: >-
+          Rust `PlanWorkspaceQueryRequest` no longer carries
+          `workspace_query.op` as `serde_json::Value`. The request now owns a
+          typed `WorkspaceQueryOp` enum covering snapshot, list, read_file,
+          stat, digest, Git log/diff/status, and capture_artifacts, with
+          parsed algorithm, Git ref, path, max-byte, max-entry, porcelain, and
+          data-class facts. Plan execution, receipt validation, capability
+          authorization, workspace-view execution, and contract tests consume
+          those enum facts instead of indexing arbitrary JSON. The Plan IR
+          parser also keeps `workspace_query.workspace` as a typed string/object
+          workspace ref so Git/filesystem query object refs survive validation.
+          The grep proof found no remaining old workspace-op JSON indexing in
+          the plan-execution and public-seam contract-test paths. The row
+          remains pending because other non-workspace Plan leaves still need
+          typed owners.
       - kind: typed_private_client_request_cutover
         paths:
           - sdk/python/src/leaven/_seam/plans.py

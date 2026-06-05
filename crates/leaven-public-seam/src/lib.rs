@@ -70,6 +70,7 @@ pub use plan_execution::{
     PlanSubmitProposalBatchOutcome, PlanSubmitProposalBatchRequest,
     PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome,
     PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
+    WorkspaceQueryOp,
 };
 pub use proposal_authority::ProposalAuthorityReport;
 pub use result::{

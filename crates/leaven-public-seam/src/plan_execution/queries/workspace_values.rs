@@ -10,9 +10,9 @@ use sha2::{Digest, Sha256};
 use crate::{CapabilityDocument, CapabilityGrantRequest, PublicSeamError};
 
 use super::{
-    PlanExecutionContext, PlanWorkspaceQueryRequest, case_query_include, invalid_plan, nested_kind,
-    object, validate_workspace_path, workspace_capture_requested_paths,
-    workspace_query_request_from_values,
+    PlanExecutionContext, PlanWorkspaceQueryRequest, WorkspaceDigestAlgorithm, WorkspaceQueryOp,
+    case_query_include, invalid_plan, nested_kind, object, validate_workspace_path,
+    workspace_capture_requested_paths, workspace_query_request_from_values,
 };
 
 pub(super) fn workspace_query_value_from_view(
@@ -20,7 +20,7 @@ pub(super) fn workspace_query_value_from_view(
     view: &leaven_workspace::WorkspaceView<'_>,
     data_classes: &[String],
 ) -> Result<Value, PublicSeamError> {
-    match request.op_kind()? {
+    match request.op_kind() {
         "read_file" => workspace_read_file_value_from_view(request, view),
         "list" => workspace_list_value_from_view(request, view, data_classes),
         "stat" => workspace_stat_value_from_view(request, view, data_classes),
@@ -31,7 +31,7 @@ pub(super) fn workspace_query_value_from_view(
         }
         "git_log" | "git_diff" | "git_status" => Err(invalid_plan(format!(
             "workspace_query `{}` requires a host-provided Git workspace outcome",
-            request.op_kind()?
+            request.op_kind()
         ))),
         other => Err(invalid_plan(format!(
             "unknown workspace_query op `{other}`"
@@ -44,13 +44,13 @@ fn workspace_read_file_value_from_view(
     view: &leaven_workspace::WorkspaceView<'_>,
 ) -> Result<Value, PublicSeamError> {
     let path = request
-        .path()?
+        .path()
         .ok_or_else(|| invalid_plan("workspace_query read_file must carry path"))?;
     let workspace_path = workspace_path(path, "workspace_query read_file path")?;
     let bytes = view
         .read_file(&workspace_path)
         .map_err(|error| workspace_error(&error))?;
-    enforce_max_bytes(request.op(), bytes.len() as u64, "read_file")?;
+    enforce_max_bytes(request.op().max_bytes(), bytes.len() as u64, "read_file")?;
     let content = String::from_utf8(bytes).map_err(|_| {
         invalid_plan(
             "workspace_query read_file produced non-utf8 content; host must provide blob_ref",
@@ -69,21 +69,25 @@ fn workspace_list_value_from_view(
     data_classes: &[String],
 ) -> Result<Value, PublicSeamError> {
     let path = request
-        .path()?
+        .path()
         .ok_or_else(|| invalid_plan("workspace_query list must carry path"))?;
     let workspace_path = workspace_path(path, "workspace_query list path")?;
-    let recursive = request
-        .op()
-        .get("recursive")
-        .and_then(Value::as_bool)
-        .unwrap_or(true);
+    let WorkspaceQueryOp::List {
+        recursive,
+        max_entries,
+        ..
+    } = request.op()
+    else {
+        return Err(invalid_plan("workspace_query list must carry typed op"));
+    };
+    let recursive = recursive.unwrap_or(true);
     let mut paths = view
         .list_files(&workspace_path)
         .map_err(|error| workspace_error(&error))?;
     paths = filter_list_recursion(paths, &workspace_path, recursive);
     paths.sort();
-    if let Some(max_entries) = request.op().get("max_entries").and_then(Value::as_u64) {
-        let max_entries = usize::try_from(max_entries).map_err(|_| {
+    if let Some(max_entries) = max_entries {
+        let max_entries = usize::try_from(*max_entries).map_err(|_| {
             invalid_plan("workspace_query list max_entries exceeds platform addressable entries")
         })?;
         paths.truncate(max_entries);
@@ -97,7 +101,7 @@ fn workspace_stat_value_from_view(
     data_classes: &[String],
 ) -> Result<Value, PublicSeamError> {
     let path = request
-        .path()?
+        .path()
         .ok_or_else(|| invalid_plan("workspace_query stat must carry path"))?;
     let workspace_path = workspace_path(path, "workspace_query stat path")?;
     let bytes = view
@@ -120,28 +124,21 @@ fn workspace_digest_value_from_view(
     view: &leaven_workspace::WorkspaceView<'_>,
 ) -> Result<Value, PublicSeamError> {
     let path = request
-        .path()?
+        .path()
         .ok_or_else(|| invalid_plan("workspace_query digest must carry path"))?;
     let workspace_path = workspace_path(path, "workspace_query digest path")?;
-    let algorithm = request
-        .op
-        .get("algorithm")
-        .and_then(Value::as_str)
-        .ok_or_else(|| invalid_plan("workspace_query digest must carry algorithm"))?;
+    let WorkspaceQueryOp::Digest { algorithm, .. } = request.op() else {
+        return Err(invalid_plan("workspace_query digest must carry algorithm"));
+    };
     let bytes = view
         .read_file(&workspace_path)
         .map_err(|error| workspace_error(&error))?;
     let digest = match algorithm {
-        "sha256" => format!("sha256:{:x}", Sha256::digest(&bytes)),
-        "blake3" => {
+        WorkspaceDigestAlgorithm::Sha256 => format!("sha256:{:x}", Sha256::digest(&bytes)),
+        WorkspaceDigestAlgorithm::Blake3 => {
             let mut builder = leaven_kernel::FingerprintBuilder::new();
             builder.update(&bytes);
             format!("blake3:{}", hex_bytes(builder.finish().0.as_slice()))
-        }
-        other => {
-            return Err(invalid_plan(format!(
-                "workspace_query digest algorithm `{other}` is not supported"
-            )));
         }
     };
     Ok(json!({
@@ -199,7 +196,7 @@ fn workspace_capture_artifacts_value_from_view(
             total_bytes = total_bytes.checked_add(byte_count).ok_or_else(|| {
                 invalid_plan("workspace_query capture_artifacts byte count overflowed")
             })?;
-            enforce_max_bytes(request.op(), total_bytes, "capture_artifacts")?;
+            enforce_max_bytes(request.op().max_bytes(), total_bytes, "capture_artifacts")?;
             let sha256 = format!("{:x}", Sha256::digest(&bytes));
             let blob_id = format!("blob_workspace_capture_{sha256}");
             Ok(json!({
@@ -266,8 +263,12 @@ fn workspace_error(error: &leaven_workspace::WorkspaceError) -> PublicSeamError 
     invalid_plan(format!("workspace_query workspace view failed: {message}"))
 }
 
-fn enforce_max_bytes(op: &Value, bytes: u64, context: &'static str) -> Result<(), PublicSeamError> {
-    if let Some(max_bytes) = op.get("max_bytes").and_then(Value::as_u64)
+fn enforce_max_bytes(
+    max_bytes: Option<u64>,
+    bytes: u64,
+    context: &'static str,
+) -> Result<(), PublicSeamError> {
+    if let Some(max_bytes) = max_bytes
         && bytes > max_bytes
     {
         return Err(invalid_plan(format!(
@@ -402,7 +403,7 @@ fn authorize_workspace_query_read(
     request: &PlanWorkspaceQueryRequest<'_>,
     capability: &CapabilityDocument,
 ) -> Result<(), PublicSeamError> {
-    let op_kind = request.op_kind()?;
+    let op_kind = request.op_kind();
     let input_classes = workspace_query_authorized_input_classes(request)?;
     let mut grant = CapabilityGrantRequest::for_action("workspace.read")
         .with_resource("workspace_ids", json!(request.workspace()))
@@ -421,9 +422,9 @@ fn authorize_workspace_query_read(
 fn workspace_query_authorized_input_classes(
     request: &PlanWorkspaceQueryRequest<'_>,
 ) -> Result<BTreeSet<String>, PublicSeamError> {
-    if request.op_kind()? == "read_file" {
+    if request.op_kind() == "read_file" {
         return Ok(request
-            .expected_data_classes()?
+            .expected_data_classes()
             .into_iter()
             .map(str::to_owned)
             .collect());

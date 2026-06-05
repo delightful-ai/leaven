@@ -208,8 +208,8 @@ impl PlanExecutionHost for WorkspaceRefHost {
         request: PlanWorkspaceQueryRequest<'_>,
     ) -> Result<PlanWorkspaceQueryOutcome, PublicSeamError> {
         assert_eq!(request.workspace(), WORKSPACE_ID);
-        assert_eq!(request.op_kind()?, "read_file");
-        assert_eq!(request.path()?, Some("README.md"));
+        assert_eq!(request.op_kind(), "read_file");
+        assert_eq!(request.path(), Some("README.md"));
         self.calls.push("workspace_read_file");
         Ok(PlanWorkspaceQueryOutcome::new(
             json!({

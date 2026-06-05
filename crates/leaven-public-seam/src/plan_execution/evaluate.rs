@@ -286,8 +286,8 @@ pub(super) fn execute_workspace_query_expr(
     host: &mut impl PlanExecutionHost,
 ) -> Result<EvaluatedExpr, PublicSeamError> {
     let request = workspace_query_request(name, expr, &deps.values, &deps.live_workspaces)?;
-    let expected_kind = workspace_query_expected_value_kind(&request)?;
-    let expected_data_classes = request.expected_data_classes()?;
+    let expected_kind = workspace_query_expected_value_kind(&request);
+    let expected_data_classes = request.expected_data_classes();
     let outcome = host.workspace_query(request.clone())?;
     let receipt_id = format!("qrec_{name}");
     let mut value = outcome
@@ -302,7 +302,7 @@ pub(super) fn execute_workspace_query_expr(
     if value_kind != expected_kind {
         return Err(invalid_plan(format!(
             "workspace_query `{}` host returned `{value_kind}` instead of `{expected_kind}`",
-            request.op_kind()?
+            request.op_kind()
         )));
     }
     validate_workspace_query_value_shape(&request, &value)?;
