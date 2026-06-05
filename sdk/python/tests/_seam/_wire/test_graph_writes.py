@@ -8,6 +8,7 @@ from leaven._seam._wire.expressions import ValueExprLiteral, ValueExprVar
 from leaven._seam._wire.payloads import (
     PlanDocument,
 )
+from leaven._seam._wire.refs import BlobRef, TraceRefRecord
 from leaven._seam._wire.writes import (
     EmitRunEventWrite,
     EvaluationSetCases,
@@ -71,6 +72,48 @@ def test_assessment_evaluation_and_event_writes_decode_typed_records() -> None:
     assert evaluation.request.set.name == "validation"
     assert isinstance(event, EmitRunEventWrite)
     assert event.visibility == "optimizer_visible"
+
+
+def test_assessment_output_decodes_typed_blob_and_trace_refs() -> None:
+    """Example: graph-write output refs use generated ref owners."""
+
+    decoded = msgspec.json.decode(
+        _mixed_write_plan().replace(
+            b'"output":{"kind":"text","visibility":"public",'
+            b'"data_classes":["public"],"summary":"score evidence"}',
+            b'"output":{"kind":"blob_ref","visibility":"public",'
+            b'"data_classes":["public"],"summary":"score evidence",'
+            b'"blob_ref":{"kind":"blob_ref","id":"blob_1","sha256":"abc",'
+            b'"bytes":3,"data_classes":["public"]},'
+            b'"trace_refs":[{"kind":"agent.trace","id":"trace_1",'
+            b'"visibility":"public"}]}',
+        ),
+        type=PlanDocument,
+    )
+    assessment = decoded.ops[0].write
+
+    assert isinstance(assessment, SubmitAssessmentsWrite)
+    output = assessment.assessments[0].score.output
+    assert isinstance(output.blob_ref, BlobRef)
+    assert output.blob_ref.id == "blob_1"
+    assert output.trace_refs is not UNSET
+    assert isinstance(output.trace_refs[0], TraceRefRecord)
+
+
+def test_assessment_output_rejects_malformed_blob_ref() -> None:
+    """Boundary check: output blob refs do not pass as arbitrary objects."""
+
+    with pytest.raises(msgspec.ValidationError):
+        msgspec.json.decode(
+            _mixed_write_plan().replace(
+                b'"output":{"kind":"text","visibility":"public",'
+                b'"data_classes":["public"],"summary":"score evidence"}',
+                b'"output":{"kind":"blob_ref","visibility":"public",'
+                b'"data_classes":["public"],"summary":"score evidence",'
+                b'"blob_ref":{"id":"blob_1"}}',
+            ),
+            type=PlanDocument,
+        )
 
 
 def test_assessment_write_rejects_unknown_assessment_kind() -> None:

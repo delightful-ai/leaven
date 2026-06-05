@@ -194,15 +194,6 @@ class Cost(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
     wall_ms: int | UnsetType = UNSET
 
 
-class BlobRef(Struct, frozen=True, forbid_unknown_fields=True, tag="blob_ref", tag_field="kind"):
-    id: str
-    sha256: str
-    bytes: int
-    data_classes: DataClassSet
-    media_type: str | UnsetType = UNSET
-    uri: str | UnsetType = UNSET
-
-
 type VisibilityClass = Literal[
     "public",
     "optimizer_visible",
@@ -614,8 +605,7 @@ class StageRunResult(Struct, frozen=True, forbid_unknown_fields=True, omit_defau
 __all__ = (  # noqa: PLE0605, SIM905
     "PLAN_RESULT_SCHEMA_FINGERPRINT PLAN_SCHEMA_FINGERPRINT STAGE_RUN_SCHEMA_FINGERPRINT "
     "{REF_EXPORTS} "
-    "AssessmentSummaryGraphRow BlobRef "
-    "CandidateSummaryGraphRow CapabilityCall ChargeReceipt CommitPolicy CommitPolicyGraphWritesAtomic "
+    "AssessmentSummaryGraphRow CandidateSummaryGraphRow CapabilityCall ChargeReceipt CommitPolicy CommitPolicyGraphWritesAtomic "
     "CommitPolicyGraphWritesSequential CommitPolicyNoGraphWrites Consistency ConsistencyAtRevision "
     "ConsistencyLatestAtStart ConsistencySinceRevision Cost DataClassSet EvalMode EvalModeDryRun "
     "EvalModeExecute EvalModeReplay EvalModeRequireCached EventSummaryGraphRow ExtensionGraphRow FailureMode "

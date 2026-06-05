@@ -65,6 +65,15 @@ class WireJsonSchema(Struct, frozen=True, forbid_unknown_fields=True, omit_defau
 type WireJsonSchemaObject = WireJsonSchema
 
 
+class BlobRef(Struct, frozen=True, forbid_unknown_fields=True, tag="blob_ref", tag_field="kind"):
+    id: str
+    sha256: str
+    bytes: int
+    data_classes: DataClassSet
+    media_type: str | UnsetType = UNSET
+    uri: str | UnsetType = UNSET
+
+
 class CandidateRefRecord(Struct, frozen=True, forbid_unknown_fields=True, tag="candidate", tag_field="kind"):
     id: str
     run: str | UnsetType = UNSET
@@ -146,6 +155,6 @@ type TraceRef = TraceRefRecord
 
 
 __all__ = (  # noqa: PLE0605, SIM905
-    "AssessmentRef AssessmentRefRecord CandidateRef CandidateRefRecord CaseRef CaseRefRecord EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestRef EvaluationRequestRefRecord ExternalInfoRefRecord InfoRef ProposalBatchRef ProposalBatchRefRecord ProposalRef ProposalRefRecord ReceiptRef ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility WorkspaceRef WorkspaceRefRecord "
+    "AssessmentRef AssessmentRefRecord BlobRef CandidateRef CandidateRefRecord CaseRef CaseRefRecord EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestRef EvaluationRequestRefRecord ExternalInfoRefRecord InfoRef ProposalBatchRef ProposalBatchRefRecord ProposalRef ProposalRefRecord ReceiptRef ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility WorkspaceRef WorkspaceRefRecord "
     "DataClassSet MetadataBag WireJsonField WireJsonLeafArray WireJsonLeafObject WireJsonObject WireJsonScalar WireJsonSchema WireJsonSchemaObject WireJsonSchemaTypeName WireJsonValue"
 ).split()

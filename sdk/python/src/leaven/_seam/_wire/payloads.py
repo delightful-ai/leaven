@@ -14,6 +14,7 @@ from .expressions import PlanExpression, Precondition, ValidationReceipt
 from .refs import (
     AssessmentRef,
     AssessmentRefRecord,
+    BlobRef,
     CandidateRef,
     CandidateRefRecord,
     CaseRef,
@@ -193,15 +194,6 @@ class Cost(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
     sandbox_calls: int | UnsetType = UNSET
     metric_calls: int | UnsetType = UNSET
     wall_ms: int | UnsetType = UNSET
-
-
-class BlobRef(Struct, frozen=True, forbid_unknown_fields=True, tag="blob_ref", tag_field="kind"):
-    id: str
-    sha256: str
-    bytes: int
-    data_classes: DataClassSet
-    media_type: str | UnsetType = UNSET
-    uri: str | UnsetType = UNSET
 
 
 type VisibilityClass = Literal[
@@ -614,9 +606,8 @@ class StageRunResult(Struct, frozen=True, forbid_unknown_fields=True, omit_defau
 
 __all__ = (  # noqa: PLE0605, SIM905
     "PLAN_RESULT_SCHEMA_FINGERPRINT PLAN_SCHEMA_FINGERPRINT STAGE_RUN_SCHEMA_FINGERPRINT "
-    "AssessmentRef AssessmentRefRecord CandidateRef CandidateRefRecord CaseRef CaseRefRecord EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestRef EvaluationRequestRefRecord ExternalInfoRefRecord InfoRef ProposalBatchRef ProposalBatchRefRecord ProposalRef ProposalRefRecord ReceiptRef ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility WorkspaceRef WorkspaceRefRecord "
-    "AssessmentSummaryGraphRow BlobRef "
-    "CandidateSummaryGraphRow CapabilityCall ChargeReceipt CommitPolicy CommitPolicyGraphWritesAtomic "
+    "AssessmentRef AssessmentRefRecord BlobRef CandidateRef CandidateRefRecord CaseRef CaseRefRecord EvaluationAttemptRef EvaluationAttemptRefRecord EvaluationRequestRef EvaluationRequestRefRecord ExternalInfoRefRecord InfoRef ProposalBatchRef ProposalBatchRefRecord ProposalRef ProposalRefRecord ReceiptRef ReceiptRefRecord TraceRef TraceRefRecord TraceVisibility WorkspaceRef WorkspaceRefRecord "
+    "AssessmentSummaryGraphRow CandidateSummaryGraphRow CapabilityCall ChargeReceipt CommitPolicy CommitPolicyGraphWritesAtomic "
     "CommitPolicyGraphWritesSequential CommitPolicyNoGraphWrites Consistency ConsistencyAtRevision "
     "ConsistencyLatestAtStart ConsistencySinceRevision Cost DataClassSet EvalMode EvalModeDryRun "
     "EvalModeExecute EvalModeReplay EvalModeRequireCached EventSummaryGraphRow ExtensionGraphRow FailureMode "

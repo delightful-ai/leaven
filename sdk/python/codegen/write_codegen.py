@@ -24,12 +24,14 @@ from msgspec import UNSET, Struct, UnsetType
 
 from .expressions import PlanExpression, ValueExpr
 from .refs import (
+    BlobRef,
     CandidateRef,
     CaseRef,
     DataClassSet,
     MetadataBag,
     ProposalBatchRef,
     ReceiptRef,
+    TraceRef,
     WireJsonField,
     WireJsonObject,
     WorkspaceRef,
@@ -113,8 +115,8 @@ class WriteOutputRecord(Struct, frozen=True, forbid_unknown_fields=True, omit_de
     data_classes: DataClassSet
     summary: str | UnsetType = UNSET
     value: WireJsonField | UnsetType = UNSET
-    blob_ref: WireJsonObject | UnsetType = UNSET
-    trace_refs: list[WireJsonObject] | UnsetType = UNSET
+    blob_ref: BlobRef | UnsetType = UNSET
+    trace_refs: list[TraceRef] | UnsetType = UNSET
 
 
 class WriteScore(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):

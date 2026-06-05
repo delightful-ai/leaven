@@ -2117,6 +2117,34 @@ acceptance:
           Focused tests prove a nested union containing a sampled cases set
           decodes into concrete msgspec variants and that a malformed child set
           is rejected at decode time instead of passing through as a raw object.
+      - kind: generated_output_blob_and_trace_refs_are_typed_records
+        paths:
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/codegen/payload_codegen.py
+          - sdk/python/codegen/result_codegen.py
+          - sdk/python/codegen/write_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/refs.py
+          - sdk/python/src/leaven/_seam/_wire/payloads.py
+          - sdk/python/src/leaven/_seam/_wire/results.py
+          - sdk/python/src/leaven/_seam/_wire/writes.py
+          - sdk/python/tests/_seam/_wire/test_graph_writes.py
+          - sdk/python/tests/_seam/_wire/test_payloads.py
+          - sdk/python/tests/_seam/_wire/test_results.py
+        commands:
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_graph_writes.py tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_results.py -q
+          - cd sdk/python && uv run ruff check codegen/ref_codegen.py codegen/payload_codegen.py codegen/result_codegen.py codegen/write_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/payloads.py src/leaven/_seam/_wire/results.py src/leaven/_seam/_wire/writes.py tests/_seam/_wire/test_graph_writes.py tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_results.py
+          - cd sdk/python && uv run ty check codegen/ref_codegen.py codegen/payload_codegen.py codegen/result_codegen.py codegen/write_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/payloads.py src/leaven/_seam/_wire/results.py src/leaven/_seam/_wire/writes.py tests/_seam/_wire/test_graph_writes.py tests/_seam/_wire/test_payloads.py tests/_seam/_wire/test_results.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Generated `BlobRef` moved from the payload module into the shared
+          generated ref module, so payload, result, and graph-write records use
+          one owner for blob identity, hashes, byte counts, data classes, media
+          type, and URI. `WriteOutputRecord.blob_ref` now decodes as `BlobRef`
+          and `WriteOutputRecord.trace_refs` decodes as generated `TraceRef`
+          records instead of arbitrary JSON objects. Focused tests prove typed
+          graph-write output ref decode and malformed blob-ref rejection.
       - kind: python_request_envelope_raw_dict_escape_removed
         paths:
           - sdk/python/src/leaven/_seam/client.py

@@ -9,7 +9,6 @@ import msgspec
 from msgspec import UNSET, Raw, Struct, UnsetType
 
 from .payloads import (
-    BlobRef,
     CallReceiptKind,
     CaseRef,
     Cost,
@@ -24,6 +23,7 @@ from .payloads import (
 from .payloads import (
     StageRunResult as StageRunDispatchResult,
 )
+from .refs import BlobRef
 
 
 class MethodResultBinding(Struct, frozen=True, forbid_unknown_fields=True):
