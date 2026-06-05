@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from msgspec import UNSET
+from msgspec import UNSET, UnsetType
 
 from .._receipts import CallReceipt, WriteReceipt
 from .._seam._wire.payloads import (
@@ -108,10 +108,12 @@ def sum_effect_cost_totals(values: list[EffectCostTotals]) -> EffectCostTotals:
     )
 
 
-def _nonnegative_int(value: int | object) -> int:
-    if isinstance(value, int) and value >= 0:
-        return value
-    return 0
+def _nonnegative_int(value: int | UnsetType) -> int:
+    if value is UNSET:
+        return 0
+    if value < 0:
+        raise ValueError("stage effect cost values must be nonnegative")
+    return value
 
 
 def _blob_refs_from_receipt(value: StageEffectReceipt) -> list[BlobRef]:

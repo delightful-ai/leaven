@@ -1,6 +1,7 @@
 """Tests for typed durable-seam optimize receipt projections."""
 
 import msgspec
+import pytest
 
 from leaven._seam._wire.payloads import StageRunResult
 from leaven._seam_optimize.receipts import (
@@ -40,6 +41,25 @@ def test_receipt_projection_consumes_typed_stage_run_result() -> None:
     assert proposals[0].proposal_ids == ["prop_1", "prop_2"]
     assert costs.cost_usd == 0.0025
     assert costs.lm_tokens == 18
+
+
+def test_receipt_projection_rejects_negative_costs() -> None:
+    """Regression: typed cost fields must not be silently coerced to zero."""
+
+    result = msgspec.json.decode(
+        (
+            b'{"schema_version":"leaven.stage_run.v1","message":"stage_run_result",'
+            b'"stage":"runner","stage_call_id":"sc_1",'
+            b'"output":{"kind":"text","summary":"ok","visibility":"public",'
+            b'"data_classes":["public"]},'
+            b'"effect_receipts":[{"method":"leaven/lm.complete","receipt":"lmrec_1",'
+            b'"cost":{"usd_micro":-1}}]}'
+        ),
+        type=StageRunResult,
+    )
+
+    with pytest.raises(ValueError, match="cost values must be nonnegative"):
+        effect_cost_totals_from_stage_result(result)
 
 
 __all__ = []

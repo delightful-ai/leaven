@@ -5007,6 +5007,23 @@ acceptance:
           now explicitly cast untrusted runtime values when exercising the
           runtime guard, so ordinary typed callers see bad input as a static
           error instead of a supported public shape.
+      - kind: python_optimize_receipt_cost_erasure_removed
+        paths:
+          - sdk/python/src/leaven/_seam_optimize/receipts.py
+          - sdk/python/tests/_seam_optimize/test_receipts.py
+        commands:
+          - cd sdk/python && uv run pytest tests/_seam_optimize/test_receipts.py -q
+          - cd sdk/python && uv run ruff check src/leaven/_seam_optimize/receipts.py tests/_seam_optimize/test_receipts.py
+          - cd sdk/python && uv run ty check src/leaven/_seam_optimize/receipts.py tests/_seam_optimize/test_receipts.py
+          - cd sdk/python && uv run python scripts/check_quality_contract.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          The durable optimize receipt projection no longer accepts
+          `int | object` for generated stage cost fields or silently coerces
+          bad values to zero. The helper now accepts the generated
+          `int | UnsetType` shape, treats missing cost fields as zero, and
+          raises on negative costs. A mirrored regression test proves negative
+          typed cost values fail loudly.
       - kind: prompt_stage_runtime_erasure_narrowed
         paths:
           - sdk/python/src/leaven/stages.py
