@@ -35,12 +35,12 @@ use params::{
     event_emit_params, proposal_apply_params,
 };
 
-type AssessmentSubmitter<'service, P> = dyn for<'params> Fn(&AssessmentSubmitParams<'params>) -> Result<Metered<Vec<Assessment<P>>>, String>
-    + 'service;
-type EvaluationRequester<'service> = dyn for<'params> Fn(&EvaluationRequestParams<'params>) -> Result<RunBoundEvaluationRequest, String>
-    + 'service;
-type ProposalSubmitter<'service, P> = dyn for<'params> Fn(&ProposalSubmitParams<'params>) -> Result<ProposalBatch<P>, String>
-    + 'service;
+type AssessmentSubmitter<'service, P> =
+    dyn Fn(&AssessmentSubmitParams) -> Result<Metered<Vec<Assessment<P>>>, String> + 'service;
+type EvaluationRequester<'service> =
+    dyn Fn(&EvaluationRequestParams) -> Result<RunBoundEvaluationRequest, String> + 'service;
+type ProposalSubmitter<'service, P> =
+    dyn Fn(&ProposalSubmitParams) -> Result<ProposalBatch<P>, String> + 'service;
 
 /// Typed evaluation request produced by a host-owned public payload lowerer.
 pub struct RunBoundEvaluationRequest {
@@ -113,10 +113,7 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
     #[must_use]
     pub fn with_proposal_submitter(
         mut self,
-        submitter: impl for<'params> Fn(
-            &ProposalSubmitParams<'params>,
-        ) -> Result<ProposalBatch<P>, String>
-        + 'service,
+        submitter: impl Fn(&ProposalSubmitParams) -> Result<ProposalBatch<P>, String> + 'service,
     ) -> Self {
         self.proposal_submitter = Some(Box::new(submitter));
         self
@@ -126,9 +123,7 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
     #[must_use]
     pub fn with_assessment_submitter(
         mut self,
-        submitter: impl for<'params> Fn(
-            &AssessmentSubmitParams<'params>,
-        ) -> Result<Metered<Vec<Assessment<P>>>, String>
+        submitter: impl Fn(&AssessmentSubmitParams) -> Result<Metered<Vec<Assessment<P>>>, String>
         + 'service,
     ) -> Self {
         self.assessment_submitter = Some(Box::new(submitter));
@@ -139,9 +134,7 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
     #[must_use]
     pub fn with_evaluation_requester(
         mut self,
-        requester: impl for<'params> Fn(
-            &EvaluationRequestParams<'params>,
-        ) -> Result<RunBoundEvaluationRequest, String>
+        requester: impl Fn(&EvaluationRequestParams) -> Result<RunBoundEvaluationRequest, String>
         + 'service,
     ) -> Self {
         self.evaluation_requester = Some(Box::new(requester));
@@ -174,7 +167,7 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
 
     fn proposal_submit(
         &self,
-        params: ProposalSubmitParams<'_>,
+        params: ProposalSubmitParams,
         plan: &Value,
     ) -> Result<Value, RunBoundGraphEffectError> {
         let submitter = self
@@ -206,7 +199,7 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
 
     fn proposal_apply(
         &self,
-        params: ProposalApplyParams<'_>,
+        params: ProposalApplyParams,
     ) -> Result<Value, RunBoundGraphEffectError> {
         let batch_id = params.write.proposal_batch_id;
         let batch = self
@@ -233,7 +226,7 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
 
     fn evaluation_request(
         &self,
-        params: EvaluationRequestParams<'_>,
+        params: EvaluationRequestParams,
     ) -> Result<Value, RunBoundGraphEffectError> {
         let requester = self
             .evaluation_requester
@@ -265,7 +258,7 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
 
     fn assessment_submit(
         &self,
-        params: AssessmentSubmitParams<'_>,
+        params: AssessmentSubmitParams,
     ) -> Result<Value, RunBoundGraphEffectError> {
         let request_id = params.write.evaluation_request_id;
         let submitter = self
@@ -288,7 +281,7 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
         assessment_submit_extension_result(&plan_result)
     }
 
-    fn event_emit(&self, params: EventEmitParams<'_>) -> Result<Value, RunBoundGraphEffectError> {
+    fn event_emit(&self, params: EventEmitParams) -> Result<Value, RunBoundGraphEffectError> {
         let event = &params.write;
         let event_id = format!("event_{}", event.name);
         self.context
@@ -301,12 +294,12 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
                 visibility: event.visibility.to_owned(),
             });
         event_emit_extension_result(EventEmitExtensionContext {
-            plan_id: params.plan_id,
-            name: event.name,
-            event_kind: event.event_kind,
-            payload_schema: event.payload_schema,
+            plan_id: &params.plan_id,
+            name: &event.name,
+            event_kind: &event.event_kind,
+            payload_schema: &event.payload_schema,
             payload: &event.payload,
-            visibility: event.visibility,
+            visibility: &event.visibility,
             event_id: &event_id,
             base_revision: &self.base_revision,
             final_revision: &self.final_revision,
@@ -314,7 +307,7 @@ impl<'service, 'run, P: OptimizationProblem> RunBoundGraphEffectService<'service
             policy_fingerprint: &self.policy_fingerprint,
             started_at: &self.started_at,
             completed_at: &self.completed_at,
-            return_values: params.return_values,
+            return_values: params.return_values.as_ref(),
         })
     }
 }

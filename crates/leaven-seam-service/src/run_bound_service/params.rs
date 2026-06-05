@@ -1,43 +1,44 @@
 use leaven_engine::ExternalEventPayload;
 use leaven_kernel::{EvaluationRequestId, ProposalBatchId};
+use serde::Deserialize;
 use serde_json::Value;
 use uuid::Uuid;
 
 use super::RunBoundGraphEffectError;
 
-pub(super) struct ProposalApplyParams<'a> {
-    pub(crate) plan_id: &'a str,
+pub(super) struct ProposalApplyParams {
+    pub(crate) plan_id: String,
     pub(crate) write: ProposalApplyWrite,
 }
 
 /// Parsed `leaven/proposal.submit_batch` callback params.
-pub struct ProposalSubmitParams<'a> {
-    pub(crate) plan_id: &'a str,
-    pub(crate) write: ProposalSubmitWrite<'a>,
+pub struct ProposalSubmitParams {
+    pub(crate) plan_id: String,
+    pub(crate) write: ProposalSubmitWrite,
 }
 
-pub(crate) struct ProposalSubmitWrite<'a> {
-    pub(crate) name: &'a str,
-    pub(crate) proposals: &'a Value,
+pub(crate) struct ProposalSubmitWrite {
+    pub(crate) name: String,
+    pub(crate) proposals: Value,
 }
 
-impl ProposalSubmitParams<'_> {
+impl ProposalSubmitParams {
     /// Plan identity carried by the public-seam callback.
     #[must_use]
     pub fn plan_id(&self) -> &str {
-        self.plan_id
+        &self.plan_id
     }
 
     /// Operation name for the proposal submit write.
     #[must_use]
     pub fn op_name(&self) -> &str {
-        self.write.name
+        &self.write.name
     }
 
     /// Host-domain proposal payloads.
     #[must_use]
     pub fn proposals_payload(&self) -> &Value {
-        self.write.proposals
+        &self.write.proposals
     }
 }
 
@@ -46,59 +47,59 @@ pub(crate) struct ProposalApplyWrite {
 }
 
 /// Parsed `leaven/evaluation.request` callback params.
-pub struct EvaluationRequestParams<'a> {
-    pub(crate) plan_id: &'a str,
-    pub(crate) write: EvaluationRequestWrite<'a>,
+pub struct EvaluationRequestParams {
+    pub(crate) plan_id: String,
+    pub(crate) write: EvaluationRequestWrite,
 }
 
-pub(crate) struct EvaluationRequestWrite<'a> {
-    pub(crate) name: &'a str,
-    pub(crate) request: &'a Value,
+pub(crate) struct EvaluationRequestWrite {
+    pub(crate) name: String,
+    pub(crate) request: Value,
 }
 
-impl EvaluationRequestParams<'_> {
+impl EvaluationRequestParams {
     /// Plan identity carried by the public-seam callback.
     #[must_use]
     pub fn plan_id(&self) -> &str {
-        self.plan_id
+        &self.plan_id
     }
 
     /// Operation name for the evaluation request write.
     #[must_use]
     pub fn op_name(&self) -> &str {
-        self.write.name
+        &self.write.name
     }
 
     /// Host-domain evaluation request payload.
     #[must_use]
     pub fn request_payload(&self) -> &Value {
-        self.write.request
+        &self.write.request
     }
 }
 
 /// Parsed `leaven/assessment.submit` callback params.
-pub struct AssessmentSubmitParams<'a> {
-    pub(crate) plan_id: &'a str,
-    pub(crate) write: AssessmentSubmitWrite<'a>,
+pub struct AssessmentSubmitParams {
+    pub(crate) plan_id: String,
+    pub(crate) write: AssessmentSubmitWrite,
 }
 
-pub(crate) struct AssessmentSubmitWrite<'a> {
-    pub(crate) name: &'a str,
+pub(crate) struct AssessmentSubmitWrite {
+    pub(crate) name: String,
     pub(crate) evaluation_request_id: EvaluationRequestId,
-    pub(crate) assessments: &'a Value,
+    pub(crate) assessments: Value,
 }
 
-impl AssessmentSubmitParams<'_> {
+impl AssessmentSubmitParams {
     /// Plan identity carried by the public-seam callback.
     #[must_use]
     pub fn plan_id(&self) -> &str {
-        self.plan_id
+        &self.plan_id
     }
 
     /// Operation name for the assessment submit write.
     #[must_use]
     pub fn op_name(&self) -> &str {
-        self.write.name
+        &self.write.name
     }
 
     /// Typed evaluation request identity receiving the assessments.
@@ -110,183 +111,221 @@ impl AssessmentSubmitParams<'_> {
     /// Host-domain assessment payloads.
     #[must_use]
     pub fn assessments_payload(&self) -> &Value {
-        self.write.assessments
+        &self.write.assessments
     }
 }
 
-pub(super) struct EventEmitParams<'a> {
-    pub(crate) plan_id: &'a str,
-    pub(crate) write: EventEmitWrite<'a>,
-    pub(crate) return_values: Option<&'a Value>,
+pub(super) struct EventEmitParams {
+    pub(crate) plan_id: String,
+    pub(crate) write: EventEmitWrite,
+    pub(crate) return_values: Option<Value>,
 }
 
-pub(crate) struct EventEmitWrite<'a> {
-    pub(crate) name: &'a str,
-    pub(crate) event_kind: &'a str,
-    pub(crate) payload_schema: &'a str,
+pub(crate) struct EventEmitWrite {
+    pub(crate) name: String,
+    pub(crate) event_kind: String,
+    pub(crate) payload_schema: String,
     pub(crate) payload: ExternalEventPayload,
-    pub(crate) visibility: &'a str,
+    pub(crate) visibility: String,
 }
 
 pub(super) fn proposal_apply_params(
     params: &Value,
-) -> Result<ProposalApplyParams<'_>, RunBoundGraphEffectError> {
-    let plan_id = string_field(params, "plan_id")?;
-    let op = write_op(params, "apply_proposal_batch", || {
-        RunBoundGraphEffectError::MissingApplyWrite
-    })?;
-    let public_ref = op
-        .write
-        .get("proposal_batch")
-        .and_then(Value::as_str)
-        .ok_or(RunBoundGraphEffectError::InvalidProposalBatchRef)?;
-    let uuid = public_ref
-        .strip_prefix("pb_")
-        .and_then(|value| Uuid::parse_str(value).ok())
-        .ok_or(RunBoundGraphEffectError::InvalidProposalBatchRef)?;
-    Ok(ProposalApplyParams {
-        plan_id,
-        write: ProposalApplyWrite {
-            proposal_batch_id: ProposalBatchId::from_uuid(uuid),
-        },
-    })
+) -> Result<ProposalApplyParams, RunBoundGraphEffectError> {
+    let plan = callback_plan(params, RunBoundGraphEffectError::MissingApplyWrite)?;
+    let plan_id = plan.plan_id.clone();
+    let write = plan.apply_proposal_batch()?;
+    Ok(ProposalApplyParams { plan_id, write })
 }
 
 pub(super) fn proposal_submit_params(
     params: &Value,
-) -> Result<ProposalSubmitParams<'_>, RunBoundGraphEffectError> {
-    let plan_id = string_field(params, "plan_id")?;
-    let op = write_op(params, "submit_proposal_batch", || {
-        RunBoundGraphEffectError::MissingProposalSubmitWrite
-    })?;
-    let proposals = op
-        .write
-        .get("proposals")
-        .ok_or(RunBoundGraphEffectError::MissingValue { field: "proposals" })?;
-    Ok(ProposalSubmitParams {
-        plan_id,
-        write: ProposalSubmitWrite {
-            name: op.name,
-            proposals,
-        },
-    })
+) -> Result<ProposalSubmitParams, RunBoundGraphEffectError> {
+    let plan = callback_plan(params, RunBoundGraphEffectError::MissingProposalSubmitWrite)?;
+    let plan_id = plan.plan_id.clone();
+    let write = plan.submit_proposal_batch()?;
+    Ok(ProposalSubmitParams { plan_id, write })
 }
 
 pub(super) fn evaluation_request_params(
     params: &Value,
-) -> Result<EvaluationRequestParams<'_>, RunBoundGraphEffectError> {
-    let plan_id = string_field(params, "plan_id")?;
-    let op = write_op(params, "request_evaluation", || {
-        RunBoundGraphEffectError::MissingEvaluationRequestWrite
-    })?;
-    let request = op
-        .write
-        .get("request")
-        .ok_or(RunBoundGraphEffectError::MissingValue { field: "request" })?;
-    Ok(EvaluationRequestParams {
-        plan_id,
-        write: EvaluationRequestWrite {
-            name: op.name,
-            request,
-        },
-    })
+) -> Result<EvaluationRequestParams, RunBoundGraphEffectError> {
+    let plan = callback_plan(
+        params,
+        RunBoundGraphEffectError::MissingEvaluationRequestWrite,
+    )?;
+    let plan_id = plan.plan_id.clone();
+    let write = plan.request_evaluation()?;
+    Ok(EvaluationRequestParams { plan_id, write })
 }
 
 pub(super) fn assessment_submit_params(
     params: &Value,
-) -> Result<AssessmentSubmitParams<'_>, RunBoundGraphEffectError> {
-    let plan_id = string_field(params, "plan_id")?;
-    let op = write_op(params, "submit_assessments", || {
-        RunBoundGraphEffectError::MissingAssessmentWrite
-    })?;
-    let public_ref = op
-        .write
-        .get("evaluation_request_id")
-        .and_then(Value::as_str)
-        .ok_or(RunBoundGraphEffectError::InvalidEvaluationRequestRef)?;
-    let uuid = public_ref
-        .strip_prefix("evalreq_")
-        .and_then(|value| Uuid::parse_str(value).ok())
-        .ok_or(RunBoundGraphEffectError::InvalidEvaluationRequestRef)?;
-    let assessments =
-        op.write
-            .get("assessments")
-            .ok_or(RunBoundGraphEffectError::MissingValue {
-                field: "assessments",
-            })?;
-    Ok(AssessmentSubmitParams {
-        plan_id,
-        write: AssessmentSubmitWrite {
-            name: op.name,
-            evaluation_request_id: EvaluationRequestId::from_uuid(uuid),
-            assessments,
-        },
-    })
+) -> Result<AssessmentSubmitParams, RunBoundGraphEffectError> {
+    let plan = callback_plan(params, RunBoundGraphEffectError::MissingAssessmentWrite)?;
+    let plan_id = plan.plan_id.clone();
+    let write = plan.submit_assessments()?;
+    Ok(AssessmentSubmitParams { plan_id, write })
 }
 
 pub(super) fn event_emit_params(
     params: &Value,
-) -> Result<EventEmitParams<'_>, RunBoundGraphEffectError> {
-    let plan_id = string_field(params, "plan_id")?;
-    let op = write_op(params, "emit_run_event", || {
-        RunBoundGraphEffectError::MissingEventWrite
-    })?;
+) -> Result<EventEmitParams, RunBoundGraphEffectError> {
+    let plan = callback_plan(params, RunBoundGraphEffectError::MissingEventWrite)?;
+    let plan_id = plan.plan_id.clone();
+    let return_values = plan.return_values.clone();
+    let write = plan.emit_run_event()?;
     Ok(EventEmitParams {
         plan_id,
-        write: EventEmitWrite {
-            name: op.name,
-            event_kind: string_field(op.write, "event_kind")?,
-            payload_schema: string_field(op.write, "payload_schema")?,
-            payload: external_event_payload(
-                op.write
-                    .get("payload")
-                    .ok_or(RunBoundGraphEffectError::MissingValue { field: "payload" })?,
-            )?,
-            visibility: string_field(op.write, "visibility")?,
-        },
-        return_values: params.get("return"),
+        write,
+        return_values,
     })
 }
 
-fn external_event_payload(value: &Value) -> Result<ExternalEventPayload, RunBoundGraphEffectError> {
-    serde_json::from_value(value.clone())
-        .map_err(|error| RunBoundGraphEffectError::InvalidEventPayload(error.to_string()))
+#[derive(Deserialize)]
+struct CallbackPlan {
+    plan_id: String,
+    ops: Vec<CallbackOperation>,
+    #[serde(default, rename = "return")]
+    return_values: Option<Value>,
 }
 
-struct WriteOp<'a> {
-    name: &'a str,
-    write: &'a Value,
+#[derive(Deserialize)]
+struct CallbackOperation {
+    name: Option<String>,
+    write: Option<CallbackWrite>,
 }
 
-fn write_op<'a>(
-    params: &'a Value,
-    kind: &'static str,
-    missing: impl Fn() -> RunBoundGraphEffectError,
-) -> Result<WriteOp<'a>, RunBoundGraphEffectError> {
-    let ops = params
-        .get("ops")
-        .and_then(Value::as_array)
-        .ok_or_else(&missing)?;
-    for op in ops {
-        let Some(write) = op.get("write") else {
-            continue;
-        };
-        if write.get("kind").and_then(Value::as_str) == Some(kind) {
-            return Ok(WriteOp {
-                name: string_field(op, "name")?,
-                write,
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum CallbackWrite {
+    ApplyProposalBatch {
+        proposal_batch: String,
+    },
+    SubmitProposalBatch {
+        proposals: Value,
+    },
+    RequestEvaluation {
+        request: Value,
+    },
+    SubmitAssessments {
+        evaluation_request_id: String,
+        assessments: Value,
+    },
+    EmitRunEvent {
+        event_kind: String,
+        payload_schema: String,
+        payload: ExternalEventPayload,
+        visibility: String,
+    },
+    #[serde(other)]
+    Other,
+}
+
+impl CallbackPlan {
+    fn apply_proposal_batch(self) -> Result<ProposalApplyWrite, RunBoundGraphEffectError> {
+        for op in self.ops {
+            let Some(CallbackWrite::ApplyProposalBatch { proposal_batch }) = op.write else {
+                continue;
+            };
+            let proposal_batch_id = proposal_batch_id(&proposal_batch)?;
+            return Ok(ProposalApplyWrite { proposal_batch_id });
+        }
+        Err(RunBoundGraphEffectError::MissingApplyWrite)
+    }
+
+    fn submit_proposal_batch(self) -> Result<ProposalSubmitWrite, RunBoundGraphEffectError> {
+        for op in self.ops {
+            let Some(CallbackWrite::SubmitProposalBatch { proposals }) = op.write else {
+                continue;
+            };
+            return Ok(ProposalSubmitWrite {
+                name: operation_name(op.name)?,
+                proposals,
             });
         }
+        Err(RunBoundGraphEffectError::MissingProposalSubmitWrite)
     }
-    Err(missing())
+
+    fn request_evaluation(self) -> Result<EvaluationRequestWrite, RunBoundGraphEffectError> {
+        for op in self.ops {
+            let Some(CallbackWrite::RequestEvaluation { request }) = op.write else {
+                continue;
+            };
+            return Ok(EvaluationRequestWrite {
+                name: operation_name(op.name)?,
+                request,
+            });
+        }
+        Err(RunBoundGraphEffectError::MissingEvaluationRequestWrite)
+    }
+
+    fn submit_assessments(self) -> Result<AssessmentSubmitWrite, RunBoundGraphEffectError> {
+        for op in self.ops {
+            let Some(CallbackWrite::SubmitAssessments {
+                evaluation_request_id: public_evaluation_request_id,
+                assessments,
+            }) = op.write
+            else {
+                continue;
+            };
+            return Ok(AssessmentSubmitWrite {
+                name: operation_name(op.name)?,
+                evaluation_request_id: evaluation_request_id(&public_evaluation_request_id)?,
+                assessments,
+            });
+        }
+        Err(RunBoundGraphEffectError::MissingAssessmentWrite)
+    }
+
+    fn emit_run_event(self) -> Result<EventEmitWrite, RunBoundGraphEffectError> {
+        for op in self.ops {
+            let Some(CallbackWrite::EmitRunEvent {
+                event_kind,
+                payload_schema,
+                payload,
+                visibility,
+            }) = op.write
+            else {
+                continue;
+            };
+            return Ok(EventEmitWrite {
+                name: operation_name(op.name)?,
+                event_kind,
+                payload_schema,
+                payload,
+                visibility,
+            });
+        }
+        Err(RunBoundGraphEffectError::MissingEventWrite)
+    }
 }
 
-pub(super) fn string_field<'a>(
-    value: &'a Value,
-    field: &'static str,
-) -> Result<&'a str, RunBoundGraphEffectError> {
-    value
-        .get(field)
-        .and_then(Value::as_str)
-        .ok_or(RunBoundGraphEffectError::MissingString { field })
+fn callback_plan(
+    params: &Value,
+    invalid: RunBoundGraphEffectError,
+) -> Result<CallbackPlan, RunBoundGraphEffectError> {
+    serde_json::from_value(params.clone()).map_err(|_error| invalid)
+}
+
+fn proposal_batch_id(public_ref: &str) -> Result<ProposalBatchId, RunBoundGraphEffectError> {
+    let uuid = public_ref
+        .strip_prefix("pb_")
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .ok_or(RunBoundGraphEffectError::InvalidProposalBatchRef)?;
+    Ok(ProposalBatchId::from_uuid(uuid))
+}
+
+fn evaluation_request_id(
+    public_ref: &str,
+) -> Result<EvaluationRequestId, RunBoundGraphEffectError> {
+    let uuid = public_ref
+        .strip_prefix("evalreq_")
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .ok_or(RunBoundGraphEffectError::InvalidEvaluationRequestRef)?;
+    Ok(EvaluationRequestId::from_uuid(uuid))
+}
+
+fn operation_name(name: Option<String>) -> Result<String, RunBoundGraphEffectError> {
+    name.ok_or(RunBoundGraphEffectError::MissingString { field: "name" })
 }
