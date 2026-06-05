@@ -47,6 +47,7 @@ pub enum PlanExpression {
         namespace: String,
         operation: String,
         schema_fingerprint: String,
+        payload: PlanExtensionPayload,
     },
 }
 
@@ -110,6 +111,11 @@ impl PlanExpression {
                 operation: required_object_string(object, "op")?.to_owned(),
                 schema_fingerprint: required_object_string(object, "schema_fingerprint")?
                     .to_owned(),
+                payload: PlanExtensionPayload::from_schema_valid_value(
+                    object
+                        .get("payload")
+                        .ok_or_else(|| invalid_plan("extension expr must carry payload"))?,
+                ),
             }),
             other => Err(invalid_plan(format!(
                 "unknown plan expression kind `{other}`"
@@ -285,6 +291,21 @@ impl PlanLiteralValue {
     }
 
     /// JSON value carried on the wire by the literal expression.
+    pub const fn as_json(&self) -> &Value {
+        &self.0
+    }
+}
+
+/// Schema-valid JSON payload carried by a Plan IR extension expression.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanExtensionPayload(Value);
+
+impl PlanExtensionPayload {
+    fn from_schema_valid_value(value: &Value) -> Self {
+        Self(value.clone())
+    }
+
+    /// JSON payload carried on the wire by the extension expression.
     pub const fn as_json(&self) -> &Value {
         &self.0
     }

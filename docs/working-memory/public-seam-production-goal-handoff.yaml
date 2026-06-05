@@ -1821,6 +1821,43 @@ acceptance:
           tests prove nested literal objects and arrays decode through the
           generated records. The row remains pending because extension payloads
           and other schema-owned JSON leaves still need typed owners.
+      - kind: rust_and_python_extension_payloads_preserve_typed_json_owner
+        paths:
+          - crates/leaven-public-seam/src/plan/expression.rs
+          - crates/leaven-public-seam/src/plan.rs
+          - crates/leaven-public-seam/src/lib.rs
+          - crates/leaven-public-seam/tests/public_seam_contract/plan_document.rs
+          - sdk/python/codegen/ref_codegen.py
+          - sdk/python/codegen/expression_codegen.py
+          - sdk/python/src/leaven/_seam/_wire/refs.py
+          - sdk/python/src/leaven/_seam/_wire/expressions.py
+          - sdk/python/tests/_seam/_wire/test_expressions.py
+        commands:
+          - cargo fmt --check
+          - cargo check -p leaven-public-seam
+          - cargo test -p leaven-public-seam --test public_seam_contract plan_document -- --nocapture
+          - cargo test -p leaven --test topology_contract
+          - cd sdk/python && uv run python codegen/generate_seam_wire.py --check
+          - cd sdk/python && uv run pytest tests/_seam/_wire/test_expressions.py -q
+          - cd sdk/python && uv run pytest tests/_seam/_wire -q
+          - cd sdk/python && uv run ruff check codegen/ref_codegen.py codegen/expression_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/expressions.py tests/_seam/_wire/test_expressions.py
+          - cd sdk/python && uv run ty check codegen/ref_codegen.py codegen/expression_codegen.py src/leaven/_seam/_wire/refs.py src/leaven/_seam/_wire/expressions.py tests/_seam/_wire/test_expressions.py
+          - python3 scripts/lint-line-count.py --root sdk/python
+        note: >-
+          Rust `PlanExpression::Extension` now carries the schema-required
+          payload through a named `PlanExtensionPayload` owner instead of
+          dropping it after validation. The public-seam contract proves a
+          nested extension payload survives `validate_plan_document()` and is
+          visible through `PlanOperation::expression()`. Python generated
+          extension records for projections, graph sources, Plan expressions,
+          and ValueExpr preconditions now use `WireJsonExtensionPayload`, a
+          named owner backed by the same bounded msgspec JSON ladder as
+          literals rather than `object`, `Raw`, or shallow `WireJsonField`.
+          Focused tests prove nested payload decode for Plan-expression,
+          graph-source, and ValueExpr extension slots. The row remains pending
+          because remaining schema-owned leaves such as metadata/info refs,
+          output values, graph-write value slots, stage case inputs, and nested
+          result fragments still need typed owners.
       - kind: typed_private_client_request_cutover
         paths:
           - sdk/python/src/leaven/_seam/plans.py

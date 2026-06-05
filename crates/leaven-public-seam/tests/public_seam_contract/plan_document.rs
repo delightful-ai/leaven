@@ -76,6 +76,58 @@ fn plan_ir_family_accepts_typed_let_call_write_documents() {
 }
 
 #[test]
+fn plan_ir_extension_expression_preserves_typed_payload() {
+    let package = package();
+    let plan = json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "planextpayload001",
+        "consistency": {"kind": "latest_at_start"},
+        "mode": {"kind": "dry_run"},
+        "ops": [{
+            "kind": "let",
+            "name": "extension_value",
+            "expr": {
+                "kind": "extension",
+                "namespace": "x.test",
+                "op": "literal_payload",
+                "schema_fingerprint": "fp_schema_sha256_extension",
+                "payload": {
+                    "route": ["graph", {"candidate": "cand_1"}],
+                    "enabled": true
+                }
+            }
+        }],
+        "return": ["extension_value"],
+        "commit": {"kind": "no_graph_writes"}
+    });
+    let document = package.validate_plan_document(&plan).unwrap();
+    let [let_op] = document.operations() else {
+        panic!("expected one extension let op");
+    };
+
+    let Some(leaven_public_seam::PlanExpression::Extension {
+        namespace,
+        operation,
+        schema_fingerprint,
+        payload,
+    }) = let_op.expression()
+    else {
+        panic!("extension let op must expose typed extension payload");
+    };
+
+    assert_eq!(namespace, "x.test");
+    assert_eq!(operation, "literal_payload");
+    assert_eq!(schema_fingerprint, "fp_schema_sha256_extension");
+    assert_eq!(
+        payload.as_json(),
+        &json!({
+            "route": ["graph", {"candidate": "cand_1"}],
+            "enabled": true
+        })
+    );
+}
+
+#[test]
 fn plan_ir_accessors_classify_direct_query_operation_identity() {
     let package = package();
     let plan = latest_at_start_graph_query_plan();

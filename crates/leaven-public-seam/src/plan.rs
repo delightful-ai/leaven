@@ -7,6 +7,8 @@ mod model;
 mod parse;
 
 #[allow(unused_imports)]
+pub use expression::PlanExtensionPayload;
+#[allow(unused_imports)]
 pub use expression::PlanLiteralValue;
 pub use expression::{PlanExpression, PlanExpressionKind, PlanGraphQuerySource};
 pub use model::{
