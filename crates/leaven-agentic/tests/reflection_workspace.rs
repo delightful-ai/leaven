@@ -242,39 +242,43 @@ impl AgentRuntime for RootContractRuntime {
         Fingerprint::from_bytes([0x52; 32])
     }
 
-    async fn run_session(
-        &self,
-        workspace: &mut WorkspaceView<'_>,
+    fn run_session<'a>(
+        &'a self,
+        workspace: &'a mut WorkspaceView<'_>,
         request: AgentRunRequest,
-        ctx: AgentRunContext<'_>,
-    ) -> Result<Metered<AgentSession>, AgentRuntimeError> {
-        assert_eq!(request.cwd, WorkspacePath::root());
-        assert!(
-            workspace
-                .read_file(&WorkspacePath::new("TASK.md").unwrap())
-                .is_ok()
-        );
-        assert!(
-            workspace
-                .read_file(&WorkspacePath::new("MANIFEST.json").unwrap())
-                .is_ok()
-        );
-        assert!(
-            workspace
-                .read_file(&WorkspacePath::new("cases/case-000000.json").unwrap())
-                .is_ok()
-        );
-        assert_eq!(
-            request.output_contract,
-            OutputContract::WorkspaceDiff {
-                roots: vec![WorkspacePath::new("target/current").unwrap()]
-            }
-        );
-        let output = WorkspacePath::new("target/current/result.txt").unwrap();
-        workspace.write_file(&output, b"improved")?;
-        let mut session = AgentSession::succeeded(ctx.session_id());
-        session.output_files.push(output);
-        Ok(Metered::new(session, Cost::zero()))
+        ctx: AgentRunContext<'a>,
+    ) -> impl std::future::Future<Output = Result<Metered<AgentSession>, AgentRuntimeError>> + Send + 'a
+    {
+        let result = (|| {
+            assert_eq!(request.cwd, WorkspacePath::root());
+            assert!(
+                workspace
+                    .read_file(&WorkspacePath::new("TASK.md").unwrap())
+                    .is_ok()
+            );
+            assert!(
+                workspace
+                    .read_file(&WorkspacePath::new("MANIFEST.json").unwrap())
+                    .is_ok()
+            );
+            assert!(
+                workspace
+                    .read_file(&WorkspacePath::new("cases/case-000000.json").unwrap())
+                    .is_ok()
+            );
+            assert_eq!(
+                request.output_contract,
+                OutputContract::WorkspaceDiff {
+                    roots: vec![WorkspacePath::new("target/current").unwrap()]
+                }
+            );
+            let output = WorkspacePath::new("target/current/result.txt").unwrap();
+            workspace.write_file(&output, b"improved")?;
+            let mut session = AgentSession::succeeded(ctx.session_id());
+            session.output_files.push(output);
+            Ok(Metered::new(session, Cost::zero()))
+        })();
+        std::future::ready(result)
     }
 }
 
