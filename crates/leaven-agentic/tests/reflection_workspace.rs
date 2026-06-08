@@ -1,12 +1,15 @@
 use std::convert::Infallible;
 
 use futures::executor::block_on;
-use leaven_agent::{AgentStatus, FakeAgentAction, FakeAgentRuntime};
+use leaven_agent::{
+    AgentRunContext, AgentRunRequest, AgentRuntime, AgentRuntimeError, AgentSession, AgentStatus,
+    FakeAgentAction, FakeAgentRuntime, OutputContract,
+};
 use leaven_agentic::{
     ArtifactReflector, ReadbackResult, ReflectionError, ReflectionLayoutConfig, ReflectionWorkspace,
 };
 use leaven_core::{ExternalRef, InfoRef};
-use leaven_kernel::{Budget, BudgetSnapshot, Cost};
+use leaven_kernel::{AgentRuntimeId, Budget, BudgetSnapshot, Cost, Fingerprint, Metered};
 use leaven_workspace::{WorkspacePath, WorkspaceView};
 use leaven_workspace_local::LocalWorkspaceFactory;
 use serde_json::json;
@@ -195,6 +198,84 @@ fn reflection_workspace_rejects_agent_edits_outside_mutable_root() {
             ReflectionError::ProtectedWorkspaceModified { path } if path.as_str() == "TASK.md"
         ));
     });
+}
+
+#[test]
+fn reflection_workspace_runs_agent_from_workspace_root() {
+    block_on(async {
+        let reflector = TextReflector;
+        let runtime = RootContractRuntime;
+        let factory = LocalWorkspaceFactory::temp();
+        let budget = BudgetSnapshot {
+            limit: Budget::unlimited(),
+            ..BudgetSnapshot::default()
+        };
+
+        let outcome = ReflectionWorkspace::new(ReflectionLayoutConfig::default())
+            .run(
+                &reflector,
+                &"seed",
+                &[json!({ "input": "case input" })],
+                &[],
+                &factory,
+                &runtime,
+                &budget,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            outcome.readback,
+            ReadbackResult::Valid("improved".to_owned())
+        );
+    });
+}
+
+struct RootContractRuntime;
+
+impl AgentRuntime for RootContractRuntime {
+    fn id(&self) -> AgentRuntimeId {
+        AgentRuntimeId::new_const("root-contract")
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([0x52; 32])
+    }
+
+    async fn run_session(
+        &self,
+        workspace: &mut WorkspaceView<'_>,
+        request: AgentRunRequest,
+        ctx: AgentRunContext<'_>,
+    ) -> Result<Metered<AgentSession>, AgentRuntimeError> {
+        assert_eq!(request.cwd, WorkspacePath::root());
+        assert!(
+            workspace
+                .read_file(&WorkspacePath::new("TASK.md").unwrap())
+                .is_ok()
+        );
+        assert!(
+            workspace
+                .read_file(&WorkspacePath::new("MANIFEST.json").unwrap())
+                .is_ok()
+        );
+        assert!(
+            workspace
+                .read_file(&WorkspacePath::new("cases/case-000000.json").unwrap())
+                .is_ok()
+        );
+        assert_eq!(
+            request.output_contract,
+            OutputContract::WorkspaceDiff {
+                roots: vec![WorkspacePath::new("target/current").unwrap()]
+            }
+        );
+        let output = WorkspacePath::new("target/current/result.txt").unwrap();
+        workspace.write_file(&output, b"improved")?;
+        let mut session = AgentSession::succeeded(ctx.session_id());
+        session.output_files.push(output);
+        Ok(Metered::new(session, Cost::zero()))
+    }
 }
 
 struct TextReflector;

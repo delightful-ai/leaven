@@ -124,7 +124,7 @@ impl ReflectionWorkspace {
                             "Read TASK.md and edit {} in place.",
                             self.layout.mutable_root.as_str()
                         )),
-                        cwd: self.layout.mutable_root.clone(),
+                        cwd: WorkspacePath::root(),
                         output_contract: OutputContract::WorkspaceDiff {
                             roots: vec![self.layout.mutable_root.clone()],
                         },
