@@ -126,7 +126,7 @@ impl WorkspaceBackend for GitWorkspaceBackend {
             }
         }
 
-        let mut child = process
+        let child = process
             .spawn()
             .map_err(|err| WorkspaceError::Command(err.to_string()))?;
         let stdin = match &command.stdin {
@@ -253,9 +253,6 @@ fn wait_for_output(
         if start.elapsed() >= timeout {
             let _ = child.kill();
             let _ = child.wait();
-            let _ = join_stdin_writer(stdin);
-            let _ = stdout.join();
-            let _ = stderr.join();
             return Err(WorkspaceError::CommandTimedOut {
                 program: program.to_owned(),
                 timeout,
