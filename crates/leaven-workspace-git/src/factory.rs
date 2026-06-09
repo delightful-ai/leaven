@@ -267,14 +267,13 @@ fn spawn_stdin_writer(
     mut writer: Option<std::process::ChildStdin>,
     bytes: Option<Vec<u8>>,
 ) -> Option<std::thread::JoinHandle<Result<(), std::io::Error>>> {
-    bytes.map(|bytes| {
-        std::thread::spawn(move || {
-            if let Some(mut writer) = writer.take() {
-                writer.write_all(&bytes)?;
-            }
-            Ok(())
-        })
-    })
+    let bytes = bytes?;
+    Some(std::thread::spawn(move || {
+        if let Some(mut writer) = writer.take() {
+            writer.write_all(&bytes)?;
+        }
+        Ok(())
+    }))
 }
 
 fn spawn_output_drain<R>(
