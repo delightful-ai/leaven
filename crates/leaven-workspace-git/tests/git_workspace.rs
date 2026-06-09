@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use futures::executor::block_on;
 use leaven_artifact_git::{GitRefKey, GitRefKind, GitRefName};
-use leaven_workspace::{Command, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
+use leaven_workspace::{Command, WorkspaceConfig, WorkspaceError, WorkspaceFactory, WorkspacePath};
 use leaven_workspace_git::{GitCheckout, GitWorkspaceFactory};
 
 #[test]
@@ -83,6 +83,33 @@ fn git_workspace_timeout_drains_child_output() {
         assert_eq!(output.status.code, Some(0));
         assert_eq!(output.stdout.bytes.len(), 200_000);
         assert_eq!(output.stderr.bytes, b"done");
+        drop(slot);
+        workspace.cleanup().await.unwrap();
+    });
+}
+
+#[test]
+fn git_workspace_timeout_covers_piped_stdin_deadlocks() {
+    block_on(async {
+        let source = fixture_repo();
+        let factory = GitWorkspaceFactory::local(source.path());
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mut slot = workspace.slot(WorkspacePath::root()).unwrap();
+        let mut command = Command::new("sh");
+        command.args = vec![
+            "-c".to_owned(),
+            "i=0; while [ $i -lt 50000 ]; do printf xxxxxxxxxx; i=$((i + 1)); done; sleep 5"
+                .to_owned(),
+        ];
+        command.stdin = leaven_workspace::CommandStdin::Bytes(vec![b'y'; 1_000_000]);
+        command.limits.timeout = Some(Duration::from_millis(200));
+
+        let error = slot.run_command(command).unwrap_err();
+
+        assert!(
+            matches!(error, WorkspaceError::CommandTimedOut { .. }),
+            "large stdin plus blocked stdout must honor command timeout, got {error:?}"
+        );
         drop(slot);
         workspace.cleanup().await.unwrap();
     });

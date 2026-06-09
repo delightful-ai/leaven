@@ -129,15 +129,17 @@ impl WorkspaceBackend for GitWorkspaceBackend {
         let mut child = process
             .spawn()
             .map_err(|err| WorkspaceError::Command(err.to_string()))?;
-        if let CommandStdin::Bytes(bytes) = &command.stdin
-            && let Some(mut stdin) = child.stdin.take()
-        {
-            stdin
-                .write_all(bytes)
-                .map_err(|err| WorkspaceError::Command(err.to_string()))?;
-        }
-
-        let output = wait_for_output(child, command.limits.timeout, &command.program, start)?;
+        let stdin = match &command.stdin {
+            CommandStdin::Empty => None,
+            CommandStdin::Bytes(bytes) => Some(bytes.clone()),
+        };
+        let output = wait_for_output(
+            child,
+            stdin,
+            command.limits.timeout,
+            &command.program,
+            start,
+        )?;
         Ok(CommandOutput {
             status: ExitStatus {
                 code: output.status.code(),
@@ -214,23 +216,33 @@ fn command_failure(program: &str, output: &std::process::Output) -> String {
 
 fn wait_for_output(
     mut child: std::process::Child,
+    stdin: Option<Vec<u8>>,
     timeout: Option<Duration>,
     program: &str,
     start: Instant,
 ) -> Result<std::process::Output, WorkspaceError> {
-    let Some(timeout) = timeout else {
-        return child
-            .wait_with_output()
-            .map_err(|err| WorkspaceError::Command(err.to_string()));
-    };
     let stdout = spawn_output_drain(child.stdout.take());
     let stderr = spawn_output_drain(child.stderr.take());
+    let stdin = spawn_stdin_writer(child.stdin.take(), stdin);
+
+    let Some(timeout) = timeout else {
+        let status = child
+            .wait()
+            .map_err(|err| WorkspaceError::Command(err.to_string()))?;
+        join_stdin_writer(stdin)?;
+        return Ok(std::process::Output {
+            status,
+            stdout: join_output_drain(stdout)?,
+            stderr: join_output_drain(stderr)?,
+        });
+    };
 
     loop {
         if let Some(status) = child
             .try_wait()
             .map_err(|err| WorkspaceError::Command(err.to_string()))?
         {
+            join_stdin_writer(stdin)?;
             return Ok(std::process::Output {
                 status,
                 stdout: join_output_drain(stdout)?,
@@ -241,6 +253,7 @@ fn wait_for_output(
         if start.elapsed() >= timeout {
             let _ = child.kill();
             let _ = child.wait();
+            let _ = join_stdin_writer(stdin);
             let _ = stdout.join();
             let _ = stderr.join();
             return Err(WorkspaceError::CommandTimedOut {
@@ -251,6 +264,20 @@ fn wait_for_output(
 
         std::thread::sleep(Duration::from_millis(5));
     }
+}
+
+fn spawn_stdin_writer(
+    mut writer: Option<std::process::ChildStdin>,
+    bytes: Option<Vec<u8>>,
+) -> Option<std::thread::JoinHandle<Result<(), std::io::Error>>> {
+    bytes.map(|bytes| {
+        std::thread::spawn(move || {
+            if let Some(mut writer) = writer.take() {
+                writer.write_all(&bytes)?;
+            }
+            Ok(())
+        })
+    })
 }
 
 fn spawn_output_drain<R>(
@@ -266,6 +293,18 @@ where
         }
         Ok(bytes)
     })
+}
+
+fn join_stdin_writer(
+    handle: Option<std::thread::JoinHandle<Result<(), std::io::Error>>>,
+) -> Result<(), WorkspaceError> {
+    let Some(handle) = handle else {
+        return Ok(());
+    };
+    handle
+        .join()
+        .map_err(|_| WorkspaceError::Command("stdin writer thread panicked".to_owned()))?
+        .map_err(|err| WorkspaceError::Command(err.to_string()))
 }
 
 fn join_output_drain(
