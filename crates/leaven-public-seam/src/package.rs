@@ -7,10 +7,10 @@ use serde_json::Value;
 use crate::{
     CallAuthorityError, CallAuthorityReport, ConformanceMatrix, DeferredWatchReplacement,
     EvaluationJobDocument, EvaluationRequestReceiptDocument, EvidenceEnvelopeDocument,
-    OutputRecordDocument, PinnedDialectEvaluator, PlanDocument, PlanResultDocument,
-    ProposalAuthorityReport, PublicSeamError, ReflectProposeHandoffDocument,
-    ReflectProposeSubmissionDocument, StagePayloadDocument, StageRunRequestDocument,
-    StageRunResultDocument,
+    OptimizeRunRequestDocument, OptimizeRunResultDocument, OutputRecordDocument,
+    PinnedDialectEvaluator, PlanDocument, PlanResultDocument, ProposalAuthorityReport,
+    PublicSeamError, ReflectProposeHandoffDocument, ReflectProposeSubmissionDocument,
+    StagePayloadDocument, StageRunRequestDocument, StageRunResultDocument,
 };
 
 mod evidence_audit;
@@ -566,6 +566,45 @@ impl PublicSeamPackage {
             value,
         )?;
         StageRunResultDocument::from_schema_valid_value(value)
+    }
+
+    /// Validates a `leaven/optimize.run` request through the active V1 optimize-run schema.
+    ///
+    /// This is the client->host optimization-dispatch leg of the locked public
+    /// seam: one method carrying a seed prompt artifact, a target-bearing case
+    /// manifest, optimizer config, and reflection config. Targets are allowed on
+    /// the case manifest because the host owns target custody; runner stage
+    /// payloads still never carry targets. The semantic checks enforce a non-empty
+    /// case manifest and a typed optimizer objective with all four wire variants.
+    pub fn validate_optimize_run_request_document(
+        &self,
+        value: &Value,
+    ) -> Result<OptimizeRunRequestDocument, PublicSeamError> {
+        self.validate_arbitrary_value(
+            "leaven.optimize_run.v1.schema.json",
+            "/optimize_run_request",
+            value,
+        )?;
+        OptimizeRunRequestDocument::from_schema_valid_value(value)
+    }
+
+    /// Validates a `leaven/optimize.run` result through the active V1 optimize-run schema.
+    ///
+    /// The result carries the optimized projection: best candidate, frontier,
+    /// iteration/metric-call counts, aggregate cost, the durable run/revision
+    /// reference, and applied proposal-batch receipts. The semantic checks enforce
+    /// finite candidate scores and the best-in-frontier law, so the projection
+    /// cannot claim a best candidate the frontier never admitted.
+    pub fn validate_optimize_run_result_document(
+        &self,
+        value: &Value,
+    ) -> Result<OptimizeRunResultDocument, PublicSeamError> {
+        self.validate_arbitrary_value(
+            "leaven.optimize_run.v1.schema.json",
+            "/optimize_run_result",
+            value,
+        )?;
+        OptimizeRunResultDocument::from_schema_valid_value(value)
     }
 
     /// Validates an ACP JSON-RPC request carrying a `leaven/stage.run` dispatch.

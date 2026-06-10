@@ -2,8 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use leaven_public_seam::PublicSeamPackage;
 use leaven_seam_runtime::{
-    JsonRpcErrorCode, RejectingSeamService, SeamPlanRequest, SeamRuntime, SeamService,
-    SeamServiceError, SeamStageRunRequest,
+    JsonRpcErrorCode, RejectingSeamService, SeamOptimizeRunRequest, SeamPlanRequest, SeamRuntime,
+    SeamService, SeamServiceError, SeamStageRunRequest,
 };
 use serde_json::{Value, json};
 
@@ -132,6 +132,85 @@ fn runtime_rejects_malformed_stage_run_service_results() {
 }
 
 #[test]
+fn runtime_validates_optimize_run_request_and_result_around_service() {
+    let runtime = runtime(OptimizeRunService::Valid);
+
+    let response = runtime.handle_value(&json!({
+        "jsonrpc": "2.0",
+        "id": "req_optimize",
+        "method": "leaven/optimize.run",
+        "params": optimize_run_request()
+    }));
+
+    assert!(!response.is_error(), "{:#}", response.value());
+    assert_eq!(response.value()["id"], "req_optimize");
+    assert_eq!(
+        response.value()["result"]["best"]["candidate"],
+        "cand_optimize_child"
+    );
+}
+
+#[test]
+fn runtime_rejects_invalid_optimize_run_request_before_dispatch() {
+    let service = RecordingService::default();
+    let runtime = runtime(service.clone());
+
+    // Drop the required cases array: the request must fail validation before the
+    // service is ever consulted.
+    let mut params = optimize_run_request();
+    params.as_object_mut().unwrap().remove("cases");
+
+    let response = runtime.handle_value(&json!({
+        "jsonrpc": "2.0",
+        "id": "req_optimize_bad",
+        "method": "leaven/optimize.run",
+        "params": params
+    }));
+
+    assert_eq!(
+        error_code(response.value()),
+        JsonRpcErrorCode::InvalidRequest
+    );
+    assert!(service.called_methods().is_empty());
+}
+
+#[test]
+fn runtime_rejects_malformed_optimize_run_service_results() {
+    let runtime = runtime(OptimizeRunService::Invalid);
+
+    let response = runtime.handle_value(&json!({
+        "jsonrpc": "2.0",
+        "id": "req_optimize",
+        "method": "leaven/optimize.run",
+        "params": optimize_run_request()
+    }));
+
+    assert_eq!(
+        error_code(response.value()),
+        JsonRpcErrorCode::InvalidResult
+    );
+}
+
+#[test]
+fn runtime_routes_optimize_run_to_the_injected_service() {
+    let service = RecordingService::default();
+    let runtime = runtime(service.clone());
+
+    let response = runtime.handle_value(&json!({
+        "jsonrpc": "2.0",
+        "id": "req_optimize",
+        "method": "leaven/optimize.run",
+        "params": optimize_run_request()
+    }));
+
+    assert_eq!(
+        error_code(response.value()),
+        JsonRpcErrorCode::MethodUnavailable
+    );
+    assert_eq!(service.called_methods(), vec!["leaven/optimize.run"]);
+}
+
+#[test]
 fn rejecting_service_exposes_the_whole_seam_as_unimplemented() {
     let runtime = runtime(RejectingSeamService);
     let method = runtime.methods().next().unwrap().to_owned();
@@ -196,6 +275,17 @@ impl SeamService for RecordingService {
             .push("leaven/stage.run".to_owned());
         Err(SeamServiceError::unavailable("leaven/stage.run"))
     }
+
+    fn handle_optimize_run(
+        &self,
+        _request: SeamOptimizeRunRequest<'_>,
+    ) -> Result<Value, SeamServiceError> {
+        self.called_methods
+            .lock()
+            .unwrap()
+            .push("leaven/optimize.run".to_owned());
+        Err(SeamServiceError::unavailable("leaven/optimize.run"))
+    }
 }
 
 #[derive(Clone, Default)]
@@ -225,6 +315,13 @@ impl SeamService for PlanDocumentRecordingService {
     ) -> Result<Value, SeamServiceError> {
         Err(SeamServiceError::unavailable("leaven/stage.run"))
     }
+
+    fn handle_optimize_run(
+        &self,
+        _request: SeamOptimizeRunRequest<'_>,
+    ) -> Result<Value, SeamServiceError> {
+        Err(SeamServiceError::unavailable("leaven/optimize.run"))
+    }
 }
 
 enum StageRunService {
@@ -248,6 +345,49 @@ impl SeamService for StageRunService {
                 "message": "stage_run_result",
                 "stage": "runner"
             }),
+        })
+    }
+
+    fn handle_optimize_run(
+        &self,
+        _request: SeamOptimizeRunRequest<'_>,
+    ) -> Result<Value, SeamServiceError> {
+        Err(SeamServiceError::unavailable("leaven/optimize.run"))
+    }
+}
+
+enum OptimizeRunService {
+    Valid,
+    Invalid,
+}
+
+impl SeamService for OptimizeRunService {
+    fn handle_plan(&self, request: SeamPlanRequest<'_>) -> Result<Value, SeamServiceError> {
+        Err(SeamServiceError::unavailable(request.method().as_str()))
+    }
+
+    fn handle_stage_run(
+        &self,
+        _request: SeamStageRunRequest<'_>,
+    ) -> Result<Value, SeamServiceError> {
+        Err(SeamServiceError::unavailable("leaven/stage.run"))
+    }
+
+    fn handle_optimize_run(
+        &self,
+        request: SeamOptimizeRunRequest<'_>,
+    ) -> Result<Value, SeamServiceError> {
+        // The request must validate before reaching the service.
+        assert_eq!(request.document().run_id(), "run_optimize");
+        Ok(match self {
+            Self::Valid => optimize_run_result(),
+            // Best candidate not present in the frontier: the runtime must reject
+            // this as an invalid result rather than serialize it.
+            Self::Invalid => {
+                let mut result = optimize_run_result();
+                result["best"]["candidate"] = json!("cand_optimize_phantom");
+                result
+            }
         })
     }
 }
@@ -317,6 +457,60 @@ fn stage_run_result() -> Value {
             "visibility": "optimizer_visible",
             "data_classes": ["candidate.output"]
         }
+    })
+}
+
+fn optimize_run_request() -> Value {
+    json!({
+        "schema_version": "leaven.optimize_run.v1",
+        "message": "optimize_run_request",
+        "run_id": "run_optimize",
+        "seed": optimize_artifact(),
+        "cases": [{
+            "case": "case_optimize_1",
+            "input": {"question": "2 + 2"},
+            "target": {"answer": "4"},
+            "split": "train"
+        }],
+        "optimizer": {
+            "max_metric_calls": 30,
+            "population_size": 4,
+            "objective": "instance"
+        },
+        "reflection": {"kind": "lm", "model": "gpt-5.4-mini"},
+        "capability_fingerprint": "fp_cap_sha256_optimize"
+    })
+}
+
+fn optimize_run_result() -> Value {
+    json!({
+        "schema_version": "leaven.optimize_run.v1",
+        "message": "optimize_run_result",
+        "best": {
+            "candidate": "cand_optimize_child",
+            "parent": "cand_optimize_seed",
+            "score": 0.75,
+            "artifact": optimize_artifact()
+        },
+        "frontier": [{
+            "candidate": "cand_optimize_child",
+            "parent": "cand_optimize_seed",
+            "score": 0.75,
+            "artifact": optimize_artifact()
+        }],
+        "iterations": 1,
+        "metric_calls_used": 12,
+        "cost": {"usd_micro": 1500, "lm_calls": 6},
+        "run": {"run": "run_optimize", "revision": "rev_optimize_final"},
+        "applied_proposals": ["wrec_optimize_batch_1"]
+    })
+}
+
+fn optimize_artifact() -> Value {
+    json!({
+        "artifact_type": "prompt",
+        "artifact_schema": "fp_schema_sha256_prompt",
+        "artifact": {"template": "Answer the question: {{question}}"}
     })
 }
 

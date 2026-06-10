@@ -495,6 +495,10 @@ fn method_primary_kind(method: LockedMethod) -> &'static str {
         LockedMethod::SandboxExec => "sandbox_exec",
         LockedMethod::EventEmit => "emit_run_event",
         LockedMethod::StageRun => "stage_run_text_output",
+        // `optimize.run` is a client->host dispatch with its own result schema; it
+        // never flows through this worker-profile extension-result projection, but
+        // the match stays exhaustive over the locked method table.
+        LockedMethod::OptimizeRun => "optimized_result",
     }
 }
 

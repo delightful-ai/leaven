@@ -53,11 +53,50 @@ pub enum LockedMethod {
     EvaluationRequest,
     /// Run event emission write.
     EventEmit,
+    /// Client-to-host optimization dispatch.
+    OptimizeRun,
 }
 
 impl LockedMethod {
-    /// Locked methods in canonical profile order.
-    pub const ALL: [Self; 25] = [
+    /// Locked methods in canonical order: the 25 worker-profile methods followed
+    /// by the one client-to-host dispatch method.
+    pub const ALL: [Self; 26] = [
+        Self::StageRun,
+        Self::GraphQuery,
+        Self::CaseLoad,
+        Self::CaseInput,
+        Self::CaseTarget,
+        Self::CaseMetadata,
+        Self::WorkspaceMaterialize,
+        Self::WorkspaceSnapshot,
+        Self::WorkspaceList,
+        Self::WorkspaceReadFile,
+        Self::WorkspaceStat,
+        Self::WorkspaceDigest,
+        Self::WorkspaceGitLog,
+        Self::WorkspaceGitDiff,
+        Self::WorkspaceGitStatus,
+        Self::WorkspaceCaptureArtifacts,
+        Self::WorkspaceRelease,
+        Self::LmComplete,
+        Self::AgentRun,
+        Self::SandboxExec,
+        Self::ProposalSubmitBatch,
+        Self::ProposalApply,
+        Self::AssessmentSubmit,
+        Self::EvaluationRequest,
+        Self::EventEmit,
+        Self::OptimizeRun,
+    ];
+
+    /// Worker-profile methods in canonical order.
+    ///
+    /// These are the host<->worker methods the Leaven worker profile advertises:
+    /// the 25-method worker callback surface plus the one `leaven/stage.run`
+    /// dispatch. `OptimizeRun` is deliberately excluded because it is a
+    /// client-to-host dispatch, not a worker callback or a host->worker stage
+    /// dispatch.
+    pub const WORKER_PROFILE: [Self; 25] = [
         Self::StageRun,
         Self::GraphQuery,
         Self::CaseLoad,
@@ -84,6 +123,14 @@ impl LockedMethod {
         Self::EvaluationRequest,
         Self::EventEmit,
     ];
+
+    /// Whether this method is advertised by the host<->worker profile surface.
+    ///
+    /// The client-to-host `OptimizeRun` dispatch is locked but is not a worker
+    /// callback or stage dispatch, so the worker profile never advertises it.
+    pub const fn is_worker_profile_method(self) -> bool {
+        !matches!(self, Self::OptimizeRun)
+    }
 
     /// Parses a locked method name.
     pub fn parse(value: &str) -> Option<Self> {
@@ -113,6 +160,7 @@ impl LockedMethod {
             "leaven/assessment.submit" => Self::AssessmentSubmit,
             "leaven/evaluation.request" => Self::EvaluationRequest,
             "leaven/event.emit" => Self::EventEmit,
+            "leaven/optimize.run" => Self::OptimizeRun,
             _ => return None,
         })
     }
@@ -145,6 +193,7 @@ impl LockedMethod {
             Self::AssessmentSubmit => "leaven/assessment.submit",
             Self::EvaluationRequest => "leaven/evaluation.request",
             Self::EventEmit => "leaven/event.emit",
+            Self::OptimizeRun => "leaven/optimize.run",
         }
     }
 
@@ -175,6 +224,7 @@ impl LockedMethod {
             Self::AssessmentSubmit => MethodAction::AssessmentSubmit,
             Self::EvaluationRequest => MethodAction::EvaluationRequest,
             Self::EventEmit => MethodAction::EventEmit,
+            Self::OptimizeRun => MethodAction::OptimizeRun,
         }
     }
 
@@ -182,6 +232,7 @@ impl LockedMethod {
     pub const fn params_schema(self) -> MethodSchema {
         match self {
             Self::StageRun => MethodSchema::StageRun,
+            Self::OptimizeRun => MethodSchema::OptimizeRun,
             _ => MethodSchema::PlanIr,
         }
     }
@@ -190,6 +241,7 @@ impl LockedMethod {
     pub const fn result_schema(self) -> MethodSchema {
         match self {
             Self::StageRun => MethodSchema::StageRun,
+            Self::OptimizeRun => MethodSchema::OptimizeRun,
             _ => MethodSchema::PlanResult,
         }
     }
@@ -223,6 +275,7 @@ impl LockedMethod {
             Self::AssessmentSubmit => &[MethodPrimaryKind::AssessmentBatchReceipt],
             Self::EvaluationRequest => &[MethodPrimaryKind::EvaluationRequestReceipt],
             Self::EventEmit => &[MethodPrimaryKind::EmitRunEvent],
+            Self::OptimizeRun => &[MethodPrimaryKind::OptimizedResult],
         }
     }
 
@@ -254,6 +307,7 @@ impl LockedMethod {
             Self::AssessmentSubmit => MethodReceiptExpectation::Write("submit_assessments"),
             Self::EvaluationRequest => MethodReceiptExpectation::Write("request_evaluation"),
             Self::EventEmit => MethodReceiptExpectation::Write("emit_run_event"),
+            Self::OptimizeRun => MethodReceiptExpectation::OptimizeRun,
         }
     }
 }
@@ -289,6 +343,8 @@ pub enum MethodAction {
     EvaluationRequest,
     /// `event.emit`
     EventEmit,
+    /// `optimize.run`
+    OptimizeRun,
 }
 
 impl MethodAction {
@@ -309,19 +365,22 @@ impl MethodAction {
             Self::AssessmentSubmit => "assessment.submit",
             Self::EvaluationRequest => "evaluation.request",
             Self::EventEmit => "event.emit",
+            Self::OptimizeRun => "optimize.run",
         }
     }
 }
 
-/// The locked V1 extension-method profile rows, in canonical order.
+/// The locked V1 worker-profile extension-method rows, in canonical order.
 ///
 /// Each row carries the locked `params_schema`/`result_schema` binding, the
 /// `required_action` capability path, and `produces_receipt`, exactly as the
 /// profile validator demands. This is the single source the canonical locked
 /// profile document is assembled from, so the engine client, the bridge, and the
-/// conformance tests stop re-encoding the 25-method table by hand.
+/// conformance tests stop re-encoding the 25-method worker table by hand. The
+/// client-to-host `leaven/optimize.run` dispatch is a locked method but is not a
+/// worker-profile row, so it is excluded here.
 pub(super) fn locked_extension_method_rows() -> Vec<Value> {
-    LockedMethod::ALL
+    LockedMethod::WORKER_PROFILE
         .into_iter()
         .map(|method| {
             json!({
@@ -337,8 +396,9 @@ pub(super) fn locked_extension_method_rows() -> Vec<Value> {
 
 /// Schema bound to a Leaven ACP extension method's params or result.
 ///
-/// The 25 worker callbacks bind the Plan IR schemas, while the one host->worker
-/// stage-dispatch method binds the dedicated stage-run schema.
+/// The 25 worker callbacks bind the Plan IR schemas, the one host->worker
+/// stage-dispatch method binds the dedicated stage-run schema, and the one
+/// client->host optimization dispatch binds the dedicated optimize-run schema.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MethodSchema {
     /// Locked Plan IR request schema (`leaven.plan.v1.schema.json`).
@@ -347,6 +407,8 @@ pub enum MethodSchema {
     PlanResult,
     /// Dedicated stage-run schema (`leaven.stage_run.v1.schema.json`).
     StageRun,
+    /// Dedicated optimize-run schema (`leaven.optimize_run.v1.schema.json`).
+    OptimizeRun,
 }
 
 impl MethodSchema {
@@ -356,6 +418,7 @@ impl MethodSchema {
             Self::PlanIr => "leaven.plan.v1.schema.json",
             Self::PlanResult => "leaven.plan_result.v1.schema.json",
             Self::StageRun => "leaven.stage_run.v1.schema.json",
+            Self::OptimizeRun => "leaven.optimize_run.v1.schema.json",
         }
     }
 }
@@ -395,6 +458,8 @@ pub enum MethodPrimaryKind {
     EvaluationRequestReceipt,
     /// `emit_run_event`
     EmitRunEvent,
+    /// `optimized_result`
+    OptimizedResult,
 }
 
 impl MethodPrimaryKind {
@@ -417,6 +482,7 @@ impl MethodPrimaryKind {
             Self::AssessmentBatchReceipt => "assessment_batch_receipt",
             Self::EvaluationRequestReceipt => "evaluation_request_receipt",
             Self::EmitRunEvent => "emit_run_event",
+            Self::OptimizedResult => "optimized_result",
         }
     }
 
@@ -439,6 +505,7 @@ impl MethodPrimaryKind {
             "assessment_batch_receipt" => Self::AssessmentBatchReceipt,
             "evaluation_request_receipt" => Self::EvaluationRequestReceipt,
             "emit_run_event" => Self::EmitRunEvent,
+            "optimized_result" => Self::OptimizedResult,
             _ => return None,
         })
     }
@@ -449,6 +516,8 @@ impl MethodPrimaryKind {
 pub enum MethodReceiptExpectation {
     /// Stage-run result receipt.
     StageRun,
+    /// Optimize-run result receipt.
+    OptimizeRun,
     /// Query receipt.
     Query,
     /// Call receipt with expected call kind.

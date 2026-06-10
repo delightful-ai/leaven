@@ -3,7 +3,7 @@ use std::fs;
 
 use super::PublicSeamPackage;
 use super::support::backtick_tokens;
-use crate::PublicSeamError;
+use crate::{LockedMethod, PublicSeamError};
 
 /// Locked V1 runtime scope implied by manifest markers.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -194,7 +194,14 @@ impl PublicSeamPackage {
                 source,
             })?;
             for token in backtick_tokens(&contents) {
-                if token.starts_with("leaven/") {
+                // The worker profile only advertises worker callbacks plus the
+                // host->worker stage dispatch. A `leaven/*` token that resolves
+                // to a non-worker-profile locked method (such as the
+                // client->host `leaven/optimize.run` dispatch) must never be
+                // advertised, even when the profile MD mentions it in backticks.
+                if token.starts_with("leaven/")
+                    && LockedMethod::parse(token).is_none_or(LockedMethod::is_worker_profile_method)
+                {
                     methods.insert(token.to_owned());
                 }
                 if token.to_ascii_lowercase().starts_with("mcp/") {

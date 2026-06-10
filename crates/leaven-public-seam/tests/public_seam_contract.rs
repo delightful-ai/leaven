@@ -14,6 +14,8 @@ mod evaluation_job;
 mod evidence_envelope;
 #[path = "public_seam_contract/lm_contract.rs"]
 mod lm_contract;
+#[path = "public_seam_contract/optimize_run.rs"]
+mod optimize_run;
 #[path = "public_seam_contract/output_record.rs"]
 mod output_record;
 #[path = "public_seam_contract/plan_dialects.rs"]

@@ -32,6 +32,7 @@ Codex/agentic public-seam readiness.
 | Method or family | Current service status | Owner | Notes |
 |---|---|---|---|
 | `leaven/stage.run` | Mock-configured and configured local | `leaven-seam-service::stage` | `MockRunner` returns deterministic runner text. `CommandRunner` dispatches a JSON-RPC `leaven/stage.run` request to a configured subprocess worker and services nested worker callbacks while the stage is active; it forwards the validated request unchanged, so scorer dispatch (`ScoreContext` payload, reward-vector result) flows through the same command-worker route. Scorer dispatch is schema-valid and parses through the runtime as of 2026-06-10; configured Python worker serving of the scorer stage lands in a later slice of the same goal. Python SDK `lv.optimize(...).run()` uses this command-worker route for registered runner/proposer mechanics. |
+| `leaven/optimize.run` | Validated-only; service execution unsupported | `leaven-public-seam` wire contract; GEPA host slice owns execution | Client->host optimization dispatch. The contract landed 2026-06-10: the locked `leaven.optimize_run.v1` request/result schema validates through `leaven-public-seam`, and `leaven-seam-runtime` routes `leaven/optimize.run` to the injected service with request validation before dispatch and result validation after. Configured services (`ConfiguredSeamService`, the run-bound graph-effect service) return an explicit method-unavailable/unsupported error today; configured service execution lands with the GEPA host slice of the active production goal. Unlike worker-profile methods, this is a client->host dispatch, not a worker callback or stage dispatch, so the worker profile does not advertise it. |
 | `leaven/lm.complete` | Mock-configured and live-provider configured | `leaven-seam-service::lm` plus provider crates | `Mock` uses `leaven-lm-mock` deterministic scripts. `OpenAi` uses `leaven-lm-openai` and requires the configured API-key environment variable. Missing credentials are an execution failure, not a mock success. |
 | `leaven/workspace.materialize` | Configured local | `leaven-seam-service::service` plus `leaven-workspace-local` | Allocates a local workspace and writes configured seed files. Workspace handles are local to the executing Plan document/callback flow. |
 | `leaven/workspace.release` | Configured local | `leaven-seam-service::service` plus `leaven-workspace-local` | Releases a workspace handle materialized earlier in the same Plan document/callback flow and returns a released workspace handle with receipts. |
@@ -62,6 +63,10 @@ request/response envelopes before and after service calls. No locked V1
 `leaven/*` worker-profile method remains validated-only in the configured
 service.
 
+- `leaven/optimize.run` is validated-only as of 2026-06-10: the client->host
+  contract is locked and routed by the runtime, but configured services return
+  an explicit method-unavailable/unsupported error until the GEPA host slice of
+  the active production goal lands its execution.
 - watch behavior remains deferred to a future V1.x slice
 
 Public-seam contract validators, Plan IR lowering helpers, and representative

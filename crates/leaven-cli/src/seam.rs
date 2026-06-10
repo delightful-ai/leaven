@@ -59,6 +59,7 @@ impl SeamProfileCommand {
 fn receipt_expectation_value(expectation: MethodReceiptExpectation) -> Value {
     match expectation {
         MethodReceiptExpectation::StageRun => json!({"kind": "stage_run"}),
+        MethodReceiptExpectation::OptimizeRun => json!({"kind": "optimize_run"}),
         MethodReceiptExpectation::Query => json!({"kind": "query"}),
         MethodReceiptExpectation::Call(call_kind) => json!({
             "kind": "call",

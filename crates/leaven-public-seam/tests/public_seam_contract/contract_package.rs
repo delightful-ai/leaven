@@ -142,6 +142,22 @@ fn acp_profile_routes_callbacks_without_mcp_negotiation() {
 }
 
 #[test]
+fn acp_extension_methods_exclude_the_client_to_host_optimize_run_dispatch() {
+    // The worker-profile MD mentions `leaven/optimize.run` in backticks because
+    // it documents the client->host dispatch direction, but the scraped worker
+    // extension-method set (fed to `authorize_worker_transport`) must never
+    // advertise it. The worker-callback `leaven/stage.run` dispatch still scrapes.
+    let package = package();
+    let methods = package.acp_extension_methods().unwrap();
+
+    assert!(
+        !methods.contains(&"leaven/optimize.run".to_owned()),
+        "scraped worker extension methods must exclude the client->host optimize.run dispatch"
+    );
+    assert!(methods.contains(&"leaven/stage.run".to_owned()));
+}
+
+#[test]
 fn acp_profile_rejects_mcp_bridge_legacy_worker_protocol_and_watch_runtime() {
     let package = package();
     let scope = package.v1_scope().unwrap();
@@ -538,7 +554,7 @@ fn conformance_matrix_rows_are_unique_honest_and_reference_real_files() {
     let package = package();
     let matrix = package.conformance_matrix().unwrap();
 
-    assert_eq!(matrix.rows.len(), 40);
+    assert_eq!(matrix.rows.len(), 41);
     let proven = matrix
         .proven_rows()
         .into_iter()

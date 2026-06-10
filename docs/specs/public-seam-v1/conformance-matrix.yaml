@@ -1104,6 +1104,66 @@ rows:
     blocked_on: []
     status: in_progress
 
+  - id: ps1.optimize.run_dispatch
+    area: stage_payloads
+    requirement: >
+      Client-to-host optimization dispatch rides one leaven/optimize.run seam
+      method bound to leaven.optimize_run.v1 (request: seed prompt artifact,
+      target-bearing case manifest, optimizer config, reflection config; result:
+      best candidate, frontier, iteration/metric-call counts, cost totals, durable
+      run/revision reference, applied proposal-batch receipts), separate from the
+      worker-profile callbacks and the host->worker stage dispatch.
+    spec_refs:
+      - docs/plans/2026-06-10-gepa-over-seam-design.md
+      - docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
+      - docs/specs/public-seam-v1/executable-method-status.md
+      - docs/specs/public-seam-v1/schemas/leaven.optimize_run.v1.schema.json
+      - docs/specs/public-seam-v1/manifest.json
+    owner_boundary: >
+      public-seam wire-contract owner for the method/schema; the seam runtime routes
+      the locked method to the injected service; the GEPA host owns optimizer
+      strategy and run execution.
+    positive_proof: >
+      A schema-valid optimize.run request (seed artifact record, non-empty
+      target-bearing case manifest, optimizer config with a typed objective,
+      reflection config) validates through the owning seam, and a schema-valid
+      result whose best candidate appears in the frontier validates too. The
+      runtime routes leaven/optimize.run to the injected service with request
+      validation before dispatch and result validation after. Configured service
+      execution of leaven/optimize.run lands with the GEPA host slice of the active
+      production goal (2026-06-10).
+    negative_proof: >
+      An optimize.run request with an empty case manifest, an objective outside the
+      locked enum, a missing case target field, or zero max_metric_calls is
+      rejected, and an optimize.run result whose best candidate is not present in
+      the frontier, that carries a non-finite or non-numeric score, an empty
+      frontier, or a malformed applied-proposal receipt is rejected.
+    fake_pass_rejected: >
+      An optimize.run result claiming a best candidate the frontier never admitted,
+      or an optimize.run dispatch advertised as a worker-profile callback or
+      stage-dispatch method.
+    minimum_closeout_level: semantic_denial
+    partial_contract_test_evidence:
+      - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_validates_request_seed_cases_optimizer_and_reflection
+      - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_validates_result_best_frontier_run_and_receipts
+      - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_parses_all_four_objective_variants
+      - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_rejects_empty_case_manifest
+      - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_rejects_best_not_in_frontier
+      - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_rejects_non_finite_and_non_numeric_scores
+      - crates/leaven-public-seam/tests/public_seam_contract/acp_profile.rs::locked_worker_profile_excludes_the_client_to_host_optimize_run_dispatch
+    partial_contract_implementation_evidence:
+      - crates/leaven-public-seam/src/optimize_run.rs::OptimizeRunRequestDocument
+      - crates/leaven-public-seam/src/optimize_run.rs::OptimizeRunResultDocument
+      - crates/leaven-public-seam/src/optimize_run.rs::OptimizeObjective
+      - crates/leaven-public-seam/src/acp_profile/methods.rs::LockedMethod
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_optimize_run_request_document
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_optimize_run_result_document
+      - crates/leaven-seam-runtime/src/runtime.rs::SeamService
+      - docs/specs/public-seam-v1/schemas/leaven.optimize_run.v1.schema.json
+      - crates/leaven-public-seam/AGENTS.md
+    blocked_on: []
+    status: in_progress
+
   - id: ps1.proposal.surface_authority
     area: proposal
     requirement: Proposal changes are limited to granted surface fingerprints, allowed schemas, allowed effects, and declared causal inputs.

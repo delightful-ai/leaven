@@ -32,7 +32,9 @@ use leaven_public_seam::{
     PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest,
     PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest, PublicSeamError, PublicSeamPackage,
 };
-use leaven_seam_runtime::{SeamPlanRequest, SeamService, SeamServiceError, SeamStageRunRequest};
+use leaven_seam_runtime::{
+    SeamOptimizeRunRequest, SeamPlanRequest, SeamService, SeamServiceError, SeamStageRunRequest,
+};
 use leaven_workspace::{Workspace, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
 use leaven_workspace_local::LocalWorkspaceFactory;
 use serde::{Deserialize, Serialize};
@@ -108,6 +110,15 @@ impl SeamService for ConfiguredSeamService {
             .stage
             .runner_result(request.params(), &mut effects)
             .map_err(|error| SeamServiceError::execution(error.to_string()))
+    }
+
+    fn handle_optimize_run(
+        &self,
+        _request: SeamOptimizeRunRequest<'_>,
+    ) -> Result<Value, SeamServiceError> {
+        // The optimize.run contract is locked, but service execution lands with
+        // the GEPA host slice of the active production goal (2026-06-10).
+        Err(SeamServiceError::unavailable("leaven/optimize.run"))
     }
 }
 

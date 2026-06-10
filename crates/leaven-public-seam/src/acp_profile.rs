@@ -101,10 +101,12 @@ impl AcpProfileDocument {
             .iter()
             .map(|method| method.method)
             .collect::<BTreeSet<_>>();
-        let locked = LockedMethod::ALL.into_iter().collect::<BTreeSet<_>>();
-        if advertised != locked {
+        let worker_profile = LockedMethod::WORKER_PROFILE
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        if advertised != worker_profile {
             return Err(invalid_acp(
-                "ACP profile must advertise exactly the locked Leaven V1 extension methods",
+                "ACP profile must advertise exactly the locked Leaven V1 worker-profile methods",
             ));
         }
         let flow_control = object

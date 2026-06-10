@@ -2,7 +2,8 @@ use std::io::Cursor;
 
 use leaven_public_seam::PublicSeamPackage;
 use leaven_seam_runtime::{
-    SeamPlanRequest, SeamRuntime, SeamService, SeamServiceError, SeamStageRunRequest,
+    SeamOptimizeRunRequest, SeamPlanRequest, SeamRuntime, SeamService, SeamServiceError,
+    SeamStageRunRequest,
 };
 use leaven_seam_stdio::serve_reader_writer;
 use serde_json::{Value, json};
@@ -70,6 +71,13 @@ impl SeamService for RejectingService {
     ) -> Result<Value, SeamServiceError> {
         Err(SeamServiceError::unavailable("leaven/stage.run"))
     }
+
+    fn handle_optimize_run(
+        &self,
+        _request: SeamOptimizeRunRequest<'_>,
+    ) -> Result<Value, SeamServiceError> {
+        Err(SeamServiceError::unavailable("leaven/optimize.run"))
+    }
 }
 
 struct StageRunService;
@@ -84,6 +92,13 @@ impl SeamService for StageRunService {
         _request: SeamStageRunRequest<'_>,
     ) -> Result<Value, SeamServiceError> {
         Ok(stage_run_result())
+    }
+
+    fn handle_optimize_run(
+        &self,
+        _request: SeamOptimizeRunRequest<'_>,
+    ) -> Result<Value, SeamServiceError> {
+        Err(SeamServiceError::unavailable("leaven/optimize.run"))
     }
 }
 

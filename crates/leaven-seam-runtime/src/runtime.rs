@@ -2,11 +2,12 @@ use std::path::Path;
 
 use leaven_public_seam::{
     AcpJsonRpcRequestDocument, AcpProfileDocument, AcpStageRunRequestDocument, LockedMethod,
-    PlanDocument, PublicSeamError, PublicSeamPackage,
+    OptimizeRunRequestDocument, PlanDocument, PublicSeamError, PublicSeamPackage,
 };
 use serde_json::{Number, Value, json};
 
 const STAGE_RUN_METHOD: &str = "leaven/stage.run";
+const OPTIMIZE_RUN_METHOD: &str = "leaven/optimize.run";
 
 /// JSON-RPC error codes emitted by the public-seam runtime.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -143,6 +144,9 @@ impl<S: SeamService> SeamRuntime<S> {
             Ok(ValidatedRequest::StageRun(request)) => {
                 self.handle_stage_run_request(value, request)
             }
+            Ok(ValidatedRequest::OptimizeRun(request)) => {
+                self.handle_optimize_run_request(value, request)
+            }
             Err(error) => error_response(
                 &JsonRpcId::from_request_value(value),
                 error.code,
@@ -156,6 +160,20 @@ impl<S: SeamService> SeamRuntime<S> {
             .get("method")
             .and_then(Value::as_str)
             .ok_or_else(|| RequestError::invalid("JSON-RPC request must carry method"))?;
+        // `leaven/optimize.run` is a client->host dispatch, not a worker-profile
+        // method, so it is gated by the locked method table rather than the worker
+        // profile. Its params are validated as an optimize-run request before
+        // service dispatch.
+        if method == OPTIMIZE_RUN_METHOD {
+            let params = value
+                .get("params")
+                .ok_or_else(|| RequestError::invalid("optimize.run request must carry params"))?;
+            let request = self
+                .package
+                .validate_optimize_run_request_document(params)
+                .map_err(|error| RequestError::from_public_seam(&error))?;
+            return Ok(ValidatedRequest::OptimizeRun(request));
+        }
         if self.profile.method_by_name(method).is_none() {
             return Err(RequestError {
                 code: JsonRpcErrorCode::MethodNotFound,
@@ -246,11 +264,42 @@ impl<S: SeamService> SeamRuntime<S> {
             Err(error) => error_response(&id, error.code(), error.to_string()),
         }
     }
+
+    fn handle_optimize_run_request(
+        &self,
+        value: &Value,
+        request: OptimizeRunRequestDocument,
+    ) -> JsonRpcResponse {
+        let Some(params) = value.get("params") else {
+            return error_response(
+                &JsonRpcId::from_request_value(value),
+                JsonRpcErrorCode::InvalidRequest,
+                "request missing params",
+            );
+        };
+        let id = JsonRpcId::from_request_value(value);
+        let service_request = SeamOptimizeRunRequest {
+            document: request,
+            params,
+        };
+        match self.service.handle_optimize_run(service_request) {
+            Ok(result) => match self.package.validate_optimize_run_result_document(&result) {
+                Ok(_) => JsonRpcResponse {
+                    value: json!({"jsonrpc": "2.0", "id": id.to_value(), "result": result}),
+                },
+                Err(error) => {
+                    error_response(&id, JsonRpcErrorCode::InvalidResult, error.to_string())
+                }
+            },
+            Err(error) => error_response(&id, error.code(), error.to_string()),
+        }
+    }
 }
 
 enum ValidatedRequest {
     Plan(AcpJsonRpcRequestDocument),
     StageRun(AcpStageRunRequestDocument),
+    OptimizeRun(OptimizeRunRequestDocument),
 }
 
 /// A validated Plan IR method request delivered to a [`SeamService`].
@@ -301,6 +350,25 @@ impl<'a> SeamStageRunRequest<'a> {
     }
 }
 
+/// A validated `leaven/optimize.run` request delivered to a [`SeamService`].
+#[derive(Clone, Debug)]
+pub struct SeamOptimizeRunRequest<'a> {
+    document: OptimizeRunRequestDocument,
+    params: &'a Value,
+}
+
+impl<'a> SeamOptimizeRunRequest<'a> {
+    /// Validated optimize-run request document.
+    pub const fn document(&self) -> &OptimizeRunRequestDocument {
+        &self.document
+    }
+
+    /// Validated optimize-run params.
+    pub const fn params(&self) -> &'a Value {
+        self.params
+    }
+}
+
 /// Method family delivered to a [`SeamService`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SeamRequestKind {
@@ -308,6 +376,8 @@ pub enum SeamRequestKind {
     Plan,
     /// Host-to-worker stage dispatch method.
     StageRun,
+    /// Client-to-host optimization dispatch method.
+    OptimizeRun,
 }
 
 /// Runtime owner for validated Leaven public-seam methods.
@@ -322,6 +392,14 @@ pub trait SeamService {
     /// transport serialization.
     fn handle_stage_run(&self, request: SeamStageRunRequest<'_>)
     -> Result<Value, SeamServiceError>;
+
+    /// Handles a validated `leaven/optimize.run` dispatch and returns an
+    /// optimize-run result payload. The runtime validates the returned payload
+    /// before transport serialization.
+    fn handle_optimize_run(
+        &self,
+        request: SeamOptimizeRunRequest<'_>,
+    ) -> Result<Value, SeamServiceError>;
 }
 
 /// A service that exposes the whole seam but implements no method bodies.
@@ -338,6 +416,13 @@ impl SeamService for RejectingSeamService {
         _request: SeamStageRunRequest<'_>,
     ) -> Result<Value, SeamServiceError> {
         Err(SeamServiceError::unavailable(STAGE_RUN_METHOD))
+    }
+
+    fn handle_optimize_run(
+        &self,
+        _request: SeamOptimizeRunRequest<'_>,
+    ) -> Result<Value, SeamServiceError> {
+        Err(SeamServiceError::unavailable(OPTIMIZE_RUN_METHOD))
     }
 }
 

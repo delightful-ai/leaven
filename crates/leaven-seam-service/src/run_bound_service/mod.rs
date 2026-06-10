@@ -13,7 +13,9 @@ use leaven_core::{Assessment, EvaluationRequest, OptimizationProblem, ProposalBa
 use leaven_engine::{ProposalBatchReport, RunContext, RunEvent};
 use leaven_kernel::{Cost, EvaluatorId, Fingerprint, Metered, ProposalBatchId, StageId};
 use leaven_public_seam::LockedMethod;
-use leaven_seam_runtime::{SeamPlanRequest, SeamService, SeamServiceError, SeamStageRunRequest};
+use leaven_seam_runtime::{
+    SeamOptimizeRunRequest, SeamPlanRequest, SeamService, SeamServiceError, SeamStageRunRequest,
+};
 use serde_json::Value;
 
 use crate::configured_extension::extension_result_for_plan_report;
@@ -326,6 +328,21 @@ impl<P: OptimizationProblem> SeamService for RunBoundGraphEffectService<'_, '_, 
         _request: SeamStageRunRequest<'_>,
     ) -> Result<Value, SeamServiceError> {
         Err(SeamServiceError::unavailable("leaven/stage.run"))
+    }
+
+    fn handle_optimize_run(
+        &self,
+        _request: SeamOptimizeRunRequest<'_>,
+    ) -> Result<Value, SeamServiceError> {
+        // The run-bound graph-effect service owns worker callbacks, not the
+        // client->host optimization dispatch; surface its existing unsupported
+        // error variant.
+        Err(SeamServiceError::execution(
+            RunBoundGraphEffectError::UnsupportedMethod {
+                method: "leaven/optimize.run".to_owned(),
+            }
+            .to_string(),
+        ))
     }
 }
 

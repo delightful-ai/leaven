@@ -285,7 +285,7 @@ impl AcpExtensionReceiptFact {
 
     fn matches_expectation(&self, expectation: MethodReceiptExpectation) -> bool {
         match expectation {
-            MethodReceiptExpectation::StageRun => false,
+            MethodReceiptExpectation::StageRun | MethodReceiptExpectation::OptimizeRun => false,
             MethodReceiptExpectation::Query => self.kind == PlanResultReceiptKind::Query,
             MethodReceiptExpectation::Call(call_kind) => {
                 self.kind == PlanResultReceiptKind::Call && self.call_kind() == Some(call_kind)

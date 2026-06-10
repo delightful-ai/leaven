@@ -67,7 +67,16 @@ fn acp_profile_validates_pinned_stdio_leaven_methods_and_bounded_updates() {
 
 #[test]
 fn locked_method_model_carries_schema_action_primary_kind_and_receipt_metadata() {
-    assert_eq!(LockedMethod::ALL.len(), 25);
+    // The locked table is the 25 worker-profile methods plus the one
+    // client->host optimize.run dispatch.
+    assert_eq!(LockedMethod::ALL.len(), 26);
+    assert_eq!(LockedMethod::WORKER_PROFILE.len(), 25);
+    assert!(
+        LockedMethod::WORKER_PROFILE
+            .iter()
+            .all(|method| method.is_worker_profile_method())
+    );
+    assert!(!LockedMethod::OptimizeRun.is_worker_profile_method());
 
     let lm = LockedMethod::LmComplete;
     assert_eq!(lm.as_str(), "leaven/lm.complete");
@@ -90,6 +99,56 @@ fn locked_method_model_carries_schema_action_primary_kind_and_receipt_metadata()
     assert_eq!(
         stage_run.receipt_expectation(),
         MethodReceiptExpectation::StageRun
+    );
+
+    let optimize_run = LockedMethod::OptimizeRun;
+    assert_eq!(optimize_run.as_str(), "leaven/optimize.run");
+    assert_eq!(
+        LockedMethod::parse("leaven/optimize.run"),
+        Some(optimize_run)
+    );
+    assert_eq!(optimize_run.required_action(), MethodAction::OptimizeRun);
+    assert_eq!(optimize_run.required_action().as_str(), "optimize.run");
+    assert_eq!(optimize_run.params_schema(), MethodSchema::OptimizeRun);
+    assert_eq!(optimize_run.result_schema(), MethodSchema::OptimizeRun);
+    assert_eq!(
+        optimize_run.params_schema().schema_file(),
+        "leaven.optimize_run.v1.schema.json"
+    );
+    assert_eq!(
+        optimize_run.primary_kinds(),
+        &[MethodPrimaryKind::OptimizedResult]
+    );
+    assert_eq!(
+        MethodPrimaryKind::OptimizedResult.as_str(),
+        "optimized_result"
+    );
+    assert_eq!(
+        MethodPrimaryKind::parse("optimized_result"),
+        Some(MethodPrimaryKind::OptimizedResult)
+    );
+    assert_eq!(
+        optimize_run.receipt_expectation(),
+        MethodReceiptExpectation::OptimizeRun
+    );
+}
+
+#[test]
+fn locked_worker_profile_excludes_the_client_to_host_optimize_run_dispatch() {
+    let package = package();
+    let profile = package
+        .validate_acp_profile_document(&acp_profile())
+        .unwrap();
+
+    // optimize.run is a locked method but a client->host dispatch, so the worker
+    // profile must not advertise it as a worker callback or stage dispatch.
+    assert!(profile.method(LockedMethod::OptimizeRun).is_none());
+    assert!(profile.method_by_name("leaven/optimize.run").is_none());
+    assert!(
+        !profile
+            .extension_methods()
+            .iter()
+            .any(|method| method.method() == LockedMethod::OptimizeRun)
     );
 }
 

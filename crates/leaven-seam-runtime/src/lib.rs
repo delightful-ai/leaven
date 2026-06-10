@@ -3,7 +3,7 @@
 mod runtime;
 
 pub use runtime::{
-    JsonRpcErrorCode, JsonRpcId, JsonRpcResponse, RejectingSeamService, SeamPlanRequest,
-    SeamRequestKind, SeamRuntime, SeamRuntimeError, SeamService, SeamServiceError,
+    JsonRpcErrorCode, JsonRpcId, JsonRpcResponse, RejectingSeamService, SeamOptimizeRunRequest,
+    SeamPlanRequest, SeamRequestKind, SeamRuntime, SeamRuntimeError, SeamService, SeamServiceError,
     SeamStageRunRequest,
 };

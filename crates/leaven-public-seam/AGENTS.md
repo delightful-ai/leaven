@@ -481,6 +481,33 @@ locked capability invariant that runner/reflector stage-call subjects cannot
 receive target-bearing grants does not extend to scorer subjects: scoring reads
 the case target through capability-gated case access.
 
+Crate-root exports for `OptimizeRunRequestDocument`, `OptimizeRunResultDocument`,
+`OptimizeObjective`, `OptimizeReflection`, `OptimizeSplit`, `OptimizerConfig`,
+`OptimizeCase`, `ArtifactRecord`, `CandidateEntry`, and `OptimizeRunReference`
+are advanced public seam contracts for the client->host optimization-dispatch
+leg. They prove active-schema `leaven.optimize_run.v1` validation for the one
+`leaven/optimize.run` method: a request carries a seed prompt artifact record
+(the same `{artifact_type, artifact_schema, artifact}` triple a proposal
+`create` effect carries), a non-empty target-bearing case manifest, optimizer
+config (a finite `max_metric_calls`, optional population/minibatch sizes, and a
+typed objective parsing all four `instance`/`objective`/`hybrid`/`cartesian`
+variants where `hybrid`/`cartesian` are validate-only at the service layer), and
+a reflection config (`lm` with a model name, or `agentic`). Targets are allowed
+on the case manifest precisely because the document goes to the host, which owns
+target custody; runner stage payloads still never carry targets. A result
+carries the optimized projection: best candidate, frontier, iteration and
+metric-call counts, aggregate cost, the durable run/revision reference, and
+applied proposal-batch receipts. The semantic laws require finite candidate
+scores and that `best` appears in `frontier` (matched by candidate id), so the
+projection cannot claim a best candidate the frontier never admitted.
+`leaven/optimize.run` is a third method direction: it is not a worker->host
+callback or the host->worker stage dispatch, so the worker profile does not
+advertise it (`LockedMethod::is_worker_profile_method` is false for it and
+`LockedMethod::WORKER_PROFILE` excludes it). These are not an optimizer runtime,
+GEPA host, run/checkpoint store, graph mutation route, or worker transport;
+configured service execution of `leaven/optimize.run` lands with the GEPA host
+slice of the active production goal.
+
 Crate-root export `DeferredWatchReplacement` is an advanced public seam
 contract. It proves that the V1 deferred watch marker can route only to a finite
 `consistency.since_revision` event-diff Plan IR document; it is not watch
@@ -632,6 +659,18 @@ backpressure, or runtime watch support.
   stage-run result are all rejected. It does not prove worker transport dispatch
   delivery, stage execution, or reflector/judge stage kinds (deferred to later
   slices).
+- `tests/optimize_run.rs` proves the client->host `leaven/optimize.run` dispatch
+  wire: a schema-valid request (seed artifact record, non-empty target-bearing
+  case manifest with a null-target case, optimizer config with all four typed
+  objectives, and `lm`/`agentic` reflection) and a schema-valid result whose best
+  candidate appears in the frontier validate through
+  `validate_optimize_run_*`. It rejects an empty case manifest, a missing message
+  discriminator, an objective outside the locked enum, zero `max_metric_calls`, a
+  missing case `target` field, a best candidate not present in the frontier, an
+  empty frontier, non-finite/non-numeric scores, and malformed `applied_proposals`
+  receipts. It does not prove an optimizer runtime, GEPA host, run/checkpoint
+  readback, or worker transport; configured service execution lands with the GEPA
+  host slice of the active production goal.
 - `tests/acp_profile.rs` proves locked Leaven worker profile semantics for pinned
   worker-profile version, stdio-first transport preference, Leaven-only seam methods,
   capability-action mapping, locked Plan IR/Plan Result schema bindings,

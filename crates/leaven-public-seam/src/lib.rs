@@ -10,6 +10,7 @@ mod evidence;
 mod execution_authority;
 mod fingerprint;
 mod matrix;
+mod optimize_run;
 mod output;
 mod package;
 mod plan;
@@ -48,6 +49,11 @@ pub use evaluation_job::{
 pub use evidence::EvidenceEnvelopeDocument;
 pub use fingerprint::SchemaFingerprint;
 pub use matrix::{ConformanceMatrix, ConformanceRow, MatrixRowStatus, MinimumCloseoutLevel};
+pub use optimize_run::{
+    ArtifactRecord, CandidateEntry, OptimizeCase, OptimizeObjective, OptimizeReflection,
+    OptimizeRunReference, OptimizeRunRequestDocument, OptimizeRunResultDocument, OptimizeSplit,
+    OptimizerConfig,
+};
 pub use output::{OutputRecordDocument, PublicBlobRef, PublicOutputRecord};
 pub use package::{
     AuthorizedWorkerTransport, ConformanceTestCase, ConformanceTestDenominator,

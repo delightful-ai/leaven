@@ -11,6 +11,7 @@
     "leaven.capability.v1.schema.json",
     "leaven.stage_payloads.v1.schema.json",
     "leaven.stage_run.v1.schema.json",
+    "leaven.optimize_run.v1.schema.json",
     "leaven.evaluation_job.v1.schema.json",
     "leaven.evidence_envelope.v1.schema.json",
     "leaven.acp_profile.v1.schema.json",

@@ -1,0 +1,275 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.leaven.dev/v1/v0.3/leaven.optimize_run.v1.schema.json",
+  "title": "Leaven Optimize Run v1 v0.3",
+  "description": "Client->host optimization dispatch. One leaven/optimize.run method carries a seed prompt artifact record, a target-bearing case manifest, optimizer config, and reflection config as its request, and returns the optimized projection: best candidate, frontier, iteration/metric-call counts, cost totals, the durable run/revision reference, and applied proposal-batch receipts. The host owns target custody for the case manifest; runner stage payloads still never carry targets.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/OptimizeRunRequest"
+    },
+    {
+      "$ref": "#/$defs/OptimizeRunResult"
+    }
+  ],
+  "$defs": {
+    "OptimizeRunRequest": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "leaven.optimize_run.v1"
+        },
+        "message": {
+          "const": "optimize_run_request"
+        },
+        "run_id": {
+          "$ref": "common.schema.json#/$defs/RunId"
+        },
+        "seed": {
+          "$ref": "#/$defs/ArtifactRecord"
+        },
+        "cases": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/OptimizeCase"
+          }
+        },
+        "optimizer": {
+          "$ref": "#/$defs/OptimizerConfig"
+        },
+        "reflection": {
+          "$ref": "#/$defs/ReflectionConfig"
+        },
+        "capability_fingerprint": {
+          "$ref": "common.schema.json#/$defs/CapabilityFingerprint"
+        }
+      },
+      "required": [
+        "schema_version",
+        "message",
+        "run_id",
+        "seed",
+        "cases",
+        "optimizer",
+        "reflection",
+        "capability_fingerprint"
+      ],
+      "additionalProperties": false
+    },
+    "OptimizeRunResult": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "leaven.optimize_run.v1"
+        },
+        "message": {
+          "const": "optimize_run_result"
+        },
+        "best": {
+          "$ref": "#/$defs/CandidateEntry"
+        },
+        "frontier": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/CandidateEntry"
+          }
+        },
+        "iterations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "metric_calls_used": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cost": {
+          "$ref": "common.schema.json#/$defs/Cost"
+        },
+        "run": {
+          "$ref": "#/$defs/RunReference"
+        },
+        "applied_proposals": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^wrec_[A-Za-z0-9_.:-]+$"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "schema_version",
+        "message",
+        "best",
+        "frontier",
+        "iterations",
+        "metric_calls_used",
+        "cost",
+        "run"
+      ],
+      "additionalProperties": false
+    },
+    "ArtifactRecord": {
+      "type": "object",
+      "properties": {
+        "artifact_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifact_schema": {
+          "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+        },
+        "artifact": {
+          "$ref": "common.schema.json#/$defs/JsonValue"
+        }
+      },
+      "required": [
+        "artifact_type",
+        "artifact_schema",
+        "artifact"
+      ],
+      "additionalProperties": false
+    },
+    "OptimizeCase": {
+      "type": "object",
+      "properties": {
+        "case": {
+          "$ref": "common.schema.json#/$defs/CaseId"
+        },
+        "input": {
+          "$ref": "common.schema.json#/$defs/JsonValue"
+        },
+        "target": {
+          "$ref": "common.schema.json#/$defs/JsonValue"
+        },
+        "metadata": {
+          "$ref": "common.schema.json#/$defs/MetadataBag"
+        },
+        "split": {
+          "enum": [
+            "train",
+            "validation",
+            "test"
+          ]
+        }
+      },
+      "required": [
+        "case",
+        "input",
+        "target"
+      ],
+      "additionalProperties": false
+    },
+    "OptimizerConfig": {
+      "type": "object",
+      "properties": {
+        "max_metric_calls": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "population_size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "minibatch_size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "objective": {
+          "enum": [
+            "instance",
+            "objective",
+            "hybrid",
+            "cartesian"
+          ]
+        }
+      },
+      "required": [
+        "max_metric_calls",
+        "objective"
+      ],
+      "additionalProperties": false
+    },
+    "ReflectionConfig": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "lm"
+            },
+            "model": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "kind",
+            "model"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "agentic"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "CandidateEntry": {
+      "type": "object",
+      "properties": {
+        "candidate": {
+          "$ref": "common.schema.json#/$defs/CandidateRef"
+        },
+        "parent": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/CandidateRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "score": {
+          "type": "number"
+        },
+        "artifact": {
+          "$ref": "#/$defs/ArtifactRecord"
+        }
+      },
+      "required": [
+        "candidate",
+        "parent",
+        "score",
+        "artifact"
+      ],
+      "additionalProperties": false
+    },
+    "RunReference": {
+      "type": "object",
+      "properties": {
+        "run": {
+          "$ref": "common.schema.json#/$defs/RunId"
+        },
+        "revision": {
+          "$ref": "common.schema.json#/$defs/GraphRevision"
+        }
+      },
+      "required": [
+        "run",
+        "revision"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
