@@ -4,6 +4,7 @@ mod configured_extension;
 mod git_workspace;
 mod graph_state;
 mod lm;
+mod optimize_run_service;
 mod run_bound_service;
 mod run_context_service;
 mod service;

@@ -1129,19 +1129,32 @@ rows:
       reflection config) validates through the owning seam, and a schema-valid
       result whose best candidate appears in the frontier validates too. The
       runtime routes leaven/optimize.run to the injected service with request
-      validation before dispatch and result validation after. Configured service
-      execution of leaven/optimize.run lands with the GEPA host slice of the active
-      production goal (2026-06-10).
+      validation before dispatch and result validation after. The configured
+      service now executes the real leaven-gepa loop (host slice, 2026-06-10):
+      it lowers the request into the leaven-run builder, dispatches per-case
+      runner and scorer stages to the configured command worker, and projects
+      the durable Optimized result plus GEPA frontier into a revalidated
+      optimize.run result. A deterministic mock-LM + scripted-worker run authors
+      a changed child, applies it through RunContext, re-evaluates it onto the
+      frontier as the best candidate, and reports the exact reference
+      metric-call count.
     negative_proof: >
       An optimize.run request with an empty case manifest, an objective outside the
       locked enum, a missing case target field, or zero max_metric_calls is
       rejected, and an optimize.run result whose best candidate is not present in
       the frontier, that carries a non-finite or non-numeric score, an empty
-      frontier, or a malformed applied-proposal receipt is rejected.
+      frontier, or a malformed applied-proposal receipt is rejected. The
+      configured host also refuses a non-prompt artifact type, the objective,
+      hybrid, and cartesian objectives, the agentic reflection kind, and any
+      population_size/minibatch_size value, each naming what is supported, and
+      refuses a runner-stage leaven/case.target read while serving it (with a
+      receipt) during scorer-stage dispatch.
     fake_pass_rejected: >
       An optimize.run result claiming a best candidate the frontier never admitted,
-      or an optimize.run dispatch advertised as a worker-profile callback or
-      stage-dispatch method.
+      an optimize.run dispatch advertised as a worker-profile callback or
+      stage-dispatch method, or a host that returns best == seed without applying
+      a proposal or re-evaluating the child (the metric-call count would drop
+      below the reference total).
     minimum_closeout_level: semantic_denial
     partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_validates_request_seed_cases_optimizer_and_reflection
@@ -1151,6 +1164,15 @@ rows:
       - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_rejects_best_not_in_frontier
       - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_rejects_non_finite_and_non_numeric_scores
       - crates/leaven-public-seam/tests/public_seam_contract/acp_profile.rs::locked_worker_profile_excludes_the_client_to_host_optimize_run_dispatch
+      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_drives_the_real_gepa_loop_to_a_changed_re_evaluated_child
+      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::runner_stage_refuses_case_target_while_scorer_stage_serves_it
+      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::small_budget_stops_the_loop_with_best_seed_and_truthful_metric_calls
+      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::worker_effect_cost_aggregates_into_result_cost_totals
+      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_refuses_unsupported_objective_naming_instance
+      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_refuses_agentic_reflection
+      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_refuses_unknown_artifact_type
+      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_refuses_population_and_minibatch_size_naming_the_fixed_default
+      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_unavailable_without_configured_stage_worker
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/optimize_run.rs::OptimizeRunRequestDocument
       - crates/leaven-public-seam/src/optimize_run.rs::OptimizeRunResultDocument
@@ -1159,9 +1181,15 @@ rows:
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_optimize_run_request_document
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_optimize_run_result_document
       - crates/leaven-seam-runtime/src/runtime.rs::SeamService
+      - crates/leaven-seam-service/src/optimize_run_service/mod.rs::handle_optimize_run
       - docs/specs/public-seam-v1/schemas/leaven.optimize_run.v1.schema.json
       - crates/leaven-public-seam/AGENTS.md
+      - crates/leaven-seam-service/AGENTS.md
     blocked_on: []
+    # Configured-service execution and the deterministic host loop law landed
+    # (2026-06-10). The row stays in_progress until an adversarial closeout
+    # review signs off ps1.optimize.run_dispatch; promotion to proven requires
+    # that review plus positive/negative/implementation/review evidence fields.
     status: in_progress
 
   - id: ps1.proposal.surface_authority

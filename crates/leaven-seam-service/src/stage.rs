@@ -44,7 +44,15 @@ impl SeamStageConfig {
     }
 }
 
-fn command_runner_result(
+/// Dispatch one `leaven/stage.run` request to a configured subprocess worker.
+///
+/// `params` is the full stage-run params object (`message`/`stage`/`payload`).
+/// Worker-initiated nested callbacks are serviced through `effects` while the
+/// stage is active; the caller scopes `effects` (for example, to refuse
+/// `case.target` reads during runner-stage dispatch). This is the same machinery
+/// the configured runner-stage handler uses, reused by the optimize-run host so
+/// runner and scorer dispatch share one transport path.
+pub fn command_runner_result(
     argv: &[String],
     params: &Value,
     effects: &mut impl FnMut(LockedMethod, &Value) -> Result<Value, PublicSeamError>,

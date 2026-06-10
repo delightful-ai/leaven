@@ -114,16 +114,40 @@ impl SeamService for ConfiguredSeamService {
 
     fn handle_optimize_run(
         &self,
-        _request: SeamOptimizeRunRequest<'_>,
+        request: SeamOptimizeRunRequest<'_>,
     ) -> Result<Value, SeamServiceError> {
-        // The optimize.run contract is locked, but service execution lands with
-        // the GEPA host slice of the active production goal (2026-06-10).
-        Err(SeamServiceError::unavailable("leaven/optimize.run"))
+        crate::optimize_run_service::handle_optimize_run(self, &request)
     }
 }
 
 impl ConfiguredSeamService {
-    fn execute_plan_method(
+    /// Configured stage worker argv, when a command-runner stage is configured.
+    ///
+    /// The optimize.run host dispatches runner/scorer stages to this worker; a
+    /// missing argv is a configuration gap mapped to method-unavailable.
+    pub(crate) fn stage_worker_argv(&self) -> Option<&Vec<String>> {
+        match &self.config.stage {
+            crate::stage::SeamStageConfig::CommandRunner { argv } => Some(argv),
+            _ => None,
+        }
+    }
+
+    /// Builds the configured LM runtime used for optimize.run reflection.
+    pub(crate) fn configured_lm_runtime(
+        &self,
+    ) -> Result<crate::lm::ConfiguredLmRuntime, leaven_lm::LmError> {
+        self.config.lm.to_lm_runtime()
+    }
+
+    /// Root directory under which an optimize.run durable run persists.
+    pub(crate) fn runs_root_for(&self, run_id: &str) -> PathBuf {
+        match &self.config.optimize_runs_root {
+            Some(root) => root.join(run_id),
+            None => leaven_run::default_local_run_dir(leaven_kernel::RunId::new()),
+        }
+    }
+
+    pub(crate) fn execute_plan_method(
         &self,
         method: LockedMethod,
         params: &Value,
@@ -279,6 +303,10 @@ pub struct SeamServiceConfig {
     pub run_context: SeamRunContextConfig,
     /// Configured case records by case id.
     pub cases: BTreeMap<String, SeamCaseRecordConfig>,
+    /// Root directory under which optimize.run runs persist their durable
+    /// checkpoints. When unset, the Leaven-managed `.leaven/runs/<run-id>`
+    /// default is used.
+    pub optimize_runs_root: Option<PathBuf>,
 }
 
 /// Stable execution metadata for one local seam service.
