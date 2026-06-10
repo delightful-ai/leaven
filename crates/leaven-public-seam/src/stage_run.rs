@@ -8,13 +8,15 @@ use crate::{
 
 /// Stage kind dispatched by one generic `leaven/stage.run` call.
 ///
-/// V1 dispatches target-free runner stages and proposer stages. Reflector,
-/// scorer, and judge dispatch lands behind this same generic method as later
+/// V1 dispatches target-free runner stages, scorer stages, and proposer stages.
+/// Reflector and judge dispatch lands behind this same generic method as later
 /// slices wire their stage payloads and outputs.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StageRunKind {
     /// Runner stage: produce a candidate output for a target-free case input.
     Runner,
+    /// Scorer stage: score a candidate output for a case and return a reward vector.
+    Scorer,
     /// Proposer stage: submit a typed proposal batch through nested callbacks.
     Proposer,
 }
@@ -23,6 +25,7 @@ impl StageRunKind {
     fn parse(value: &str) -> Result<Self, PublicSeamError> {
         match value {
             "runner" => Ok(Self::Runner),
+            "scorer" => Ok(Self::Scorer),
             "proposer" => Ok(Self::Proposer),
             other => Err(invalid_stage_run(format!(
                 "unknown stage run kind `{other}`"
@@ -34,6 +37,7 @@ impl StageRunKind {
     const fn payload_role(self) -> StagePayloadRole {
         match self {
             Self::Runner => StagePayloadRole::Runner,
+            Self::Scorer => StagePayloadRole::Scorer,
             Self::Proposer => StagePayloadRole::Proposer,
         }
     }
@@ -42,17 +46,26 @@ impl StageRunKind {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Runner => "runner",
+            Self::Scorer => "scorer",
             Self::Proposer => "proposer",
         }
+    }
+
+    /// Whether a stage result of this kind must carry a reward-vector score.
+    const fn requires_score(self) -> bool {
+        matches!(self, Self::Scorer)
     }
 }
 
 /// Schema-valid `leaven/stage.run` request: a stage kind plus a role-scoped payload.
 ///
-/// The host dispatches one stage to a worker. V1 carries a target-free
-/// `RunnerRequest`; the embedded payload is validated through the same
-/// runner-stage semantic checks as a standalone stage payload, so a stage-run
-/// dispatch cannot smuggle case-target material past the runner-stage guard.
+/// The host dispatches one stage to a worker. V1 carries a runner, scorer, or
+/// proposer payload; the embedded payload is re-validated through the same
+/// role-scoped stage-payload semantic checks as a standalone stage payload, so
+/// the dispatched payload role must match the stage kind. The runner-stage
+/// guard keeps case-target material out of runner dispatch; scorer dispatch
+/// deliberately permits case-target access, which is mediated by capability-
+/// gated case reads rather than the stage-payload guard.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StageRunRequestDocument {
     stage: StageRunKind,
@@ -97,13 +110,99 @@ impl StageRunRequestDocument {
 /// V1 returns a stage `OutputRecord` of kind `text`. The output reuses the
 /// locked `OutputRecord` semantics, so a stage-run result cannot return a
 /// shapeless blob in place of a reportable output.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct StageRunResultDocument {
     stage: StageRunKind,
     stage_call_id: String,
     output: OutputRecordDocument,
+    score: Option<StageScoreFact>,
     effect_receipts: Vec<StageEffectReceipt>,
     proposal_receipts: Vec<StageProposalReceipt>,
+}
+
+/// Reward-vector score returned by a scorer stage dispatch.
+///
+/// The scalar `value` is the collapsed reward, and `rewards` carry the
+/// per-reward vector the optimizer reflects over. Reward and score numbers are
+/// validated finite, so a stage cannot smuggle `NaN`/infinite reward facts.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StageScoreFact {
+    value: f64,
+    rewards: Vec<StageRewardFact>,
+}
+
+impl StageScoreFact {
+    fn from_schema_valid_value(value: &Value) -> Result<Self, PublicSeamError> {
+        let object = value
+            .as_object()
+            .ok_or_else(|| invalid_stage_run("stage run score must be an object"))?;
+        let scalar = required_finite_number(object.get("value"), "score.value")?;
+        let rewards = object
+            .get("rewards")
+            .and_then(Value::as_array)
+            .ok_or_else(|| invalid_stage_run("stage run score must carry a rewards array"))?
+            .iter()
+            .map(StageRewardFact::from_schema_valid_value)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self {
+            value: scalar,
+            rewards,
+        })
+    }
+
+    /// Collapsed scalar score returned by the scorer stage.
+    pub const fn value(&self) -> f64 {
+        self.value
+    }
+
+    /// Per-reward vector backing the collapsed score.
+    pub fn rewards(&self) -> &[StageRewardFact] {
+        &self.rewards
+    }
+}
+
+/// One reward in a scorer-stage reward vector.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StageRewardFact {
+    id: String,
+    value: f64,
+    weight: f64,
+    feedback: Option<String>,
+}
+
+impl StageRewardFact {
+    fn from_schema_valid_value(value: &Value) -> Result<Self, PublicSeamError> {
+        let object = value
+            .as_object()
+            .ok_or_else(|| invalid_stage_run("stage run reward must be an object"))?;
+        Ok(Self {
+            id: required_str(object.get("id"), "score.rewards.id")?.to_owned(),
+            value: required_finite_number(object.get("value"), "score.rewards.value")?,
+            weight: required_finite_number(object.get("weight"), "score.rewards.weight")?,
+            feedback: optional_str(object.get("feedback"), "score.rewards.feedback")?
+                .map(ToOwned::to_owned),
+        })
+    }
+
+    /// Reward id.
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    /// Reward value.
+    pub const fn value(&self) -> f64 {
+        self.value
+    }
+
+    /// Reward weight.
+    pub const fn weight(&self) -> f64 {
+        self.weight
+    }
+
+    /// Optional human-readable reward feedback.
+    pub fn feedback(&self) -> Option<&str> {
+        self.feedback.as_deref()
+    }
 }
 
 /// Effect receipt reported by a worker while producing a stage result.
@@ -423,12 +522,29 @@ impl StageRunResultDocument {
                 "V1 stage run result output must be kind `text`",
             ));
         }
+        let score = object
+            .get("score")
+            .map(StageScoreFact::from_schema_valid_value)
+            .transpose()?;
+        if stage.requires_score() && score.is_none() {
+            return Err(invalid_stage_run(format!(
+                "stage run `{}` result must carry a reward-vector score",
+                stage.as_str()
+            )));
+        }
+        if !stage.requires_score() && score.is_some() {
+            return Err(invalid_stage_run(format!(
+                "stage run `{}` result must not carry a score",
+                stage.as_str()
+            )));
+        }
         let effect_receipts = effect_receipts(object.get("effect_receipts"))?;
         let proposal_receipts = proposal_receipts(object.get("proposal_receipts"))?;
         Ok(Self {
             stage,
             stage_call_id,
             output,
+            score,
             effect_receipts,
             proposal_receipts,
         })
@@ -447,6 +563,14 @@ impl StageRunResultDocument {
     /// Typed stage output returned by the worker.
     pub const fn output(&self) -> &OutputRecordDocument {
         &self.output
+    }
+
+    /// Reward-vector score returned by a scorer stage, if any.
+    ///
+    /// A scorer-stage result always carries a score; runner and proposer results
+    /// never do.
+    pub const fn score(&self) -> Option<&StageScoreFact> {
+        self.score.as_ref()
     }
 
     /// Effect receipts reported by worker callbacks while producing this output.
@@ -591,6 +715,18 @@ fn required_u64(value: Option<&Value>, field: &str) -> Result<u64, PublicSeamErr
     value
         .and_then(Value::as_u64)
         .ok_or_else(|| invalid_stage_run(format!("stage run field `{field}` must be a u64")))
+}
+
+fn required_finite_number(value: Option<&Value>, field: &str) -> Result<f64, PublicSeamError> {
+    let number = value
+        .and_then(Value::as_f64)
+        .ok_or_else(|| invalid_stage_run(format!("stage run field `{field}` must be a number")))?;
+    if !number.is_finite() {
+        return Err(invalid_stage_run(format!(
+            "stage run field `{field}` must be finite"
+        )));
+    }
+    Ok(number)
 }
 
 fn optional_u64(value: Option<&Value>, field: &str) -> Result<Option<u64>, PublicSeamError> {

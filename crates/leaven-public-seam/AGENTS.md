@@ -460,19 +460,26 @@ They are not an agent runtime, LM prompt renderer, ACP delivery path, proposal
 application engine, RunContext graph mutation proof, receipt-store persistence
 proof, or proof that every optimizer/runtime producer emits these payloads.
 
-Crate-root exports for `StageRunRequestDocument`, `StageRunResultDocument`, and
-`StageRunKind` are advanced public seam contracts for the host->worker stage
-dispatch leg. They prove active-schema `leaven.stage_run.v1` validation for the
-one generic `leaven/stage.run` method: a dispatch request carries a stage kind
-plus a role-scoped stage payload, and the embedded payload is re-validated
-through the same runner-stage semantic checks so case-target material cannot
-ride a stage-run dispatch past the runner guard; a dispatch result returns the
-stage's typed `OutputRecord` (V1 minimally a runner-stage text output). This is
-intentionally separate from the Plan IR effect callbacks: `leaven/stage.run`
-binds the stage-run schema in both directions and does not bind Plan IR or Plan
-Result. They are not a worker process implementation, transport dispatch loop,
-stage execution runtime, reward-vector contract, or graph mutation route, and
-V1 dispatches only the target-free runner stage.
+Crate-root exports for `StageRunRequestDocument`, `StageRunResultDocument`,
+`StageRunKind`, `StageScoreFact`, and `StageRewardFact` are advanced public seam
+contracts for the host->worker stage dispatch leg. They prove active-schema
+`leaven.stage_run.v1` validation for the one generic `leaven/stage.run` method: a
+dispatch request carries a stage kind plus a role-scoped stage payload, and the
+embedded payload is re-validated through the same role-scoped stage-payload
+semantic checks so case-target material cannot ride a runner-stage dispatch past
+the runner guard; a dispatch result returns the stage's typed `OutputRecord` (a
+text output). V1 dispatches the target-free runner stage, the scorer stage (a
+`ScoreContext` payload whose result must carry a typed reward-vector
+`StageScoreFact` with finite per-reward values), and the proposer stage; the
+score-presence law refuses scorer results without a reward vector and refuses
+runner/proposer results that smuggle one. This is intentionally separate from
+the Plan IR effect callbacks: `leaven/stage.run` binds the stage-run schema in
+both directions and does not bind Plan IR or Plan Result. They are not a worker
+process implementation, transport dispatch loop, stage execution runtime, or
+graph mutation route; scorer-stage worker serving lands in a later slice. The
+locked capability invariant that runner/reflector stage-call subjects cannot
+receive target-bearing grants does not extend to scorer subjects: scoring reads
+the case target through capability-gated case access.
 
 Crate-root export `DeferredWatchReplacement` is an advanced public seam
 contract. It proves that the V1 deferred watch marker can route only to a finite
@@ -614,12 +621,17 @@ backpressure, or runtime watch support.
   lowering, worker transport, provider calls, proposal graph mutation, or
   independent output-identity truth for arbitrary stage JSON.
 - `tests/stage_run.rs` proves the host->worker `leaven/stage.run` dispatch wire:
-  a schema-valid runner dispatch request (stage kind plus role-scoped payload)
-  and a text-output dispatch result validate through `validate_stage_run_*`,
-  while a request carrying `case.target` material or a non-runner payload role,
-  a non-text result output, and a Plan Result envelope smuggled as a stage-run
-  result are all rejected. It does not prove worker transport dispatch delivery,
-  stage execution, or non-runner stage kinds (deferred to later slices).
+  schema-valid runner, scorer, and proposer dispatch requests (stage kind plus
+  role-scoped payload) and their text-output dispatch results validate through
+  `validate_stage_run_*`. A scorer result carries a typed reward-vector
+  `StageScoreFact`; the score-presence law refuses a scorer result without a
+  reward vector and refuses runner/proposer results that carry one, and refuses
+  wrong-typed or non-finite reward/score numbers. A request carrying
+  `case.target` material or a payload role that does not match the dispatched
+  stage kind, a non-text result output, and a Plan Result envelope smuggled as a
+  stage-run result are all rejected. It does not prove worker transport dispatch
+  delivery, stage execution, or reflector/judge stage kinds (deferred to later
+  slices).
 - `tests/acp_profile.rs` proves locked Leaven worker profile semantics for pinned
   worker-profile version, stdio-first transport preference, Leaven-only seam methods,
   capability-action mapping, locked Plan IR/Plan Result schema bindings,

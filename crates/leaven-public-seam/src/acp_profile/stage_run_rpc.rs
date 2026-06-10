@@ -71,7 +71,7 @@ impl AcpStageRunRequestDocument {
 ///
 /// The result is a stage-run result (a typed stage output), not a Plan Result
 /// extension envelope. The response id must bind the dispatched request id.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AcpStageRunResponseDocument {
     id: String,
     result: StageRunResultDocument,

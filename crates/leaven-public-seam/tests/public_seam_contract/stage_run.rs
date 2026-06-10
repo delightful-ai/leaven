@@ -326,12 +326,180 @@ fn stage_run_result_rejects_non_text_output_and_plan_result_smuggling() {
     ));
 }
 
+#[test]
+fn stage_run_validates_scorer_dispatch_request_and_reward_vector_result() {
+    let package = package();
+
+    let request = package
+        .validate_stage_run_request_document(&scorer_stage_run_request())
+        .unwrap();
+    assert_eq!(request.stage(), StageRunKind::Scorer);
+    assert_eq!(request.stage().as_str(), "scorer");
+    assert_eq!(request.payload().role(), StagePayloadRole::Scorer);
+
+    let result = package
+        .validate_stage_run_result_document(&scorer_stage_run_result())
+        .unwrap();
+    assert_eq!(result.stage(), StageRunKind::Scorer);
+    assert_eq!(result.stage_call_id(), "sc_scorer_stagerun");
+    assert_eq!(result.output().kind(), "text");
+
+    let score = result.score().expect("scorer result must carry a score");
+    assert_exact(score.value(), 0.5);
+    let rewards = score.rewards();
+    assert_eq!(rewards.len(), 2);
+    assert_eq!(rewards[0].id(), "exact_match");
+    assert_exact(rewards[0].value(), 1.0);
+    assert_exact(rewards[0].weight(), 0.5);
+    assert_eq!(rewards[0].feedback(), Some("matched the gold answer"));
+    assert_eq!(rewards[1].id(), "format");
+    assert_exact(rewards[1].value(), 0.0);
+    assert_exact(rewards[1].weight(), 0.5);
+    assert_eq!(rewards[1].feedback(), None);
+}
+
+/// Asserts a parsed reward/score number equals the exact wire value. JSON-decoded
+/// `0.0`/`0.5`/`1.0` are bit-exact, so this catches a dropped or altered reward
+/// without tolerating drift.
+#[track_caller]
+fn assert_exact(actual: f64, expected: f64) {
+    assert!(
+        (actual - expected).abs() < f64::EPSILON,
+        "expected `{expected}`, got `{actual}`"
+    );
+}
+
+#[test]
+fn stage_run_request_rejects_runner_payload_on_scorer_stage() {
+    let package = package();
+
+    let mut wrong_role = scorer_stage_run_request();
+    wrong_role["payload"] = runner_payload();
+    assert!(matches!(
+        package
+            .validate_stage_run_request_document(&wrong_role)
+            .unwrap_err(),
+        PublicSeamError::InvalidStageRun { .. } | PublicSeamError::ExampleValidation { .. }
+    ));
+}
+
+#[test]
+fn stage_run_result_enforces_score_presence_by_stage_kind() {
+    let package = package();
+
+    // A scorer result without a score is refused: scoring without a reward
+    // vector silently drops the optimizer signal.
+    let mut scorer_without_score = scorer_stage_run_result();
+    scorer_without_score
+        .as_object_mut()
+        .unwrap()
+        .remove("score");
+    assert!(matches!(
+        package
+            .validate_stage_run_result_document(&scorer_without_score)
+            .unwrap_err(),
+        PublicSeamError::InvalidStageRun { .. }
+    ));
+
+    // A runner result carrying a score is refused: runner stages must not smuggle
+    // reward vectors.
+    let mut runner_with_score = stage_run_result();
+    runner_with_score["score"] = score_fact();
+    assert!(matches!(
+        package
+            .validate_stage_run_result_document(&runner_with_score)
+            .unwrap_err(),
+        PublicSeamError::InvalidStageRun { .. } | PublicSeamError::ExampleValidation { .. }
+    ));
+
+    // A proposer result carrying a score is likewise refused.
+    let mut proposer_with_score = proposer_stage_run_result();
+    proposer_with_score["score"] = score_fact();
+    assert!(matches!(
+        package
+            .validate_stage_run_result_document(&proposer_with_score)
+            .unwrap_err(),
+        PublicSeamError::InvalidStageRun { .. } | PublicSeamError::ExampleValidation { .. }
+    ));
+}
+
+#[test]
+fn stage_run_result_rejects_wrong_typed_reward_and_score_numbers() {
+    let package = package();
+
+    // A string reward value cannot pass as a number; a scorer cannot smuggle a
+    // non-numeric reward past the typed reward vector.
+    let mut string_reward = scorer_stage_run_result();
+    string_reward["score"]["rewards"][0]["value"] = json!("1.0");
+    assert!(matches!(
+        package
+            .validate_stage_run_result_document(&string_reward)
+            .unwrap_err(),
+        PublicSeamError::InvalidStageRun { .. } | PublicSeamError::ExampleValidation { .. }
+    ));
+
+    // A null collapsed score is not a finite number.
+    let mut non_number_score = scorer_stage_run_result();
+    non_number_score["score"]["value"] = serde_json::Value::Null;
+    assert!(matches!(
+        package
+            .validate_stage_run_result_document(&non_number_score)
+            .unwrap_err(),
+        PublicSeamError::InvalidStageRun { .. } | PublicSeamError::ExampleValidation { .. }
+    ));
+}
+
 fn stage_run_request() -> Value {
     json!({
         "schema_version": "leaven.stage_run.v1",
         "message": "stage_run_request",
         "stage": "runner",
         "payload": runner_payload()
+    })
+}
+
+fn scorer_stage_run_request() -> Value {
+    json!({
+        "schema_version": "leaven.stage_run.v1",
+        "message": "stage_run_request",
+        "stage": "scorer",
+        "payload": score_context_payload()
+    })
+}
+
+fn scorer_stage_run_result() -> Value {
+    json!({
+        "schema_version": "leaven.stage_run.v1",
+        "message": "stage_run_result",
+        "stage": "scorer",
+        "stage_call_id": "sc_scorer_stagerun",
+        "output": {
+            "kind": "text",
+            "summary": "exact match; wrong format",
+            "value": "exact_match: pass\nformat: fail",
+            "visibility": "optimizer_visible",
+            "data_classes": ["candidate.output"]
+        },
+        "score": score_fact()
+    })
+}
+
+fn score_fact() -> Value {
+    json!({
+        "value": 0.5,
+        "rewards": [
+            {
+                "id": "exact_match",
+                "value": 1.0,
+                "weight": 0.5,
+                "feedback": "matched the gold answer"
+            },
+            {
+                "id": "format",
+                "value": 0.0,
+                "weight": 0.5
+            }
+        ]
     })
 }
 
@@ -432,7 +600,7 @@ fn score_context_payload() -> Value {
         "role": "scorer",
         "run": "run_stagerun",
         "stage_call_id": "sc_scorer_stagerun",
-        "evaluation_request_id": "erq_stagerun",
+        "evaluation_request_id": "evalreq_stagerun",
         "candidate": "cand_stagerun_parent",
         "case": "case_stagerun",
         "output": {

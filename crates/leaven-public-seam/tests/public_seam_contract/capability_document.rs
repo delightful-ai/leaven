@@ -192,6 +192,38 @@ fn capability_documents_reject_role_purpose_invariant_violations_at_mint_time() 
         CapabilityDocument::from_value(wrong_evaluation_request),
         "assessment.submit grant must match evaluation_stage_call evaluation_request_id",
     );
+
+    // Scorer stage-call subjects are allowed target-bearing grants: scoring reads
+    // the case target through capability-gated case access, unlike the target-free
+    // runner and reflector stages. The same target-bearing grant that the runner
+    // subject above is refused for must mint for a scorer subject.
+    let mut scorer_target = example_capability(&package);
+    scorer_target["subject"] = json!({
+        "kind": "stage_call",
+        "run": "run_demo",
+        "stage_call_id": "sc_scorer",
+        "role": "scorer"
+    });
+    let scorer_subject_carries_target =
+        scorer_target["grants"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|grant| {
+                let constraints = &grant["constraints"];
+                constraints["case_fields"]
+                    .as_array()
+                    .is_some_and(|fields| fields.iter().any(|f| f == "target"))
+                    || constraints["allowed_input_classes"]
+                        .as_array()
+                        .is_some_and(|classes| classes.iter().any(|c| c == "case.target"))
+            });
+    assert!(
+        scorer_subject_carries_target,
+        "scorer-allowed law must exercise a genuinely target-bearing grant"
+    );
+    CapabilityDocument::from_value(scorer_target)
+        .expect("scorer stage-call subject may receive a target-bearing grant");
 }
 
 #[test]

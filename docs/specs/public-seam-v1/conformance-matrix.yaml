@@ -1066,24 +1066,35 @@ rows:
       The locked Leaven worker profile advertises leaven/stage.run with stage.run capability
       action and the leaven.stage_run.v1 request/result schema binding, and a
       schema-valid runner dispatch request plus a text-output result validate
-      through the owning seam.
+      through the owning seam. A schema-valid scorer dispatch request (ScoreContext
+      payload) plus a result carrying the typed reward-vector score validate too;
+      configured Python worker serving of the scorer stage lands in a later slice
+      of this goal (2026-06-10).
     negative_proof: >
-      A stage-run request carrying case.target material or a non-runner payload
-      role is rejected, and a stage-run result returning a non-text output or a
-      Plan Result envelope is rejected.
+      A stage-run request carrying case.target material or a payload role that
+      does not match the dispatched stage kind is rejected, a stage-run result
+      returning a non-text output or a Plan Result envelope is rejected, a scorer
+      result without a reward-vector score is rejected, and a runner or proposer
+      result that smuggles a score is rejected.
     fake_pass_rejected: >
       A stage dispatch smuggled through a Plan IR effect callback, or a stage-run
       payload accepted by JSON shape without the runner-stage target guard.
     minimum_closeout_level: semantic_denial
     partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/public_seam_contract/stage_run.rs::stage_run_validates_generic_runner_dispatch_request_and_text_result
+      - crates/leaven-public-seam/tests/public_seam_contract/stage_run.rs::stage_run_validates_scorer_dispatch_request_and_reward_vector_result
       - crates/leaven-public-seam/tests/public_seam_contract/stage_run.rs::stage_run_request_rejects_target_material_and_wrong_payload_role
+      - crates/leaven-public-seam/tests/public_seam_contract/stage_run.rs::stage_run_request_rejects_runner_payload_on_scorer_stage
       - crates/leaven-public-seam/tests/public_seam_contract/stage_run.rs::stage_run_result_rejects_non_text_output_and_plan_result_smuggling
+      - crates/leaven-public-seam/tests/public_seam_contract/stage_run.rs::stage_run_result_enforces_score_presence_by_stage_kind
+      - crates/leaven-public-seam/tests/public_seam_contract/stage_run.rs::stage_run_result_rejects_wrong_typed_reward_and_score_numbers
       - crates/leaven-public-seam/tests/public_seam_contract/acp_profile.rs::acp_profile_validates_pinned_stdio_leaven_methods_and_bounded_updates
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/stage_run.rs::StageRunRequestDocument
       - crates/leaven-public-seam/src/stage_run.rs::StageRunResultDocument
       - crates/leaven-public-seam/src/stage_run.rs::StageRunKind
+      - crates/leaven-public-seam/src/stage_run.rs::StageScoreFact
+      - crates/leaven-public-seam/src/stage_run.rs::StageRewardFact
       - crates/leaven-public-seam/src/acp_profile/methods.rs::schema_binding_for_method
       - crates/leaven-public-seam/src/acp_profile/methods.rs::locked_extension_methods
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_stage_run_request_document

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.leaven.dev/v1/v0.3/leaven.stage_run.v1.schema.json",
   "title": "Leaven Stage Run v1 v0.3",
-  "description": "Host->worker stage dispatch. One generic leaven/stage.run method carries a stage kind plus a role-scoped stage payload as its request and returns the stage's typed output. V1 dispatches target-free runner stages and proposer stages that submit proposals through nested leaven/proposal.submit_batch callbacks.",
+  "description": "Host->worker stage dispatch. One generic leaven/stage.run method carries a stage kind plus a role-scoped stage payload as its request and returns the stage's typed output. V1 dispatches target-free runner stages, scorer stages that read the scored case through capability-gated case access and return a reward vector, and proposer stages that submit proposals through nested leaven/proposal.submit_batch callbacks.",
   "oneOf": [
     {
       "$ref": "#/$defs/StageRunRequest"
@@ -24,6 +24,7 @@
         "stage": {
           "enum": [
             "runner",
+            "scorer",
             "proposer"
           ]
         },
@@ -31,6 +32,9 @@
           "oneOf": [
             {
               "$ref": "leaven.stage_payloads.v1.schema.json#/$defs/RunnerRequest"
+            },
+            {
+              "$ref": "leaven.stage_payloads.v1.schema.json#/$defs/ScoreContext"
             },
             {
               "$ref": "leaven.stage_payloads.v1.schema.json#/$defs/ProposeRequest"
@@ -58,6 +62,7 @@
         "stage": {
           "enum": [
             "runner",
+            "scorer",
             "proposer"
           ]
         },
@@ -66,6 +71,9 @@
         },
         "output": {
           "$ref": "common.schema.json#/$defs/OutputRecord"
+        },
+        "score": {
+          "$ref": "#/$defs/StageScoreFact"
         },
         "effect_receipts": {
           "type": "array",
@@ -188,6 +196,49 @@
       "required": [
         "method",
         "receipt"
+      ],
+      "additionalProperties": false
+    },
+    "StageRewardFact": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": "number"
+        },
+        "weight": {
+          "type": "number"
+        },
+        "feedback": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "value",
+        "weight"
+      ],
+      "additionalProperties": false
+    },
+    "StageScoreFact": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "rewards": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StageRewardFact"
+          }
+        }
+      },
+      "required": [
+        "value",
+        "rewards"
       ],
       "additionalProperties": false
     }

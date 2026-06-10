@@ -56,7 +56,7 @@ availability for `leaven seam serve --stdio` is recorded in
 `../executable-method-status.md`; do not infer service readiness only from a
 method being present in this profile.
 
-Stage dispatch (engine to worker): `leaven/stage.run`. The engine dispatches one stage to the worker as a single generic method carrying a stage kind plus a role-scoped stage payload, and the worker returns that stage's typed output. This is the inverse direction from the callbacks below: here the engine asks the worker to run a stage rather than the worker asking the engine to perform an effect. `leaven/stage.run` binds the dedicated `leaven.stage_run.v1` request and result schemas, not the Plan IR effect schemas the callbacks use.
+Stage dispatch (engine to worker): `leaven/stage.run`. The engine dispatches one stage to the worker as a single generic method carrying a stage kind plus a role-scoped stage payload, and the worker returns that stage's typed output. V1 dispatches the target-free runner stage, the scorer stage (which reads the scored case through capability-gated case access and returns a typed reward-vector score alongside its text output), and the proposer stage. This is the inverse direction from the callbacks below: here the engine asks the worker to run a stage rather than the worker asking the engine to perform an effect. `leaven/stage.run` binds the dedicated `leaven.stage_run.v1` request and result schemas, not the Plan IR effect schemas the callbacks use.
 
 Graph operations: `leaven/graph.query`, `leaven/case.load`, `leaven/case.input`, `leaven/case.target`, `leaven/case.metadata`.
 

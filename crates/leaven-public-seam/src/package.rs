@@ -532,8 +532,11 @@ impl PublicSeamPackage {
     ///
     /// This is the host->worker stage-dispatch leg of the locked ACP profile: one
     /// generic method carrying a stage kind plus a role-scoped payload. The
-    /// embedded payload is re-validated through the runner-stage semantic checks
-    /// so target material cannot ride a stage-run dispatch past the runner guard.
+    /// embedded payload is re-validated through the role-scoped (runner, scorer,
+    /// or proposer) stage-payload semantic checks, so the dispatched payload role
+    /// must match the stage kind. The runner-stage guard keeps target material
+    /// out of runner dispatch; scorer dispatch legitimately reads `case.target`
+    /// under capability-gated case access, not as a stage-payload leak.
     pub fn validate_stage_run_request_document(
         &self,
         value: &Value,
@@ -548,9 +551,11 @@ impl PublicSeamPackage {
 
     /// Validates a `leaven/stage.run` dispatch result through the active V1 stage-run schema.
     ///
-    /// V1 returns a runner-stage `OutputRecord` of kind `text`; the output reuses
-    /// the locked output-record semantics, so a stage-run result cannot return a
-    /// shapeless payload in place of a reportable stage output.
+    /// V1 returns the dispatched stage's `OutputRecord` of kind `text` for runner,
+    /// scorer, and proposer stages; the output reuses the locked output-record
+    /// semantics, so a stage-run result cannot return a shapeless payload in place
+    /// of a reportable stage output. A scorer result additionally carries a typed
+    /// reward-vector score, which runner and proposer results must not carry.
     pub fn validate_stage_run_result_document(
         &self,
         value: &Value,
