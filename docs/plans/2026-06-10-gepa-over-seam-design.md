@@ -66,27 +66,36 @@ lv.optimize(...).run()
 lv.runs.open / inspect ─────► Rust-owned readback (proven path)
 ```
 
-### New crate: `crates/leaven-gepa-seam`
+### Host: `optimize_run_service` module in `leaven-seam-service`
 
-Bridge crate in the existing `leaven-gepa-agentic-*` pattern. It composes the
-real `leaven-gepa` optimizer with seam-dispatched worker stages:
+**Amended 2026-06-10 after grounding (originally a new `leaven-gepa-seam`
+crate).** The host needs no new crate and no new traits: `leaven-run`'s
+builder already IS the loop (`optimize(seed).train(...).runner(closure)
+.score(closure).using(gepa).budget(...).run()` drives
+`Engine::run_iterations` → `Gepa::step`, with checkpoints per iteration —
+exactly how p8 runs). The seam host is therefore *configured composition*,
+which is `leaven-seam-service`'s stated mandate, in the same crate that
+already owns the private `CommandRunner` worker-dispatch machinery and the
+`SeamTextProblem` precedent for in-crate problem types:
 
-- `WorkerRunner` / `WorkerRubric`: bridge impls that satisfy the leaven-run /
-  engine evaluation seams by dispatching `leaven/stage.run` to the configured
-  `CommandRunner` worker and lowering results (output records, reward vectors,
-  effect receipts) into engine vocabulary.
-- Problem bindings: prompt (`PromptArtifact` + its edit surface — the V1 wire
-  artifact) and agent-kit (composing `leaven-gepa-agentic-agent-kit` +
-  `leaven-agentic::AgenticProposer`, which already implements
-  `GepaReflector<P, S>`).
-- It must **not** own: GEPA search policy (stays in `leaven-gepa`), wire schema
-  law (stays in `leaven-public-seam`), transport (stays in `leaven-seam-stdio`),
-  provider protocols (stay in `leaven-lm-*` / `leaven-agent-*`), graph mutation
-  (stays behind `RunContext`).
-
-`leaven-seam-service` gains the `leaven/optimize.run` handler that lowers the
-public request into this host. Optimizer strategy state stays out of
-`leaven-seam-service` per its boundary; it only configures and invokes.
+- Worker-dispatching closures satisfying leaven-run's existing `Runner` /
+  `Scorer` closure seams: runner dispatches a `runner` stage over
+  `leaven/stage.run` to the configured worker argv; scorer dispatches a
+  `scorer` stage and lowers the typed `StageScoreFact` reward vector into the
+  engine `Score`. Worker callbacks (`leaven/lm.complete`, capability-gated
+  `leaven/case.target` during scorer stages only) are serviced by the host.
+- Prompt problem binding in-module (`SeamPromptArtifact` + single-part
+  `EditSurface`), following the `SeamTextProblem` precedent. Promotion to a
+  `leaven-artifact-prompt` crate is deliberate future work once a second
+  consumer exists; the legacy `leaven-acp-stage-bridge::PromptArtifact` is
+  not a dependency target for new public behavior.
+- `handle_optimize_run` lowers the validated request into the leaven-run
+  builder with a `Gepa::reflect_with_lm(...)` reflector and projects
+  `RunResult` + frontier into `OptimizeRunResultDocument`.
+- New dependency edge: `leaven-seam-service` → `leaven-gepa` (composition,
+  like configured LM providers). GEPA search policy stays in `leaven-gepa`;
+  wire law stays in `leaven-public-seam`; graph mutation stays behind
+  `RunContext`.
 
 ### Wire contract revisions (deliberate locked-V1 changes)
 
