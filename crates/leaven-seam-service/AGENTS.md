@@ -61,8 +61,14 @@ method unsupported.
   mutation stays behind `RunContext` through the `leaven-run` builder. The
   `prompt` artifact type, `instance` objective, and `lm` reflection kind are the
   executable V1 surface; every other config value is refused with a message
-  naming what is supported (population_size/minibatch_size are refused because
-  V1 uses the fixed per-case Pareto frontier and reference minibatch). The
+  naming what is supported. `population_size` lowers into the GEPA candidate-pool
+  cap (`Gepa::max_candidates`) as a stop condition over the seed plus
+  loop-authored children, and `minibatch_size` lowers into the GEPA train
+  screening minibatch override (`Gepa::train_minibatch_size`, applied after
+  `with_profile` and order-independent). A service law refuses `population_size`
+  of 1 naming the `>= 2` bound (a cap of 1 admits only the seed); the wire schema
+  enforces `>= 1`, so the `>= 2` bound is service-layer law, like `objective` !=
+  `instance`. The
   `applied_proposals` receipts are opaque service-issued `wrec_` ids bound 1:1
   to the run's durable candidate-apply records; they name graph truth, not
   inline writes.

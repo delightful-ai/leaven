@@ -45,6 +45,37 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         leaven_engine::StepStatus::Stopped(leaven_engine::StopReason::BudgetReached)
     }
 
+    pub(super) fn finish_for_candidate_cap_stop(&mut self) -> leaven_engine::StepStatus
+    where
+        Pop: GepaPopulation,
+    {
+        self.best = self
+            .validation_best
+            .as_ref()
+            .map(|best| best.candidate)
+            .or_else(|| self.reference_state.best_candidate())
+            .or_else(|| self.population.best());
+        let best = self
+            .best
+            .and_then(|candidate| self.reference_state.index_of(candidate));
+        self.record_event(GepaEventSummary::OptimizationEnded { best });
+        self.emit_report();
+        leaven_engine::StepStatus::Stopped(leaven_engine::StopReason::CandidateCapReached)
+    }
+
+    /// Whether the graph's total spawned candidate count (seed plus every
+    /// loop-authored child, accepted or rejected) has reached the configured
+    /// candidate-pool cap. The graph candidate count is the truthful counter:
+    /// every authored child is a graph candidate, while a skipped proposal that
+    /// never authors a child does not move it.
+    pub(super) fn candidate_cap_reached<P>(&self, ctx: &RunContext<'_, P>) -> bool
+    where
+        P: OptimizationProblem,
+    {
+        self.max_candidates
+            .is_some_and(|cap| ctx.graph().candidate_count() >= cap.get())
+    }
+
     pub(super) fn finish_for_engine_stop(&mut self)
     where
         Pop: GepaPopulation,
@@ -132,6 +163,11 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             self.observe_train_candidate(ctx, parent, &parent_screening);
         }
         for _ in 0..self.proposal_count {
+            // Honor the candidate-pool cap inside the iteration: once an
+            // authored child reaches the cap, do not author further proposals.
+            if self.candidate_cap_reached(ctx) {
+                break;
+            }
             self.process_proposal(
                 ctx,
                 parent,

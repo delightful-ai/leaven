@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::num::NonZeroUsize;
 
 use leaven_eval::Case;
 use leaven_kernel::CaseId;
@@ -40,6 +41,12 @@ pub(super) struct LoweredRequest {
     /// scorer-stage target custody.
     pub(super) cases_by_id: BTreeMap<CaseId, LoweredCase>,
     pub(super) max_metric_calls: u64,
+    /// Candidate-pool cap: caps the seed plus loop-authored children. `None`
+    /// leaves the GEPA loop unbounded (reference behavior).
+    pub(super) max_candidates: Option<NonZeroUsize>,
+    /// Train screening minibatch override. `None` keeps the profile-fixed
+    /// reference minibatch.
+    pub(super) train_minibatch_size: Option<NonZeroUsize>,
     pub(super) reflection_model: String,
     pub(super) capability_fingerprint: String,
 }
@@ -48,7 +55,7 @@ pub(super) fn lower_request(
     document: &OptimizeRunRequestDocument,
 ) -> Result<LoweredRequest, OptimizeRunHostError> {
     let seed = lower_seed(document.seed())?;
-    let max_metric_calls = lower_optimizer(document.optimizer())?;
+    let optimizer = lower_optimizer(document.optimizer())?;
     let reflection_model = lower_reflection(document.reflection())?;
 
     let mut train = Vec::new();
@@ -82,10 +89,19 @@ pub(super) fn lower_request(
         validation,
         test,
         cases_by_id,
-        max_metric_calls,
+        max_metric_calls: optimizer.max_metric_calls,
+        max_candidates: optimizer.max_candidates,
+        train_minibatch_size: optimizer.train_minibatch_size,
         reflection_model,
         capability_fingerprint: document.capability_fingerprint().to_owned(),
     })
+}
+
+/// Optimizer knobs lowered from the locked request into executable host config.
+struct LoweredOptimizer {
+    max_metric_calls: u64,
+    max_candidates: Option<NonZeroUsize>,
+    train_minibatch_size: Option<NonZeroUsize>,
 }
 
 fn lower_seed(seed: &ArtifactRecord) -> Result<SeamPromptArtifact, OptimizeRunHostError> {
@@ -107,7 +123,7 @@ fn lower_seed(seed: &ArtifactRecord) -> Result<SeamPromptArtifact, OptimizeRunHo
     Ok(SeamPromptArtifact::new(template))
 }
 
-fn lower_optimizer(optimizer: &OptimizerConfig) -> Result<u64, OptimizeRunHostError> {
+fn lower_optimizer(optimizer: &OptimizerConfig) -> Result<LoweredOptimizer, OptimizeRunHostError> {
     match optimizer.objective() {
         OptimizeObjective::Instance => {}
         other => {
@@ -117,21 +133,43 @@ fn lower_optimizer(optimizer: &OptimizerConfig) -> Result<u64, OptimizeRunHostEr
             )));
         }
     }
-    // GEPA's reference frontier is a per-case Pareto frontier and its minibatch
-    // is fixed by the strategy profile; the wire's `population_size` and
-    // `minibatch_size` map to no executable host knob in V1, so they are
-    // refused rather than silently ignored.
-    if optimizer.population_size().is_some() {
+    Ok(LoweredOptimizer {
+        max_metric_calls: optimizer.max_metric_calls(),
+        max_candidates: lower_population_size(optimizer.population_size())?,
+        train_minibatch_size: lower_minibatch_size(optimizer.minibatch_size()),
+    })
+}
+
+/// Lowers `population_size` into the GEPA candidate-pool cap.
+///
+/// The wire schema already guarantees `population_size >= 1`. The service adds a
+/// tighter law: the cap counts the seed plus loop-authored children, so a cap of
+/// 1 admits only the seed and can never author a child. That is a no-op
+/// optimization request, so it is refused naming the `>= 2` bound. Absent
+/// `population_size` leaves the loop unbounded (reference behavior).
+fn lower_population_size(
+    population_size: Option<u64>,
+) -> Result<Option<NonZeroUsize>, OptimizeRunHostError> {
+    let Some(size) = population_size else {
+        return Ok(None);
+    };
+    if size < 2 {
         return Err(OptimizeRunHostError::unsupported(
-            "optimizer.population_size is not executable; V1 uses the fixed per-case Pareto frontier and omits population_size",
+            "optimizer.population_size must be at least 2; a cap of 1 admits only the seed and can never author a child",
         ));
     }
-    if optimizer.minibatch_size().is_some() {
-        return Err(OptimizeRunHostError::unsupported(
-            "optimizer.minibatch_size is not executable; V1 uses the fixed reference train minibatch and omits minibatch_size",
-        ));
-    }
-    Ok(optimizer.max_metric_calls())
+    Ok(NonZeroUsize::new(
+        usize::try_from(size).unwrap_or(usize::MAX),
+    ))
+}
+
+/// Lowers `minibatch_size` into the GEPA train screening minibatch override.
+///
+/// The wire schema already guarantees `minibatch_size >= 1`, so any present
+/// value is a valid override. Absent `minibatch_size` keeps the profile-fixed
+/// reference minibatch.
+fn lower_minibatch_size(minibatch_size: Option<u64>) -> Option<NonZeroUsize> {
+    minibatch_size.and_then(|size| NonZeroUsize::new(usize::try_from(size).unwrap_or(usize::MAX)))
 }
 
 fn lower_reflection(reflection: &OptimizeReflection) -> Result<String, OptimizeRunHostError> {

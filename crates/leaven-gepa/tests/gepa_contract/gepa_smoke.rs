@@ -10,11 +10,11 @@ use leaven_core::{
     ProposalBatch, ProposalBatchSemantics, ResolvedEvaluationRequest, ResolvedRequestKind,
 };
 use leaven_engine::{
-    BudgetLedger, CachePolicy, CaseSet, CheckpointContext, CheckpointableOptimizer, Engine,
-    EvaluationCache, EvaluationContext, EvaluationError, Evaluator, GraphSnapshotRef, Optimizer,
-    OptimizerStateReader, PrivateStatePolicy, ProposalContext, ProposalError, Proposer,
-    RestoreContext, RestoredRunState, RunCheckpoint, RunContext, RunGraph, RunPersistenceError,
-    StateFormat, StopReason, TrustPolicy,
+    BudgetLedger, CachePolicy, Callback, CaseSet, CheckpointContext, CheckpointableOptimizer,
+    Engine, EvaluationCache, EvaluationContext, EvaluationError, Evaluator, GraphSnapshotRef,
+    Optimizer, OptimizerStateReader, PrivateStatePolicy, ProposalContext, ProposalError, Proposer,
+    RestoreContext, RestoredRunState, RunCheckpoint, RunContext, RunEvent, RunGraph, RunGraphView,
+    RunPersistenceError, StateFormat, StopReason, TrustPolicy,
 };
 use leaven_evidence::{
     CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence, OutputRecord, ScalarEvidence,
@@ -867,6 +867,233 @@ fn train_accepted_child_without_validation_is_not_reference_admitted() {
         }));
         assert_eq!(gepa.population().best(), Some(child));
     });
+}
+
+/// Records every engine stop reason so a cap-stop law can prove the loop ended
+/// for the candidate-pool cap rather than another reason.
+struct StopReasonRecorder {
+    reasons: Arc<Mutex<Vec<StopReason>>>,
+}
+
+impl Callback<SamplingProblem> for StopReasonRecorder {
+    fn on_event(&mut self, event: &RunEvent, _graph: RunGraphView<'_, SamplingProblem>) {
+        if let RunEvent::OptimizationStopping { reason } = event {
+            self.reasons
+                .lock()
+                .expect("stop reasons lock")
+                .push(*reason);
+        }
+    }
+}
+
+#[test]
+fn candidate_pool_cap_stops_the_loop_when_the_seed_plus_one_child_is_reached() {
+    block_on(async {
+        let case_set = train_case_set();
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
+        let reasons = Arc::new(Mutex::new(Vec::new()));
+        let mut engine = Engine::<SamplingProblem>::builder()
+            // A constant non-perfect score means every iteration authors a fresh
+            // child (rejected, but spawned into the graph), so without the cap
+            // the loop would keep authoring children up to `max_iterations`.
+            .evaluator(ConstantScoreEvaluator)
+            .callback(StopReasonRecorder {
+                reasons: reasons.clone(),
+            })
+            .build();
+        let seed = engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            improved_reflector(),
+        )
+        .reflective_dataset(OneReflectiveExample)
+        .batch_sampler(EpochShuffled::new(1))
+        .validation_policy(MinibatchThenValidation)
+        .skip_perfect_score(false)
+        .max_iterations(5)
+        .max_candidates(std::num::NonZeroUsize::new(2).unwrap());
+
+        engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        // The graph holds exactly the seed and one authored child: the cap is a
+        // stop over total spawned candidates, not a frontier-size limit.
+        assert_eq!(
+            engine.view().candidate_count(),
+            2,
+            "the candidate-pool cap stops the loop at seed + one child"
+        );
+        let children = engine.view().candidate_tree().children(seed);
+        assert_eq!(children.len(), 1, "no further proposals beyond the cap");
+
+        // The loop stopped for the candidate cap, named truthfully.
+        assert_eq!(
+            reasons.lock().expect("stop reasons lock").as_slice(),
+            &[StopReason::CandidateCapReached],
+            "the loop must stop with the candidate-cap reason"
+        );
+
+        // Exactly one proposal attempt ran: the cap suppressed every later one.
+        assert_eq!(gepa.report().proposal_attempts.len(), 1);
+    });
+}
+
+#[test]
+fn absent_candidate_cap_preserves_reference_behavior_bit_for_bit() {
+    block_on(async {
+        // Two GEPA values over identical inputs: one with no cap, one with a cap
+        // larger than any candidate the run can author. Their candidate counts,
+        // metric calls, and reports must match: the cap is inert above the pool.
+        let run = |max_candidates: Option<std::num::NonZeroUsize>| async move {
+            let case_set = train_case_set();
+            let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
+            let mut engine = Engine::<SamplingProblem>::builder()
+                .evaluator(PrefixImprovementEvaluator)
+                .build();
+            let seed = engine
+                .insert_seed(
+                    PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                    0,
+                )
+                .unwrap();
+            let gepa = Gepa::new(
+                PartMapSurface,
+                ParetoFrontier::by_case().build(),
+                improved_reflector(),
+            )
+            .reflective_dataset(OneReflectiveExample)
+            .batch_sampler(EpochShuffled::new(1))
+            .validation_policy(MinibatchThenValidation)
+            .max_iterations(1);
+            let mut gepa = match max_candidates {
+                Some(cap) => gepa.max_candidates(cap),
+                None => gepa,
+            };
+            engine.run(&mut gepa, &case_set, &store).await.unwrap();
+            (
+                engine.view().candidate_count(),
+                gepa.reference_state().total_metric_calls(),
+                gepa.report().proposal_attempts.len(),
+                seed,
+            )
+        };
+
+        let baseline = run(None).await;
+        let with_high_cap = run(std::num::NonZeroUsize::new(1000)).await;
+
+        assert_eq!(
+            baseline.0, with_high_cap.0,
+            "an unreachable cap must not change the spawned candidate count"
+        );
+        assert_eq!(
+            baseline.1, with_high_cap.1,
+            "an unreachable cap must not change metric-call accounting"
+        );
+        assert_eq!(
+            baseline.2, with_high_cap.2,
+            "an unreachable cap must not change proposal attempts"
+        );
+    });
+}
+
+#[test]
+fn train_minibatch_override_changes_parent_and_child_screening_cost() {
+    block_on(async {
+        let run = |minibatch: Option<std::num::NonZeroUsize>| {
+            // Disjoint TRAIN (3 cases) / VALIDATION (1 case) so the screening
+            // minibatch size is the only thing moving the metric-call count.
+            let case_set = CaseSet::new(vec![(), (), (), ()])
+                .with_partition(
+                    leaven_core::PartitionId::from("TRAIN"),
+                    vec![
+                        leaven_kernel::CaseId::new(0),
+                        leaven_kernel::CaseId::new(1),
+                        leaven_kernel::CaseId::new(2),
+                    ],
+                )
+                .with_partition(
+                    leaven_core::PartitionId::from("VALIDATION"),
+                    vec![leaven_kernel::CaseId::new(3)],
+                );
+            let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
+            async move {
+                let mut engine = Engine::<SamplingProblem>::builder()
+                    .evaluator(PrefixImprovementEvaluator)
+                    .build();
+                engine
+                    .insert_seed(
+                        PartMapArtifact(BTreeMap::from([(
+                            "answer".to_owned(),
+                            "draft".to_owned(),
+                        )])),
+                        0,
+                    )
+                    .unwrap();
+                let gepa = Gepa::new(
+                    PartMapSurface,
+                    ParetoFrontier::by_case().build(),
+                    improved_reflector(),
+                )
+                .reflective_dataset(OneReflectiveExample)
+                .with_profile(GepaProfile::OptimizeAnything);
+                let mut gepa = match minibatch {
+                    Some(size) => gepa.train_minibatch_size(size),
+                    None => gepa,
+                }
+                .max_iterations(1);
+                engine.run(&mut gepa, &case_set, &store).await.unwrap();
+                gepa.reference_state().total_metric_calls()
+            }
+        };
+
+        // Profile default minibatch 3: 1 seed validation + 3 parent + 3 child +
+        // 1 child validation = 8.
+        let default_calls = run(None).await;
+        assert_eq!(
+            default_calls, 8,
+            "OptimizeAnything minibatch 3 screens parent and child on 3 train cases each"
+        );
+
+        // Minibatch override 1: 1 seed + 1 parent + 1 child + 1 child validation = 4.
+        let override_calls = run(std::num::NonZeroUsize::new(1)).await;
+        assert_eq!(
+            override_calls, 4,
+            "minibatch override 1 screens parent and child on a single train case each"
+        );
+    });
+}
+
+#[test]
+fn train_minibatch_override_survives_a_later_profile_application() {
+    // Applying a profile after an explicit minibatch override must not reset the
+    // minibatch to the profile default: the override is order-independent.
+    let override_first = Gepa::new(
+        PartMapSurface,
+        ParetoFrontier::by_case().build(),
+        improved_reflector(),
+    )
+    .train_minibatch_size(std::num::NonZeroUsize::new(1).unwrap())
+    .with_profile(GepaProfile::OptimizeAnything);
+
+    let profile_first = Gepa::new(
+        PartMapSurface,
+        ParetoFrontier::by_case().build(),
+        improved_reflector(),
+    )
+    .with_profile(GepaProfile::OptimizeAnything)
+    .train_minibatch_size(std::num::NonZeroUsize::new(1).unwrap());
+
+    // Both orders report the overridden minibatch, not the profile's fixed 3.
+    assert_eq!(
+        override_first.report().profile.train_minibatch_size,
+        Some(1)
+    );
+    assert_eq!(profile_first.report().profile.train_minibatch_size, Some(1));
 }
 
 #[test]

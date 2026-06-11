@@ -196,12 +196,45 @@ async fn run_gepa_loop_async(
     let test = lowered.test.clone();
     let reflection_model = lowered.reflection_model.clone();
     let max_metric_calls = lowered.max_metric_calls;
+    let max_candidates = lowered.max_candidates;
+    let train_minibatch_size = lowered.train_minibatch_size;
 
     let scorer_dispatch = dispatch.clone();
     let runner_dispatch = dispatch;
 
     let event_sink = events;
     let report_sink = report_slot;
+
+    // The OptimizeAnything profile fixes the reference per-case Pareto frontier
+    // and screening minibatch. `population_size` lowers into the candidate-pool
+    // cap (a stop condition over the seed plus loop-authored children) and
+    // `minibatch_size` lowers into the train screening minibatch override, which
+    // survives the profile because the builder records it explicitly.
+    let mut gepa = Gepa::reflect_with_lm(reflection_lm, reflection_model)
+        .surface(SeamPromptSurface)
+        .build()
+        .with_profile(GepaProfile::OptimizeAnything);
+    if let Some(minibatch) = train_minibatch_size {
+        gepa = gepa.train_minibatch_size(minibatch);
+    }
+    let gepa = gepa
+        // Reflection sees a target-free string projection of each case input;
+        // scorer feedback flows from the stored assessment evidence, so
+        // reflection quality keeps the per-case feedback text the scorer
+        // produced.
+        .reflective_dataset(leaven_gepa::GepaReflectiveDataset::with_case_input(
+            project_case_input,
+        ))
+        .on_event(move |event| event_sink.record(event))
+        .on_report(move |report| {
+            *report_sink
+                .lock()
+                .expect("optimize.run report slot lock poisoned") = Some(report.clone());
+        });
+    let gepa = match max_candidates {
+        Some(cap) => gepa.max_candidates(cap),
+        None => gepa,
+    };
 
     let optimized = leaven_run::optimize(seed)
         .train(train)
@@ -223,25 +256,7 @@ async fn run_gepa_loop_async(
         .scorer_fingerprint(worker_runtime_fingerprint("optimize_run.scorer"))
         .evaluation_parallelism(sequential())
         .on_event(CandidateArtifactSnapshot::new(artifacts))
-        .using(
-            Gepa::reflect_with_lm(reflection_lm, reflection_model)
-                .surface(SeamPromptSurface)
-                .build()
-                .with_profile(GepaProfile::OptimizeAnything)
-                // Reflection sees a target-free string projection of each
-                // case input; scorer feedback flows from the stored
-                // assessment evidence, so reflection quality keeps the
-                // per-case feedback text the scorer produced.
-                .reflective_dataset(leaven_gepa::GepaReflectiveDataset::with_case_input(
-                    project_case_input,
-                ))
-                .on_event(move |event| event_sink.record(event))
-                .on_report(move |report| {
-                    *report_sink
-                        .lock()
-                        .expect("optimize.run report slot lock poisoned") = Some(report.clone());
-                }),
-        )
+        .using(gepa)
         .budget(Budget::metric_calls(max_metric_calls))
         .run_id(RunId::new())
         .run_dir(run_dir)

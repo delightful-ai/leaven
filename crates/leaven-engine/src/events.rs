@@ -19,6 +19,10 @@ pub enum StopReason {
     OptimizerDone,
     BudgetReached,
     BudgetExceeded,
+    /// A configured candidate-pool cap was reached: the run authored as many
+    /// candidates (seed plus loop-authored children) as the cap allows, so the
+    /// optimizer stopped cleanly like budget exhaustion.
+    CandidateCapReached,
     StopperTriggered,
     External,
     Error,

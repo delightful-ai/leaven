@@ -683,42 +683,136 @@ fn optimize_run_refuses_unknown_artifact_type() {
 }
 
 #[test]
-fn optimize_run_refuses_population_and_minibatch_size_naming_the_fixed_default() {
+fn population_size_caps_the_candidate_pool_at_seed_plus_one_child() {
     let pkg = package();
     let runs_root = tempfile::tempdir().unwrap();
-    let make = || {
-        service_with(
-            &pkg,
-            SeamStageConfig::CommandRunner {
-                argv: vec![loop_law_worker().display().to_string()],
-            },
-            SeamLmConfig::Mock {
-                responses: vec![reflection_response_with_marker()],
-            },
-            runs_root.path(),
-        )
-    };
-
-    let mut population_request = optimize_request("seed");
-    population_request["params"]["optimizer"]["population_size"] = json!(4);
-    let response = runtime(make(), pkg.clone()).handle_value(&population_request);
-    assert!(response.is_error());
-    assert!(
-        response.value()["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("population_size")
+    let service = service_with(
+        &pkg,
+        SeamStageConfig::CommandRunner {
+            argv: vec![loop_law_worker().display().to_string()],
+        },
+        SeamLmConfig::Mock {
+            responses: vec![reflection_response_with_marker()],
+        },
+        runs_root.path(),
     );
 
-    let mut minibatch_request = optimize_request("seed");
-    minibatch_request["params"]["optimizer"]["minibatch_size"] = json!(3);
-    let response = runtime(make(), pkg.clone()).handle_value(&minibatch_request);
+    let mut request = optimize_request("Answer the question. Output only the integer.");
+    // A candidate-pool cap of 2 stops the loop after the seed plus one authored
+    // child. The budget is raised well past one child's cost so the cap, not the
+    // budget, is what stops the loop. The mock LM carries a single reflection
+    // response, so a loop that did not stop at the cap would try a second
+    // reflection and fail; the cap is what keeps the run truthful.
+    request["params"]["optimizer"]["population_size"] = json!(2);
+    request["params"]["optimizer"]["max_metric_calls"] = json!(100);
+    let result = run_optimize(&request, service, pkg.clone());
+
+    pkg.validate_optimize_run_result_document(&result)
+        .expect("projected result must be schema valid");
+
+    let frontier = result["frontier"].as_array().unwrap();
+    let best = &result["best"];
+    let best_id = best["candidate"].as_str().unwrap();
+    let seed_entry = frontier
+        .iter()
+        .find(|entry| entry["parent"].is_null())
+        .expect("frontier carries the seed entry");
+    let seed_id = seed_entry["candidate"].as_str().unwrap();
+
+    // The cap admitted exactly the seed and one child onto the frontier.
+    assert_eq!(
+        frontier.len(),
+        2,
+        "the candidate-pool cap admits the seed and exactly one child"
+    );
+    // The best is the genuinely-winning child, not a hardcoded seed.
+    assert_ne!(best_id, seed_id, "best must be the improved child");
+    assert_score(&best["score"], 1.0);
+    assert_score(&seed_entry["score"], 0.0);
+
+    // Metric-call accounting is the reference loop's one-child cost: a cap stop
+    // does not invent or drop screening calls (1 seed + 3 parent + 3 child + 1
+    // validation = 8).
+    assert_eq!(
+        result["metric_calls_used"].as_u64().unwrap(),
+        8,
+        "the one authored child spends the reference loop's 8 metric calls"
+    );
+}
+
+#[test]
+fn minibatch_size_overrides_the_reference_screening_minibatch() {
+    let pkg = package();
+    let runs_root = tempfile::tempdir().unwrap();
+    let service = service_with(
+        &pkg,
+        SeamStageConfig::CommandRunner {
+            argv: vec![loop_law_worker().display().to_string()],
+        },
+        SeamLmConfig::Mock {
+            responses: vec![reflection_response_with_marker()],
+        },
+        runs_root.path(),
+    );
+
+    let mut request = optimize_request("Answer the question. Output only the integer.");
+    // With a minibatch override of 1, the parent and child each screen on a
+    // single train case instead of the profile's fixed 3, so the loop-law exact
+    // metric count drops from 8 to 4 (1 seed validation + 1 parent screen + 1
+    // child screen + 1 child validation). The budget is the matching 4 so the
+    // run authors exactly the one child and stops, like the reference loop-law
+    // spends exactly its 8-call budget on one child.
+    request["params"]["optimizer"]["minibatch_size"] = json!(1);
+    request["params"]["optimizer"]["max_metric_calls"] = json!(4);
+    let result = run_optimize(&request, service, pkg.clone());
+
+    pkg.validate_optimize_run_result_document(&result)
+        .expect("projected result must be schema valid");
+
+    let best = &result["best"];
+    let frontier = result["frontier"].as_array().unwrap();
+    let seed_id = frontier
+        .iter()
+        .find(|entry| entry["parent"].is_null())
+        .and_then(|entry| entry["candidate"].as_str())
+        .unwrap();
+    // The override changes the screening minibatch, not the loop's correctness:
+    // the improved child still wins.
+    assert_ne!(best["candidate"].as_str().unwrap(), seed_id);
+    assert_score(&best["score"], 1.0);
+
+    assert_eq!(
+        result["metric_calls_used"].as_u64().unwrap(),
+        4,
+        "minibatch override 1 spends 1 seed + 1 parent + 1 child + 1 validation = 4 metric calls"
+    );
+}
+
+#[test]
+fn optimize_run_refuses_population_size_one_naming_the_minimum_bound() {
+    let pkg = package();
+    let runs_root = tempfile::tempdir().unwrap();
+    let service = service_with(
+        &pkg,
+        SeamStageConfig::CommandRunner {
+            argv: vec![loop_law_worker().display().to_string()],
+        },
+        SeamLmConfig::Mock {
+            responses: vec![reflection_response_with_marker()],
+        },
+        runs_root.path(),
+    );
+    let mut request = optimize_request("seed");
+    // A cap of 1 admits only the seed and can never author a child: a no-op
+    // optimization request, refused naming the `>= 2` bound.
+    request["params"]["optimizer"]["population_size"] = json!(1);
+    let runtime = runtime(service, pkg);
+    let response = runtime.handle_value(&request);
     assert!(response.is_error());
+    let message = response.value()["error"]["message"].as_str().unwrap();
     assert!(
-        response.value()["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("minibatch_size")
+        message.contains("population_size") && message.contains("at least 2"),
+        "refusal must name population_size and the >= 2 bound: {message}"
     );
 }
 

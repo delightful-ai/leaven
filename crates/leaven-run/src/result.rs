@@ -89,6 +89,8 @@ pub enum OptimizationStopReason {
     BudgetReached,
     /// A stage charge exceeded its hard budget limit.
     BudgetExceeded,
+    /// A configured candidate-pool cap stopped the optimizer cleanly.
+    CandidateCapReached,
     /// A configured stopper stopped the optimizer cleanly.
     StopperTriggered,
     /// An external controller stopped the run.
@@ -103,6 +105,7 @@ impl From<leaven_engine::StopReason> for OptimizationStopReason {
             leaven_engine::StopReason::OptimizerDone => Self::OptimizerDone,
             leaven_engine::StopReason::BudgetReached => Self::BudgetReached,
             leaven_engine::StopReason::BudgetExceeded => Self::BudgetExceeded,
+            leaven_engine::StopReason::CandidateCapReached => Self::CandidateCapReached,
             leaven_engine::StopReason::StopperTriggered => Self::StopperTriggered,
             leaven_engine::StopReason::External => Self::External,
             leaven_engine::StopReason::Error => Self::Error,

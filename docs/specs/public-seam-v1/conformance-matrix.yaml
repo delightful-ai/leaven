@@ -1145,8 +1145,12 @@ rows:
       the frontier, that carries a non-finite or non-numeric score, an empty
       frontier, or a malformed applied-proposal receipt is rejected. The
       configured host also refuses a non-prompt artifact type, the objective,
-      hybrid, and cartesian objectives, the agentic reflection kind, and any
-      population_size/minibatch_size value, each naming what is supported, and
+      hybrid, and cartesian objectives, and the agentic reflection kind, each
+      naming what is supported. The host now honors optimizer.population_size as
+      the candidate-pool cap (a stop condition over the seed plus loop-authored
+      children) and optimizer.minibatch_size as the train screening minibatch
+      override, but refuses population_size == 1 naming the >= 2 service bound (a
+      cap of 1 admits only the seed and can never author a child). The host also
       refuses a runner-stage leaven/case.target read while serving it (with a
       receipt) during scorer-stage dispatch.
     fake_pass_rejected: >
@@ -1162,6 +1166,8 @@ rows:
       - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_parses_all_four_objective_variants
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_drives_the_real_gepa_loop_to_a_changed_re_evaluated_child
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::small_budget_stops_the_loop_with_best_seed_and_truthful_metric_calls
+      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::population_size_caps_the_candidate_pool_at_seed_plus_one_child
+      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::minibatch_size_overrides_the_reference_screening_minibatch
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::worker_effect_cost_aggregates_into_result_cost_totals
       - crates/leaven-public-seam/tests/public_seam_contract/acp_profile.rs::locked_worker_profile_excludes_the_client_to_host_optimize_run_dispatch
     negative_test_evidence:
@@ -1172,7 +1178,7 @@ rows:
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_refuses_unsupported_objective_naming_instance
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_refuses_agentic_reflection
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_refuses_unknown_artifact_type
-      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_refuses_population_and_minibatch_size_naming_the_fixed_default
+      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_refuses_population_size_one_naming_the_minimum_bound
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_unavailable_without_configured_stage_worker
     implementation_evidence:
       - crates/leaven-public-seam/src/optimize_run.rs::OptimizeRunRequestDocument

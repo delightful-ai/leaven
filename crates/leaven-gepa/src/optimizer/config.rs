@@ -152,6 +152,8 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             },
             train_partition: PartitionId::from("TRAIN"),
             max_iterations: DEFAULT_MAX_ITERATIONS,
+            max_candidates: None,
+            train_minibatch_override: None,
             proposal_count: 1,
             skip_perfect_score: true,
             perfect_score: DEFAULT_PERFECT_SCORE,
@@ -216,6 +218,8 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             },
             train_partition: self.train_partition,
             max_iterations: self.max_iterations,
+            max_candidates: self.max_candidates,
+            train_minibatch_override: self.train_minibatch_override,
             proposal_count: self.proposal_count,
             skip_perfect_score: self.skip_perfect_score,
             perfect_score: self.perfect_score,
@@ -252,6 +256,8 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             profile: validation_policy_profile::<NextValidate>(self.profile),
             train_partition: self.train_partition,
             max_iterations: self.max_iterations,
+            max_candidates: self.max_candidates,
+            train_minibatch_override: self.train_minibatch_override,
             proposal_count: self.proposal_count,
             skip_perfect_score: self.skip_perfect_score,
             perfect_score: self.perfect_score,
@@ -293,6 +299,8 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             profile: self.profile,
             train_partition: self.train_partition,
             max_iterations: self.max_iterations,
+            max_candidates: self.max_candidates,
+            train_minibatch_override: self.train_minibatch_override,
             proposal_count: self.proposal_count,
             skip_perfect_score: self.skip_perfect_score,
             perfect_score: self.perfect_score,
@@ -317,6 +325,41 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         self
     }
 
+    /// Cap the candidate pool: the seed plus loop-authored children.
+    ///
+    /// This is a stop condition over total spawned candidates (the seed plus
+    /// every child the loop authors into the graph, accepted or rejected), not a
+    /// frontier-size or selection change. When the run's graph candidate count
+    /// reaches the cap, the loop stops with
+    /// [`StopReason::CandidateCapReached`](leaven_engine::StopReason::CandidateCapReached),
+    /// exactly like budget exhaustion. With no cap (the default), the optimizer
+    /// behaves identically to the reference loop.
+    #[must_use]
+    pub const fn max_candidates(mut self, max_candidates: std::num::NonZeroUsize) -> Self {
+        self.max_candidates = Some(max_candidates);
+        self
+    }
+
+    /// Override the profile-fixed parent/child screening train minibatch size.
+    ///
+    /// This replaces the train batch sampler with an
+    /// [`EpochShuffled`](crate::validation::EpochShuffled) sampler of the given
+    /// size and records the override so a later [`with_profile`](Self::with_profile)
+    /// call keeps it instead of resetting the minibatch to the profile default.
+    /// The override is order-independent: applying it before or after a profile
+    /// yields the same screening minibatch size.
+    #[must_use]
+    pub fn train_minibatch_size(
+        self,
+        minibatch_size: std::num::NonZeroUsize,
+    ) -> Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, EpochShuffled, Validate, Dataset>
+    {
+        let mut next = self.batch_sampler(EpochShuffled::new(minibatch_size.get()));
+        next.train_minibatch_override = Some(minibatch_size);
+        next.profile.train_minibatch_size = Some(minibatch_size.get());
+        next
+    }
+
     /// Apply a named GEPA strategy profile.
     ///
     /// Profiles are explicit presets, not hidden compatibility modes. Applying
@@ -328,16 +371,27 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         profile: GepaProfile,
     ) -> Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, EpochShuffled, FullValidation, Dataset>
     {
-        self.batch_sampler(EpochShuffled::new(profile.minibatch_size()))
+        // An explicit `train_minibatch_size` override wins over the profile's
+        // fixed minibatch so applying a profile after an override does not
+        // silently clobber it. The override is carried forward so it survives any
+        // further profile application.
+        let minibatch_size = self
+            .train_minibatch_override
+            .map_or_else(|| profile.minibatch_size(), std::num::NonZeroUsize::get);
+        let train_minibatch_override = self.train_minibatch_override;
+        let mut next = self
+            .batch_sampler(EpochShuffled::new(minibatch_size))
             .validation_policy(FullValidation)
             .proposal_count(profile.proposal_count())
             .skip_perfect_score(profile.skip_perfect_score())
             .with_resolved_profile(
                 profile.label(),
-                Some(profile.minibatch_size()),
+                Some(minibatch_size),
                 "full-validation",
                 "full-validation-before-admission",
-            )
+            );
+        next.train_minibatch_override = train_minibatch_override;
+        next
     }
 
     /// Set how many serial proposal attempts to run for the selected candidate

@@ -101,6 +101,8 @@ pub struct Gepa<
     profile: GepaReportProfile,
     train_partition: PartitionId,
     max_iterations: usize,
+    max_candidates: Option<std::num::NonZeroUsize>,
+    train_minibatch_override: Option<std::num::NonZeroUsize>,
     proposal_count: usize,
     skip_perfect_score: bool,
     perfect_score: f64,
@@ -212,6 +214,11 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         );
         fingerprint.update(self.train_partition.0.as_str().as_bytes());
         fingerprint.update(self.max_iterations.to_le_bytes());
+        fingerprint.update(
+            self.max_candidates
+                .map_or(0, std::num::NonZeroUsize::get)
+                .to_le_bytes(),
+        );
         update_checkpoint_state(&mut fingerprint, b"profile", &self.profile);
         fingerprint.update(self.proposal_count.to_le_bytes());
         fingerprint.update([u8::from(self.skip_perfect_score)]);
@@ -292,6 +299,12 @@ where
         if let Some(status) = self.finish_if_iteration_limit() {
             return Ok(status);
         }
+        // The candidate-pool cap is a stop condition over total spawned
+        // candidates. Checking it before authoring stops a resumed or
+        // already-saturated run without spending another proposal.
+        if self.candidate_cap_reached(ctx) {
+            return Ok(self.finish_for_candidate_cap_stop());
+        }
 
         let seed = Self::seed_candidate(ctx)?;
         if let Err(error) = self.run_iteration(ctx, seed).await {
@@ -301,6 +314,13 @@ where
             return Err(error);
         }
         self.completed_iterations += 1;
+
+        // The iteration may have authored the child that reaches the cap; stop
+        // now rather than spending an empty extra step before the top-of-step
+        // check fires.
+        if self.candidate_cap_reached(ctx) {
+            return Ok(self.finish_for_candidate_cap_stop());
+        }
 
         if self.completed_iterations >= self.max_iterations {
             Ok(self
