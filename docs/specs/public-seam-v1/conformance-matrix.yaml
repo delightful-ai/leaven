@@ -1156,24 +1156,25 @@ rows:
       a proposal or re-evaluating the child (the metric-call count would drop
       below the reference total).
     minimum_closeout_level: semantic_denial
-    partial_contract_test_evidence:
+    positive_test_evidence:
       - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_validates_request_seed_cases_optimizer_and_reflection
       - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_validates_result_best_frontier_run_and_receipts
       - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_parses_all_four_objective_variants
+      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_drives_the_real_gepa_loop_to_a_changed_re_evaluated_child
+      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::small_budget_stops_the_loop_with_best_seed_and_truthful_metric_calls
+      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::worker_effect_cost_aggregates_into_result_cost_totals
+      - crates/leaven-public-seam/tests/public_seam_contract/acp_profile.rs::locked_worker_profile_excludes_the_client_to_host_optimize_run_dispatch
+    negative_test_evidence:
       - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_rejects_empty_case_manifest
       - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_rejects_best_not_in_frontier
       - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_rejects_non_finite_and_non_numeric_scores
-      - crates/leaven-public-seam/tests/public_seam_contract/acp_profile.rs::locked_worker_profile_excludes_the_client_to_host_optimize_run_dispatch
-      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_drives_the_real_gepa_loop_to_a_changed_re_evaluated_child
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::runner_stage_refuses_case_target_while_scorer_stage_serves_it
-      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::small_budget_stops_the_loop_with_best_seed_and_truthful_metric_calls
-      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::worker_effect_cost_aggregates_into_result_cost_totals
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_refuses_unsupported_objective_naming_instance
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_refuses_agentic_reflection
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_refuses_unknown_artifact_type
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_refuses_population_and_minibatch_size_naming_the_fixed_default
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_unavailable_without_configured_stage_worker
-    partial_contract_implementation_evidence:
+    implementation_evidence:
       - crates/leaven-public-seam/src/optimize_run.rs::OptimizeRunRequestDocument
       - crates/leaven-public-seam/src/optimize_run.rs::OptimizeRunResultDocument
       - crates/leaven-public-seam/src/optimize_run.rs::OptimizeObjective
@@ -1185,12 +1186,10 @@ rows:
       - docs/specs/public-seam-v1/schemas/leaven.optimize_run.v1.schema.json
       - crates/leaven-public-seam/AGENTS.md
       - crates/leaven-seam-service/AGENTS.md
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-06-10-optimize-run-dispatch-loop-law-review.md
     blocked_on: []
-    # Configured-service execution and the deterministic host loop law landed
-    # (2026-06-10). The row stays in_progress until an adversarial closeout
-    # review signs off ps1.optimize.run_dispatch; promotion to proven requires
-    # that review plus positive/negative/implementation/review evidence fields.
-    status: in_progress
+    status: proven
 
   - id: ps1.proposal.surface_authority
     area: proposal

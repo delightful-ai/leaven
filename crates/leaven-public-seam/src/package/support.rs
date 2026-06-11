@@ -64,6 +64,7 @@ pub(super) fn looks_like_denial_test(symbol: &str) -> bool {
         "mismatch",
         "outside",
         "forbidden",
+        "unavailable",
         "cannot",
         "fake",
         "negative",

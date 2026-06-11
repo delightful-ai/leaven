@@ -583,6 +583,7 @@ fn conformance_matrix_rows_are_unique_honest_and_reference_real_files() {
             "ps1.graph.runcontext_mutation_only",
             "ps1.harness.negative_denominator",
             "ps1.lm.contract",
+            "ps1.optimize.run_dispatch",
             "ps1.plan.ir_family",
             "ps1.plan.execution_modes",
             "ps1.plan.pinned_dialects",
