@@ -176,6 +176,10 @@
           "type": "integer",
           "minimum": 1
         },
+        "max_cost_usd_micro": {
+          "type": "integer",
+          "minimum": 1
+        },
         "objective": {
           "enum": [
             "instance",

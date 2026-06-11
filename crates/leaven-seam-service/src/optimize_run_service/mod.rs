@@ -198,6 +198,7 @@ async fn run_gepa_loop_async(
     let max_metric_calls = lowered.max_metric_calls;
     let max_candidates = lowered.max_candidates;
     let train_minibatch_size = lowered.train_minibatch_size;
+    let max_cost_usd_micro = lowered.max_cost_usd_micro;
 
     let scorer_dispatch = dispatch.clone();
     let runner_dispatch = dispatch;
@@ -236,6 +237,21 @@ async fn run_gepa_loop_async(
         None => gepa,
     };
 
+    // The metric-call cap always bounds the loop. An optional `usd_micro` cost
+    // ceiling adds a second budget axis: the worker reports metered provider
+    // spend on the `usd_micro` cost axis, and the engine budget ledger refuses a
+    // charge that would exceed this axis limit, stopping the loop on real spend.
+    let mut budget = Budget::metric_calls(max_metric_calls);
+    if let Some(usd_micro) = max_cost_usd_micro {
+        budget = budget
+            .with_axis_limit("usd_micro", u64_to_f64(usd_micro))
+            .map_err(|error| {
+                OptimizeRunHostError::lowering(format!(
+                    "optimizer.max_cost_usd_micro is not a valid budget amount: {error}"
+                ))
+            })?;
+    }
+
     let optimized = leaven_run::optimize(seed)
         .train(train)
         .validation(validation)
@@ -257,7 +273,7 @@ async fn run_gepa_loop_async(
         .evaluation_parallelism(sequential())
         .on_event(CandidateArtifactSnapshot::new(artifacts))
         .using(gepa)
-        .budget(Budget::metric_calls(max_metric_calls))
+        .budget(budget)
         .run_id(RunId::new())
         .run_dir(run_dir)
         .run()
@@ -280,6 +296,13 @@ fn error_chain(error: &(dyn std::error::Error + 'static)) -> String {
 
 fn sequential() -> std::num::NonZeroUsize {
     std::num::NonZeroUsize::new(1).expect("1 is non-zero")
+}
+
+#[allow(clippy::cast_precision_loss)]
+fn u64_to_f64(value: u64) -> f64 {
+    // A `usd_micro` ceiling is a non-negative integer counter; the f64 budget
+    // axis tolerates rounding well beyond any realistic micro-dollar ceiling.
+    value as f64
 }
 
 /// Stable durable behavior fingerprint for the worker-backed runner/scorer

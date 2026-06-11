@@ -354,6 +354,105 @@ raise SystemExit("unexpected stage")
     )
 }
 
+/// Worker that reports a large `usd_micro` cost on every runner stage so a usd
+/// ceiling below the seed-validation spend stops the loop before any child.
+fn usd_cost_worker() -> PathBuf {
+    write_worker(
+        "optimize-usd-cost-worker",
+        &format!(
+            r#"#!/usr/bin/env python3
+import json, sys, select
+
+MARKER = "{MARKER}"
+req = json.loads(sys.stdin.readline())
+payload = req["params"]["payload"]
+stage = req["params"]["stage"]
+
+def lm_callback():
+    return {{
+        "jsonrpc": "2.0",
+        "id": "worker-lm-usd",
+        "method": "leaven/lm.complete",
+        "params": {{
+            "schema_version": "leaven.plan.v1",
+            "plan_id": "plan_worker_usd",
+            "consistency": {{"kind": "latest_at_start"}},
+            "mode": {{"kind": "execute"}},
+            "ops": [{{
+                "kind": "call",
+                "name": "completion",
+                "idempotency_key": "worker-lm-usd",
+                "call": {{
+                    "kind": "lm_complete",
+                    "purpose": "test.optimize_usd",
+                    "model": "mock",
+                    "messages": [{{"role": "user", "content": [{{"kind": "text", "text": "prompt"}}]}}],
+                    "output": {{"kind": "final_message", "max_bytes": 128}},
+                    "input_classes": ["public"]
+                }}
+            }}],
+            "return": ["completion"],
+            "commit": {{"kind": "no_graph_writes"}}
+        }}
+    }}
+
+if stage == "runner":
+    print(json.dumps(lm_callback()), flush=True)
+    ready, _, _ = select.select([sys.stdin], [], [], 5)
+    if not ready:
+        raise SystemExit("timed out waiting for runner lm.complete response")
+    lm_response = json.loads(sys.stdin.readline())
+    receipt = lm_response["result"]["receipts"][0]
+    template = payload["case_input"]["candidate_template"]
+    answer = "42" if MARKER in template else "0"
+    result = {{
+        "schema_version": "leaven.stage_run.v1",
+        "message": "stage_run_result",
+        "stage": "runner",
+        "stage_call_id": payload["stage_call_id"],
+        "output": {{
+            "kind": "text",
+            "summary": "runner answer",
+            "value": answer,
+            "visibility": "optimizer_visible",
+            "data_classes": ["candidate.output"]
+        }},
+        "effect_receipts": [{{
+            "method": "leaven/lm.complete",
+            "receipt": receipt["receipt"],
+            "call_kind": "lm_complete",
+            "cost": {{"usd_micro": 1000000, "lm_calls": 1}}
+        }}]
+    }}
+    print(json.dumps({{"jsonrpc": "2.0", "id": req.get("id"), "result": result}}), flush=True)
+    sys.exit(0)
+
+if stage == "scorer":
+    answer = payload["output"]["value"]
+    score = 1.0 if answer == "42" else 0.0
+    result = {{
+        "schema_version": "leaven.stage_run.v1",
+        "message": "stage_run_result",
+        "stage": "scorer",
+        "stage_call_id": payload["stage_call_id"],
+        "output": {{
+            "kind": "text",
+            "summary": "scorer output",
+            "value": answer,
+            "visibility": "optimizer_visible",
+            "data_classes": ["candidate.output"]
+        }},
+        "score": {{"value": score, "rewards": [{{"id": "match", "value": score, "weight": 1.0, "feedback": "f"}}]}}
+    }}
+    print(json.dumps({{"jsonrpc": "2.0", "id": req.get("id"), "result": result}}), flush=True)
+    sys.exit(0)
+
+raise SystemExit("unexpected stage")
+"#
+        ),
+    )
+}
+
 /// Mock reflection response: a fenced replacement template carrying the marker
 /// so the GEPA parser admits a changed child.
 fn reflection_response_with_marker() -> MockLmResponseConfig {
@@ -925,6 +1024,54 @@ fn worker_effect_cost_aggregates_into_result_cost_totals() {
     assert!(
         input_tokens >= 9,
         "worker input tokens must aggregate: {input_tokens}"
+    );
+}
+
+#[test]
+fn max_cost_usd_micro_ceiling_stops_the_loop_before_a_child_is_authored() {
+    let pkg = package();
+    let runs_root = tempfile::tempdir().unwrap();
+    let service = service_with(
+        &pkg,
+        SeamStageConfig::CommandRunner {
+            argv: vec![usd_cost_worker().display().to_string()],
+        },
+        SeamLmConfig::Mock {
+            responses: vec![reflection_response_with_marker()],
+        },
+        runs_root.path(),
+    );
+
+    // Every runner stage reports 1_000_000 usd_micro. The metric budget is high
+    // (a child could be authored on metric calls alone), but a usd ceiling of
+    // 1_500_000 is below one child's screening spend: the seed validation spends
+    // ~1_000_000, and the parent/child minibatch screens push past the ceiling,
+    // so the loop stops with the seed as best. The usd axis, not the metric cap,
+    // is what stops the loop.
+    let mut request = optimize_request("Answer the question. Output only the integer.");
+    request["params"]["optimizer"]["max_metric_calls"] = json!(100);
+    request["params"]["optimizer"]["max_cost_usd_micro"] = json!(1_500_000);
+    let result = run_optimize(&request, service, pkg.clone());
+
+    pkg.validate_optimize_run_result_document(&result)
+        .expect("result must be schema valid when the usd ceiling stops the loop");
+
+    let frontier = result["frontier"].as_array().unwrap();
+    let best_id = result["best"]["candidate"].as_str().unwrap();
+    let seed_entry = frontier
+        .iter()
+        .find(|entry| entry["parent"].is_null())
+        .unwrap();
+    assert_eq!(
+        best_id,
+        seed_entry["candidate"].as_str().unwrap(),
+        "the usd ceiling must stop the loop with the seed as best (no affordable child)"
+    );
+    // The reported usd cost never exceeds the ceiling by more than one charge.
+    let usd_micro = result["cost"]["usd_micro"].as_u64().unwrap();
+    assert!(
+        usd_micro >= 1_000_000,
+        "the seed validation usd cost must be reported: {usd_micro}"
     );
 }
 

@@ -83,6 +83,7 @@ pub struct OptimizerConfig {
     max_metric_calls: u64,
     population_size: Option<u64>,
     minibatch_size: Option<u64>,
+    max_cost_usd_micro: Option<u64>,
     objective: OptimizeObjective,
 }
 
@@ -102,6 +103,10 @@ impl OptimizerConfig {
             optional_u64(object.get("population_size"), "optimizer.population_size")?;
         let minibatch_size =
             optional_u64(object.get("minibatch_size"), "optimizer.minibatch_size")?;
+        let max_cost_usd_micro = optional_u64(
+            object.get("max_cost_usd_micro"),
+            "optimizer.max_cost_usd_micro",
+        )?;
         let objective = OptimizeObjective::parse(required_str(
             object.get("objective"),
             "optimizer.objective",
@@ -110,6 +115,7 @@ impl OptimizerConfig {
             max_metric_calls,
             population_size,
             minibatch_size,
+            max_cost_usd_micro,
             objective,
         })
     }
@@ -127,6 +133,15 @@ impl OptimizerConfig {
     /// Optimizer minibatch size, if configured.
     pub const fn minibatch_size(&self) -> Option<u64> {
         self.minibatch_size
+    }
+
+    /// Optimizer USD cost ceiling in micro-dollars, if configured.
+    ///
+    /// When set, the host caps the run's `usd_micro` cost axis at this value so
+    /// the optimization loop stops once metered provider spend would exceed the
+    /// ceiling.
+    pub const fn max_cost_usd_micro(&self) -> Option<u64> {
+        self.max_cost_usd_micro
     }
 
     /// Requested optimizer objective.

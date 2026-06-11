@@ -47,6 +47,9 @@ pub(super) struct LoweredRequest {
     /// Train screening minibatch override. `None` keeps the profile-fixed
     /// reference minibatch.
     pub(super) train_minibatch_size: Option<NonZeroUsize>,
+    /// USD cost ceiling in micro-dollars. `None` leaves the run capped only by
+    /// `max_metric_calls` (no usd ceiling).
+    pub(super) max_cost_usd_micro: Option<u64>,
     pub(super) reflection_model: String,
     pub(super) capability_fingerprint: String,
 }
@@ -92,6 +95,7 @@ pub(super) fn lower_request(
         max_metric_calls: optimizer.max_metric_calls,
         max_candidates: optimizer.max_candidates,
         train_minibatch_size: optimizer.train_minibatch_size,
+        max_cost_usd_micro: optimizer.max_cost_usd_micro,
         reflection_model,
         capability_fingerprint: document.capability_fingerprint().to_owned(),
     })
@@ -102,6 +106,7 @@ struct LoweredOptimizer {
     max_metric_calls: u64,
     max_candidates: Option<NonZeroUsize>,
     train_minibatch_size: Option<NonZeroUsize>,
+    max_cost_usd_micro: Option<u64>,
 }
 
 fn lower_seed(seed: &ArtifactRecord) -> Result<SeamPromptArtifact, OptimizeRunHostError> {
@@ -137,6 +142,7 @@ fn lower_optimizer(optimizer: &OptimizerConfig) -> Result<LoweredOptimizer, Opti
         max_metric_calls: optimizer.max_metric_calls(),
         max_candidates: lower_population_size(optimizer.population_size())?,
         train_minibatch_size: lower_minibatch_size(optimizer.minibatch_size()),
+        max_cost_usd_micro: optimizer.max_cost_usd_micro(),
     })
 }
 
