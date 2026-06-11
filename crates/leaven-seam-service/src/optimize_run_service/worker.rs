@@ -7,7 +7,6 @@ use leaven_run::{RunCase, RunError, RunOutput, Score, ScoreContext, ScoreError};
 use serde_json::{Value, json};
 
 use super::lowering::LoweredCase;
-use super::problem::SeamPromptArtifact;
 use super::sanitize;
 use crate::stage::command_runner_result;
 
@@ -83,13 +82,20 @@ impl WorkerDispatch {
 
 /// Runs one runner-stage dispatch for the GEPA loop's runner seam.
 ///
-/// The dispatched payload carries the candidate's template material and the
-/// target-free case input; it never carries target material. Nested
-/// `leaven/lm.complete` callbacks are serviced; `leaven/case.target` is refused
-/// because runner stages are structurally target-free.
+/// The dispatched payload carries the candidate material (`candidate_payload`,
+/// keyed `candidate_template` for prompts or `candidate_agent_kit` for
+/// Git-backed kits) and the target-free case input; it never carries target
+/// material. Nested `leaven/lm.complete` callbacks are serviced;
+/// `leaven/case.target` is refused because runner stages are structurally
+/// target-free.
+///
+/// The candidate material is projected by the caller because the projection is
+/// artifact-specific (a prompt template versus a flat kit-revision file map),
+/// while the dispatch transport, target isolation, and effect accounting here
+/// are shared across artifact types.
 pub(super) async fn run_runner_stage(
     dispatch: WorkerDispatch,
-    artifact: SeamPromptArtifact,
+    candidate_payload: Value,
     case: RunCase<Value>,
 ) -> Result<RunOutput<Value>, RunError> {
     let case_id = case.id();
@@ -102,7 +108,7 @@ pub(super) async fn run_runner_stage(
         &dispatch.run_id,
         &stage_call_id,
         &dispatch.capability_fingerprint,
-        artifact.template(),
+        candidate_payload,
         &lowered,
         case.input(),
     );
@@ -125,10 +131,17 @@ pub(super) async fn run_runner_stage(
 /// request case set with read receipts. The typed reward vector is lowered into
 /// the engine [`Score`], preserving per-reward values as metrics and feedback
 /// text into the channel GEPA's reflective dataset reads.
-pub(super) async fn run_scorer_stage(
+///
+/// The scorer is artifact-agnostic: it never inspects the candidate artifact,
+/// only the runner output and the scored case, so one implementation serves both
+/// the prompt and Git-backed kit paths.
+pub(super) async fn run_scorer_stage<A>(
     dispatch: WorkerDispatch,
-    ctx: ScoreContext<SeamPromptArtifact, Value, Value, Value>,
-) -> Result<Score, ScoreError> {
+    ctx: ScoreContext<A, Value, Value, Value>,
+) -> Result<Score, ScoreError>
+where
+    A: leaven_core::Artifact,
+{
     let case_id = ctx.case.id();
     let lowered = dispatch
         .lowered_case(case_id)
@@ -310,17 +323,24 @@ fn runner_stage_params(
     run_id: &str,
     stage_call_id: &str,
     capability_fingerprint: &str,
-    template: &str,
+    candidate_payload: Value,
     lowered: &LoweredCase,
     case_input: &Value,
 ) -> Value {
     // `case_input` carries the target-free material the worker needs: the
-    // candidate prompt template plus the case input. Target material is never
-    // included.
-    let payload_case_input = json!({
-        "candidate_template": template,
-        "case_input": case_input,
-    });
+    // projected candidate material (a `candidate_template` for prompts or a
+    // `candidate_agent_kit` flat file map for Git-backed kits) plus the case
+    // input. Target material is never included.
+    let mut payload_case_input = match candidate_payload {
+        Value::Object(map) => map,
+        other => {
+            let mut map = serde_json::Map::new();
+            map.insert("candidate".to_owned(), other);
+            map
+        }
+    };
+    payload_case_input.insert("case_input".to_owned(), case_input.clone());
+    let payload_case_input = Value::Object(payload_case_input);
     json!({
         "schema_version": "leaven.stage_run.v1",
         "message": "stage_run_request",
@@ -402,10 +422,13 @@ fn stage_effect_cost(result: &Value) -> Cost {
     cost
 }
 
-fn lower_score(
-    ctx: &ScoreContext<SeamPromptArtifact, Value, Value, Value>,
+fn lower_score<A>(
+    ctx: &ScoreContext<A, Value, Value, Value>,
     result: &Value,
-) -> Result<Score, ScoreError> {
+) -> Result<Score, ScoreError>
+where
+    A: leaven_core::Artifact,
+{
     let score_value = result
         .pointer("/score/value")
         .and_then(Value::as_f64)

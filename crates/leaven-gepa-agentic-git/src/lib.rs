@@ -13,6 +13,7 @@ mod parser;
 mod public_seam_stage;
 mod reflector;
 mod renderer;
+mod surface;
 
 pub use input::GitProgramGepaReflectionInput;
 pub use materializer::GitProgramGepaReflectionMaterializer;
@@ -23,11 +24,12 @@ pub use public_seam_stage::{
 };
 pub use reflector::GepaGitProgramAgenticReflector;
 pub use renderer::GepaGitProgramReflectionRenderer;
+pub use surface::GitProgramPathSurface;
 
 pub mod prelude {
     pub use crate::{
         GepaGitProgramAgenticReflector, GepaGitProgramReflectionRenderer,
         GitProgramGepaReflectionInput, GitProgramGepaReflectionMaterializer,
-        GitProgramGepaReflectionParser,
+        GitProgramGepaReflectionParser, GitProgramPathSurface,
     };
 }

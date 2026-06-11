@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::num::NonZeroUsize;
 
+use leaven_artifact_git::GitPath;
 use leaven_eval::Case;
 use leaven_kernel::CaseId;
 use leaven_public_seam::{
@@ -9,11 +10,29 @@ use leaven_public_seam::{
 };
 use serde_json::Value;
 
+use super::agent_kit::projection::kit_files_from_wire;
 use super::error::OptimizeRunHostError;
 use super::problem::SeamPromptArtifact;
 
-/// Wire artifact type the host executes today.
-pub(super) const SUPPORTED_ARTIFACT_TYPE: &str = "prompt";
+/// Lowered seed plus reflection path, branched by artifact type.
+///
+/// The `prompt` artifact runs the LM-backed reflection loop; the `agent_kit`
+/// artifact runs the Git-backed agentic reflection loop. Each artifact type
+/// fixes the reflection kind it supports (`prompt` requires `lm`, `agent_kit`
+/// requires `agentic`), so the reflection config is lowered together with the
+/// seed and the mismatched combinations are refused here.
+pub(super) enum LoweredObjective {
+    /// Prompt-template optimization with LM reflection.
+    Prompt {
+        seed: SeamPromptArtifact,
+        reflection_model: String,
+    },
+    /// Git-backed `AgentKit` optimization with agentic reflection. The seed file
+    /// map is the flat content the host builds a run-scoped repository from.
+    AgentKit {
+        kit_files: BTreeMap<GitPath, Vec<u8>>,
+    },
+}
 
 /// One lowered optimize-run case bound to a dense engine [`CaseId`] while
 /// preserving its wire string id, input, target, and metadata.
@@ -32,7 +51,8 @@ pub(super) struct LoweredCase {
 /// Validated optimize-run request lowered into builder-ready inputs.
 pub(super) struct LoweredRequest {
     pub(super) run_id: String,
-    pub(super) seed: SeamPromptArtifact,
+    /// The lowered seed and reflection path, branched by artifact type.
+    pub(super) objective: LoweredObjective,
     pub(super) seed_schema: String,
     pub(super) train: Vec<Case<Value, Value>>,
     pub(super) validation: Vec<Case<Value, Value>>,
@@ -50,16 +70,14 @@ pub(super) struct LoweredRequest {
     /// USD cost ceiling in micro-dollars. `None` leaves the run capped only by
     /// `max_metric_calls` (no usd ceiling).
     pub(super) max_cost_usd_micro: Option<u64>,
-    pub(super) reflection_model: String,
     pub(super) capability_fingerprint: String,
 }
 
 pub(super) fn lower_request(
     document: &OptimizeRunRequestDocument,
 ) -> Result<LoweredRequest, OptimizeRunHostError> {
-    let seed = lower_seed(document.seed())?;
+    let objective = lower_objective(document.seed(), document.reflection())?;
     let optimizer = lower_optimizer(document.optimizer())?;
-    let reflection_model = lower_reflection(document.reflection())?;
 
     let mut train = Vec::new();
     let mut validation = Vec::new();
@@ -86,7 +104,7 @@ pub(super) fn lower_request(
 
     Ok(LoweredRequest {
         run_id: document.run_id().to_owned(),
-        seed,
+        objective,
         seed_schema: document.seed().artifact_schema().to_owned(),
         train,
         validation,
@@ -96,7 +114,6 @@ pub(super) fn lower_request(
         max_candidates: optimizer.max_candidates,
         train_minibatch_size: optimizer.train_minibatch_size,
         max_cost_usd_micro: optimizer.max_cost_usd_micro,
-        reflection_model,
         capability_fingerprint: document.capability_fingerprint().to_owned(),
     })
 }
@@ -109,16 +126,38 @@ struct LoweredOptimizer {
     max_cost_usd_micro: Option<u64>,
 }
 
-fn lower_seed(seed: &ArtifactRecord) -> Result<SeamPromptArtifact, OptimizeRunHostError> {
-    // V1 executes only the prompt artifact type. The agent_kit projection parses
-    // at the wire layer (the Git-backed AgentKit host slice lands later), so the
-    // host refuses it by typed payload kind naming the supported type.
+/// Lowers the seed artifact together with the reflection config into the
+/// executable objective, enforcing the artifact-type x reflection-kind matrix.
+///
+/// Each artifact type fixes the reflection kind it executes with:
+/// - `prompt` runs LM reflection. `agentic` reflection is refused naming `lm`.
+/// - `agent_kit` runs the Git-backed agentic reflection path. `lm` reflection is
+///   refused naming `agentic` as the kit reflection path.
+fn lower_objective(
+    seed: &ArtifactRecord,
+    reflection: &OptimizeReflection,
+) -> Result<LoweredObjective, OptimizeRunHostError> {
     match seed.payload() {
-        ArtifactPayload::Prompt { template } => Ok(SeamPromptArtifact::new(template)),
-        ArtifactPayload::AgentKit { .. } => Err(OptimizeRunHostError::unsupported(format!(
-            "artifact_type `{}` is not executable; the supported V1 artifact type is `{SUPPORTED_ARTIFACT_TYPE}`",
-            seed.artifact_type()
-        ))),
+        ArtifactPayload::Prompt { template } => match reflection {
+            OptimizeReflection::Lm { model } => Ok(LoweredObjective::Prompt {
+                seed: SeamPromptArtifact::new(template),
+                reflection_model: model.clone(),
+            }),
+            OptimizeReflection::Agentic => Err(OptimizeRunHostError::unsupported(
+                "reflection kind `agentic` is not executable for the `prompt` artifact type; the supported reflection kind for `prompt` is `lm`",
+            )),
+        },
+        ArtifactPayload::AgentKit {
+            system_prompt,
+            skills,
+        } => match reflection {
+            OptimizeReflection::Agentic => Ok(LoweredObjective::AgentKit {
+                kit_files: kit_files_from_wire(system_prompt, skills)?,
+            }),
+            OptimizeReflection::Lm { .. } => Err(OptimizeRunHostError::unsupported(
+                "reflection kind `lm` is not executable for the `agent_kit` artifact type; the `agent_kit` artifact type requires `agentic` reflection",
+            )),
+        },
     }
 }
 
@@ -170,13 +209,4 @@ fn lower_population_size(
 /// reference minibatch.
 fn lower_minibatch_size(minibatch_size: Option<u64>) -> Option<NonZeroUsize> {
     minibatch_size.and_then(|size| NonZeroUsize::new(usize::try_from(size).unwrap_or(usize::MAX)))
-}
-
-fn lower_reflection(reflection: &OptimizeReflection) -> Result<String, OptimizeRunHostError> {
-    match reflection {
-        OptimizeReflection::Lm { model } => Ok(model.clone()),
-        OptimizeReflection::Agentic => Err(OptimizeRunHostError::unsupported(
-            "reflection kind `agentic` is not executable; the supported V1 reflection kind is `lm`",
-        )),
-    }
 }

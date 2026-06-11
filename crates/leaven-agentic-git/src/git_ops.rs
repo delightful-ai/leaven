@@ -1,4 +1,4 @@
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -76,10 +76,57 @@ fn run_git_command_vec(
     cwd: Option<&WorkspacePath>,
     args: Vec<String>,
 ) -> Result<CommandOutput, GitAgenticGitError> {
+    run_git_command_env_vec(workspace, cwd, &[], args)
+}
+
+fn run_git_command_env_vec(
+    workspace: &mut WorkspaceView<'_>,
+    cwd: Option<&WorkspacePath>,
+    env: &[(String, String)],
+    args: Vec<String>,
+) -> Result<CommandOutput, GitAgenticGitError> {
     let mut command = Command::new("git");
     command.cwd = cwd.cloned();
     command.args = args;
+    command.env = env.iter().cloned().collect();
     Ok(workspace.run_command(command)?)
+}
+
+fn run_git_env<const N: usize>(
+    workspace: &mut WorkspaceView<'_>,
+    cwd: Option<&WorkspacePath>,
+    env: &[(String, String)],
+    args: [&str; N],
+) -> Result<(), GitAgenticGitError> {
+    let output = run_git_command_env_vec(
+        workspace,
+        cwd,
+        env,
+        args.into_iter().map(str::to_owned).collect(),
+    )?;
+    ensure_success(&output, "git")
+}
+
+fn run_git_output_env<const N: usize>(
+    workspace: &mut WorkspaceView<'_>,
+    cwd: Option<&WorkspacePath>,
+    env: &[(String, String)],
+    args: [&str; N],
+) -> Result<Vec<u8>, GitAgenticGitError> {
+    let output = run_git_command_env_vec(
+        workspace,
+        cwd,
+        env,
+        args.into_iter().map(str::to_owned).collect(),
+    )?;
+    if output.status.code == Some(0) {
+        return Ok(output.stdout.bytes);
+    }
+    Err(GitAgenticGitError::Git(GitWorkspaceGitError::Command {
+        program: "git",
+        status: output.status.code,
+        stderr: String::from_utf8_lossy(&output.stderr.bytes).into_owned(),
+    }))
 }
 
 fn ensure_success(output: &CommandOutput, program: &'static str) -> Result<(), GitAgenticGitError> {
@@ -101,22 +148,76 @@ pub fn current_head(
     Ok(GitObjectId::new(String::from_utf8(output)?.trim())?)
 }
 
-pub fn repo_dirty(
+/// Reports whether the checked-out worktree differs in content from the parent
+/// commit it was materialized at.
+///
+/// The decision is content-truthful, not stat-cache-truthful. A freshly
+/// materialized checkout writes its index, then a foreign process (the agent)
+/// rewrites a tracked file in place. A stat-based check (`git status`,
+/// `git diff-index`, even `git update-index --refresh`) can trust the cached
+/// stat and mis-read a real edit as clean when the post-write stat collides
+/// with the index entry — silently dropping the agent's edit as "no changes".
+/// This is configuration-dependent (for example `core.checkStat=minimal` or an
+/// active `core.fsmonitor` widens the window) and racy under load.
+///
+/// To remove that dependence, this re-hashes the whole worktree into a scratch
+/// index that holds no stat cache, then compares the resulting tree object id
+/// against the parent commit's tree. Two trees are equal exactly when the
+/// worktree content matches the parent content, regardless of file mtime, the
+/// stat cache, or `core.checkStat`. The scratch index leaves the checkout's own
+/// index untouched.
+pub fn worktree_differs_from_parent(
     workspace: &mut WorkspaceView<'_>,
     checkout: &WorkspacePath,
 ) -> Result<bool, GitAgenticGitError> {
-    Ok(!run_git_output(
-        workspace,
-        Some(checkout),
-        ["status", "--porcelain=v1", "-z"],
-    )?
-    .is_empty())
+    let parent_tree = run_git_output(workspace, Some(checkout), ["rev-parse", "HEAD^{tree}"])?;
+    let parent_tree = String::from_utf8(parent_tree)?.trim().to_owned();
+    let worktree_tree = worktree_tree(workspace, checkout)?;
+    Ok(worktree_tree != parent_tree)
+}
+
+/// Hashes the entire worktree into a scratch index and returns its tree object
+/// id.
+///
+/// A unique `GIT_INDEX_FILE` under `.git` keeps the checkout's own index
+/// untouched. `read-tree HEAD` seeds the scratch index from the parent so
+/// removals are detected, then `add -A` re-reads and re-hashes every path's
+/// content (no stat-cache shortcut applies to a fresh index), and `write-tree`
+/// records the worktree's content tree. The scratch index file is removed
+/// afterward.
+fn worktree_tree(
+    workspace: &mut WorkspaceView<'_>,
+    checkout: &WorkspacePath,
+) -> Result<String, GitAgenticGitError> {
+    let scratch = format!(".git/leaven-dirty-{}.index", RunId::new());
+    let scratch_env = vec![("GIT_INDEX_FILE".to_owned(), scratch.clone())];
+    let result = (|| {
+        run_git_env(
+            workspace,
+            Some(checkout),
+            &scratch_env,
+            ["read-tree", "HEAD"],
+        )?;
+        run_git_env(workspace, Some(checkout), &scratch_env, ["add", "-A"])?;
+        let tree = run_git_output_env(workspace, Some(checkout), &scratch_env, ["write-tree"])?;
+        Ok(String::from_utf8(tree)?.trim().to_owned())
+    })();
+    remove_workspace_file(workspace, checkout, &scratch)?;
+    result
 }
 
 pub fn freeze_worktree(
     workspace: &mut WorkspaceView<'_>,
     checkout: &WorkspacePath,
 ) -> Result<(), GitAgenticGitError> {
+    // Stage content, not stat. A plain `git add -A` trusts the index stat cache
+    // for tracked paths, so an agent edit whose post-write stat collides with
+    // the entry would be staged as the *old* content and the frozen child would
+    // silently carry the seed rather than the edit. `add --renormalize -A`
+    // re-reads and re-hashes every tracked path's content (defeating the stat
+    // collision) and the following `add -A` stages new and removed paths, so the
+    // snapshot commit always reflects the worktree content.
+    run_git(workspace, Some(checkout), ["add", "--renormalize", "-A"])?;
     run_git(workspace, Some(checkout), ["add", "-A"])?;
     run_git(
         workspace,
@@ -335,13 +436,51 @@ pub fn host_git(
     program: &'static str,
     args: Vec<OsString>,
 ) -> Result<Vec<u8>, GitAgenticGitError> {
+    host_git_with(cwd, program, args, &[], None)
+}
+
+/// Runs a host `git` invocation with explicit environment overrides and
+/// optional stdin bytes.
+///
+/// The seed builder uses this to pin author/committer identity and dates (so
+/// identical kit content yields an identical commit id) and to feed blob and
+/// tree content to plumbing commands over stdin.
+pub fn host_git_with(
+    cwd: Option<&Path>,
+    program: &'static str,
+    args: Vec<OsString>,
+    env: &[(&str, &OsStr)],
+    stdin: Option<&[u8]>,
+) -> Result<Vec<u8>, GitAgenticGitError> {
+    use std::io::Write as _;
+    use std::process::Stdio;
+
     let mut command = std::process::Command::new("git");
     command.args(args);
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
     }
-    let output = command
-        .output()
+    for (key, value) in env {
+        command.env(key, value);
+    }
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    command.stdin(if stdin.is_some() {
+        Stdio::piped()
+    } else {
+        Stdio::null()
+    });
+    let mut child = command
+        .spawn()
+        .map_err(|source| GitWorkspaceGitError::CommandIo { program, source })?;
+    if let Some(bytes) = stdin
+        && let Some(mut handle) = child.stdin.take()
+    {
+        handle
+            .write_all(bytes)
+            .map_err(|source| GitWorkspaceGitError::CommandIo { program, source })?;
+    }
+    let output = child
+        .wait_with_output()
         .map_err(|source| GitWorkspaceGitError::CommandIo { program, source })?;
     if output.status.success() {
         return Ok(output.stdout);

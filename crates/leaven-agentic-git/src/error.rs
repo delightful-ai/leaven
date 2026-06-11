@@ -7,6 +7,8 @@ use leaven_workspace_git::GitWorkspaceGitError;
 pub enum GitAgenticGitError {
     #[error("git program store map is empty")]
     MissingStores,
+    #[error("git program seed must carry at least one file")]
+    EmptyProgramSeed,
     #[error("missing durable git store for repo `{repo}`")]
     MissingStore { repo: RepoKey },
     #[error("missing git program layout for repo `{repo}`")]

@@ -453,6 +453,115 @@ raise SystemExit("unexpected stage")
     )
 }
 
+/// Worker that scores an `agent_kit` candidate by reading the projected
+/// `candidate_agent_kit.system_prompt`: it answers correctly only when the kit
+/// system prompt carries the improvement marker, and scores by reading
+/// `case.target` during scorer stages with per-case feedback text.
+fn kit_loop_law_worker() -> PathBuf {
+    write_worker(
+        "optimize-kit-worker",
+        &format!(
+            r#"#!/usr/bin/env python3
+import json, sys, select
+
+MARKER = "{MARKER}"
+
+req = json.loads(sys.stdin.readline())
+payload = req["params"]["payload"]
+stage = req["params"]["stage"]
+
+if stage == "runner":
+    kit = payload["case_input"]["candidate_agent_kit"]
+    system_prompt = kit["system_prompt"]
+    # The worker is target-free: it answers from the kit system prompt only.
+    answer = "42" if MARKER in system_prompt else "0"
+    result = {{
+        "schema_version": "leaven.stage_run.v1",
+        "message": "stage_run_result",
+        "stage": "runner",
+        "stage_call_id": payload["stage_call_id"],
+        "output": {{
+            "kind": "text",
+            "summary": "kit runner answer",
+            "value": answer,
+            "visibility": "optimizer_visible",
+            "data_classes": ["candidate.output"]
+        }}
+    }}
+    print(json.dumps({{"jsonrpc": "2.0", "id": req.get("id"), "result": result}}), flush=True)
+    sys.exit(0)
+
+if stage == "scorer":
+    answer = payload["output"]["value"]
+    case_id = payload["case"]
+    callback = {{
+        "jsonrpc": "2.0",
+        "id": "kit-target-1",
+        "method": "leaven/case.target",
+        "params": {{
+            "schema_version": "leaven.plan.v1",
+            "plan_id": "plan_kit_target",
+            "consistency": {{"kind": "latest_at_start"}},
+            "mode": {{"kind": "execute"}},
+            "ops": [{{
+                "kind": "let",
+                "name": "case_target",
+                "expr": {{
+                    "kind": "case_query",
+                    "query": {{
+                        "kind": "load",
+                        "case": {{"kind": "case", "run": payload["run"], "id": case_id}},
+                        "include": ["target"],
+                        "projection_schema": "fp_schema_sha256_case_projection"
+                    }}
+                }}
+            }}],
+            "return": ["case_target"],
+            "commit": {{"kind": "no_graph_writes"}}
+        }}
+    }}
+    print(json.dumps(callback), flush=True)
+    ready, _, _ = select.select([sys.stdin], [], [], 5)
+    if not ready:
+        raise SystemExit("timed out waiting for kit case.target response")
+    target_response = json.loads(sys.stdin.readline())
+    if "error" in target_response:
+        raise SystemExit("case.target refused during kit scorer: " + json.dumps(target_response["error"]))
+    target_answer = target_response["result"]["primary"]["target"]["answer"]
+    correct = str(answer) == str(target_answer)
+    reward_value = 1.0 if correct else 0.0
+    feedback = "KIT_FEEDBACK_MARKER answer matched" if correct else "KIT_FEEDBACK_MARKER the system prompt produced a wrong answer; teach it to use the rule"
+    result = {{
+        "schema_version": "leaven.stage_run.v1",
+        "message": "stage_run_result",
+        "stage": "scorer",
+        "stage_call_id": payload["stage_call_id"],
+        "output": {{
+            "kind": "text",
+            "summary": "kit scorer output",
+            "value": answer,
+            "visibility": "optimizer_visible",
+            "data_classes": ["candidate.output"]
+        }},
+        "score": {{
+            "value": reward_value,
+            "rewards": [{{
+                "id": "exact_match",
+                "value": reward_value,
+                "weight": 1.0,
+                "feedback": feedback
+            }}]
+        }}
+    }}
+    print(json.dumps({{"jsonrpc": "2.0", "id": req.get("id"), "result": result}}), flush=True)
+    sys.exit(0)
+
+raise SystemExit("unexpected stage: " + str(stage))
+"#
+        ),
+    )
+}
+
 /// Mock reflection response: a fenced replacement template carrying the marker
 /// so the GEPA parser admits a changed child.
 fn reflection_response_with_marker() -> MockLmResponseConfig {
@@ -530,6 +639,24 @@ fn optimize_request(seed_template: &str) -> Value {
             "capability_fingerprint": "fp_cap_sha256_optimize"
         }
     })
+}
+
+/// An optimize.run request seeded with an `agent_kit` projection and `agentic`
+/// reflection. The kit carries a system prompt plus one skill file.
+fn agent_kit_request(system_prompt: &str) -> Value {
+    let mut request = optimize_request("unused-prompt-seed");
+    request["params"]["seed"] = json!({
+        "artifact_type": "agent_kit",
+        "artifact_schema": "fp_schema_sha256_agent_kit",
+        "artifact": {
+            "system_prompt": system_prompt,
+            "skills": [
+                {"path": "arithmetic/SKILL.md", "content": "Add carefully."}
+            ]
+        }
+    });
+    request["params"]["reflection"] = json!({"kind": "agentic"});
+    request
 }
 
 fn run_optimize(request: &Value, service: ConfiguredSeamService, pkg: PublicSeamPackage) -> Value {
@@ -746,13 +873,18 @@ fn optimize_run_refuses_agentic_reflection() {
         },
         runs_root.path(),
     );
+    // A prompt seed with `agentic` reflection is refused naming `lm` as the
+    // prompt reflection path.
     let mut request = optimize_request("seed");
     request["params"]["reflection"] = json!({"kind": "agentic"});
     let runtime = runtime(service, pkg);
     let response = runtime.handle_value(&request);
     assert!(response.is_error());
     let message = response.value()["error"]["message"].as_str().unwrap();
-    assert!(message.contains("lm"), "refusal must name `lm`: {message}");
+    assert!(
+        message.contains("lm") && message.contains("prompt"),
+        "refusal must name `lm` and `prompt`: {message}"
+    );
 }
 
 #[test]
@@ -769,28 +901,214 @@ fn optimize_run_refuses_unknown_artifact_type() {
         },
         runs_root.path(),
     );
-    // A schema-valid agent_kit projection parses at the wire layer (the
-    // Git-backed AgentKit host slice lands later), so the configured host refuses
-    // it by typed payload kind, naming the supported `prompt` type rather than
-    // failing at wire validation.
+    // An artifact type outside the V1 set (`prompt` and `agent_kit`) is rejected
+    // at the wire layer before reaching the host.
     let mut request = optimize_request("seed");
     request["params"]["seed"] = json!({
-        "artifact_type": "agent_kit",
-        "artifact_schema": "fp_schema_sha256_agent_kit",
-        "artifact": {
-            "system_prompt": "You are a careful solver.",
-            "skills": [
-                {"path": "arithmetic/SKILL.md", "content": "Add carefully."}
-            ]
-        }
+        "artifact_type": "skill_bank",
+        "artifact_schema": "fp_schema_sha256_skill_bank",
+        "artifact": {"skills": []}
     });
     let runtime = runtime(service, pkg);
     let response = runtime.handle_value(&request);
     assert!(response.is_error());
     let message = response.value()["error"]["message"].as_str().unwrap();
     assert!(
-        message.contains("prompt"),
-        "refusal must name `prompt`: {message}"
+        message.contains("artifact_type") || message.contains("agent_kit"),
+        "refusal must name the unknown artifact_type or the supported set: {message}"
+    );
+}
+
+#[test]
+fn optimize_run_refuses_lm_reflection_for_agent_kit_naming_agentic() {
+    let pkg = package();
+    let runs_root = tempfile::tempdir().unwrap();
+    let service = service_with(
+        &pkg,
+        SeamStageConfig::CommandRunner {
+            argv: vec![loop_law_worker().display().to_string()],
+        },
+        SeamLmConfig::Mock {
+            responses: vec![reflection_response_with_marker()],
+        },
+        runs_root.path(),
+    );
+    // An agent_kit seed with `lm` reflection is refused naming `agentic` as the
+    // kit reflection path.
+    let mut request = agent_kit_request("You are a careful solver.");
+    request["params"]["reflection"] = json!({"kind": "lm", "model": "mock"});
+    let runtime = runtime(service, pkg);
+    let response = runtime.handle_value(&request);
+    assert!(response.is_error());
+    let message = response.value()["error"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("agentic") && message.contains("agent_kit"),
+        "refusal must name agentic and agent_kit: {message}"
+    );
+}
+
+/// Asserts the Git-backed kit loop produced a changed, re-evaluated child that
+/// beats the seed, with truthful lineage, projection, metric-call accounting,
+/// and applied-proposal receipts.
+fn assert_kit_loop_result(pkg: &PublicSeamPackage, result: &Value, evolved_prompt: &str) {
+    pkg.validate_optimize_run_result_document(result)
+        .expect("projected kit result must be schema valid");
+
+    let frontier = result["frontier"].as_array().unwrap();
+    let best_id = result["best"]["candidate"].as_str().unwrap();
+    let seed_entry = frontier
+        .iter()
+        .find(|entry| entry["parent"].is_null())
+        .expect("frontier carries the seed entry");
+    let seed_id = seed_entry["candidate"].as_str().unwrap();
+
+    // The best is a changed child, not the seed; the child's parent is the seed.
+    assert_ne!(best_id, seed_id, "best must be the evolved kit child");
+    assert_score(&result["best"]["score"], 1.0);
+    assert_score(&seed_entry["score"], 0.0);
+    let child_entry = frontier
+        .iter()
+        .find(|entry| entry["candidate"].as_str() == Some(best_id))
+        .unwrap();
+    assert_eq!(
+        child_entry["parent"].as_str(),
+        Some(seed_id),
+        "kit child parent must be the seed"
+    );
+
+    // The child kit artifact is an agent_kit projection whose system prompt
+    // carries the evolved marker; the seed's does not.
+    assert_eq!(child_entry["artifact"]["artifact_type"], "agent_kit");
+    let child_system_prompt = child_entry["artifact"]["artifact"]["system_prompt"]
+        .as_str()
+        .unwrap();
+    assert!(
+        child_system_prompt.contains(MARKER),
+        "evolved kit system prompt must carry the marker: {child_system_prompt}"
+    );
+    assert_eq!(
+        child_system_prompt, evolved_prompt,
+        "the projected child kit must carry the exact evolved system prompt"
+    );
+    assert!(
+        !seed_entry["artifact"]["artifact"]["system_prompt"]
+            .as_str()
+            .unwrap()
+            .contains(MARKER),
+        "seed kit system prompt must not carry the marker"
+    );
+    // The unchanged skill file round-trips into the projection.
+    assert!(
+        child_entry["artifact"]["artifact"]["skills"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|skill| skill["path"] == "arithmetic/SKILL.md"),
+        "the unchanged skill file must survive into the child projection"
+    );
+
+    // Proposals were applied, naming graph truth, and the metric-call accounting
+    // is the reference one-child cost (1 seed + 3 parent + 3 child + 1 = 8).
+    assert!(
+        !result["applied_proposals"].as_array().unwrap().is_empty(),
+        "applied_proposals must be non-empty"
+    );
+    assert!(result["iterations"].as_u64().unwrap() >= 1);
+    assert_eq!(
+        result["metric_calls_used"].as_u64().unwrap(),
+        8,
+        "the kit loop spends the reference 8 metric calls on one authored child"
+    );
+}
+
+#[test]
+fn optimize_run_drives_the_real_git_backed_agent_kit_loop_with_agentic_reflection() {
+    use leaven_agent::test_support::{FakeAgentAction, FakeAgentRuntime};
+    use leaven_workspace::WorkspacePath;
+
+    let pkg = package();
+    let runs_root = tempfile::tempdir().unwrap();
+    let evolved_prompt = format!("Solve using the {MARKER}. Output only the integer.");
+
+    // The fake agent reads the materialized seed system prompt, then writes an
+    // evolved system prompt that carries the marker. Readback turns that edit
+    // into a typed Git child the loop re-evaluates. Task capture lets the test
+    // assert the scorer feedback reached the rendered reflection instructions.
+    let (runtime_agent, captured_tasks) = FakeAgentRuntime::new(vec![
+        FakeAgentAction::ReadFile {
+            path: WorkspacePath::new("repos/agent_kit/system_prompt.md").unwrap(),
+        },
+        FakeAgentAction::WriteFile {
+            path: WorkspacePath::new("repos/agent_kit/system_prompt.md").unwrap(),
+            bytes: evolved_prompt.clone().into_bytes(),
+        },
+    ])
+    .capturing_tasks();
+
+    let service = service_with(
+        &pkg,
+        SeamStageConfig::CommandRunner {
+            argv: vec![kit_loop_law_worker().display().to_string()],
+        },
+        // The mock LM is unused by the agentic kit path; a single response keeps
+        // the config valid.
+        SeamLmConfig::Mock {
+            responses: vec![reflection_response_with_marker()],
+        },
+        runs_root.path(),
+    )
+    .with_test_agent_runtime(runtime_agent);
+
+    let result = run_optimize(&agent_kit_request("Answer plainly."), service, pkg.clone());
+
+    // The frontier, lineage, projection, metric-call accounting, and
+    // applied_proposals laws hold (the changed kit child beats the seed).
+    assert_kit_loop_result(&pkg, &result, &evolved_prompt);
+
+    // Feedback-reaches-reflection: the scorer-provided per-case feedback text
+    // appears in the rendered reflection instructions the agent read.
+    let tasks = captured_tasks.lock().unwrap();
+    assert!(
+        !tasks.is_empty(),
+        "the agentic reflector must have run at least one session"
+    );
+    assert!(
+        tasks
+            .iter()
+            .any(|task| task.contains("KIT_FEEDBACK_MARKER")),
+        "the scorer per-case feedback must reach the rendered reflection instructions"
+    );
+
+    // A durable checkpoint exists in the run dir.
+    let run_dir = runs_root.path().join("run_optimize_loop");
+    assert!(
+        walk_has_checkpoint(&run_dir),
+        "a checkpoint must exist under {run_dir:?}"
+    );
+}
+
+#[test]
+fn optimize_run_kit_unavailable_without_configured_agent_runtime() {
+    let pkg = package();
+    let runs_root = tempfile::tempdir().unwrap();
+    // A command worker is configured (so the dispatch is available), but no agent
+    // runtime is wired, so an agentic agent_kit run is unavailable.
+    let service = service_with(
+        &pkg,
+        SeamStageConfig::CommandRunner {
+            argv: vec![loop_law_worker().display().to_string()],
+        },
+        SeamLmConfig::Mock {
+            responses: vec![reflection_response_with_marker()],
+        },
+        runs_root.path(),
+    );
+    let request = agent_kit_request("You are a careful solver.");
+    let runtime = runtime(service, pkg);
+    let response = runtime.handle_value(&request);
+    assert!(
+        response.is_error(),
+        "agentic agent_kit without an agent runtime must be unavailable"
     );
 }
 

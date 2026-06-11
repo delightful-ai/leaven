@@ -58,13 +58,16 @@ method unsupported.
   plus GEPA frontier into the locked `leaven.optimize_run.v1` result document.
   It owns lowering, worker composition, and projection only. GEPA search policy
   stays in `leaven-gepa`, wire law stays in `leaven-public-seam`, and graph
-  mutation stays behind `RunContext` through the `leaven-run` builder. The
-  `prompt` artifact type, `instance` objective, and `lm` reflection kind are the
-  executable V1 surface; every other config value is refused with a message
-  naming what is supported. `population_size` lowers into the GEPA candidate-pool
-  cap (`Gepa::max_candidates`) as a stop condition over the seed plus
-  loop-authored children, and `minibatch_size` lowers into the GEPA train
-  screening minibatch override (`Gepa::train_minibatch_size`, applied after
+  mutation stays behind `RunContext` through the `leaven-run` builder. Two
+  artifact types are executable: `prompt` (LM reflection) and `agent_kit`
+  (Git-backed agentic reflection). The `instance` objective is the executable
+  objective; every other config value is refused with a message naming what is
+  supported. The artifact type fixes the reflection kind: `prompt` requires `lm`
+  reflection and refuses `agentic` naming `lm`; `agent_kit` requires `agentic`
+  reflection and refuses `lm` naming `agentic`. `population_size` lowers into the
+  GEPA candidate-pool cap (`Gepa::max_candidates`) as a stop condition over the
+  seed plus loop-authored children, and `minibatch_size` lowers into the GEPA
+  train screening minibatch override (`Gepa::train_minibatch_size`, applied after
   `with_profile` and order-independent). A service law refuses `population_size`
   of 1 naming the `>= 2` bound (a cap of 1 admits only the seed); the wire schema
   enforces `>= 1`, so the `>= 2` bound is service-layer law, like `objective` !=
@@ -72,6 +75,23 @@ method unsupported.
   `applied_proposals` receipts are opaque service-issued `wrec_` ids bound 1:1
   to the run's durable candidate-apply records; they name graph truth, not
   inline writes.
+- `optimize_run_service/agent_kit/`: the Git-backed AgentKit optimization path.
+  It owns the `agent_kit` wire-record-to-Git-file projection (mapping the wire
+  `{system_prompt, skills}` projection onto a `manifest.toml` /
+  `system_prompt.md` / `skills/<path>` file map and back), the kit GEPA loop over
+  a `GitProgramArtifact` with the `GepaGitProgramAgenticReflector`, the kit
+  candidate snapshot, and the kit result projection. The run-scoped Git seed
+  construction (deterministic commit identity) and revision readback are NOT owned
+  here: they live in `leaven-agentic-git` (`build_program_seed` /
+  `read_revision_files`); the real `EditSurface<GitProgramArtifact>`
+  (`GitProgramPathSurface`) and agentic reflector live in
+  `leaven-gepa-agentic-git`. Each kit candidate is projected per-revision into the
+  runner payload under the `candidate_agent_kit` key (sibling of the prompt path's
+  `candidate_template`), so a worker reads the flat kit content. The agent runtime
+  is resolved from `SeamAgentConfig::CodexCli` for the live path; deterministic
+  tests inject a scripted `FakeAgentRuntime` through a `#[cfg(test)]`-only service
+  slot (never a serde config or public scaffold). An agentic `agent_kit` run with
+  no configured agent runtime is refused with the method-unavailable style.
 
 ## Verification
 
@@ -102,9 +122,24 @@ provider, and `worker_effect_cost_aggregates_into_result_cost_totals` exercises 
 worker that issues `leaven/lm.complete` under the loop runtime. If you change the
 loop executor or the LM callback threading, keep both passing.
 
-If dependencies or crate boundaries change (the host adds the
-`leaven-seam-service -> leaven-gepa`/`leaven-eval`/`leaven-surface` edges), also
-run:
+The Git-backed AgentKit loop law is
+`optimize_run_service::tests::optimize_run_drives_the_real_git_backed_agent_kit_loop_with_agentic_reflection`:
+it seeds a run-scoped Git repo from the wire kit projection, runs the agentic
+reflection loop with a scripted `FakeAgentRuntime` that authors a changed
+`system_prompt.md`, and proves the changed kit child is applied and re-evaluated
+onto the frontier (best != seed, parent == seed, evolved system prompt visible in
+the `agent_kit` projection, unchanged skill preserved, exact 8 metric calls,
+applied_proposals non-empty). It also proves the first-class
+feedback-reaches-reflection requirement: the scorer-provided per-case feedback
+text appears in the rendered reflection instructions the agent read (captured via
+the test-support task-capture hook). Companion refusal laws cover prompt+agentic
+(naming `lm`), agent_kit+lm (naming `agentic`), and agentic agent_kit without a
+configured agent runtime (unavailable).
+
+If dependencies or crate boundaries change (the kit path adds the
+`leaven-seam-service -> leaven-agentic-git`/`leaven-artifact-git`/`leaven-gepa-agentic-git`/`leaven-agentic`
+edges on top of the prompt path's `leaven-gepa`/`leaven-eval`/`leaven-surface`
+edges), also run:
 
 ```bash
 cargo test -p leaven --test topology_contract

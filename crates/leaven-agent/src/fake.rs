@@ -16,6 +16,7 @@ pub struct FakeAgentRuntime {
     capabilities: AgentRuntimeCapabilities,
     actions: Vec<FakeAgentAction>,
     cost: Cost,
+    captured_tasks: Option<std::sync::Arc<std::sync::Mutex<Vec<String>>>>,
 }
 
 impl FakeAgentRuntime {
@@ -27,6 +28,7 @@ impl FakeAgentRuntime {
             capabilities: AgentRuntimeCapabilities::default(),
             actions,
             cost: Cost::zero(),
+            captured_tasks: None,
         }
     }
 
@@ -54,6 +56,19 @@ impl FakeAgentRuntime {
     pub fn with_capabilities(mut self, capabilities: AgentRuntimeCapabilities) -> Self {
         self.capabilities = capabilities;
         self
+    }
+
+    /// Records the rendered task instructions each session receives.
+    ///
+    /// Returns a handle a test can read after the run to assert what the agent
+    /// actually saw (for example, that scorer-provided per-case feedback reached
+    /// the rendered reflection instructions). Captured tasks accumulate in
+    /// session order.
+    #[must_use]
+    pub fn capturing_tasks(mut self) -> (Self, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+        let slot = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        self.captured_tasks = Some(slot.clone());
+        (self, slot)
     }
 }
 
@@ -96,6 +111,12 @@ impl AgentRuntime for FakeAgentRuntime {
         if ctx.cancellation().is_cancelled() {
             session.status = AgentStatus::Cancelled;
             return Ok(Metered::new(session, self.cost.clone()));
+        }
+
+        if let Some(slot) = &self.captured_tasks {
+            slot.lock()
+                .expect("fake agent captured-tasks lock poisoned")
+                .push(request.instructions.task.clone());
         }
 
         if let Some(system) = request.instructions.system {

@@ -12,6 +12,7 @@
 //! behind `RunContext`. This module owns lowering, worker composition, and
 //! projection only.
 
+mod agent_kit;
 mod error;
 mod instrumentation;
 mod lowering;
@@ -96,6 +97,34 @@ fn execute(
         lm_handler,
     );
 
+    match &lowered.objective {
+        lowering::LoweredObjective::Prompt { .. } => {
+            execute_prompt(service, &lowered, dispatch, &run_dir_root)
+        }
+        lowering::LoweredObjective::AgentKit { .. } => {
+            agent_kit::execute_agent_kit(service, &lowered, dispatch, &run_dir_root)
+        }
+    }
+}
+
+/// Runs the prompt-template LM-reflection optimization path and projects its
+/// result.
+fn execute_prompt(
+    service: &ConfiguredSeamService,
+    lowered: &LoweredRequest,
+    dispatch: WorkerDispatch,
+    run_dir_root: &std::path::Path,
+) -> Result<Value, OptimizeRunHostError> {
+    let lowering::LoweredObjective::Prompt {
+        seed,
+        reflection_model,
+    } = &lowered.objective
+    else {
+        return Err(OptimizeRunHostError::lowering(
+            "execute_prompt requires a prompt objective",
+        ));
+    };
+
     let reflection_lm = service
         .configured_lm_runtime()
         .map_err(|error| OptimizeRunHostError::lowering(error.to_string()))?;
@@ -106,13 +135,15 @@ fn execute(
         Arc::new(std::sync::Mutex::new(None));
 
     let optimized = run_gepa_loop(GepaLoopInputs {
-        lowered: &lowered,
+        lowered,
+        seed: seed.clone(),
+        reflection_model: reflection_model.clone(),
         dispatch,
         reflection_lm,
         events: events.clone(),
         artifacts: artifacts.clone(),
         report_slot: report_slot.clone(),
-        run_dir: run_dir_root.clone(),
+        run_dir: run_dir_root.to_path_buf(),
     })?;
 
     let report = report_slot
@@ -125,7 +156,7 @@ fn execute(
         })?;
 
     let event_summaries = events.snapshot();
-    write_run_instrumentation(&run_dir_root, &event_summaries, Some(&report));
+    write_run_instrumentation(run_dir_root, &event_summaries, Some(&report));
 
     let revision = revision_label(&optimized, &lowered.run_id);
     let result = project_result(&ProjectionInputs {
@@ -142,6 +173,8 @@ fn execute(
 
 struct GepaLoopInputs<'a> {
     lowered: &'a LoweredRequest,
+    seed: SeamPromptArtifact,
+    reflection_model: String,
     dispatch: WorkerDispatch,
     reflection_lm: crate::lm::ConfiguredLmRuntime,
     events: GepaEventLog,
@@ -182,6 +215,8 @@ async fn run_gepa_loop_async(
 ) -> Result<Optimized<SeamPromptArtifact>, OptimizeRunHostError> {
     let GepaLoopInputs {
         lowered,
+        seed,
+        reflection_model,
         dispatch,
         reflection_lm,
         events,
@@ -190,11 +225,9 @@ async fn run_gepa_loop_async(
         run_dir,
     } = inputs;
 
-    let seed = lowered.seed.clone();
     let train = lowered.train.clone();
     let validation = lowered.validation.clone();
     let test = lowered.test.clone();
-    let reflection_model = lowered.reflection_model.clone();
     let max_metric_calls = lowered.max_metric_calls;
     let max_candidates = lowered.max_candidates;
     let train_minibatch_size = lowered.train_minibatch_size;
@@ -241,16 +274,7 @@ async fn run_gepa_loop_async(
     // ceiling adds a second budget axis: the worker reports metered provider
     // spend on the `usd_micro` cost axis, and the engine budget ledger refuses a
     // charge that would exceed this axis limit, stopping the loop on real spend.
-    let mut budget = Budget::metric_calls(max_metric_calls);
-    if let Some(usd_micro) = max_cost_usd_micro {
-        budget = budget
-            .with_axis_limit("usd_micro", u64_to_f64(usd_micro))
-            .map_err(|error| {
-                OptimizeRunHostError::lowering(format!(
-                    "optimizer.max_cost_usd_micro is not a valid budget amount: {error}"
-                ))
-            })?;
-    }
+    let budget = build_budget(max_metric_calls, max_cost_usd_micro)?;
 
     let optimized = leaven_run::optimize(seed)
         .train(train)
@@ -259,7 +283,12 @@ async fn run_gepa_loop_async(
         .runner(
             move |artifact: SeamPromptArtifact, case: leaven_run::RunCase<Value>| {
                 let dispatch = runner_dispatch.clone();
-                async move { run_runner_stage(dispatch, artifact, case).await }
+                // The prompt path projects its candidate material as the single
+                // `candidate_template` key the worker reads.
+                let candidate_payload = serde_json::json!({
+                    "candidate_template": artifact.template(),
+                });
+                async move { run_runner_stage(dispatch, candidate_payload, case).await }
             },
         )
         .score(
@@ -283,7 +312,9 @@ async fn run_gepa_loop_async(
     Ok(optimized)
 }
 
-fn error_chain(error: &(dyn std::error::Error + 'static)) -> String {
+pub(in crate::optimize_run_service) fn error_chain(
+    error: &(dyn std::error::Error + 'static),
+) -> String {
     let mut message = error.to_string();
     let mut source = error.source();
     while let Some(cause) = source {
@@ -294,12 +325,35 @@ fn error_chain(error: &(dyn std::error::Error + 'static)) -> String {
     message
 }
 
-fn sequential() -> std::num::NonZeroUsize {
+pub(in crate::optimize_run_service) fn sequential() -> std::num::NonZeroUsize {
     std::num::NonZeroUsize::new(1).expect("1 is non-zero")
 }
 
+/// Builds the run budget shared by both optimization paths.
+///
+/// The metric-call cap always bounds the loop. An optional `usd_micro` cost
+/// ceiling adds a second budget axis: the worker reports metered provider spend
+/// on the `usd_micro` cost axis, and the engine budget ledger refuses a charge
+/// that would exceed this axis limit, stopping the loop on real spend.
+pub(in crate::optimize_run_service) fn build_budget(
+    max_metric_calls: u64,
+    max_cost_usd_micro: Option<u64>,
+) -> Result<Budget, OptimizeRunHostError> {
+    let mut budget = Budget::metric_calls(max_metric_calls);
+    if let Some(usd_micro) = max_cost_usd_micro {
+        budget = budget
+            .with_axis_limit("usd_micro", u64_to_f64(usd_micro))
+            .map_err(|error| {
+                OptimizeRunHostError::lowering(format!(
+                    "optimizer.max_cost_usd_micro is not a valid budget amount: {error}"
+                ))
+            })?;
+    }
+    Ok(budget)
+}
+
 #[allow(clippy::cast_precision_loss)]
-fn u64_to_f64(value: u64) -> f64 {
+pub(in crate::optimize_run_service) fn u64_to_f64(value: u64) -> f64 {
     // A `usd_micro` ceiling is a non-negative integer counter; the f64 budget
     // axis tolerates rounding well beyond any realistic micro-dollar ceiling.
     value as f64
@@ -308,7 +362,9 @@ fn u64_to_f64(value: u64) -> f64 {
 /// Stable durable behavior fingerprint for the worker-backed runner/scorer
 /// closures. Worker closures are not introspectable, so durable runs require an
 /// explicit declared fingerprint per role.
-fn worker_runtime_fingerprint(role: &str) -> leaven_kernel::Fingerprint {
+pub(in crate::optimize_run_service) fn worker_runtime_fingerprint(
+    role: &str,
+) -> leaven_kernel::Fingerprint {
     let mut builder = leaven_kernel::FingerprintBuilder::new();
     builder.update(b"leaven-seam-service.optimize_run.worker.v1");
     builder.update(role.as_bytes());
@@ -320,7 +376,9 @@ fn worker_runtime_fingerprint(role: &str) -> leaven_kernel::Fingerprint {
 /// GEPA's reflective dataset only reads this case input string; the target is
 /// never projected here. Object inputs render each field on its own line so the
 /// reflection prompt sees structured input without raw JSON noise.
-fn project_case_input(case: &leaven_eval::Case<Value, Value>) -> String {
+pub(in crate::optimize_run_service) fn project_case_input(
+    case: &leaven_eval::Case<Value, Value>,
+) -> String {
     match &case.input {
         Value::String(text) => text.clone(),
         Value::Object(fields) => fields
@@ -336,6 +394,21 @@ fn project_case_input(case: &leaven_eval::Case<Value, Value>) -> String {
 }
 
 fn revision_label(optimized: &Optimized<SeamPromptArtifact>, run_id: &str) -> String {
+    revision_label_for(optimized, run_id)
+}
+
+/// Kit-path revision label over a `GitProgramArtifact` result.
+pub(in crate::optimize_run_service) fn revision_label_kit(
+    optimized: &Optimized<leaven_artifact_git::GitProgramArtifact>,
+    run_id: &str,
+) -> String {
+    revision_label_for(optimized, run_id)
+}
+
+fn revision_label_for<A>(optimized: &Optimized<A>, run_id: &str) -> String
+where
+    A: leaven_core::Artifact,
+{
     if let leaven_run::RunStorage::Stored {
         latest_checkpoint: Some(checkpoint),
         ..

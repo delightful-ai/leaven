@@ -32,6 +32,12 @@ not an ordinary prelude/default-feature product route.
   into locked V1 stage payloads, handoff receipts, and the proposal submission
   plan that cites the proposer-stage receipt.
 - `reflector.rs` wraps `AgenticProposer` as a `GepaReflector`.
+- `surface.rs` owns `GitProgramPathSurface`, the real `EditSurface` the agentic
+  Git reflection path runs over: it exposes each program repo as one selectable
+  part (part id = `RepoKey`, address = layout `GitPath`) and lowers a typed
+  `GitProgramChange` through `change_part`. The agentic path produces its change
+  through readback rather than `change_part`, but the surface is
+  behavior-bearing for GEPA part selection and for programmatic change lowering.
 
 ## Public Maturity
 

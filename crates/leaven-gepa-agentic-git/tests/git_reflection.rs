@@ -132,6 +132,58 @@ fn renderer_covers_empty_and_nested_reflective_examples() {
 }
 
 #[test]
+fn path_surface_exposes_each_repo_as_a_selectable_part() {
+    use leaven_surface::EditSurface;
+    let fixture = GitFixture::new();
+    let artifact = fixture.program_artifact();
+    let surface = leaven_gepa_agentic_git::GitProgramPathSurface;
+
+    // The single program repo is exposed as one part keyed by its repo key with
+    // its materialization layout as the address.
+    let parts = surface.parts(&artifact).unwrap();
+    assert_eq!(parts.len(), 1);
+    assert_eq!(parts[0].id, repo_key("program"));
+    assert_eq!(parts[0].address, git_path("repos/program"));
+    assert_eq!(parts[0].view, "repos/program");
+
+    // A typed change targeting the selected repo lowers through change_part; one
+    // targeting a different/absent repo is refused.
+    let parent_revision = artifact
+        .repo(&repo_key("program"))
+        .unwrap()
+        .revision()
+        .clone();
+    let change = leaven_artifact_git::GitProgramChange::AdvanceRepo {
+        repo: repo_key("program"),
+        expected_parent: parent_revision.clone(),
+        child: parent_revision,
+    };
+    assert!(
+        surface
+            .change_part(&artifact, repo_key("program"), change.clone())
+            .is_ok()
+    );
+    let bench_revision = fixture.program_parent;
+    let mismatched = leaven_artifact_git::GitProgramChange::AdvanceRepo {
+        repo: repo_key("bench"),
+        expected_parent: bench_revision.clone(),
+        child: bench_revision,
+    };
+    assert!(
+        surface
+            .change_part(&artifact, repo_key("program"), mismatched)
+            .is_err(),
+        "a change that does not target the selected repo must be refused"
+    );
+    assert!(
+        surface
+            .change_part(&artifact, repo_key("bench"), change)
+            .is_err(),
+        "selecting an absent repo part must be refused"
+    );
+}
+
+#[test]
 fn parser_reports_missing_parent_and_clean_workspace() {
     let fixture = GitFixture::new();
     let parser = GitProgramGepaReflectionParser::new(GitProgramReadback::new(fixture.stores()));
@@ -230,25 +282,21 @@ fn reflector_wrapper_runs_agentic_proposer_under_llvm_coverage() {
             GitProgramMaterializer::new(fixture.stores()),
             GitProgramReadback::new(fixture.stores()),
         );
-        let request = ReflectRequest::for_part(
-            parent,
-            "repos/program/program.txt".to_owned(),
-            "program.txt",
-        )
-        .with_examples([ReflectiveCase::from_example(
-            ReflectiveValue::Text("runtime read the parent".to_owned()),
-            None,
-            None,
-            None,
-            "write the reflected body",
-        )])
-        .with_source_refs([InfoRef::Candidate(parent)]);
+        let request = ReflectRequest::for_part(parent, repo_key("program"), "program")
+            .with_examples([ReflectiveCase::from_example(
+                ReflectiveValue::Text("runtime read the parent".to_owned()),
+                None,
+                None,
+                None,
+                "write the reflected body",
+            )])
+            .with_source_refs([InfoRef::Candidate(parent)]);
         let mut ctx = RunContext::<GitProblem>::new(&mut graph, &mut budget);
 
         let child = leaven_gepa::GepaReflector::reflect_candidate(
             &mut reflector,
             &mut ctx,
-            &GitProgramPathSurface,
+            &leaven_gepa_agentic_git::GitProgramPathSurface,
             request,
         )
         .await
@@ -857,41 +905,4 @@ fn workspace_path(path: &str) -> WorkspacePath {
 
 fn git_object(hex: &str) -> GitObjectId {
     GitObjectId::new(hex).unwrap()
-}
-
-#[cfg(coverage)]
-struct GitProgramPathSurface;
-
-#[cfg(coverage)]
-impl leaven_surface::EditSurface<GitProgramArtifact> for GitProgramPathSurface {
-    type PartId = String;
-    type Address = String;
-    type View<'a>
-        = String
-    where
-        GitProgramArtifact: 'a;
-    type Edit = ();
-
-    fn fingerprint(&self) -> leaven_surface::SurfaceFingerprint {
-        leaven_surface::SurfaceFingerprint(leaven_kernel::Fingerprint::from_bytes([9; 32]))
-    }
-
-    fn parts<'a>(
-        &self,
-        _artifact: &'a GitProgramArtifact,
-    ) -> Result<
-        Vec<leaven_surface::Part<Self::PartId, Self::Address, Self::View<'a>>>,
-        leaven_surface::SurfaceError,
-    > {
-        Ok(Vec::new())
-    }
-
-    fn change_part(
-        &self,
-        _artifact: &GitProgramArtifact,
-        _id: Self::PartId,
-        _edit: Self::Edit,
-    ) -> Result<leaven_artifact_git::GitProgramChange, leaven_surface::SurfaceError> {
-        Err(leaven_surface::SurfaceError::UnknownPart)
-    }
 }

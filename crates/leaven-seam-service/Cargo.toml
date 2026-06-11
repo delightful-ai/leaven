@@ -12,10 +12,14 @@ futures = { workspace = true }
 jcs-canonicalize = { workspace = true }
 leaven-agent = { workspace = true }
 leaven-agent-codex-cli = { workspace = true }
+leaven-agentic = { workspace = true }
+leaven-agentic-git = { workspace = true }
+leaven-artifact-git = { workspace = true }
 leaven-core = { workspace = true }
 leaven-engine = { workspace = true }
 leaven-eval = { workspace = true }
 leaven-gepa = { workspace = true }
+leaven-gepa-agentic-git = { workspace = true }
 leaven-kernel = { workspace = true }
 leaven-lm = { workspace = true }
 leaven-lm-mock = { workspace = true }

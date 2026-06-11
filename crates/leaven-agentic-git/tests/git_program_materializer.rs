@@ -430,6 +430,88 @@ fn readback_freezes_dirty_worktree_as_imported_child_commit() {
 }
 
 #[test]
+fn readback_detects_a_content_edit_a_colliding_stat_check_would_miss() {
+    // Loop-law hardening: change detection must be content-truthful, not
+    // stat-cache-truthful. A materialized checkout writes its index, then a
+    // foreign process (the agent) rewrites a tracked file in place. A stat-based
+    // check (`git status`, `git diff-index`, even `git update-index --refresh`)
+    // can trust the cached stat and mis-read a real edit as clean when the
+    // post-write stat collides with the index entry, silently dropping the
+    // authored child as "no changes".
+    //
+    // This reproduces that collision deterministically: under
+    // `core.checkStat=minimal` git compares only (mtime, size), so a same-size
+    // edit whose mtime is pinned back to the entry's mtime is invisible to every
+    // stat-based check. The content-based readback must still freeze the edit
+    // into an imported child commit.
+    block_on(async {
+        let fixture = GitFixture::new();
+        let artifact = fixture.parent_artifact();
+        let mut workspace = materialized_workspace(&fixture, &artifact).await;
+        let mut view = workspace.view();
+        configure_workspace_git(&mut view, "repos/program");
+        workspace_git(
+            &mut view,
+            "repos/program",
+            ["config", "core.checkStat", "minimal"],
+        );
+
+        // Pin the seed file's mtime to a fixed instant, then re-add it so the
+        // index entry records that exact (mtime, size).
+        let pinned = "200001010000.00";
+        workspace_command(
+            &mut view,
+            Some("repos/program"),
+            "touch",
+            ["-t", pinned, "program.txt"],
+        );
+        workspace_git(&mut view, "repos/program", ["add", "program.txt"]);
+
+        // Same-size edit (`program base\n` -> `program EDIT\n`, both 13 bytes),
+        // with the mtime pinned back to the recorded value. Under minimal
+        // checkStat the (mtime, size) pair is unchanged, so a stat-based check
+        // sees a clean worktree.
+        view.write_file(
+            &workspace_path("repos/program/program.txt"),
+            b"program EDIT\n",
+        )
+        .unwrap();
+        workspace_command(
+            &mut view,
+            Some("repos/program"),
+            "touch",
+            ["-t", pinned, "program.txt"],
+        );
+        assert!(
+            workspace_git_output(&mut view, "repos/program", ["status", "--porcelain"]).is_empty(),
+            "the collision must make a stat-based status report clean, or this test proves nothing",
+        );
+
+        let change = GitProgramReadback::new(fixture.stores())
+            .read_back_change(&artifact, &mut view)
+            .unwrap()
+            .expect("a content edit must produce a change even when a stat check sees it as clean");
+
+        let GitProgramChange::AdvanceRepo { child, .. } = change else {
+            panic!("single edited repo should return AdvanceRepo");
+        };
+        let GitRevision::Commit(child) = child else {
+            panic!("edit readback should freeze a commit");
+        };
+        assert_eq!(
+            git_output(
+                &fixture.program_store,
+                ["show", &format!("{child}:program.txt")],
+            ),
+            "program EDIT\n"
+        );
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+    });
+}
+
+#[test]
 fn readback_freezes_dirty_worktree_without_local_mount() {
     block_on(async {
         let fixture = GitFixture::new();

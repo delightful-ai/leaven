@@ -1145,7 +1145,17 @@ rows:
       optimize.run result. A deterministic mock-LM + scripted-worker run authors
       a changed child, applies it through RunContext, re-evaluates it onto the
       frontier as the best candidate, and reports the exact reference
-      metric-call count.
+      metric-call count. The agent_kit artifact type executes too (Git-backed
+      host slice, 2026-06-11): the host seeds a run-scoped bare Git repo with a
+      deterministic seed commit from the wire projection, runs the loop over a
+      GitProgramArtifact with the agentic reflector over the real
+      GitProgramPathSurface, projects each candidate revision into the runner
+      payload under candidate_agent_kit, and reads evolved child revisions back
+      into the wire agent_kit shape. A deterministic scripted-worker plus
+      scripted-FakeAgentRuntime run authors a changed system_prompt.md that is
+      applied through RunContext and re-evaluated onto the frontier as the best
+      candidate, with the scorer per-case feedback reaching the rendered
+      reflection instructions.
     negative_proof: >
       An optimize.run request with an empty case manifest, an objective outside the
       locked enum, a missing case target field, or zero max_metric_calls is
@@ -1155,9 +1165,11 @@ rows:
       artifact projection missing system_prompt, or carrying a skill file whose
       path is absolute or contains parent traversal, is rejected at the wire layer
       by the typed payload parser and its AgentKit path law. The configured host
-      also refuses a valid agent_kit artifact projection (the Git-backed AgentKit
-      host slice lands later), the objective, hybrid, and cartesian objectives,
-      and the agentic reflection kind, each naming what is supported. The host now honors optimizer.population_size as
+      refuses the objective, hybrid, and cartesian objectives, each naming
+      instance. The artifact type fixes the reflection kind: a prompt seed with
+      agentic reflection is refused naming lm, an agent_kit seed with lm
+      reflection is refused naming agentic, and an agentic agent_kit run with no
+      configured agent runtime returns the method-unavailable style. The host now honors optimizer.population_size as
       the candidate-pool cap (a stop condition over the seed plus loop-authored
       children) and optimizer.minibatch_size as the train screening minibatch
       override, but refuses population_size == 1 naming the >= 2 service bound (a
@@ -1182,6 +1194,7 @@ rows:
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::population_size_caps_the_candidate_pool_at_seed_plus_one_child
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::minibatch_size_overrides_the_reference_screening_minibatch
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::worker_effect_cost_aggregates_into_result_cost_totals
+      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_drives_the_real_git_backed_agent_kit_loop_with_agentic_reflection
       - crates/leaven-public-seam/tests/public_seam_contract/acp_profile.rs::locked_worker_profile_excludes_the_client_to_host_optimize_run_dispatch
     negative_test_evidence:
       - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_rejects_empty_case_manifest
@@ -1193,6 +1206,8 @@ rows:
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::runner_stage_refuses_case_target_while_scorer_stage_serves_it
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_refuses_unsupported_objective_naming_instance
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_refuses_agentic_reflection
+      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_refuses_lm_reflection_for_agent_kit_naming_agentic
+      - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_kit_unavailable_without_configured_agent_runtime
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_refuses_unknown_artifact_type
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_refuses_population_size_one_naming_the_minimum_bound
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_unavailable_without_configured_stage_worker

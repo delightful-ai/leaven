@@ -49,6 +49,10 @@ pub struct ConfiguredSeamService {
     capability: Option<CapabilityDocument>,
     graph_state: Arc<Mutex<SeamGraphState>>,
     run_context_state: Option<Arc<Mutex<RunContextProposalApplyState>>>,
+    /// Test-support scripted agent runtime for the optimize.run kit path. Gated
+    /// to test builds; never part of the serde service config.
+    #[cfg(test)]
+    test_agent_runtime: Option<leaven_agent::test_support::FakeAgentRuntime>,
 }
 
 impl ConfiguredSeamService {
@@ -85,6 +89,8 @@ impl ConfiguredSeamService {
             run_context_state,
             config,
             capability,
+            #[cfg(test)]
+            test_agent_runtime: None,
         })
     }
 
@@ -137,6 +143,38 @@ impl ConfiguredSeamService {
         &self,
     ) -> Result<crate::lm::ConfiguredLmRuntime, leaven_lm::LmError> {
         self.config.lm.to_lm_runtime()
+    }
+
+    /// Builds the configured Codex CLI agent runtime, when one is wired.
+    ///
+    /// The optimize.run `agent_kit` path uses this as the live agentic reflection
+    /// runtime; when `SeamAgentConfig::None` is configured, the host refuses the
+    /// kit path with the method-unavailable style.
+    pub(crate) fn configured_codex_runtime(&self) -> Option<CodexCliRuntime> {
+        self.config.agent.to_codex_runtime()
+    }
+
+    /// Test-support scripted agent runtime for the optimize.run `agent_kit` path.
+    ///
+    /// Deterministic tests inject a `FakeAgentRuntime` here so the Git-backed
+    /// agentic reflection loop runs without a live provider. This is gated to
+    /// test builds and is never part of the serde service config, so a fake
+    /// runtime cannot masquerade as a configured provider in production.
+    #[cfg(test)]
+    pub(crate) fn test_agent_runtime(
+        &self,
+    ) -> Option<leaven_agent::test_support::FakeAgentRuntime> {
+        self.test_agent_runtime.clone()
+    }
+
+    /// Installs a test-support scripted agent runtime for the kit path.
+    #[cfg(test)]
+    pub(crate) fn with_test_agent_runtime(
+        mut self,
+        runtime: leaven_agent::test_support::FakeAgentRuntime,
+    ) -> Self {
+        self.test_agent_runtime = Some(runtime);
+        self
     }
 
     /// Root directory under which an optimize.run durable run persists.

@@ -19,8 +19,8 @@ use crate::{
     git_ops::{
         BundleImportCleanup, apply_patch_bytes, bundle_head, checked_out_bytes, current_head,
         ensure_expected_parent, ensure_parent_dir, export_commit_bundle, freeze_worktree, host_git,
-        materialization_bundle, output_proposal_path, remove_workspace_file, repo_dirty, run_git,
-        run_git_output, run_git_vec, workspace_path,
+        materialization_bundle, output_proposal_path, remove_workspace_file, run_git,
+        run_git_output, run_git_vec, workspace_path, worktree_differs_from_parent,
     },
 };
 
@@ -152,7 +152,7 @@ impl GitProgramReadback {
                 continue;
             }
 
-            if !repo_dirty(workspace, &checkout)? {
+            if !worktree_differs_from_parent(workspace, &checkout)? {
                 let head = current_head(workspace, &checkout)?;
                 if &head == parent_commit {
                     continue;
