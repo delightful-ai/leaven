@@ -7,6 +7,7 @@ from typing import cast
 from ..artifacts.prompt import PromptArtifact
 from ..decorators import RegisteredStage
 from ..proposal import ProposalBatch
+from ..rubric import RegisteredReward, Rubric
 from ..stage_payloads import ProposeRequest
 from .stage_types import WorkerStage
 
@@ -33,6 +34,33 @@ def load_stage_from_file(
         f"stage {stage_id!r} / {stage_name!r} not found in {module_file}; "
         f"available registered stages: {available}"
     )
+
+
+def load_rubric_from_file(module_file: Path, *, reward_names: list[str]) -> Rubric:
+    """Execute a stage file and rebuild the rubric from the requested rewards.
+
+    The optimize host dispatches scorer stages to the same worker argv as runner
+    stages, so the worker reloads the module and collects the rubric's
+    `@lv.reward` functions by function name (stable across the `__main__` /
+    worker-reload module rename), in the order the driver recorded them. A
+    missing reward is a hard error rather than a silently smaller rubric.
+    """
+    namespace = runpy.run_path(str(module_file), run_name=_run_name(module_file))
+    by_name: dict[str, RegisteredReward] = {}
+    for value in namespace.values():
+        if isinstance(value, RegisteredReward):
+            by_name[value.func.__name__] = value
+    rewards: list[RegisteredReward] = []
+    for name in reward_names:
+        if name not in by_name:
+            available = sorted(by_name)
+            raise LookupError(
+                f"reward {name!r} not found in {module_file}; available rewards: {available}"
+            )
+        rewards.append(by_name[name])
+    if not rewards:
+        raise ValueError("scorer worker requires at least one rubric reward")
+    return Rubric(rewards)
 
 
 def _run_name(module_file: Path) -> str:

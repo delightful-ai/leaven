@@ -93,7 +93,7 @@ PLAN_RESULT_SCHEMA_FINGERPRINT = (
     "fp_schema_sha256_51fcd2b973fdb5ec3936e09607bac98ad9d733d91de9491f5cdd10c11761d000"
 )
 STAGE_RUN_SCHEMA_FINGERPRINT = (
-    "fp_schema_sha256_da2d026c060b655ea39850dbd43034e097260eefb88a3667207343fb6353a7ec"
+    "fp_schema_sha256_9f5df7a8b4b7163c74ef4afa5197fb22ae1bcb1b21d007cb5cd863494fc1e228"
 )
 
 
@@ -375,6 +375,25 @@ class RunnerRequest(
     capability_fingerprint: str
 
 
+class ScorerRequest(
+    Struct,
+    frozen=True,
+    forbid_unknown_fields=True,
+    omit_defaults=True,
+    tag="scorer",
+    tag_field="role",
+):
+    schema_version: Literal["leaven.stage_payloads.v1"]
+    run: str
+    stage_call_id: str
+    evaluation_request_id: str
+    candidate: CandidateRef
+    case: CaseRef
+    output: OutputRecord
+    capability_fingerprint: str
+    target_handle: CaseRef | UnsetType = UNSET
+
+
 type ProposalEffect = Literal[
     "create",
     "change",
@@ -405,7 +424,7 @@ class ProposeRequest(
     query_policy_fingerprint: str | UnsetType = UNSET
 
 
-type StageRunPayload = RunnerRequest | ProposeRequest
+type StageRunPayload = RunnerRequest | ScorerRequest | ProposeRequest
 type PlanResultStatus = Literal["succeeded", "failed", "cancelled", "timeout"]
 type LeavenValueKind = Literal[
     "emit_run_event",
@@ -527,7 +546,19 @@ class PlanResultDocument(Struct, frozen=True, forbid_unknown_fields=True, omit_d
     metadata: MetadataBag | UnsetType = UNSET
 
 
-type StageRunKind = Literal["runner"] | Literal["proposer"]
+type StageRunKind = Literal["runner"] | Literal["scorer"] | Literal["proposer"]
+
+
+class StageRewardFact(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
+    id: str
+    value: float
+    weight: float
+    feedback: str | UnsetType = UNSET
+
+
+class StageScore(Struct, frozen=True, forbid_unknown_fields=True):
+    value: float
+    rewards: list[StageRewardFact]
 
 
 class StageRunRequest(Struct, frozen=True, forbid_unknown_fields=True):
@@ -543,6 +574,7 @@ class StageRunResult(Struct, frozen=True, forbid_unknown_fields=True, omit_defau
     stage: StageRunKind
     stage_call_id: str
     output: OutputRecord
+    score: StageScore | UnsetType = UNSET
     effect_receipts: list[StageEffectReceipt] | UnsetType = UNSET
     proposal_receipts: list[StageProposalReceipt] | UnsetType = UNSET
 
@@ -557,8 +589,8 @@ __all__ = (  # noqa: PLE0605, SIM905
     "GraphExtensionBlobRefPayload GraphExtensionPayload GraphExtensionSummaryPayload GraphRow GraphWrite InfoRef LeavenValue MetadataBag OperationReceipt OutputRecord PlanDocument PlanExpression Precondition "
     "PlanError PlanErrorCode PlanErrorDetails PlanErrorDetailsObject PlanOp PlanResultDocument ProposalBatchRef ProposalBatchRefRecord ProposalEffect ProposeRequest "
     "ProposalEffectSummary ProposalEffectSummaryKind ProposalRef ProposalRefRecord ProposalSummaryGraphRow ReceiptRef Redaction ReflectionResult Replayability "
-    "RunnerRequest Score "
-    "StageEffectReceipt StageProposalReceipt StageRunKind StageRunPayload StageRunRequest StageRunResult "
+    "RunnerRequest Score ScorerRequest "
+    "StageEffectReceipt StageProposalReceipt StageRewardFact StageScore StageRunKind StageRunPayload StageRunRequest StageRunResult "
     "StaleWritePolicy SurfaceSuggestion TraceRef ValidationReceipt VisibilityClass "
     "OutputJsonValue"
 ).split()

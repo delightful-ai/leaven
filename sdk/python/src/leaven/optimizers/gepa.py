@@ -66,7 +66,14 @@ def gepa(
 
     GEPA (Genetic Evolutionary Prompt Adaptation) is the reflective two-phase
     optimizer. Stage roles: reflector (understands), proposer (decides).
-    Defaults match the paper's EvoSkill configuration.
+
+    V1 `lv.optimize(...).run()` honors `population_size` (the candidate-pool cap,
+    `>= 2`), `minibatch_size` (the train screening minibatch), `objective`
+    (`"instance"` only; the host refuses other objectives), and an `lm`
+    reflection model (from `reflection_lm` or the runtime LM). The remaining
+    knobs (`frontier`, `parent_selector`, `max_iterations`, `reflect`,
+    `propose`) have no `leaven/optimize.run` route in V1 and are refused at
+    lowering rather than silently ignored.
     """
     return Gepa(
         population_size=population_size,

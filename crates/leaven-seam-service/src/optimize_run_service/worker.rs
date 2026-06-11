@@ -242,15 +242,15 @@ fn serve_case_read(
         .ok_or_else(|| PublicSeamError::InvalidPlan {
             message: format!("optimize.run worker requested unknown case `{wire_case}`"),
         })?;
+    // Input and target are required; metadata is optional, so an absent
+    // metadata bag reads as an empty object rather than refusing the scorer's
+    // read. The worker can then build a complete `ScoringCaseView` without
+    // pre-knowing which cases carry metadata.
+    let empty_metadata = Value::Object(serde_json::Map::new());
     let value = match field {
-        CaseReadField::Input => Some(&lowered.input),
-        CaseReadField::Target => Some(&lowered.target),
-        CaseReadField::Metadata => lowered.metadata.as_ref(),
-    };
-    let Some(value) = value else {
-        return Err(PublicSeamError::InvalidPlan {
-            message: format!("case `{wire_case}` has no configured {}", field.field()),
-        });
+        CaseReadField::Input => &lowered.input,
+        CaseReadField::Target => &lowered.target,
+        CaseReadField::Metadata => lowered.metadata.as_ref().unwrap_or(&empty_metadata),
     };
     Ok(json!({
         "primary": {

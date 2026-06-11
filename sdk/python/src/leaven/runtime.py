@@ -109,15 +109,22 @@ class _RuntimeBuilder:
             cache_config=cache,
         )
 
-    def local(self, *, budget: Budget | None = None) -> Runtime:
+    def local(
+        self,
+        *,
+        budget: Budget | None = None,
+        lm: LmConfig | None = None,
+    ) -> Runtime:
         """Convenience: a minimal local-machine runtime with a mock LM.
 
-        Useful for smoke tests of authoring code. Real LMs and agents must be
-        wired through full `lv.runtime(...)`.
+        Useful for smoke tests of authoring code. `lm` defaults to a one-line
+        mock; pass a scripted `lv.lm.mock(...)` to drive a deterministic local
+        optimization (the host reflects with this LM). Real provider LMs and
+        agents must be wired through full `lv.runtime(...)`.
         """
         return self(
             workspace=workspace_local(),
-            lm=mock(responses=["[mock]"]),
+            lm=lm if lm is not None else mock(responses=["[mock]"]),
             trust_profile=TrustProfile.TRUSTED_LOCAL_OPERATOR,
             budget=budget,
         )

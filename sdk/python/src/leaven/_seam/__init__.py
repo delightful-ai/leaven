@@ -11,6 +11,7 @@ from .config import (
     CodexCliRuntimeConfig,
     CommandRunnerStageConfig,
     LocalWorkspaceConfig,
+    MockLmResponse,
     MockLmRuntimeConfig,
     MockRunnerStageConfig,
     OpenAiLmRuntimeConfig,
@@ -20,6 +21,17 @@ from .config import (
 from .effect_plans import EvaluationRequestRequest, EventEmitRequest
 from .errors import SeamClientError
 from .lm_plans import LmCompleteRequest
+from .optimize_run import (
+    ArtifactRecord,
+    CandidateEntry,
+    CostDocument,
+    OptimizeCase,
+    OptimizerConfigDocument,
+    OptimizeRunRequestDocument,
+    OptimizeRunResultDocument,
+    ReflectionLmConfig,
+    RunReference,
+)
 from .plans import (
     AgentRunRequest,
     AssessmentSubmitRequest,
@@ -40,19 +52,29 @@ from .workspace_plans import (
 
 __all__ = [
     "AgentRunRequest",
+    "ArtifactRecord",
     "AssessmentSubmitRequest",
+    "CandidateEntry",
     "CaseLoadRequest",
     "CodexCliRuntimeConfig",
     "CommandRunnerStageConfig",
+    "CostDocument",
     "EvaluationRequestRequest",
     "EventEmitRequest",
     "LmCompleteRequest",
     "LocalWorkspaceConfig",
+    "MockLmResponse",
     "MockLmRuntimeConfig",
     "MockRunnerStageConfig",
     "OpenAiLmRuntimeConfig",
+    "OptimizeCase",
+    "OptimizeRunRequestDocument",
+    "OptimizeRunResultDocument",
+    "OptimizerConfigDocument",
     "ProposalApplyRequest",
     "ProposalSubmitRequest",
+    "ReflectionLmConfig",
+    "RunReference",
     "SandboxExecRequest",
     "SeamClient",
     "SeamClientError",

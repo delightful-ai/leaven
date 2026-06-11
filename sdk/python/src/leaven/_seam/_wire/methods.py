@@ -82,8 +82,8 @@ METHOD_BINDINGS: tuple[LockedMethodBinding, ...] = (
         params_schema="leaven.stage_run.v1.schema.json",
         result_schema="leaven.stage_run.v1.schema.json",
         required_action="stage.run",
-        params_schema_fingerprint="fp_schema_sha256_da2d026c060b655ea39850dbd43034e097260eefb88a3667207343fb6353a7ec",
-        result_schema_fingerprint="fp_schema_sha256_da2d026c060b655ea39850dbd43034e097260eefb88a3667207343fb6353a7ec",
+        params_schema_fingerprint="fp_schema_sha256_9f5df7a8b4b7163c74ef4afa5197fb22ae1bcb1b21d007cb5cd863494fc1e228",
+        result_schema_fingerprint="fp_schema_sha256_9f5df7a8b4b7163c74ef4afa5197fb22ae1bcb1b21d007cb5cd863494fc1e228",
         produces_receipt=True,
     ),
     LockedMethodBinding(

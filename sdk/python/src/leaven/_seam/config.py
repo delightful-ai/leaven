@@ -90,7 +90,7 @@ type LmRuntimeDocument = MockLmRuntimeDocument | OpenAiLmRuntimeDocument
 type StageRuntimeDocument = MockRunnerStageDocument | CommandRunnerStageDocument | NoneProviderConfig
 
 
-class SeamServiceDocument(Struct, frozen=True, forbid_unknown_fields=True):
+class SeamServiceDocument(Struct, frozen=True, forbid_unknown_fields=True, omit_defaults=True):
     """Full wire service config document."""
 
     context: SeamExecutionContextDocument
@@ -99,6 +99,7 @@ class SeamServiceDocument(Struct, frozen=True, forbid_unknown_fields=True):
     agent: AgentRuntimeDocument
     lm: LmRuntimeDocument
     stage: StageRuntimeDocument
+    optimize_runs_root: str | None | UnsetType = msgspec.UNSET
 
 
 def config_to_json(config: SeamServiceDocument) -> JsonObject:
@@ -162,22 +163,46 @@ class CodexCliRuntimeConfig:
 
 
 @dataclass(frozen=True)
+class MockLmResponse:
+    """One deterministic mock LM response with its charged token counts."""
+
+    text: str
+    input_tokens: int = 1
+    output_tokens: int = 1
+
+
+@dataclass(frozen=True)
 class MockLmRuntimeConfig:
-    """Deterministic LM provider config used when a request does not call LM."""
+    """Deterministic LM provider config.
+
+    `text` is the single-response convenience used when a request makes one LM
+    call; `responses` overrides it with an ordered script (each executed LM call
+    consumes the next response), needed when the host issues multiple LM calls
+    such as optimize.run reflection.
+    """
 
     text: str = "unused"
     input_tokens: int = 1
     output_tokens: int = 1
+    responses: tuple[MockLmResponse, ...] | None = None
 
     def to_wire(self) -> MockLmRuntimeDocument:
         """Return the typed service config record."""
+        responses = self.responses or (
+            MockLmResponse(
+                text=self.text,
+                input_tokens=self.input_tokens,
+                output_tokens=self.output_tokens,
+            ),
+        )
         return MockLmRuntimeDocument(
             responses=[
                 MockLmResponseDocument(
-                    text=self.text,
-                    input_tokens=self.input_tokens,
-                    output_tokens=self.output_tokens,
+                    text=response.text,
+                    input_tokens=response.input_tokens,
+                    output_tokens=response.output_tokens,
                 )
+                for response in responses
             ],
         )
 
@@ -269,6 +294,13 @@ class SeamServiceConfig:
     workspace: LocalWorkspaceConfig = field(default_factory=LocalWorkspaceConfig)
     lm: MockLmRuntimeConfig | OpenAiLmRuntimeConfig = field(default_factory=MockLmRuntimeConfig)
     stage: MockRunnerStageConfig | CommandRunnerStageConfig | None = None
+    optimize_runs_root: str | None = None
+    """Root directory under which `leaven/optimize.run` persists durable runs.
+
+    When set, the host writes each run's checkpoint under
+    `<optimize_runs_root>/<run_id>/`, so the client can read the durable run
+    back. When unset, the host uses its Leaven-managed default run dir.
+    """
 
     def to_wire(self) -> SeamServiceDocument:
         """Return the typed service config record."""
@@ -279,6 +311,9 @@ class SeamServiceConfig:
             agent=self.agent.to_wire() if self.agent is not None else NoneProviderConfig(),
             lm=self.lm.to_wire(),
             stage=self.stage.to_wire() if self.stage is not None else NoneProviderConfig(),
+            optimize_runs_root=(
+                self.optimize_runs_root if self.optimize_runs_root is not None else msgspec.UNSET
+            ),
         )
 
     def to_json(self) -> JsonObject:
@@ -294,6 +329,7 @@ __all__ = [
     "CodexCliRuntimeConfig",
     "CommandRunnerStageConfig",
     "LocalWorkspaceConfig",
+    "MockLmResponse",
     "MockLmRuntimeConfig",
     "MockRunnerStageConfig",
     "OpenAiLmRuntimeConfig",

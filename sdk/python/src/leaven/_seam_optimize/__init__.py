@@ -1,11 +1,11 @@
-"""Private durable-seam implementation for the current optimize mechanics path."""
+"""Private lowering from `lv.optimize(...)` into one `leaven/optimize.run` call."""
 
-from .driver import run_prompt_mechanics
-from .types import PlannedOptimizeCase, SeamOptimizeReport, SeamStageAssessment
+from .driver import OptimizeRunOutcome, default_runs_root, run_optimization
+from .types import PlannedOptimizeCase
 
 __all__ = [
+    "OptimizeRunOutcome",
     "PlannedOptimizeCase",
-    "SeamOptimizeReport",
-    "SeamStageAssessment",
-    "run_prompt_mechanics",
+    "default_runs_root",
+    "run_optimization",
 ]

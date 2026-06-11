@@ -15,6 +15,9 @@ class Budget(BaseModel):
     usd: float | None = None
     """Aggregate USD cap across all costful effects in the run."""
 
+    metric_calls: int | None = None
+    """Aggregate metric-call cap (the GEPA optimize budget axis; `>= 1`)."""
+
     calls: int | None = None
     """Aggregate call count cap (LM + agent + sandbox combined)."""
 
@@ -31,6 +34,7 @@ class Budget(BaseModel):
 def budget(
     *,
     usd: float | None = None,
+    metric_calls: int | None = None,
     calls: int | None = None,
     lm_tokens: int | None = None,
     wall_seconds: float | None = None,
@@ -40,9 +44,12 @@ def budget(
 
     All fields optional; unset means no cap on that dimension. At least one
     cap should be set in practice (the engine warns on fully-uncapped budgets).
+    A GEPA `lv.optimize(...)` run requires `metric_calls` (the optimize budget
+    axis); pass `usd` to add a cost ceiling on top of it.
     """
     return Budget(
         usd=usd,
+        metric_calls=metric_calls,
         calls=calls,
         lm_tokens=lm_tokens,
         wall_seconds=wall_seconds,

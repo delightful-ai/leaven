@@ -11,14 +11,24 @@ from typing import Protocol
 
 @dataclass(frozen=True)
 class StageWorkerTarget:
-    """How a subprocess worker re-loads a registered stage."""
+    """How a subprocess worker re-loads a registered stage.
+
+    The same worker argv serves both runner and scorer stage dispatch, so it
+    carries the runner stage identity plus the rubric reward function names the
+    worker rebuilds the rubric from when the optimize host dispatches a scorer
+    stage.
+    """
 
     stage_id: str
     stage_name: str
     module_file: Path
+    reward_names: tuple[str, ...] = ()
 
     def argv(self, *, lm_model: str = "mock") -> tuple[str, ...]:
         """Return the command used by `CommandRunnerStageConfig`."""
+        reward_args: tuple[str, ...] = ()
+        for reward_name in self.reward_names:
+            reward_args = (*reward_args, "--rubric-reward", reward_name)
         return (
             sys.executable,
             "-m",
@@ -31,6 +41,7 @@ class StageWorkerTarget:
             self.stage_name,
             "--lm-model",
             lm_model,
+            *reward_args,
         )
 
 
@@ -43,14 +54,21 @@ def worker_argv_for_stage[O](
     stage: _StageLike[O],
     *,
     lm_model: str = "mock",
+    reward_names: tuple[str, ...] = (),
 ) -> tuple[str, ...]:
-    """Build worker argv for a `RegisteredStage` without importing it here."""
+    """Build worker argv for a `RegisteredStage` without importing it here.
+
+    `reward_names` carries the rubric reward function names the worker rebuilds
+    the rubric from when the optimize host dispatches a scorer stage to the same
+    argv.
+    """
     if not isinstance(stage.func, FunctionType):
         raise TypeError("stage workers require function-backed registered stages")
     target = StageWorkerTarget(
         stage_id=stage.id,
         stage_name=stage.func.__name__,
         module_file=_module_file(stage),
+        reward_names=reward_names,
     )
     return target.argv(lm_model=lm_model)
 

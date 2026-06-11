@@ -476,6 +476,28 @@ result = await lv.optimize(
 # Train / validation / test splits come from `Case.split` on the task.
 ```
 
+**V1 status (`leaven/optimize.run`).** `lv.optimize(...).run()` lowers the whole
+composition into one locked `leaven/optimize.run` request against the durable
+`leaven seam serve --stdio` host, which runs the real GEPA loop and dispatches
+per-case runner and scorer stages back to the Python worker. V1 executes a
+`PromptArtifact` seed with the `instance` objective and `lm` reflection; the
+host refuses other artifact types, objectives, and the `agentic` reflection
+kind. `gepa(population_size=>=2, minibatch_size=...)` are honored; the knobs
+with no optimize-run route in V1 (`frontier`, `parent_selector`,
+`max_iterations`, `reflect`, `propose`) are refused at lowering rather than
+silently ignored. The optimize budget axis is `lv.budget(metric_calls=N)` (a
+GEPA run requires it), with an optional `lv.budget(usd=...)` lowering into the
+host's `max_cost_usd_micro` cost ceiling; the other budget axes (`calls`,
+`lm_tokens`, `wall_seconds`, `concurrent_calls`) have no optimize-run route in V1
+and are refused at lowering rather than silently dropped. Each `.run()` invocation
+uses a fresh durable run dir (`<runs_root>/run_<task-slug>_<unique>`), so reruns
+are deterministic and never silently resume a prior run's checkpoint. Per-case
+assessment readback is not
+yet wired for these durable checkpoints, so `result.assessments()` raises
+`AssessmentsUnavailableError` and the run summary names the `run.inspection`
+gap; `result.best`, `result.frontier`, and `result.summary` cost/score facts are
+authoritative.
+
 The result is typed `Optimized[Artifact]`:
 
 ```python

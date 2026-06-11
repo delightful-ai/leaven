@@ -11,10 +11,11 @@ from ..artifacts.prompt import PromptArtifact
 from ..decorators import RegisteredStage
 from ..proposal import ProposalBatch
 from ..stage_payloads import ProposeRequest
-from .loader import load_stage_from_file
+from .loader import load_rubric_from_file, load_stage_from_file
 from .proposer import run_proposer_stage
 from .protocol import read_request, write_error, write_result
 from .runner import run_runner_stage
+from .scorer import run_scorer_stage
 from .stage_types import WorkerStage
 
 
@@ -23,14 +24,9 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     request_id: JsonRpcId = None
     try:
-        stage = load_stage_from_file(
-            args.module_file,
-            stage_id=args.stage_id,
-            stage_name=args.stage_name,
-        )
         request = read_request()
         request_id = request.request_id
-        result = asyncio.run(run_stage(stage, request.params, lm_model=args.lm_model))
+        result = asyncio.run(_run(args, request.params))
     except Exception as error:
         write_error(request_id, str(error))
         return 1
@@ -39,12 +35,30 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
 
+async def _run(args: argparse.Namespace, params: StageRunRequest) -> StageRunResult:
+    """Dispatch one stage.run request by stage kind.
+
+    Scorer dispatch rebuilds the rubric from the configured reward ids; runner
+    and proposer dispatch load the registered stage by id.
+    """
+    if params.stage == "scorer":
+        rubric = load_rubric_from_file(args.module_file, reward_names=list(args.rubric_reward))
+        return await run_scorer_stage(rubric, params, lm_model=args.lm_model)
+    stage = load_stage_from_file(
+        args.module_file,
+        stage_id=args.stage_id,
+        stage_name=args.stage_name,
+    )
+    return await run_stage(stage, params, lm_model=args.lm_model)
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m leaven._seam_worker")
     parser.add_argument("--module-file", required=True, type=Path)
     parser.add_argument("--stage-id", required=True)
     parser.add_argument("--stage-name", required=True)
     parser.add_argument("--lm-model", required=True)
+    parser.add_argument("--rubric-reward", action="append", default=[])
     return parser
 
 
@@ -54,7 +68,7 @@ async def run_stage(
     *,
     lm_model: str,
 ) -> StageRunResult:
-    """Dispatch one registered stage by role."""
+    """Dispatch one registered runner/proposer stage by role."""
     if stage.role == "runner":
         return await run_runner_stage(
             _runner_stage(stage),

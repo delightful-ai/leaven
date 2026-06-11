@@ -5,20 +5,21 @@ optimizer config, and a runtime into a runnable optimization. The builder is
 typed by the artifact type so `result.best.artifact` is fully typed. Train /
 validation / test splits come from `Case.split` tags on the environment's task.
 
-`.run()` for the current prompt mechanics path uses the durable
-`leaven seam serve --stdio` server route and sends locked runner/proposer
-`leaven/stage.run` requests through private `_seam` client machinery. The
-current prompt slice dispatches registered Python runner stages and configured
-`Propose.fn(...)` proposer stages through checked-in subprocess workers. The
-proposer path submits a proposal batch only; proposal application, admission,
-and real optimizer search remain later slices.
+`.run()` lowers the whole composition into one locked `leaven/optimize.run`
+request against the spawned `leaven seam serve --stdio` host. The host drives
+the real GEPA loop (reflect / propose / screen / admit), dispatching per-case
+runner and scorer stages back to the configured Python worker, and returns the
+optimized projection (best candidate, frontier, cost totals, durable run
+reference) plus a durable run checkpoint the result reads back.
 """
 
+import secrets
+import time
 from typing import cast
 
 from ._errors import UnsupportedConfigurationError
-from ._runs import persist_rust_prompt_checkpoint
-from ._seam_optimize import PlannedOptimizeCase, SeamOptimizeReport, run_prompt_mechanics
+from ._runs import optimized_from_optimize_run
+from ._seam_optimize import PlannedOptimizeCase, default_runs_root, run_optimization
 from .artifacts.prompt import PromptArtifact
 from .decorators import RegisteredStage
 from .environment import Environment
@@ -39,17 +40,17 @@ class OptimizeBuilder[A]:
     async def run(self) -> Optimized[A]:
         """Execute the optimization. Returns when the optimizer terminates.
 
-        Termination conditions (whichever comes first): optimizer-internal
-        stopping criteria, budget exhausted, max iterations reached, user
-        cancellation.
+        Termination conditions (whichever comes first): the optimizer's
+        candidate-pool cap, the metric-call budget, or the optional usd ceiling.
         """
         seed = self._prompt_seed()
         runner = self._runner_stage()
         optimizer = self._gepa_config()
         cases = self._plan_cases()
         run_id = self._run_id()
+        runs_root = default_runs_root()
 
-        report = await run_prompt_mechanics(
+        outcome = await run_optimization(
             seed=seed,
             cases=cases,
             runner=runner,
@@ -57,8 +58,10 @@ class OptimizeBuilder[A]:
             rubric=self.environment.rubric,
             run_id=run_id,
             runtime=self.runtime,
+            runs_root=runs_root,
         )
-        return cast("Optimized[A]", _to_optimized(seed, cases, report, run_id))
+        optimized = optimized_from_optimize_run(outcome)
+        return cast("Optimized[A]", optimized)
 
     def _prompt_seed(self) -> PromptArtifact:
         if not isinstance(self.seed, PromptArtifact):
@@ -104,8 +107,20 @@ class OptimizeBuilder[A]:
         ]
 
     def _run_id(self) -> str:
+        """Build a fresh run id for this invocation.
+
+        The host writes a durable run dir at `<runs_root>/run_<run_id>` and, on a
+        colliding dir, RESUMES the prior optimizer checkpoint (latest-at-start
+        consistency). A fixed run id would therefore make `.run()` non-idempotent:
+        repeated runs would silently resume stale state and could print a prior
+        run's improvement even when the current configuration would not improve.
+        So each invocation gets a unique run id (a human-readable task prefix plus
+        a monotonic timestamp and random suffix), keeping `.run()` deterministic
+        and safe to rerun. The result's `run_dir` points at this fresh dir.
+        """
         name = self.environment.task.name
-        return _slug(name) if name else "leaven_optimize"
+        prefix = _slug(name) if name else "leaven_optimize"
+        return f"{prefix}_{time.time_ns():x}_{secrets.token_hex(4)}"
 
 
 def optimize[A](
@@ -129,16 +144,6 @@ def optimize[A](
     b.optimizer = optimizer
     b.runtime = runtime
     return b
-
-
-def _to_optimized(
-    seed: PromptArtifact,
-    cases: list[PlannedOptimizeCase],
-    report: SeamOptimizeReport,
-    run_id: str,
-) -> Optimized[PromptArtifact]:
-    """Materialize the durable-seam mechanics report through Rust readback."""
-    return persist_rust_prompt_checkpoint(seed=seed, cases=cases, report=report, run_id=run_id)
 
 
 def _wire_case_id(case_id: str) -> str:

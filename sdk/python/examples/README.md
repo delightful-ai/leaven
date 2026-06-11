@@ -8,7 +8,8 @@ Some examples are shape scaffolds that import, typecheck, and demonstrate the
 authoring API while stopping at their documented boundary. Those boundaries are
 specific: product/no-spend/live examples must not stop at scaffolds, and shape
 examples must name the exact non-product edge they hit.
-Example 03 is the no-spend wired prompt mechanics path. Examples 10-13 are
+Example 03 is the no-spend real prompt optimization over the durable seam.
+Examples 10-13 are
 live-gated seam/provider proofs and skip by default unless the required
 environment variables are set.
 
@@ -32,7 +33,7 @@ LEAVEN_LIVE_OPENAI=1 uv run --project examples/live_openai_lm live-openai-lm
 |---|------|-------------|----------------------|-------|
 | 01 | `01_runtime.py` | shape scaffold | `just examples` | Runtime composition slots and a minimal builder composition. |
 | 02 | `02_cases_and_artifacts.py` | shape scaffold | `just examples` | Prompt artifacts, skill banks, JSONL cases, and split-tagged `lv.Case` records. |
-| 03 | `03_prompt_optimize.py` | no-spend mechanics proof | `just examples`, `just example 03` | `lv.optimize(...).run()` over the durable `leaven seam serve --stdio --config` mechanics path for a `PromptArtifact` seed, including Rust-owned checkpoint materialization and readback. This does not prove optimizer search or proposal application. |
+| 03 | `03_prompt_optimize.py` | real product optimization (no-spend, mock LM) | `just examples`, `just example 03` | `lv.optimize(...).run()` drives the real GEPA loop over the durable `leaven seam serve --stdio --config` host: one `leaven/optimize.run` request, host-driven reflect/propose/screen/admit, and runner + scorer stages dispatched back to the Python worker. With the deterministic mock LM the run genuinely improves (seed scores 0, the reflected child wins); the example asserts `best > seed`. Per-case assessment readback is not yet wired, so `result.assessments()` raises an actionable not-available-yet error. |
 | 04 | `04_evoskill_skill_bank.py` | shape scaffold | expected boundary in `just examples` | EvoSkill-class `SkillBank` composition shape. Current front door rejects non-`PromptArtifact` seeds. |
 | 05 | `05_evaluator_with_judge.py` | shape scaffold | `just examples` | Advanced evaluator authoring shape and evidence vocabulary. |
 | 06 | `06_reflect_propose_custom.py` | shape scaffold | expected boundary in `just examples` | Separated reflector/proposer authoring shape. Current front door rejects non-`PromptArtifact` seeds here. |

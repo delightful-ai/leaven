@@ -1,6 +1,6 @@
-"""Private Rust checkpoint readback helpers for `lv.runs`."""
+"""Private Rust checkpoint readback helpers for `lv.runs` and optimize results."""
 
-from .rust_checkpoint import persist_rust_prompt_checkpoint
+from .optimize_run import optimized_from_optimize_run
 from .rust_evidence import rust_assessment_rows, rust_evidence_summaries
 from .rust_export import (
     load_rust_blob_readback,
@@ -16,8 +16,8 @@ __all__ = [
     "load_rust_evidence_readback",
     "load_rust_run_readback",
     "open_rust_optimized",
+    "optimized_from_optimize_run",
     "optimized_from_rust_readback",
-    "persist_rust_prompt_checkpoint",
     "rust_assessment_rows",
     "rust_evidence_summaries",
 ]

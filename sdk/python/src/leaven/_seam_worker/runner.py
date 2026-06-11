@@ -30,7 +30,7 @@ async def run_runner_stage(
     candidate = _candidate_id(payload.candidate)
     case_id = _case_id(payload.case)
     stage_call_id = payload.stage_call_id
-    prompt = PromptArtifact(template=case_input.prompt, candidate_id=candidate)
+    prompt = PromptArtifact(template=case_input.template, candidate_id=candidate)
     case = InputCaseView(id=case_id, input=case_input.case_fields)
     callback = JsonRpcCallbackClient(lm_model=lm_model)
     cx = rollout_context(
@@ -77,24 +77,32 @@ def _case_id(value: CaseRef) -> str:
 
 @dataclass(frozen=True, slots=True)
 class _PromptRunnerCaseInput:
-    """Typed projection for the current PromptArtifact runner payload."""
+    """Typed projection for the current PromptArtifact runner payload.
 
-    prompt: str
+    The optimize host's runner payload carries the candidate's template under
+    `candidate_template` and the target-free case input under `case_input`; the
+    worker re-runs the registered runner against that template and case input.
+    """
+
+    template: str
     case_fields: JsonObject
 
 
 def _prompt_runner_case_input(payload: RunnerRequest) -> _PromptRunnerCaseInput:
     case_input = payload.case_input
     try:
-        prompt = case_input["prompt"]
+        template = case_input["candidate_template"]
     except KeyError as error:
-        raise ValueError("runner case_input must carry prompt") from error
-    if not isinstance(prompt, str):
-        raise TypeError("runner case_input.prompt must be a string")
-    case_fields: JsonObject = {
-        key: value for key, value in case_input.items() if key != "prompt"
-    }
-    return _PromptRunnerCaseInput(prompt=prompt, case_fields=case_fields)
+        raise ValueError("runner case_input must carry candidate_template") from error
+    if not isinstance(template, str):
+        raise TypeError("runner case_input.candidate_template must be a string")
+    try:
+        nested = case_input["case_input"]
+    except KeyError as error:
+        raise ValueError("runner case_input must carry case_input") from error
+    if not isinstance(nested, dict):
+        raise TypeError("runner case_input.case_input must be a JSON object")
+    return _PromptRunnerCaseInput(template=template, case_fields=dict(nested))
 
 
 __all__ = ["run_runner_stage"]

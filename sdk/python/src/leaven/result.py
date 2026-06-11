@@ -72,6 +72,10 @@ class ReplayUnavailableError(RuntimeError):
     """Raised when a stored assessment cannot be replayed deterministically."""
 
 
+class AssessmentsUnavailableError(RuntimeError):
+    """Raised when per-case assessment rows are not available for this run."""
+
+
 class Optimized[A](BaseModel):
     """Result of `await lv.optimize(...).run()`. Typed by artifact."""
 
@@ -86,8 +90,25 @@ class Optimized[A](BaseModel):
     proposal_receipts: list[WriteReceipt] = Field(default_factory=list)
     effect_receipts: list[CallReceipt] = Field(default_factory=list)
 
+    def _require_assessments(self) -> None:
+        """Raise an actionable error when per-case assessment rows are absent.
+
+        Some run sources (today, `leaven/optimize.run` durable checkpoints) do
+        not yet project per-case assessment rows. Rather than returning empty or
+        fabricated data, the assessment accessors raise so callers see the gap.
+        """
+        if self.assessment_rows:
+            return
+        for fact in self.summary.unsupported:
+            if fact.surface == "run.inspection":
+                raise AssessmentsUnavailableError(
+                    f"per-case assessments are not available for run {self.run_id!r}: "
+                    f"{fact.detail}"
+                )
+
     def assessment(self, case_id: str, *, candidate_id: str | None = None) -> Assessment:
         """Look up one assessment by case id (and optionally candidate id)."""
+        self._require_assessments()
         matches = [
             assessment
             for assessment in self.assessment_rows
@@ -114,6 +135,7 @@ class Optimized[A](BaseModel):
         candidate_id: str | None = None,
     ) -> Iterable[Assessment]:
         """Filter assessments by split and/or candidate."""
+        self._require_assessments()
         return (
             assessment
             for assessment in self.assessment_rows
@@ -167,6 +189,7 @@ def _candidate_by_id[A](by_id: dict[str, Candidate[A]], candidate_id: str) -> Ca
 
 
 __all__ = [
+    "AssessmentsUnavailableError",
     "Candidate",
     "Optimized",
     "ReplayResult",

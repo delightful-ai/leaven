@@ -4,9 +4,60 @@ from .._handles import WorkspaceHandle
 from .._receipts import CallReceipt
 from ..builders.agent import AgentBuilder
 from ..builders.proposals import ProposalsBuilder
-from ..contexts import ProposeContext, RolloutContext
+from ..contexts import ProposeContext, RolloutContext, RubricContext
 from .lm import CallbackLmBuilder
 from .protocols import AgentRunCallback, LmCompleteCallback, ProposalSubmitCallback
+
+
+class CallbackRubricContext(RubricContext):
+    """A live `RubricContext` bound to a scorer stage's effect callbacks.
+
+    `cx.lm.complete(...)` and `cx.agent.run(...)` route through the active stage
+    callback so a reward can drive effects; the target is read through the
+    `ScoringCaseView` case parameter, not through `cx`.
+    """
+
+    def __init__(
+        self,
+        callback: LmCompleteCallback,
+        *,
+        candidate_id: str,
+        stage_call_id: str,
+        capability_fingerprint: str,
+        lm_model: str,
+        agent_callback: AgentRunCallback | None = None,
+    ) -> None:
+        self.lm = CallbackLmBuilder(callback, stage_call_id, default_model=lm_model)
+        self.agent = (
+            AgentBuilder._for_seam(
+                agent_callback,
+                candidate_id=candidate_id,
+                idempotency_prefix=f"{stage_call_id}-agent",
+                plan_id=f"plan_{_id_fragment(stage_call_id)}_agent",
+            )
+            if agent_callback is not None
+            else AgentBuilder()
+        )
+        self._candidate_id = candidate_id
+        self._stage_call_id = stage_call_id
+        self._capability_fingerprint = capability_fingerprint
+
+    @property
+    def stage_id(self) -> str:
+        return self._stage_call_id
+
+    @property
+    def capability_fingerprint(self) -> str:
+        return self._capability_fingerprint
+
+    @property
+    def rollout_workspace(self) -> WorkspaceHandle:
+        return WorkspaceHandle(
+            workspace_id=_materialized_workspace_id(self._candidate_id),
+            candidate_id=self._candidate_id,
+            lifetime="stage_call",
+            receipt=CallReceipt(receipt_id=f"wrec_{_id_fragment(self._stage_call_id)}"),
+        )
 
 
 class CallbackRolloutContext(RolloutContext):
@@ -124,7 +175,7 @@ class CallbackProposeContext(ProposeContext):
         )
 
 
-__all__ = ["CallbackProposeContext", "CallbackRolloutContext"]
+__all__ = ["CallbackProposeContext", "CallbackRolloutContext", "CallbackRubricContext"]
 
 
 def _materialized_workspace_id(candidate_id: str) -> str:

@@ -6,7 +6,6 @@ from pathlib import Path
 
 import msgspec
 import pytest
-from _pytest.monkeypatch import MonkeyPatch
 
 import leaven as lv
 from leaven._handles import WorkspaceHandle
@@ -32,7 +31,7 @@ from leaven._seam._wire.results import (
     LmMessageRecord,
     LmResponsePrimary,
 )
-from leaven._seam_optimize.driver import _agent_config, _lm_config, _lm_model
+from leaven._seam_optimize.driver import _lm_config, _lm_model
 from leaven.builders.agent import AgentBuilder
 from leaven.builders.lm import LmBuilder
 from leaven.json_value import JsonObject, JsonValue
@@ -272,7 +271,7 @@ def test_openai_runtime_lowers_to_private_seam_service_config() -> None:
         ),
     )
 
-    lm_config = _lm_config(runtime, fallback_text="unused")
+    lm_config = _lm_config(runtime)
 
     assert _lm_model(runtime) == "gpt-4.1-mini"
     assert isinstance(lm_config, OpenAiLmRuntimeConfig)
@@ -309,7 +308,10 @@ async def run(prompt, case, cx):
         stage_call_id="sc_stage_worker",
         candidate="cand_stage_worker",
         case="case_stage_worker",
-        case_input={"question": "2 + 2", "prompt": "Answer the question."},
+        case_input={
+            "candidate_template": "Answer the question.",
+            "case_input": {"question": "2 + 2"},
+        },
         capability_fingerprint="fp_cap_sha256_stage_worker",
     )
 
@@ -408,7 +410,10 @@ async def run(prompt, case, cx):
         stage_call_id="sc_stage_worker_agent",
         candidate="cand_stage_worker_agent",
         case="case_stage_worker_agent",
-        case_input={"question": "2 + 2", "prompt": "Answer the question."},
+        case_input={
+            "candidate_template": "Answer the question.",
+            "case_input": {"question": "2 + 2"},
+        },
         capability_fingerprint="fp_cap_sha256_stage_worker_agent",
     )
 
@@ -509,35 +514,6 @@ async def run(prompt, case, cx):
             ],
         }
     ]
-
-
-def test_optimize_runtime_codex_agent_config_lowers_to_seam(monkeypatch: MonkeyPatch) -> None:
-    """Example: Python runtime agent config becomes service Codex CLI config."""
-
-    monkeypatch.setenv("LEAVEN_TEST_CODEX_BIN", "/tmp/leaven-test-codex")
-    runtime = lv.runtime(
-        workspace=lv.workspace.local(),
-        lm=lv.lm.mock(responses=["unused"]),
-        agent=lv.agent.codex(
-            model="gpt-5.4-mini",
-            transport="cli",
-            approval_mode="interactive",
-            bin_path_env="LEAVEN_TEST_CODEX_BIN",
-            timeout_s=17,
-        ),
-    )
-
-    config = _agent_config(runtime)
-
-    assert config is not None
-    assert config.to_json() == {
-        "kind": "codex_cli",
-        "codex_bin": "/tmp/leaven-test-codex",
-        "model": "gpt-5.4-mini",
-        "timeout_s": 17,
-        "codex_home": None,
-        "bypass_approvals_and_sandbox": False,
-    }
 
 
 def _json_object(value: JsonValue) -> JsonObject:

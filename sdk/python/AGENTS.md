@@ -16,29 +16,35 @@ of a public product/backbone method.
 
 ### The wired paths
 
-#### 1. Example 03, durable seam optimize mechanics
+#### 1. Example 03, real optimization over the durable seam
 
-`examples/03_prompt_optimize.py` now runs `lv.optimize(...).run()` through the
-durable `leaven seam serve --stdio --config` server route. The wired surface is
-the current mechanics path: `optimize().run()`, `cases.from_jsonl`, registered
-`@lv.runner` dispatch through the checked-in command worker, `cx.lm.complete`
-and `cx.agent.run` callbacks while a worker stage is active, Python
-`@lv.reward` vector execution, persisted in-process inspection via
-`lv.runs.open(...)`, and the `Environment`/`Task`/`Rollout.fn`/`Rubric`/
-`runtime.local` records those compose. The private owners are
-`leaven._seam_optimize`, `leaven._seam_worker`, and `leaven._runs`; the legacy
-`leaven._serve` bridge-demo module has been removed and must not return.
+`examples/03_prompt_optimize.py` runs `lv.optimize(...).run()` as a real GEPA
+optimization through the durable `leaven seam serve --stdio --config` host. The
+client lowers the whole composition into one locked `leaven/optimize.run`
+request; the host drives the real `leaven-gepa` loop (reflect / propose / screen
+/ admit) and dispatches per-case runner and scorer stages back to the checked-in
+Python worker over `leaven/stage.run`. The worker runs the registered
+`@lv.runner` for runner stages and the `@lv.reward` rubric vector for scorer
+stages (reading the case target through capability-gated, receipted
+`leaven/case.target` callbacks). The wired surface is `optimize().run()`,
+`cases.from_jsonl`, `@lv.runner`, `@lv.reward`/`Rubric`, and the
+`Environment`/`Task`/`Rollout.fn`/`runtime.local` records those compose. The
+private owners are `leaven._seam_optimize` (request lowering),
+`leaven._seam_worker` (runner + scorer dispatch), and `leaven._runs.optimize_run`
+(result projection). The legacy `leaven._serve` bridge-demo module and the old
+per-case `run_prompt_mechanics` path have been removed and must not return.
 
-Honest scope: the Python SDK now configures and calls the durable public seam
-server for runner `leaven/stage.run` mechanics, executes the user's Python
-`@lv.runner`, services configured `leaven/*` callbacks, runs Python reward
-vectors, optionally dispatches a configured `Propose.fn(...)` proposer that can
-run `cx.agent.run` against `cx.parent_workspace` and submit a proposal batch
-over `leaven/proposal.submit_batch`, returns a typed
-`Optimized[PromptArtifact]`, writes Rust-owned checkpoints under
-`.leaven/runs/<run_id>/`, and reopens runs only through Rust checkpoint
-readback. It still does not apply submitted proposals, run real GEPA proposal
-search, or close live LM-provider acceptance by itself.
+Honest scope: with the deterministic mock LM, example 03 genuinely improves —
+the seed template scores 0, the scripted reflection authors a child template
+that surfaces `{question}`, and the re-evaluated child wins. The result carries
+the authoritative best/frontier/cost from the result document and a durable run
+checkpoint under the client-configured runs root. Per-case assessments are not
+yet readable from that checkpoint, so `result.assessments()` raises
+`AssessmentsUnavailableError` (an actionable not-available-yet error) and the run
+summary names the `run.inspection` gap rather than fabricating rows. A `usd`
+budget lowers into the host `max_cost_usd_micro` cost ceiling; the optimize
+budget axis is `metric_calls`, and a GEPA run without it is refused naming
+`metric_calls`.
 
 #### 2. Example 10, live Codex agent.run over the public seam
 
@@ -249,10 +255,12 @@ Round 4 vendored (2026-05-24) — high-taste references:
 - No checked-in Python file exceeds 650 lines. Generated schema modules are not
   checked in until the codegen output has a deliberate split policy.
 - `cargo build -p leaven-cli` then `uv run python examples/03_prompt_optimize.py`
-  runs the current wired mechanics path over the durable public seam server:
-  it spawns `leaven seam serve --stdio --config`, sends runner
-  `leaven/stage.run` requests, and returns a typed `Optimized[PromptArtifact]`.
-  Expected current output is `seed score: 0.000` / `best score: 0.000` plus the
-  seed prompt. This is deterministic mechanics evidence, not optimizer-search
-  product proof. The remaining examples print composed types and canonical
-  sketches only unless their own comments name a live-gated proof.
+  runs a real GEPA optimization over the durable public seam host: it spawns
+  `leaven seam serve --stdio --config`, sends one `leaven/optimize.run` request,
+  and the host dispatches runner and scorer stages back to the Python worker.
+  Expected output is `seed score: 0.091` / `best score: 1.000` / `improved:
+  True` with an optimized prompt that surfaces `{question}`. The example asserts
+  `best > seed`, so the tour fails loudly if the loop regresses to mechanics.
+  This is deterministic, no-spend product proof of the real optimizer loop. The
+  remaining examples print composed types and canonical sketches only unless
+  their own comments name a live-gated proof.

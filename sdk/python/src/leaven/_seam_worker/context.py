@@ -3,14 +3,53 @@
 import sys
 from collections.abc import Sequence
 
-from .._seam import AgentRunRequest, LmCompleteRequest, ProposalSubmitRequest, SeamJsonRpcRequest
+import msgspec
+from msgspec import UNSET, Struct, UnsetType
+
+from .._seam import (
+    AgentRunRequest,
+    CaseLoadRequest,
+    LmCompleteRequest,
+    ProposalSubmitRequest,
+    SeamJsonRpcRequest,
+)
 from .._seam._wire.calls import LmContentText, LmMessage
 from .._seam._wire.codec import decode_method_response, encode_request
 from .._seam._wire.errors import JsonRpcProtocolError, JsonRpcRemoteError
+from .._seam._wire.jsonrpc import JsonRpcResponseEnvelope
 from .._seam._wire.payloads import StageEffectReceipt, StageProposalReceipt
+from .._seam._wire.refs import WireJsonLiteralDepth8
 from .._seam._wire.results import AgentRunResult, LmCompleteResult, ProposalSubmitResult
 from .._stage_runtime import CallbackProposeContext, CallbackRolloutContext
 from .callbacks import CallbackReceiptLog, CallbackResult
+
+
+class _CaseReadPrimary(Struct, frozen=True):
+    """Host worker-callback case-read primary (a subset of `case_record`)."""
+
+    kind: str
+    case: str
+    data_classes: list[str]
+    input: WireJsonLiteralDepth8 | UnsetType = UNSET
+    target: WireJsonLiteralDepth8 | UnsetType = UNSET
+    metadata: WireJsonLiteralDepth8 | UnsetType = UNSET
+
+
+class CaseReadResponse(Struct, frozen=True):
+    """Host worker-callback case-read result; the scorer reads `primary`.
+
+    This is the simplified shape the optimize host returns for a worker
+    `leaven/case.*` callback during scorer dispatch, distinct from the full
+    public `CaseLoadResult` returned by a top-level client case read. The host
+    also serves read receipts alongside `primary`; the scorer does not consume
+    them, and msgspec tolerates the extra field, so it is not declared here
+    rather than widening a callback-response field to `object`.
+    """
+
+    primary: _CaseReadPrimary
+
+
+_CASE_READ_RESPONSE_DECODER = msgspec.json.Decoder(JsonRpcResponseEnvelope)
 
 
 class JsonRpcCallbackClient:
@@ -55,6 +94,32 @@ class JsonRpcCallbackClient:
     def proposal_submit(self, request: ProposalSubmitRequest) -> ProposalSubmitResult:
         """Send one `leaven/proposal.submit_batch` callback and decode the typed result."""
         return self._request_result(request, ProposalSubmitResult)
+
+    def case_read(self, request: CaseLoadRequest) -> CaseReadResponse:
+        """Send one `leaven/case.*` callback and decode the host case-read result.
+
+        Used by scorer-stage dispatch to read the case target/input/metadata the
+        optimize host serves with read receipts. The response is the host's
+        simplified worker-callback case-read shape, not the full client
+        `CaseLoadResult`.
+        """
+        print(
+            encode_request(
+                method=request.method,
+                request_id=request.request_id,
+                params=request.to_params(),
+            ).decode(),
+            flush=True,
+        )
+        line = sys.stdin.readline()
+        if not line:
+            raise RuntimeError("stage host closed before answering case read callback")
+        envelope = _CASE_READ_RESPONSE_DECODER.decode(line.encode())
+        if envelope.error is not UNSET:
+            raise RuntimeError(f"case read callback was refused: {envelope.error}")
+        if envelope.result is UNSET:
+            raise RuntimeError("case read callback response carried neither result nor error")
+        return msgspec.json.decode(bytes(envelope.result), type=CaseReadResponse)
 
     def effect_receipts(self) -> list[StageEffectReceipt]:
         """Return effect receipts observed while running the current stage."""

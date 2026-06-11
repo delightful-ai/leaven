@@ -4,6 +4,9 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import msgspec
+from msgspec import UNSET
+
 from ._wire import (
     JsonRpcId,
     JsonRpcProtocolError,
@@ -37,6 +40,12 @@ from .config import SeamServiceConfig
 from .effect_plans import EvaluationRequestRequest, EventEmitRequest
 from .errors import SeamClientError
 from .lm_plans import LmCompleteRequest
+from .optimize_run import (
+    OptimizeRunRequestDocument,
+    OptimizeRunResultDocument,
+    decode_optimize_run_response,
+    encode_optimize_run_request,
+)
 from .plans import (
     AgentRunRequest,
     AssessmentSubmitRequest,
@@ -248,14 +257,47 @@ class SeamClient:
         """Send one proposer `leaven/stage.run` request and return its typed result."""
         return self._typed_request(request, StageRunDispatchResult, timeout_s=timeout_s)
 
+    def optimize_run(
+        self,
+        request_id: str,
+        document: OptimizeRunRequestDocument,
+        *,
+        timeout_s: int = 600,
+    ) -> OptimizeRunResultDocument:
+        """Run one `leaven/optimize.run` dispatch and return the typed result.
+
+        The host drives the real GEPA loop, dispatching runner/scorer stages back
+        to the configured stage worker over `leaven/stage.run`, and returns the
+        optimized projection (best, frontier, cost, durable run reference).
+        """
+        line = encode_optimize_run_request(request_id=request_id, document=document).decode()
+        body = self._run_line(line, timeout_s=timeout_s)
+        try:
+            envelope = decode_optimize_run_response(body)
+        except msgspec.DecodeError as error:
+            raise SeamClientError(f"seam returned invalid JSON-RPC: {error}") from error
+        if envelope.error is not UNSET:
+            raise SeamClientError(f"seam returned JSON-RPC error: {envelope.error}")
+        if envelope.result is UNSET:
+            raise SeamClientError("optimize.run response carried neither result nor error")
+        return envelope.result
+
     def _request_bytes(self, request: SeamJsonRpcRequest, *, timeout_s: int) -> bytes:
+        line = encode_request(
+            method=request.method,
+            request_id=_request_id(request.request_id),
+            params=request.to_params(),
+        ).decode()
+        return self._run_line(line, timeout_s=timeout_s)
+
+    def _run_line(self, line: str, *, timeout_s: int) -> bytes:
         with tempfile.TemporaryDirectory(prefix="leaven-seam-client-") as tmp:
             config_path = Path(tmp) / "seam-config.json"
             config_path.write_text(
                 self._config.to_json_bytes().decode(),
                 encoding="utf-8",
             )
-            process = self._run_process(config_path, request, timeout_s)
+            process = self._run_process(config_path, line, timeout_s)
 
         if process.returncode != 0:
             raise SeamClientError(
@@ -286,14 +328,9 @@ class SeamClient:
     def _run_process(
         self,
         config_path: Path,
-        request: SeamJsonRpcRequest,
+        line: str,
         timeout_s: int,
     ) -> subprocess.CompletedProcess[str]:
-        line = encode_request(
-            method=request.method,
-            request_id=_request_id(request.request_id),
-            params=request.to_params(),
-        ).decode()
         return subprocess.run(
             [
                 str(self._leaven_bin),
