@@ -70,8 +70,33 @@ where
 }
 
 /// Starts optimizing a seed artifact through the high-level product API.
+///
+/// Case-typed hooks such as `.store(...)` and `.on_event(...)` are available
+/// after `.train(...)` / `.train_inputs(...)` fixes the run case type.
+///
+/// ```compile_fail
+/// # use std::convert::Infallible;
+/// # use leaven_core::{Artifact, ArtifactIdentity};
+/// # use leaven_eval::NoTarget;
+/// # use leaven_kernel::ContentId;
+/// # use leaven_run::{OptimizeStore, RunProblem, optimize};
+/// # #[derive(Clone)]
+/// # struct Seed;
+/// # impl Artifact for Seed {
+/// #     type Change = ();
+/// #     type Error = Infallible;
+/// #     fn identity(&self) -> ArtifactIdentity {
+/// #         ArtifactIdentity::Content(ContentId::from_bytes([1; 32]))
+/// #     }
+/// #     fn apply_change(&self, _change: &Self::Change) -> Result<Self, Self::Error> {
+/// #         Ok(Self)
+/// #     }
+/// # }
+/// let store = OptimizeStore::<RunProblem<Seed, (), NoTarget>>::inline("early");
+/// let _builder = optimize(Seed).store(store).train_inputs(vec![()]);
+/// ```
 #[must_use]
-pub fn optimize<A>(seed: A) -> OptimizeBuilder<A, (), NoTarget, (), ()>
+pub fn optimize<A>(seed: A) -> OptimizeBuilder<A, (), NoTarget, (), (), CasesPending>
 where
     A: Artifact,
 {
@@ -93,11 +118,20 @@ where
         store: StoreConfig::Source(StoreSource::DefaultDurable),
         run_id: RunId::new(),
         order: BuilderOrder::default(),
+        _cases: PhantomData,
     }
 }
 
+/// Marker for a builder whose case type has not been fixed yet.
+#[doc(hidden)]
+pub struct CasesPending;
+
+/// Marker for a builder whose case type is fixed by training data.
+#[doc(hidden)]
+pub struct CasesConfigured;
+
 /// Public optimize/train/validation/test builder.
-pub struct OptimizeBuilder<A, I, T, O, Out = ()>
+pub struct OptimizeBuilder<A, I, T, O, Out = (), Cases = CasesConfigured>
 where
     A: Artifact,
     I: Send + Sync + 'static,
@@ -120,15 +154,19 @@ where
     store: StoreConfig<RunProblem<A, I, T>>,
     run_id: RunId,
     order: BuilderOrder,
+    _cases: PhantomData<Cases>,
 }
 
-impl<A> OptimizeBuilder<A, (), NoTarget, (), ()>
+impl<A> OptimizeBuilder<A, (), NoTarget, (), (), CasesPending>
 where
     A: Artifact,
 {
     /// Supplies training case envelopes and fixes the run case type.
     #[must_use]
-    pub fn train<I, T>(self, train: Vec<Case<I, T>>) -> OptimizeBuilder<A, I, T, (), ()>
+    pub fn train<I, T>(
+        self,
+        train: Vec<Case<I, T>>,
+    ) -> OptimizeBuilder<A, I, T, (), (), CasesConfigured>
     where
         I: Clone + Send + Sync + 'static,
         T: Clone + Send + Sync + 'static,
@@ -151,12 +189,16 @@ where
             store: StoreConfig::Source(self.store.into_source()),
             run_id: self.run_id,
             order: self.order,
+            _cases: PhantomData,
         }
     }
 
     /// Supplies input-only toy training cases with dense generated IDs.
     #[must_use]
-    pub fn train_inputs<I>(self, train: Vec<I>) -> OptimizeBuilder<A, I, NoTarget, (), ()>
+    pub fn train_inputs<I>(
+        self,
+        train: Vec<I>,
+    ) -> OptimizeBuilder<A, I, NoTarget, (), (), CasesConfigured>
     where
         I: Clone + Send + Sync + 'static,
     {
@@ -164,7 +206,7 @@ where
     }
 }
 
-impl<A, I, T, O, Out> OptimizeBuilder<A, I, T, O, Out>
+impl<A, I, T, O, Out, Cases> OptimizeBuilder<A, I, T, O, Out, Cases>
 where
     A: Artifact,
     I: Clone + Send + Sync + 'static,
@@ -187,7 +229,7 @@ where
     /// Supplies the runner/executor.
     /// Must be called before [`Self::score`]; changing output type after scoring is a hard error.
     #[must_use]
-    pub fn runner<F, Fut, NextOut>(self, runner: F) -> OptimizeBuilder<A, I, T, O, NextOut>
+    pub fn runner<F, Fut, NextOut>(self, runner: F) -> OptimizeBuilder<A, I, T, O, NextOut, Cases>
     where
         F: Fn(A, RunCase<I>) -> Fut + Send + Sync + 'static,
         Fut: Future + Send + 'static,
@@ -216,6 +258,7 @@ where
             store: self.store,
             run_id: self.run_id,
             order,
+            _cases: PhantomData,
         }
     }
 
@@ -258,7 +301,7 @@ where
 
     /// Supplies the optimizer.
     #[must_use]
-    pub fn using<Next>(self, optimizer: Next) -> OptimizeBuilder<A, I, T, Next, Out> {
+    pub fn using<Next>(self, optimizer: Next) -> OptimizeBuilder<A, I, T, Next, Out, Cases> {
         OptimizeBuilder {
             seed: self.seed,
             train: self.train,
@@ -277,6 +320,7 @@ where
             store: self.store,
             run_id: self.run_id,
             order: self.order,
+            _cases: PhantomData,
         }
     }
 
@@ -305,16 +349,6 @@ where
         self
     }
 
-    /// Registers a callback for public run events.
-    #[must_use]
-    pub fn on_event<Cb>(mut self, callback: Cb) -> Self
-    where
-        Cb: Callback<RunProblem<A, I, T>> + 'static,
-    {
-        self.callbacks.push(Box::new(callback));
-        self
-    }
-
     /// Uses a durable local run directory as the store and resume handle.
     #[must_use]
     pub fn run_dir(mut self, run_dir: impl Into<PathBuf>) -> Self {
@@ -339,6 +373,23 @@ where
         self.store = StoreConfig::Source(StoreSource::Ephemeral);
         self
     }
+}
+
+impl<A, I, T, O, Out> OptimizeBuilder<A, I, T, O, Out, CasesConfigured>
+where
+    A: Artifact,
+    I: Clone + Send + Sync + 'static,
+    T: Clone + Send + Sync + 'static,
+{
+    /// Registers a callback for public run events.
+    #[must_use]
+    pub fn on_event<Cb>(mut self, callback: Cb) -> Self
+    where
+        Cb: Callback<RunProblem<A, I, T>> + 'static,
+    {
+        self.callbacks.push(Box::new(callback));
+        self
+    }
 
     /// Supplies evidence and optional checkpoint persistence for the run.
     #[must_use]
@@ -351,7 +402,7 @@ where
     }
 }
 
-impl<A, I, O, Out> OptimizeBuilder<A, I, NoTarget, O, Out>
+impl<A, I, O, Out> OptimizeBuilder<A, I, NoTarget, O, Out, CasesConfigured>
 where
     A: Artifact,
     I: Clone + Send + Sync + 'static,
@@ -371,7 +422,7 @@ where
     }
 }
 
-impl<A, I, T, O, Out> OptimizeBuilder<A, I, T, O, Out>
+impl<A, I, T, O, Out> OptimizeBuilder<A, I, T, O, Out, CasesConfigured>
 where
     A: Artifact + Serialize + DeserializeOwned,
     <A as Artifact>::Change: Serialize + DeserializeOwned,
