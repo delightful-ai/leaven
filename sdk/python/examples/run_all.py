@@ -12,9 +12,9 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 EXPECTED_BOUNDARY_EXAMPLES = {
-    "04_evoskill_skill_bank.py": "non-PromptArtifact front-door boundary",
-    "06_reflect_propose_custom.py": "non-PromptArtifact front-door boundary",
-    "09_full_repro.py": "non-PromptArtifact front-door boundary",
+    "04_evoskill_skill_bank.py": "unsupported-seed front-door boundary",
+    "06_reflect_propose_custom.py": "unsupported-seed front-door boundary",
+    "09_full_repro.py": "unsupported-seed front-door boundary",
 }
 
 
@@ -68,7 +68,7 @@ def _is_expected_boundary_error(script_name: str, error: Exception) -> bool:
     if script_name not in EXPECTED_BOUNDARY_EXAMPLES:
         return False
     return isinstance(error, TypeError) and str(error).startswith(
-        "this slice optimizes a PromptArtifact seed"
+        "lv.optimize optimizes a PromptArtifact or AgentKitArtifact seed"
     )
 
 

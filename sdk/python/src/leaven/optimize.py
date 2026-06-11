@@ -20,6 +20,8 @@ from typing import cast
 from ._errors import UnsupportedConfigurationError
 from ._runs import optimized_from_optimize_run
 from ._seam_optimize import PlannedOptimizeCase, default_runs_root, run_optimization
+from ._seam_optimize.artifact_projection import OptimizeSeed
+from .artifacts.agent_kit import AgentKitArtifact
 from .artifacts.prompt import PromptArtifact
 from .decorators import RegisteredStage
 from .environment import Environment
@@ -43,7 +45,7 @@ class OptimizeBuilder[A]:
         Termination conditions (whichever comes first): the optimizer's
         candidate-pool cap, the metric-call budget, or the optional usd ceiling.
         """
-        seed = self._prompt_seed()
+        seed = self._optimize_seed()
         runner = self._runner_stage()
         optimizer = self._gepa_config()
         cases = self._plan_cases()
@@ -63,14 +65,15 @@ class OptimizeBuilder[A]:
         optimized = optimized_from_optimize_run(outcome)
         return cast("Optimized[A]", optimized)
 
-    def _prompt_seed(self) -> PromptArtifact:
-        if not isinstance(self.seed, PromptArtifact):
-            raise TypeError(
-                f"this slice optimizes a PromptArtifact seed; got {type(self.seed).__name__}"
-            )
-        return self.seed
+    def _optimize_seed(self) -> OptimizeSeed:
+        if isinstance(self.seed, PromptArtifact | AgentKitArtifact):
+            return self.seed
+        raise TypeError(
+            "lv.optimize optimizes a PromptArtifact or AgentKitArtifact seed; "
+            f"got {type(self.seed).__name__}"
+        )
 
-    def _runner_stage(self) -> RegisteredStage[PromptArtifact, str]:
+    def _runner_stage(self) -> RegisteredStage[OptimizeSeed, str]:
         rollout = self.environment.rollout
         if rollout.kind != "function" or rollout.stage is None:
             raise UnsupportedConfigurationError(

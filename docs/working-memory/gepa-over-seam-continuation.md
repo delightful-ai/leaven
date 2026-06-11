@@ -1,8 +1,10 @@
 # GEPA over the seam — progress + continuation (2026-06-10)
 
-Status: slices 1–3 DONE and verified. Slice 4 (AIME live) next, slice 5
-(codex-kit on terminal-bench) after. Design doc (amended, authoritative):
-`docs/plans/2026-06-10-gepa-over-seam-design.md`.
+Status: slices 1–4 DONE and verified (slice 4 = AIME live cutoff MET, see below).
+Slice 5 (codex-kit on terminal-bench) implementation DONE (Rust host stages
+5A-i/ii + Python SDK/harbor stage 5B); see "Slice 5B landed" and the Slice 5
+live evidence below for the live-cutoff status. Design doc (amended,
+authoritative): `docs/plans/2026-06-10-gepa-over-seam-design.md`.
 
 ## Goal
 
@@ -182,6 +184,58 @@ Plan (grounded by scout 2026-06-10; refresh before implementing):
   then live cutoff on regex-log.
 - TB2 canary GUID: do not fold task internals/solutions into stored corpora.
 
+### Slice 5B landed (2026-06-11) — SDK kit authoring + harbor + cutoffs
+
+Stages 5A-i/ii (Rust host) were already in the parent commits. 5B is the
+Python-SDK + harbor-example slice (Rust untouched):
+
+- SDK agent-kit artifact: `leaven.AgentKitArtifact` (`system_prompt`, `skills:
+  [AgentKitSkill(path, content)]`, `candidate_id`) projecting to/from the locked
+  `agent_kit` wire body. `sdk/python/src/leaven/artifacts/agent_kit.py`,
+  exported top-level.
+- Generalized the SeamPromptArtifact-monomorphic optimize path to dispatch by
+  artifact type via the new single-owner
+  `_seam_optimize/artifact_projection.py` (`project_seed` → wire record +
+  reflection kind; `artifact_from_record` → typed candidate). The driver now
+  wires the host agent runtime for the agentic kit path: `gepa(reflection_agent=
+  lv.agent.codex(transport="cli", model=..., bin_path_env=...))` lowers to a
+  `CodexCliRuntimeConfig` in the served `SeamServiceConfig`. Reflection-kind x
+  artifact-type matrix enforced at lowering (kit requires agentic + agent;
+  prompt refuses an agent). The worker runner reconstructs the typed artifact
+  from `candidate_agent_kit` or `candidate_template`; the scorer is unchanged
+  (artifact-agnostic). Result projection dispatches the candidate artifact by
+  `artifact_type`. Null targets now supported (rollout-judged tasks have no held
+  answer).
+- Harbor rollout package `sdk/python/examples/codex_terminal_bench/` (own uv
+  project, `harbor==0.13.1`): `LeavenCodex(Codex)` uploads AGENTS.md (from
+  system_prompt) + skills into `/app` before `super().run`; `@lv.runner` runs
+  ONE git-pinned regex-log Trial (`terminal-bench-2` @
+  `2fd12b88aafdd04a52c298e3940bcb189f9766d6`, path `regex-log`, image
+  `alexgshaw/regex-log:20251031`) and serializes reward + CTRF fraction + tokens
+  + trajectory; rubric = verifier reward (w=1) + CTRF fraction (w=0.25), feedback
+  = verifier output + agent-own-behavior trajectory excerpts (no task
+  solutions). Seed kit is deliberately weak-but-honest. Oracle smoke verified the
+  git-pinned task downloads, container builds, verifier writes reward+ctrf.
+- Reachability (decision 3, CONFIRMED): the Rust `FakeAgentRuntime` is
+  `#[cfg(test)]`-only and NOT reachable through the served-CLI `SeamServiceConfig`
+  (only `SeamAgentConfig::None | CodexCli`). So the served path's only
+  deterministic agentic option is a SCRIPTED CODEX BINARY. The no-spend proof
+  `examples/codex_terminal_bench/tests/test_kit_optimization_mechanics.py` drives
+  the REAL served optimize path (real GEPA loop, real Git-backed kit
+  materialization/readback, real agentic reflection) with two no-spend
+  substitutions: a fake-codex binary that rewrites
+  `repos/agent_kit/system_prompt.md` (the deepest deterministic agentic cut) and
+  an explicit env-gated fake-trial seam (`LEAVEN_CODEX_TB_FAKE_TRIAL`, since the
+  rollout runs in a worker subprocess where the live `Trial` can't be
+  monkeypatched). It asserts the kit child is applied + re-evaluated onto the
+  frontier beating the seed; it fails if not.
+- Live example: `sdk/python/examples/15_live_optimize_codex_terminal_bench.py`
+  self-skips without `LEAVEN_CODEX_LIVE=1` + Docker + `OPENAI_API_KEY`, else
+  delegates to the harbor project's `codex-terminal-bench` console script.
+- Gates: sdk `just check` green; `uv run pytest` 333 passed; `just examples` (14;
+  15 self-skips); `just compile-examples` ok; harbor project ruff/ty/pytest (9)
+  green. Live cutoff evidence is in "Slice 5 live evidence" below.
+
 ## Other carry-forwards
 
 - `leaven-acp-stage-bridge` + `leaven-cli serve.rs` (legacy demo loop) are now
@@ -265,3 +319,107 @@ Verification run for slice 4 (Python-only, focused): sdk `just check` green; sdk
 without the gate); sdk `just compile-examples` ok. No Rust changed, so no cargo
 gates needed. `just check`/`just coverage`/`release-check` (repo-root) NOT run
 (out of scope; sdk gates are the owning surface).
+
+## Slice 5 live evidence (2026-06-11) — kit cutoff NOT met live; BLOCKER (headroom)
+
+The served kit-optimization path is fully built and VERIFIED FUNCTIONAL end to
+end, and the cutoff mechanic is PROVEN deterministically (no-spend). The LIVE
+cutoff (a kit child that strictly beats the seed on a real TB2 task) was NOT met,
+because gpt-5.4-mini solves the chosen tasks regardless of the AGENTS.md kit. This
+is a truthful negative recorded per the headroom ladder's final rung ("never lower
+the bar"), not an implementation gap.
+
+What is proven (load-bearing): the deterministic no-spend cutoff
+`examples/codex_terminal_bench/tests/test_kit_optimization_mechanics.py` drives the
+REAL served `leaven/optimize.run` path — real GEPA loop, real Git-backed kit
+materialization/readback, real agentic Git-program reflection, real worker
+runner/scorer dispatch, real frontier admission — with two no-spend substitutions
+that are the deepest cut reachable through the served CLI: a scripted fake-codex
+binary (the Rust `FakeAgentRuntime` is `#[cfg(test)]`-only and unreachable through
+`SeamServiceConfig`, so a scripted codex binary is the only deterministic agentic
+option) and an explicit env-gated fake-trial seam (the rollout runs in a worker
+subprocess where the live Harbor `Trial` cannot be monkeypatched). It asserts the
+kit child is authored, applied through the run graph, and re-evaluated onto the
+frontier beating the seed; it fails if any of that does not happen. Passes
+reliably in ~31s.
+
+What ran live (verified functional, with concrete evidence):
+- The full live machinery works: `leaven seam serve --stdio` host + GEPA kit loop;
+  the harbor rollout runs ONE real Harbor Trial per candidate with `@openai/codex`
+  installed in-container; the `LeavenCodex` agent uploads the seed kit to
+  `/app/AGENTS.md` (verified: the seed system prompt appeared in `/app/AGENTS.md`
+  inside a running container); codex (gpt-5.4-mini) solves the task; the verifier
+  writes `reward.txt` and `ctrf.json`; the durable Git-backed run persists under
+  `.leaven/release-runs/run_codex_terminal_bench_*` (with `kit-stores/agent_kit.git`,
+  checkpoints, blobs). An oracle smoke (no codex spend) first confirmed the
+  git-pinned task downloads/builds/scores.
+- Pinned task: `terminal-bench-2` @ commit
+  `2fd12b88aafdd04a52c298e3940bcb189f9766d6`, image `alexgshaw/regex-log:20251031`
+  (and `alexgshaw/password-recovery:20251031` for the second attempt). NOTE: the
+  TB2 images are x86_64; on this ARM Mac they run under qemu emulation, so each
+  in-container codex trial is slow (~15-20 min).
+
+Live cutoff attempts (sanctioned spend, recorded honestly):
+- Command (from `sdk/python`): `set -a; source ../../.env; set +a;
+  export LEAVEN_CODEX_BIN=/Users/darin/.codex/packages/standalone/current/codex;
+  LEAVEN_CODEX_LIVE=1 LEAVEN_CODEX_BIN=$LEAVEN_CODEX_BIN [LEAVEN_CODEX_TB_TASK=...]
+  LEAVEN_OPTIMIZE_TIMEOUT_S=7200 LEAVEN_RUNS_ROOT=.leaven/release-runs
+  uv run python examples/15_live_optimize_codex_terminal_bench.py`.
+  (`LEAVEN_CODEX_BIN` is required: the scenario configures
+  `gepa(reflection_agent=lv.agent.codex(transport='cli', bin_path_env='LEAVEN_CODEX_BIN'))`,
+  and that env points the host's agentic reflector at the local codex binary.)
+- Run dirs: `.leaven/release-runs/run_codex_terminal_bench_18b80839d2635738_57eab38e`
+  (regex-log, original weak seed), `..._18b808a718ae7430_5b6e2507` (regex-log,
+  weakened seed), `..._18b808c7750b9698_fcc810f5` (password-recovery, weakened seed).
+- Attempt 1 (regex-log, original weak seed "...Work quickly."): the SEED scored
+  validation reward=1 (verifier `reward.txt`=1). Weighted-mean caps at 1.0 (verifier
+  w=1 + ctrf w=0.25 both at 1.0), so no child can strictly beat it. Headroom ladder
+  rung 1: weaken the seed.
+- Attempt 2 (regex-log, weakened seed "Move fast: write the first solution that
+  looks plausible and finish immediately; do not explore inputs or test"): the SEED
+  again scored validation reward=1. The kit did not change the outcome.
+- Attempt 3 (password-recovery, the same weakened seed, a HARD method-dependent
+  forensic task whose method is NOT in the instruction): the SEED agent, despite the
+  "rush" kit, did methodical forensics (carved nested disk images) and RECOVERED the
+  password `8XDP5Q2RT9ZK7VB3BV4WW54` (23 chars, `8XD...W54`, valid) → reward=1. Run
+  stopped once the seed solution was written (no headroom).
+
+Root cause (the truthful finding): codex reads BOTH the kit's `AGENTS.md` AND the
+task instruction, and TB2 task instructions are self-contained. For a strong model
+(gpt-5.4-mini), the AGENTS.md kit is largely redundant — it can shape style but does
+not gate the OUTCOME on a self-contained task the model can solve from the
+instruction alone. So a "weak-but-honest" seed kit does not make the agent fail, and
+there is no headroom for a reflected kit to win. This held on both an easy (regex-log)
+and a hard (password-recovery) task. Demonstrating a live kit-gated 0->1 cutoff would
+require a task whose required method/knowledge is NOT in the instruction AND that the
+base model cannot do zero-shot but can with the right kit — a narrow "Goldilocks"
+regime that standard TB2 tasks plus this model did not provide within the attempts
+made. I did NOT lower the bar (no adversarial/sabotaging seed, no tie accepted, no
+faked result).
+
+Spend: three partial live runs, each one in-container codex trial (gpt-5.4-mini)
+before stopping; token usage was on the order of the per-trial codex transcripts
+(e.g. the password-recovery seed turn reported ~416k input / ~11k output tokens).
+USD is not metered (Leaven meters tokens; `total_cost_usd` reports 0.0).
+
+Resume options for a future live cutoff (do NOT lower the bar):
+- Pick a task whose success genuinely depends on persistent agent guidance not in
+  the instruction (a private convention, a brittle multi-step workflow, an
+  environment quirk) so the seed reliably fails and a reflected kit reliably helps;
+  or use a weaker in-container model so the kit's method gates the outcome.
+- Make the rubric reward partial progress the kit can move (CTRF fraction is wired
+  at w=0.25) on a task where the seed gets partial and a kit gets full credit.
+- The deterministic proof already locks the mechanic; the live gap is task/model
+  selection, not the optimize path.
+
+No-spend proof of the same served path:
+`examples/codex_terminal_bench/tests/test_kit_optimization_mechanics.py` (above).
+Harbor pure-logic units: `tests/test_trial.py`, `tests/test_scenario.py`.
+
+Verification run for slice 5B (Python-only + harbor example, focused): sdk
+`just check` green; sdk `uv run pytest` 333 passed; sdk `just examples` green (14
+examples; example 15 self-skips without the gate + Docker); sdk
+`just compile-examples` ok; harbor project `ruff`/`ty`/`pytest` (9) green; oracle
+Trial smoke confirmed the git-pinned task path. No Rust changed (5A owns it). Repo
+-root `just check`/`coverage`/`release-check` NOT run (out of scope; sdk gates are
+the owning surface).

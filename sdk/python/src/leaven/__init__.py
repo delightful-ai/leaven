@@ -36,7 +36,13 @@ from ._errors import UnsupportedConfigurationError
 from .agent_instructions import AgentInstructions, AgentRoles
 
 # ----- Built-in artifacts ---------------------------------------------------
-from .artifacts import PromptArtifact, PromptTemplateChange, SkillBank
+from .artifacts import (
+    AgentKitArtifact,
+    AgentKitSkill,
+    PromptArtifact,
+    PromptTemplateChange,
+    SkillBank,
+)
 from .artifacts.skill_bank import SkillBankChangeFile, SkillBankWriteFileChange, SkillFile
 from .blob_ref import BlobRef
 
@@ -128,6 +134,8 @@ del _leaky
 __all__ = [
     # records
     "AgentInstructions",
+    "AgentKitArtifact",
+    "AgentKitSkill",
     "AgentRoles",
     "AssessmentsUnavailableError",
     "BlobRef",

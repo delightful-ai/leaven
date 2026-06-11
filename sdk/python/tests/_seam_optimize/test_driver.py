@@ -5,9 +5,17 @@ from msgspec import UNSET
 
 import leaven as lv
 from leaven._errors import UnsupportedConfigurationError
-from leaven._seam.optimize_run import ReflectionLmConfig
-from leaven._seam_optimize.driver import _optimizer_config, _reflection_model, _request_document
+from leaven._seam.optimize_run import ReflectionAgenticConfig, ReflectionLmConfig
+from leaven._seam_optimize.artifact_projection import project_seed
+from leaven._seam_optimize.driver import (
+    _agent_config,
+    _optimizer_config,
+    _reflection_config,
+    _reflection_model,
+    _request_document,
+)
 from leaven._seam_optimize.types import PlannedOptimizeCase
+from leaven.artifacts.agent_kit import AgentKitArtifact
 from leaven.artifacts.prompt import PromptArtifact
 from leaven.proposal import ProposalBatch
 from leaven.stage_payloads import ProposeRequest
@@ -121,7 +129,7 @@ def test_reflection_model_prefers_explicit_reflection_lm() -> None:
 def test_request_document_keeps_targets_only_in_the_case_manifest() -> None:
     """Law: the lowered request carries targets in cases and a prompt seed only."""
     document = _request_document(
-        seed=PromptArtifact(template="answer {question}"),
+        projection=project_seed(PromptArtifact(template="answer {question}")),
         cases=_cases(),
         optimizer=lv.optimizers.gepa(population_size=2),
         runtime=_runtime(),
@@ -135,3 +143,56 @@ def test_request_document_keeps_targets_only_in_the_case_manifest() -> None:
     assert document.cases[0].split == "train"
     assert isinstance(document.reflection, ReflectionLmConfig)
     assert document.reflection.model == "mock"
+
+
+def test_agent_kit_seed_lowers_to_agentic_reflection() -> None:
+    """Law: an agent_kit seed lowers to the agent_kit type and agentic reflection."""
+    document = _request_document(
+        projection=project_seed(AgentKitArtifact(system_prompt="Answer plainly.")),
+        cases=_cases(),
+        optimizer=lv.optimizers.gepa(
+            population_size=2,
+            reflection_agent=lv.agent.codex(model="gpt-5.4-mini", transport="cli"),
+        ),
+        runtime=_runtime(),
+        run_id="kit_test",
+    )
+    assert document.seed.artifact_type == "agent_kit"
+    assert document.seed.artifact == {"system_prompt": "Answer plainly.", "skills": []}
+    assert isinstance(document.reflection, ReflectionAgenticConfig)
+
+
+def test_agent_kit_reflection_requires_a_reflection_agent() -> None:
+    """Law: an agent_kit seed without a reflection agent is refused, not LM-defaulted."""
+    with pytest.raises(UnsupportedConfigurationError, match="reflection_agent"):
+        _reflection_config("agentic", lv.optimizers.gepa(population_size=2), _runtime())
+
+
+def test_prompt_seed_refuses_a_reflection_agent() -> None:
+    """Law: a reflection agent on the prompt (lm) path is refused, not ignored."""
+    optimizer = lv.optimizers.gepa(
+        reflection_agent=lv.agent.codex(model="gpt-5.4-mini", transport="cli")
+    )
+    with pytest.raises(UnsupportedConfigurationError, match="reflection_agent"):
+        _reflection_config("lm", optimizer, _runtime())
+
+
+def test_agent_config_resolves_codex_cli_binary_from_env(monkeypatch) -> None:
+    """Example: the kit path lowers the reflection agent into a Codex CLI config."""
+    monkeypatch.setenv("TEST_CODEX_BIN", "/usr/local/bin/codex-fake")
+    optimizer = lv.optimizers.gepa(
+        reflection_agent=lv.agent.codex(
+            model="gpt-5.4-mini",
+            transport="cli",
+            bin_path_env="TEST_CODEX_BIN",
+        )
+    )
+    agent = _agent_config(optimizer, reflection_kind="agentic")
+    assert agent is not None
+    assert agent.codex_bin == "/usr/local/bin/codex-fake"
+    assert agent.model == "gpt-5.4-mini"
+
+
+def test_agent_config_is_unset_for_the_prompt_path() -> None:
+    """Law: the prompt path configures no host agent runtime."""
+    assert _agent_config(lv.optimizers.gepa(), reflection_kind="lm") is None

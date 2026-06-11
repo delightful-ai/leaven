@@ -29,6 +29,8 @@ from .optimize_run import (
     OptimizerConfigDocument,
     OptimizeRunRequestDocument,
     OptimizeRunResultDocument,
+    ReflectionAgenticConfig,
+    ReflectionConfig,
     ReflectionLmConfig,
     RunReference,
 )
@@ -73,6 +75,8 @@ __all__ = [
     "OptimizerConfigDocument",
     "ProposalApplyRequest",
     "ProposalSubmitRequest",
+    "ReflectionAgenticConfig",
+    "ReflectionConfig",
     "ReflectionLmConfig",
     "RunReference",
     "SandboxExecRequest",

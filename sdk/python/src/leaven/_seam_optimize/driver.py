@@ -20,7 +20,7 @@ from msgspec import UNSET, UnsetType
 
 from .._errors import UnsupportedConfigurationError
 from .._seam import (
-    ArtifactRecord,
+    CodexCliRuntimeConfig,
     CommandRunnerStageConfig,
     MockLmResponse,
     MockLmRuntimeConfig,
@@ -29,14 +29,16 @@ from .._seam import (
     OptimizerConfigDocument,
     OptimizeRunRequestDocument,
     OptimizeRunResultDocument,
+    ReflectionAgenticConfig,
+    ReflectionConfig,
     ReflectionLmConfig,
     SeamClient,
     SeamExecutionContext,
     SeamServiceConfig,
 )
 from .._seam.optimize_run import OptimizeSplit
+from .._seam.resolve import resolve_codex_binary
 from .._seam_worker import worker_argv_for_stage
-from ..artifacts.prompt import PromptArtifact
 from ..decorators import RegisteredStage
 from ..lm.config import LmConfig
 from ..lm.mock import MockLm
@@ -44,10 +46,9 @@ from ..lm.openai import OpenAiLm
 from ..optimizers.gepa import Gepa
 from ..rubric import RegisteredReward, Rubric
 from ..runtime import Runtime
+from .artifact_projection import OptimizeSeed, SeedProjection, project_seed
 from .types import PlannedOptimizeCase
 
-PROMPT_ARTIFACT_TYPE = "prompt"
-PROMPT_ARTIFACT_SCHEMA = "fp_schema_sha256_prompt"
 OPTIMIZE_CAPABILITY_FINGERPRINT = "fp_cap_sha256_python_optimize"
 
 
@@ -64,9 +65,9 @@ class OptimizeRunOutcome:
 
 async def run_optimization(
     *,
-    seed: PromptArtifact,
+    seed: OptimizeSeed,
     cases: list[PlannedOptimizeCase],
-    runner: RegisteredStage[PromptArtifact, str],
+    runner: RegisteredStage[OptimizeSeed, str],
     optimizer: Gepa,
     rubric: Rubric,
     run_id: str,
@@ -77,7 +78,9 @@ async def run_optimization(
     if not rubric.rewards:
         raise ValueError("the environment rubric must contain at least one reward")
     reward_names = tuple(_reward_name(reward) for reward in rubric.rewards)
+    projection = project_seed(seed)
     lm_model = _lm_model(runtime)
+    agent_config = _agent_config(optimizer, reflection_kind=projection.reflection_kind)
     client = SeamClient(
         config=SeamServiceConfig(
             context=SeamExecutionContext(
@@ -86,6 +89,7 @@ async def run_optimization(
                 base_revision=f"rev_{run_id}",
             ),
             lm=_lm_config(runtime),
+            agent=agent_config,
             stage=CommandRunnerStageConfig(
                 argv=worker_argv_for_stage(runner, lm_model=lm_model, reward_names=reward_names)
             ),
@@ -93,7 +97,7 @@ async def run_optimization(
         )
     )
     document = _request_document(
-        seed=seed,
+        projection=projection,
         cases=cases,
         optimizer=optimizer,
         runtime=runtime,
@@ -117,7 +121,7 @@ async def run_optimization(
 
 def _request_document(
     *,
-    seed: PromptArtifact,
+    projection: SeedProjection,
     cases: list[PlannedOptimizeCase],
     optimizer: Gepa,
     runtime: Runtime,
@@ -127,27 +131,104 @@ def _request_document(
         schema_version="leaven.optimize_run.v1",
         message="optimize_run_request",
         run_id=f"run_{run_id}",
-        seed=ArtifactRecord(
-            artifact_type=PROMPT_ARTIFACT_TYPE,
-            artifact_schema=PROMPT_ARTIFACT_SCHEMA,
-            artifact={"template": seed.template},
-        ),
+        seed=projection.artifact,
         cases=[_wire_case(case) for case in cases],
         optimizer=_optimizer_config(optimizer, runtime),
-        reflection=ReflectionLmConfig(model=_reflection_model(optimizer, runtime)),
+        reflection=_reflection_config(projection.reflection_kind, optimizer, runtime),
         capability_fingerprint=OPTIMIZE_CAPABILITY_FINGERPRINT,
     )
 
 
-def _wire_case(case: PlannedOptimizeCase) -> OptimizeCase:
-    if case.target is None:
-        raise ValueError(
-            f"case {case.case_id!r} has no target; the optimize host scores against case targets"
+def _reflection_config(
+    reflection_kind: str,
+    optimizer: Gepa,
+    runtime: Runtime,
+) -> ReflectionConfig:
+    """Build the wire reflection config for the seed's reflection kind.
+
+    The prompt path reflects with an LM model name; the agent-kit path reflects
+    agentically through a configured agent runtime (the wire carries only the
+    kind; the agent runtime is service-configured).
+    """
+    if reflection_kind == "agentic":
+        if optimizer.reflection_lm is not None:
+            raise UnsupportedConfigurationError(
+                "gepa(reflection_lm=...) does not apply to an AgentKitArtifact seed; "
+                "the agent-kit path reflects agentically. Pass "
+                "gepa(reflection_agent=lv.agent.codex(...)) instead."
+            )
+        if optimizer.reflection_agent is None:
+            raise UnsupportedConfigurationError(
+                "optimizing an AgentKitArtifact seed requires an agentic reflection "
+                "runtime; pass gepa(reflection_agent=lv.agent.codex(transport='cli', "
+                "model=...)) so the host can evolve the kit."
+            )
+        return ReflectionAgenticConfig()
+    if optimizer.reflection_agent is not None:
+        raise UnsupportedConfigurationError(
+            "gepa(reflection_agent=...) applies only to an AgentKitArtifact seed; "
+            "a PromptArtifact seed reflects with an lm model. Remove reflection_agent "
+            "or pass reflection_lm."
         )
+    return ReflectionLmConfig(model=_reflection_model(optimizer, runtime))
+
+
+def _agent_config(
+    optimizer: Gepa,
+    *,
+    reflection_kind: str,
+) -> CodexCliRuntimeConfig | None:
+    """Lower the optimizer's reflection agent into a Codex CLI service config.
+
+    Only the agentic kit path configures a host agent runtime; the prompt path
+    leaves the host agent unset. The reflection agent must be a Codex CLI agent
+    (`lv.agent.codex(transport='cli')`): the host's agentic reflector runs Codex
+    in a materialized workspace to evolve the kit.
+    """
+    if reflection_kind != "agentic":
+        return None
+    agent = optimizer.reflection_agent
+    if agent is None:
+        raise UnsupportedConfigurationError(
+            "agentic reflection requires gepa(reflection_agent=lv.agent.codex(...))"
+        )
+    if agent.transport != "cli":
+        raise UnsupportedConfigurationError(
+            "agent-kit reflection requires a Codex CLI agent; pass "
+            f"lv.agent.codex(transport='cli', ...); got transport {agent.transport!r}"
+        )
+    codex_bin = _resolve_codex_bin(agent.bin_path_env)
+    timeout_s = int(agent.timeout_s) if agent.timeout_s is not None else 600
+    return CodexCliRuntimeConfig(
+        codex_bin=codex_bin,
+        model=agent.model,
+        timeout_s=timeout_s,
+        bypass_approvals_and_sandbox=agent.approval_mode == "bypass",
+    )
+
+
+def _resolve_codex_bin(bin_path_env: str | None) -> str:
+    """Resolve the Codex CLI binary path for the host reflection agent."""
+    if bin_path_env is not None:
+        path = os.environ.get(bin_path_env)
+        if not path:
+            raise UnsupportedConfigurationError(
+                f"gepa(reflection_agent=lv.agent.codex(bin_path_env={bin_path_env!r})) "
+                f"requires {bin_path_env} to point at the codex binary"
+            )
+        return path
+    return resolve_codex_binary()
+
+
+def _wire_case(case: PlannedOptimizeCase) -> OptimizeCase:
+    # A case may legitimately carry no target: a rollout-judged task (e.g. a
+    # benchmark verifier) scores from the rollout output, not a held answer. The
+    # wire `target` field is required but may be JSON null, so a `None` target
+    # rides as null and the scorer simply never reads a target.
     return OptimizeCase(
         case=case.case_id,
         input=dict(case.input),
-        target=dict(case.target),
+        target=dict(case.target) if case.target is not None else None,
         metadata=dict(case.metadata) if case.metadata else UNSET,
         split=_wire_split(case.split),
     )

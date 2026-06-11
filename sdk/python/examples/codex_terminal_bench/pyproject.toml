@@ -1,0 +1,65 @@
+[project]
+name = "leaven-codex-terminal-bench"
+version = "0.1.0"
+description = "Live Codex agent-kit optimization on Terminal-Bench-2 via Harbor for the Leaven Python SDK"
+requires-python = ">=3.12"
+dependencies = [
+    "leaven",
+    "harbor==0.13.1",
+]
+
+[project.scripts]
+codex-terminal-bench = "codex_terminal_bench.main:run"
+
+[tool.uv.sources]
+leaven = { path = "../..", editable = true }
+
+[dependency-groups]
+private-dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.7",
+    "ty>=0.0.1a1",
+]
+
+[tool.leaven.dependency-boundaries]
+public_runtime = [
+    "leaven",
+]
+public_optional = []
+private_runtime = [
+    "harbor",
+]
+private_dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+    "ty",
+]
+notes = [
+    "This project is a live-spend proof package, not part of the published leaven SDK wheel.",
+    "The only public runtime dependency is the local leaven SDK package under test.",
+    "harbor==0.13.1 is the Terminal-Bench-2 harness; it is private to this example's rollout",
+    "function, not a leaven SDK dependency. The rollout runs ONE harbor Trial per case in a",
+    "Docker container with codex installed in-container; harbor spend is reported back as",
+    "rollout evidence, not capability-gated through the public seam (an accepted V1 caveat).",
+    "Private dev dependencies are local lint/type tools for this example project only.",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/codex_terminal_bench"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

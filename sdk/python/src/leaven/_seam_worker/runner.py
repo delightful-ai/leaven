@@ -1,18 +1,29 @@
-"""Run one registered Python runner stage from a stage.run payload."""
+"""Run one registered Python runner stage from a stage.run payload.
 
-from dataclasses import dataclass
+The optimize host dispatches a runner stage with the candidate material projected
+under one key in `case_input`: a `candidate_template` string for a prompt
+artifact, or a `candidate_agent_kit` flat wire artifact for an agent-kit
+artifact. This module reconstructs the typed artifact the registered runner sees
+from whichever key the host sent, so one runner worker serves both artifact
+types (the registered `@lv.runner` declares which artifact type it accepts).
+"""
 
 from .._seam._wire.payloads import OutputRecord, RunnerRequest, StageRunRequest, StageRunResult
 from .._seam._wire.refs import CandidateRef, CandidateRefRecord, CaseRef, CaseRefRecord
+from ..artifacts.agent_kit import AgentKitArtifact
 from ..artifacts.prompt import PromptArtifact
 from ..case import InputCaseView
 from ..decorators import RegisteredStage
 from ..json_value import JsonObject
 from .context import JsonRpcCallbackClient, rollout_context
 
+# Candidate payload keys the host projects each candidate revision under.
+_PROMPT_CANDIDATE_KEY = "candidate_template"
+_AGENT_KIT_CANDIDATE_KEY = "candidate_agent_kit"
+
 
 async def run_runner_stage(
-    stage: RegisteredStage[PromptArtifact, str],
+    stage: RegisteredStage[object, str],
     params: StageRunRequest,
     *,
     lm_model: str,
@@ -26,12 +37,11 @@ async def run_runner_stage(
     if stage.role != "runner":
         raise ValueError(f"configured stage must be a runner; got {stage.role!r}")
 
-    case_input = _prompt_runner_case_input(payload)
     candidate = _candidate_id(payload.candidate)
     case_id = _case_id(payload.case)
     stage_call_id = payload.stage_call_id
-    prompt = PromptArtifact(template=case_input.template, candidate_id=candidate)
-    case = InputCaseView(id=case_id, input=case_input.case_fields)
+    artifact, case_fields = _runner_artifact(payload, candidate_id=candidate)
+    case = InputCaseView(id=case_id, input=case_fields)
     callback = JsonRpcCallbackClient(lm_model=lm_model)
     cx = rollout_context(
         candidate_id=candidate,
@@ -40,7 +50,7 @@ async def run_runner_stage(
         lm_model=lm_model,
         callback=callback,
     )
-    raw_output = await stage.func(prompt, case, cx)
+    raw_output = await stage.func(artifact, case, cx)
     if not isinstance(raw_output, str):
         raise TypeError("runner stages must return str for the current text output contract")
     return StageRunResult(
@@ -75,34 +85,46 @@ def _case_id(value: CaseRef) -> str:
     raise TypeError(f"unsupported case ref: {value!r}")
 
 
-@dataclass(frozen=True, slots=True)
-class _PromptRunnerCaseInput:
-    """Typed projection for the current PromptArtifact runner payload.
+def _runner_artifact(
+    payload: RunnerRequest,
+    *,
+    candidate_id: str,
+) -> tuple[PromptArtifact | AgentKitArtifact, JsonObject]:
+    """Reconstruct the typed candidate artifact plus the target-free case input.
 
-    The optimize host's runner payload carries the candidate's template under
-    `candidate_template` and the target-free case input under `case_input`; the
-    worker re-runs the registered runner against that template and case input.
+    The host's runner payload carries the candidate material under exactly one
+    artifact-specific key (`candidate_template` for a prompt, `candidate_agent_kit`
+    for an agent kit) and the target-free case input under `case_input`. The
+    worker reconstructs the typed artifact the registered runner consumes from
+    whichever key the host sent.
     """
-
-    template: str
-    case_fields: JsonObject
-
-
-def _prompt_runner_case_input(payload: RunnerRequest) -> _PromptRunnerCaseInput:
     case_input = payload.case_input
-    try:
-        template = case_input["candidate_template"]
-    except KeyError as error:
-        raise ValueError("runner case_input must carry candidate_template") from error
-    if not isinstance(template, str):
-        raise TypeError("runner case_input.candidate_template must be a string")
+    case_fields = _case_fields(case_input)
+    if _PROMPT_CANDIDATE_KEY in case_input:
+        template = case_input[_PROMPT_CANDIDATE_KEY]
+        if not isinstance(template, str):
+            raise TypeError(f"runner case_input.{_PROMPT_CANDIDATE_KEY} must be a string")
+        return PromptArtifact(template=template, candidate_id=candidate_id), case_fields
+    if _AGENT_KIT_CANDIDATE_KEY in case_input:
+        wire = case_input[_AGENT_KIT_CANDIDATE_KEY]
+        if not isinstance(wire, dict):
+            raise TypeError(f"runner case_input.{_AGENT_KIT_CANDIDATE_KEY} must be a JSON object")
+        kit = AgentKitArtifact.from_wire_artifact(wire, candidate_id=candidate_id)
+        return kit, case_fields
+    raise ValueError(
+        f"runner case_input must carry a candidate under `{_PROMPT_CANDIDATE_KEY}` "
+        f"or `{_AGENT_KIT_CANDIDATE_KEY}`"
+    )
+
+
+def _case_fields(case_input: JsonObject) -> JsonObject:
     try:
         nested = case_input["case_input"]
     except KeyError as error:
         raise ValueError("runner case_input must carry case_input") from error
     if not isinstance(nested, dict):
         raise TypeError("runner case_input.case_input must be a JSON object")
-    return _PromptRunnerCaseInput(template=template, case_fields=dict(nested))
+    return dict(nested)
 
 
 __all__ = ["run_runner_stage"]

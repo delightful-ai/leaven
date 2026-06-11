@@ -13,7 +13,7 @@ from msgspec import UNSET
 
 from .._seam import CandidateEntry, CostDocument, OptimizeRunResultDocument
 from .._seam_optimize import OptimizeRunOutcome
-from ..artifacts.prompt import PromptArtifact
+from .._seam_optimize.artifact_projection import OptimizeSeed, artifact_from_record
 from ..assessment import Replayability
 from ..result import Candidate, Optimized, RunSummary
 from ..run_status import RunCostStatus, RunUsageStatus, UnsupportedRunFact
@@ -34,8 +34,13 @@ _ASSESSMENTS_UNAVAILABLE = UnsupportedRunFact(
 )
 
 
-def optimized_from_optimize_run(outcome: OptimizeRunOutcome) -> Optimized[PromptArtifact]:
-    """Project the host optimize.run result into the public Optimized handle."""
+def optimized_from_optimize_run(outcome: OptimizeRunOutcome) -> Optimized[OptimizeSeed]:
+    """Project the host optimize.run result into the public Optimized handle.
+
+    Each candidate's typed artifact is reconstructed from its wire
+    `artifact_type` (a `PromptArtifact` template or an `AgentKitArtifact`
+    projection), so the same projection serves both optimization paths.
+    """
     result = outcome.result
     frontier = [_candidate(entry) for entry in result.frontier]
     if not frontier:
@@ -43,7 +48,7 @@ def optimized_from_optimize_run(outcome: OptimizeRunOutcome) -> Optimized[Prompt
     best = _candidate(result.best)
     run_dir = str(Path(outcome.runs_root) / outcome.wire_run_id)
     summary = _summary(result, run_dir=run_dir)
-    return Optimized[PromptArtifact](
+    return Optimized[OptimizeSeed](
         run_id=result.run.run,
         best=best,
         frontier=frontier,
@@ -51,8 +56,8 @@ def optimized_from_optimize_run(outcome: OptimizeRunOutcome) -> Optimized[Prompt
     )
 
 
-def _candidate(entry: CandidateEntry) -> Candidate[PromptArtifact]:
-    return Candidate[PromptArtifact](
+def _candidate(entry: CandidateEntry) -> Candidate[OptimizeSeed]:
+    return Candidate[OptimizeSeed](
         id=entry.candidate,
         artifact=_artifact(entry),
         parent_id=entry.parent,
@@ -60,16 +65,12 @@ def _candidate(entry: CandidateEntry) -> Candidate[PromptArtifact]:
     )
 
 
-def _artifact(entry: CandidateEntry) -> PromptArtifact:
-    payload = entry.artifact.artifact
-    if "template" not in payload:
-        raise TypeError(f"optimize.run candidate {entry.candidate!r} artifact has no template")
-    template = payload["template"]
-    if not isinstance(template, str):
-        raise TypeError(
-            f"optimize.run candidate {entry.candidate!r} artifact template is not a string"
-        )
-    return PromptArtifact(template=template, candidate_id=entry.candidate)
+def _artifact(entry: CandidateEntry) -> OptimizeSeed:
+    return artifact_from_record(
+        entry.artifact.artifact_type,
+        entry.artifact.artifact,
+        entry.candidate,
+    )
 
 
 def _summary(result: OptimizeRunResultDocument, *, run_dir: str) -> RunSummary:

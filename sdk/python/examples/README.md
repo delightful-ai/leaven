@@ -1,6 +1,6 @@
 # Examples
 
-Thirteen example scripts show the current Leaven Python surface, but they do
+The example scripts show the current Leaven Python surface, but they do
 not all prove the same maturity level. The table below is the contract: cite an
 example only for the proof class it names.
 
@@ -9,9 +9,9 @@ authoring API while stopping at their documented boundary. Those boundaries are
 specific: product/no-spend/live examples must not stop at scaffolds, and shape
 examples must name the exact non-product edge they hit.
 Example 03 is the no-spend real prompt optimization over the durable seam.
-Examples 10-14 are
+Examples 10-15 are
 live-gated seam/provider proofs and skip by default unless the required
-environment variables are set.
+environment variables (and, for example 15, Docker) are available.
 
 ## Run
 
@@ -20,13 +20,15 @@ From `sdk/python/`:
 ```bash
 uv sync                           # one-time
 uv run python examples/01_runtime.py
-just examples                     # run all thirteen in order; live-gated examples skip by default
+just examples                     # run the tour in order; live-gated examples skip by default
 just example 03                   # run just one (by number prefix)
 LEAVEN_LIVE_CODEX=1 just example 10
 LEAVEN_LIVE_OPENAI=1 just example 13
 LEAVEN_LIVE_OPENAI=1 uv run --project examples/live_openai_lm live-openai-lm
 # Live AIME optimization (materialize the cache first; see example 14 header):
 LEAVEN_LIVE_OPENAI=1 just example 14
+# Live Codex agent-kit optimization on Terminal-Bench-2 (needs Docker; see example 15 header):
+LEAVEN_CODEX_LIVE=1 uv run --project examples/codex_terminal_bench codex-terminal-bench
 ```
 
 ## The Tour
@@ -46,6 +48,7 @@ LEAVEN_LIVE_OPENAI=1 just example 14
 | 12 | `12_live_optimize_codex_proposer.py` | live-gated product-path mechanics proof | skips unless `LEAVEN_LIVE_CODEX=1` | A configured proposer calls `cx.agent.run` against `cx.parent_workspace` and submits a proposal batch. It does not prove proposal application. |
 | 13 | `13_live_optimize_openai_lm.py` | live-gated product-path mechanics proof | skips unless `LEAVEN_LIVE_OPENAI=1` | A runner calls `cx.lm.complete` through the seam and validates text, usage, model, and receipt projection. |
 | 14 | `14_live_optimize_aime.py` | live-gated real optimization (AIME) | skips unless `LEAVEN_LIVE_OPENAI=1` (and the AIME cache exists) | `lv.optimize(...).run()` optimizes a real AIME solver instruction over the durable seam with two live OpenAI models: the runtime solver (`gpt-4.1-mini`) runs each `cx.lm.complete`, and GEPA reflection (`gpt-5.4-mini`) runs through the same provider. One live run proves a changed child is applied and re-evaluated onto the frontier and that token usage plumbs back (Leaven meters tokens, not USD pricing, so `total_cost_usd` reports 0.0; the run is bounded by `metric_calls`). It does not prove AIME benchmark parity or a fixed improvement margin. The deterministic mechanics of this code path are proven no-spend by `tests/examples/test_live_optimize_aime.py`. |
+| 15 | `15_live_optimize_codex_terminal_bench.py` | live-gated served-path proof (Codex agent kit on Terminal-Bench-2); strict-beat cutoff is a recorded blocker | skips unless `LEAVEN_CODEX_LIVE=1` and Docker is available | `lv.optimize(...).run()` optimizes a Codex AGENT KIT (a system prompt materialized as `AGENTS.md` plus skill files) on ONE pinned Terminal-Bench-2 task over the durable seam, with AGENTIC Codex reflection: the host's GEPA reflector runs Codex (`gpt-5.4-mini`) to author each child kit from real rollout traces, and each rollout runs ONE Harbor Trial (`harbor==0.13.1`) with `@openai/codex` installed in-container solving the pinned `regex-log` task. The live run verifies the served kit path is functional end to end (kit upload to the in-container `AGENTS.md`, in-container codex solve, verifier reward/CTRF, the Git-backed kit loop, and the durable run). It does NOT demonstrate a live kit child that strictly beats the seed: a strong in-container model solves the chosen self-contained Terminal-Bench-2 tasks regardless of the kit, so a weak-but-honest seed left no headroom (a recorded headroom blocker, see `docs/specs/public-seam-v1/executable-method-status.md` and `docs/working-memory/gepa-over-seam-continuation.md`; the live run graphs hold only the seed candidate with no admitted child). The load-bearing cutoff proof is therefore the deterministic no-spend mechanics test, not the live run. The behavior-bearing project is `examples/codex_terminal_bench/` (its own uv project pinning harbor). The deterministic mechanics of this exact served optimize path — a changed kit child authored, applied, and re-evaluated onto the frontier beating the seed — are proven no-spend by `examples/codex_terminal_bench/tests/test_kit_optimization_mechanics.py` (a scripted fake-codex reflection binary plus an explicit no-spend trial seam; the served-CLI service config cannot reach the Rust-only deterministic agent runtime, so a scripted codex binary is the deepest deterministic agentic cut). |
 
 ## Fixtures
 

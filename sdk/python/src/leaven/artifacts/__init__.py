@@ -8,6 +8,13 @@ common workflow uses it, it's here. Otherwise it lives in an adapter
 namespace owned by its semantics.
 """
 
+from .agent_kit import (
+    AGENT_KIT_ARTIFACT_SCHEMA,
+    AGENT_KIT_ARTIFACT_TYPE,
+    AgentKitArtifact,
+    AgentKitChange,
+    AgentKitSkill,
+)
 from .directory import DirectoryArtifact, directory
 from .prompt import PromptArtifact, PromptTemplateChange
 from .skill_bank import (
@@ -27,6 +34,11 @@ from .skill_bank import (
 )
 
 __all__ = [
+    "AGENT_KIT_ARTIFACT_SCHEMA",
+    "AGENT_KIT_ARTIFACT_TYPE",
+    "AgentKitArtifact",
+    "AgentKitChange",
+    "AgentKitSkill",
     "DirectoryArtifact",
     "PromptArtifact",
     "PromptTemplateChange",

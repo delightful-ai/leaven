@@ -69,7 +69,13 @@ class ReflectionAgenticConfig(
     tag="agentic",
     tag_field="kind",
 ):
-    """Agentic reflection config; wire-only in V1 (the host refuses it)."""
+    """Agentic reflection config.
+
+    The host evolves the artifact through a configured agent runtime instead of
+    an LM. V1 executes agentic reflection for the `agent_kit` artifact type (a
+    Git-backed kit revised in a materialized workspace); it is refused for the
+    `prompt` artifact type, which reflects with an LM.
+    """
 
 
 type ReflectionConfig = ReflectionLmConfig | ReflectionAgenticConfig

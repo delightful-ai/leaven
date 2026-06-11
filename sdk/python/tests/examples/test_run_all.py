@@ -37,7 +37,9 @@ def test_examples_runner_allows_only_named_scaffold_boundaries() -> None:
 
     assert runner._is_expected_boundary_error(
         "04_evoskill_skill_bank.py",
-        TypeError("this slice optimizes a PromptArtifact seed only"),
+        TypeError(
+            "lv.optimize optimizes a PromptArtifact or AgentKitArtifact seed; got SkillBank"
+        ),
     )
     assert not runner._is_expected_boundary_error(
         "04_evoskill_skill_bank.py",

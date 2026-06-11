@@ -2,6 +2,7 @@
 
 from typing import Literal
 
+from ..agent.codex import CodexAgent
 from ..frontier import FrontierConfig
 from ..lm.config import LmConfig
 from ..stages import Propose, Reflect
@@ -34,6 +35,14 @@ class Gepa(OptimizerConfig):
     reflection_lm: LmConfig | None = None
     """LM for reflection calls. Inherits runtime LM if omitted."""
 
+    reflection_agent: CodexAgent | None = None
+    """Agent runtime for agentic reflection (the `AgentKitArtifact` path).
+
+    Required when optimizing an `AgentKitArtifact` seed: the host evolves the
+    kit by running this Codex agent in a materialized workspace. Must be omitted
+    for the LM-reflected `PromptArtifact` path.
+    """
+
     minibatch_size: int = 4
     """Cases per reflection minibatch."""
 
@@ -56,6 +65,7 @@ def gepa(
     frontier: FrontierConfig | None = None,
     parent_selector: ParentSelector = "round_robin",
     reflection_lm: LmConfig | None = None,
+    reflection_agent: CodexAgent | None = None,
     minibatch_size: int = 4,
     max_iterations: int | None = None,
     objective: Objective = "instance",
@@ -80,6 +90,7 @@ def gepa(
         frontier=frontier,
         parent_selector=parent_selector,
         reflection_lm=reflection_lm,
+        reflection_agent=reflection_agent,
         minibatch_size=minibatch_size,
         max_iterations=max_iterations,
         objective=objective,
