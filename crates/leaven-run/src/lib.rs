@@ -10,7 +10,7 @@ pub(crate) mod run_report;
 pub(crate) mod run_store;
 mod store;
 
-pub use builder::{OptimizeBuilder, RunProblem, optimize};
+pub use builder::{CasesConfigured, CasesPending, OptimizeBuilder, RunProblem, optimize};
 pub use compatibility::{
     ResumeCompatibilityError, RunCompatibilityManifest, RuntimeFingerprint, RuntimeKind,
     ScoringEvaluatorIdentity,
