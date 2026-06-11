@@ -157,13 +157,21 @@ Plan (grounded by scout 2026-06-10; refresh before implementing):
   subclass (via AgentConfig import_path) with `agent_kit_dir` kwarg that
   `environment.upload_file()`s AGENTS.md + skills into the WORKDIR before
   `codex exec` (codex reads AGENTS.md from cwd natively).
-- Leaven side: agent-kit artifact wire record (DEFERRED from slice 1 — named
-  parts {system_prompt, skills:[{path, content}]}, mirrors AgentKitArtifact);
-  host agent-kit problem binding composing `leaven-gepa-agentic-agent-kit` +
-  `leaven-agentic::AgenticProposer` (already implements `GepaReflector<P,S>`)
-  + `CodexAgentKitMaterializer` + `leaven-agent-codex-cli`
-  (LEAVEN_CODEX_LIVE=1, LEAVEN_CODEX_BIN, gpt-5.4-mini); wires
-  `reflection:{kind:"agentic"}` (currently refused). Reflection MUST consume
+- Leaven side (PREMISE CORRECTED 2026-06-11: there is NO flat-content
+  AgentKitArtifact — the real AgentKit IS a Git revision, `GitProgramArtifact`;
+  `leaven-artifact-agent-kit` owns only manifest/profile/path vocabulary; the
+  real reflector is `leaven-gepa-agentic-git::GepaGitProgramAgenticReflector`
+  composing AgenticProposer + CodexAgentKitMaterializer, and its renderer
+  already pours run.feedback into the agent instructions +
+  `.leaven/gepa-reflection.md`): the wire record {system_prompt,
+  skills:[{path,content}]} is a PROJECTION; the host constructs a real
+  run-scoped bare Git repo + seed commit from wire content at setup, runs the
+  loop over GitProgramArtifact, and reads child revisions back to flat parts
+  for payloads/results. Deterministic proof uses
+  `leaven_agent::test_support::FakeAgentRuntime` (reuse pattern:
+  leaven-gepa-agentic-git test `reflector_wrapper_runs_agentic_proposer_...`).
+  optimize_run_service is SeamPromptArtifact-monomorphic (27 refs / 6 modules)
+  — genericize or parallel path. Wires `reflection:{kind:"agentic"}`. Reflection MUST consume
   real rollout traces: harbor trajectory + verifier output projected into the
   reflective workspace (darin: "agentic materialization/reflection rather
   important"). Boundary: harbor stays INSIDE the Python rollout fn (its spend

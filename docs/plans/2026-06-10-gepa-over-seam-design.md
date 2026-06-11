@@ -116,7 +116,10 @@ contract-test updates in the same change:
    parent/lineage and scores, iterations, applied proposal receipts, cost
    totals) plus the durable run/checkpoint reference for `lv.runs` readback.
 3. **Agent-kit artifact wire record.** Named parts: system prompt + skill
-   files (`{path, content}` list), mirroring `AgentKitArtifact`. This opens the
+   files (`{path, content}` list) — a *projection* of the Git-backed AgentKit
+   (`GitProgramArtifact`; corrected 2026-06-11: there is no flat-content
+   AgentKitArtifact). The host constructs a real run-scoped Git repo from wire
+   content and reads child revisions back to flat parts. This opens the
    declared non-`PromptArtifact` boundary for one real artifact type.
 
 Hard cutover: `run_prompt_mechanics` and the Python-side scoring path are
