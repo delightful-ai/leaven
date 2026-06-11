@@ -769,8 +769,21 @@ fn optimize_run_refuses_unknown_artifact_type() {
         },
         runs_root.path(),
     );
+    // A schema-valid agent_kit projection parses at the wire layer (the
+    // Git-backed AgentKit host slice lands later), so the configured host refuses
+    // it by typed payload kind, naming the supported `prompt` type rather than
+    // failing at wire validation.
     let mut request = optimize_request("seed");
-    request["params"]["seed"]["artifact_type"] = json!("agent_kit");
+    request["params"]["seed"] = json!({
+        "artifact_type": "agent_kit",
+        "artifact_schema": "fp_schema_sha256_agent_kit",
+        "artifact": {
+            "system_prompt": "You are a careful solver.",
+            "skills": [
+                {"path": "arithmetic/SKILL.md", "content": "Add carefully."}
+            ]
+        }
+    });
     let runtime = runtime(service, pkg);
     let response = runtime.handle_value(&request);
     assert!(response.is_error());

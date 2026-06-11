@@ -261,18 +261,145 @@ impl OptimizeCase {
     }
 }
 
-/// A prompt-artifact wire record carried by `leaven/optimize.run`.
+/// One skill file in an `agent_kit` artifact projection.
+///
+/// The `path` is a portable relative path inside the skills subtree (the subtree
+/// the Codex profile mounts under `.agents/skills`); `content` is the file body.
+/// Paths are validated by the `AgentKit` path law at parse time, so neither
+/// absolute paths nor parent traversal can ride a projection.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SkillFile {
+    path: String,
+    content: String,
+}
+
+impl SkillFile {
+    fn from_schema_valid_value(value: &Value, index: usize) -> Result<Self, PublicSeamError> {
+        let object = value.as_object().ok_or_else(|| {
+            invalid_optimize_run(format!("agent_kit skill[{index}] must be an object"))
+        })?;
+        let path = required_str(object.get("path"), "agent_kit.skills.path")?;
+        validate_skill_path(path, index)?;
+        let content = required_str(object.get("content"), "agent_kit.skills.content")?;
+        Ok(Self {
+            path: path.to_owned(),
+            content: content.to_owned(),
+        })
+    }
+
+    /// Relative path inside the skills subtree.
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+
+    /// File body.
+    pub fn content(&self) -> &str {
+        &self.content
+    }
+}
+
+/// Typed artifact payload carried by an [`ArtifactRecord`].
+///
+/// V1 carries two artifact projections, discriminated by the record's
+/// `artifact_type`. Parsing rejects any other artifact type, so the wire cannot
+/// smuggle an untyped JSON payload past this layer.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ArtifactPayload {
+    /// A prompt template artifact (`artifact_type = "prompt"`).
+    Prompt {
+        /// Prompt template body.
+        template: String,
+    },
+    /// A projection of a Git-backed `AgentKit` revision
+    /// (`artifact_type = "agent_kit"`).
+    ///
+    /// This is a flat projection of a Git-backed artifact: the host owns
+    /// run-scoped repository construction from this projection. The
+    /// `CodexAgentKitMaterializer` materializes three manifest slots —
+    /// `system_prompt` (read into Codex's base instructions), `agent_docs`
+    /// (mounted at `AGENTS.md`), and `skills` (mounted under `.agents/skills`) —
+    /// and GEPA reflection can evolve any of the three. V1 projects only two of
+    /// those slots onto the wire: `system_prompt` is the manifest system-prompt
+    /// slot content, and `skills` are the files in the subtree the Codex profile
+    /// mounts under `.agents/skills`. The `agent_docs` slot is deliberately
+    /// omitted from V1, so readback of an evolved child into this flat shape
+    /// carries only the projected `system_prompt` and `skills`; a child whose
+    /// `agent_docs` slot evolved is not round-tripped through this V1 shape.
+    AgentKit {
+        /// System-prompt slot content.
+        system_prompt: String,
+        /// Skill files mounted under the Codex `.agents/skills` mount.
+        skills: Vec<SkillFile>,
+    },
+}
+
+/// Wire `artifact_type` of a `prompt` artifact projection.
+pub const PROMPT_ARTIFACT_TYPE: &str = "prompt";
+/// Wire `artifact_type` of an `agent_kit` artifact projection.
+pub const AGENT_KIT_ARTIFACT_TYPE: &str = "agent_kit";
+
+impl ArtifactPayload {
+    fn from_schema_valid_value(
+        artifact_type: &str,
+        artifact: &Value,
+    ) -> Result<Self, PublicSeamError> {
+        match artifact_type {
+            PROMPT_ARTIFACT_TYPE => Self::parse_prompt(artifact),
+            AGENT_KIT_ARTIFACT_TYPE => Self::parse_agent_kit(artifact),
+            other => Err(invalid_optimize_run(format!(
+                "unknown artifact_type `{other}`; V1 carries `prompt` and `agent_kit`"
+            ))),
+        }
+    }
+
+    fn parse_prompt(artifact: &Value) -> Result<Self, PublicSeamError> {
+        let object = artifact
+            .as_object()
+            .ok_or_else(|| invalid_optimize_run("prompt artifact must be an object"))?;
+        let template = required_str(object.get("template"), "prompt.template")?.to_owned();
+        Ok(Self::Prompt { template })
+    }
+
+    fn parse_agent_kit(artifact: &Value) -> Result<Self, PublicSeamError> {
+        let object = artifact
+            .as_object()
+            .ok_or_else(|| invalid_optimize_run("agent_kit artifact must be an object"))?;
+        let system_prompt =
+            required_str(object.get("system_prompt"), "agent_kit.system_prompt")?.to_owned();
+        let skills = object
+            .get("skills")
+            .and_then(Value::as_array)
+            .ok_or_else(|| invalid_optimize_run("agent_kit artifact must carry a skills array"))?
+            .iter()
+            .enumerate()
+            .map(|(index, value)| SkillFile::from_schema_valid_value(value, index))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self::AgentKit {
+            system_prompt,
+            skills,
+        })
+    }
+}
+
+/// A typed artifact wire record carried by `leaven/optimize.run`.
 ///
 /// This mirrors the artifact triple a proposal `create` effect carries
 /// (`artifact_type`, `artifact_schema`, `artifact`): the typed artifact name, the
-/// schema fingerprint the artifact validates against, and the artifact JSON
-/// itself (template-bearing for prompt artifacts). The seed and every frontier
-/// entry's artifact use this same record shape.
+/// schema fingerprint the artifact validates against, and the artifact payload
+/// itself, parsed into a typed [`ArtifactPayload`] by `artifact_type`. The seed
+/// and every frontier entry's artifact use this same record shape.
+///
+/// The `agent_kit` payload is a projection of a Git-backed `AgentKit` revision,
+/// not the artifact itself: the host owns run-scoped repository construction from
+/// the projection and reads evolved child revisions back into this flat shape.
+/// The projection is lossy by design: it carries two of the three materialized
+/// `AgentKit` slots (`system_prompt` and `skills`) and omits `agent_docs` in V1,
+/// so an evolved `agent_docs` slot does not round-trip through this wire shape.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ArtifactRecord {
     artifact_type: String,
     artifact_schema: String,
-    artifact: Value,
+    payload: ArtifactPayload,
 }
 
 impl ArtifactRecord {
@@ -287,12 +414,12 @@ impl ArtifactRecord {
             required_str(object.get("artifact_schema"), "artifact.artifact_schema")?.to_owned();
         let artifact = object
             .get("artifact")
-            .ok_or_else(|| invalid_optimize_run("optimize run artifact must carry an artifact"))?
-            .clone();
+            .ok_or_else(|| invalid_optimize_run("optimize run artifact must carry an artifact"))?;
+        let payload = ArtifactPayload::from_schema_valid_value(&artifact_type, artifact)?;
         Ok(Self {
             artifact_type,
             artifact_schema,
-            artifact,
+            payload,
         })
     }
 
@@ -306,9 +433,9 @@ impl ArtifactRecord {
         &self.artifact_schema
     }
 
-    /// Artifact JSON body.
-    pub const fn artifact(&self) -> &Value {
-        &self.artifact
+    /// Typed artifact payload.
+    pub const fn payload(&self) -> &ArtifactPayload {
+        &self.payload
     }
 }
 
@@ -674,6 +801,47 @@ fn required_finite_number(value: Option<&Value>, field: &str) -> Result<f64, Pub
         )));
     }
     Ok(number)
+}
+
+/// Validates a skill file path against the `AgentKit` path law.
+///
+/// This mirrors `leaven_artifact_agent_kit::AgentKitPath`: a portable relative
+/// POSIX path with no absolute root, parent traversal, current-directory or empty
+/// components, backslash, or NUL byte. The wire schema rejects the simplest cases
+/// (empty, absolute, backslash); this law is the authoritative check the schema
+/// cannot cleanly encode, so neither absolute paths nor `..` traversal can ride a
+/// projection into the host's run-scoped repository.
+fn validate_skill_path(path: &str, index: usize) -> Result<(), PublicSeamError> {
+    let reject = |reason: &str| {
+        Err(invalid_optimize_run(format!(
+            "agent_kit skill[{index}] path `{path}` is invalid: {reason}"
+        )))
+    };
+    if path.is_empty() {
+        return reject("path is empty");
+    }
+    if path.starts_with('/') {
+        return reject("path must be relative");
+    }
+    if path.contains('\\') {
+        return reject("path contains a backslash");
+    }
+    if path.contains('\0') {
+        return reject("path contains NUL");
+    }
+    let normalized = path.trim_end_matches('/');
+    if normalized.is_empty() {
+        return reject("path is empty");
+    }
+    for component in normalized.split('/') {
+        match component {
+            "" => return reject("path contains an empty component"),
+            "." => return reject("path contains a current-directory component"),
+            ".." => return reject("path contains parent traversal"),
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 fn candidate_ref_id(value: &Value) -> Result<String, PublicSeamError> {

@@ -4,8 +4,8 @@ use std::num::NonZeroUsize;
 use leaven_eval::Case;
 use leaven_kernel::CaseId;
 use leaven_public_seam::{
-    ArtifactRecord, OptimizeObjective, OptimizeReflection, OptimizeRunRequestDocument,
-    OptimizeSplit, OptimizerConfig,
+    ArtifactPayload, ArtifactRecord, OptimizeObjective, OptimizeReflection,
+    OptimizeRunRequestDocument, OptimizeSplit, OptimizerConfig,
 };
 use serde_json::Value;
 
@@ -110,22 +110,16 @@ struct LoweredOptimizer {
 }
 
 fn lower_seed(seed: &ArtifactRecord) -> Result<SeamPromptArtifact, OptimizeRunHostError> {
-    if seed.artifact_type() != SUPPORTED_ARTIFACT_TYPE {
-        return Err(OptimizeRunHostError::unsupported(format!(
+    // V1 executes only the prompt artifact type. The agent_kit projection parses
+    // at the wire layer (the Git-backed AgentKit host slice lands later), so the
+    // host refuses it by typed payload kind naming the supported type.
+    match seed.payload() {
+        ArtifactPayload::Prompt { template } => Ok(SeamPromptArtifact::new(template)),
+        ArtifactPayload::AgentKit { .. } => Err(OptimizeRunHostError::unsupported(format!(
             "artifact_type `{}` is not executable; the supported V1 artifact type is `{SUPPORTED_ARTIFACT_TYPE}`",
             seed.artifact_type()
-        )));
+        ))),
     }
-    let template = seed
-        .artifact()
-        .get("template")
-        .and_then(Value::as_str)
-        .ok_or_else(|| {
-            OptimizeRunHostError::lowering(
-                "prompt seed artifact must carry a string `template` field",
-            )
-        })?;
-    Ok(SeamPromptArtifact::new(template))
 }
 
 fn lower_optimizer(optimizer: &OptimizerConfig) -> Result<LoweredOptimizer, OptimizeRunHostError> {

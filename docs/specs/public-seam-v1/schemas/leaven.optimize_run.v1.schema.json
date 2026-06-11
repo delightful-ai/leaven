@@ -111,23 +111,107 @@
       "additionalProperties": false
     },
     "ArtifactRecord": {
+      "description": "Typed artifact wire record. V1 carries two artifact projections, discriminated by artifact_type: a `prompt` template artifact and an `agent_kit` projection of a Git-backed AgentKit revision. The host owns repository construction and readback for the agent_kit projection; the wire record is not the artifact itself.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/PromptArtifactRecord"
+        },
+        {
+          "$ref": "#/$defs/AgentKitArtifactRecord"
+        }
+      ]
+    },
+    "PromptArtifactRecord": {
       "type": "object",
       "properties": {
         "artifact_type": {
-          "type": "string",
-          "minLength": 1
+          "const": "prompt"
         },
         "artifact_schema": {
           "$ref": "common.schema.json#/$defs/SchemaFingerprint"
         },
         "artifact": {
-          "$ref": "common.schema.json#/$defs/JsonValue"
+          "$ref": "#/$defs/PromptArtifactPayload"
         }
       },
       "required": [
         "artifact_type",
         "artifact_schema",
         "artifact"
+      ],
+      "additionalProperties": false
+    },
+    "PromptArtifactPayload": {
+      "type": "object",
+      "properties": {
+        "template": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "template"
+      ],
+      "additionalProperties": false
+    },
+    "AgentKitArtifactRecord": {
+      "description": "Wire projection of a Git-backed AgentKit revision. The host owns the run-scoped repository construction from this projection and the readback of evolved child revisions into this flat shape; this record projects that Git-backed artifact, it is not the artifact. The CodexAgentKitMaterializer materializes three manifest slots: `system_prompt` (read into Codex's base-instruction channel), `agent_docs` (mounted at `AGENTS.md`), and `skills` (mounted under `.agents/skills`); GEPA reflection can evolve any of the three. This wire shape projects only two of them, `system_prompt` and `skills`, and deliberately omits `agent_docs` in V1, so an evolved `agent_docs` slot does not round-trip through this projection.",
+      "type": "object",
+      "properties": {
+        "artifact_type": {
+          "const": "agent_kit"
+        },
+        "artifact_schema": {
+          "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+        },
+        "artifact": {
+          "$ref": "#/$defs/AgentKitArtifactPayload"
+        }
+      },
+      "required": [
+        "artifact_type",
+        "artifact_schema",
+        "artifact"
+      ],
+      "additionalProperties": false
+    },
+    "AgentKitArtifactPayload": {
+      "description": "Flat projection of a Git-backed AgentKit revision: the system-prompt slot content plus the skill files mounted under the Codex `.agents/skills` mount.",
+      "type": "object",
+      "properties": {
+        "system_prompt": {
+          "description": "System-prompt slot content (the manifest `system_prompt` file, conventionally system_prompt.md, projected into Codex's base instructions).",
+          "type": "string"
+        },
+        "skills": {
+          "description": "Skill files mounted under the Codex `.agents/skills` mount. Each path is relative to the skills subtree.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SkillFile"
+          }
+        }
+      },
+      "required": [
+        "system_prompt",
+        "skills"
+      ],
+      "additionalProperties": false
+    },
+    "SkillFile": {
+      "description": "One skill file in an AgentKit projection. The path is a portable relative path inside the skills subtree; the seam additionally enforces the full AgentKit path law (no absolute path, no parent traversal, no current-directory or empty components, no backslash, no NUL) in typed parsing.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "Relative path inside the skills subtree. The schema pattern rejects empty, absolute, and backslash-bearing paths; the seam rejects parent traversal and other invalid components.",
+          "type": "string",
+          "pattern": "^[^/\\\\][^\\\\]*$"
+        },
+        "content": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "content"
       ],
       "additionalProperties": false
     },

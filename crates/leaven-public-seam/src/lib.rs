@@ -50,9 +50,9 @@ pub use evidence::EvidenceEnvelopeDocument;
 pub use fingerprint::SchemaFingerprint;
 pub use matrix::{ConformanceMatrix, ConformanceRow, MatrixRowStatus, MinimumCloseoutLevel};
 pub use optimize_run::{
-    ArtifactRecord, CandidateEntry, OptimizeCase, OptimizeObjective, OptimizeReflection,
-    OptimizeRunReference, OptimizeRunRequestDocument, OptimizeRunResultDocument, OptimizeSplit,
-    OptimizerConfig,
+    AGENT_KIT_ARTIFACT_TYPE, ArtifactPayload, ArtifactRecord, CandidateEntry, OptimizeCase,
+    OptimizeObjective, OptimizeReflection, OptimizeRunReference, OptimizeRunRequestDocument,
+    OptimizeRunResultDocument, OptimizeSplit, OptimizerConfig, PROMPT_ARTIFACT_TYPE, SkillFile,
 };
 pub use output::{OutputRecordDocument, PublicBlobRef, PublicOutputRecord};
 pub use package::{

@@ -1,5 +1,7 @@
 use crate::support::package;
-use leaven_public_seam::{OptimizeObjective, OptimizeReflection, OptimizeSplit, PublicSeamError};
+use leaven_public_seam::{
+    ArtifactPayload, OptimizeObjective, OptimizeReflection, OptimizeSplit, PublicSeamError,
+};
 use serde_json::{Value, json};
 
 #[test]
@@ -14,8 +16,10 @@ fn optimize_run_validates_request_seed_cases_optimizer_and_reflection() {
     assert_eq!(request.seed().artifact_type(), "prompt");
     assert_eq!(request.seed().artifact_schema(), "fp_schema_sha256_prompt");
     assert_eq!(
-        request.seed().artifact(),
-        &json!({"template": "Answer the question: {{question}}"})
+        request.seed().payload(),
+        &ArtifactPayload::Prompt {
+            template: "Answer the question: {{question}}".to_owned()
+        }
     );
 
     let cases = request.cases();
@@ -101,6 +105,116 @@ fn optimize_run_parses_agentic_reflection() {
         .validate_optimize_run_request_document(&request)
         .unwrap();
     assert_eq!(parsed.reflection(), &OptimizeReflection::Agentic);
+}
+
+#[test]
+fn optimize_run_validates_agent_kit_seed_projection() {
+    let package = package();
+
+    let mut request = optimize_run_request();
+    request["seed"] = agent_kit_artifact();
+    let parsed = package
+        .validate_optimize_run_request_document(&request)
+        .unwrap();
+
+    assert_eq!(parsed.seed().artifact_type(), "agent_kit");
+    assert_eq!(
+        parsed.seed().artifact_schema(),
+        "fp_schema_sha256_agent_kit"
+    );
+    match parsed.seed().payload() {
+        ArtifactPayload::AgentKit {
+            system_prompt,
+            skills,
+        } => {
+            assert_eq!(system_prompt, "You are a careful solver.");
+            assert_eq!(skills.len(), 2);
+            assert_eq!(skills[0].path(), "arithmetic/SKILL.md");
+            assert_eq!(skills[0].content(), "Add carefully.");
+            assert_eq!(skills[1].path(), "verify.md");
+            assert_eq!(skills[1].content(), "Recheck the final integer.");
+        }
+        prompt @ ArtifactPayload::Prompt { .. } => {
+            panic!("expected an agent_kit payload, got {prompt:?}")
+        }
+    }
+}
+
+#[test]
+fn optimize_run_result_round_trips_an_agent_kit_artifact_through_accessors() {
+    let package = package();
+
+    let mut result = optimize_run_result();
+    result["best"]["artifact"] = agent_kit_artifact();
+    result["frontier"][1]["artifact"] = agent_kit_artifact();
+    let parsed = package
+        .validate_optimize_run_result_document(&result)
+        .unwrap();
+
+    assert_eq!(parsed.best().artifact().artifact_type(), "agent_kit");
+    match parsed.best().artifact().payload() {
+        ArtifactPayload::AgentKit {
+            system_prompt,
+            skills,
+        } => {
+            assert_eq!(system_prompt, "You are a careful solver.");
+            assert_eq!(skills.len(), 2);
+            assert_eq!(skills[1].path(), "verify.md");
+        }
+        prompt @ ArtifactPayload::Prompt { .. } => {
+            panic!("expected an agent_kit payload, got {prompt:?}")
+        }
+    }
+}
+
+#[test]
+fn optimize_run_rejects_agent_kit_seed_missing_system_prompt() {
+    let package = package();
+
+    let mut request = optimize_run_request();
+    request["seed"] = agent_kit_artifact();
+    request["seed"]["artifact"]
+        .as_object_mut()
+        .unwrap()
+        .remove("system_prompt");
+    assert!(matches!(
+        package
+            .validate_optimize_run_request_document(&request)
+            .unwrap_err(),
+        PublicSeamError::InvalidOptimizeRun { .. } | PublicSeamError::ExampleValidation { .. }
+    ));
+}
+
+#[test]
+fn optimize_run_rejects_agent_kit_skill_with_absolute_path() {
+    let package = package();
+
+    let mut request = optimize_run_request();
+    request["seed"] = agent_kit_artifact();
+    request["seed"]["artifact"]["skills"][0]["path"] = json!("/etc/passwd");
+    assert!(matches!(
+        package
+            .validate_optimize_run_request_document(&request)
+            .unwrap_err(),
+        PublicSeamError::InvalidOptimizeRun { .. } | PublicSeamError::ExampleValidation { .. }
+    ));
+}
+
+#[test]
+fn optimize_run_rejects_agent_kit_skill_with_parent_traversal_path() {
+    let package = package();
+
+    // A `..` segment is rejected by the seam path law even though the schema
+    // pattern accepts the relative shape.
+    let mut request = optimize_run_request();
+    request["seed"] = agent_kit_artifact();
+    request["seed"]["artifact"]["skills"][0]["path"] = json!("../escape/SKILL.md");
+    assert!(matches!(
+        package
+            .validate_optimize_run_request_document(&request)
+            .unwrap_err(),
+        PublicSeamError::InvalidOptimizeRun { .. } | PublicSeamError::ExampleValidation { .. }
+    ));
 }
 
 #[test]
@@ -321,5 +435,19 @@ fn optimize_artifact() -> Value {
         "artifact_type": "prompt",
         "artifact_schema": "fp_schema_sha256_prompt",
         "artifact": {"template": "Answer the question: {{question}}"}
+    })
+}
+
+fn agent_kit_artifact() -> Value {
+    json!({
+        "artifact_type": "agent_kit",
+        "artifact_schema": "fp_schema_sha256_agent_kit",
+        "artifact": {
+            "system_prompt": "You are a careful solver.",
+            "skills": [
+                {"path": "arithmetic/SKILL.md", "content": "Add carefully."},
+                {"path": "verify.md", "content": "Recheck the final integer."}
+            ]
+        }
     })
 }

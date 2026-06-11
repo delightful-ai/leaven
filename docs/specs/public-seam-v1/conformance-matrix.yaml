@@ -1108,11 +1108,16 @@ rows:
     area: stage_payloads
     requirement: >
       Client-to-host optimization dispatch rides one leaven/optimize.run seam
-      method bound to leaven.optimize_run.v1 (request: seed prompt artifact,
+      method bound to leaven.optimize_run.v1 (request: seed artifact record,
       target-bearing case manifest, optimizer config, reflection config; result:
       best candidate, frontier, iteration/metric-call counts, cost totals, durable
       run/revision reference, applied proposal-batch receipts), separate from the
-      worker-profile callbacks and the host->worker stage dispatch.
+      worker-profile callbacks and the host->worker stage dispatch. The artifact
+      record carries a typed payload discriminated by artifact_type: a prompt
+      template projection and an agent_kit projection of a Git-backed AgentKit
+      revision (system_prompt slot content plus path-validated skill files; the
+      host owns repository construction and readback, the wire record is not the
+      artifact).
     spec_refs:
       - docs/plans/2026-06-10-gepa-over-seam-design.md
       - docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
@@ -1127,7 +1132,10 @@ rows:
       A schema-valid optimize.run request (seed artifact record, non-empty
       target-bearing case manifest, optimizer config with a typed objective,
       reflection config) validates through the owning seam, and a schema-valid
-      result whose best candidate appears in the frontier validates too. The
+      result whose best candidate appears in the frontier validates too. Both the
+      prompt and agent_kit artifact projections parse into typed payloads: a
+      prompt template, or an agent_kit system_prompt plus path-validated skill
+      files that round-trip through the result accessors. The
       runtime routes leaven/optimize.run to the injected service with request
       validation before dispatch and result validation after. The configured
       service now executes the real leaven-gepa loop (host slice, 2026-06-10):
@@ -1143,10 +1151,13 @@ rows:
       locked enum, a missing case target field, or zero max_metric_calls is
       rejected, and an optimize.run result whose best candidate is not present in
       the frontier, that carries a non-finite or non-numeric score, an empty
-      frontier, or a malformed applied-proposal receipt is rejected. The
-      configured host also refuses a non-prompt artifact type, the objective,
-      hybrid, and cartesian objectives, and the agentic reflection kind, each
-      naming what is supported. The host now honors optimizer.population_size as
+      frontier, or a malformed applied-proposal receipt is rejected. An agent_kit
+      artifact projection missing system_prompt, or carrying a skill file whose
+      path is absolute or contains parent traversal, is rejected at the wire layer
+      by the typed payload parser and its AgentKit path law. The configured host
+      also refuses a valid agent_kit artifact projection (the Git-backed AgentKit
+      host slice lands later), the objective, hybrid, and cartesian objectives,
+      and the agentic reflection kind, each naming what is supported. The host now honors optimizer.population_size as
       the candidate-pool cap (a stop condition over the seed plus loop-authored
       children) and optimizer.minibatch_size as the train screening minibatch
       override, but refuses population_size == 1 naming the >= 2 service bound (a
@@ -1164,6 +1175,8 @@ rows:
       - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_validates_request_seed_cases_optimizer_and_reflection
       - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_validates_result_best_frontier_run_and_receipts
       - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_parses_all_four_objective_variants
+      - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_validates_agent_kit_seed_projection
+      - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_result_round_trips_an_agent_kit_artifact_through_accessors
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_drives_the_real_gepa_loop_to_a_changed_re_evaluated_child
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::small_budget_stops_the_loop_with_best_seed_and_truthful_metric_calls
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::population_size_caps_the_candidate_pool_at_seed_plus_one_child
@@ -1174,6 +1187,9 @@ rows:
       - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_rejects_empty_case_manifest
       - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_rejects_best_not_in_frontier
       - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_rejects_non_finite_and_non_numeric_scores
+      - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_rejects_agent_kit_seed_missing_system_prompt
+      - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_rejects_agent_kit_skill_with_absolute_path
+      - crates/leaven-public-seam/tests/public_seam_contract/optimize_run.rs::optimize_run_rejects_agent_kit_skill_with_parent_traversal_path
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::runner_stage_refuses_case_target_while_scorer_stage_serves_it
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_refuses_unsupported_objective_naming_instance
       - crates/leaven-seam-service/src/optimize_run_service/tests.rs::optimize_run_refuses_agentic_reflection
