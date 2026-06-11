@@ -17,6 +17,14 @@ from leaven._seam._wire.payloads import CommitPolicyNoGraphWrites, PlanDocument,
 
 from .plans import SeamRequestMethod, _plan_document
 
+# Default response byte budget when the runner sets no `max_tokens`. Reasoning
+# runners (e.g. AIME solving) set `max_tokens`, which sizes the byte budget below
+# so the final message is not refused for exceeding a tiny fixed cap.
+_DEFAULT_FINAL_MESSAGE_MAX_BYTES = 512
+# A generous upper bound on bytes per output token (multi-byte UTF-8 plus
+# whitespace), used to size the final-message byte budget from `max_tokens`.
+_BYTES_PER_TOKEN = 8
+
 
 @dataclass(frozen=True)
 class LmCompleteRequest:
@@ -50,6 +58,18 @@ class LmCompleteRequest:
             commit=CommitPolicyNoGraphWrites(),
         )
 
+    def _final_message_max_bytes(self) -> int:
+        """Size the default final-message byte cap to the requested token budget.
+
+        The host refuses a final message that exceeds this cap, so a small fixed
+        default would truncate reasoning runners. When `max_tokens` is set, size
+        the byte budget to that many output tokens; otherwise keep the small
+        default for short completions.
+        """
+        if self.max_tokens is None:
+            return _DEFAULT_FINAL_MESSAGE_MAX_BYTES
+        return max(_DEFAULT_FINAL_MESSAGE_MAX_BYTES, self.max_tokens * _BYTES_PER_TOKEN)
+
     def _lm_call(self) -> PlanOp:
         sampling = {}
         if self.temperature is not None:
@@ -67,7 +87,7 @@ class LmCompleteRequest:
                 model=self.model,
                 model_role=self.model_role if self.model_role is not None else UNSET,
                 messages=list(self.messages),
-                output=self.output or LmOutputFinalMessage(max_bytes=512),
+                output=self.output or LmOutputFinalMessage(max_bytes=self._final_message_max_bytes()),
                 tools=list(self.tools) if self.tools is not None else UNSET,
                 sampling=convert(sampling, type=LmSampling) if sampling else UNSET,
                 input_classes=list(self.input_classes or ["public"]),

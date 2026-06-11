@@ -9,6 +9,7 @@ from leaven._seam._wire.calls import (
     LmCompleteCall,
     LmContentText,
     LmMessage,
+    LmOutputFinalMessage,
     OutputFinalMessage,
     WorkspaceMaterializeCall,
 )
@@ -119,6 +120,38 @@ def test_lm_request_params_decode_typed_call_variant() -> None:
     assert call.model == "gpt-test"
     assert call.sampling is not msgspec.UNSET
     assert call.sampling.max_output_tokens == 16
+
+
+def _lm_request(*, max_tokens: int | None) -> LmCompleteRequest:
+    return LmCompleteRequest(
+        request_id="lm-bytes",
+        plan_id="plan-lm-bytes",
+        idempotency_key="idem-lm-bytes",
+        messages=[LmMessage(role="user", content=[LmContentText(text="solve")])],
+        model="gpt-test",
+        max_tokens=max_tokens,
+    )
+
+
+def test_lm_request_sizes_final_message_byte_budget_to_token_request() -> None:
+    """A reasoning runner's `max_tokens` sizes the final-message byte cap.
+
+    The host refuses a final message past its byte cap, so the default cap must
+    grow with the requested token budget instead of truncating long reasoning.
+    """
+    call = _decode_plan_params(_lm_request(max_tokens=4096).to_params()).ops[0].call
+    assert isinstance(call, LmCompleteCall)
+    assert isinstance(call.output, LmOutputFinalMessage)
+    # 4096 tokens * 8 bytes/token is far above the small fixed default.
+    assert call.output.max_bytes == 4096 * 8
+
+
+def test_lm_request_keeps_small_default_byte_budget_without_token_request() -> None:
+    """Short completions without `max_tokens` keep the small fixed byte cap."""
+    call = _decode_plan_params(_lm_request(max_tokens=None).to_params()).ops[0].call
+    assert isinstance(call, LmCompleteCall)
+    assert isinstance(call.output, LmOutputFinalMessage)
+    assert call.output.max_bytes == 512
 
 
 def test_stage_run_request_preserves_typed_case_input_owner() -> None:

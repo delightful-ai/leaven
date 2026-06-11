@@ -7,7 +7,7 @@ default:
 sync:
     uv sync
 
-# Run the full tour (12 examples).
+# Run the full tour (13 examples; live-gated examples skip by default).
 examples:
     uv run python examples/run_all.py
 

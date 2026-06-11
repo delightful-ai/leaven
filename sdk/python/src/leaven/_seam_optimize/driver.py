@@ -10,6 +10,7 @@ result document the facade projects into `Optimized`.
 """
 
 import asyncio
+import functools
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -99,9 +100,12 @@ async def run_optimization(
         run_id=run_id,
     )
     result = await asyncio.to_thread(
-        client.optimize_run,
-        f"optimize-{run_id}",
-        document,
+        functools.partial(
+            client.optimize_run,
+            f"optimize-{run_id}",
+            document,
+            timeout_s=_optimize_timeout_s(),
+        )
     )
     return OptimizeRunOutcome(
         result=result,
@@ -326,6 +330,25 @@ def _first_lm(value: LmConfig | list[LmConfig] | dict[str, LmConfig]) -> LmConfi
             raise ValueError("runtime.lm dict must not be empty")
         return next(iter(value.values()))
     return value
+
+
+_DEFAULT_OPTIMIZE_TIMEOUT_S = 600
+
+
+def _optimize_timeout_s() -> int:
+    """Client wall-clock timeout for one `leaven/optimize.run` dispatch.
+
+    A live GEPA run (sequential solves plus slow reasoning-model reflection) can
+    exceed the default. `LEAVEN_OPTIMIZE_TIMEOUT_S` raises the operator ceiling
+    for those runs without changing the default for deterministic runs.
+    """
+    override = os.environ.get("LEAVEN_OPTIMIZE_TIMEOUT_S")
+    if not override:
+        return _DEFAULT_OPTIMIZE_TIMEOUT_S
+    seconds = int(override)
+    if seconds < 1:
+        raise UnsupportedConfigurationError("LEAVEN_OPTIMIZE_TIMEOUT_S must be a positive integer")
+    return seconds
 
 
 def default_runs_root() -> str:

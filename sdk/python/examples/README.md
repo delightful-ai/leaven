@@ -1,6 +1,6 @@
 # Examples
 
-Twelve example scripts show the current Leaven Python surface, but they do
+Thirteen example scripts show the current Leaven Python surface, but they do
 not all prove the same maturity level. The table below is the contract: cite an
 example only for the proof class it names.
 
@@ -9,7 +9,7 @@ authoring API while stopping at their documented boundary. Those boundaries are
 specific: product/no-spend/live examples must not stop at scaffolds, and shape
 examples must name the exact non-product edge they hit.
 Example 03 is the no-spend real prompt optimization over the durable seam.
-Examples 10-13 are
+Examples 10-14 are
 live-gated seam/provider proofs and skip by default unless the required
 environment variables are set.
 
@@ -20,11 +20,13 @@ From `sdk/python/`:
 ```bash
 uv sync                           # one-time
 uv run python examples/01_runtime.py
-just examples                     # run all twelve in order; live-gated examples skip by default
+just examples                     # run all thirteen in order; live-gated examples skip by default
 just example 03                   # run just one (by number prefix)
 LEAVEN_LIVE_CODEX=1 just example 10
 LEAVEN_LIVE_OPENAI=1 just example 13
 LEAVEN_LIVE_OPENAI=1 uv run --project examples/live_openai_lm live-openai-lm
+# Live AIME optimization (materialize the cache first; see example 14 header):
+LEAVEN_LIVE_OPENAI=1 just example 14
 ```
 
 ## The Tour
@@ -43,6 +45,7 @@ LEAVEN_LIVE_OPENAI=1 uv run --project examples/live_openai_lm live-openai-lm
 | 11 | `11_live_optimize_codex_stage.py` | live-gated product-path mechanics proof | skips unless `LEAVEN_LIVE_CODEX=1` | `lv.optimize(...).run()` dispatches a Python runner that calls `cx.agent.run` through the seam. Not Codex evolution proof. |
 | 12 | `12_live_optimize_codex_proposer.py` | live-gated product-path mechanics proof | skips unless `LEAVEN_LIVE_CODEX=1` | A configured proposer calls `cx.agent.run` against `cx.parent_workspace` and submits a proposal batch. It does not prove proposal application. |
 | 13 | `13_live_optimize_openai_lm.py` | live-gated product-path mechanics proof | skips unless `LEAVEN_LIVE_OPENAI=1` | A runner calls `cx.lm.complete` through the seam and validates text, usage, model, and receipt projection. |
+| 14 | `14_live_optimize_aime.py` | live-gated real optimization (AIME) | skips unless `LEAVEN_LIVE_OPENAI=1` (and the AIME cache exists) | `lv.optimize(...).run()` optimizes a real AIME solver instruction over the durable seam with two live OpenAI models: the runtime solver (`gpt-4.1-mini`) runs each `cx.lm.complete`, and GEPA reflection (`gpt-5.4-mini`) runs through the same provider. One live run proves a changed child is applied and re-evaluated onto the frontier and that token usage plumbs back (Leaven meters tokens, not USD pricing, so `total_cost_usd` reports 0.0; the run is bounded by `metric_calls`). It does not prove AIME benchmark parity or a fixed improvement margin. The deterministic mechanics of this code path are proven no-spend by `tests/examples/test_live_optimize_aime.py`. |
 
 ## Fixtures
 

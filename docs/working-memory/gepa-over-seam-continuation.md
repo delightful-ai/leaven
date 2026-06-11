@@ -183,3 +183,77 @@ Plan (grounded by scout 2026-06-10; refresh before implementing):
   crate once a second consumer exists.
 - p8 example itself could later route through the seam host (paper-scale flag
   on the same code path) — not in scope for the cutoff.
+
+## Slice 4 live evidence (2026-06-11) — AIME cutoff MET
+
+Slice 4 landed: `sdk/python/examples/14_live_optimize_aime.py` optimizes a real
+AIME solver instruction live through `lv.optimize(...).run()` over the durable
+seam, with gpt-4.1-mini solver and gpt-5.4-mini reflection both served by one
+`SeamLmConfig::OpenAi` provider.
+
+Decision-1 grounding (the open risk): NO Rust host fix needed. The system already
+threads per-call models correctly. `SeamLmConfig::OpenAi` carries NO model field;
+the model is required per request. Solver: the worker's `cx.lm.complete` ships
+`model=<runtime LM>` (gpt-4.1-mini) and the OpenAI provider uses
+`request.model.as_str()` (`leaven-lm-openai/src/client.rs:59`). Reflection:
+`Gepa::reflect_with_lm(configured_lm, reflection_model)` stores the wire
+`reflection.model` (gpt-5.4-mini) and the reflection `LmRequest::new(input.model, ...)`
+(`leaven-gepa/src/reflection.rs:105`) uses it. Slice 4 is one commit, Python-only.
+
+Owning-layer fixes found while making the live path real (all Python SDK):
+- `_seam/lm_plans.py`: the worker hardcoded `LmOutputFinalMessage(max_bytes=512)`,
+  refusing any reasoning-length solver response. Now sized from `max_tokens`
+  (`max_tokens * 8` bytes), so a reasoning runner's response is not refused.
+- `_seam_optimize/driver.py`: the optimize client timeout was hardcoded 600s with
+  no override; a live GEPA run (sequential solves + slow reasoning reflection)
+  exceeds it. Added `LEAVEN_OPTIMIZE_TIMEOUT_S` operator override (default 600).
+- Cost truth: Leaven meters TOKENS, not USD (`TokenUsage::to_cost` has no dollar
+  field; no model-pricing table). So `total_cost_usd` is 0.0 and the `usd`
+  ceiling never bites; the run is bounded by `metric_calls`. Documented at the
+  example/README/method-status. A pricing table is a separate future slice.
+
+Live cutoff run (sanctioned spend, recorded):
+- Command: from `sdk/python`, `set -a; source ../../.env; set +a;
+  LEAVEN_LIVE_OPENAI=1 LEAVEN_OPTIMIZE_TIMEOUT_S=2400
+  LEAVEN_RUNS_ROOT=.leaven/release-runs uv run python examples/14_live_optimize_aime.py`
+- Run dir: `.leaven/release-runs/run_aime_gepa_18b7fd7b048102e8_8777b0a2`
+  (run id `run_aime_gepa_18b7fd7b048102e8_8777b0a2`).
+- Result: seed score 0.000 -> best score 1.000, improved=True, iterations=3,
+  metric_calls_used=12 (<= 30), lm_tokens=22422, cost_status=known,
+  total_cost_usd=0.0 (token metering only).
+- Durable evidence (per-case): seed validation 0/2 (cases 7,11); parent screen
+  0/2 (train 0,1); child-1 screen 0/2 (rejected); child-2 screen 2/2 (242,227 ->
+  beats parent -> ADMITTED); admitted child re-validation 2/2 (73,104 -> beats
+  seed). This is the cutoff: a CHANGED child, APPLIED through RunContext,
+  RE-EVALUATED onto the frontier, beating the seed.
+- Seed instruction: "Respond with only your immediate best-guess integer. Do not
+  calculate or show any working." Optimized (gpt-5.4-mini reflection) instruction:
+  a detailed solver brief that forbids guessing and requires explicit
+  step-by-step working and verification before the final integer.
+
+Reliability levers used (all faithful, recorded honestly):
+- Weak guess-only seed (reliably fails) vs reasoning child (reliably solves) at
+  solver temperature 0.3 (temp 1.0 made the seed solve by luck and flip-flop).
+- Curated real AIME train rows (indices 0,1 train; 7,11 validation) where
+  gpt-4.1-mini's success depends on the prompt -- the optimization is genuine
+  (reflection must discover reasoning helps); curation only de-flakes the demo.
+- Informative per-case scorer feedback (RewardValue.feedback) that names the
+  failure mode WITHOUT leaking the target, so reflection improves the
+  generalizable instruction instead of memorizing answers.
+- Runner injects the problem + answer-format footer around the evolved
+  instruction (mirrors p8: optimize the instruction, not the injection plumbing),
+  so a reflected instruction that drops a `{problem}` placeholder still solves.
+
+No-spend proof of the same code path: `tests/examples/test_live_optimize_aime.py`
+(`test_example_14_optimization_mechanics_improve_with_mock_lm`) drives the same
+runner/rubric/`build_optimization` with the mock LM over AIME-shaped fixtures
+(empty seed -> 0; reflected instruction -> admitted child beats seed). NOTE: the
+host rebuilds the runtime LM per `lm.complete`, so a mock solver replays
+responses[0] every call; the mock proves loop mechanics, not prompt-sensitive
+solving (that is the live example's job).
+
+Verification run for slice 4 (Python-only, focused): sdk `just check` green; sdk
+`uv run pytest` 320 passed; sdk `just examples` green (13 examples, 14 self-skips
+without the gate); sdk `just compile-examples` ok. No Rust changed, so no cargo
+gates needed. `just check`/`just coverage`/`release-check` (repo-root) NOT run
+(out of scope; sdk gates are the owning surface).
