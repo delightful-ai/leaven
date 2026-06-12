@@ -34,6 +34,7 @@ class CodexCliRuntimeDocument(Struct, frozen=True, forbid_unknown_fields=True):
     model: str
     timeout_s: int
     codex_home: str | None
+    home_dir: str | None
     bypass_approvals_and_sandbox: bool
     kind: Literal["codex_cli"] = "codex_cli"
 
@@ -145,6 +146,7 @@ class CodexCliRuntimeConfig:
     model: str = "gpt-5.4-mini"
     timeout_s: int = 180
     codex_home: str | None = None
+    home_dir: str | None = None
     bypass_approvals_and_sandbox: bool = False
 
     def to_wire(self) -> CodexCliRuntimeDocument:
@@ -154,6 +156,7 @@ class CodexCliRuntimeConfig:
             model=self.model,
             timeout_s=self.timeout_s,
             codex_home=self.codex_home,
+            home_dir=self.home_dir,
             bypass_approvals_and_sandbox=self.bypass_approvals_and_sandbox,
         )
 

@@ -71,7 +71,8 @@ fn codex_cli_config_covers_wire_variants_env_and_parser_construction() {
     assert_eq!(default_config.command_config().run.program, "codex");
 
     let mut config = CodexCliConfig::new("codex");
-    config.codex_home = Some("/tmp/leaven-codex-home".to_owned());
+    config.codex_home = Some("/tmp/leaven-codex-home/.codex".to_owned());
+    config.home_dir = Some("/tmp/leaven-codex-home".to_owned());
     config.reasoning_effort = CodexCliReasoningEffort::XHigh;
     config.approval = CodexCliApproval::Sandbox(CodexCliSandbox::ReadOnly);
     let command_config = config.command_config();
@@ -79,8 +80,11 @@ fn codex_cli_config_covers_wire_variants_env_and_parser_construction() {
 
     assert_eq!(
         command_config.run.env["CODEX_HOME"],
-        "/tmp/leaven-codex-home"
+        "/tmp/leaven-codex-home/.codex"
     );
+    // HOME is overridden so codex skill discovery cannot reach the operator's
+    // `$HOME`-rooted skill registry (`~/.agents`, `~/.codex/superpowers`).
+    assert_eq!(command_config.run.env["HOME"], "/tmp/leaven-codex-home");
     assert!(
         command_config
             .run

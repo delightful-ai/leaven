@@ -493,6 +493,10 @@ pub enum SeamAgentConfig {
         timeout_s: Option<u64>,
         /// Optional `CODEX_HOME` override.
         codex_home: Option<String>,
+        /// Optional `HOME` override. Isolating `HOME` severs operator-global
+        /// skill discovery (`~/.agents`, `~/.codex/superpowers`) so reflection
+        /// sees only Codex built-ins and the materialized workspace skills.
+        home_dir: Option<String>,
         /// Run Codex with full bypass flags. Intended for explicit live proof only.
         bypass_approvals_and_sandbox: bool,
     },
@@ -507,12 +511,14 @@ impl SeamAgentConfig {
                 model,
                 timeout_s,
                 codex_home,
+                home_dir,
                 bypass_approvals_and_sandbox,
             } => {
                 let mut config = CodexCliConfig::new(codex_bin.clone());
                 config.model.clone_from(model);
                 config.timeout = timeout_s.map(std::time::Duration::from_secs);
                 config.codex_home.clone_from(codex_home);
+                config.home_dir.clone_from(home_dir);
                 if *bypass_approvals_and_sandbox {
                     config.approval = CodexCliApproval::BypassSandboxAndApprovals;
                 } else {
@@ -1701,6 +1707,7 @@ mod tests {
                     model: "gpt-5.4-mini".to_owned(),
                     timeout_s: Some(5),
                     codex_home: None,
+                    home_dir: None,
                     bypass_approvals_and_sandbox: false,
                 },
                 stage: SeamStageConfig::CommandRunner {
@@ -1795,6 +1802,7 @@ mod tests {
                     model: "gpt-5.4-mini".to_owned(),
                     timeout_s: Some(5),
                     codex_home: None,
+                    home_dir: None,
                     bypass_approvals_and_sandbox: false,
                 },
                 ..SeamServiceConfig::default()

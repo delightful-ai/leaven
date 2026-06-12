@@ -17,6 +17,10 @@ class CodexAgent(AgentConfig):
     bin_path_env: str | None = None
     """Env var holding the codex binary path. None = use PATH."""
     allowed_commands: list[str] | None = None
+    codex_home: str | None = None
+    """Override `CODEX_HOME` for the reflection codex. None = the driver prepares a
+    run-scoped isolated home (copied `auth.json`, no personal `AGENTS.md`/config) so
+    the operator's local codex doctrine never bleeds into the authored kit."""
 
 
 def codex(
@@ -26,6 +30,7 @@ def codex(
     approval_mode: Literal["bypass", "interactive"] = "bypass",
     bin_path_env: str | None = None,
     allowed_commands: Sequence[str] | None = None,
+    codex_home: str | None = None,
     role: str | None = None,
     timeout_s: float | None = None,
 ) -> CodexAgent:
@@ -36,6 +41,7 @@ def codex(
         approval_mode=approval_mode,
         bin_path_env=bin_path_env,
         allowed_commands=list(allowed_commands) if allowed_commands else None,
+        codex_home=codex_home,
         role=role,
         timeout_s=timeout_s,
     )

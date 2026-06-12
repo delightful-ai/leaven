@@ -12,6 +12,8 @@ result document the facade projects into `Optimized`.
 import asyncio
 import functools
 import os
+import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from types import FunctionType
@@ -199,10 +201,17 @@ def _agent_config(
         )
     codex_bin = _resolve_codex_bin(agent.bin_path_env)
     timeout_s = int(agent.timeout_s) if agent.timeout_s is not None else 600
+    if agent.codex_home is not None:
+        # Explicit operator override: use it verbatim, no HOME isolation.
+        codex_home, home_dir = agent.codex_home, None
+    else:
+        codex_home, home_dir = _isolated_codex_home()
     return CodexCliRuntimeConfig(
         codex_bin=codex_bin,
         model=agent.model,
         timeout_s=timeout_s,
+        codex_home=codex_home,
+        home_dir=home_dir,
         bypass_approvals_and_sandbox=agent.approval_mode == "bypass",
     )
 
@@ -218,6 +227,43 @@ def _resolve_codex_bin(bin_path_env: str | None) -> str:
             )
         return path
     return resolve_codex_binary()
+
+
+def _isolated_codex_home() -> tuple[str, str]:
+    """Prepare a run-scoped `(codex_home, home_dir)` isolated from the operator.
+
+    The host's reflection codex runs on the operator's machine, where it pulls
+    context from two roots:
+
+    - `$CODEX_HOME` -> `AGENTS.md` + `config.toml` (the operator's codex doctrine);
+    - `$HOME` -> the skill registry `~/.agents/.skill-lock.json` and
+      `~/.codex/superpowers`, i.e. the operator's whole personal skill arsenal.
+
+    Isolating only `CODEX_HOME` severs the doctrine but leaves the `$HOME`-rooted
+    skills, so codex still reaches for e.g. the "superpowers" workflow. We isolate
+    both: the fresh home is the new `HOME`, `CODEX_HOME` is `<home>/.codex` with a
+    copied `auth.json` (preserving the existing subscription/login). The reflection
+    then sees only codex's built-in skills and the already-materialized workspace
+    (kit) skills -- a reproducible surface independent of the operator's machine.
+
+    The home lives under the runs root, not a self-deleting temp dir, because codex
+    writes its session trajectory under `$CODEX_HOME/sessions`: a disposable home
+    would erase the reflection trajectory we want to keep. Operator runs-root
+    retention governs cleanup. An operator who needs their own codex config passes
+    `lv.agent.codex(codex_home=...)` explicitly to opt out.
+    """
+    source = Path(os.environ.get("CODEX_HOME") or (Path.home() / ".codex"))
+    homes_root = Path(default_runs_root()) / "codex-homes"
+    homes_root.mkdir(parents=True, exist_ok=True)
+    home = Path(tempfile.mkdtemp(prefix="codex-home-", dir=homes_root))
+    codex_home = home / ".codex"
+    codex_home.mkdir(parents=True, exist_ok=True)
+    auth = source / "auth.json"
+    if auth.is_file():
+        destination = codex_home / "auth.json"
+        shutil.copyfile(auth, destination)
+        destination.chmod(0o600)
+    return str(codex_home), str(home)
 
 
 def _wire_case(case: PlannedOptimizeCase) -> OptimizeCase:

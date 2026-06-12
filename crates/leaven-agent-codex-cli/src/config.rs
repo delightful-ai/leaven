@@ -21,6 +21,11 @@ pub struct CodexCliConfig {
     pub retain_raw_stdout: bool,
     pub retain_raw_stderr: bool,
     pub codex_home: Option<String>,
+    /// Optional `HOME` override for the Codex subprocess. Isolating `HOME`
+    /// severs operator-global skill discovery rooted at `$HOME` (`~/.agents`,
+    /// `~/.codex/superpowers`) so reflection sees only Codex built-ins and the
+    /// already-materialized workspace skills, not the operator's machine.
+    pub home_dir: Option<String>,
 }
 
 impl CodexCliConfig {
@@ -37,6 +42,7 @@ impl CodexCliConfig {
             retain_raw_stdout: true,
             retain_raw_stderr: true,
             codex_home: None,
+            home_dir: None,
         }
     }
 
@@ -45,6 +51,9 @@ impl CodexCliConfig {
         let mut env = BTreeMap::new();
         if let Some(codex_home) = &self.codex_home {
             env.insert("CODEX_HOME".to_owned(), codex_home.clone());
+        }
+        if let Some(home_dir) = &self.home_dir {
+            env.insert("HOME".to_owned(), home_dir.clone());
         }
 
         CommandAgentConfig {
@@ -91,11 +100,15 @@ impl CodexCliConfig {
             retain_raw_stdout,
             retain_raw_stderr,
             codex_home,
+            home_dir,
         } = self;
 
         let mut env = BTreeMap::new();
         if let Some(codex_home) = codex_home {
             env.insert("CODEX_HOME".to_owned(), codex_home);
+        }
+        if let Some(home_dir) = home_dir {
+            env.insert("HOME".to_owned(), home_dir);
         }
 
         let command_config = CommandAgentConfig {

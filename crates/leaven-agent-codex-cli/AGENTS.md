@@ -7,8 +7,13 @@ raw stdout/stderr, and returns a provider-neutral `AgentSession`.
 
 ## Map
 - `CodexCliConfig` owns CLI binary, model, reasoning effort, approval/sandbox
-  mode, explicit goal-mode feature opt-in, `CODEX_HOME`, timeout, and
-  last-message path.
+  mode, explicit goal-mode feature opt-in, `CODEX_HOME`, optional `HOME`
+  override, timeout, and last-message path.
+- `home_dir` overrides the subprocess `HOME`. Codex discovers operator-global
+  skills from `$HOME` (the `~/.agents` skill registry, `~/.codex/superpowers`),
+  which `CODEX_HOME` does not govern. Isolating `HOME` scopes discovery to Codex
+  built-ins plus the already-materialized workspace skills, without this runtime
+  copying or mirroring any skill bank.
 - `CodexCliRuntime` is an `AgentRuntime` implemented by delegation to
   `CommandAgentRuntime<CodexCliSessionParser>`.
 - `CodexCliSessionParser` treats `--output-last-message` as the stable final

@@ -1,5 +1,7 @@
 """Tests for the optimize.run request lowering and V1 refusals."""
 
+from pathlib import Path
+
 import pytest
 from msgspec import UNSET
 
@@ -177,8 +179,10 @@ def test_prompt_seed_refuses_a_reflection_agent() -> None:
         _reflection_config("lm", optimizer, _runtime())
 
 
-def test_agent_config_resolves_codex_cli_binary_from_env(monkeypatch) -> None:
+def test_agent_config_resolves_codex_cli_binary_from_env(tmp_path, monkeypatch) -> None:
     """Example: the kit path lowers the reflection agent into a Codex CLI config."""
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))  # isolate from the dev ~/.codex
+    monkeypatch.setenv("LEAVEN_RUNS_ROOT", str(tmp_path / "runs"))
     monkeypatch.setenv("TEST_CODEX_BIN", "/usr/local/bin/codex-fake")
     optimizer = lv.optimizers.gepa(
         reflection_agent=lv.agent.codex(
@@ -191,6 +195,63 @@ def test_agent_config_resolves_codex_cli_binary_from_env(monkeypatch) -> None:
     assert agent is not None
     assert agent.codex_bin == "/usr/local/bin/codex-fake"
     assert agent.model == "gpt-5.4-mini"
+
+
+def test_agent_config_isolates_codex_home_and_home_from_the_operator(tmp_path, monkeypatch) -> None:
+    """Law: the kit reflection isolates both CODEX_HOME and HOME by default.
+
+    Codex pulls context from two roots: `$CODEX_HOME` (`AGENTS.md` + `config.toml`,
+    the operator's doctrine) and `$HOME` (the `~/.agents` skill registry +
+    `~/.codex/superpowers`, the operator's personal skill arsenal). The driver
+    prepares a fresh HOME with `CODEX_HOME=<home>/.codex` carrying only a copied
+    `auth.json` -- no `AGENTS.md`, no `config.toml`, and crucially no `~/.agents`
+    -- so the reflection sees only codex built-ins and the workspace (kit) skills.
+    """
+    source = tmp_path / "operator-codex"
+    source.mkdir()
+    (source / "auth.json").write_text('{"auth_mode":"chatgpt"}', encoding="utf-8")
+    (source / "AGENTS.md").write_text("personal doctrine: hard cutover", encoding="utf-8")
+    (source / "config.toml").write_text("model = 'custom'", encoding="utf-8")
+    runs_root = tmp_path / "runs"
+    monkeypatch.setenv("CODEX_HOME", str(source))
+    monkeypatch.setenv("LEAVEN_RUNS_ROOT", str(runs_root))
+    monkeypatch.setenv("TEST_CODEX_BIN", "/usr/local/bin/codex-fake")
+    optimizer = lv.optimizers.gepa(
+        reflection_agent=lv.agent.codex(
+            model="gpt-5.4-mini", transport="cli", bin_path_env="TEST_CODEX_BIN"
+        )
+    )
+    agent = _agent_config(optimizer, reflection_kind="agentic")
+    assert agent is not None
+    assert agent.codex_home is not None and agent.home_dir is not None
+    codex_home = Path(agent.codex_home)
+    home = Path(agent.home_dir)
+    # CODEX_HOME is <HOME>/.codex; the HOME is durable under the runs root.
+    assert codex_home.parent == home
+    assert runs_root in home.parents
+    # Subscription auth carried over, but no operator doctrine and no skill registry.
+    assert (codex_home / "auth.json").read_text(encoding="utf-8") == '{"auth_mode":"chatgpt"}'
+    assert not (codex_home / "AGENTS.md").exists()
+    assert not (codex_home / "config.toml").exists()
+    assert not (home / ".agents").exists()  # `~/.agents` skill registry severed
+
+
+def test_agent_config_honors_explicit_codex_home(tmp_path, monkeypatch) -> None:
+    """Law: an explicit `codex_home` opts out of isolation; HOME stays the operator's."""
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    monkeypatch.setenv("TEST_CODEX_BIN", "/usr/local/bin/codex-fake")
+    optimizer = lv.optimizers.gepa(
+        reflection_agent=lv.agent.codex(
+            model="gpt-5.4-mini",
+            transport="cli",
+            bin_path_env="TEST_CODEX_BIN",
+            codex_home="/explicit/home",
+        )
+    )
+    agent = _agent_config(optimizer, reflection_kind="agentic")
+    assert agent is not None
+    assert agent.codex_home == "/explicit/home"
+    assert agent.home_dir is None
 
 
 def test_agent_config_is_unset_for_the_prompt_path() -> None:
