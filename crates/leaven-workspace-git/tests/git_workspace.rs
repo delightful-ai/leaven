@@ -77,12 +77,16 @@ fn git_workspace_timeout_drains_child_output() {
                 .to_owned(),
         ];
         command.limits.timeout = Some(Duration::from_secs(5));
+        command.limits.max_stdout_bytes = Some(16);
+        command.limits.max_stderr_bytes = Some(3);
 
         let output = slot.run_command(command).unwrap();
 
         assert_eq!(output.status.code, Some(0));
-        assert_eq!(output.stdout.bytes.len(), 200_000);
-        assert_eq!(output.stderr.bytes, b"done");
+        assert_eq!(output.stdout.bytes, b"xxxxxxxxxxxxxxxx");
+        assert!(output.stdout.truncated);
+        assert_eq!(output.stderr.bytes, b"don");
+        assert!(output.stderr.truncated);
         drop(slot);
         workspace.cleanup().await.unwrap();
     });

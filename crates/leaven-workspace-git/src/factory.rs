@@ -9,8 +9,8 @@ use std::os::unix::fs::PermissionsExt;
 use futures::future::{BoxFuture, FutureExt};
 use leaven_kernel::RunId;
 use leaven_workspace::{
-    CapturedOutput, Command, CommandOutput, CommandStdin, ExitStatus, FactoryError, Workspace,
-    WorkspaceBackend, WorkspaceConfig, WorkspaceError, WorkspaceFactory, WorkspacePath,
+    CapturedOutput, Command, CommandLimits, CommandOutput, CommandStdin, ExitStatus, FactoryError,
+    Workspace, WorkspaceBackend, WorkspaceConfig, WorkspaceError, WorkspaceFactory, WorkspacePath,
 };
 
 #[derive(Clone, Debug)]
@@ -46,7 +46,10 @@ impl GitWorkspaceFactory {
 impl WorkspaceFactory for GitWorkspaceFactory {
     async fn allocate(&self, _config: WorkspaceConfig) -> Result<Workspace, FactoryError> {
         let root = self.root.join(format!("leaven-git-{}", RunId::new()));
-        run_git_clone(&self.source, &root)?;
+        if let Err(error) = run_git_clone(&self.source, &root) {
+            let _ = std::fs::remove_dir_all(&root);
+            return Err(error);
+        }
         if let Some(checkout) = &self.checkout {
             if let Err(error) = run_git_checkout(&root, checkout) {
                 let _ = std::fs::remove_dir_all(&root);
@@ -137,7 +140,7 @@ impl WorkspaceBackend for GitWorkspaceBackend {
                 .map_err(|err| WorkspaceError::Command(err.to_string()))?;
         }
 
-        let output = wait_for_output(child, command.limits.timeout, &command.program, start)?;
+        let output = wait_for_output(child, &command.limits, &command.program, start)?;
         Ok(CommandOutput {
             status: ExitStatus {
                 code: output.status.code(),
@@ -214,17 +217,12 @@ fn command_failure(program: &str, output: &std::process::Output) -> String {
 
 fn wait_for_output(
     mut child: std::process::Child,
-    timeout: Option<Duration>,
+    limits: &CommandLimits,
     program: &str,
     start: Instant,
 ) -> Result<std::process::Output, WorkspaceError> {
-    let Some(timeout) = timeout else {
-        return child
-            .wait_with_output()
-            .map_err(|err| WorkspaceError::Command(err.to_string()));
-    };
-    let stdout = spawn_output_drain(child.stdout.take());
-    let stderr = spawn_output_drain(child.stderr.take());
+    let stdout = spawn_output_drain(child.stdout.take(), limits.max_stdout_bytes);
+    let stderr = spawn_output_drain(child.stderr.take(), limits.max_stderr_bytes);
 
     loop {
         if let Some(status) = child
@@ -238,7 +236,9 @@ fn wait_for_output(
             });
         }
 
-        if start.elapsed() >= timeout {
+        if let Some(timeout) = limits.timeout
+            && start.elapsed() >= timeout
+        {
             let _ = child.kill();
             let _ = child.wait();
             let _ = stdout.join();
@@ -255,6 +255,7 @@ fn wait_for_output(
 
 fn spawn_output_drain<R>(
     reader: Option<R>,
+    limit: Option<u64>,
 ) -> std::thread::JoinHandle<Result<Vec<u8>, std::io::Error>>
 where
     R: Read + Send + 'static,
@@ -262,10 +263,38 @@ where
     std::thread::spawn(move || {
         let mut bytes = Vec::new();
         if let Some(mut reader) = reader {
-            reader.read_to_end(&mut bytes)?;
+            read_capped_to_end(&mut reader, &mut bytes, limit)?;
         }
         Ok(bytes)
     })
+}
+
+fn read_capped_to_end<R>(
+    reader: &mut R,
+    bytes: &mut Vec<u8>,
+    limit: Option<u64>,
+) -> Result<(), std::io::Error>
+where
+    R: Read,
+{
+    let Some(limit) = limit else {
+        reader.read_to_end(bytes)?;
+        return Ok(());
+    };
+    let retained = usize::try_from(limit)
+        .unwrap_or(usize::MAX)
+        .saturating_add(1);
+    let mut buffer = [0; 8192];
+    loop {
+        let read = reader.read(&mut buffer)?;
+        if read == 0 {
+            return Ok(());
+        }
+        let remaining = retained.saturating_sub(bytes.len());
+        if remaining > 0 {
+            bytes.extend_from_slice(&buffer[..read.min(remaining)]);
+        }
+    }
 }
 
 fn join_output_drain(
