@@ -1369,7 +1369,7 @@ fn skill_patch_application_rejects_changes_that_do_not_match_plan_targets() {
 
 #[test]
 #[allow(clippy::too_many_lines)]
-fn skill_patch_application_matches_concrete_edit_kind_and_multiplicity() {
+fn skill_patch_application_matches_concrete_edit_kind_and_file_effects() {
     let description = "Edits Rust tests. Use when Rust test failures need diagnosis.";
     let body = "Read the failing test output and patch the narrow code path.";
     let parent = bank_with_alpha(description, body, false);
@@ -1465,18 +1465,50 @@ fn skill_patch_application_matches_concrete_edit_kind_and_multiplicity() {
     .unwrap();
     let collapsed_change = SkillPatchApplication::apply(
         &parent,
-        multi_edit_plan,
+        multi_edit_plan.clone(),
         vec![SkillBankChange::WriteFile {
-            skill: alpha,
+            skill: alpha.clone(),
             path: SkillPath::new("scripts/run.sh").unwrap(),
             file: SkillFile::text("#!/bin/sh\necho beta\n"),
         }],
     )
+    .unwrap();
+    assert!(matches!(
+        collapsed_change.change(),
+        SkillBankChange::Atomic(changes) if changes.len() == 1
+    ));
+    assert_eq!(
+        collapsed_change
+            .child()
+            .get(&alpha)
+            .unwrap()
+            .file(&SkillPath::new("scripts/run.sh").unwrap())
+            .unwrap()
+            .bytes(),
+        b"#!/bin/sh\necho beta\n"
+    );
+
+    let repeated_change = SkillPatchApplication::apply(
+        &parent,
+        multi_edit_plan,
+        vec![
+            SkillBankChange::WriteFile {
+                skill: alpha.clone(),
+                path: SkillPath::new("scripts/run.sh").unwrap(),
+                file: SkillFile::text("#!/bin/sh\necho beta\n"),
+            },
+            SkillBankChange::WriteFile {
+                skill: alpha,
+                path: SkillPath::new("scripts/run.sh").unwrap(),
+                file: SkillFile::text("#!/bin/sh\necho gamma\n"),
+            },
+        ],
+    )
     .unwrap_err();
     assert!(matches!(
-        collapsed_change,
+        repeated_change,
         SkillPatchApplicationError::PlanMismatch(reason)
-            if reason.contains("plan edits") && reason.contains("concrete changes")
+            if reason.contains("repeat whole-file effects")
     ));
 }
 

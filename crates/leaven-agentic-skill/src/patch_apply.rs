@@ -110,9 +110,20 @@ fn validate_changes_match_plan(
             };
             (edit.target().clone(), kind)
         })
-        .collect::<Vec<_>>();
+        .collect::<BTreeSet<_>>();
     let actual = concrete_patch_intents(parent, changes);
-    if counted(expected.iter()) == counted(actual.iter()) {
+    let actual_counts = counted(actual.iter());
+    let repeated_actual = actual_counts
+        .iter()
+        .filter_map(|(intent, count)| (*count > 1).then_some((intent.clone(), *count)))
+        .collect::<Vec<_>>();
+    if !repeated_actual.is_empty() {
+        return Err(SkillPatchApplicationError::PlanMismatch(format!(
+            "concrete changes repeat whole-file effects {repeated_actual:?}; combine each target into one final file change"
+        )));
+    }
+    let actual = actual.into_iter().collect::<BTreeSet<_>>();
+    if expected == actual {
         return Ok(());
     }
     Err(SkillPatchApplicationError::PlanMismatch(format!(
