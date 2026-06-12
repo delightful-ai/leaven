@@ -423,3 +423,125 @@ examples; example 15 self-skips without the gate + Docker); sdk
 Trial smoke confirmed the git-pinned task path. No Rust changed (5A owns it). Repo
 -root `just check`/`coverage`/`release-check` NOT run (out of scope; sdk gates are
 the owning surface).
+
+## Session 2026-06-11 (cont.) — reflection traces real + clean; isolation fixed
+
+Goal of the session: prove the agentic reflection is REAL and its traces are
+saved/accessible/interpretable, and that the optimization library + eval
+machinery actually work end to end. It is, with two fixes landed.
+
+### What we found (the load-bearing facts)
+- ROLLOUT trajectories existed and are real (harbor `agent/trajectory.json` +
+  `agent/codex.txt` + raw codex `sessions/*.jsonl`, verifier `reward.txt`/`ctrf.json`)
+  under `sdk/python/.leaven/codex-tb-trials/` from the prior live attempts.
+- REFLECTION trajectories did NOT exist before this session. Every prior live
+  kit run's `kit-stores/agent_kit.git` held ONLY the seed commit — reflection
+  never fired live (the seed maxed at reward=1, the loop ended). The only
+  "reflection" ever run end to end was the deterministic test's FAKE-codex
+  script. So a real LLM authoring a kit from real feedback had ZERO captured
+  evidence. (This was the real gap behind "we have traces for all of it?".)
+- To capture a real reflection without the slow/headroom-blocked qemu trials:
+  run REAL codex reflection (gpt-5.4-mini, ChatGPT-subscription auth, NOT the API
+  key) + the no-spend fake-trial seam (`LEAVEN_CODEX_TB_FAKE_TRIAL=1`). The
+  seed scores 0, so GEPA reflects, real codex authors a real child kit, it is
+  applied through `RunContext` + re-evaluated (rejected only because the fake
+  trial rewards a magic marker — expected, the live-headroom story is unchanged).
+- CONTAMINATION discovered by reading the captured trajectory: the reflection
+  codex runs on the operator's machine and absorbed (1) `~/.codex/AGENTS.md`
+  doctrine — a regex-log kit came back authored in "hard-cutover style ... not a
+  compatibility layer ... keep scaffolding separated" (verbatim operator
+  doctrine, not task signal); and (2) the operator's whole personal skill
+  arsenal — 40+ skills from `~/.agents/.skill-lock.json`, `~/.codex/superpowers`,
+  `~/src/personal/skills` (codex literally "used the superpowers workflow").
+  KEY: the skill registry is `$HOME`-rooted, NOT `$CODEX_HOME`-rooted, so
+  CODEX_HOME isolation alone does NOT sever skills; HOME isolation does.
+
+### Fixes landed (jj commits on top of de30e431)
+- `8463408a` seam-service+python-sdk: isolate reflection codex HOME/CODEX_HOME.
+  SDK driver (`_seam_optimize/driver.py::_isolated_codex_home`) auto-prepares a
+  run-scoped HOME with `CODEX_HOME=<home>/.codex` carrying ONLY a copied
+  `auth.json` (subscription preserved), no AGENTS.md/config.toml, no `~/.agents`.
+  Plumbing: codex-cli `CodexCliConfig.home_dir` -> `HOME` env (next to
+  CODEX_HOME); `SeamAgentConfig::CodexCli.home_dir`; wire
+  `CodexCliRuntime{Config,Document}.home_dir`; `lv.agent.codex(codex_home=...)`
+  opts out. Home lives UNDER the runs root (durable) so the codex session
+  trajectory (`$CODEX_HOME/sessions`) is captured, not erased — a self-deleting
+  temp home was the first attempt and ate the trajectory (regression caught
+  mid-build). Result (verified live): reflection now sees ONLY codex built-ins
+  (imagegen/openai-docs/plugin-creator/skill-creator/skill-installer) + the
+  materialized workspace (kit) skills — reproducible across machines — and
+  authors a clean task-driven kit (verify-first loop; edge cases incl.
+  ordering/partial-matches, which is exactly regex-log's "last date per line").
+- `795679e0` leaven-run+examples/p8_aime_gepa: own
+  `OptimizationStopReason::as_str()`; drop p8's hand-match. p8 stringified the
+  stop reason with a local `report_stop_reason()` that enumerated every variant,
+  so the pool-cap `CandidateCapReached` variant broke the bin's TEST target
+  (E0004) — hidden because `just check` / `cargo build --bin leaven` do not
+  compile example test targets; only `cargo check --workspace --all-targets`
+  surfaces it. Rather than patch another arm onto a brittle match, the canonical
+  `snake_case` string now lives on the owning type in `leaven-run`
+  (`OptimizationStopReason::as_str()`, const fn, matching the
+  `leaven-public-seam` `as_str` pattern, per-variant test) and p8 uses
+  `result.stop.as_str()`; a future variant can no longer drift the example.
+
+### Verification (no-spend unless noted)
+SDK `uv run pytest` 335 (added 3 driver isolation law tests); `just examples` 14;
+`just compile-examples`; kit mechanics test 2 (real served host, fake codex);
+Rust `cargo test -p leaven-agent-codex-cli` 8 (+ HOME-emission assertion),
+`-p leaven-seam-service` 50, `cargo test -p leaven --test topology_contract` 8
+(no new dep edges — codex-cli<->seam-service already existed); `cargo check
+--workspace --all-targets` clean after the p8 fix. LIVE: AIME example 14
+(gpt-4.1-mini solver + gpt-5.4-mini reflection) on the rebuilt binary improved
+seed 0.000 -> best 0.500 (3 iters) — Goal A's prompt/LM path unaffected by the
+isolation change (it only touches the agentic kit path). Repo-root
+`just check` was kicked off as the broad gate (log:
+`/Users/darin/tmp/reflect-capture/just_check.log`).
+
+### Repro of the fast capture (real reflection, no docker)
+From `sdk/python`, with a fresh runs root:
+`set -a; source ../../.env; set +a; LEAVEN_CODEX_TB_FAKE_TRIAL=1
+LEAVEN_CODEX_BIN=/Users/darin/.codex/packages/standalone/current/codex
+LEAVEN_BIN=<repo>/target/debug/leaven LEAVEN_RUNS_ROOT=$PWD/.leaven/<name>
+uv run --project examples/codex_terminal_bench python <driver calling
+build_optimization(cases=pinned_task_cases(), metric_calls=8, minibatch_size=1,
+population_size=2).run()>`. Reflection trajectory lands at
+`<runs_root>/codex-homes/codex-home-*/.codex/sessions/2026/.../rollout-*.jsonl`;
+authored kit at `<run-dir>/kit-stores/agent_kit.git` (seed commit + child commit,
+`git --git-dir=... diff <seed> <child> system_prompt.md`).
+
+### Next (still open)
+- VM-isolated reflection (the fully-clean sandbox, the operator's repeated ask):
+  run the reflection codex inside a `leaven-workspace-firkin` Apple/VZ pod — no
+  operator paths at all. Decided slice shape: "routing now, live Firkin next".
+  Routing-now = a seam-service workspace-backend config `{ Local | Firkin }` so
+  the reflection factory is no longer the hardcoded `LocalWorkspaceFactory::temp()`
+  at `crates/leaven-seam-service/src/optimize_run_service/agent_kit/loop_run.rs:200`;
+  prove the Firkin materialization with the crate's fake runtime (currently
+  test-only in `leaven-workspace-firkin/tests/`). NEW topology edge
+  seam-service -> leaven-workspace-firkin will need the contract + AGENTS update.
+  Live-Firkin = a LINUX codex binary + auth (copy `auth.json`, or inject
+  OPENAI_API_KEY) + network IN the booted pod; harbor's in-container
+  `@openai/codex` install is the provisioning template (`firkin-apple-vz-live`
+  feature, `LEAVEN_FIRKIN_LIVE_TEMPLATE_IMAGE`, signed Apple/VZ). This is the
+  honest answer to the host-path skill leak (HOME isolation is the host-path
+  patch; the VM is the real boundary).
+  DE-RISKED: the kit-in-pod half is ALREADY proven live. The reflector uses
+  `GitProgramMaterializer`/`GitProgramReadback` over a `WorkspaceFactory`, and
+  `leaven-workspace-firkin/tests/firkin_contract/firkin_live_git_e2e.rs`
+  (`live_apple_vz_product_pod_materializes_and_reads_back_git_workspaces`,
+  signed Apple/VZ, alpine/git image) already materializes + reads back Git
+  workspaces in a booted pod with those SAME primitives. So routing-now is just
+  swapping `LocalWorkspaceFactory` for `FirkinWorkspaceFactory` in
+  `build_reflector` via config; the ONLY genuinely new work is codex EXECUTION
+  in the pod (image carries node+codex or installs it at setup, auth +
+  network) — a provisioning/image/spend decision that is darin's to make.
+  Governing design: `docs/specs/agentic_trace_reflection_product_backend.md`
+  (+ `firkin_git_workspace_backend.md`, `firkin_git_workspace_api_shape.md`);
+  boundary law there: `leaven-workspace-firkin` stays workspace substrate (must
+  not know GEPA/artifact/Firkin-kit layout), the GEPA Git-program bridge stays
+  in `leaven-gepa-agentic-git`.
+- The LIVE benchmark cutoff (a kit child strictly BEATING the seed on a real TB2
+  task) is STILL headroom-blocked: gpt-5.4-mini solves regex-log AND
+  password-recovery regardless of kit. Unchanged. Pursue a headroom-bearing
+  task/model (reasoning_effort=low solver, or a method-dependent task) only on an
+  explicit live request.
