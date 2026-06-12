@@ -447,7 +447,7 @@ fn report_budget_and_cache_lines(
     result: &Optimized<AimePrompt>,
 ) -> Vec<String> {
     vec![
-        format!("stop_reason={}", report_stop_reason(result.stop)),
+        format!("stop_reason={}", result.stop.as_str()),
         format!(
             "search_metric_call_cap={}",
             report_optional_u64(config.budget.metric_calls)
@@ -898,17 +898,6 @@ fn report_lm_cache_write_path(backend: AimeLmCacheBackend, storage: &RunStorage)
     }
 }
 
-fn report_stop_reason(reason: leaven::run::OptimizationStopReason) -> &'static str {
-    match reason {
-        leaven::run::OptimizationStopReason::OptimizerDone => "optimizer_done",
-        leaven::run::OptimizationStopReason::BudgetReached => "budget_reached",
-        leaven::run::OptimizationStopReason::BudgetExceeded => "budget_exceeded",
-        leaven::run::OptimizationStopReason::StopperTriggered => "stopper_triggered",
-        leaven::run::OptimizationStopReason::External => "external",
-        leaven::run::OptimizationStopReason::Error => "error",
-    }
-}
-
 #[cfg(test)]
 async fn run_deterministic_aime() -> AimeRunResult {
     let config = AimeRunConfig::deterministic_smoke();
@@ -1205,7 +1194,7 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
             "test_score_use": "final_report_only",
         },
         "budget": {
-            "stop_reason": report_stop_reason(result.stop),
+            "stop_reason": result.stop.as_str(),
             "search_metric_call_cap": config.budget.metric_calls,
             "search_metric_calls_spent": result.summary.optimization_cost.metric_calls,
             "search_metric_calls_overshoot": metric_calls_overshoot(

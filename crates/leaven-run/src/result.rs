@@ -99,6 +99,25 @@ pub enum OptimizationStopReason {
     Error,
 }
 
+impl OptimizationStopReason {
+    /// Stable `snake_case` identifier for this stop reason.
+    ///
+    /// Owned here so reports and wire output share one spelling and adding a
+    /// variant cannot silently drift a hand-maintained match in a consumer.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::OptimizerDone => "optimizer_done",
+            Self::BudgetReached => "budget_reached",
+            Self::BudgetExceeded => "budget_exceeded",
+            Self::CandidateCapReached => "candidate_cap_reached",
+            Self::StopperTriggered => "stopper_triggered",
+            Self::External => "external",
+            Self::Error => "error",
+        }
+    }
+}
+
 impl From<leaven_engine::StopReason> for OptimizationStopReason {
     fn from(reason: leaven_engine::StopReason) -> Self {
         match reason {
@@ -416,5 +435,20 @@ mod tests {
     #[test]
     fn average_refuses_empty_case_sets() {
         assert_eq!(average(&[]), None);
+    }
+
+    #[test]
+    fn stop_reason_as_str_is_stable_snake_case_for_every_variant() {
+        use OptimizationStopReason::{
+            BudgetExceeded, BudgetReached, CandidateCapReached, Error, External, OptimizerDone,
+            StopperTriggered,
+        };
+        assert_eq!(OptimizerDone.as_str(), "optimizer_done");
+        assert_eq!(BudgetReached.as_str(), "budget_reached");
+        assert_eq!(BudgetExceeded.as_str(), "budget_exceeded");
+        assert_eq!(CandidateCapReached.as_str(), "candidate_cap_reached");
+        assert_eq!(StopperTriggered.as_str(), "stopper_triggered");
+        assert_eq!(External.as_str(), "external");
+        assert_eq!(Error.as_str(), "error");
     }
 }
