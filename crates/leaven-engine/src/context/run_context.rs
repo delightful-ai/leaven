@@ -9,8 +9,8 @@ use leaven_core::{
 };
 use leaven_kernel::{
     AssessmentId, BudgetExceeded, BudgetSnapshot, CandidateId, Cost, ErrorKind, ErrorRecord,
-    EvaluationRequestId, EvaluatorId, IterationId, ProposalBatchId, ProposalId, StageCallId,
-    StageId,
+    EvaluationRequestId, EvaluatorId, Fingerprint, FingerprintBuilder, IterationId,
+    ProposalBatchId, ProposalId, StageCallId, StageId,
 };
 use leaven_store::{EvidenceStore, StoreError};
 use thiserror::Error;
@@ -20,10 +20,11 @@ use crate::graph::storage::{ApplyAttemptOutcome, ApplyProposalError};
 use crate::{
     Actor, ApplyOneReport, ApplyOutcome, ApplyReport, BudgetHandle, BudgetLedger,
     CacheBypassReason, CachePolicy, CacheStatus, CaseSet, DynCallback, DynEvaluator, ErrorPolicy,
-    EvaluationCache, EvaluationCacheKey, EvaluationContext, EvaluationError, EvaluationReport,
-    EvaluationResolveError, Evaluator, OptimizerStateWrite, ProposalBatchReport, ProposalContext,
-    ProposalError, Proposer, ReadScope, RenderContext, RunCheckpointRequest, RunEvent, RunGraph,
-    RunGraphView, RunPersistence, TrustPolicy, TrustViolation,
+    EvaluationCache, EvaluationCacheKey, EvaluationCacheRequestKind, EvaluationContext,
+    EvaluationError, EvaluationReport, EvaluationResolveError, Evaluator, OptimizerStateWrite,
+    ProposalBatchReport, ProposalContext, ProposalError, Proposer, ReadScope, RenderContext,
+    RunCheckpointRequest, RunEvent, RunGraph, RunGraphView, RunPersistence, TrustPolicy,
+    TrustViolation,
 };
 
 use super::proposal_context::StageAttemptEventSink;
@@ -867,10 +868,23 @@ fn evaluation_cache_key<P: OptimizationProblem>(
     Ok(EvaluationCacheKey {
         evaluator,
         policy,
+        kind: request_cache_kind(&request.kind),
+        granularity: request.granularity,
+        purpose: request.purpose.clone(),
         case_set_version: request.set.case_set_version.clone(),
         case_ids: request.set.case_ids.clone(),
         candidates,
     })
+}
+
+fn request_cache_kind(kind: &ResolvedRequestKind) -> EvaluationCacheRequestKind {
+    match kind {
+        ResolvedRequestKind::Independent { .. } => EvaluationCacheRequestKind::Independent,
+        ResolvedRequestKind::Pairwise { order, .. } => {
+            EvaluationCacheRequestKind::Pairwise { order: *order }
+        }
+        ResolvedRequestKind::Listwise { .. } => EvaluationCacheRequestKind::Listwise,
+    }
 }
 
 fn request_candidate_cache_identities<P: OptimizationProblem>(
@@ -880,7 +894,10 @@ fn request_candidate_cache_identities<P: OptimizationProblem>(
 ) -> Result<Vec<CacheIdentity>, CacheBypassReason> {
     match policy {
         CachePolicy::Never => Err(CacheBypassReason::DisabledByPolicy),
-        CachePolicy::UserKey(fingerprint) => Ok(vec![CacheIdentity::User(*fingerprint)]),
+        CachePolicy::UserKey(fingerprint) => Ok(request_candidates(request)
+            .into_iter()
+            .map(|candidate| user_candidate_cache_identity(*fingerprint, candidate))
+            .collect()),
         CachePolicy::Deterministic | CachePolicy::DeterministicWithSeed(_) => {
             request_candidates(request)
                 .into_iter()
@@ -893,6 +910,17 @@ fn request_candidate_cache_identities<P: OptimizationProblem>(
                 .collect()
         }
     }
+}
+
+fn user_candidate_cache_identity(
+    fingerprint: Fingerprint,
+    candidate: CandidateId,
+) -> CacheIdentity {
+    let mut builder = FingerprintBuilder::new();
+    builder.update(b"leaven-engine.evaluation-cache.user-candidate.v1");
+    builder.update(fingerprint.0);
+    builder.update(candidate.as_uuid().as_bytes());
+    CacheIdentity::User(builder.finish())
 }
 
 fn request_candidates(request: &ResolvedEvaluationRequest) -> Vec<CandidateId> {

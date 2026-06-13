@@ -604,6 +604,14 @@ where
                 .hide_from_proposers([PartitionId::from("VALIDATION"), PartitionId::from("TEST")]),
         )
         .evaluator(evaluator);
+    if let Some(limit) = metric_call_limit {
+        engine_builder = engine_builder.metric_call_budget_stopper(limit);
+    }
+    let ConfiguredEngineStart {
+        builder: mut engine_builder,
+        resumed,
+        checkpoint,
+    } = configure_engine_start(engine_builder, prepared_store, compatibility)?;
     if let Some(evaluation_cache) = prepared_store.evaluation_cache.as_ref() {
         let cache =
             evaluation_cache
@@ -614,14 +622,6 @@ where
                 })?;
         engine_builder = engine_builder.evaluation_cache(cache);
     }
-    if let Some(limit) = metric_call_limit {
-        engine_builder = engine_builder.metric_call_budget_stopper(limit);
-    }
-    let ConfiguredEngineStart {
-        builder: mut engine_builder,
-        resumed,
-        checkpoint,
-    } = configure_engine_start(engine_builder, prepared_store, compatibility)?;
     if let Some(persistence) = prepared_store.store.persistence() {
         engine_builder = engine_builder.persistence(persistence);
     }

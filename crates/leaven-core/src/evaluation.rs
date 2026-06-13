@@ -245,7 +245,9 @@ pub struct ResolvedEvaluationRequest {
 /// Resolved counterpart of [`EvaluationRequest`]. The variants mirror
 /// the unresolved shapes, minus the [`EvaluationSet`] (which has been
 /// resolved into [`ResolvedEvaluationRequest::set`]).
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
+)]
 pub enum ResolvedRequestKind {
     /// Independent scoring of each candidate.
     Independent {
@@ -277,7 +279,9 @@ pub enum ResolvedRequestKind {
 /// evaluator that cannot satisfy the requested granularity should
 /// surface that as an explicit error rather than silently substituting
 /// a different shape.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
+)]
 pub enum AssessmentGranularity {
     /// One assessment per candidate over the whole resolved set.
     Aggregate,
@@ -294,7 +298,9 @@ pub enum AssessmentGranularity {
 /// reconstructing intent from event order. Trust policies and
 /// frontier filters often key on purpose (e.g. "frontier ignores
 /// `Probe`-purpose assessments").
-#[derive(Clone, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
+)]
 pub enum EvaluationPurpose {
     /// Initial scoring of seed candidates.
     SeedBaseline,
@@ -323,7 +329,9 @@ pub enum EvaluationPurpose {
 /// on order (LLM judges often have positional bias). `Unordered`
 /// means the evaluator declares its judgment is symmetric, which lets
 /// the cache pool both orderings.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
+)]
 pub enum PairOrder {
     /// Order matters; the evaluator may be asymmetric.
     Ordered,

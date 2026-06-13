@@ -1,9 +1,10 @@
 use std::fs;
 
-use leaven_core::{CacheIdentity, CaseSetVersion};
+use leaven_core::{AssessmentGranularity, CacheIdentity, CaseSetVersion, EvaluationPurpose};
 use leaven_engine::{
     CachePolicy, EvaluationCache, EvaluationCacheEntry, EvaluationCacheKey,
-    EvaluationCacheSnapshot, EvaluationCacheStoreError, SqliteEvaluationCache,
+    EvaluationCacheRequestKind, EvaluationCacheSnapshot, EvaluationCacheStoreError,
+    SqliteEvaluationCache,
 };
 use leaven_kernel::{AssessmentId, CaseId, ContentId, Fingerprint};
 use rusqlite::Connection;
@@ -331,6 +332,9 @@ fn cache_key(policy: CachePolicy) -> EvaluationCacheKey {
     EvaluationCacheKey {
         evaluator: Fingerprint::from_bytes([1; 32]),
         policy,
+        kind: EvaluationCacheRequestKind::Independent,
+        granularity: AssessmentGranularity::PerCase,
+        purpose: EvaluationPurpose::Search,
         case_set_version: CaseSetVersion("cases-v1".to_owned()),
         case_ids: vec![CaseId::new(1), CaseId::new(2)],
         candidates: vec![

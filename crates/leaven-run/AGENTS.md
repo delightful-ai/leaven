@@ -110,8 +110,9 @@ around engine graph mutation or a home for optimizer strategy state.
   declares role-specific LM/runtime identities for product adapters such as P8.
   Ephemeral runs may omit them. Optimizers may expose engine-level optimizer
   compatibility; `leaven-run` records and compares it without inspecting
-  optimizer-private state. Cache and budget compatibility still contain narrow
-  placeholders.
+  optimizer-private state. Cache compatibility now names the engine
+  evaluation-cache key semantics while LM cache compatibility remains pending;
+  budget compatibility still contains a narrow placeholder.
 - `OptimizeBuilder` defaults evaluation caching to automatic deterministic
   candidate/case caching for ordinary durable runs. Explicit
   `.evaluation_cache_policy(CachePolicy::Never)` is the throwaway/debug path.
