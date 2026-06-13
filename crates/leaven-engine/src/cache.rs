@@ -2,7 +2,9 @@
 
 use std::collections::HashMap;
 
-use leaven_core::{CacheIdentity, CaseSetVersion};
+use leaven_core::{
+    AssessmentGranularity, CacheIdentity, CaseSetVersion, EvaluationPurpose, PairOrder,
+};
 use leaven_kernel::{AssessmentId, CandidateId, CaseId, Fingerprint};
 use serde::{Deserialize, Serialize};
 
@@ -16,7 +18,7 @@ pub enum CachePolicy {
     Deterministic,
     /// Cache deterministic results with an explicit seed in the policy.
     DeterministicWithSeed(u64),
-    /// Cache under a caller-provided fingerprint.
+    /// Cache under caller-provided deterministic state, still separated by request candidates.
     UserKey(Fingerprint),
 }
 
@@ -50,12 +52,29 @@ pub struct EvaluationCacheKey {
     pub evaluator: Fingerprint,
     /// Cache policy that participates in key identity.
     pub policy: CachePolicy,
+    /// Resolved request kind, including ordered pairwise/listwise semantics.
+    pub kind: EvaluationCacheRequestKind,
+    /// Requested assessment granularity.
+    pub granularity: AssessmentGranularity,
+    /// Request purpose. Search, validation, and final test rows are not interchangeable.
+    pub purpose: EvaluationPurpose,
     /// Concrete case-set version used to resolve the request.
     pub case_set_version: CaseSetVersion,
     /// Resolved case IDs.
     pub case_ids: Vec<CaseId>,
     /// Candidate cache identities in request order.
     pub candidates: Vec<CacheIdentity>,
+}
+
+/// Request-shape identity retained by evaluation cache keys.
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
+pub enum EvaluationCacheRequestKind {
+    /// Independent scoring.
+    Independent,
+    /// Pairwise comparison. The order policy affects evaluator semantics.
+    Pairwise { order: PairOrder },
+    /// Listwise ranking.
+    Listwise,
 }
 
 /// In-memory evaluation cache.
@@ -129,16 +148,19 @@ impl EvaluationCache {
 
 #[cfg(test)]
 mod tests {
-    use leaven_core::{CacheIdentity, CaseSetVersion};
+    use leaven_core::{AssessmentGranularity, CacheIdentity, CaseSetVersion, EvaluationPurpose};
     use leaven_kernel::{AssessmentId, CaseId, ContentId, Fingerprint};
 
-    use crate::{CachePolicy, EvaluationCache, EvaluationCacheKey};
+    use crate::{CachePolicy, EvaluationCache, EvaluationCacheKey, EvaluationCacheRequestKind};
 
     #[test]
     fn cache_snapshot_round_trips_entries_for_resume() {
         let key = EvaluationCacheKey {
             evaluator: Fingerprint::from_bytes([1; 32]),
             policy: CachePolicy::Deterministic,
+            kind: EvaluationCacheRequestKind::Independent,
+            granularity: AssessmentGranularity::PerCase,
+            purpose: EvaluationPurpose::Search,
             case_set_version: CaseSetVersion("cases-v1".to_owned()),
             case_ids: vec![CaseId::new(1)],
             candidates: vec![CacheIdentity::Content(ContentId::from_bytes([2; 32]))],
@@ -159,6 +181,9 @@ mod tests {
         let first = EvaluationCacheKey {
             evaluator: Fingerprint::from_bytes([1; 32]),
             policy: CachePolicy::Deterministic,
+            kind: EvaluationCacheRequestKind::Independent,
+            granularity: AssessmentGranularity::PerCase,
+            purpose: EvaluationPurpose::Search,
             case_set_version: CaseSetVersion("cases-v1".to_owned()),
             case_ids: vec![CaseId::new(1)],
             candidates: vec![CacheIdentity::Content(ContentId::from_bytes([1; 32]))],
@@ -166,6 +191,9 @@ mod tests {
         let second = EvaluationCacheKey {
             evaluator: Fingerprint::from_bytes([2; 32]),
             policy: CachePolicy::DeterministicWithSeed(3),
+            kind: EvaluationCacheRequestKind::Independent,
+            granularity: AssessmentGranularity::PerCase,
+            purpose: EvaluationPurpose::Validation,
             case_set_version: CaseSetVersion("cases-v1".to_owned()),
             case_ids: vec![CaseId::new(2)],
             candidates: vec![CacheIdentity::Content(ContentId::from_bytes([2; 32]))],

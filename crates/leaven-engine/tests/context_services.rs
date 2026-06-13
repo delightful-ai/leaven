@@ -13,9 +13,9 @@ use leaven_core::{
 };
 use leaven_engine::{
     BudgetLedger, CacheBypassReason, CachePolicy, CacheStatus, Callback, CaseSet,
-    EvaluationCacheKey, EvaluationContext, EvaluationError, Evaluator, ProposalContext,
-    ProposalError, Proposer, RunCheckpointRequest, RunContext, RunEvent, RunGraphView,
-    RunPersistence, StoreRunPersistence, TrustPolicy,
+    EvaluationCacheKey, EvaluationCacheRequestKind, EvaluationContext, EvaluationError, Evaluator,
+    ProposalContext, ProposalError, Proposer, RunCheckpointRequest, RunContext, RunEvent,
+    RunGraphView, RunPersistence, StoreRunPersistence, TrustPolicy,
 };
 use leaven_kernel::{
     AssessmentId, Budget, CaseId, ContentId, Cost, ErrorKind, EvaluatorId, Fingerprint,
@@ -323,7 +323,7 @@ fn pairwise_and_listwise_evaluations_record_non_independent_targets() {
                     .unwrap(),
             ]
         };
-        let evaluator = ShapeEvaluator;
+        let evaluator = ShapeEvaluator::new(CachePolicy::Never);
         let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
             .with_case_set(&case_set)
             .with_cache(&mut cache)
@@ -624,6 +624,194 @@ fn deterministic_evaluation_cache_skips_second_evaluator_call() {
 }
 
 #[test]
+fn deterministic_evaluation_cache_keeps_request_semantics_distinct() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let mut cache = leaven_engine::EvaluationCache::default();
+        let case_set = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let candidate = {
+            let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            seed_ctx
+                .insert_seed(TextArtifact("abcd".to_owned()), 0)
+                .unwrap()
+        };
+        let evaluator = CountingEvaluator::new(CachePolicy::Deterministic);
+
+        let aggregate = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_cache(&mut cache)
+                .with_evidence_store(&store);
+            ctx.evaluate_with(&evaluator, independent_request(candidate))
+                .await
+                .unwrap()
+        };
+        let per_case_search = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_cache(&mut cache)
+                .with_evidence_store(&store);
+            ctx.evaluate_with(
+                &evaluator,
+                EvaluationRequest::Independent {
+                    candidates: vec![candidate],
+                    set: EvaluationSet::All,
+                    granularity: AssessmentGranularity::PerCase,
+                    purpose: EvaluationPurpose::Search,
+                },
+            )
+            .await
+            .unwrap()
+        };
+        let per_case_validation = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_cache(&mut cache)
+                .with_evidence_store(&store);
+            ctx.evaluate_with(
+                &evaluator,
+                EvaluationRequest::Independent {
+                    candidates: vec![candidate],
+                    set: EvaluationSet::All,
+                    granularity: AssessmentGranularity::PerCase,
+                    purpose: EvaluationPurpose::Validation,
+                },
+            )
+            .await
+            .unwrap()
+        };
+
+        assert_eq!(aggregate.cache, CacheStatus::Miss);
+        assert_eq!(per_case_search.cache, CacheStatus::Miss);
+        assert_eq!(per_case_validation.cache, CacheStatus::Miss);
+        assert_eq!(evaluator.calls(), 3);
+        assert_ne!(aggregate.assessment_ids, per_case_search.assessment_ids);
+        assert_ne!(
+            per_case_search.assessment_ids,
+            per_case_validation.assessment_ids
+        );
+    });
+}
+
+#[test]
+fn deterministic_evaluation_cache_keeps_request_kinds_distinct() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let mut cache = leaven_engine::EvaluationCache::default();
+        let case_set = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let candidates = {
+            let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            vec![
+                seed_ctx
+                    .insert_seed(TextArtifact("left".to_owned()), 0)
+                    .unwrap(),
+                seed_ctx
+                    .insert_seed(TextArtifact("right".to_owned()), 1)
+                    .unwrap(),
+            ]
+        };
+        let evaluator = ShapeEvaluator::new(CachePolicy::Deterministic);
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_cache(&mut cache)
+            .with_evidence_store(&store);
+
+        let independent = ctx
+            .evaluate_with(
+                &evaluator,
+                EvaluationRequest::Independent {
+                    candidates: candidates.clone(),
+                    set: EvaluationSet::All,
+                    granularity: AssessmentGranularity::Aggregate,
+                    purpose: EvaluationPurpose::Selection,
+                },
+            )
+            .await
+            .unwrap();
+        let listwise = ctx
+            .evaluate_with(
+                &evaluator,
+                EvaluationRequest::Listwise {
+                    candidates,
+                    set: EvaluationSet::All,
+                    granularity: AssessmentGranularity::Aggregate,
+                    purpose: EvaluationPurpose::Selection,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(independent.cache, CacheStatus::Miss);
+        assert_eq!(listwise.cache, CacheStatus::Miss);
+        assert_ne!(independent.assessment_ids, listwise.assessment_ids);
+        assert!(
+            ctx.graph()
+                .assessment(listwise.assessment_ids[0])
+                .unwrap()
+                .listwise_candidates()
+                .is_some()
+        );
+    });
+}
+
+#[test]
+fn user_key_evaluation_cache_keeps_candidates_distinct() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let mut cache = leaven_engine::EvaluationCache::default();
+        let case_set = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let (seed, best) = {
+            let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            (
+                seed_ctx
+                    .insert_seed(TextArtifact("seed".to_owned()), 0)
+                    .unwrap(),
+                seed_ctx
+                    .insert_seed(TextArtifact("best".to_owned()), 1)
+                    .unwrap(),
+            )
+        };
+        let evaluator =
+            CountingEvaluator::new(CachePolicy::UserKey(Fingerprint::from_bytes([42; 32])));
+
+        let baseline = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_cache(&mut cache)
+                .with_evidence_store(&store);
+            ctx.evaluate_with(&evaluator, independent_request(seed))
+                .await
+                .unwrap()
+        };
+        let optimized = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_cache(&mut cache)
+                .with_evidence_store(&store);
+            ctx.evaluate_with(&evaluator, independent_request(best))
+                .await
+                .unwrap()
+        };
+
+        assert_eq!(baseline.cache, CacheStatus::Miss);
+        assert_eq!(optimized.cache, CacheStatus::Miss);
+        assert_eq!(evaluator.calls(), 2);
+        assert_ne!(baseline.assessment_ids, optimized.assessment_ids);
+        assert_eq!(
+            graph
+                .view(leaven_engine::ReadScope::default())
+                .assessment(optimized.assessment_ids[0])
+                .unwrap()
+                .independent_candidate(),
+            Some(best)
+        );
+    });
+}
+
+#[test]
 fn casewise_cache_hit_rematerializes_rows_for_same_content_candidate() {
     block_on(async {
         let (mut graph, mut budget) = graph_and_budget();
@@ -772,6 +960,9 @@ fn deterministic_evaluation_ignores_cache_entries_with_missing_graph_assessments
             EvaluationCacheKey {
                 evaluator: Fingerprint::from_bytes([7; 32]),
                 policy: CachePolicy::Deterministic,
+                kind: EvaluationCacheRequestKind::Independent,
+                granularity: AssessmentGranularity::Aggregate,
+                purpose: EvaluationPurpose::Search,
                 case_set_version: CaseSetVersion("0".to_owned()),
                 case_ids: vec![leaven_kernel::CaseId::from_index(0)],
                 candidates: vec![CacheIdentity::Content(ContentId::from_bytes(content))],
@@ -1447,7 +1638,15 @@ impl CountingEvaluator {
     }
 }
 
-struct ShapeEvaluator;
+struct ShapeEvaluator {
+    cache_policy: CachePolicy,
+}
+
+impl ShapeEvaluator {
+    fn new(cache_policy: CachePolicy) -> Self {
+        Self { cache_policy }
+    }
+}
 
 impl Evaluator<TestProblem> for ShapeEvaluator {
     fn id(&self) -> EvaluatorId {
@@ -1459,7 +1658,7 @@ impl Evaluator<TestProblem> for ShapeEvaluator {
     }
 
     fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
-        CachePolicy::Never
+        self.cache_policy.clone()
     }
 
     async fn evaluate(

@@ -18,8 +18,8 @@ use serde::{Deserialize, Serialize};
 use crate::result::RunCompatibilitySummary;
 
 const MANIFEST_FILE: &str = "compatibility.json";
-const MANIFEST_SCHEMA: &str = "leaven-run.compatibility.v3";
-const CACHE_PLACEHOLDER: &str = "cache:auto/eval-schema-pending/lm-schema-pending";
+const MANIFEST_SCHEMA: &str = "leaven-run.compatibility.v4";
+const CACHE_PLACEHOLDER: &str = "cache:eval-key-request-shape-v2/lm-schema-pending";
 const BUDGET_PLACEHOLDER: &str = "budget:ledger-compatibility-pending";
 
 /// Runtime slot whose behavior must be explicitly fingerprinted for durable runs.
