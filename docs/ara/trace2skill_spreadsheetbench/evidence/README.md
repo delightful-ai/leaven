@@ -19,6 +19,6 @@ explicitly labeled as a Leaven result. No Leaven result overlays exist yet.
 | Evidence | Status |
 |----------|--------|
 | Leaven result overlay JSONL | Not yet generated. |
-| One-case `13-1` live/seam result | Not yet generated in this ARA. |
+| One-case `13-1` ACP worker result | `results/one_case_live.md` records a deterministic local ACP worker proof. This is not model-backed paper parity. |
 | Full held-out `200..400` Leaven run | Not yet generated. |
 | Seed aggregate `41/42/43` Leaven run | Not yet generated. |

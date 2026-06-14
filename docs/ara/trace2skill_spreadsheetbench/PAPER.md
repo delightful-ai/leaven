@@ -100,5 +100,6 @@ separately and labeled by denominator.
 | [plots/trace2skill_targets.png](plots/trace2skill_targets.png) | Paper target sheet generated from ARA evidence tables. |
 | [results/README.md](results/README.md) | Leaven result-record rules, proof classifications, and overlay binding. |
 | [results/leaven_result_schema.md](results/leaven_result_schema.md) | JSONL schema for real Leaven metrics that can be plotted against paper targets. |
+| [results/one_case_live.md](results/one_case_live.md) | Deterministic one-case ACP worker proof and artifact manifest. |
 | [coverage.md](coverage.md) | Coverage pass notes and known gaps. |
 | [validation.md](validation.md) | Local Seal Level 1 validation commands and results. |

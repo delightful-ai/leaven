@@ -4,11 +4,12 @@ use std::{
 };
 
 use trace2skill_spreadsheetbench::{
-    Trace2SkillOneCaseAnalystFanoutInput, Trace2SkillOneCaseComparisonInput,
-    Trace2SkillOneCaseInput, Trace2SkillOneCaseRunInput, Trace2SkillOneCaseRunScoringInput,
-    compare_trace2skill_one_case_answer, inspect_trace2skill_one_case,
-    prepare_trace2skill_one_case_analyst_fanout, prepare_trace2skill_one_case_run,
-    render_trace2skill_one_case_prompt, score_trace2skill_one_case_run,
+    Trace2SkillOneCaseAcpWorkerInput, Trace2SkillOneCaseAnalystFanoutInput,
+    Trace2SkillOneCaseComparisonInput, Trace2SkillOneCaseInput, Trace2SkillOneCaseRunInput,
+    Trace2SkillOneCaseRunScoringInput, compare_trace2skill_one_case_answer,
+    inspect_trace2skill_one_case, prepare_trace2skill_one_case_analyst_fanout,
+    prepare_trace2skill_one_case_run, render_trace2skill_one_case_prompt,
+    run_trace2skill_one_case_acp_external_worker, score_trace2skill_one_case_run,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -85,6 +86,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             )?;
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
+        Mode::RunOneCaseAcpWorker => {
+            let run_dir = args
+                .run_dir
+                .as_deref()
+                .ok_or_else(|| invalid_input(format!("--run-dir is required\n\n{USAGE}")))?;
+            let model_id = args
+                .model_id
+                .as_deref()
+                .ok_or_else(|| invalid_input(format!("--model-id is required\n\n{USAGE}")))?;
+            let report =
+                run_trace2skill_one_case_acp_external_worker(Trace2SkillOneCaseAcpWorkerInput {
+                    case: input,
+                    run_dir,
+                    model_id,
+                })?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        }
     }
 
     Ok(())
@@ -142,6 +160,7 @@ impl CliArgs {
                 "--prepare-one-case-analyst-fanout" => {
                     set_mode(&mut mode, Mode::PrepareOneCaseAnalystFanout)?;
                 }
+                "--run-one-case-acp-worker" => set_mode(&mut mode, Mode::RunOneCaseAcpWorker)?,
                 "--case" => case_file = next_path(&mut args, "--case")?,
                 "--spreadsheet-dir" => {
                     spreadsheet_dir = next_path(&mut args, "--spreadsheet-dir")?;
@@ -205,6 +224,7 @@ enum Mode {
     PrepareOneCaseRun,
     ScoreOneCaseRun,
     PrepareOneCaseAnalystFanout,
+    RunOneCaseAcpWorker,
 }
 
 struct Defaults {
@@ -266,7 +286,7 @@ fn invalid_input(message: impl Into<String>) -> io::Error {
 }
 
 const USAGE: &str = "usage: trace2skill_spreadsheetbench \
-    (--inspect-one-case | --render-one-case-prompt | --compare-one-case-answer | --prepare-one-case-run | --score-one-case-run | --prepare-one-case-analyst-fanout) \
+    (--inspect-one-case | --render-one-case-prompt | --compare-one-case-answer | --prepare-one-case-run | --score-one-case-run | --prepare-one-case-analyst-fanout | --run-one-case-acp-worker) \
     [--case PATH] [--spreadsheet-dir PATH] [--system-prompt PATH] [--released-skill PATH] \
     [--output-workbook PATH] [--golden-workbook PATH] [--run-dir PATH] \
     [--model-id ID] [--transcript-file PATH] [--upstream-prompt-dir PATH]";

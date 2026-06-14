@@ -1,5 +1,6 @@
 //! `Trace2Skill` `SpreadsheetBench` manifest lowering.
 
+mod acp_worker;
 mod one_case_run;
 mod patch_bridge;
 mod patch_replay;
@@ -26,6 +27,10 @@ use leaven_kernel::{
 };
 use serde::Deserialize;
 
+pub use acp_worker::{
+    Trace2SkillOneCaseAcpWorkerInput, Trace2SkillOneCaseAcpWorkerReport,
+    run_trace2skill_one_case_acp_external_worker,
+};
 pub use one_case_run::{
     Trace2SkillOneCaseAnalystFanoutInput, Trace2SkillOneCaseAnalystFanoutReport,
     Trace2SkillOneCaseRunInput, Trace2SkillOneCaseRunManifest, Trace2SkillOneCaseRunReport,
@@ -825,6 +830,14 @@ pub enum Trace2SkillManifestError {
         manifest_case_id: String,
         /// Task id recorded in `trajectory.json`.
         trajectory_task_id: String,
+    },
+    /// ACP external worker failed.
+    #[error("Trace2Skill ACP external worker failed during {context}: {message}")]
+    ExternalWorker {
+        /// Operation that failed.
+        context: &'static str,
+        /// Human-readable error detail.
+        message: String,
     },
 }
 

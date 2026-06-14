@@ -11,7 +11,12 @@ can be inspected.
 
 ## Current State
 
-No Leaven result JSONL exists yet.
+No Leaven overlay JSONL exists yet.
+
+The deterministic one-case ACP worker result is recorded in
+[`one_case_live.md`](one_case_live.md). It is intentionally not plotted against
+paper target bars because its denominator is one local solved case, not a full
+paper split or Qwen/vLLM aggregate.
 
 The paper target plot can be regenerated without result records:
 

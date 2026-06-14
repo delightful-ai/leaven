@@ -153,3 +153,40 @@ Scope:
 Limit:
 
 - The smoke row was temporary, classified `mechanics-smoke`, and was not stored in the ARA. It is not a Leaven result.
+
+## 2026-06-14 Deterministic One-Case ACP Worker Run
+
+Prepare command:
+
+```bash
+cargo run -p trace2skill_spreadsheetbench -- --prepare-one-case-run --run-dir tmp/trace2skill-one-case-live
+```
+
+Run and score command:
+
+```bash
+cargo run -p trace2skill_spreadsheetbench -- --run-one-case-acp-worker --run-dir tmp/trace2skill-one-case-live --model-id local-openpyxl-trace2skill-agent
+```
+
+Result:
+
+```text
+PASS: score 1.0, matched 120/120 cells, output workbook 8423 bytes.
+```
+
+Artifacts:
+
+- `tmp/trace2skill-one-case-live/13-1_output.xlsx`
+- `tmp/trace2skill-one-case-live/acp_result.json`
+- `tmp/trace2skill-one-case-live/agent_transcript.md`
+- `tmp/trace2skill-one-case-live/manifest.json`
+- `tmp/trace2skill-one-case-live/score_report.json`
+- `tmp/trace2skill-one-case-live/trajectory.json`
+
+Scope:
+
+- Confirms the promoted CLI path can prepare a real `13-1` run, dispatch a deterministic local Python worker through `leaven/agent.run`, require a workbook artifact in the ACP result, score the workbook, and write trajectory evidence.
+
+Limit:
+
+- This is `deterministic-one-case` evidence only. It does not use Qwen3.5, vLLM, Trace2Skill analyst calls, live hierarchical merge, held-out `200..400`, seeds `41/42/43`, or paper aggregate metrics.

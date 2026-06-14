@@ -13,17 +13,17 @@ workspace = true
 [dependencies]
 calamine = { workspace = true }
 leaven-agentic-skill = { workspace = true }
+leaven-acp = { workspace = true }
 leaven-artifact-skill = { workspace = true }
 leaven-core = { workspace = true }
 leaven-eval = { workspace = true }
 leaven-evidence = { workspace = true }
 leaven-kernel = { workspace = true }
+leaven-public-seam = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-leaven-acp = { workspace = true }
-leaven-public-seam = { workspace = true }
-sha2 = { workspace = true }
 tempfile = { workspace = true }

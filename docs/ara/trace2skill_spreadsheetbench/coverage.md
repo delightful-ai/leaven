@@ -30,13 +30,14 @@
 - Focused Leaven mechanics-test proof classifications and a passing 49-test focused gate.
 - Leaven result JSONL schema and overlay binding rules under `results/`.
 - Plotter support for optional `results/*.jsonl` overlays, with no result rows fabricated.
+- Deterministic one-case ACP worker run for case `13-1`, with workbook, ACP result, score report, manifest, transcript, and trajectory artifacts under `tmp/trace2skill-one-case-live`.
 
 ### Known Gaps
 
 - The appendix prompt templates are referenced but not yet transcribed into a dedicated ARA prompt evidence file.
 - The full bibliography is summarized in `logic/related_work.md` but not exhaustively converted into one RW block per citation.
 - No Leaven result overlay JSONL exists yet; only the schema and overlay reader exist.
-- No one-case `13-1` live/seam result has been added to this ARA.
+- No model-backed one-case `13-1` live result has been added to this ARA; the current one-case result is a deterministic local ACP worker proof.
 - No held-out `200..400` run, seed aggregate, cross-model run, or full Qwen/vLLM paper denominator has been executed.
 - The plot target sheet is a scoreboard only and is not reproduction evidence.
 - The focused mechanics gate is not reproduction evidence beyond the classifications in `evidence/leaven_mechanics_tests.md`.

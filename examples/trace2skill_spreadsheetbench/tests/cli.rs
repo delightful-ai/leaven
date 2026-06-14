@@ -214,6 +214,51 @@ fn cli_scores_prepared_one_case_run_dir_as_json() {
 }
 
 #[test]
+fn cli_runs_one_case_acp_worker_and_scores_artifacts_as_json() {
+    let fixture = ExactCaseFixture::new();
+    let temp = tempfile::tempdir().unwrap();
+    let run_dir = temp.path().join("run");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_trace2skill_spreadsheetbench"))
+        .arg("--run-one-case-acp-worker")
+        .arg("--case")
+        .arg(&fixture.case_file)
+        .arg("--spreadsheet-dir")
+        .arg(&fixture.spreadsheet_dir)
+        .arg("--system-prompt")
+        .arg(&fixture.system_prompt)
+        .arg("--released-skill")
+        .arg(&fixture.released_skill)
+        .arg("--run-dir")
+        .arg(&run_dir)
+        .arg("--model-id")
+        .arg("local-openpyxl-trace2skill-agent")
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["scored"]["case_id"], "13-1");
+    assert_eq!(json["scored"]["score_report"]["score"], 1.0);
+    assert_eq!(json["scored"]["score_report"]["matched_cells"], 120);
+    assert!(
+        json["acp_result_file"]["path"]
+            .as_str()
+            .unwrap()
+            .ends_with("acp_result.json")
+    );
+    assert!(run_dir.join("13-1_output.xlsx").is_file());
+    assert!(run_dir.join("agent_transcript.md").is_file());
+    assert!(run_dir.join("acp_result.json").is_file());
+    assert!(run_dir.join("score_report.json").is_file());
+    assert!(run_dir.join("trajectory.json").is_file());
+}
+
+#[test]
 fn cli_prepares_one_case_stage2_analyst_fanout_as_json() {
     let fixture = ExactCaseFixture::new();
     let temp = tempfile::tempdir().unwrap();
