@@ -90,3 +90,12 @@ separately and labeled by denominator.
 | [tables/table_math.md](evidence/tables/table_math.md) | Raw paper Table `tab:math`. |
 | [tables/table_vqa.md](evidence/tables/table_vqa.md) | Raw paper Table `tab:vqa`. |
 | [figures/figure_trace2skill_framework.md](evidence/figures/figure_trace2skill_framework.md) | Source figure path and caption for the Trace2Skill pipeline. |
+
+### Plot Targets and Validation
+
+| File | Description |
+|------|-------------|
+| [plots/README.md](plots/README.md) | Explains target-plot meaning and proxy limits. |
+| [plots/trace2skill_targets.png](plots/trace2skill_targets.png) | Paper target sheet generated from ARA evidence tables. |
+| [coverage.md](coverage.md) | Coverage pass notes and known gaps. |
+| [validation.md](validation.md) | Local Seal Level 1 validation commands and results. |
