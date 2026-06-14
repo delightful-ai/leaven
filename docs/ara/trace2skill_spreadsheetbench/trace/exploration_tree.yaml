@@ -1,0 +1,97 @@
+version: 1
+root:
+  id: RQ1
+  type: question
+  title: Can trajectory-local agent experience be distilled into a transferable skill directory?
+  support_level: explicit
+  sources:
+    - tmp/skill_opt_sources/arx_2603.25158/full_source.md:19
+  children:
+    - id: D1
+      type: decision
+      title: Use one comprehensive skill directory rather than many fragmented skills.
+      support_level: explicit
+      sources:
+        - tmp/skill_opt_sources/arx_2603.25158/full_source.md:13
+      children:
+        - id: E1
+          type: experiment
+          title: Main SpreadsheetBench and WikiTQ comparison.
+          support_level: explicit
+          sources:
+            - tmp/skill_opt_sources/arx_2603.25158/src/tables/table_main_v1.tex
+        - id: E2
+          type: experiment
+          title: Math transfer target.
+          support_level: explicit
+          sources:
+            - tmp/skill_opt_sources/arx_2603.25158/src/tables/table_math.tex
+        - id: E3
+          type: experiment
+          title: DocVQA transfer target.
+          support_level: explicit
+          sources:
+            - tmp/skill_opt_sources/arx_2603.25158/src/tables/table_vqa.tex
+    - id: D2
+      type: decision
+      title: Analyze trajectory-local patches independently before consolidation.
+      support_level: explicit
+      sources:
+        - tmp/skill_opt_sources/arx_2603.25158/full_source.md:99
+        - tmp/skill_opt_sources/arx_2603.25158/full_source.md:111
+      children:
+        - id: E4
+          type: experiment
+          title: Agentic error analysis versus single-call LLM analysis.
+          support_level: explicit
+          sources:
+            - tmp/skill_opt_sources/arx_2603.25158/src/tables/table_agentic_ablation.tex
+        - id: DE1
+          type: dead_end
+          title: Single-call LLM analysis over-attributes parse failures.
+          support_level: explicit
+          sources:
+            - tmp/skill_opt_sources/arx_2603.25158/full_source.md:820
+    - id: D3
+      type: decision
+      title: Merge patches in a many-to-one hierarchy.
+      support_level: explicit
+      sources:
+        - tmp/skill_opt_sources/arx_2603.25158/full_source.md:119
+        - tmp/skill_opt_sources/arx_2603.25158/full_source.md:129
+      children:
+        - id: E5
+          type: experiment
+          title: Parallel consolidation versus sequential editing.
+          support_level: explicit
+          sources:
+            - tmp/skill_opt_sources/arx_2603.25158/src/tables/table_seq_parallel.tex
+        - id: DE2
+          type: dead_end
+          title: Sequential editing drifts because each update changes later context.
+          support_level: explicit
+          sources:
+            - tmp/skill_opt_sources/arx_2603.25158/full_source.md:601
+    - id: D4
+      type: decision
+      title: Consume evolved skills directly without retrieval at inference time.
+      support_level: explicit
+      sources:
+        - tmp/skill_opt_sources/arx_2603.25158/full_source.md:131
+      children:
+        - id: E6
+          type: experiment
+          title: Trace2Skill skill versus ReasoningBank retrieval memory.
+          support_level: explicit
+          sources:
+            - tmp/skill_opt_sources/arx_2603.25158/src/tables/table_reasoning_bank.tex
+        - id: D5
+          type: decision
+          title: Preserve paper targets separately from Leaven result overlays.
+          support_level: inferred
+          sources:
+            - docs/working-memory/trace2skill-ara-reproduction-goal-handoff.yaml
+          also_depends_on:
+            - E1
+            - E5
+            - E6
