@@ -90,6 +90,7 @@ separately and labeled by denominator.
 | [tables/table_math.md](evidence/tables/table_math.md) | Raw paper Table `tab:math`. |
 | [tables/table_vqa.md](evidence/tables/table_vqa.md) | Raw paper Table `tab:vqa`. |
 | [figures/figure_trace2skill_framework.md](evidence/figures/figure_trace2skill_framework.md) | Source figure path and caption for the Trace2Skill pipeline. |
+| [leaven_mechanics_tests.md](evidence/leaven_mechanics_tests.md) | Leaven mechanics-test proof classifications and limits. |
 
 ### Plot Targets and Validation
 

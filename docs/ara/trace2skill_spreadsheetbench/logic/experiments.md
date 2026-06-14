@@ -116,6 +116,7 @@
   - Current Leaven assets remain mechanics-smoke or one-case proof until live/full runs exist.
 - **Baselines**: none.
 - **Dependencies**: none
+- **Current evidence**: `evidence/leaven_mechanics_tests.md`
 
 ## E08: Reproduction Denominator Overlay
 - **Verifies**: C07

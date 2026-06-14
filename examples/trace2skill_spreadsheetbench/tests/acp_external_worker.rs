@@ -4,7 +4,7 @@ use std::{
 };
 
 use leaven_acp::{AcpProcessCommand, AcpStdioProcessSession, RejectAllEffectHost};
-use leaven_public_seam::{AcpProfileDocument, PublicSeamPackage};
+use leaven_public_seam::{AcpProfileDocument, LockedMethod, MethodPrimaryKind, PublicSeamPackage};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
@@ -47,13 +47,13 @@ fn acp_external_python_worker_solves_real_spreadsheetbench_case_and_scores_run()
 
     let response = session
         .call_extension(
-            "leaven/agent.run",
+            LockedMethod::AgentRun,
             &agent_run_plan_params(),
             &RejectAllEffectHost,
         )
         .unwrap();
-    assert_eq!(response.method(), "leaven/agent.run");
-    assert_eq!(response.primary_kind(), "agent_session");
+    assert_eq!(response.method(), LockedMethod::AgentRun);
+    assert_eq!(response.primary_kind(), MethodPrimaryKind::AgentSession);
     assert!(prepared.output_workbook.exists());
     assert_workbook_bound_to_acp_result(response.result(), &prepared.output_workbook);
     let transcript_file = run_dir.join("agent_transcript.md");
@@ -100,12 +100,12 @@ fn acp_external_python_worker_success_without_workbook_does_not_clear_benchmark_
 
     let response = session
         .call_extension(
-            "leaven/agent.run",
+            LockedMethod::AgentRun,
             &agent_run_plan_params(),
             &RejectAllEffectHost,
         )
         .unwrap();
-    assert_eq!(response.primary_kind(), "agent_session");
+    assert_eq!(response.primary_kind(), MethodPrimaryKind::AgentSession);
     assert!(
         response
             .result()

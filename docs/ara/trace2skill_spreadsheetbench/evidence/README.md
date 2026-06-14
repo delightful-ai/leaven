@@ -12,6 +12,7 @@ explicitly labeled as a Leaven result. No Leaven result overlays exist yet.
 | [tables/table_math.md](tables/table_math.md) | `tmp/skill_opt_sources/arx_2603.25158/src/tables/table_math.tex` | C05 | Math transfer target table. |
 | [tables/table_vqa.md](tables/table_vqa.md) | `tmp/skill_opt_sources/arx_2603.25158/src/tables/table_vqa.tex` | C05 | DocVQA transfer target table. |
 | [figures/figure_trace2skill_framework.md](figures/figure_trace2skill_framework.md) | `tmp/skill_opt_sources/arx_2603.25158/src/figures/trace2skill_framwork.png` | C01, C02, C04 | Source framework figure and caption. |
+| [leaven_mechanics_tests.md](leaven_mechanics_tests.md) | `examples/trace2skill_spreadsheetbench/tests/` | C06, C07 | Focused Leaven mechanics and one-case proof classification. |
 
 ## Missing Evidence
 

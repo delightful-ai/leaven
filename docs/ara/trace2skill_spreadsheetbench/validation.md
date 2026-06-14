@@ -60,3 +60,27 @@ Result:
 ```text
 PASS: docs/ara/trace2skill_spreadsheetbench (26 files)
 ```
+
+## 2026-06-14 Focused Leaven Mechanics Gate
+
+Command:
+
+```bash
+cargo test -p trace2skill_spreadsheetbench --test manifest --test run_artifacts --test patch_bridge --test patch_replay --test one_case --test cli --test workbook_score --test acp_external_worker
+```
+
+Result:
+
+```text
+PASS: 49 tests across manifest, run_artifacts, patch_bridge, patch_replay,
+one_case, cli, workbook_score, and acp_external_worker.
+```
+
+Scope:
+
+- Confirms the focused Leaven mechanics and one-case deterministic proof targets listed in `evidence/leaven_mechanics_tests.md`.
+- Confirms the ACP external-worker test uses the current typed `LockedMethod::AgentRun` / `MethodPrimaryKind::AgentSession` public seam values.
+
+Limit:
+
+- This focused gate does not run live Qwen3.5 models, vLLM, Trace2Skill analyst calls, live hierarchical merge, held-out `200..400`, seeds `41/42/43`, or cross-model/cross-domain paper metrics.

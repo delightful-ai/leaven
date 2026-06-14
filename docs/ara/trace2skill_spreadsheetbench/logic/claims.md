@@ -55,7 +55,7 @@
 - **Status**: supported by local dossier evidence.
 - **Falsification criteria**: Current repo state contains full held-out split, seed aggregate, model-matched result overlays and closeout evidence that this ARA has not recorded.
 - **Proof**: [E07]
-- **Evidence basis**: `docs/working-memory/trace2skill-replication.md` and `docs/working-memory/skill-paper-replication.md` classify the current state as partial/proxy.
+- **Evidence basis**: `docs/working-memory/trace2skill-replication.md`, `docs/working-memory/skill-paper-replication.md`, and `evidence/leaven_mechanics_tests.md` classify the current state as mechanics/proxy/one-case evidence rather than full paper parity.
 - **Interpretation**: This is the core anti-proxy guardrail for the goal.
 - **Dependencies**: none
 - **Tags**: Leaven, proof classification, proxy refusal
@@ -65,7 +65,7 @@
 - **Status**: hypothesis for the reproduction workflow; current status pending.
 - **Falsification criteria**: A completed closeout artifact proves all handoff acceptance items and updates this claim with evidence.
 - **Proof**: [E08]
-- **Evidence basis**: Goal handoff artifact and execution plan define the denominator and forbidden proxy completions.
+- **Evidence basis**: Goal handoff artifact, execution plan, and `evidence/leaven_mechanics_tests.md` define the denominator and forbidden proxy completions.
 - **Interpretation**: This claim governs closeout language more than the paper's scientific contribution.
 - **Dependencies**: C01, C02, C03, C04, C05, C06
 - **Tags**: reproduction denominator, Leaven result overlay, closeout

@@ -173,10 +173,11 @@ def validate(root: Path) -> list[str]:
             if support == "explicit" and not node.get("sources"):
                 fail(errors, f"explicit trace node {node.get('id')} missing sources")
 
-    evidence_files = [
-        *sorted((root / "evidence/tables").glob("*.md")),
-        *sorted((root / "evidence/figures").glob("*.md")),
-    ]
+    evidence_files = sorted(
+        path
+        for path in (root / "evidence").rglob("*.md")
+        if path.name != "README.md"
+    )
     if not evidence_files:
         fail(errors, "no evidence files found")
     for evidence in evidence_files:
