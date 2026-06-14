@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use leaven_core::{
-    AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest, EvaluationSet,
-    OptimizationProblem, ResolvedEvaluationRequest,
+    Assessment, AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest,
+    EvaluationSet, OptimizationProblem, ResolvedEvaluationRequest,
 };
 use leaven_kernel::{AssessmentId, CandidateId, CaseId, Cost, ErrorKind, EvaluatorId, StageId};
 
@@ -238,6 +238,8 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
                 return Err(RunContextError::Evaluation(error));
             }
         };
+        let requested_cases: BTreeSet<CaseId> = missing.iter().map(|miss| miss.case).collect();
+        validate_casewise_batch_assessments(&metered.value, &requested_cases)?;
         let report = self.complete_evaluation(
             evaluator_id,
             request_id,
@@ -247,16 +249,6 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
         )?;
         let cost = report.cost.clone();
         let mut by_case = self.casewise_batch_rows_by_case(&report.assessment_ids)?;
-        // Reject batches with rows for cases that were not requested *before*
-        // touching the cache: those rows are pure noise from a misbehaving
-        // evaluator, and caching the in-set siblings of a poisoned batch would
-        // silently legitimize the evaluator's output.
-        let requested_cases: BTreeSet<CaseId> = missing.iter().map(|miss| miss.case).collect();
-        if by_case.keys().any(|case| !requested_cases.contains(case)) {
-            return Err(RunContextError::Evaluation(EvaluationError::Message(
-                "casewise batch returned rows outside requested cases".to_owned(),
-            )));
-        }
         for miss in missing {
             let assessment = pop_casewise_batch_assessment(&mut by_case, miss.case)?;
             if let Ok(cache_key) = miss.cache_key
@@ -301,6 +293,40 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
         }
         Ok(by_case)
     }
+}
+
+fn validate_casewise_batch_assessments<P: OptimizationProblem>(
+    assessments: &[Assessment<P>],
+    requested_cases: &BTreeSet<CaseId>,
+) -> Result<(), RunContextError> {
+    let mut seen = BTreeSet::new();
+    for assessment in assessments {
+        let target = match assessment {
+            Assessment::Independent { target, .. } => target,
+            Assessment::Pairwise { target, .. } | Assessment::Listwise { target, .. } => target,
+        };
+        let AssessmentTarget::Case { case, .. } = target else {
+            return Err(RunContextError::Evaluation(EvaluationError::Message(
+                "casewise batch expected case-targeted assessments".to_owned(),
+            )));
+        };
+        if !requested_cases.contains(case) {
+            return Err(RunContextError::Evaluation(EvaluationError::Message(
+                "casewise batch returned rows outside requested cases".to_owned(),
+            )));
+        }
+        if !seen.insert(*case) {
+            return Err(RunContextError::Evaluation(EvaluationError::Message(
+                "casewise batch returned duplicate rows for requested cases".to_owned(),
+            )));
+        }
+    }
+    if let Some(missing) = requested_cases.iter().find(|case| !seen.contains(case)) {
+        return Err(RunContextError::Evaluation(EvaluationError::Message(
+            format!("casewise batch did not return case `{missing}`"),
+        )));
+    }
+    Ok(())
 }
 
 fn pop_casewise_batch_assessment(
