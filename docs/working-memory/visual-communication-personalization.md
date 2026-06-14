@@ -170,6 +170,13 @@ This is intentionally a sketch, not a spec:
 }
 ```
 
+## Artifact Index
+
+- `visual-communication-artifacts/shot-0001-loop.md`: first human-readable
+  visual-shot artifact for labeling the bootstrap loop.
+- `visual-communication-artifacts/shot-0001-loop.json`: machine-readable seed
+  for the same artifact.
+
 ## Open Decisions
 
 - What exactly counts as a "shot" for the first dataset: screenshot, chat turn,

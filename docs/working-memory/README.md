@@ -20,3 +20,6 @@ Current ledgers:
 - `pod-snapshotting-efficiency.md`: active goal ledger for lightweight
   artifact-native Git intermediate reconstruction and Firkin snapshot boundary
   evidence.
+- `visual-communication-personalization.md`: active understanding ledger for
+  teaching Leaven to communicate visually to Darin, with seed artifacts under
+  `visual-communication-artifacts/`.

@@ -1,0 +1,41 @@
+{
+  "schema": "leaven.visual_shot.seed.v0",
+  "id": "visual-shot/leaven-working-memory/shot-0001-loop",
+  "created_at": "2026-06-14T23:57:07Z",
+  "status": "unlabeled",
+  "shot": {
+    "title": "Visual communication personalization loop",
+    "source_refs": [
+      "file:docs/working-memory/visual-communication-personalization.md",
+      "file:/Users/darin/vendor/github.com/saxenauts/syke/SKILL.md",
+      "file:/Users/darin/src/personal/chat-unification/annotation_ui/SPEC.md",
+      "file:/Users/darin/src/personal/chat-unification/annotation_ui/PERSISTENCE.md"
+    ],
+    "summary": "The user wants Leaven to learn how to communicate visually: create a picture or diagram for a bounded shot, compare it to the source moment, and store short natural-language feedback with enough conversation context to optimize future visual communication.",
+    "known_blockers": [
+      "Live Syke state on darins-macbook-pro is unverified because SSH hung, likely on 1Password-backed auth."
+    ],
+    "assets": []
+  },
+  "candidate": {
+    "id": "visual-candidate/shot-0001-loop/diagram-a",
+    "kind": "diagram",
+    "artifact_path": "docs/working-memory/visual-communication-artifacts/shot-0001-loop.md",
+    "policy_id": "visual-policy/bootstrap-from-working-memory",
+    "prompt_or_recipe_ref": "section:Candidate Visual"
+  },
+  "label": {
+    "verdict": null,
+    "words": "",
+    "preference": {
+      "beats": [],
+      "loses_to": []
+    },
+    "updated_at": null
+  },
+  "leaven_projection": {
+    "optimized_artifact_guess": "visual communication policy",
+    "evidence_shape_guess": "mixed free-text feedback plus optional pairwise preference",
+    "first_persistence_bias": "local durable file first, then promote"
+  }
+}
