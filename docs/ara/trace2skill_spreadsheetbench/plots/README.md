@@ -26,5 +26,6 @@ Current plot panels:
 - parallel consolidation versus sequential editing;
 - distilled portable skill versus ReasoningBank retrieval memory.
 
-Future Leaven overlays must read separate Leaven result records and display a
-separate legend or marker. Do not edit paper evidence values to make a plot.
+Leaven overlays read separate result records from `results/*.jsonl` and display
+a separate legend or marker. If no result JSONL files exist, the plotter renders
+paper targets only. Do not edit paper evidence values to make a plot.

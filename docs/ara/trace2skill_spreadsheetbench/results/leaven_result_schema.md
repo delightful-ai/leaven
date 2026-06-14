@@ -1,0 +1,92 @@
+# Trace2Skill Leaven Result JSONL Schema
+
+Schema id: `leaven.trace2skill.result.v1`
+
+This is the minimal result envelope for plotting Leaven-produced measurements
+against Trace2Skill paper targets. It is deliberately stricter than the paper
+tables: paper targets say what to match; result rows say what Leaven actually
+ran.
+
+## Record Shape
+
+```json
+{
+  "schema_version": "leaven.trace2skill.result.v1",
+  "run_id": "trace2skill-2026-06-14T00-00-00Z-seed41",
+  "created_at": "2026-06-14T00:00:00Z",
+  "proof_classification": "paper-subset",
+  "dataset_slice": {
+    "name": "SpreadsheetBench",
+    "split": "test",
+    "case_range": "200..400",
+    "case_count": 200,
+    "denominator": "paper-held-out-spreadsheetbench-200-400"
+  },
+  "model_id": "Qwen3.5-122B-A10B",
+  "serving_backend": "vLLM",
+  "seed": 41,
+  "skill_source": {
+    "kind": "trace2skill-evolved",
+    "path": "artifacts/trace2skill/run-.../skill/SKILL.md"
+  },
+  "metric_name": "122B Vrf",
+  "metric_value": 68.88,
+  "metric_unit": "percent",
+  "plot_binding": {
+    "panel": "same_model_deepening_vrf",
+    "x_label": "+Combined\n122B",
+    "series": "Leaven",
+    "axis": "left"
+  },
+  "cost": {
+    "usd": null,
+    "prompt_tokens": null,
+    "completion_tokens": null
+  },
+  "runtime": {
+    "seconds": null,
+    "workers": 128
+  },
+  "source_command": "LEAVEN_TRACE2SKILL_LIVE=1 ...",
+  "artifact_paths": [
+    "artifacts/trace2skill/run-.../manifest.json",
+    "artifacts/trace2skill/run-.../score_report.json",
+    "artifacts/trace2skill/run-.../trajectory.jsonl"
+  ],
+  "notes": "Deviation notes or empty string."
+}
+```
+
+## Required Fields
+
+| Field | Type | Rule |
+|-------|------|------|
+| `schema_version` | string | Must equal `leaven.trace2skill.result.v1`. |
+| `run_id` | string | Stable id shared by rows from one run. |
+| `created_at` | string | ISO-like timestamp for provenance. |
+| `proof_classification` | string | Must be one of the values listed in `README.md`. |
+| `dataset_slice` | object | Must include `name`, `split`, `case_count`, and `denominator`. |
+| `model_id` | string | The model that produced the metric. |
+| `seed` | number, string, or null | Null only when the run truly had no seed. |
+| `skill_source` | object | Must include `kind`; include `path` when the skill is file-backed. |
+| `metric_name` | string | Human-readable metric label, e.g. `122B Vrf`. |
+| `metric_value` | number | The plotted numeric value. |
+| `metric_unit` | string | `percent`, `delta_points`, or `minutes`. |
+| `plot_binding` | object | Must include `panel`, `x_label`, `series`, and `axis`. |
+| `cost` | object | Include available spend/token fields; use null for unknown fields. |
+| `runtime` | object | Include `seconds`; include workers/turn budget when relevant. |
+| `source_command` | string | Exact command or harness invocation that produced the metric. |
+| `artifact_paths` | array | Non-empty list of inspectable artifacts. |
+| `notes` | string | Empty string is allowed; missing is not. |
+
+## Refusal Rules
+
+- Do not write paper target rows as Leaven result rows.
+- Do not write rows from historical YAML claims unless the underlying artifacts
+  and command can be inspected now.
+- Do not write a `paper-denominator-reproduction` row for a subset, single seed,
+  deterministic fixture, or mechanics-only gate.
+- Do not write success rows for SpreadsheetBench cases when the score envelope
+  exists but the output workbook artifact is missing.
+- Do not silently repair denominator drift in the plotter. If `plot_binding`
+  does not match a displayed paper target label, validation must fail.

@@ -4,12 +4,29 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+RESULT_SCHEMA_VERSION = "leaven.trace2skill.result.v1"
+ALLOWED_PROOF_CLASSIFICATIONS = {
+    "mechanics-smoke",
+    "deterministic-one-case",
+    "paper-subset",
+    "paper-denominator-candidate",
+    "paper-denominator-reproduction",
+}
+ALLOWED_METRIC_UNITS = {"percent", "delta_points", "minutes"}
+SUPPORTED_RESULT_PANELS = {
+    "same_model_deepening_vrf",
+    "avg_improvement",
+    "parallel_vs_sequential",
+    "reasoningbank",
+}
 
 
 MANDATORY_DIRS = [
@@ -69,6 +86,92 @@ def iter_tree_nodes(node: Any) -> list[dict[str, Any]]:
         for child in node.get("children", []) or []:
             nodes.extend(iter_tree_nodes(child))
     return nodes
+
+
+def validate_result_record(errors: list[str], record: Any, rel_path: Path, line_number: int) -> None:
+    prefix = f"{rel_path}:{line_number}"
+    if not isinstance(record, dict):
+        fail(errors, f"{prefix} must be a JSON object")
+        return
+
+    required = [
+        "schema_version",
+        "run_id",
+        "created_at",
+        "proof_classification",
+        "dataset_slice",
+        "model_id",
+        "seed",
+        "skill_source",
+        "metric_name",
+        "metric_value",
+        "metric_unit",
+        "plot_binding",
+        "cost",
+        "runtime",
+        "source_command",
+        "artifact_paths",
+        "notes",
+    ]
+    missing = [field for field in required if field not in record]
+    if missing:
+        fail(errors, f"{prefix} missing fields: {', '.join(missing)}")
+        return
+    if record["schema_version"] != RESULT_SCHEMA_VERSION:
+        fail(errors, f"{prefix} schema_version must be {RESULT_SCHEMA_VERSION}")
+    if record["proof_classification"] not in ALLOWED_PROOF_CLASSIFICATIONS:
+        fail(errors, f"{prefix} has invalid proof_classification")
+    if record["metric_unit"] not in ALLOWED_METRIC_UNITS:
+        fail(errors, f"{prefix} has invalid metric_unit")
+    if not isinstance(record["metric_value"], (int, float)) or isinstance(record["metric_value"], bool):
+        fail(errors, f"{prefix} metric_value must be numeric")
+
+    for field in ("run_id", "created_at", "model_id", "metric_name", "source_command", "notes"):
+        if not isinstance(record[field], str):
+            fail(errors, f"{prefix} {field} must be a string")
+    for field in ("run_id", "created_at", "model_id", "metric_name", "source_command"):
+        if isinstance(record[field], str) and not record[field].strip():
+            fail(errors, f"{prefix} {field} must be non-empty")
+
+    dataset_slice = record["dataset_slice"]
+    if not isinstance(dataset_slice, dict):
+        fail(errors, f"{prefix} dataset_slice must be an object")
+    else:
+        for field in ("name", "split", "case_count", "denominator"):
+            if field not in dataset_slice:
+                fail(errors, f"{prefix} dataset_slice missing {field}")
+        if "case_count" in dataset_slice and (
+            not isinstance(dataset_slice["case_count"], int) or dataset_slice["case_count"] < 1
+        ):
+            fail(errors, f"{prefix} dataset_slice.case_count must be a positive integer")
+        for field in ("name", "split", "denominator"):
+            if field in dataset_slice and (
+                not isinstance(dataset_slice[field], str) or not dataset_slice[field].strip()
+            ):
+                fail(errors, f"{prefix} dataset_slice.{field} must be a non-empty string")
+
+    skill_source = record["skill_source"]
+    if not isinstance(skill_source, dict) or not isinstance(skill_source.get("kind"), str) or not skill_source["kind"]:
+        fail(errors, f"{prefix} skill_source.kind must be a non-empty string")
+    for field in ("plot_binding", "cost", "runtime"):
+        if not isinstance(record[field], dict):
+            fail(errors, f"{prefix} {field} must be an object")
+
+    binding = record["plot_binding"]
+    if isinstance(binding, dict):
+        for field in ("panel", "x_label", "series", "axis"):
+            if not isinstance(binding.get(field), str) or not binding[field]:
+                fail(errors, f"{prefix} plot_binding.{field} must be a non-empty string")
+        if binding.get("panel") not in SUPPORTED_RESULT_PANELS:
+            fail(errors, f"{prefix} plot_binding.panel is not supported")
+        if binding.get("axis") not in {"left", "right"}:
+            fail(errors, f"{prefix} plot_binding.axis must be left or right")
+
+    artifacts = record["artifact_paths"]
+    if not isinstance(artifacts, list) or not artifacts:
+        fail(errors, f"{prefix} artifact_paths must be a non-empty array")
+    elif any(not isinstance(path_entry, str) or not path_entry for path_entry in artifacts):
+        fail(errors, f"{prefix} artifact_paths entries must be non-empty strings")
 
 
 def validate(root: Path) -> list[str]:
@@ -186,6 +289,26 @@ def validate(root: Path) -> list[str]:
             fail(errors, f"{evidence.relative_to(root)} missing **Source** field")
         if "|" not in text:
             fail(errors, f"{evidence.relative_to(root)} missing Markdown table")
+
+    results_dir = root / "results"
+    if results_dir.exists():
+        if not results_dir.is_dir():
+            fail(errors, "results exists but is not a directory")
+        else:
+            for rel in ("results/README.md", "results/leaven_result_schema.md"):
+                path = root / rel
+                if not path.is_file() or not read(path).strip():
+                    fail(errors, f"missing or empty result schema file: {rel}")
+            for jsonl_path in sorted(results_dir.glob("*.jsonl")):
+                for line_number, line in enumerate(read(jsonl_path).splitlines(), start=1):
+                    if not line.strip():
+                        continue
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError as exc:
+                        fail(errors, f"{jsonl_path.relative_to(root)}:{line_number} is not valid JSON: {exc}")
+                        continue
+                    validate_result_record(errors, record, jsonl_path.relative_to(root), line_number)
 
     return errors
 
