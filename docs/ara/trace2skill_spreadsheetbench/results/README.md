@@ -57,8 +57,10 @@ command, artifacts, extra object, and notes. It then rejects missing artifact
 paths, absolute artifact paths, mechanics or one-case rows with plot bindings,
 approval-gated rows missing runbook-required prompt artifacts, full paper
 reproduction rows whose model or serving backend does not match the paper
-protocol, and overlay rows whose metric unit, denominator, or paper
-classification is not compatible with the target panel. Overlay rows must also
+protocol, approval-gated paper-protocol rows whose model or serving backend
+does not match the paper protocol, and overlay rows whose metric unit,
+denominator, or paper classification is not compatible with the target panel.
+Overlay rows must also
 use a `plot_binding.x_label` present in the committed target-plot provenance
 for that panel, so closeout cannot count a row the plotter would later reject.
 When the target label names a model family such as `122B` or `35B`, known Qwen
@@ -133,11 +135,13 @@ the `dataset_slice` against the runbook stage's generated
 that exact `dataset_slice.split`, subset rows cannot silently become 200-case
 paper-denominator rows, held-out rows must use the paper `200..400` split, and
 aggregate/full-paper rows must keep generated case ranges and counts.
-All paper-denominator-class rows (`held-out-single-seed-candidate`,
-`seed-aggregate-candidate`, `paper-denominator-candidate`, and
-`paper-denominator-reproduction`) must use a paper model id
-(`Qwen3.5-122B-A10B` or `Qwen3.5-35B-A3B`) and `vLLM`, so fixture-model rows
-cannot masquerade as held-out, aggregate, or full-paper evidence.
+All approval-gated paper-protocol rows (`model-one-case`, `paper-subset`,
+`evolving-split-run`, `training-validation-candidate`,
+`held-out-single-seed-candidate`, `seed-aggregate-candidate`,
+`paper-denominator-candidate`, and `paper-denominator-reproduction`) must use a
+paper model id (`Qwen3.5-122B-A10B` or `Qwen3.5-35B-A3B`) and `vLLM`, so
+fixture-model rows cannot masquerade as model-backed one-case, subset,
+evolving, validation, held-out, aggregate, or full-paper evidence.
 It also checks the runbook stage's generated `expected_seed_policy`, so
 approval-gated rows cannot drift to off-protocol seeds while still looking like
 paper-denominator progress. Runtime fields are checked against generated

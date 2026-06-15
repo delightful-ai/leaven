@@ -109,9 +109,9 @@ def importer_base_args(
         "--denominator",
         "fixture-held-out-subset-not-paper",
         "--model-id",
-        "fixture-model",
+        "Qwen3.5-122B-A10B",
         "--serving-backend",
-        "fixture-backend",
+        "vLLM",
         "--seed",
         "41",
         "--workers",
@@ -386,8 +386,8 @@ def model_one_case_row(repo_root: Path, tmp_path: Path) -> dict[str, Any]:
             "case_count": 1,
             "denominator": "one-case-13-1-model-backed",
         },
-        "model_id": "fixture-model",
-        "serving_backend": "fixture-backend",
+        "model_id": "Qwen3.5-122B-A10B",
+        "serving_backend": "vLLM",
         "seed": 41,
         "skill_source": {"kind": "fixture-model-one-case"},
         "metric_name": "official_instance_accuracy",
@@ -695,7 +695,7 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
             repo_root,
             ara_root,
             invalid_heldout_model_output,
-            "paper-denominator row has non-paper model_id",
+            "held-out-single-seed-candidate rows must use a paper model_id",
             errors,
             "held-out invalid model id",
         )
@@ -753,7 +753,7 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
             aggregate_output,
             tmp_path / "aggregate-wrong-serving.jsonl",
             mutate_aggregate_to_wrong_serving_backend,
-            "paper-denominator rows must use vLLM",
+            "seed-aggregate-candidate rows must use vLLM",
             errors,
             "aggregate serving drift",
         )
@@ -979,7 +979,7 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
             repo_root,
             ara_root,
             invalid_serving_output,
-            "paper-denominator rows must use vLLM",
+            "paper-denominator-reproduction rows must use vLLM",
             errors,
             "full-paper invalid serving backend",
         )
@@ -992,7 +992,7 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
             repo_root,
             ara_root,
             invalid_model_output,
-            "paper-denominator row has non-paper model_id",
+            "paper-denominator-reproduction rows must use a paper model_id",
             errors,
             "full-paper invalid model id",
         )
@@ -1221,6 +1221,34 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "G2 rows must use dataset_slice.split 'held_out'",
             errors,
             "subset split drift",
+        )
+
+        def mutate_subset_to_wrong_model(row: dict[str, Any]) -> None:
+            row["model_id"] = "fixture-model"
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "subset-wrong-model.jsonl",
+            mutate_subset_to_wrong_model,
+            "paper-subset rows must use a paper model_id",
+            errors,
+            "subset model identity drift",
+        )
+
+        def mutate_subset_to_wrong_backend(row: dict[str, Any]) -> None:
+            row["serving_backend"] = "fixture-backend"
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "subset-wrong-backend.jsonl",
+            mutate_subset_to_wrong_backend,
+            "paper-subset rows must use vLLM",
+            errors,
+            "subset serving identity drift",
         )
 
         def mutate_heldout_to_training_range(row: dict[str, Any]) -> None:

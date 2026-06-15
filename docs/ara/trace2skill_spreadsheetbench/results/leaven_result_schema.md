@@ -80,7 +80,7 @@ what Leaven actually ran.
 | `proof_classification` | string | Must be one of the values listed in `README.md`. |
 | `dataset_slice` | object | Must include `name`, `split`, `case_count`, and `denominator`. |
 | `model_id` | string | The model that produced the metric. |
-| `serving_backend` | string | The serving backend that produced the metric; full paper-denominator reproduction rows must use `vLLM`. |
+| `serving_backend` | string | The serving backend that produced the metric; approval-gated paper-protocol rows must use `vLLM`. |
 | `seed` | number, string, or null | Null only when the run truly had no seed. |
 | `skill_source` | object | Must include `kind`; include `path` when the skill is file-backed. |
 | `metric_name` | string | Human-readable metric label, e.g. `122B Vrf`. |
@@ -108,7 +108,10 @@ what Leaven actually ran.
   checks can count them.
 - Do not write a `paper-denominator-reproduction` row for a subset, single seed,
   deterministic fixture, or mechanics-only gate.
-- Paper-denominator classification checks apply before overlay handling:
+- Approval-gated paper-protocol classification checks apply before overlay
+  handling: `model-one-case`, `paper-subset`, `evolving-split-run`,
+  `training-validation-candidate`, `held-out-single-seed-candidate`,
+  `seed-aggregate-candidate`, `paper-denominator-candidate`, and
   `paper-denominator-reproduction` rows must name a paper model and `vLLM`
   even if `plot_binding` is temporarily null.
 - Do not write success rows for SpreadsheetBench cases when the score envelope
@@ -170,11 +173,10 @@ what Leaven actually ran.
   `eval_official_results.json` per-case `results[*].id` list against the
   declared `dataset_slice.case_range` in upstream dataset order. A row cannot
   claim `200..400`, `200..202`, or `0..200` from summary metrics alone.
-- Paper-denominator-class rows (`held-out-single-seed-candidate`,
-  `seed-aggregate-candidate`, `paper-denominator-candidate`, and
-  `paper-denominator-reproduction`) must use a paper model id
+- Approval-gated paper-protocol rows must use a paper model id
   (`Qwen3.5-122B-A10B` or `Qwen3.5-35B-A3B`) and `vLLM`; fixture-model rows
-  cannot count as held-out, seed-aggregate, or full-paper evidence.
+  cannot count as model-backed one-case, subset, evolving, validation,
+  held-out, seed-aggregate, or full-paper evidence.
 - Result rows must also satisfy the named runbook stage's generated
   `expected_seed_policy`: model one-case and subset rows use seed `41`,
   evolving/validation/held-out single-seed rows use one of `41`, `42`, or `43`,

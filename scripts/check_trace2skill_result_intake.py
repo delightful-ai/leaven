@@ -82,6 +82,7 @@ MODEL_ID_FAMILIES = {
     "Qwen3.5-122B-A10B": "122B",
     "Qwen3.5-35B-A3B": "35B",
 }
+PAPER_MODEL_IDS = set(MODEL_ID_FAMILIES)
 
 
 def parse_case_range(raw: Any) -> tuple[int, int] | None:
@@ -571,6 +572,20 @@ def check_stage_command_policy(
             )
 
 
+def check_paper_protocol_identity(
+    prefix: str,
+    proof: Any,
+    record: dict[str, Any],
+    errors: list[str],
+) -> None:
+    if proof not in APPROVAL_REQUIRED_PROOF_CLASSIFICATIONS:
+        return
+    if record.get("model_id") not in PAPER_MODEL_IDS:
+        errors.append(f"{prefix} {proof} rows must use a paper model_id")
+    if record.get("serving_backend") != "vLLM":
+        errors.append(f"{prefix} {proof} rows must use vLLM")
+
+
 def check_official_source_metric(
     prefix: str,
     record: dict[str, Any],
@@ -1051,6 +1066,7 @@ def check_record(
     check_stage_seed_policy(prefix, stage, record, errors)
     check_stage_runtime_policy(prefix, stage, record, errors)
     check_stage_command_policy(prefix, stage, record, dataset_slice, errors)
+    check_paper_protocol_identity(prefix, proof, record, errors)
 
     artifact_paths = record.get("artifact_paths")
     if not isinstance(artifact_paths, list) or not artifact_paths:
@@ -1106,10 +1122,6 @@ def check_record(
         case_count = record.get("dataset_slice", {}).get("case_count")
         if not isinstance(case_count, int) or case_count < 200:
             errors.append(f"{prefix} paper-denominator rows must cover at least the 200-case paper split")
-        if record.get("serving_backend") != "vLLM":
-            errors.append(f"{prefix} paper-denominator rows must use vLLM")
-        if record.get("model_id") not in {"Qwen3.5-122B-A10B", "Qwen3.5-35B-A3B"}:
-            errors.append(f"{prefix} paper-denominator row has non-paper model_id")
 
     check_official_source_metric(prefix, record, binding, errors)
 
