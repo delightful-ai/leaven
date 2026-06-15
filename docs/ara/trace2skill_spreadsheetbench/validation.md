@@ -489,6 +489,8 @@ Current result:
   `official_avg_soft_score`, and `official_avg_hard_score`.
 - Converts evaluator fractions to percent-valued Leaven result rows.
 - Defaults every row to `plot_binding: null`.
+- Requires `--eval-results`, `--skill-path`, `--artifact-path`, and
+  `--approval-artifact-path` values to be locally inspectable when provided.
 - Refuses `paper-denominator-reproduction` unless
   `--allow-paper-denominator-reproduction` and at least one
   `--approval-artifact-path` are explicitly present.

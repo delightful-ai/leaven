@@ -70,7 +70,9 @@ The importer writes `plot_binding: null` by default. Paper-target overlays
 require explicit `--plot-binding-json` entries, and
 `paper-denominator-reproduction` is refused unless the operator also passes
 `--allow-paper-denominator-reproduction` plus at least one
-`--approval-artifact-path`.
+`--approval-artifact-path`. Every `--eval-results`, `--skill-path`,
+`--artifact-path`, and `--approval-artifact-path` value must exist locally when
+the importer runs.
 
 The full-denominator approval packet can be checked with:
 

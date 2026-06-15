@@ -38,10 +38,21 @@ SUPPORTED_RESULT_PANELS = {
 
 
 def load_json(path: Path) -> dict[str, Any]:
+    require_existing_path(path, "--eval-results")
     loaded = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(loaded, dict):
         raise ValueError(f"{path} must contain a JSON object")
     return loaded
+
+
+def require_existing_path(path: Path, label: str) -> None:
+    if not path.exists():
+        raise FileNotFoundError(f"{label} is not inspectable: {path}")
+
+
+def require_existing_artifact_paths(paths: list[str], label: str) -> None:
+    for raw in paths:
+        require_existing_path(Path(raw), label)
 
 
 def require_number(mapping: dict[str, Any], field: str, prefix: str) -> float:
@@ -184,10 +195,13 @@ def build_records(args: argparse.Namespace) -> list[dict[str, Any]]:
     summary = validate_eval_result(eval_result, args.case_count)
     seed = parse_seed(args.seed)
     plot_bindings = parse_plot_bindings(args.plot_binding_json, args.proof_classification)
+    require_existing_artifact_paths(args.artifact_path, "--artifact-path")
+    require_existing_artifact_paths(args.approval_artifact_path, "--approval-artifact-path")
 
     artifact_paths = [args.eval_results.as_posix(), *args.artifact_path, *args.approval_artifact_path]
     skill_source = {"kind": args.skill_kind}
     if args.skill_path:
+        require_existing_path(Path(args.skill_path), "--skill-path")
         skill_source["path"] = args.skill_path
 
     base = {
