@@ -22,7 +22,11 @@ Scope:
 
 Limit:
 
-- This does not prove source coverage completeness, full paper reproduction, Leaven result overlays, one-case live proof, held-out split execution, seed aggregation, or Qwen/vLLM parity.
+- This initial structural check did not by itself prove source coverage
+  completeness, full paper reproduction, Leaven result overlays, held-out split
+  execution, seed aggregation, or Qwen/vLLM parity. The later deterministic
+  one-case checks below are the owning proof for the local ACP `13-1` seam
+  denominator only.
 
 ## 2026-06-14 Plot Target Generation
 
@@ -1139,6 +1143,9 @@ Current result:
   JSONL file, one total row, zero overlay rows, and zero paper-denominator rows.
 - Verifies `closeout_audit.json` reports the same result-row summary as the
   actual `results/*.jsonl` files.
+- Verifies `validation.md` no longer carries the stale early caveat that the
+  current ARA lacks one-case live proof after closeout has accepted the
+  deterministic local ACP `13-1` proof.
 - The integrated Seal Level 1 validator now runs this status-doc check after
   result intake and evidence-binding validation.
 

@@ -99,6 +99,21 @@ def check_closeout_summary(ara_root: Path, summary: ResultSummary) -> list[str]:
     return errors
 
 
+def closeout_acceptance_status(ara_root: Path, acceptance_id: str) -> str | None:
+    closeout_path = ara_root / "results/closeout_audit.json"
+    if not closeout_path.is_file():
+        return None
+    closeout = json.loads(read(closeout_path))
+    acceptance = closeout.get("acceptance")
+    if not isinstance(acceptance, dict):
+        return None
+    entry = acceptance.get(acceptance_id)
+    if not isinstance(entry, dict):
+        return None
+    status = entry.get("status")
+    return status if isinstance(status, str) else None
+
+
 def check_denominator_status(ara_root: Path, file_count: int, summary: ResultSummary) -> list[str]:
     path = ara_root / "results/denominator_status.md"
     if not path.is_file():
@@ -130,6 +145,14 @@ def check_validation_log(ara_root: Path, summary: ResultSummary) -> list[str]:
     text = read(path)
     if summary.total_rows > 0 and "No `results/*.jsonl` files exist yet" in text:
         errors.append("validation.md still says no results/*.jsonl files exist")
+    if closeout_acceptance_status(ara_root, "one_case_live_or_explicit_blocker") == "satisfied_deterministic_one_case":
+        stale_one_case_limit = (
+            "This does not prove source coverage completeness, full paper reproduction, "
+            "Leaven result overlays, one-case live proof, held-out split execution, "
+            "seed aggregation, or Qwen/vLLM parity."
+        )
+        if stale_one_case_limit in text:
+            errors.append("validation.md still says the current ARA does not prove one-case live proof")
     if "Status Doc Consistency Check" not in text:
         errors.append("validation.md missing Status Doc Consistency Check section")
     return errors
