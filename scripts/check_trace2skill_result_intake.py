@@ -642,6 +642,7 @@ def check_stage_aggregate_policy(
         source_stage_id = expected.get("source_runbook_stage_id")
         source_proof = expected.get("source_proof_classification")
         observed: set[int] = set()
+        metric_values_by_seed: dict[int, float] = {}
         for source_path, line_number, source in rows:
             source_errors: list[str] = []
             check_record(
@@ -683,9 +684,26 @@ def check_stage_aggregate_policy(
             seed = normalize_seed(source.get("seed"))
             if seed is not None:
                 observed.add(seed)
+                metric_value = source.get("metric_value")
+                if is_json_number(metric_value):
+                    if seed in metric_values_by_seed:
+                        errors.append(f"{prefix} {stage_id} aggregate rows must cite at most one metric row for seed {seed}")
+                    else:
+                        metric_values_by_seed[seed] = float(metric_value)
         missing = [seed for seed in required_seeds if seed not in observed]
         if missing:
             errors.append(f"{prefix} {stage_id} aggregate rows must cite source result rows for seeds {missing!r}")
+        missing_metric_values = [seed for seed in required_seeds if seed not in metric_values_by_seed]
+        if missing_metric_values:
+            errors.append(
+                f"{prefix} {stage_id} aggregate rows must cite numeric source metric_values for seeds {missing_metric_values!r}"
+            )
+        elif is_json_number(record.get("metric_value")):
+            expected_metric = sum(metric_values_by_seed[seed] for seed in required_seeds) / len(required_seeds)
+            if not math.isclose(float(record["metric_value"]), expected_metric, rel_tol=0, abs_tol=1e-9):
+                errors.append(
+                    f"{prefix} {stage_id} aggregate metric_value must equal mean source metric_value {expected_metric}"
+                )
         return
 
     if kind == "full-paper":

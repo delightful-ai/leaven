@@ -698,6 +698,20 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
             "aggregate case-count drift",
         )
 
+        def mutate_aggregate_to_wrong_metric_value(row: dict[str, Any]) -> None:
+            row["metric_value"] = 51.0
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            aggregate_output,
+            tmp_path / "aggregate-wrong-metric-value.jsonl",
+            mutate_aggregate_to_wrong_metric_value,
+            "G5 aggregate metric_value must equal mean source metric_value 50.0",
+            errors,
+            "aggregate metric-value drift",
+        )
+
         def mutate_aggregate_to_wrong_serving_backend(row: dict[str, Any]) -> None:
             row["serving_backend"] = "fixture-backend"
 

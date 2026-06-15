@@ -175,7 +175,8 @@ what Leaven actually ran.
 - Aggregate result rows must also satisfy the named runbook stage's generated
   `expected_aggregate_policy`: seed-aggregate rows must cite inspectable source
   result JSONL rows whose held-out single-seed predecessor rows pass result
-  intake and cover seeds `41`, `42`, and `43`; full-paper rows must cite
+  intake and cover seeds `41`, `42`, and `43`, and the aggregate `metric_value`
+  must equal the mean of the cited seed metric values; full-paper rows must cite
   training-validation, seed-aggregate, or paper-candidate source result rows
   that also pass result intake and together cover the generated required split
   ranges such as `0..200` and `200..400`. Aggregate and full-paper source rows

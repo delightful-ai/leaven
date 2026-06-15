@@ -138,7 +138,8 @@ carry `extra.command_policy` and a `source_command` containing the upstream
 command fragments required by the originating stage. Aggregate evidence is
 checked against generated `expected_aggregate_policy`, so seed aggregates must
 cite inspectable held-out single-seed result JSONL rows that themselves pass
-result intake for seeds `41`, `42`, and `43`, and full-paper rows must cite
+result intake for seeds `41`, `42`, and `43`, with the aggregate `metric_value`
+equal to the mean of the cited seed metric values. Full-paper rows must cite
 training-validation, seed-aggregate, or paper-candidate source rows that also
 pass result intake and together cover the generated required split ranges such
 as `0..200` and `200..400`. Aggregate and full-paper source rows must also match
