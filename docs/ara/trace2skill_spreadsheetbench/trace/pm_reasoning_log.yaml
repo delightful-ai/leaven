@@ -220,3 +220,7 @@ entries:
     notes:
       - "Routed aggregate source approval as paper-protocol authorization guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the check only prevents blocked top-level approval-gated source rows from supporting aggregates; it creates no accepted Leaven overlay rows, approvals, analyst responses, Stage 3 merges, seed aggregates, full-paper rows, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#56"
+    notes:
+      - "Routed one-case case-id enforcement as denominator-identity guardrail evidence, not model-backed execution."
+      - "Kept reproduction claims unchanged because the check only prevents one-case-shaped rows from hiding non-13-1 cases; it creates no accepted model-backed one-case rows, overlays, approvals, seed aggregates, full-paper rows, or Qwen/vLLM execution."
