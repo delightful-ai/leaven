@@ -48,12 +48,12 @@ Still blocking full reproduction:
 
 | Dimension | Score | Note |
 |-----------|-------|------|
-| Evidence relevance | 4 | Tables and local proof docs mostly support their claims; C07 needs the E09 link. |
+| Evidence relevance | 4 | Tables and local proof docs mostly support their claims; C07 now cites E09, while full approval remains blocked. |
 | Falsifiability | 3 | Directionally good, but tolerance and closeout checks are not concrete enough. |
 | Scope calibration | 4 | Strong proxy refusal and denominator labels. |
 | Argument coherence | 4 | Clear arc from paper targets to Leaven denominators to approval gates. |
-| Exploration integrity | 3 | Real dead ends exist, but they need explicit failure/lesson fields. |
-| Methodological rigor | 3 | Good config capture; still missing approval, tolerance, retry, variance, and prompt evidence. |
+| Exploration integrity | 3 | Real dead ends now carry explicit failure/lesson fields, but full live-run dead ends are still absent. |
+| Methodological rigor | 3 | Good config capture; still missing approval, approved tolerance, rendered live prompts, retry evidence, and variance evidence. |
 
 ## Recommendation
 

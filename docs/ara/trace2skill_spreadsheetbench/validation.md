@@ -745,3 +745,39 @@ Limit:
 - This prevents stale status prose from contradicting current artifacts. It does
   not add Leaven result rows, overlay metrics, or Qwen/vLLM paper-denominator
   execution.
+
+## 2026-06-14 Rigor Review Follow-Up Check
+
+Artifact:
+
+```text
+scripts/check_trace2skill_rigor_followup.py
+docs/ara/trace2skill_spreadsheetbench/level2_report.json
+docs/ara/trace2skill_spreadsheetbench/reviews/rigor_review.md
+docs/ara/trace2skill_spreadsheetbench/trace/exploration_tree.yaml
+docs/ara/trace2skill_spreadsheetbench/logic/claims.md
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_rigor_followup.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Current result:
+
+- Verifies the Level 2 report's `post_review_followup` lists F02 and F04 as
+  addressed, F03 and F05 as partially addressed, and keeps remaining blockers
+  non-empty.
+- Verifies every dead-end exploration node has non-empty `failure_mode` and
+  `lesson` fields.
+- Verifies C07 cites both E08 and E09.
+- Verifies tolerance and prompt-template follow-up artifacts exist.
+- Verifies the human rigor-review notes no longer contradict the addressed F02
+  and F04 status.
+
+Limit:
+
+- This checks follow-up consistency for the existing semantic review. It does
+  not rerun a new independent Level 2 review, approve tolerance, capture
+  rendered live prompts, or execute Qwen/vLLM.
