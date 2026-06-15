@@ -981,20 +981,32 @@ def validate(root: Path) -> list[str]:
                             elif aggregate_policy.get("kind") != expected_kind:
                                 fail(errors, f"results/full_denominator_runbook.json {stage_id} expected_aggregate_policy kind must be {expected_kind}")
                             elif expected_kind == "seed-aggregate":
-                                if aggregate_policy.get("source_runbook_stage_id") != "G4":
-                                    fail(errors, "results/full_denominator_runbook.json G5 aggregate source_runbook_stage_id must be G4")
-                                if aggregate_policy.get("source_proof_classification") != "held-out-single-seed-candidate":
-                                    fail(errors, "results/full_denominator_runbook.json G5 aggregate source_proof_classification must be held-out-single-seed-candidate")
-                                if aggregate_policy.get("required_seeds") != [41, 42, 43]:
-                                    fail(errors, "results/full_denominator_runbook.json G5 aggregate required_seeds must be [41, 42, 43]")
-                                if aggregate_policy.get("source_result_paths_min") != 3:
-                                    fail(errors, "results/full_denominator_runbook.json G5 aggregate source_result_paths_min must be 3")
+                                expected_policy = {
+                                    "kind": "seed-aggregate",
+                                    "source_runbook_stage_id": "G4",
+                                    "source_proof_classification": "held-out-single-seed-candidate",
+                                    "required_seeds": [41, 42, 43],
+                                    "source_result_paths_min": 3,
+                                }
+                                if aggregate_policy != expected_policy:
+                                    fail(
+                                        errors,
+                                        "results/full_denominator_runbook.json G5 aggregate source policy must match the held-out seed aggregate contract",
+                                    )
                             elif expected_kind == "full-paper":
-                                classifications = aggregate_policy.get("source_proof_classifications")
-                                if not isinstance(classifications, list) or "seed-aggregate-candidate" not in classifications:
-                                    fail(errors, "results/full_denominator_runbook.json G6 aggregate must cite seed-aggregate-candidate sources")
-                                if aggregate_policy.get("source_result_paths_min") != 1:
-                                    fail(errors, "results/full_denominator_runbook.json G6 aggregate source_result_paths_min must be 1")
+                                expected_policy = {
+                                    "kind": "full-paper",
+                                    "source_proof_classifications": [
+                                        "training-validation-candidate",
+                                        "seed-aggregate-candidate",
+                                    ],
+                                    "source_result_paths_min": 1,
+                                }
+                                if aggregate_policy != expected_policy:
+                                    fail(
+                                        errors,
+                                        "results/full_denominator_runbook.json G6 aggregate source policy must be training-validation-candidate plus seed-aggregate-candidate only",
+                                    )
 
     return errors
 
