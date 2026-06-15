@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T17:10-07:00"
-  turn_count: 1
-  summary: "Model availability research was committed as approval-packet evidence, not as reproduction evidence."
+  last_turn: "2026-06-14T17:23-07:00"
+  turn_count: 2
+  summary: "Approval preflight and dataset manifest now make more of the full-denominator gate executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -13,6 +13,18 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Validated Trace2Skill ARA after adding model_availability.md; validator passed at 39 files and level2_report.json parsed."
+  - turn: 2
+    type: experiment
+    id: "PM-2026-06-14-002"
+    routing: direct
+    provenance: ai-executed
+    summary: "Added approval-packet preflight; normal mode failed as expected and --expect-blocked passed with unresolved approval fields."
+  - turn: 2
+    type: experiment
+    id: "PM-2026-06-14-003"
+    routing: direct
+    provenance: ai-executed
+    summary: "Generated deterministic dataset_manifest.json for the local 400-row SpreadsheetBench-Verified dataset and reran ARA validation."
 
 ai_actions:
   - turn: 1
@@ -29,14 +41,38 @@ ai_actions:
     action: "Committed the availability slice as jj commit a90da1f0 and opened a fresh empty working-copy commit."
     provenance: ai-executed
     files_changed: []
+  - turn: 2
+    action: "Added scripts/check_trace2skill_approval_packet.py and expanded full_run_plan.md with hardware, credentials, retention, and expected-artifact fields."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/check_trace2skill_approval_packet.py"
+      - "docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md"
+      - "docs/ara/trace2skill_spreadsheetbench/results/README.md"
+      - "docs/ara/trace2skill_spreadsheetbench/results/denominator_status.md"
+      - "docs/ara/trace2skill_spreadsheetbench/results/model_availability.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 2
+    action: "Added scripts/build_trace2skill_dataset_manifest.py, generated results/dataset_manifest.json, and filled the approval packet dataset manifest field."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/build_trace2skill_dataset_manifest.py"
+      - "docs/ara/trace2skill_spreadsheetbench/results/dataset_manifest.json"
+      - "docs/ara/trace2skill_spreadsheetbench/PAPER.md"
+      - "docs/ara/trace2skill_spreadsheetbench/results/README.md"
+      - "docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md"
+      - "docs/ara/trace2skill_spreadsheetbench/src/environment.md"
+      - "docs/ara/trace2skill_spreadsheetbench/results/denominator_status.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
 key_context:
   - turn: 1
     excerpt: "Availability research established public model repositories and serving paths, but left endpoint, hardware, credentials, cost, retention, and tolerance approval unresolved."
+  - turn: 2
+    excerpt: "Dataset provenance is now resolved by manifest, but normal approval preflight still fails on model, serving, budget, credential, retention, approval, and tolerance fields."
 
 open_threads:
-  - "Full Qwen/vLLM paper-denominator execution remains blocked until approval packet fields in results/full_run_plan.md are filled."
+  - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."
 
 ai_suggestions_pending: []
