@@ -17,6 +17,7 @@ Current scripts:
 - `check_trace2skill_status_docs.py`: no-spend ARA checker for human status docs; verifies current file counts, result-row summaries, and known overlay/non-overlay state stay synchronized with artifacts.
 - `check_trace2skill_rigor_followup.py`: no-spend ARA checker for Seal Level 2 follow-up claims; verifies addressed review findings are actually reflected in the exploration tree, C07 proof links, tolerance/prompt artifacts, and review prose.
 - `check_trace2skill_runbook_labels.py`: no-spend ARA checker for result proof classifications; verifies generated runbook labels, result docs, importer/plotter/validator constants, and non-overlay restrictions stay synchronized.
+- `check_trace2skill_runbook_freshness.py`: no-spend ARA checker that regenerates the full-denominator runbook in a temp directory and verifies the committed JSON/Markdown outputs are not stale.
 
 ## Local Rules
 - Keep script defaults local and credential-free. Network, cloud, live model, or destructive behavior must be an explicit flag or environment opt-in.

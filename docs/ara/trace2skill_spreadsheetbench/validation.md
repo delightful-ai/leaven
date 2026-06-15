@@ -258,6 +258,38 @@ Limit:
 
 - The smoke row was temporary, classified `mechanics-smoke`, and was not stored in the ARA. It is not a Leaven result.
 
+## 2026-06-14 Runbook Freshness Check
+
+Artifact:
+
+```text
+scripts/check_trace2skill_runbook_freshness.py
+scripts/build_trace2skill_runbook.py
+docs/ara/trace2skill_spreadsheetbench/results/full_denominator_runbook.{json,md}
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_runbook_freshness.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Current result:
+
+```text
+PASS: docs/ara/trace2skill_spreadsheetbench runbook freshness
+```
+
+Scope:
+
+- Regenerates the full-denominator runbook into a temporary directory.
+- Verifies the committed JSON and Markdown runbook outputs match the generator exactly.
+- The same check now runs inside `scripts/validate_ara.py`.
+
+Limit:
+
+- This proves generated runbook freshness only. It does not approve the packet, fill unresolved model/hardware/cost fields, launch Qwen/vLLM, or create paper-denominator result rows.
+
 ## 2026-06-14 Deterministic One-Case ACP Worker Run
 
 Prepare command:
