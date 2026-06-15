@@ -350,8 +350,8 @@ PASS: docs/ara/trace2skill_spreadsheetbench artifact contract
 
 Scope:
 
-- Verifies the approval packet still expects normalized run metadata, dataset manifest, trajectory manifests, trajectories, score reports, skill-evolution artifacts, held-out eval artifacts, and `leaven_results.jsonl`.
-- Verifies every generated runbook stage lists the artifact fragments needed for its stated denominator, including one-case manifest/transcript evidence and future Leaven result JSONL outputs for model-backed/subset/held-out stages.
+- Verifies the approval packet still expects normalized run metadata, dataset manifest, rendered agent prompts, trajectories, score reports, Stage 2 analyst prompt fanout, Stage 3 merge prompts/manifests, skill-evolution artifacts, held-out eval artifacts, prompt-render manifests, and `leaven_results.jsonl`.
+- Verifies every generated runbook stage lists the artifact fragments needed for its stated denominator, including one-case manifest/transcript/rendered Stage 2 evidence, future rendered prompt manifests, and future Leaven result JSONL outputs for model-backed/subset/held-out stages.
 - The same check now runs inside `scripts/validate_ara.py`.
 
 Limit:

@@ -108,6 +108,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             [
                 "cargo run -p trace2skill_spreadsheetbench -- --prepare-one-case-run --run-dir tmp/trace2skill-one-case-live",
                 "cargo run -p trace2skill_spreadsheetbench -- --run-one-case-acp-worker --run-dir tmp/trace2skill-one-case-live --model-id local-openpyxl-trace2skill-agent",
+                "cargo run -p trace2skill_spreadsheetbench -- --prepare-one-case-analyst-fanout --run-dir tmp/trace2skill-one-case-live",
             ],
             [
                 "tmp/trace2skill-one-case-live/manifest.json",
@@ -116,6 +117,8 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
                 "tmp/trace2skill-one-case-live/agent_transcript.md",
                 "tmp/trace2skill-one-case-live/score_report.json",
                 "tmp/trace2skill-one-case-live/trajectory.json",
+                "tmp/trace2skill-one-case-live/stage2_analyst_prompt.md",
+                "tmp/trace2skill-one-case-live/stage2_fanout.json",
             ],
             "deterministic-one-case",
             "paper reproduction",
@@ -136,6 +139,8 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             [
                 "model_one_case_seed_41/logs",
                 "model_one_case_seed_41/work",
+                "model_one_case_seed_41/rendered_prompts/{case_id}/agent_prompt.md",
+                "model_one_case_seed_41/prompt_render_manifest.json",
                 "model_one_case_seed_41/outputs/eval_official_results.json",
                 "model_one_case_seed_41/leaven_results.jsonl",
             ],
@@ -160,6 +165,8 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             [
                 "subset_<start>_<end>_seed_41/logs",
                 "subset_<start>_<end>_seed_41/work",
+                "subset_<start>_<end>_seed_41/rendered_prompts/{case_id}/agent_prompt.md",
+                "subset_<start>_<end>_seed_41/prompt_render_manifest.json",
                 "subset_<start>_<end>_seed_41/outputs/eval_official_results.json",
                 "subset_<start>_<end>_seed_41/leaven_results.jsonl",
             ],
@@ -192,11 +199,18 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             [
                 "baseline_seed_{seed}/logs",
                 "baseline_seed_{seed}/work",
+                "baseline_seed_{seed}/rendered_prompts/{case_id}/agent_prompt.md",
+                "baseline_seed_{seed}/prompt_render_manifest.json",
                 "baseline_seed_{seed}/outputs/eval_official_results.json",
                 "baseline_seed_{seed}/error_analysis_parsed.json",
+                "baseline_seed_{seed}/stage2_analyst_prompts/{case_id}/error_prompt.md",
+                "baseline_seed_{seed}/stage2_analyst_prompts/{case_id}/success_prompt.md",
+                "baseline_seed_{seed}/stage2_fanout.jsonl",
                 "baseline_seed_{seed}/success_analysis_parsed.json",
                 "skill_evolution_seed_{seed}/error_driven_skill_evolution/change.log",
                 "skill_evolution_seed_{seed}/error_driven_skill_evolution/intermediates",
+                "skill_evolution_seed_{seed}/error_driven_skill_evolution/stage3_merge_prompts/{batch_id}.md",
+                "skill_evolution_seed_{seed}/error_driven_skill_evolution/stage3_merge_manifest.json",
                 "skill_evolution_seed_{seed}/error_driven_skill_evolution/skills",
             ],
             "evolving-split-run",
@@ -221,7 +235,11 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
                 "# Select BEST_SEED from training-set validation only; do not inspect held-out outputs.",
             ],
             [
+                "validation_train_seed_{seed}/baseline_rendered_prompts/{case_id}/agent_prompt.md",
+                "validation_train_seed_{seed}/baseline_prompt_render_manifest.json",
                 "validation_train_seed_{seed}/baseline_outputs/eval_official_results.json",
+                "validation_train_seed_{seed}/evolved_rendered_prompts/{case_id}/agent_prompt.md",
+                "validation_train_seed_{seed}/evolved_prompt_render_manifest.json",
                 "validation_train_seed_{seed}/evolved_outputs/eval_official_results.json",
                 "best_seed_selection_note.md",
             ],
@@ -245,6 +263,8 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             [
                 "heldout_seed_<best>/logs",
                 "heldout_seed_<best>/work",
+                "heldout_seed_<best>/rendered_prompts/{case_id}/agent_prompt.md",
+                "heldout_seed_<best>/prompt_render_manifest.json",
                 "heldout_seed_<best>/outputs/eval_official_results.json",
                 "heldout_seed_<best>/leaven_results.jsonl",
             ],
@@ -266,6 +286,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             ],
             [
                 "docs/ara/trace2skill_spreadsheetbench/results/<approved-run-id>.jsonl",
+                "docs/ara/trace2skill_spreadsheetbench/results/<approved-run-id>.prompt_render_manifest.json",
                 "docs/ara/trace2skill_spreadsheetbench/plots/trace2skill_targets.png",
                 "docs/ara/trace2skill_spreadsheetbench/results/closeout_audit.json",
             ],
@@ -286,6 +307,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             ],
             [
                 "complete denominator-labeled result JSONL rows",
+                "complete rendered prompt manifests for every claimed model call",
                 "updated closeout_audit.json with overall_complete true only after objective-wide proof",
             ],
             "paper-denominator-reproduction",

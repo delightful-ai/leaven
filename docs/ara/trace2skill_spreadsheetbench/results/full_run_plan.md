@@ -98,14 +98,22 @@ artifacts:
     - run_metadata.json
     - dataset_manifest.json
     - trajectory_generation/{seed}/{case_id}/manifest.json
+    - trajectory_generation/{seed}/{case_id}/agent_prompt.md
     - trajectory_generation/{seed}/{case_id}/trajectory.json
     - trajectory_generation/{seed}/{case_id}/score_report.json
+    - skill_evolution/{seed}/stage2_analyst_prompts/{case_id}/error_prompt.md
+    - skill_evolution/{seed}/stage2_analyst_prompts/{case_id}/success_prompt.md
+    - skill_evolution/{seed}/stage2_fanout.jsonl
     - skill_evolution/{seed}/patch_pool.jsonl
+    - skill_evolution/{seed}/stage3_merge_prompts/{batch_id}.md
     - skill_evolution/{seed}/merge_tree.json
+    - skill_evolution/{seed}/stage3_merge_manifest.json
     - skill_evolution/{seed}/skill/SKILL.md
     - heldout_eval/{seed}/{case_id}/manifest.json
+    - heldout_eval/{seed}/{case_id}/agent_prompt.md
     - heldout_eval/{seed}/{case_id}/trajectory.json
     - heldout_eval/{seed}/{case_id}/score_report.json
+    - prompt_render_manifest.json
     - leaven_results.jsonl
 approval:
   approved_by: null
