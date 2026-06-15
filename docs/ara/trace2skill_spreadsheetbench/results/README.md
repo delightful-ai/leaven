@@ -43,6 +43,16 @@ Until the packet is approved, the expected proof is the blocked preflight:
 uv run --with pyyaml python scripts/check_trace2skill_approval_packet.py docs/ara/trace2skill_spreadsheetbench --expect-blocked
 ```
 
+The closeout audit can be regenerated with:
+
+```bash
+uv run --with pyyaml python scripts/audit_trace2skill_closeout.py docs/ara/trace2skill_spreadsheetbench
+```
+
+It writes [`closeout_audit.md`](closeout_audit.md) and
+[`closeout_audit.json`](closeout_audit.json). While the full paper denominator
+is missing, the audit must keep `overall_complete` false.
+
 The paper target plot can be regenerated without result records:
 
 ```bash

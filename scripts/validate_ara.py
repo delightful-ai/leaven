@@ -310,6 +310,33 @@ def validate(root: Path) -> list[str]:
                         continue
                     validate_result_record(errors, record, jsonl_path.relative_to(root), line_number)
 
+            closeout_audit_path = results_dir / "closeout_audit.json"
+            if closeout_audit_path.exists():
+                try:
+                    closeout_audit = json.loads(read(closeout_audit_path))
+                except json.JSONDecodeError as exc:
+                    fail(errors, f"results/closeout_audit.json is not valid JSON: {exc}")
+                    closeout_audit = None
+                if isinstance(closeout_audit, dict):
+                    if closeout_audit.get("schema_version") != "leaven.trace2skill.closeout_audit.v1":
+                        fail(errors, "results/closeout_audit.json has wrong schema_version")
+                    if closeout_audit.get("overall_complete") is not False:
+                        fail(errors, "results/closeout_audit.json must keep overall_complete false until paper denominator is proven")
+                    acceptance = closeout_audit.get("acceptance")
+                    if not isinstance(acceptance, dict):
+                        fail(errors, "results/closeout_audit.json missing acceptance object")
+                    else:
+                        for acceptance_id in (
+                            "ara_level1_valid",
+                            "plots_from_ara",
+                            "current_mechanics_classified",
+                            "one_case_live_or_explicit_blocker",
+                            "full_denominator_plan_approved",
+                            "reproduced_claim_limited_to_actual_denominator",
+                        ):
+                            if acceptance_id not in acceptance:
+                                fail(errors, f"results/closeout_audit.json missing {acceptance_id}")
+
     return errors
 
 

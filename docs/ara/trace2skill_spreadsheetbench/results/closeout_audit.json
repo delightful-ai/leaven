@@ -1,0 +1,148 @@
+{
+  "acceptance": {
+    "ara_level1_valid": {
+      "evidence": [
+        "docs/ara/trace2skill_spreadsheetbench/PAPER.md",
+        "docs/ara/trace2skill_spreadsheetbench/logic/claims.md",
+        "docs/ara/trace2skill_spreadsheetbench/logic/experiments.md",
+        "docs/ara/trace2skill_spreadsheetbench/evidence/tables",
+        "docs/ara/trace2skill_spreadsheetbench/validation.md",
+        "uv run --with pyyaml python scripts/validate_ara.py docs/ara/trace2skill_spreadsheetbench"
+      ],
+      "remaining": [
+        "Re-run the validator after any ARA evidence or schema change."
+      ],
+      "status": "satisfied_current_package"
+    },
+    "current_mechanics_classified": {
+      "evidence": [
+        "docs/ara/trace2skill_spreadsheetbench/evidence/leaven_mechanics_tests.md",
+        "docs/ara/trace2skill_spreadsheetbench/validation.md"
+      ],
+      "remaining": [
+        "Re-run focused Rust tests after changing example mechanics or proof classifications."
+      ],
+      "status": "satisfied_current_tests"
+    },
+    "full_denominator_plan_approved": {
+      "evidence": [
+        "docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md",
+        "docs/ara/trace2skill_spreadsheetbench/results/dataset_manifest.json",
+        "scripts/check_trace2skill_approval_packet.py"
+      ],
+      "remaining": [
+        "models.qwen_122b is unresolved",
+        "models.qwen_35b is unresolved",
+        "serving.host is unresolved",
+        "serving.version is unresolved",
+        "serving.tensor_parallel is unresolved",
+        "serving.gpu_type is unresolved",
+        "serving.gpu_count is unresolved",
+        "budget.max_usd is unresolved",
+        "budget.max_wall_clock_hours is unresolved",
+        "budget.max_gpu_hours is unresolved",
+        "credentials.api_key_env is unresolved",
+        "credentials.redaction_policy is unresolved",
+        "credentials.log_retention is unresolved",
+        "artifacts.root is unresolved",
+        "artifacts.retention is unresolved",
+        "approval.approved_by is unresolved",
+        "approval.approved_at is unresolved",
+        "tolerance.approved must be True, got None"
+      ],
+      "status": "blocked"
+    },
+    "one_case_live_or_explicit_blocker": {
+      "evidence": [
+        "docs/ara/trace2skill_spreadsheetbench/results/one_case_live.md",
+        "tmp/trace2skill-one-case-live/13-1_output.xlsx",
+        "tmp/trace2skill-one-case-live/score_report.json",
+        "tmp/trace2skill-one-case-live/trajectory.json",
+        "tmp/trace2skill-one-case-live/acp_result.json"
+      ],
+      "remaining": [
+        "This is deterministic local ACP one-case evidence only.",
+        "Model-backed one-case evidence remains absent until approved."
+      ],
+      "status": "satisfied_deterministic_one_case"
+    },
+    "plots_from_ara": {
+      "evidence": [
+        "docs/ara/trace2skill_spreadsheetbench/plots/trace2skill_targets.png",
+        "scripts/plot_trace2skill_ara.py",
+        "docs/ara/trace2skill_spreadsheetbench/results/leaven_result_schema.md"
+      ],
+      "remaining": [
+        "No paper-denominator Leaven result JSONL overlay rows exist yet.",
+        "Target plots remain target evidence, not reproduction evidence."
+      ],
+      "status": "satisfied_targets_only"
+    },
+    "reproduced_claim_limited_to_actual_denominator": {
+      "evidence": [
+        "docs/ara/trace2skill_spreadsheetbench/results/denominator_status.md",
+        "docs/ara/trace2skill_spreadsheetbench/reviews/rigor_review.md",
+        "docs/ara/trace2skill_spreadsheetbench/level2_report.json"
+      ],
+      "remaining": [
+        "No held-out 200..400 result rows exist.",
+        "No seed aggregate rows exist.",
+        "No cross-model paper-denominator rows exist.",
+        "Final closeout remains impossible while normal approval preflight fails."
+      ],
+      "status": "guardrail_active_not_final_closeout"
+    }
+  },
+  "dataset_manifest_summary": {
+    "case_count": 400,
+    "case_order_sha256": "ac05d2035ad776af9d901689423645316e707e6e8426a04d2eae6591929b64e9",
+    "dataset_json_sha256": "bcecaa89a005bd4e3bbe98da150a86e8062c27f262e575d5e47bd9861b3525e7",
+    "referenced_workbook_missing_directory_count": 0,
+    "splits": [
+      {
+        "case_count": 200,
+        "case_order_sha256": "4e7e54c59d34e671fb02861636f636fe46f50271a40df055cb4a349561cbef93",
+        "first_id": "13-1",
+        "last_id": "52575",
+        "name": "evolving",
+        "range": "0..200"
+      },
+      {
+        "case_count": 200,
+        "case_order_sha256": "eb68c9b69307708ebf7ac04c86c82efddafebc85c5b428ba65d24ee5478f2d3d",
+        "first_id": "52807",
+        "last_id": "59902",
+        "name": "held_out",
+        "range": "200..400"
+      }
+    ]
+  },
+  "forbidden_proxy_completion_labels": [
+    "historical-yaml",
+    "ara-shape-only",
+    "paper-target-plot",
+    "trace2skill-tiny-live",
+    "one-case-only",
+    "mechanics-tests",
+    "harbor-adapter",
+    "subset-improvement"
+  ],
+  "missing_denominators": [
+    "model-backed-one-case-13-1",
+    "small-N-paper-subset",
+    "evolving-split-0..200",
+    "held-out-split-200..400",
+    "seed-aggregate-41-42-43",
+    "cross-model-paper-rows",
+    "full-paper-denominator"
+  ],
+  "overall_complete": false,
+  "reason": "Full paper-denominator reproduction is not proven: approval preflight is blocked and no paper-denominator Leaven result JSONL rows exist.",
+  "reproduced_denominators": [
+    "paper-targets-captured",
+    "mechanics-tests-classified",
+    "deterministic-one-case-13-1"
+  ],
+  "result_jsonl_files": [],
+  "schema_version": "leaven.trace2skill.closeout_audit.v1"
+}

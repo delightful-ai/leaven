@@ -362,3 +362,34 @@ Limit:
 
 - This manifests local data provenance and split materialization only. It does
   not approve a Qwen/vLLM run and does not produce any Leaven metric rows.
+
+## 2026-06-14 Closeout Audit
+
+Artifact:
+
+```text
+scripts/audit_trace2skill_closeout.py
+docs/ara/trace2skill_spreadsheetbench/results/closeout_audit.md
+docs/ara/trace2skill_spreadsheetbench/results/closeout_audit.json
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/audit_trace2skill_closeout.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Current result:
+
+- `overall_complete` is `false`.
+- Current denominators are limited to paper-target capture, mechanics-test
+  classification, and deterministic one-case `13-1`.
+- Missing denominators include model-backed one-case, small-N subset,
+  evolving split `0..200`, held-out split `200..400`, seed aggregate
+  `41/42/43`, cross-model paper rows, and full paper denominator.
+
+Limit:
+
+- This is a closeout guardrail, not a reproduction result. It is expected to
+  remain incomplete until approved Qwen/vLLM runs produce denominator-labeled
+  Leaven result records.
