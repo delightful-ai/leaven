@@ -332,3 +332,7 @@ entries:
     notes:
       - "Routed source-command model identity enforcement as paper-protocol and command-provenance guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the change only prevents approval-gated command-backed rows from claiming a model_id absent from source_command; it creates no accepted model-backed row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#84"
+    notes:
+      - "Routed source-command model-flag enforcement as paper-protocol and command-provenance guardrail evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the change only prevents approval-gated command-backed rows from satisfying model identity with loose text outside an actual --model flag; it creates no accepted model-backed row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
