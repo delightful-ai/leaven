@@ -536,6 +536,49 @@ Limit:
 - `--expect-blocked` is a guardrail proof only. It confirms that the current
   packet is not runnable; it is not reproduction evidence.
 
+## 2026-06-14 Approval State Consistency Check
+
+Artifact:
+
+```text
+scripts/check_trace2skill_approval_state.py
+docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md
+docs/ara/trace2skill_spreadsheetbench/results/closeout_audit.json
+docs/ara/trace2skill_spreadsheetbench/results/closeout_audit.md
+docs/ara/trace2skill_spreadsheetbench/results/denominator_status.md
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_approval_state.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Current result:
+
+```text
+PASS: docs/ara/trace2skill_spreadsheetbench approval state
+```
+
+Scope:
+
+- Reuses the approval-packet parser and policy check.
+- If the packet is blocked, verifies the closeout audit reports
+  `full_denominator_plan_approved` as blocked, carries each packet blocker, and
+  keeps `overall_complete` false.
+- Verifies human status docs still state that normal approval preflight is
+  blocked and Qwen/vLLM-scale execution must not launch.
+- If the packet ever becomes runnable, the same checker rejects stale blocked
+  language in closeout/status docs.
+- The integrated Seal Level 1 validator now runs this approval-state check
+  before runbook and closeout freshness checks.
+
+Limit:
+
+- This proves approval-state consistency only. It does not resolve the approval
+  fields, provision model endpoints, create credentials, approve tolerance, or
+  execute any model-backed Trace2Skill denominator.
+
 ## 2026-06-14 Dataset Manifest
 
 Artifact:
