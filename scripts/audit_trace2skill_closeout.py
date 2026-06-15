@@ -54,6 +54,17 @@ def import_one_case_checker(repo_root: Path) -> Any:
     return module
 
 
+def import_result_intake_checker(repo_root: Path) -> Any:
+    path = repo_root / "scripts/check_trace2skill_result_intake.py"
+    spec = importlib.util.spec_from_file_location("check_trace2skill_result_intake", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot import {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def rel(path: Path, root: Path) -> str:
     return path.relative_to(root).as_posix()
 
@@ -86,6 +97,12 @@ def status_entry(status: str, evidence: list[str], remaining: list[str]) -> dict
 def audit(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
     ara_rel = rel(ara_dir, repo_root)
     results_dir = ara_dir / "results"
+    result_intake = import_result_intake_checker(repo_root)
+    result_intake_errors = result_intake.check_result_intake(repo_root, ara_dir)
+    if result_intake_errors:
+        joined = "\n- ".join(result_intake_errors)
+        raise ValueError(f"result intake failed before closeout audit:\n- {joined}")
+
     result_jsonl = sorted(results_dir.glob("*.jsonl")) if results_dir.is_dir() else []
     result_records = [record for path in result_jsonl for record in jsonl_records(path)]
     paper_denominator_result_records = [
@@ -220,6 +237,11 @@ def audit(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             ],
         },
         "result_jsonl_files": [rel(path, repo_root) for path in result_jsonl],
+        "result_intake_summary": {
+            "valid": True,
+            "checker": "scripts/check_trace2skill_result_intake.py",
+            "errors": [],
+        },
         "result_record_summary": {
             "total_records": len(result_records),
             "non_overlay_records": sum(1 for record in result_records if record.get("plot_binding") is None),
@@ -266,6 +288,8 @@ def write_markdown(report: dict[str, Any], output: Path) -> None:
             "## Result Records",
             "",
             f"- JSONL files: `{len(report['result_jsonl_files'])}`",
+            f"- Result intake valid: `{str(report['result_intake_summary']['valid']).lower()}`",
+            f"- Result intake checker: `{report['result_intake_summary']['checker']}`",
             f"- Total rows: `{report['result_record_summary']['total_records']}`",
             f"- Non-overlay rows: `{report['result_record_summary']['non_overlay_records']}`",
             f"- Paper-denominator rows: `{report['result_record_summary']['paper_denominator_records']}`",

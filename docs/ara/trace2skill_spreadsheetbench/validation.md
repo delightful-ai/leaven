@@ -704,6 +704,9 @@ Scope:
 - Regenerates the closeout audit into a temporary directory.
 - Verifies committed JSON and Markdown closeout outputs exactly match current
   approval, result-row, dataset-manifest, and deterministic one-case state.
+- Runs result-intake validation before closeout row counting and records
+  `result_intake_summary.valid: true` plus the checker path in the closeout
+  artifacts.
 - The same check now runs inside `scripts/validate_ara.py`.
 
 Limit:

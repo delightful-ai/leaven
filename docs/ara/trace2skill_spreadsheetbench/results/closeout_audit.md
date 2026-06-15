@@ -34,6 +34,8 @@ Missing:
 ## Result Records
 
 - JSONL files: `1`
+- Result intake valid: `true`
+- Result intake checker: `scripts/check_trace2skill_result_intake.py`
 - Total rows: `1`
 - Non-overlay rows: `1`
 - Paper-denominator rows: `0`

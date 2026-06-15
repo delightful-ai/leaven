@@ -765,6 +765,16 @@ def validate(root: Path) -> list[str]:
                             fail(errors, "results/closeout_audit.json result_record_summary must be an object")
                         elif summary.get("paper_denominator_records") not in {0, None}:
                             fail(errors, "results/closeout_audit.json must report zero paper_denominator_records until paper denominator is proven")
+                    intake_summary = closeout_audit.get("result_intake_summary")
+                    if not isinstance(intake_summary, dict):
+                        fail(errors, "results/closeout_audit.json missing result_intake_summary object")
+                    else:
+                        if intake_summary.get("valid") is not True:
+                            fail(errors, "results/closeout_audit.json result_intake_summary.valid must be true")
+                        if intake_summary.get("checker") != "scripts/check_trace2skill_result_intake.py":
+                            fail(errors, "results/closeout_audit.json result_intake_summary.checker must name result-intake checker")
+                        if intake_summary.get("errors") != []:
+                            fail(errors, "results/closeout_audit.json result_intake_summary.errors must be empty")
                     acceptance = closeout_audit.get("acceptance")
                     if not isinstance(acceptance, dict):
                         fail(errors, "results/closeout_audit.json missing acceptance object")

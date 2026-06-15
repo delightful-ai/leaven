@@ -148,6 +148,11 @@
     "mechanics-tests-classified",
     "deterministic-one-case-13-1"
   ],
+  "result_intake_summary": {
+    "checker": "scripts/check_trace2skill_result_intake.py",
+    "errors": [],
+    "valid": true
+  },
   "result_jsonl_files": [
     "docs/ara/trace2skill_spreadsheetbench/results/deterministic_one_case.jsonl"
   ],
