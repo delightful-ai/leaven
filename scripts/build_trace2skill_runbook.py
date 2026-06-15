@@ -129,6 +129,9 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             ],
             [
                 "tmp/trace2skill-one-case-live/manifest.json",
+                "tmp/trace2skill-one-case-live/agent_prompt.md",
+                "tmp/trace2skill-one-case-live/1_13-1_init.xlsx",
+                "tmp/trace2skill-one-case-live/1_13-1_golden.xlsx",
                 "tmp/trace2skill-one-case-live/13-1_output.xlsx",
                 "tmp/trace2skill-one-case-live/acp_result.json",
                 "tmp/trace2skill-one-case-live/agent_transcript.md",

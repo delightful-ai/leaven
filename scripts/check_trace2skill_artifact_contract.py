@@ -43,6 +43,9 @@ STAGE_REQUIRED_FRAGMENTS = {
     ],
     "G1": [
         "manifest.json",
+        "agent_prompt.md",
+        "1_13-1_init.xlsx",
+        "1_13-1_golden.xlsx",
         "13-1_output.xlsx",
         "acp_result.json",
         "agent_transcript.md",
