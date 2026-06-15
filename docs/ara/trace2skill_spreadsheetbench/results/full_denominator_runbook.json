@@ -72,6 +72,7 @@
         "docs/ara/trace2skill_spreadsheetbench/results/closeout_audit.json",
         "docs/ara/trace2skill_spreadsheetbench/validation.md"
       ],
+      "expected_dataset_slice": null,
       "forbidden_label": "paper reproduction",
       "id": "G0",
       "runnable_now": true,
@@ -96,6 +97,12 @@
         "tmp/trace2skill-one-case-live/stage2_analyst_prompt.md",
         "tmp/trace2skill-one-case-live/stage2_fanout.json"
       ],
+      "expected_dataset_slice": {
+        "case_count": 1,
+        "case_range": "0..1",
+        "denominator_contains": "one-case-13-1",
+        "kind": "one-case"
+      },
       "forbidden_label": "paper reproduction",
       "id": "G1",
       "runnable_now": true,
@@ -129,6 +136,12 @@
         "model_one_case_seed_41/outputs/eval_official_results.json",
         "model_one_case_seed_41/leaven_results.jsonl"
       ],
+      "expected_dataset_slice": {
+        "case_count": 1,
+        "case_range": "0..1",
+        "denominator_contains": "one-case-13-1",
+        "kind": "one-case"
+      },
       "forbidden_label": "held-out split reproduced",
       "id": "G1M",
       "runnable_now": false,
@@ -164,6 +177,18 @@
         "subset_<start>_<end>_seed_41/outputs/eval_official_results.json",
         "subset_<start>_<end>_seed_41/leaven_results.jsonl"
       ],
+      "expected_dataset_slice": {
+        "case_count_max_exclusive": 200,
+        "case_count_min": 1,
+        "denominator_contains": "subset",
+        "forbidden_denominator_fragments": [
+          "paper-denominator",
+          "full-paper"
+        ],
+        "kind": "held-out-subset",
+        "range_end_max": 400,
+        "range_start_min": 200
+      },
       "forbidden_label": "held-out split reproduced",
       "id": "G2",
       "runnable_now": false,
@@ -216,6 +241,12 @@
         "skill_evolution_seed_{seed}/error_driven_skill_evolution/stage3_merge_manifest.json",
         "skill_evolution_seed_{seed}/error_driven_skill_evolution/skills"
       ],
+      "expected_dataset_slice": {
+        "case_count": 200,
+        "case_range": "0..200",
+        "denominator": "evolving-split-0..200",
+        "kind": "exact-range"
+      },
       "forbidden_label": "held-out result",
       "id": "G3",
       "runnable_now": false,
@@ -255,6 +286,12 @@
         "validation_train_seed_{seed}/evolved_outputs/eval_official_results.json",
         "best_seed_selection_note.md"
       ],
+      "expected_dataset_slice": {
+        "case_count": 200,
+        "case_range": "0..200",
+        "denominator": "training-validation-0..200",
+        "kind": "exact-range"
+      },
       "forbidden_label": "held-out result",
       "id": "G3V",
       "runnable_now": false,
@@ -289,6 +326,12 @@
         "heldout_seed_<best>/outputs/eval_official_results.json",
         "heldout_seed_<best>/leaven_results.jsonl"
       ],
+      "expected_dataset_slice": {
+        "case_count": 200,
+        "case_range": "200..400",
+        "denominator": "held-out-200..400",
+        "kind": "exact-range"
+      },
       "forbidden_label": "paper aggregate",
       "id": "G4",
       "runnable_now": false,
@@ -311,6 +354,15 @@
         "docs/ara/trace2skill_spreadsheetbench/plots/trace2skill_targets.png",
         "docs/ara/trace2skill_spreadsheetbench/results/closeout_audit.json"
       ],
+      "expected_dataset_slice": {
+        "denominator": "seed-aggregate-41-42-43",
+        "kind": "aggregate",
+        "seeds": [
+          41,
+          42,
+          43
+        ]
+      },
       "forbidden_label": "cross-model paper reproduction",
       "id": "G5",
       "runnable_now": false,
@@ -331,6 +383,20 @@
         "complete rendered prompt manifests for every claimed model call",
         "updated closeout_audit.json with overall_complete true only after objective-wide proof"
       ],
+      "expected_dataset_slice": {
+        "case_count": 400,
+        "denominator": "full-paper-denominator",
+        "kind": "full-paper",
+        "required_split_ranges": [
+          "0..200",
+          "200..400"
+        ],
+        "seeds": [
+          41,
+          42,
+          43
+        ]
+      },
       "forbidden_label": "anything stronger than completed rows",
       "id": "G6",
       "runnable_now": false,

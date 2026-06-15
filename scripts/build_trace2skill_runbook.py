@@ -40,6 +40,7 @@ def stage(
     expected_artifacts: list[str],
     allowed_label: str,
     forbidden_label: str,
+    expected_dataset_slice: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "id": stage_id,
@@ -51,6 +52,7 @@ def stage(
         "expected_artifacts": expected_artifacts,
         "allowed_label": allowed_label,
         "forbidden_label": forbidden_label,
+        "expected_dataset_slice": expected_dataset_slice,
     }
 
 
@@ -59,6 +61,9 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
     packet = approval.approval_packet((ara_dir / "results/full_run_plan.md").read_text(encoding="utf-8"))
     approval_errors = approval.packet_errors(packet)
     manifest = load_json(ara_dir / "results/dataset_manifest.json")
+    splits = {item["name"]: item for item in manifest["splits"]}
+    evolving = splits["evolving"]
+    held_out = splits["held_out"]
     data_path = packet["dataset"]["path"]
     seeds = " ".join(str(seed) for seed in packet["protocol"]["seeds"])
     workers = packet["protocol"]["stage2_workers"]
@@ -98,6 +103,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             ],
             "guardrail-ready",
             "paper reproduction",
+            None,
         ),
         stage(
             "G1",
@@ -122,6 +128,12 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             ],
             "deterministic-one-case",
             "paper reproduction",
+            {
+                "kind": "one-case",
+                "case_range": "0..1",
+                "case_count": 1,
+                "denominator_contains": "one-case-13-1",
+            },
         ),
         stage(
             "G1M",
@@ -146,6 +158,12 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             ],
             "model-one-case",
             "held-out split reproduced",
+            {
+                "kind": "one-case",
+                "case_range": "0..1",
+                "case_count": 1,
+                "denominator_contains": "one-case-13-1",
+            },
         ),
         stage(
             "G2",
@@ -172,6 +190,15 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             ],
             "paper-subset",
             "held-out split reproduced",
+            {
+                "kind": "held-out-subset",
+                "range_start_min": 200,
+                "range_end_max": 400,
+                "case_count_min": 1,
+                "case_count_max_exclusive": held_out["case_count"],
+                "denominator_contains": "subset",
+                "forbidden_denominator_fragments": ["paper-denominator", "full-paper"],
+            },
         ),
         stage(
             "G3",
@@ -215,6 +242,12 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             ],
             "evolving-split-run",
             "held-out result",
+            {
+                "kind": "exact-range",
+                "case_range": evolving["range"],
+                "case_count": evolving["case_count"],
+                "denominator": "evolving-split-0..200",
+            },
         ),
         stage(
             "G3V",
@@ -245,6 +278,12 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             ],
             "training-validation-candidate",
             "held-out result",
+            {
+                "kind": "exact-range",
+                "case_range": evolving["range"],
+                "case_count": evolving["case_count"],
+                "denominator": "training-validation-0..200",
+            },
         ),
         stage(
             "G4",
@@ -270,6 +309,12 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             ],
             "held-out-single-seed-candidate",
             "paper aggregate",
+            {
+                "kind": "exact-range",
+                "case_range": held_out["range"],
+                "case_count": held_out["case_count"],
+                "denominator": "held-out-200..400",
+            },
         ),
         stage(
             "G5",
@@ -292,6 +337,11 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             ],
             "seed-aggregate-candidate",
             "cross-model paper reproduction",
+            {
+                "kind": "aggregate",
+                "denominator": "seed-aggregate-41-42-43",
+                "seeds": packet["protocol"]["seeds"],
+            },
         ),
         stage(
             "G6",
@@ -312,6 +362,13 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             ],
             "paper-denominator-reproduction",
             "anything stronger than completed rows",
+            {
+                "kind": "full-paper",
+                "denominator": "full-paper-denominator",
+                "required_split_ranges": [evolving["range"], held_out["range"]],
+                "case_count": manifest["case_count"],
+                "seeds": packet["protocol"]["seeds"],
+            },
         ),
     ]
 
@@ -374,6 +431,7 @@ def write_markdown(runbook: dict[str, Any], output: Path) -> None:
                 f"- Approval required: `{str(stage_item['approval_required']).lower()}`",
                 f"- Allowed label: `{stage_item['allowed_label']}`",
                 f"- Forbidden label: `{stage_item['forbidden_label']}`",
+                f"- Expected dataset slice: `{json.dumps(stage_item['expected_dataset_slice'], sort_keys=True)}`",
                 "",
                 "Commands:",
                 "",

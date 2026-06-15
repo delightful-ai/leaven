@@ -813,6 +813,30 @@ def validate(root: Path) -> list[str]:
                         for stage_id in ("G0", "G1", "G1M", "G2", "G3", "G3V", "G4", "G5", "G6"):
                             if stage_id not in stage_ids:
                                 fail(errors, f"results/full_denominator_runbook.json missing {stage_id}")
+                        by_id = {stage.get("id"): stage for stage in stages if isinstance(stage, dict)}
+                        expected_dataset_kinds = {
+                            "G0": None,
+                            "G1": "one-case",
+                            "G1M": "one-case",
+                            "G2": "held-out-subset",
+                            "G3": "exact-range",
+                            "G3V": "exact-range",
+                            "G4": "exact-range",
+                            "G5": "aggregate",
+                            "G6": "full-paper",
+                        }
+                        for stage_id, expected_kind in expected_dataset_kinds.items():
+                            stage = by_id.get(stage_id)
+                            if stage is None:
+                                continue
+                            expected_slice = stage.get("expected_dataset_slice")
+                            if expected_kind is None:
+                                if expected_slice is not None:
+                                    fail(errors, f"results/full_denominator_runbook.json {stage_id} expected_dataset_slice must be null")
+                            elif not isinstance(expected_slice, dict):
+                                fail(errors, f"results/full_denominator_runbook.json {stage_id} missing expected_dataset_slice")
+                            elif expected_slice.get("kind") != expected_kind:
+                                fail(errors, f"results/full_denominator_runbook.json {stage_id} expected_dataset_slice kind must be {expected_kind}")
 
     return errors
 

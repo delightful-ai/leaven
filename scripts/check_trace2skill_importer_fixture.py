@@ -49,8 +49,8 @@ def touch(repo_root: Path, path: Path, text: str) -> str:
 
 
 def prompt_artifact_paths(repo_root: Path, tmp_path: Path) -> list[str]:
-    prompt = tmp_path / "subset_0_2_seed_41/rendered_prompts/13-1/agent_prompt.md"
-    manifest = tmp_path / "subset_0_2_seed_41/prompt_render_manifest.json"
+    prompt = tmp_path / "subset_200_202_seed_41/rendered_prompts/52807/agent_prompt.md"
+    manifest = tmp_path / "subset_200_202_seed_41/prompt_render_manifest.json"
     return [
         touch(repo_root, prompt, "fixture rendered agent prompt\n"),
         touch(repo_root, manifest, '{"schema_version":"fixture.prompt_manifest.v1"}\n'),
@@ -78,13 +78,13 @@ def importer_base_args(output: Path, artifact_paths: list[str] | None = None) ->
         "--runbook-stage-id",
         "G2",
         "--split",
-        "fixture",
+        "held_out",
         "--case-range",
-        "0..2",
+        "200..202",
         "--case-count",
         "2",
         "--denominator",
-        "fixture-subset-not-paper",
+        "fixture-held-out-subset-not-paper",
         "--model-id",
         "fixture-model",
         "--serving-backend",
