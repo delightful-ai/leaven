@@ -1,8 +1,8 @@
 sessions:
   - id: "2026-06-14_001"
     date: "2026-06-14"
-    summary: "Recorded model availability, approval preflight, dataset manifest, closeout audit, runbook, one non-overlay result row, and strict official-eval importer while keeping full-denominator execution blocked on approval."
-    turn_count: 6
-    events_count: 7
+    summary: "Recorded model availability, approval preflight, dataset manifest, closeout audit, runbook, one non-overlay result row, strict official-eval importer, and local artifact-path refusal while keeping full-denominator execution blocked on approval."
+    turn_count: 7
+    events_count: 8
     claims_touched: []
     open_threads: 1

@@ -23,3 +23,7 @@ entries:
     notes:
       - "Routed official-eval importer as execution-readiness and guardrail evidence, not as a reproduction result."
       - "Did not stage or crystallize a new paper-performance claim because fixture rows are tmp-only and no Qwen/vLLM denominator run occurred."
+  - turn: "2026-06-14_001#7"
+    notes:
+      - "Routed artifact-path existence checks as intake guardrail evidence; this narrows false-result admission without changing any paper denominator."
+      - "Did not promote a new claim because the checks prove refusal behavior, not Trace2Skill task performance."

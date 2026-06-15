@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T18:20-07:00"
-  turn_count: 6
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, and a strict official-eval importer now make the full-denominator path more executable without approving a run."
+  last_turn: "2026-06-14T18:23-07:00"
+  turn_count: 7
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, and local artifact-path refusal now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -49,6 +49,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Added official eval importer; fixture import wrote four non-overlay rows and reproduction guard refused full-paper classification without approval artifact evidence."
+  - turn: 7
+    type: experiment
+    id: "PM-2026-06-14-008"
+    routing: direct
+    provenance: ai-executed
+    summary: "Hardened official eval importer so eval, skill, artifact, and approval artifact paths must exist locally before result rows are written."
 
 ai_actions:
   - turn: 1
@@ -138,6 +144,13 @@ ai_actions:
       - "scripts/fixtures/trace2skill_eval_official_results_sample.json"
       - "docs/ara/trace2skill_spreadsheetbench/results/README.md"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 7
+    action: "Updated scripts/import_trace2skill_eval_results.py to reject non-inspectable evidence paths, documented the rule, and verified positive fixture import plus missing artifact/approval refusal paths."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/import_trace2skill_eval_results.py"
+      - "docs/ara/trace2skill_spreadsheetbench/results/README.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -154,6 +167,8 @@ key_context:
     excerpt: "Result record summary now reports total_records=1, non_overlay_records=1, paper_denominator_records=0."
   - turn: 6
     excerpt: "Importer fixture output stayed in tmp/, defaulted to plot_binding=null, and paper-denominator-reproduction refused even with the override flag until an approval artifact path was provided."
+  - turn: 7
+    excerpt: "Importer now raises FileNotFoundError for missing --artifact-path or --approval-artifact-path values; fixture import still writes four non-overlay tmp rows."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."
