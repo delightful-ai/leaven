@@ -67,3 +67,7 @@ entries:
     notes:
       - "Routed status-doc consistency validation as false-claim prevention evidence."
       - "Kept reproduction claims unchanged because the checker only prevents stale status prose from contradicting current artifacts; it adds no overlays and does not execute Qwen/vLLM."
+  - turn: "2026-06-14_001#18"
+    notes:
+      - "Routed rigor-follow-up validation as ARA review-integrity evidence, not as a fresh Level 2 review."
+      - "Kept reproduction claims unchanged because the checker proves addressed review items are synchronized with current artifacts; it does not approve tolerance, capture rendered prompts, add overlays, or execute Qwen/vLLM."

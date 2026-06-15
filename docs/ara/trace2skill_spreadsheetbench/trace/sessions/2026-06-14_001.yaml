@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T18:58-07:00"
-  turn_count: 17
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, and status-doc consistency validation now make the full-denominator path more executable without approving a run."
+  last_turn: "2026-06-14T19:01-07:00"
+  turn_count: 18
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, and rigor-follow-up validation now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -115,6 +115,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Added status-doc checker; denominator_status.md, validation.md, and closeout_audit.json must match current ARA file counts and result-row summaries before validation passes."
+  - turn: 18
+    type: experiment
+    id: "PM-2026-06-14-019"
+    routing: direct
+    provenance: ai-executed
+    summary: "Added rigor-follow-up checker; addressed Level 2 findings must be reflected in tree dead-end fields, C07 proof links, follow-up artifacts, and review prose before validation passes."
 
 ai_actions:
   - turn: 1
@@ -298,6 +304,15 @@ ai_actions:
       - "scripts/AGENTS.md"
       - "docs/ara/trace2skill_spreadsheetbench/results/denominator_status.md"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 18
+    action: "Added scripts/check_trace2skill_rigor_followup.py, wired it into validate_ara.py, and updated stale rigor-review score notes."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/check_trace2skill_rigor_followup.py"
+      - "scripts/validate_ara.py"
+      - "scripts/AGENTS.md"
+      - "docs/ara/trace2skill_spreadsheetbench/reviews/rigor_review.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -336,6 +351,8 @@ key_context:
     excerpt: "Evidence-binding check passed directly and through validate_ara; it verifies every evidence markdown file is indexed, every indexed source path exists, every indexed claim exists, every claim has evidence, and claim/experiment references do not dangle."
   - turn: 17
     excerpt: "Status-doc check passed directly and through validate_ara; it verifies denominator_status.md reports the current 50-file ARA count, result docs report one non-overlay JSONL row, closeout_audit.json agrees with actual result rows, and validation.md no longer makes an unqualified no-result-JSONL statement."
+  - turn: 18
+    excerpt: "Rigor-follow-up check passed directly and through validate_ara; it verifies Level 2 addressed findings F02/F04 are backed by dead-end failure/lesson fields and C07 E08/E09 proof links, while F03/F05 remain partial and approval/rendered-prompt blockers remain open."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."
