@@ -618,6 +618,14 @@ def validate(root: Path) -> list[str]:
                 fail(errors, f"PAPER.md frontmatter missing {key}")
         if "## Layer Index" not in paper:
             fail(errors, "PAPER.md missing Layer Index")
+        stale_overlay_completion = "not proven until result overlays are produced"
+        if stale_overlay_completion in paper:
+            fail(errors, "PAPER.md must not imply result overlays alone prove reproduction")
+        required_completion_boundary = (
+            "approved paper-denominator result rows pass intake and closeout"
+        )
+        if required_completion_boundary not in paper:
+            fail(errors, "PAPER.md missing approved paper-denominator closeout boundary")
 
     claims_path = root / "logic/claims.md"
     experiments_path = root / "logic/experiments.md"

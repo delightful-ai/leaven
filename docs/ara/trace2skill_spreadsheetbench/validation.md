@@ -18,6 +18,9 @@ Scope:
 
 - Confirms mandatory ARA directories and files exist and are non-empty.
 - Confirms `PAPER.md` frontmatter and Layer Index exist.
+- Confirms `PAPER.md` says approved paper-denominator result rows must pass
+  intake and closeout before a reproduced claim, and does not imply overlays
+  alone are enough.
 - Confirms claims, experiments, concepts, heuristics, code refs, trace nodes, and evidence `Source` fields satisfy the local Seal Level 1 validator.
 
 Limit:

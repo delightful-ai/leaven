@@ -28,7 +28,7 @@ claims_summary:
   - "Trace2Skill distills many trajectory-local lessons into one portable skill directory."
   - "Paper tables report improved SpreadsheetBench, WikiTQ, math, and DocVQA results for evolved skills."
   - "Parallel consolidation is reported as faster and stronger than sequential online editing on SpreadsheetBench."
-  - "The Leaven reproduction is not proven until result overlays are produced against the paper denominator."
+  - "The Leaven reproduction is not proven until approved paper-denominator result rows pass intake and closeout."
 abstract: "Trace2Skill proposes parallel trajectory analysis and hierarchical consolidation to evolve agent skill directories without parameter updates or retrieval modules. This ARA captures the paper's claims, source anchors, result tables, configs, and reproduction constraints for Leaven's 1:1 Trace2Skill / SpreadsheetBench goal."
 ---
 
@@ -43,9 +43,11 @@ patches, then hierarchically merge those patches into a single conflict-checked
 skill update. The main Leaven objective is to reproduce the paper denominator
 honestly, not merely reproduce this shape with a proxy task.
 
-This ARA is the scoreboard and denominator for the Leaven reproduction. Paper
-target values live in `evidence/`; future Leaven result overlays must be stored
-separately and labeled by denominator.
+This ARA is the scoreboard and denominator contract for the Leaven reproduction.
+Paper target values live in `evidence/`; future Leaven result rows must be
+stored separately, labeled by denominator, admitted by result intake, and closed
+out against `results/closeout_audit.json` before they can support a reproduced
+claim.
 
 ## Layer Index
 
