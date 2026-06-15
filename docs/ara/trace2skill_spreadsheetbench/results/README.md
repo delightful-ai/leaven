@@ -149,10 +149,14 @@ paper-denominator progress. Runtime fields are checked against generated
 budget, and merge batch size where the originating stage requires them. Command
 evidence is checked against generated `expected_command_policy`, so rows must
 carry `extra.command_policy` and a `source_command` containing the upstream
-command fragments required by the originating stage. Range-bearing rows must
-also include concrete `--start_idx` and `--end_idx` fragments matching their
-declared `dataset_slice.case_range`; a row cannot claim held-out range
-`200..202` while its recorded command names `0..2`. Command-backed
+command fragments required by the originating stage. The required upstream
+script fragments must appear as the generated invocation shape such as
+`python run_spreadsheetbench.py` or
+`python -m skill_evolver.run_parallel_skill_evolution`; mentioning a script in
+an `echo`, comment, or other non-invocation segment is not command evidence.
+Range-bearing rows must also include concrete `--start_idx` and `--end_idx`
+fragments matching their declared `dataset_slice.case_range`; a row cannot
+claim held-out range `200..202` while its recorded command names `0..2`. Command-backed
 approval-gated rows must also include a concrete `--model <model_id>` flag
 matching the same paper `model_id`, and must not include another paper model in
 a different `--model` flag. When the row carries `seed`, `runtime.workers`, or

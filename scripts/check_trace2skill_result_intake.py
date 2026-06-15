@@ -558,6 +558,10 @@ def check_stage_command_policy(
     for fragment in fragments:
         if fragment not in source_command:
             errors.append(f"{prefix} {stage_id} source_command must include {fragment!r}")
+        else:
+            invocation = expected_invocation(fragment)
+            if invocation is not None and not command_invokes(source_command, fragment, invocation):
+                errors.append(f"{prefix} {stage_id} source_command must invoke {invocation!r}")
 
     if not isinstance(dataset_slice, dict):
         return
@@ -598,6 +602,25 @@ def command_segment(source_command: str, fragment: str) -> str | None:
         if fragment in segment:
             return segment
     return None
+
+
+def expected_invocation(fragment: str) -> str | None:
+    invocations = {
+        "run_spreadsheetbench.py": "python run_spreadsheetbench.py",
+        "evaluate_with_official.py": "python evaluate_with_official.py",
+        "analyze_results.py": "python analyze_results.py",
+        "analysis/run_error_analysis.py": "python analysis/run_error_analysis.py",
+        "analysis/run_success_analysis_llm.py": "python analysis/run_success_analysis_llm.py",
+        "skill_evolver.run_parallel_skill_evolution": "python -m skill_evolver.run_parallel_skill_evolution",
+    }
+    return invocations.get(fragment)
+
+
+def command_invokes(source_command: str, fragment: str, invocation: str) -> bool:
+    segment = command_segment(source_command, fragment)
+    if segment is None:
+        return False
+    return segment.strip().startswith(invocation)
 
 
 def check_paper_model_command_identity(

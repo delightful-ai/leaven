@@ -188,14 +188,19 @@ what Leaven actually ran.
 - Result rows must also satisfy the named runbook stage's generated
   `expected_command_policy`: `extra.command_policy` must match the generated
   policy kind, and `source_command` must include the upstream command fragments
-  required for that stage. When the row has a `dataset_slice.case_range`,
-  `source_command` must also include matching concrete `--start_idx` and
-  `--end_idx` fragments. Approval-gated rows backed by a generated command
-  policy must also include a concrete `--model <model_id>` flag matching the
-  same paper `model_id` and must not include a different paper model in another
-  `--model` flag. When those rows carry `seed`, `runtime.workers`, or
-  `runtime.max_turns`, `source_command` must include matching `--seeds`,
-  `--workers`, and `--max_turns` flags. Skill-evolution rows must additionally
+  required for that stage. Required upstream script fragments must appear in
+  their generated invocation form such as `python run_spreadsheetbench.py`,
+  `python evaluate_with_official.py`, or
+  `python -m skill_evolver.run_parallel_skill_evolution`; merely mentioning a
+  script name in a non-invocation command segment is not command evidence. When
+  the row has a `dataset_slice.case_range`, `source_command` must also include
+  matching concrete `--start_idx` and `--end_idx` fragments. Approval-gated rows
+  backed by a generated command policy must also include a concrete
+  `--model <model_id>` flag matching the same paper `model_id` and must not
+  include a different paper model in another `--model` flag. When those rows
+  carry `seed`, `runtime.workers`, or `runtime.max_turns`, `source_command`
+  must include matching `--seeds`, `--workers`, and `--max_turns` flags.
+  Skill-evolution rows must additionally
   include matching `--model`, `--workers`, and `--max_turns` on the
   `analysis/run_error_analysis.py` command itself, matching `--max_workers` for
   success-analysis fanout on the `analysis/run_success_analysis_llm.py` command

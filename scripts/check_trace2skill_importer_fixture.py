@@ -765,6 +765,23 @@ def check_evolving_result_intake(repo_root: Path, ara_root: Path, tmp_path: Path
         "evolving source-command merge-batch drift",
     )
 
+    def mutate_evolving_to_mentioned_skill_evolver(row: dict[str, Any]) -> None:
+        row["source_command"] = row["source_command"].replace(
+            "python -m skill_evolver.run_parallel_skill_evolution",
+            "echo skill_evolver.run_parallel_skill_evolution",
+        )
+
+    check_mutated_result_intake(
+        repo_root,
+        ara_root,
+        output,
+        tmp_path / "evolving-mentioned-skill-evolver.jsonl",
+        mutate_evolving_to_mentioned_skill_evolver,
+        "G3 source_command must invoke 'python -m skill_evolver.run_parallel_skill_evolution'",
+        errors,
+        "evolving mentioned skill-evolver command",
+    )
+
     def mutate_evolving_to_missing_error_analysis(row: dict[str, Any]) -> None:
         row["source_command"] = row["source_command"].replace(
             "&& python analysis/run_error_analysis.py --model Qwen3.5-122B-A10B --workers 128 --max_turns 100 ",
@@ -1617,6 +1634,23 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "G2 rows must use extra.command_policy 'upstream-eval'",
             errors,
             "subset command-policy drift",
+        )
+
+        def mutate_subset_to_mentioned_run_command(row: dict[str, Any]) -> None:
+            row["source_command"] = row["source_command"].replace(
+                "python run_spreadsheetbench.py",
+                "echo run_spreadsheetbench.py",
+            )
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "subset-mentioned-run-command.jsonl",
+            mutate_subset_to_mentioned_run_command,
+            "G2 source_command must invoke 'python run_spreadsheetbench.py'",
+            errors,
+            "subset mentioned run-command drift",
         )
 
         def mutate_subset_to_wrong_source_range(row: dict[str, Any]) -> None:
