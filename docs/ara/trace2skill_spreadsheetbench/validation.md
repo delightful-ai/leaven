@@ -865,6 +865,9 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
   held-out source result JSONL rows that themselves pass result intake for
   seeds `41`, `42`, and `43`; full-paper rows must cite aggregate or
   paper-candidate source result JSONL rows that also pass result intake.
+- Verifies recursive aggregate source-row intake carries approval blockers for
+  top-level ARA `results/*.jsonl` source rows, so blocked approval-gated source
+  rows cannot support a seed aggregate while `full_run_plan.md` remains blocked.
 - Requires approval-gated rows to include prompt artifact paths matching their
   runbook stage expectations, such as rendered prompts and prompt-render
   manifests.

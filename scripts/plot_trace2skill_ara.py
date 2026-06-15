@@ -131,6 +131,12 @@ def check_result_intake(repo_root: Path, ara_dir: Path, paths: list[Path]) -> No
                 )
                 else None
             )
+            extra = record.get("extra")
+            source_approval_blockers = (
+                module.approval_packet_errors(ara_dir)
+                if isinstance(extra, dict) and extra.get("source_result_paths")
+                else None
+            )
             module.check_record(
                 repo_root,
                 resolved,
@@ -139,6 +145,7 @@ def check_result_intake(repo_root: Path, ara_dir: Path, paths: list[Path]) -> No
                 runbook_stages,
                 errors,
                 approval_blockers=approval_blockers,
+                source_approval_blockers=source_approval_blockers,
             )
     if errors:
         detail = "; ".join(errors)

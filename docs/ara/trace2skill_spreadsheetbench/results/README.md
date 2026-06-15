@@ -131,7 +131,10 @@ command fragments required by the originating stage. Aggregate evidence is
 checked against generated `expected_aggregate_policy`, so seed aggregates must
 cite inspectable held-out single-seed result JSONL rows that themselves pass
 result intake for seeds `41`, `42`, and `43`, and full-paper rows must cite
-aggregate or paper-candidate source rows that also pass result intake.
+aggregate or paper-candidate source rows that also pass result intake. When a
+cited source row lives in top-level ARA `results/*.jsonl`, approval-gated source
+rows must also pass the runnable approval-packet preflight before they can count
+as aggregate or full-paper support.
 
 The full-denominator approval packet can be checked with:
 

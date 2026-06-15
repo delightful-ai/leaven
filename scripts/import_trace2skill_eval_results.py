@@ -243,6 +243,14 @@ def validate_records_against_result_intake(args: argparse.Namespace, records: li
         if checker.is_actual_ara_result_path(ara_root, output_path)
         else None
     )
+    source_approval_blockers = (
+        checker.approval_packet_errors(ara_root)
+        if any(
+            isinstance(record.get("extra"), dict) and record["extra"].get("source_result_paths")
+            for record in records
+        )
+        else None
+    )
     errors: list[str] = []
     for line_number, record in enumerate(records, start=1):
         checker.check_record(
@@ -253,6 +261,7 @@ def validate_records_against_result_intake(args: argparse.Namespace, records: li
             runbook_stages,
             errors,
             approval_blockers=approval_blockers,
+            source_approval_blockers=source_approval_blockers,
         )
     if errors:
         joined = "\n- ".join(errors)

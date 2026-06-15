@@ -274,7 +274,15 @@ def check_result_intake_for_rows(
         errors.append(f"{label}: {exc}")
         return
     for line_number, row in enumerate(rows, start=1):
-        checker.check_record(repo_root, output, line_number, row, stages, intake_errors)
+        checker.check_record(
+            repo_root,
+            output,
+            line_number,
+            row,
+            stages,
+            intake_errors,
+            source_approval_blockers=checker.approval_packet_errors(ara_root),
+        )
     if expected_error is None:
         if intake_errors:
             errors.append(f"{label}: result-intake errors: {intake_errors!r}")
@@ -406,6 +414,7 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
     prompt_manifest = repo_root / "docs/ara/trace2skill_spreadsheetbench/results/fixture_aggregate.prompt_render_manifest.json"
     prompt_manifest.write_text('{"schema_version":"fixture.aggregate_prompt_manifest.v1"}\n', encoding="utf-8")
     prompt_manifest_rel = prompt_manifest.relative_to(repo_root).as_posix()
+    blocked_source_outputs: list[Path] = []
     aggregate_output = tmp_path / "aggregate.jsonl"
     aggregate_row = {
         "schema_version": "leaven.trace2skill.result.v1",
@@ -483,6 +492,30 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
             "does not pass result intake",
             errors,
             "aggregate invalid source row",
+        )
+
+        blocked_source_paths: list[str] = []
+        for seed in (41, 42, 43):
+            blocked_source_output = ara_root / "results" / f"fixture_blocked_source_seed_{seed}.jsonl"
+            write_jsonl(blocked_source_output, [source_heldout_row(repo_root, tmp_path, seed)])
+            blocked_source_outputs.append(blocked_source_output)
+            blocked_source_paths.append(blocked_source_output.relative_to(repo_root).as_posix())
+        blocked_source_aggregate_row = json.loads(json.dumps(aggregate_row))
+        blocked_source_aggregate_row["artifact_paths"] = [
+            APPROVAL_ARTIFACT,
+            prompt_manifest_rel,
+            *blocked_source_paths,
+        ]
+        blocked_source_aggregate_row["extra"]["source_result_paths"] = blocked_source_paths
+        blocked_source_aggregate_output = tmp_path / "aggregate-blocked-top-level-source.jsonl"
+        write_jsonl(blocked_source_aggregate_output, [blocked_source_aggregate_row])
+        check_result_intake_for_rows(
+            repo_root,
+            ara_root,
+            blocked_source_aggregate_output,
+            "require a runnable approval packet",
+            errors,
+            "aggregate blocked top-level source row",
         )
 
         full_paper_output = tmp_path / "full-paper.jsonl"
@@ -570,6 +603,8 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
         )
     finally:
         prompt_manifest.unlink(missing_ok=True)
+        for blocked_source_output in blocked_source_outputs:
+            blocked_source_output.unlink(missing_ok=True)
 
 
 def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:

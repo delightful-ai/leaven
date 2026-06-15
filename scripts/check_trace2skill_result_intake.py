@@ -118,6 +118,15 @@ def is_actual_ara_result_path(ara_root: Path, path: Path) -> bool:
         return False
 
 
+def is_trace2skill_ara_result_path(repo_root: Path, path: Path) -> bool:
+    try:
+        return path.resolve().parent == (
+            repo_root / "docs/ara/trace2skill_spreadsheetbench/results"
+        ).resolve()
+    except OSError:
+        return False
+
+
 def is_json_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
@@ -549,6 +558,7 @@ def check_stage_aggregate_policy(
     artifact_paths: Any,
     errors: list[str],
     aggregate_stack: set[str],
+    source_approval_blockers: list[str] | None = None,
 ) -> None:
     if stage is None:
         return
@@ -603,6 +613,10 @@ def check_stage_aggregate_policy(
                 source_errors,
                 validate_aggregate=False,
                 aggregate_stack=next_stack,
+                approval_blockers=source_approval_blockers
+                if is_trace2skill_ara_result_path(repo_root, source_path)
+                else None,
+                source_approval_blockers=source_approval_blockers,
             )
             if source_errors:
                 errors.append(
@@ -648,6 +662,10 @@ def check_stage_aggregate_policy(
                 source_errors,
                 validate_aggregate=True,
                 aggregate_stack=next_stack,
+                approval_blockers=source_approval_blockers
+                if is_trace2skill_ara_result_path(repo_root, source_path)
+                else None,
+                source_approval_blockers=source_approval_blockers,
             )
             if source_errors:
                 errors.append(
@@ -669,6 +687,7 @@ def check_record(
     validate_aggregate: bool = True,
     aggregate_stack: set[str] | None = None,
     approval_blockers: list[str] | None = None,
+    source_approval_blockers: list[str] | None = None,
 ) -> None:
     prefix = f"{path.relative_to(repo_root)}:{line_number}"
     check_base_record_shape(prefix, record, errors)
@@ -714,6 +733,7 @@ def check_record(
             artifact_paths,
             errors,
             aggregate_stack or set(),
+            source_approval_blockers=source_approval_blockers,
         )
     check_required_prompt_artifacts(prefix, proof, stage, artifact_paths, errors)
     check_required_stage_file_artifacts(prefix, stage, artifact_paths, errors)
@@ -816,6 +836,7 @@ def check_result_intake(repo_root: Path, ara_root: Path) -> list[str]:
                 runbook_stages,
                 errors,
                 approval_blockers=approval_blockers,
+                source_approval_blockers=approval_blockers,
             )
     return errors
 
