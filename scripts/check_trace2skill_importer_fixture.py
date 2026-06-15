@@ -127,7 +127,8 @@ def importer_base_args(
         "--command-policy",
         "upstream-eval",
         "--source-command",
-        "python run_spreadsheetbench.py --model Qwen3.5-122B-A10B --start_idx 200 --end_idx 202 "
+        "python run_spreadsheetbench.py --model Qwen3.5-122B-A10B --workers 128 "
+        "--max_turns 100 --seeds 41 --start_idx 200 --end_idx 202 "
         "&& python evaluate_with_official.py --start_idx 200 --end_idx 202",
     ]
 
@@ -406,7 +407,8 @@ def model_one_case_row(repo_root: Path, tmp_path: Path) -> dict[str, Any]:
             "max_turns": 100,
         },
         "source_command": (
-            "python run_spreadsheetbench.py --model Qwen3.5-122B-A10B --start_idx 0 --end_idx 1 "
+            "python run_spreadsheetbench.py --model Qwen3.5-122B-A10B --workers 1 "
+            "--max_turns 100 --seeds 41 --start_idx 0 --end_idx 1 "
             "&& python evaluate_with_official.py --start_idx 0 --end_idx 1"
         ),
         "artifact_paths": artifact_paths,
@@ -499,7 +501,8 @@ def source_heldout_row(
             "max_turns": 100,
         },
         "source_command": (
-            f"python run_spreadsheetbench.py --model {model_id} --start_idx 200 --end_idx 400 "
+            f"python run_spreadsheetbench.py --model {model_id} --workers 128 "
+            f"--max_turns 100 --seeds {seed} --start_idx 200 --end_idx 400 "
             "&& python evaluate_with_official.py --start_idx 200 --end_idx 400"
         ),
         "artifact_paths": [APPROVAL_ARTIFACT, prompt, prompt_manifest, eval_result],
@@ -586,7 +589,8 @@ def source_training_validation_row(
             "max_turns": 100,
         },
         "source_command": (
-            f"python run_spreadsheetbench.py --model {model_id} --start_idx 0 --end_idx 200 "
+            f"python run_spreadsheetbench.py --model {model_id} --workers 128 "
+            f"--max_turns 100 --seeds {seed} --start_idx 0 --end_idx 200 "
             "&& python evaluate_with_official.py --start_idx 0 --end_idx 200"
         ),
         "artifact_paths": [
@@ -1348,6 +1352,48 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "paper-subset source_command must include --model 'Qwen3.5-122B-A10B'",
             errors,
             "subset source-command model drift",
+        )
+
+        def mutate_subset_to_wrong_source_seed(row: dict[str, Any]) -> None:
+            row["source_command"] = row["source_command"].replace("--seeds 41", "--seeds 42")
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "subset-wrong-source-seed.jsonl",
+            mutate_subset_to_wrong_source_seed,
+            "paper-subset source_command must include --seeds 41",
+            errors,
+            "subset source-command seed drift",
+        )
+
+        def mutate_subset_to_wrong_source_workers(row: dict[str, Any]) -> None:
+            row["source_command"] = row["source_command"].replace("--workers 128", "--workers 1")
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "subset-wrong-source-workers.jsonl",
+            mutate_subset_to_wrong_source_workers,
+            "paper-subset source_command must include --workers 128",
+            errors,
+            "subset source-command worker drift",
+        )
+
+        def mutate_subset_to_wrong_source_max_turns(row: dict[str, Any]) -> None:
+            row["source_command"] = row["source_command"].replace("--max_turns 100", "--max_turns 99")
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "subset-wrong-source-max-turns.jsonl",
+            mutate_subset_to_wrong_source_max_turns,
+            "paper-subset source_command must include --max_turns 100",
+            errors,
+            "subset source-command max-turns drift",
         )
 
         wrong_range_args = importer_base_args(

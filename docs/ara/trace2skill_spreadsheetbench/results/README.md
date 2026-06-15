@@ -155,10 +155,13 @@ declared `dataset_slice.case_range`; a row cannot claim held-out range
 `200..202` while its recorded command names `0..2`. Command-backed
 approval-gated rows must also include a concrete `--model <model_id>` flag
 matching the same paper `model_id`, and must not include another paper model in
-a different `--model` flag. Metadata cannot claim Qwen paper identity when the
-recorded run command names another model, no model, or only mentions the model
-outside the executed flag. Official evaluator-derived rows must keep
-`extra.source_metric` tied to the metric actually counted by the
+a different `--model` flag. When the row carries `seed`, `runtime.workers`, or
+`runtime.max_turns`, the command must include matching `--seeds`, `--workers`,
+and `--max_turns` flags. Metadata cannot claim Qwen paper identity or paper run
+settings when the recorded command names another model, seed, worker count, turn
+budget, no concrete flag, or only mentions the value outside the executed flag.
+Official evaluator-derived rows must keep `extra.source_metric` tied to the
+metric actually counted by the
 evaluator. Non-overlay imports use canonical `official_*` metric names, and
 overlays may bind raw official metrics only to compatible score panels; raw
 official evaluator metrics cannot be relabeled as derived average-improvement

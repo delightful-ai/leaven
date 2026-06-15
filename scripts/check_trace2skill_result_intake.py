@@ -586,6 +586,13 @@ def check_paper_protocol_identity(
         errors.append(f"{prefix} {proof} rows must use vLLM")
 
 
+def command_flag_values(source_command: str, flag: str) -> list[str]:
+    return re.findall(
+        rf"(?<!\S)--{re.escape(flag)}(?:=|\s+)(?:['\"])?([^'\"\s;&|]+)",
+        source_command,
+    )
+
+
 def check_paper_model_command_identity(
     prefix: str,
     proof: Any,
@@ -603,7 +610,7 @@ def check_paper_model_command_identity(
     source_command = record.get("source_command")
     if not isinstance(source_command, str) or not source_command:
         return
-    model_flags = re.findall(r"(?<!\S)--model(?:=|\s+)(?:['\"])?([^'\"\s;&|]+)", source_command)
+    model_flags = command_flag_values(source_command, "model")
     if model_id not in model_flags:
         errors.append(f"{prefix} {proof} source_command must include --model {model_id!r}")
     for command_model_id in model_flags:
@@ -611,6 +618,34 @@ def check_paper_model_command_identity(
             errors.append(
                 f"{prefix} {proof} source_command must not include --model {command_model_id!r}"
             )
+
+
+def check_paper_run_command_flags(
+    prefix: str,
+    proof: Any,
+    stage: dict[str, Any] | None,
+    record: dict[str, Any],
+    errors: list[str],
+) -> None:
+    if proof not in APPROVAL_REQUIRED_PROOF_CLASSIFICATIONS:
+        return
+    if stage is None or stage.get("expected_command_policy") is None:
+        return
+    source_command = record.get("source_command")
+    if not isinstance(source_command, str) or not source_command:
+        return
+
+    seed = normalize_seed(record.get("seed"))
+    if seed is not None and str(seed) not in command_flag_values(source_command, "seeds"):
+        errors.append(f"{prefix} {proof} source_command must include --seeds {seed}")
+
+    runtime = record.get("runtime")
+    if not isinstance(runtime, dict):
+        return
+    for flag, field in (("workers", "workers"), ("max_turns", "max_turns")):
+        value = runtime.get(field)
+        if value is not None and str(value) not in command_flag_values(source_command, flag):
+            errors.append(f"{prefix} {proof} source_command must include --{flag} {value}")
 
 
 def check_official_source_metric(
@@ -1095,6 +1130,7 @@ def check_record(
     check_stage_command_policy(prefix, stage, record, dataset_slice, errors)
     check_paper_protocol_identity(prefix, proof, record, errors)
     check_paper_model_command_identity(prefix, proof, stage, record, errors)
+    check_paper_run_command_flags(prefix, proof, stage, record, errors)
 
     artifact_paths = record.get("artifact_paths")
     if not isinstance(artifact_paths, list) or not artifact_paths:
