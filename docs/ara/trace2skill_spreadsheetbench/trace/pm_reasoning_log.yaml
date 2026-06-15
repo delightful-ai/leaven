@@ -11,3 +11,7 @@ entries:
     notes:
       - "Routed closeout audit as direct guardrail evidence; it formalizes incompletion rather than advancing any paper-result claim."
       - "Kept observations empty because no user approval or empirical paper-denominator result closed a new scientific claim."
+  - turn: "2026-06-14_001#4"
+    notes:
+      - "Routed runbook generation as execution-readiness evidence; it maps stages and commands but does not itself satisfy a paper-denominator result."
+      - "Did not promote runbook readiness to a claim of reproduction because approval preflight remains blocked and result JSONL overlays are absent."
