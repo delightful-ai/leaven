@@ -649,6 +649,9 @@ def check_paper_run_command_flags(
 
     runtime_policy = stage.get("expected_runtime_policy")
     if isinstance(runtime_policy, dict) and runtime_policy.get("kind") == "skill-evolution":
+        workers = runtime.get("workers")
+        if workers is not None and str(workers) not in command_flag_values(source_command, "max-workers"):
+            errors.append(f"{prefix} {proof} source_command must include --max-workers {workers}")
         extra = record.get("extra")
         merge_batch_size = extra.get("merge_batch_size") if isinstance(extra, dict) else None
         if merge_batch_size is not None and str(merge_batch_size) not in command_flag_values(

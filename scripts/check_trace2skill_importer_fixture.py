@@ -765,6 +765,20 @@ def check_evolving_result_intake(repo_root: Path, ara_root: Path, tmp_path: Path
         "evolving source-command merge-batch drift",
     )
 
+    def mutate_evolving_to_wrong_source_max_workers(row: dict[str, Any]) -> None:
+        row["source_command"] = row["source_command"].replace("--max-workers 128", "--max-workers 1")
+
+    check_mutated_result_intake(
+        repo_root,
+        ara_root,
+        output,
+        tmp_path / "evolving-wrong-source-max-workers.jsonl",
+        mutate_evolving_to_wrong_source_max_workers,
+        "evolving-split-run source_command must include --max-workers 128",
+        errors,
+        "evolving source-command max-workers drift",
+    )
+
 
 def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Path, errors: list[str]) -> None:
     source_paths: list[str] = []
