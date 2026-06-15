@@ -91,3 +91,7 @@ entries:
     notes:
       - "Routed artifact-contract validation as future result-intake readiness evidence, not execution evidence."
       - "Kept reproduction claims unchanged because the checker proves expected artifact coverage only; the future model-backed artifacts, result rows, overlays, approval, and Qwen/vLLM execution remain absent."
+  - turn: "2026-06-14_001#24"
+    notes:
+      - "Routed approval-artifact result-intake hardening as admission-control evidence for future model-backed rows."
+      - "Kept reproduction claims unchanged because this only requires approval evidence on future rows; it does not fill approval fields, create result rows, draw overlays, or execute Qwen/vLLM."

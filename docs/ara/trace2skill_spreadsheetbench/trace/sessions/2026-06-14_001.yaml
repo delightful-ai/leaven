@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T19:20-07:00"
-  turn_count: 23
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, runbook-freshness validation, artifact-contract validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
+  last_turn: "2026-06-14T19:23-07:00"
+  turn_count: 24
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, approval-artifact result-intake guard, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, runbook-freshness validation, artifact-contract validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -151,6 +151,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Added artifact-contract checker; approval-packet expected artifacts and generated runbook stage artifacts now must include the evidence fragments needed for future denominator-specific result intake."
+  - turn: 24
+    type: experiment
+    id: "PM-2026-06-14-025"
+    routing: direct
+    provenance: ai-executed
+    summary: "Hardened official-eval result import and intake so every approval-gated proof classification must carry inspectable approval artifact paths before result rows are admitted."
 
 ai_actions:
   - turn: 1
@@ -403,6 +409,15 @@ ai_actions:
       - "docs/ara/trace2skill_spreadsheetbench/results/full_denominator_runbook.json"
       - "docs/ara/trace2skill_spreadsheetbench/results/full_denominator_runbook.md"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 24
+    action: "Updated import_trace2skill_eval_results.py and check_trace2skill_result_intake.py so model-backed, subset, evolving, training-validation, held-out, seed-aggregate, and paper-denominator candidate rows require extra.approval_artifact_paths; updated result docs and validation notes."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/import_trace2skill_eval_results.py"
+      - "scripts/check_trace2skill_result_intake.py"
+      - "docs/ara/trace2skill_spreadsheetbench/results/README.md"
+      - "docs/ara/trace2skill_spreadsheetbench/results/leaven_result_schema.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -453,6 +468,8 @@ key_context:
     excerpt: "Runbook-freshness check passed directly and through validate_ara; it regenerates the full-denominator runbook JSON/Markdown from the approval packet and dataset manifest and compares the committed outputs exactly while leaving approval and Qwen/vLLM execution blocked."
   - turn: 23
     excerpt: "Artifact-contract check passed directly and through validate_ara; it verifies approval-packet and runbook expected artifacts include one-case manifest/transcript evidence, normalized trajectory/score/skill artifacts, and future Leaven result JSONL outputs while leaving approval and Qwen/vLLM execution blocked."
+  - turn: 24
+    excerpt: "Approval-artifact intake guard passed: importer refuses paper-subset without --approval-artifact-path, accepts fixture rows with full_run_plan.md as approval evidence, result intake rejects bypassed approval-gated rows missing extra.approval_artifact_paths, and validate_ara still passes with one deterministic non-overlay row."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."
