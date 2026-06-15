@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T18:54-07:00"
-  turn_count: 16
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, and evidence-binding validation now make the full-denominator path more executable without approving a run."
+  last_turn: "2026-06-14T18:58-07:00"
+  turn_count: 17
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, and status-doc consistency validation now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -109,6 +109,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Added evidence-binding checker; evidence/README.md, claim ids, experiment references, evidence files, and source paths must resolve before validation passes."
+  - turn: 17
+    type: experiment
+    id: "PM-2026-06-14-018"
+    routing: direct
+    provenance: ai-executed
+    summary: "Added status-doc checker; denominator_status.md, validation.md, and closeout_audit.json must match current ARA file counts and result-row summaries before validation passes."
 
 ai_actions:
   - turn: 1
@@ -283,6 +289,15 @@ ai_actions:
       - "scripts/validate_ara.py"
       - "scripts/AGENTS.md"
       - "docs/ara/trace2skill_spreadsheetbench/evidence/README.md"
+  - turn: 17
+    action: "Added scripts/check_trace2skill_status_docs.py, wired it into validate_ara.py, and corrected stale result/file-count status prose."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/check_trace2skill_status_docs.py"
+      - "scripts/validate_ara.py"
+      - "scripts/AGENTS.md"
+      - "docs/ara/trace2skill_spreadsheetbench/results/denominator_status.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -319,6 +334,8 @@ key_context:
     excerpt: "Result intake check passed directly and through validate_ara; it rejects missing or absolute artifact paths, mechanics/one-case overlays, and overlay rows with incompatible units, denominators, or paper classifications."
   - turn: 16
     excerpt: "Evidence-binding check passed directly and through validate_ara; it verifies every evidence markdown file is indexed, every indexed source path exists, every indexed claim exists, every claim has evidence, and claim/experiment references do not dangle."
+  - turn: 17
+    excerpt: "Status-doc check passed directly and through validate_ara; it verifies denominator_status.md reports the current 50-file ARA count, result docs report one non-overlay JSONL row, closeout_audit.json agrees with actual result rows, and validation.md no longer makes an unqualified no-result-JSONL statement."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."

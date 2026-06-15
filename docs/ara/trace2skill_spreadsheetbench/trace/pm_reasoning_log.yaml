@@ -63,3 +63,7 @@ entries:
     notes:
       - "Routed evidence-binding validation as ARA integrity evidence, not as paper-denominator progress."
       - "Kept reproduction claims unchanged because the checker proves index/source/reference integrity only; it adds no Leaven result rows and does not execute Qwen/vLLM."
+  - turn: "2026-06-14_001#17"
+    notes:
+      - "Routed status-doc consistency validation as false-claim prevention evidence."
+      - "Kept reproduction claims unchanged because the checker only prevents stale status prose from contradicting current artifacts; it adds no overlays and does not execute Qwen/vLLM."
