@@ -39,3 +39,11 @@ entries:
     notes:
       - "Routed prompt-index validation as source-anchor evidence; it checks counts and representative paths, not rendered live prompts."
       - "Did not stage a new reproduction claim because no model call, analyst call, or merge run occurred."
+  - turn: "2026-06-14_001#11"
+    notes:
+      - "Routed figure-index validation as source-anchor evidence; it checks upstream figure file identity, not visual or metric reproduction."
+      - "Did not stage a new reproduction claim because the proof is limited to fig:pipeline path, byte size, SHA-256, and PNG magic."
+  - turn: "2026-06-14_001#12"
+    notes:
+      - "Routed protocol-config validation as execution-readiness evidence; it checks paper/upstream config anchoring and runbook flags, not a live Qwen/vLLM run."
+      - "Recorded the upstream merge-batch mismatch as a guardrail: paper value 32 must be passed explicitly because upstream code defaults to 5 and the README omits the flag."
