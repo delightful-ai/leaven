@@ -59,3 +59,7 @@ entries:
     notes:
       - "Routed result-intake validation as admission-control evidence for future Leaven result rows."
       - "Debugged and fixed a relative/absolute path mismatch found only through integrated validate_ara import mode, then kept the rule strict: artifacts must be inspectable and one-case/mechanics rows cannot overlay."
+  - turn: "2026-06-14_001#16"
+    notes:
+      - "Routed evidence-binding validation as ARA integrity evidence, not as paper-denominator progress."
+      - "Kept reproduction claims unchanged because the checker proves index/source/reference integrity only; it adds no Leaven result rows and does not execute Qwen/vLLM."
