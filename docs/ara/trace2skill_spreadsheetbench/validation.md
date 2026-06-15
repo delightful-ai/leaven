@@ -647,6 +647,7 @@ uv run --with pyyaml python scripts/import_trace2skill_eval_results.py \
   --serving-backend fixture-backend \
   --seed 41 \
   --skill-kind fixture-skill \
+  --approval-artifact-path docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md \
   --source-command 'fixture importer smoke'
 ```
 
@@ -657,6 +658,8 @@ Current result:
   `official_avg_soft_score`, and `official_avg_hard_score`.
 - Converts evaluator fractions to percent-valued Leaven result rows.
 - Defaults every row to `plot_binding: null`.
+- Requires approval-gated proof classifications, including `paper-subset`, to
+  include at least one inspectable `--approval-artifact-path`.
 - Requires `--eval-results`, `--skill-path`, `--artifact-path`, and
   `--approval-artifact-path` values to be locally inspectable when provided.
 - Refuses `paper-denominator-reproduction` unless

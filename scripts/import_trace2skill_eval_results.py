@@ -36,6 +36,10 @@ PLOT_CAPABLE_PROOF_CLASSIFICATIONS = {
     "paper-denominator-candidate",
     "paper-denominator-reproduction",
 }
+APPROVAL_REQUIRED_PROOF_CLASSIFICATIONS = ALLOWED_PROOF_CLASSIFICATIONS - {
+    "mechanics-smoke",
+    "deterministic-one-case",
+}
 SUPPORTED_RESULT_PANELS = {
     "same_model_deepening_vrf",
     "avg_improvement",
@@ -195,8 +199,8 @@ def build_records(args: argparse.Namespace) -> list[dict[str, Any]]:
         raise ValueError(
             "refusing paper-denominator-reproduction without --allow-paper-denominator-reproduction"
         )
-    if args.proof_classification == "paper-denominator-reproduction" and not args.approval_artifact_path:
-        raise ValueError("paper-denominator-reproduction requires at least one --approval-artifact-path")
+    if args.proof_classification in APPROVAL_REQUIRED_PROOF_CLASSIFICATIONS and not args.approval_artifact_path:
+        raise ValueError(f"{args.proof_classification} requires at least one --approval-artifact-path")
 
     eval_result = load_json(args.eval_results)
     summary = validate_eval_result(eval_result, args.case_count)
@@ -265,11 +269,12 @@ def build_records(args: argparse.Namespace) -> list[dict[str, Any]]:
                 "passed_test_cases": summary["passed_test_cases"],
             },
         }
+        if args.proof_classification in APPROVAL_REQUIRED_PROOF_CLASSIFICATIONS:
+            record["extra"]["approval_artifact_paths"] = args.approval_artifact_path
         if args.proof_classification == "paper-denominator-reproduction":
             record["extra"]["paper_denominator_reproduction_allowed_by"] = (
                 "--allow-paper-denominator-reproduction"
             )
-            record["extra"]["approval_artifact_paths"] = args.approval_artifact_path
         records.append(record)
 
     return records
@@ -306,7 +311,7 @@ def main() -> int:
         "--approval-artifact-path",
         action="append",
         default=[],
-        help="Required for paper-denominator-reproduction rows; names approval/audit evidence.",
+        help="Required for approval-gated rows; names approval/audit evidence.",
     )
     parser.add_argument("--cost-usd", type=float)
     parser.add_argument("--prompt-tokens", type=int)

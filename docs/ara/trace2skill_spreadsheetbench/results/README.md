@@ -73,16 +73,20 @@ uv run --with pyyaml python scripts/import_trace2skill_eval_results.py \
   --seed <seed> \
   --skill-kind trace2skill-evolved \
   --skill-path path/to/SKILL.md \
+  --approval-artifact-path docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md \
   --source-command '<exact command>'
 ```
 
 The importer writes `plot_binding: null` by default. Paper-target overlays
-require explicit `--plot-binding-json` entries, and
-`paper-denominator-reproduction` is refused unless the operator also passes
-`--allow-paper-denominator-reproduction` plus at least one
-`--approval-artifact-path`. Every `--eval-results`, `--skill-path`,
-`--artifact-path`, and `--approval-artifact-path` value must exist locally when
-the importer runs.
+require explicit `--plot-binding-json` entries. Every approval-gated proof
+classification requires at least one `--approval-artifact-path`; this includes
+`model-one-case`, `paper-subset`, `evolving-split-run`,
+`training-validation-candidate`, `held-out-single-seed-candidate`,
+`seed-aggregate-candidate`, `paper-denominator-candidate`, and
+`paper-denominator-reproduction`. `paper-denominator-reproduction` also requires
+`--allow-paper-denominator-reproduction`. Every `--eval-results`,
+`--skill-path`, `--artifact-path`, and `--approval-artifact-path` value must
+exist locally when the importer runs.
 
 The full-denominator approval packet can be checked with:
 

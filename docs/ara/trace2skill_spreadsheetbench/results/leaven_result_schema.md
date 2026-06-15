@@ -52,8 +52,14 @@ what Leaven actually ran.
   "artifact_paths": [
     "artifacts/trace2skill/run-.../manifest.json",
     "artifacts/trace2skill/run-.../score_report.json",
-    "artifacts/trace2skill/run-.../trajectory.jsonl"
+    "artifacts/trace2skill/run-.../trajectory.jsonl",
+    "docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md"
   ],
+  "extra": {
+    "approval_artifact_paths": [
+      "docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md"
+    ]
+  },
   "notes": "Deviation notes or empty string."
 }
 ```
@@ -78,6 +84,7 @@ what Leaven actually ran.
 | `runtime` | object | Include `seconds`; include workers/turn budget when relevant. |
 | `source_command` | string | Exact command or harness invocation that produced the metric. |
 | `artifact_paths` | array | Non-empty list of inspectable artifacts. |
+| `extra.approval_artifact_paths` | array | Required for every approval-gated class: `model-one-case`, `paper-subset`, `evolving-split-run`, `training-validation-candidate`, `held-out-single-seed-candidate`, `seed-aggregate-candidate`, `paper-denominator-candidate`, and `paper-denominator-reproduction`. Each entry must also appear in `artifact_paths`. |
 | `notes` | string | Empty string is allowed; missing is not. |
 
 ## Refusal Rules
@@ -103,3 +110,6 @@ what Leaven actually ran.
 - Overlay rows must use units compatible with their panel: percent for score
   axes, minutes for runtime axes, and delta points for average-improvement
   axes.
+- Approval-gated rows must carry at least one inspectable
+  `extra.approval_artifact_paths` entry and that same path must be included in
+  `artifact_paths`.

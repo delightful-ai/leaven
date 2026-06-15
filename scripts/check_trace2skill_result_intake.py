@@ -23,6 +23,16 @@ PAPER_DENOMINATOR_CLASSIFICATIONS = {
     "paper-denominator-candidate",
     "paper-denominator-reproduction",
 }
+APPROVAL_REQUIRED_PROOF_CLASSIFICATIONS = {
+    "model-one-case",
+    "paper-subset",
+    "evolving-split-run",
+    "training-validation-candidate",
+    "held-out-single-seed-candidate",
+    "seed-aggregate-candidate",
+    "paper-denominator-candidate",
+    "paper-denominator-reproduction",
+}
 PLOT_AXIS_UNITS = {
     ("same_model_deepening_vrf", "left"): {"percent"},
     ("avg_improvement", "left"): {"delta_points"},
@@ -71,6 +81,19 @@ def check_record(repo_root: Path, path: Path, line_number: int, record: dict[str
     skill_path = record.get("skill_source", {}).get("path")
     if skill_path is not None:
         check_artifact_path(repo_root, prefix, skill_path, errors)
+
+    if proof in APPROVAL_REQUIRED_PROOF_CLASSIFICATIONS:
+        extra = record.get("extra")
+        approval_paths = extra.get("approval_artifact_paths") if isinstance(extra, dict) else None
+        if not isinstance(approval_paths, list) or not approval_paths:
+            errors.append(f"{prefix} {proof} rows must include extra.approval_artifact_paths")
+        else:
+            for approval_path in approval_paths:
+                check_artifact_path(repo_root, prefix, approval_path, errors)
+                if isinstance(artifact_paths, list) and approval_path not in artifact_paths:
+                    errors.append(
+                        f"{prefix} approval artifact {approval_path!r} must also appear in artifact_paths"
+                    )
 
     if proof in NON_OVERLAY_ONLY_CLASSIFICATIONS and binding is not None:
         errors.append(f"{prefix} {proof} rows must keep plot_binding null")
