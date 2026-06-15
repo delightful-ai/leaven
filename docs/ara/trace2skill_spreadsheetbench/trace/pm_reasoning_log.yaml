@@ -196,3 +196,7 @@ entries:
     notes:
       - "Routed model-run file-artifact intake as paper-protocol artifact guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because file-artifact validation only rejects future rows missing runbook-required outputs; it creates no accepted Leaven overlay rows, approvals, analyst responses, Stage 3 merges, seed aggregates, full-paper rows, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#50"
+    notes:
+      - "Routed epilogue verification and jj snapshot as process-continuity evidence, not reproduction evidence."
+      - "Kept reproduction claims unchanged because the slice only committed trace bookkeeping and confirmed the active goal plus blocked approval packet; it created no accepted Leaven overlay rows, approvals, analyst responses, Stage 3 merges, seed aggregates, full-paper rows, or Qwen/vLLM execution."
