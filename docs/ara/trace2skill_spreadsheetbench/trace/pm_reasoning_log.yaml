@@ -224,3 +224,7 @@ entries:
     notes:
       - "Routed one-case case-id enforcement as denominator-identity guardrail evidence, not model-backed execution."
       - "Kept reproduction claims unchanged because the check only prevents one-case-shaped rows from hiding non-13-1 cases; it creates no accepted model-backed one-case rows, overlays, approvals, seed aggregates, full-paper rows, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#57"
+    notes:
+      - "Routed result split identity enforcement as denominator-provenance guardrail evidence, not model-backed execution."
+      - "Kept reproduction claims unchanged because the check only prevents range-shaped rows from hiding the wrong split label; it creates no accepted model-backed rows, overlays, approvals, seed aggregates, full-paper rows, or Qwen/vLLM execution."
