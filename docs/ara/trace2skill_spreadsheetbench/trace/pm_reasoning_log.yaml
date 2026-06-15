@@ -376,3 +376,7 @@ entries:
     notes:
       - "Routed model-backed output-workbook artifact enforcement as runbook/result-intake guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the change only prevents approval-gated rows from counting official evaluator JSON without inspectable produced workbooks; it creates no model-backed one-case row, overlay, approval, subset, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#95"
+    notes:
+      - "Routed importer fixture scratch containment as result-evidence hygiene, not denominator execution."
+      - "Kept reproduction claims unchanged because the change only prevents validation scratch rows from surviving in top-level ARA results; it creates no accepted model-backed row, overlay, approval, subset, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
