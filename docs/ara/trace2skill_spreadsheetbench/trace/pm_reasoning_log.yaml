@@ -216,3 +216,7 @@ entries:
     notes:
       - "Routed imported skill-artifact audit as paper-protocol artifact guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the check only ensures future imported rows audit file-backed optimized skill artifacts; it creates no accepted Leaven overlay rows, approvals, analyst responses, Stage 3 merges, seed aggregates, full-paper rows, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#55"
+    notes:
+      - "Routed aggregate source approval as paper-protocol authorization guardrail evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the check only prevents blocked top-level approval-gated source rows from supporting aggregates; it creates no accepted Leaven overlay rows, approvals, analyst responses, Stage 3 merges, seed aggregates, full-paper rows, or Qwen/vLLM execution."
