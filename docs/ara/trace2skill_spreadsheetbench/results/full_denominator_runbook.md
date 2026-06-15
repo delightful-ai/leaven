@@ -48,6 +48,7 @@ Normal approval preflight passes: `false`
 - Expected seed policy: `null`
 - Expected runtime policy: `null`
 - Expected command policy: `null`
+- Expected aggregate policy: `null`
 
 Commands:
 
@@ -74,6 +75,7 @@ Expected artifacts:
 - Expected seed policy: `null`
 - Expected runtime policy: `null`
 - Expected command policy: `null`
+- Expected aggregate policy: `null`
 
 Commands:
 
@@ -104,6 +106,7 @@ Expected artifacts:
 - Expected seed policy: `{"kind": "exact", "seed": 41}`
 - Expected runtime policy: `{"kind": "upstream-run", "max_turns": 100, "workers": 1}`
 - Expected command policy: `{"kind": "upstream-eval", "required_source_command_fragments": ["run_spreadsheetbench.py", "evaluate_with_official.py"]}`
+- Expected aggregate policy: `null`
 
 Commands:
 
@@ -143,6 +146,7 @@ Expected artifacts:
 - Expected seed policy: `{"kind": "exact", "seed": 41}`
 - Expected runtime policy: `{"kind": "upstream-run", "max_turns": 100, "workers": 128}`
 - Expected command policy: `{"kind": "upstream-eval", "required_source_command_fragments": ["run_spreadsheetbench.py", "evaluate_with_official.py"]}`
+- Expected aggregate policy: `null`
 
 Commands:
 
@@ -184,6 +188,7 @@ Expected artifacts:
 - Expected seed policy: `{"kind": "one-of", "seeds": [41, 42, 43]}`
 - Expected runtime policy: `{"kind": "skill-evolution", "max_turns": 100, "merge_batch_size": 32, "workers": 128}`
 - Expected command policy: `{"kind": "skill-evolution", "required_source_command_fragments": ["run_spreadsheetbench.py", "evaluate_with_official.py", "analyze_results.py", "analysis/run_error_analysis.py", "analysis/run_success_analysis_llm.py", "skill_evolver.run_parallel_skill_evolution"]}`
+- Expected aggregate policy: `null`
 
 Commands:
 
@@ -242,6 +247,7 @@ Expected artifacts:
 - Expected seed policy: `{"kind": "one-of", "seeds": [41, 42, 43]}`
 - Expected runtime policy: `{"kind": "upstream-run", "max_turns": 100, "workers": 128}`
 - Expected command policy: `{"kind": "upstream-eval", "required_source_command_fragments": ["run_spreadsheetbench.py", "evaluate_with_official.py"]}`
+- Expected aggregate policy: `null`
 
 Commands:
 
@@ -287,6 +293,7 @@ Expected artifacts:
 - Expected seed policy: `{"kind": "one-of", "seeds": [41, 42, 43]}`
 - Expected runtime policy: `{"kind": "upstream-run", "max_turns": 100, "workers": 128}`
 - Expected command policy: `{"kind": "upstream-eval", "required_source_command_fragments": ["run_spreadsheetbench.py", "evaluate_with_official.py"]}`
+- Expected aggregate policy: `null`
 
 Commands:
 
@@ -327,6 +334,7 @@ Expected artifacts:
 - Expected seed policy: `{"kind": "all-of", "seeds": [41, 42, 43]}`
 - Expected runtime policy: `null`
 - Expected command policy: `null`
+- Expected aggregate policy: `{"kind": "seed-aggregate", "required_seeds": [41, 42, 43], "source_proof_classification": "held-out-single-seed-candidate", "source_result_paths_min": 3, "source_runbook_stage_id": "G4"}`
 
 Commands:
 
@@ -355,6 +363,7 @@ Expected artifacts:
 - Expected seed policy: `{"kind": "all-of", "seeds": [41, 42, 43]}`
 - Expected runtime policy: `null`
 - Expected command policy: `null`
+- Expected aggregate policy: `{"kind": "full-paper", "source_proof_classifications": ["seed-aggregate-candidate", "paper-denominator-candidate"], "source_result_paths_min": 1}`
 
 Commands:
 

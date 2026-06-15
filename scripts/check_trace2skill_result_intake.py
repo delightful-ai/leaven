@@ -339,6 +339,102 @@ def check_stage_command_policy(
             errors.append(f"{prefix} {stage_id} source_command must include {fragment!r}")
 
 
+def source_result_paths(extra: Any) -> list[str] | None:
+    if not isinstance(extra, dict):
+        return None
+    paths = extra.get("source_result_paths")
+    if not isinstance(paths, list) or not all(isinstance(path, str) and path for path in paths):
+        return None
+    return paths
+
+
+def source_rows(repo_root: Path, rel_paths: list[str], errors: list[str], prefix: str) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for rel_path in rel_paths:
+        path = repo_root / rel_path
+        try:
+            loaded = load_jsonl(path)
+        except (json.JSONDecodeError, OSError, ValueError) as exc:
+            errors.append(f"{prefix} source result path {rel_path!r} is not valid JSONL: {exc}")
+            continue
+        rows.extend(record for _, record in loaded)
+    return rows
+
+
+def check_stage_aggregate_policy(
+    repo_root: Path,
+    current_path: Path,
+    prefix: str,
+    stage: dict[str, Any] | None,
+    record: dict[str, Any],
+    artifact_paths: Any,
+    errors: list[str],
+) -> None:
+    if stage is None:
+        return
+    stage_id = stage.get("id")
+    expected = stage.get("expected_aggregate_policy")
+    if expected is None:
+        return
+    if not isinstance(expected, dict):
+        errors.append(f"{prefix} runbook stage {stage_id!r} expected_aggregate_policy must be an object or null")
+        return
+
+    extra = record.get("extra")
+    paths = source_result_paths(extra)
+    minimum = expected.get("source_result_paths_min")
+    if paths is None:
+        errors.append(f"{prefix} {stage_id} aggregate rows must carry extra.source_result_paths")
+        return
+    if isinstance(minimum, int) and len(set(paths)) < minimum:
+        errors.append(f"{prefix} {stage_id} aggregate rows must cite at least {minimum} source result path(s)")
+
+    current_rel = current_path.relative_to(repo_root).as_posix()
+    for rel_path in paths:
+        if rel_path == current_rel:
+            errors.append(f"{prefix} {stage_id} aggregate rows must not cite their own result file as source")
+        check_artifact_path(repo_root, prefix, rel_path, errors)
+        if isinstance(artifact_paths, list) and rel_path not in artifact_paths:
+            errors.append(f"{prefix} aggregate source result {rel_path!r} must also appear in artifact_paths")
+
+    rows = source_rows(repo_root, paths, errors, prefix)
+    kind = expected.get("kind")
+    if kind == "seed-aggregate":
+        required_seeds = normalize_seed_list(expected.get("required_seeds"))
+        if required_seeds is None:
+            errors.append(f"{prefix} runbook stage {stage_id!r} expected_aggregate_policy required_seeds must be a seed list")
+            return
+        source_stage_id = expected.get("source_runbook_stage_id")
+        source_proof = expected.get("source_proof_classification")
+        observed: set[int] = set()
+        for source in rows:
+            source_extra = source.get("extra")
+            if not isinstance(source_extra, dict):
+                continue
+            if source_extra.get("runbook_stage_id") != source_stage_id:
+                continue
+            if source.get("proof_classification") != source_proof:
+                continue
+            seed = normalize_seed(source.get("seed"))
+            if seed is not None:
+                observed.add(seed)
+        missing = [seed for seed in required_seeds if seed not in observed]
+        if missing:
+            errors.append(f"{prefix} {stage_id} aggregate rows must cite source result rows for seeds {missing!r}")
+        return
+
+    if kind == "full-paper":
+        classifications = expected.get("source_proof_classifications")
+        if not isinstance(classifications, list) or not all(isinstance(item, str) for item in classifications):
+            errors.append(f"{prefix} runbook stage {stage_id!r} expected_aggregate_policy source_proof_classifications must be strings")
+            return
+        if not any(source.get("proof_classification") in classifications for source in rows):
+            errors.append(f"{prefix} {stage_id} full-paper rows must cite aggregate or candidate source result rows")
+        return
+
+    errors.append(f"{prefix} runbook stage {stage_id!r} expected_aggregate_policy has unknown kind {kind!r}")
+
+
 def check_record(
     repo_root: Path,
     path: Path,
@@ -378,6 +474,7 @@ def check_record(
     else:
         for rel_path in artifact_paths:
             check_artifact_path(repo_root, prefix, rel_path, errors)
+    check_stage_aggregate_policy(repo_root, path, prefix, stage, record, artifact_paths, errors)
     check_required_prompt_artifacts(prefix, proof, stage, artifact_paths, errors)
 
     skill_path = record.get("skill_source", {}).get("path")

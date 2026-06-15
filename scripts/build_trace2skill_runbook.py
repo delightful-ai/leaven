@@ -44,6 +44,7 @@ def stage(
     expected_seed_policy: dict[str, Any] | None = None,
     expected_runtime_policy: dict[str, Any] | None = None,
     expected_command_policy: dict[str, Any] | None = None,
+    expected_aggregate_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "id": stage_id,
@@ -59,6 +60,7 @@ def stage(
         "expected_seed_policy": expected_seed_policy,
         "expected_runtime_policy": expected_runtime_policy,
         "expected_command_policy": expected_command_policy,
+        "expected_aggregate_policy": expected_aggregate_policy,
     }
 
 
@@ -445,6 +447,13 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             },
             None,
             None,
+            {
+                "kind": "seed-aggregate",
+                "source_runbook_stage_id": "G4",
+                "source_proof_classification": "held-out-single-seed-candidate",
+                "required_seeds": packet["protocol"]["seeds"],
+                "source_result_paths_min": len(packet["protocol"]["seeds"]),
+            },
         ),
         stage(
             "G6",
@@ -478,6 +487,14 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             },
             None,
             None,
+            {
+                "kind": "full-paper",
+                "source_proof_classifications": [
+                    "seed-aggregate-candidate",
+                    "paper-denominator-candidate",
+                ],
+                "source_result_paths_min": 1,
+            },
         ),
     ]
 
@@ -544,6 +561,7 @@ def write_markdown(runbook: dict[str, Any], output: Path) -> None:
                 f"- Expected seed policy: `{json.dumps(stage_item['expected_seed_policy'], sort_keys=True)}`",
                 f"- Expected runtime policy: `{json.dumps(stage_item['expected_runtime_policy'], sort_keys=True)}`",
                 f"- Expected command policy: `{json.dumps(stage_item['expected_command_policy'], sort_keys=True)}`",
+                f"- Expected aggregate policy: `{json.dumps(stage_item['expected_aggregate_policy'], sort_keys=True)}`",
                 "",
                 "Commands:",
                 "",

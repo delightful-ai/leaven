@@ -131,6 +131,11 @@ def load_jsonl(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+
+
 def expect_failure(
     repo_root: Path,
     args: list[str],
@@ -274,6 +279,87 @@ def check_mutated_result_intake(
     )
 
 
+def source_heldout_row(seed: int) -> dict[str, Any]:
+    return {
+        "proof_classification": "held-out-single-seed-candidate",
+        "seed": seed,
+        "extra": {
+            "runbook_stage_id": "G4",
+        },
+    }
+
+
+def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Path, errors: list[str]) -> None:
+    source_paths: list[str] = []
+    for seed in (41, 42, 43):
+        source_path = tmp_path / f"heldout_seed_{seed}.jsonl"
+        write_jsonl(source_path, [source_heldout_row(seed)])
+        source_paths.append(source_path.relative_to(repo_root).as_posix())
+
+    prompt_manifest = repo_root / "docs/ara/trace2skill_spreadsheetbench/results/fixture_aggregate.prompt_render_manifest.json"
+    prompt_manifest.write_text('{"schema_version":"fixture.aggregate_prompt_manifest.v1"}\n', encoding="utf-8")
+    prompt_manifest_rel = prompt_manifest.relative_to(repo_root).as_posix()
+    aggregate_output = tmp_path / "aggregate.jsonl"
+    aggregate_row = {
+        "schema_version": "leaven.trace2skill.result.v1",
+        "run_id": "trace2skill-aggregate-fixture",
+        "created_at": "2026-06-14T00:00:03Z",
+        "proof_classification": "seed-aggregate-candidate",
+        "dataset_slice": {
+            "name": "SpreadsheetBench-Verified",
+            "split": "held_out",
+            "case_range": "200..400",
+            "case_count": 200,
+            "denominator": "seed-aggregate-41-42-43",
+        },
+        "model_id": "fixture-model",
+        "serving_backend": "fixture-backend",
+        "seed": None,
+        "skill_source": {"kind": "fixture-aggregate"},
+        "metric_name": "official_instance_accuracy",
+        "metric_value": 50.0,
+        "metric_unit": "percent",
+        "plot_binding": None,
+        "cost": {
+            "usd": None,
+            "prompt_tokens": None,
+            "completion_tokens": None,
+        },
+        "runtime": {
+            "seconds": None,
+        },
+        "source_command": "aggregate heldout_seed_41.jsonl heldout_seed_42.jsonl heldout_seed_43.jsonl",
+        "artifact_paths": [APPROVAL_ARTIFACT, prompt_manifest_rel, *source_paths],
+        "extra": {
+            "runbook_stage_id": "G5",
+            "approval_artifact_paths": [APPROVAL_ARTIFACT],
+            "seeds": [41, 42, 43],
+            "source_result_paths": source_paths,
+        },
+        "notes": "",
+    }
+    write_jsonl(aggregate_output, [aggregate_row])
+    try:
+        check_result_intake_for_rows(repo_root, ara_root, aggregate_output, None, errors, "aggregate intake")
+
+        def mutate_aggregate_to_missing_source_seed(row: dict[str, Any]) -> None:
+            row["extra"] = dict(row["extra"])
+            row["extra"]["source_result_paths"] = list(row["extra"]["source_result_paths"][:-1])
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            aggregate_output,
+            tmp_path / "aggregate-missing-source-seed.jsonl",
+            mutate_aggregate_to_missing_source_seed,
+            "G5 aggregate rows must cite at least 3 source result path(s)",
+            errors,
+            "aggregate source-result drift",
+        )
+    finally:
+        prompt_manifest.unlink(missing_ok=True)
+
+
 def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
     errors: list[str] = []
     target_dir = repo_root / "target"
@@ -285,6 +371,7 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
         output = tmp_path / "imported.jsonl"
         check_positive_import(repo_root, output, errors)
         check_result_intake_for_rows(repo_root, ara_root, output, None, errors, "positive import intake")
+        check_aggregate_result_intake(repo_root, ara_root, tmp_path, errors)
 
         def mutate_subset_to_paper_sized(row: dict[str, Any]) -> None:
             row["dataset_slice"] = dict(row["dataset_slice"])

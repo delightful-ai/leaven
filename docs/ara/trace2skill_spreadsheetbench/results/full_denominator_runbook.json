@@ -67,6 +67,7 @@
         "uv run --with pyyaml python scripts/validate_ara.py docs/ara/trace2skill_spreadsheetbench"
       ],
       "denominator": "ara-and-approval-preflight",
+      "expected_aggregate_policy": null,
       "expected_artifacts": [
         "docs/ara/trace2skill_spreadsheetbench/results/dataset_manifest.json",
         "docs/ara/trace2skill_spreadsheetbench/results/closeout_audit.json",
@@ -90,6 +91,7 @@
         "cargo run -p trace2skill_spreadsheetbench -- --prepare-one-case-analyst-fanout --run-dir tmp/trace2skill-one-case-live"
       ],
       "denominator": "one-case-13-1-deterministic",
+      "expected_aggregate_policy": null,
       "expected_artifacts": [
         "tmp/trace2skill-one-case-live/manifest.json",
         "tmp/trace2skill-one-case-live/13-1_output.xlsx",
@@ -134,6 +136,7 @@
         "python evaluate_with_official.py --data_path \"$DATA_PATH\" --output_dir \"$ONE_CASE_DIR/outputs\" --verbose --start_idx 0 --end_idx 1"
       ],
       "denominator": "one-case-13-1-model-backed",
+      "expected_aggregate_policy": null,
       "expected_artifacts": [
         "model_one_case_seed_41/logs",
         "model_one_case_seed_41/work",
@@ -191,6 +194,7 @@
         "python evaluate_with_official.py --data_path \"$DATA_PATH\" --output_dir \"$SUBSET_DIR/outputs\" --verbose --start_idx \"$SUBSET_START\" --end_idx \"$SUBSET_END\""
       ],
       "denominator": "paper-subset",
+      "expected_aggregate_policy": null,
       "expected_artifacts": [
         "subset_<start>_<end>_seed_41/logs",
         "subset_<start>_<end>_seed_41/work",
@@ -262,6 +266,7 @@
         "done"
       ],
       "denominator": "evolving-split-0..200",
+      "expected_aggregate_policy": null,
       "expected_artifacts": [
         "baseline_seed_{seed}/logs",
         "baseline_seed_{seed}/work",
@@ -340,6 +345,7 @@
         "# Select BEST_SEED from training-set validation only; do not inspect held-out outputs."
       ],
       "denominator": "training-validation-0..200",
+      "expected_aggregate_policy": null,
       "expected_artifacts": [
         "validation_train_seed_{seed}/baseline_rendered_prompts/{case_id}/agent_prompt.md",
         "validation_train_seed_{seed}/baseline_prompt_render_manifest.json",
@@ -401,6 +407,7 @@
         "python evaluate_with_official.py --data_path \"$DATA_PATH\" --output_dir \"$EVOLVED_RUN_DIR/outputs\" --start_idx 200 --end_idx 400"
       ],
       "denominator": "held-out-200..400",
+      "expected_aggregate_policy": null,
       "expected_artifacts": [
         "heldout_seed_<best>/logs",
         "heldout_seed_<best>/work",
@@ -451,6 +458,17 @@
         "uv run --with pyyaml python scripts/audit_trace2skill_closeout.py docs/ara/trace2skill_spreadsheetbench"
       ],
       "denominator": "seed-aggregate-41-42-43",
+      "expected_aggregate_policy": {
+        "kind": "seed-aggregate",
+        "required_seeds": [
+          41,
+          42,
+          43
+        ],
+        "source_proof_classification": "held-out-single-seed-candidate",
+        "source_result_paths_min": 3,
+        "source_runbook_stage_id": "G4"
+      },
       "expected_artifacts": [
         "docs/ara/trace2skill_spreadsheetbench/results/<approved-run-id>.jsonl",
         "docs/ara/trace2skill_spreadsheetbench/results/<approved-run-id>.prompt_render_manifest.json",
@@ -491,6 +509,14 @@
         "uv run --with pyyaml python scripts/audit_trace2skill_closeout.py docs/ara/trace2skill_spreadsheetbench"
       ],
       "denominator": "full-paper-denominator",
+      "expected_aggregate_policy": {
+        "kind": "full-paper",
+        "source_proof_classifications": [
+          "seed-aggregate-candidate",
+          "paper-denominator-candidate"
+        ],
+        "source_result_paths_min": 1
+      },
       "expected_artifacts": [
         "complete denominator-labeled result JSONL rows",
         "complete rendered prompt manifests for every claimed model call",
