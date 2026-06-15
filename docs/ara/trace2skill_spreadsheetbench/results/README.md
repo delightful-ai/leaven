@@ -43,6 +43,35 @@ uv run python scripts/build_trace2skill_one_case_result.py
 Its `plot_binding` is `null` so it is not drawn on paper-denominator target
 plots.
 
+Official SpreadsheetBench evaluator output can be converted into Leaven result
+rows only after a real Leaven run has produced an inspectable
+`eval_official_results.json`:
+
+```bash
+uv run --with pyyaml python scripts/import_trace2skill_eval_results.py \
+  --eval-results path/to/eval_official_results.json \
+  --output docs/ara/trace2skill_spreadsheetbench/results/<run_id>.jsonl \
+  --run-id <run_id> \
+  --created-at <timestamp> \
+  --proof-classification paper-subset \
+  --split <split> \
+  --case-range <start..end> \
+  --case-count <n> \
+  --denominator <explicit-denominator> \
+  --model-id <model> \
+  --serving-backend <backend> \
+  --seed <seed> \
+  --skill-kind trace2skill-evolved \
+  --skill-path path/to/SKILL.md \
+  --source-command '<exact command>'
+```
+
+The importer writes `plot_binding: null` by default. Paper-target overlays
+require explicit `--plot-binding-json` entries, and
+`paper-denominator-reproduction` is refused unless the operator also passes
+`--allow-paper-denominator-reproduction` plus at least one
+`--approval-artifact-path`.
+
 The full-denominator approval packet can be checked with:
 
 ```bash

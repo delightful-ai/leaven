@@ -1,0 +1,67 @@
+{
+  "summary": {
+    "total_instances": 2,
+    "fully_correct_instances": 1,
+    "instance_accuracy": 0.5,
+    "total_test_cases": 4,
+    "passed_test_cases": 3,
+    "test_case_accuracy": 0.75,
+    "avg_soft_score": 0.75,
+    "avg_hard_score": 0.5,
+    "by_instruction_type": {
+      "analysis": {
+        "count": 2,
+        "avg_soft_score": 0.75,
+        "avg_hard_score": 0.5
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "fixture-pass",
+      "instruction_type": "analysis",
+      "success": true,
+      "test_cases": [
+        {
+          "gt_file": "case_a_answer.xlsx",
+          "output_file": "case_a_output.xlsx",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "gt_file": "case_b_answer.xlsx",
+          "output_file": "case_b_output.xlsx",
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "passed_count": 2,
+      "total_count": 2,
+      "soft_score": 1.0,
+      "hard_score": 1
+    },
+    {
+      "id": "fixture-partial",
+      "instruction_type": "analysis",
+      "success": false,
+      "test_cases": [
+        {
+          "gt_file": "case_c_answer.xlsx",
+          "output_file": "case_c_output.xlsx",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "gt_file": "case_d_answer.xlsx",
+          "output_file": "case_d_output.xlsx",
+          "passed": false,
+          "message": "fixture mismatch"
+        }
+      ],
+      "passed_count": 1,
+      "total_count": 2,
+      "soft_score": 0.5,
+      "hard_score": 0
+    }
+  ]
+}

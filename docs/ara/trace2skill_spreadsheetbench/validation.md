@@ -452,3 +452,48 @@ Limit:
 - This is a real Leaven result record for the deterministic one-case seam proof,
   not held-out, seed-aggregate, cross-model, or full paper reproduction
   evidence.
+
+## 2026-06-14 Official Eval Result Importer
+
+Artifact:
+
+```text
+scripts/import_trace2skill_eval_results.py
+scripts/fixtures/trace2skill_eval_official_results_sample.json
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/import_trace2skill_eval_results.py \
+  --eval-results scripts/fixtures/trace2skill_eval_official_results_sample.json \
+  --output tmp/trace2skill-import-fixture/imported.jsonl \
+  --run-id trace2skill-import-fixture \
+  --created-at 2026-06-14T00:00:02Z \
+  --proof-classification paper-subset \
+  --split fixture \
+  --case-range 0..2 \
+  --case-count 2 \
+  --denominator fixture-only-not-paper \
+  --model-id fixture-model \
+  --serving-backend fixture-backend \
+  --seed 41 \
+  --skill-kind fixture-skill \
+  --source-command 'fixture importer smoke'
+```
+
+Current result:
+
+- Writes four rows for the official evaluator summary metrics:
+  `official_instance_accuracy`, `official_test_case_accuracy`,
+  `official_avg_soft_score`, and `official_avg_hard_score`.
+- Converts evaluator fractions to percent-valued Leaven result rows.
+- Defaults every row to `plot_binding: null`.
+- Refuses `paper-denominator-reproduction` unless
+  `--allow-paper-denominator-reproduction` and at least one
+  `--approval-artifact-path` are explicitly present.
+
+Limit:
+
+- The fixture is script coverage only. It is not stored under top-level
+  `results/*.jsonl`, not plotted, and not evidence for paper reproduction.
