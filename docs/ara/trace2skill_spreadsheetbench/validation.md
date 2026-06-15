@@ -1000,6 +1000,8 @@ uv run --with pyyaml python scripts/check_trace2skill_stage2_prompt_artifacts.py
 
 Current result:
 
+- Regenerates the deterministic one-case Stage 2 prompt/fanout artifacts before
+  checking their content.
 - Verifies the rendered one-case Stage 2 MAP analyst prompt exists and has
   SHA-256
   `94893fef2c3459bbe76bb63854dd2e9aab813625877c584867d34eadba700ba4`.

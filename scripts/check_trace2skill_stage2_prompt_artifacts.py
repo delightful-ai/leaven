@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -124,9 +125,36 @@ def check_evidence_doc(repo_root: Path, errors: list[str]) -> None:
             errors.append(f"stage2_rendered_prompts.md missing {needle!r}")
 
 
+def regenerate_stage2_prompt_artifacts(repo_root: Path) -> subprocess.CompletedProcess[str]:
+    command = [
+        "cargo",
+        "run",
+        "-p",
+        "trace2skill_spreadsheetbench",
+        "--",
+        "--prepare-one-case-analyst-fanout",
+        "--run-dir",
+        RUN_DIR.as_posix(),
+    ]
+    print("$ " + " ".join(command))
+    return subprocess.run(
+        command,
+        cwd=repo_root,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+
 def check_stage2_prompt_artifacts(repo_root: Path, ara_root: Path) -> list[str]:
     del ara_root
     errors: list[str] = []
+    result = regenerate_stage2_prompt_artifacts(repo_root)
+    if result.returncode != 0:
+        detail = "\n".join(part for part in (result.stdout.strip(), result.stderr.strip()) if part)
+        return [f"Stage 2 prompt regeneration failed with exit {result.returncode}: {detail}"]
+
     prompt_path = repo_root / PROMPT_PATH
     fanout_path = repo_root / FANOUT_PATH
     for label, path in (("rendered prompt", prompt_path), ("fanout", fanout_path)):

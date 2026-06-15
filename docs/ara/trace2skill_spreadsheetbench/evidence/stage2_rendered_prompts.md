@@ -17,7 +17,7 @@ Regenerate the artifacts with:
 cargo run -p trace2skill_spreadsheetbench -- --prepare-one-case-analyst-fanout --run-dir tmp/trace2skill-one-case-live
 ```
 
-Check the artifacts with:
+Regenerate and check the artifacts with:
 
 ```bash
 uv run --with pyyaml python scripts/check_trace2skill_stage2_prompt_artifacts.py docs/ara/trace2skill_spreadsheetbench
