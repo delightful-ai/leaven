@@ -369,12 +369,14 @@ def source_rows(
 def check_stage_aggregate_policy(
     repo_root: Path,
     current_path: Path,
+    line_number: int,
     prefix: str,
     stage: dict[str, Any] | None,
     record: dict[str, Any],
     runbook_stages: dict[str, dict[str, Any]],
     artifact_paths: Any,
     errors: list[str],
+    aggregate_stack: set[str],
 ) -> None:
     if stage is None:
         return
@@ -396,6 +398,11 @@ def check_stage_aggregate_policy(
         errors.append(f"{prefix} {stage_id} aggregate rows must cite at least {minimum} source result path(s)")
 
     current_rel = current_path.relative_to(repo_root).as_posix()
+    current_key = f"{current_rel}:{line_number}"
+    if current_key in aggregate_stack:
+        errors.append(f"{prefix} aggregate source graph contains a cycle at {current_key}")
+        return
+    next_stack = {*aggregate_stack, current_key}
     for rel_path in paths:
         if rel_path == current_rel:
             errors.append(f"{prefix} {stage_id} aggregate rows must not cite their own result file as source")
@@ -423,6 +430,7 @@ def check_stage_aggregate_policy(
                 runbook_stages,
                 source_errors,
                 validate_aggregate=False,
+                aggregate_stack=next_stack,
             )
             if source_errors:
                 errors.append(
@@ -449,8 +457,31 @@ def check_stage_aggregate_policy(
         if not isinstance(classifications, list) or not all(isinstance(item, str) for item in classifications):
             errors.append(f"{prefix} runbook stage {stage_id!r} expected_aggregate_policy source_proof_classifications must be strings")
             return
-        if not any(source.get("proof_classification") in classifications for _, _, source in rows):
+        matching_sources = [
+            (source_path, source_line_number, source)
+            for source_path, source_line_number, source in rows
+            if source.get("proof_classification") in classifications
+        ]
+        if not matching_sources:
             errors.append(f"{prefix} {stage_id} full-paper rows must cite aggregate or candidate source result rows")
+            return
+        for source_path, source_line_number, source in matching_sources:
+            source_errors: list[str] = []
+            check_record(
+                repo_root,
+                source_path,
+                source_line_number,
+                source,
+                runbook_stages,
+                source_errors,
+                validate_aggregate=True,
+                aggregate_stack=next_stack,
+            )
+            if source_errors:
+                errors.append(
+                    f"{prefix} {stage_id} source row {source_path.relative_to(repo_root)}:{source_line_number} "
+                    f"does not pass result intake: {source_errors!r}"
+                )
         return
 
     errors.append(f"{prefix} runbook stage {stage_id!r} expected_aggregate_policy has unknown kind {kind!r}")
@@ -464,6 +495,7 @@ def check_record(
     runbook_stages: dict[str, dict[str, Any]],
     errors: list[str],
     validate_aggregate: bool = True,
+    aggregate_stack: set[str] | None = None,
 ) -> None:
     prefix = f"{path.relative_to(repo_root)}:{line_number}"
     proof = record.get("proof_classification")
@@ -497,7 +529,18 @@ def check_record(
         for rel_path in artifact_paths:
             check_artifact_path(repo_root, prefix, rel_path, errors)
     if validate_aggregate:
-        check_stage_aggregate_policy(repo_root, path, prefix, stage, record, runbook_stages, artifact_paths, errors)
+        check_stage_aggregate_policy(
+            repo_root,
+            path,
+            line_number,
+            prefix,
+            stage,
+            record,
+            runbook_stages,
+            artifact_paths,
+            errors,
+            aggregate_stack or set(),
+        )
     check_required_prompt_artifacts(prefix, proof, stage, artifact_paths, errors)
 
     skill_path = record.get("skill_source", {}).get("path")

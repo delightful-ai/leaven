@@ -427,6 +427,64 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
             errors,
             "aggregate invalid source row",
         )
+
+        full_paper_output = tmp_path / "full-paper.jsonl"
+        aggregate_output_rel = aggregate_output.relative_to(repo_root).as_posix()
+        full_paper_row = {
+            "schema_version": "leaven.trace2skill.result.v1",
+            "run_id": "trace2skill-full-paper-fixture",
+            "created_at": "2026-06-14T00:00:04Z",
+            "proof_classification": "paper-denominator-reproduction",
+            "dataset_slice": {
+                "name": "SpreadsheetBench-Verified",
+                "split": "all",
+                "case_range": "0..400",
+                "case_count": 400,
+                "denominator": "full-paper-denominator",
+            },
+            "model_id": "Qwen3.5-122B-A10B",
+            "serving_backend": "vLLM",
+            "seed": None,
+            "skill_source": {"kind": "fixture-full-paper"},
+            "metric_name": "official_instance_accuracy",
+            "metric_value": 50.0,
+            "metric_unit": "percent",
+            "plot_binding": None,
+            "cost": {
+                "usd": None,
+                "prompt_tokens": None,
+                "completion_tokens": None,
+            },
+            "runtime": {
+                "seconds": None,
+            },
+            "source_command": "aggregate seed-aggregate-41-42-43 into full-paper fixture",
+            "artifact_paths": [APPROVAL_ARTIFACT, prompt_manifest_rel, aggregate_output_rel],
+            "extra": {
+                "runbook_stage_id": "G6",
+                "approval_artifact_paths": [APPROVAL_ARTIFACT],
+                "seeds": [41, 42, 43],
+                "source_result_paths": [aggregate_output_rel],
+            },
+            "notes": "",
+        }
+        write_jsonl(full_paper_output, [full_paper_row])
+        check_result_intake_for_rows(repo_root, ara_root, full_paper_output, None, errors, "full-paper intake")
+
+        invalid_aggregate_output_rel = invalid_aggregate_output.relative_to(repo_root).as_posix()
+        invalid_full_paper_row = json.loads(json.dumps(full_paper_row))
+        invalid_full_paper_row["artifact_paths"] = [APPROVAL_ARTIFACT, prompt_manifest_rel, invalid_aggregate_output_rel]
+        invalid_full_paper_row["extra"]["source_result_paths"] = [invalid_aggregate_output_rel]
+        invalid_full_paper_output = tmp_path / "full-paper-invalid-aggregate-source.jsonl"
+        write_jsonl(invalid_full_paper_output, [invalid_full_paper_row])
+        check_result_intake_for_rows(
+            repo_root,
+            ara_root,
+            invalid_full_paper_output,
+            "does not pass result intake",
+            errors,
+            "full-paper invalid aggregate source row",
+        )
     finally:
         prompt_manifest.unlink(missing_ok=True)
 
