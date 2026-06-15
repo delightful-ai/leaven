@@ -80,6 +80,7 @@ what Leaven actually ran.
 | `proof_classification` | string | Must be one of the values listed in `README.md`. |
 | `dataset_slice` | object | Must include `name`, `split`, `case_count`, and `denominator`. |
 | `model_id` | string | The model that produced the metric. |
+| `serving_backend` | string | The serving backend that produced the metric; full paper-denominator reproduction rows must use `vLLM`. |
 | `seed` | number, string, or null | Null only when the run truly had no seed. |
 | `skill_source` | object | Must include `kind`; include `path` when the skill is file-backed. |
 | `metric_name` | string | Human-readable metric label, e.g. `122B Vrf`. |
@@ -106,6 +107,9 @@ what Leaven actually ran.
   checks can count them.
 - Do not write a `paper-denominator-reproduction` row for a subset, single seed,
   deterministic fixture, or mechanics-only gate.
+- Paper-denominator classification checks apply before overlay handling:
+  `paper-denominator-reproduction` rows must name a paper model and `vLLM`
+  even if `plot_binding` is temporarily null.
 - Do not write success rows for SpreadsheetBench cases when the score envelope
   exists but the output workbook artifact is missing.
 - Use `plot_binding: null` for real Leaven results whose denominator cannot be

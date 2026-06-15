@@ -97,7 +97,7 @@ def check_base_record_shape(prefix: str, record: dict[str, Any], errors: list[st
     if record.get("schema_version") != RESULT_SCHEMA_VERSION:
         errors.append(f"{prefix} schema_version must be {RESULT_SCHEMA_VERSION!r}")
 
-    for key in ("run_id", "created_at", "model_id", "metric_name", "source_command"):
+    for key in ("run_id", "created_at", "model_id", "serving_backend", "metric_name", "source_command"):
         check_non_empty_string(prefix, record, key, errors)
 
     proof = record.get("proof_classification")
@@ -666,6 +666,17 @@ def check_record(
     if proof in NON_OVERLAY_ONLY_CLASSIFICATIONS and binding is not None:
         errors.append(f"{prefix} {proof} rows must keep plot_binding null")
 
+    if proof in PAPER_DENOMINATOR_CLASSIFICATIONS:
+        case_count = record.get("dataset_slice", {}).get("case_count")
+        if not isinstance(case_count, int) or case_count < 200:
+            errors.append(f"{prefix} paper-denominator rows must cover at least the 200-case paper split")
+
+    if proof == "paper-denominator-reproduction":
+        if record.get("serving_backend") != "vLLM":
+            errors.append(f"{prefix} paper-denominator-reproduction rows must use vLLM")
+        if record.get("model_id") not in {"Qwen3.5-122B-A10B", "Qwen3.5-35B-A3B"}:
+            errors.append(f"{prefix} paper-denominator-reproduction row has non-paper model_id")
+
     if binding is None:
         return
 
@@ -690,17 +701,6 @@ def check_record(
 
     if proof == "paper-subset" and "subset" not in str(denominator):
         errors.append(f"{prefix} paper-subset overlays must use an explicit subset denominator")
-
-    if proof in PAPER_DENOMINATOR_CLASSIFICATIONS:
-        case_count = record.get("dataset_slice", {}).get("case_count")
-        if not isinstance(case_count, int) or case_count < 200:
-            errors.append(f"{prefix} paper-denominator rows must cover at least the 200-case paper split")
-
-    if proof == "paper-denominator-reproduction":
-        if record.get("serving_backend") != "vLLM":
-            errors.append(f"{prefix} paper-denominator-reproduction rows must use vLLM")
-        if record.get("model_id") not in {"Qwen3.5-122B-A10B", "Qwen3.5-35B-A3B"}:
-            errors.append(f"{prefix} paper-denominator-reproduction row has non-paper model_id")
 
 
 def repo_root_for(ara_root: Path) -> Path:

@@ -471,6 +471,32 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
         write_jsonl(full_paper_output, [full_paper_row])
         check_result_intake_for_rows(repo_root, ara_root, full_paper_output, None, errors, "full-paper intake")
 
+        invalid_serving_output = tmp_path / "full-paper-invalid-serving.jsonl"
+        invalid_serving_row = json.loads(json.dumps(full_paper_row))
+        invalid_serving_row["serving_backend"] = "fixture-backend"
+        write_jsonl(invalid_serving_output, [invalid_serving_row])
+        check_result_intake_for_rows(
+            repo_root,
+            ara_root,
+            invalid_serving_output,
+            "paper-denominator-reproduction rows must use vLLM",
+            errors,
+            "full-paper invalid serving backend",
+        )
+
+        invalid_model_output = tmp_path / "full-paper-invalid-model.jsonl"
+        invalid_model_row = json.loads(json.dumps(full_paper_row))
+        invalid_model_row["model_id"] = "fixture-model"
+        write_jsonl(invalid_model_output, [invalid_model_row])
+        check_result_intake_for_rows(
+            repo_root,
+            ara_root,
+            invalid_model_output,
+            "paper-denominator-reproduction row has non-paper model_id",
+            errors,
+            "full-paper invalid model id",
+        )
+
         invalid_aggregate_output_rel = invalid_aggregate_output.relative_to(repo_root).as_posix()
         invalid_full_paper_row = json.loads(json.dumps(full_paper_row))
         invalid_full_paper_row["artifact_paths"] = [APPROVAL_ARTIFACT, prompt_manifest_rel, invalid_aggregate_output_rel]

@@ -825,8 +825,8 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
 - Runs the result-intake checker before writing output rows.
 - Validates the base Leaven result envelope before provenance checks:
   `schema_version`, run id, timestamp, proof classification, dataset slice,
-  model id, seed shape, skill source, metric fields, cost/runtime objects,
-  source command, artifacts, `extra`, and notes.
+  model id, serving backend, seed shape, skill source, metric fields,
+  cost/runtime objects, source command, artifacts, `extra`, and notes.
 - Requires every row to carry `extra.runbook_stage_id` and validates the stage
   label against `full_denominator_runbook.json` before write and during result
   intake.
@@ -864,8 +864,8 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
 - The checker exercises those refusal paths directly: missing runbook stage id,
   wrong runbook stage label, missing prompt artifacts for `paper-subset`,
   missing base schema id, stringly metric value, subset denominator drift,
-  subset seed drift, subset worker drift, missing approval evidence for
-  `paper-subset`, and accidental
+  subset seed drift, subset worker drift, full-paper serving/model drift with
+  null plot binding, missing approval evidence for `paper-subset`, and accidental
   `paper-denominator-reproduction` without the explicit allow flag.
 
 Limit:
