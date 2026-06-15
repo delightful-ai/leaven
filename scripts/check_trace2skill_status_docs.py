@@ -131,6 +131,10 @@ def check_denominator_status(ara_root: Path, file_count: int, summary: ResultSum
     expected_file_count = f"passes with {file_count} files"
     if expected_file_count not in text:
         errors.append(f"results/denominator_status.md must say `{expected_file_count}`")
+    if "## Current Reproduced Denominator" in text:
+        errors.append("results/denominator_status.md must not label current evidence as reproduced denominator")
+    if "## Current Evidence and Missing Denominators" not in text:
+        errors.append("results/denominator_status.md missing current evidence heading")
 
     if summary.total_rows:
         expected_result_state = (

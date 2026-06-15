@@ -18,7 +18,7 @@ result records for the relevant held-out, seed-aggregate, and cross-model rows.
 | `full_denominator_plan_approved` | Planned but not approved; dataset manifest is recorded, blocked preflight is executable, and staged runbook is generated. | `results/full_run_plan.md`; `results/full_denominator_runbook.md`; `results/dataset_manifest.json`; `src/environment.md`; `src/configs/tolerance.md`; `scripts/check_trace2skill_approval_packet.py` with `--expect-blocked`. | Fill and approve model endpoints/weights, vLLM host/version, hardware, cost, credentials, tolerance approval, artifact retention, and stop conditions. |
 | `reproduced_claim_limited_to_actual_denominator` | Partially satisfied as an active guardrail, not final closeout; executable closeout audit says incomplete. | `reviews/rigor_review.md`; `level2_report.json`; `results/closeout_audit.md`; `results/closeout_audit.json`; this audit; all result docs label current proof as target, mechanics, deterministic one-case, or approval-gated. | Final closeout must compare actual Leaven result JSONL overlays against paper targets and state the reproduced denominator exactly. |
 
-## Current Reproduced Denominator
+## Current Evidence and Missing Denominators
 
 | Denominator | Status | Claim allowed |
 |-------------|--------|---------------|

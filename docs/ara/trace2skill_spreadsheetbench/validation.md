@@ -490,8 +490,9 @@ Scope:
 
 - Compares the current ARA state to every acceptance item in
   `docs/working-memory/trace2skill-ara-reproduction-goal-handoff.yaml`.
-- States the strongest currently reproduced denominator as deterministic
-  one-case ACP worker proof.
+- States the strongest current evidence as deterministic one-case ACP worker
+  proof while keeping paper-target capture and mechanics checks out of
+  reproduced-denominator language.
 - Names the unresolved approval blocker for full Qwen/vLLM paper-denominator
   execution.
 
