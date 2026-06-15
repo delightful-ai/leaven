@@ -1096,6 +1096,25 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "official source-metric derived overlay drift",
         )
 
+        def mutate_overlay_to_unknown_target_label(row: dict[str, Any]) -> None:
+            row["plot_binding"] = {
+                "panel": "same_model_deepening_vrf",
+                "x_label": "Not A Paper Target",
+                "series": "Fixture",
+                "axis": "left",
+            }
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "unknown-target-label-overlay.jsonl",
+            mutate_overlay_to_unknown_target_label,
+            "plot_binding.x_label 'Not A Paper Target' does not match target labels for panel 'same_model_deepening_vrf'",
+            errors,
+            "overlay target-label drift",
+        )
+
         def mutate_missing_eval_artifact(row: dict[str, Any]) -> None:
             row["artifact_paths"] = [
                 path

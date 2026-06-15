@@ -61,6 +61,7 @@ PROMPT_ARTIFACT_WORDS = {
 OPTIONAL_ROW_ARTIFACT_FRAGMENTS = {
     "leaven_results.jsonl",
 }
+PLOT_PROVENANCE_PATH = "docs/ara/trace2skill_spreadsheetbench/plots/trace2skill_targets.provenance.json"
 OFFICIAL_SOURCE_METRIC_NAMES = {
     "instance_accuracy": "official_instance_accuracy",
     "test_case_accuracy": "official_test_case_accuracy",
@@ -619,6 +620,55 @@ def check_official_source_metric(
                 )
 
 
+def plot_target_labels(repo_root: Path, prefix: str, errors: list[str]) -> dict[str, set[str]]:
+    provenance_path = repo_root / PLOT_PROVENANCE_PATH
+    try:
+        provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        errors.append(f"{prefix} cannot read plot provenance labels from {PLOT_PROVENANCE_PATH}: {exc}")
+        return {}
+    panels = provenance.get("panels") if isinstance(provenance, dict) else None
+    if not isinstance(panels, dict):
+        errors.append(f"{prefix} plot provenance missing panels object")
+        return {}
+
+    labels: dict[str, set[str]] = {}
+    for panel, entries in panels.items():
+        if not isinstance(panel, str) or not isinstance(entries, list):
+            continue
+        panel_labels: set[str] = set()
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            raw_label = entry.get("x_label", entry.get("metric"))
+            if isinstance(raw_label, str) and raw_label:
+                panel_labels.add(raw_label)
+        if panel_labels:
+            labels[panel] = panel_labels
+    return labels
+
+
+def check_plot_binding_target_label(
+    repo_root: Path,
+    prefix: str,
+    binding: Any,
+    errors: list[str],
+) -> None:
+    if not isinstance(binding, dict):
+        return
+    panel = binding.get("panel")
+    x_label = binding.get("x_label")
+    if not isinstance(panel, str) or not isinstance(x_label, str) or not x_label:
+        return
+    labels = plot_target_labels(repo_root, prefix, errors).get(panel)
+    if labels is None:
+        errors.append(f"{prefix} plot_binding.panel {panel!r} is missing from target plot provenance")
+    elif x_label not in labels:
+        errors.append(
+            f"{prefix} plot_binding.x_label {x_label!r} does not match target labels for panel {panel!r}"
+        )
+
+
 def source_result_paths(extra: Any) -> list[str] | None:
     if not isinstance(extra, dict):
         return None
@@ -1022,6 +1072,7 @@ def check_record(
 
     if proof == "paper-subset" and "subset" not in str(denominator):
         errors.append(f"{prefix} paper-subset overlays must use an explicit subset denominator")
+    check_plot_binding_target_label(repo_root, prefix, binding, errors)
 
 
 def repo_root_for(ara_root: Path) -> Path:

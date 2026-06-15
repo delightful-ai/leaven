@@ -117,6 +117,9 @@ what Leaven actually ran.
   shown honestly on the paper-target panels.
 - Do not silently repair denominator drift in the plotter. If `plot_binding`
   does not match a displayed paper target label, validation must fail.
+- Overlay rows must use a `plot_binding.x_label` that exists in the committed
+  target-plot provenance for the named panel; closeout cannot count an overlay
+  row that the plotter would later reject.
 - Artifact paths and `skill_source.path` values must be repo-relative,
   inspectable files at validation time. When `skill_source.path` is present,
   the same path must also appear in `artifact_paths`; a file-backed optimized
