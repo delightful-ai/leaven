@@ -292,6 +292,13 @@ Scope:
   before drawing result overlays.
 - The checker creates a plot-shaped but provenance-invalid overlay row under
   `target/` and expects the plotter to fail before writing an image.
+- The checker also creates an otherwise shape-valid approval-gated overlay row
+  under top-level ARA `results/` and expects the plotter to fail while
+  `full_run_plan.md` remains blocked, then removes the temporary row.
+- The documented paper-target command remains dependency-minimal:
+  `uv run --with matplotlib --with pandas python scripts/plot_trace2skill_ara.py
+  docs/ara/trace2skill_spreadsheetbench`; approval YAML parsing is only needed
+  for top-level approval-gated result rows.
 - The integrated Seal Level 1 validator now runs this gate after plot freshness
   and before result intake.
 

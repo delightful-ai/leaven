@@ -123,7 +123,23 @@ def check_result_intake(repo_root: Path, ara_dir: Path, paths: list[Path]) -> No
             except ValueError:
                 errors.append(f"{path}:{line_number} result files must live under the repo root")
                 continue
-            module.check_record(repo_root, resolved, line_number, record, runbook_stages, errors)
+            approval_blockers = (
+                module.approval_packet_errors(ara_dir)
+                if (
+                    module.is_actual_ara_result_path(ara_dir, resolved)
+                    and record.get("proof_classification") in module.APPROVAL_REQUIRED_PROOF_CLASSIFICATIONS
+                )
+                else None
+            )
+            module.check_record(
+                repo_root,
+                resolved,
+                line_number,
+                record,
+                runbook_stages,
+                errors,
+                approval_blockers=approval_blockers,
+            )
     if errors:
         detail = "; ".join(errors)
         raise ValueError(f"result overlays failed result intake: {detail}")
