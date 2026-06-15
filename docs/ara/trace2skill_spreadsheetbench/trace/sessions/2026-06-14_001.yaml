@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T20:19-07:00"
-  turn_count: 36
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, importer-fixture validation, Stage 2 rendered-prompt validation/freshness, rendered-prompt artifact-contract validation, prompt-artifact result-intake admission, pre-write official-eval import admission, approval-artifact result-intake guard, runbook-stage result binding, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, dataset-manifest freshness validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, approval-state validation, deterministic one-case result-freshness validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
+  last_turn: "2026-06-14T20:23-07:00"
+  turn_count: 37
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, importer-fixture validation, Stage 2 rendered-prompt validation/freshness, rendered-prompt artifact-contract validation, prompt-artifact result-intake admission, pre-write official-eval import admission, closeout result-intake gate, approval-artifact result-intake guard, runbook-stage result binding, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, dataset-manifest freshness validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, approval-state validation, deterministic one-case result-freshness validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -229,6 +229,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Moved official-eval row admission into the importer pre-write path so stage/proof mismatches and missing prompt artifacts fail before a JSONL output artifact is created."
+  - turn: 37
+    type: experiment
+    id: "PM-2026-06-14-038"
+    routing: direct
+    provenance: ai-executed
+    summary: "Required the closeout audit to run result-intake validation before counting result JSONL rows and record result_intake_summary in the generated closeout artifacts."
 
 ai_actions:
   - turn: 1
@@ -599,6 +605,16 @@ ai_actions:
       - "scripts/AGENTS.md"
       - "docs/ara/trace2skill_spreadsheetbench/results/README.md"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 37
+    action: "Updated scripts/audit_trace2skill_closeout.py to require result-intake validity before closeout row counting, added closeout result_intake_summary validation in scripts/validate_ara.py, regenerated closeout audit artifacts, and documented the closeout freshness proof."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/audit_trace2skill_closeout.py"
+      - "scripts/validate_ara.py"
+      - "scripts/AGENTS.md"
+      - "docs/ara/trace2skill_spreadsheetbench/results/closeout_audit.json"
+      - "docs/ara/trace2skill_spreadsheetbench/results/closeout_audit.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -675,6 +691,8 @@ key_context:
     excerpt: "Result intake now rejects approval-gated rows missing runbook-required prompt artifacts; the official-eval importer fixture proves a G2 paper-subset row passes with rendered prompt and prompt_render_manifest artifacts and fails the intake check without them, while no model-backed rows, overlays, approval, or Qwen/vLLM execution were created."
   - turn: 36
     excerpt: "Official-eval imports now run result-intake preflight before write: the fixture proves a G2 paper-subset row with prompt artifacts writes four rows, while missing-prompt and wrong-stage rows fail without creating accepted JSONL output; no top-level result rows, overlays, approval, or Qwen/vLLM execution were added."
+  - turn: 37
+    excerpt: "Closeout audit now refuses invalid result rows before counting them: closeout freshness, result intake, status docs, approval expected-blocked, and validate_ara all passed while result_intake_summary.valid=true and paper_denominator_records=0 remain recorded."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."
