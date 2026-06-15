@@ -777,6 +777,7 @@ Artifact:
 
 ```text
 scripts/import_trace2skill_eval_results.py
+scripts/check_trace2skill_importer_fixture.py
 scripts/fixtures/trace2skill_eval_official_results_sample.json
 ```
 
@@ -804,6 +805,12 @@ uv run --with pyyaml python scripts/import_trace2skill_eval_results.py \
 
 Current result:
 
+- Integrated ARA validation now runs the importer fixture checker:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/ara/trace2skill_spreadsheetbench
+```
+
 - Writes four rows for the official evaluator summary metrics:
   `official_instance_accuracy`, `official_test_case_accuracy`,
   `official_avg_soft_score`, and `official_avg_hard_score`.
@@ -818,6 +825,9 @@ Current result:
 - Refuses `paper-denominator-reproduction` unless
   `--allow-paper-denominator-reproduction` and at least one
   `--approval-artifact-path` are explicitly present.
+- The checker exercises those refusal paths directly: missing runbook stage id,
+  missing approval evidence for `paper-subset`, and accidental
+  `paper-denominator-reproduction` without the explicit allow flag.
 
 Limit:
 

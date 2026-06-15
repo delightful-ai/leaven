@@ -316,6 +316,23 @@ def validate_trace2skill_result_intake(errors: list[str], root: Path) -> None:
         fail(errors, f"result intake: {result_error}")
 
 
+def validate_trace2skill_importer_fixture(errors: list[str], root: Path) -> None:
+    repo_root = repo_root_for(root.resolve())
+    checker_path = repo_root / "scripts/check_trace2skill_importer_fixture.py"
+    if not checker_path.is_file():
+        fail(errors, "missing scripts/check_trace2skill_importer_fixture.py")
+        return
+    spec = importlib.util.spec_from_file_location("check_trace2skill_importer_fixture", checker_path)
+    if spec is None or spec.loader is None:
+        fail(errors, f"cannot import {checker_path}")
+        return
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    for fixture_error in module.check_importer_fixture(repo_root, root.resolve()):
+        fail(errors, f"official-eval importer fixture: {fixture_error}")
+
+
 def validate_trace2skill_evidence_bindings(errors: list[str], root: Path) -> None:
     repo_root = repo_root_for(root.resolve())
     checker_path = repo_root / "scripts/check_trace2skill_evidence_bindings.py"
@@ -668,6 +685,7 @@ def validate(root: Path) -> list[str]:
     validate_trace2skill_plot_provenance(errors, root)
     validate_trace2skill_plot_freshness(errors, root)
     validate_trace2skill_result_intake(errors, root)
+    validate_trace2skill_importer_fixture(errors, root)
     validate_trace2skill_evidence_bindings(errors, root)
     validate_trace2skill_status_docs(errors, root)
     validate_trace2skill_rigor_followup(errors, root)
