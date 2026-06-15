@@ -27,6 +27,17 @@ SUPPORTED_RESULT_PANELS = {
     "parallel_vs_sequential",
     "reasoningbank",
 }
+REQUIRED_TRACE2SKILL_MECHANICS_TESTS = [
+    "manifest",
+    "run_artifacts",
+    "patch_bridge",
+    "patch_replay",
+    "one_case",
+    "one_case_run",
+    "cli",
+    "workbook_score",
+    "acp_external_worker",
+]
 
 
 MANDATORY_DIRS = [
@@ -86,6 +97,13 @@ def iter_tree_nodes(node: Any) -> list[dict[str, Any]]:
         for child in node.get("children", []) or []:
             nodes.extend(iter_tree_nodes(child))
     return nodes
+
+
+def repo_root_for(root: Path) -> Path:
+    for candidate in (root, *root.parents):
+        if (candidate / "examples/trace2skill_spreadsheetbench/tests").is_dir():
+            return candidate
+    return Path.cwd()
 
 
 def validate_result_record(errors: list[str], record: Any, rel_path: Path, line_number: int) -> None:
@@ -291,6 +309,20 @@ def validate(root: Path) -> list[str]:
             fail(errors, f"{evidence.relative_to(root)} missing **Source** field")
         if "|" not in text:
             fail(errors, f"{evidence.relative_to(root)} missing Markdown table")
+
+    mechanics_evidence = root / "evidence/leaven_mechanics_tests.md"
+    if mechanics_evidence.is_file():
+        mechanics_text = read(mechanics_evidence)
+        repo_root = repo_root_for(root.resolve())
+        for test_name in REQUIRED_TRACE2SKILL_MECHANICS_TESTS:
+            test_path = repo_root / f"examples/trace2skill_spreadsheetbench/tests/{test_name}.rs"
+            if not test_path.is_file():
+                fail(errors, f"missing Trace2Skill mechanics test file: {test_path.relative_to(repo_root)}")
+            expected_command = f"cargo test -p trace2skill_spreadsheetbench --test {test_name}"
+            if expected_command not in mechanics_text:
+                fail(errors, f"leaven_mechanics_tests.md missing classified target: {expected_command}")
+    else:
+        fail(errors, "missing evidence/leaven_mechanics_tests.md")
 
     results_dir = root / "results"
     if results_dir.exists():

@@ -66,14 +66,14 @@ PASS: docs/ara/trace2skill_spreadsheetbench (26 files)
 Command:
 
 ```bash
-cargo test -p trace2skill_spreadsheetbench --test manifest --test run_artifacts --test patch_bridge --test patch_replay --test one_case --test cli --test workbook_score --test acp_external_worker
+cargo test -p trace2skill_spreadsheetbench --test manifest --test run_artifacts --test patch_bridge --test patch_replay --test one_case --test one_case_run --test cli --test workbook_score --test acp_external_worker
 ```
 
 Result:
 
 ```text
-PASS: 49 tests across manifest, run_artifacts, patch_bridge, patch_replay,
-one_case, cli, workbook_score, and acp_external_worker.
+PASS: 53 tests across manifest, run_artifacts, patch_bridge, patch_replay,
+one_case, one_case_run, cli, workbook_score, and acp_external_worker.
 ```
 
 Scope:
@@ -84,6 +84,32 @@ Scope:
 Limit:
 
 - This focused gate does not run live Qwen3.5 models, vLLM, Trace2Skill analyst calls, live hierarchical merge, held-out `200..400`, seeds `41/42/43`, or cross-model/cross-domain paper metrics.
+
+## 2026-06-14 Mechanics Classification Coverage Check
+
+Artifact:
+
+```text
+scripts/validate_ara.py
+docs/ara/trace2skill_spreadsheetbench/evidence/leaven_mechanics_tests.md
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/validate_ara.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Current result:
+
+- Validator requires every current `examples/trace2skill_spreadsheetbench/tests/{manifest,run_artifacts,patch_bridge,patch_replay,one_case,one_case_run,cli,workbook_score,acp_external_worker}.rs` target to exist.
+- Validator also requires `evidence/leaven_mechanics_tests.md` to classify each corresponding `cargo test -p trace2skill_spreadsheetbench --test <target>` command.
+
+Limit:
+
+- This prevents unclassified mechanics-test drift. It does not prove live
+  Qwen/vLLM execution or promote any mechanics test to paper-denominator
+  evidence.
 
 ## 2026-06-14 Result Overlay Schema Check
 
