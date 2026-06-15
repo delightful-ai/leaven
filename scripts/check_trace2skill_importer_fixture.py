@@ -716,7 +716,7 @@ def source_evolving_row(
             "&& python evaluate_with_official.py --start_idx 0 --end_idx 200 "
             "&& python analyze_results.py "
             "&& python analysis/run_error_analysis.py "
-            "&& python analysis/run_success_analysis_llm.py "
+            "&& python analysis/run_success_analysis_llm.py --max_workers 128 "
             f"&& python -m skill_evolver.run_parallel_skill_evolution --model {model_id} "
             f"--merge-batch-size 32 --max-workers 128 --seed {seed}"
         ),
@@ -763,6 +763,20 @@ def check_evolving_result_intake(repo_root: Path, ara_root: Path, tmp_path: Path
         "evolving-split-run source_command must include --merge-batch-size 32",
         errors,
         "evolving source-command merge-batch drift",
+    )
+
+    def mutate_evolving_to_wrong_source_success_workers(row: dict[str, Any]) -> None:
+        row["source_command"] = row["source_command"].replace("--max_workers 128", "--max_workers 1")
+
+    check_mutated_result_intake(
+        repo_root,
+        ara_root,
+        output,
+        tmp_path / "evolving-wrong-source-success-workers.jsonl",
+        mutate_evolving_to_wrong_source_success_workers,
+        "evolving-split-run source_command must include --max_workers 128",
+        errors,
+        "evolving source-command success-worker drift",
     )
 
     def mutate_evolving_to_wrong_source_max_workers(row: dict[str, Any]) -> None:
