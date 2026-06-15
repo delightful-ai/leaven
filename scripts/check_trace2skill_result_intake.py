@@ -564,6 +564,29 @@ def source_rows(
     return rows
 
 
+def check_source_identity_matches(
+    prefix: str,
+    stage_id: Any,
+    parent: dict[str, Any],
+    source: dict[str, Any],
+    source_path: Path,
+    source_line_number: int,
+    repo_root: Path,
+    errors: list[str],
+) -> None:
+    source_label = f"{source_path.relative_to(repo_root)}:{source_line_number}"
+    for key, noun in (
+        ("model_id", "model_id"),
+        ("serving_backend", "serving_backend"),
+        ("metric_name", "metric_name"),
+        ("metric_unit", "metric_unit"),
+    ):
+        if source.get(key) != parent.get(key):
+            errors.append(
+                f"{prefix} {stage_id} source row {source_label} must match parent row {noun} {parent.get(key)!r}"
+            )
+
+
 def check_stage_aggregate_policy(
     repo_root: Path,
     current_path: Path,
@@ -647,6 +670,16 @@ def check_stage_aggregate_policy(
                 continue
             if source.get("proof_classification") != source_proof:
                 continue
+            check_source_identity_matches(
+                prefix,
+                stage_id,
+                record,
+                source,
+                source_path,
+                line_number,
+                repo_root,
+                errors,
+            )
             seed = normalize_seed(source.get("seed"))
             if seed is not None:
                 observed.add(seed)
@@ -703,6 +736,16 @@ def check_stage_aggregate_policy(
             source_range = source_slice.get("case_range") if isinstance(source_slice, dict) else None
             if isinstance(source_range, str) and source_range:
                 observed_ranges.add(source_range)
+            check_source_identity_matches(
+                prefix,
+                stage_id,
+                record,
+                source,
+                source_path,
+                source_line_number,
+                repo_root,
+                errors,
+            )
         if isinstance(required_ranges, list) and all(isinstance(item, str) for item in required_ranges):
             missing = [case_range for case_range in required_ranges if case_range not in observed_ranges]
             if missing:

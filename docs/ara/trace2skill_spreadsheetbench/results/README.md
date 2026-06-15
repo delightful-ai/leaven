@@ -136,7 +136,10 @@ cite inspectable held-out single-seed result JSONL rows that themselves pass
 result intake for seeds `41`, `42`, and `43`, and full-paper rows must cite
 training-validation, seed-aggregate, or paper-candidate source rows that also
 pass result intake and together cover the generated required split ranges such
-as `0..200` and `200..400`. When a cited source row lives in top-level ARA
+as `0..200` and `200..400`. Aggregate and full-paper source rows must also match
+the parent row's `model_id`, `serving_backend`, `metric_name`, and `metric_unit`,
+so a seed aggregate or full-paper row cannot silently combine incompatible model
+or metric conditions. When a cited source row lives in top-level ARA
 `results/*.jsonl`, approval-gated source rows must also pass the runnable
 approval-packet preflight before they can count as aggregate or full-paper
 support.

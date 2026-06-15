@@ -438,7 +438,13 @@ def check_model_one_case_result_intake(
     )
 
 
-def source_heldout_row(repo_root: Path, tmp_path: Path, seed: int) -> dict[str, Any]:
+def source_heldout_row(
+    repo_root: Path,
+    tmp_path: Path,
+    seed: int,
+    model_id: str = "Qwen3.5-122B-A10B",
+    serving_backend: str = "vLLM",
+) -> dict[str, Any]:
     prompt = touch(
         repo_root,
         tmp_path / f"heldout_seed_{seed}/rendered_prompts/52807/agent_prompt.md",
@@ -466,8 +472,8 @@ def source_heldout_row(repo_root: Path, tmp_path: Path, seed: int) -> dict[str, 
             "case_count": 200,
             "denominator": "held-out-200..400",
         },
-        "model_id": "fixture-model",
-        "serving_backend": "fixture-backend",
+        "model_id": model_id,
+        "serving_backend": serving_backend,
         "seed": seed,
         "skill_source": {"kind": "fixture-heldout"},
         "metric_name": "official_instance_accuracy",
@@ -498,7 +504,13 @@ def source_heldout_row(repo_root: Path, tmp_path: Path, seed: int) -> dict[str, 
     }
 
 
-def source_training_validation_row(repo_root: Path, tmp_path: Path, seed: int) -> dict[str, Any]:
+def source_training_validation_row(
+    repo_root: Path,
+    tmp_path: Path,
+    seed: int,
+    model_id: str = "Qwen3.5-122B-A10B",
+    serving_backend: str = "vLLM",
+) -> dict[str, Any]:
     base = tmp_path / f"validation_train_seed_{seed}"
     baseline_prompt = touch(
         repo_root,
@@ -547,8 +559,8 @@ def source_training_validation_row(repo_root: Path, tmp_path: Path, seed: int) -
             "case_count": 200,
             "denominator": "training-validation-0..200",
         },
-        "model_id": "fixture-model",
-        "serving_backend": "fixture-backend",
+        "model_id": model_id,
+        "serving_backend": serving_backend,
         "seed": seed,
         "skill_source": {"kind": "fixture-training-validation"},
         "metric_name": "official_instance_accuracy",
@@ -612,8 +624,8 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
             "case_count": 200,
             "denominator": "seed-aggregate-41-42-43",
         },
-        "model_id": "fixture-model",
-        "serving_backend": "fixture-backend",
+        "model_id": "Qwen3.5-122B-A10B",
+        "serving_backend": "vLLM",
         "seed": None,
         "skill_source": {"kind": "fixture-aggregate"},
         "metric_name": "official_instance_accuracy",
@@ -691,6 +703,31 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
             "does not pass result intake",
             errors,
             "aggregate invalid source row",
+        )
+
+        mismatched_model_paths = list(source_paths)
+        mismatched_model_source_path = tmp_path / "heldout_seed_41_wrong_model.jsonl"
+        write_jsonl(
+            mismatched_model_source_path,
+            [source_heldout_row(repo_root, tmp_path, 41, model_id="fixture-other-model")],
+        )
+        mismatched_model_paths[0] = mismatched_model_source_path.relative_to(repo_root).as_posix()
+        mismatched_model_aggregate_row = json.loads(json.dumps(aggregate_row))
+        mismatched_model_aggregate_row["artifact_paths"] = [
+            APPROVAL_ARTIFACT,
+            prompt_manifest_rel,
+            *mismatched_model_paths,
+        ]
+        mismatched_model_aggregate_row["extra"]["source_result_paths"] = mismatched_model_paths
+        mismatched_model_aggregate_output = tmp_path / "aggregate-mismatched-source-model.jsonl"
+        write_jsonl(mismatched_model_aggregate_output, [mismatched_model_aggregate_row])
+        check_result_intake_for_rows(
+            repo_root,
+            ara_root,
+            mismatched_model_aggregate_output,
+            "G5 source row",
+            errors,
+            "aggregate source model drift",
         )
 
         blocked_source_paths: list[str] = []
@@ -780,6 +817,34 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
             "G6 full-paper rows must cite source result rows covering split ranges ['0..200']",
             errors,
             "full-paper missing training source range",
+        )
+
+        mismatched_training_output = tmp_path / "training-validation-seed-41-wrong-model.jsonl"
+        write_jsonl(
+            mismatched_training_output,
+            [source_training_validation_row(repo_root, tmp_path, 41, model_id="fixture-other-model")],
+        )
+        mismatched_training_output_rel = mismatched_training_output.relative_to(repo_root).as_posix()
+        mismatched_training_full_paper_row = json.loads(json.dumps(full_paper_row))
+        mismatched_training_full_paper_row["artifact_paths"] = [
+            APPROVAL_ARTIFACT,
+            prompt_manifest_rel,
+            mismatched_training_output_rel,
+            aggregate_output_rel,
+        ]
+        mismatched_training_full_paper_row["extra"]["source_result_paths"] = [
+            mismatched_training_output_rel,
+            aggregate_output_rel,
+        ]
+        mismatched_training_full_paper_output = tmp_path / "full-paper-mismatched-training-model.jsonl"
+        write_jsonl(mismatched_training_full_paper_output, [mismatched_training_full_paper_row])
+        check_result_intake_for_rows(
+            repo_root,
+            ara_root,
+            mismatched_training_full_paper_output,
+            "G6 source row",
+            errors,
+            "full-paper source model drift",
         )
 
         invalid_case_count_output = tmp_path / "full-paper-invalid-case-count.jsonl"
