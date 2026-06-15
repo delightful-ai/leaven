@@ -264,3 +264,7 @@ entries:
     notes:
       - "Routed G6 unreachable source-class removal as denominator-provenance guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the change only removes a generated source class that no current runbook stage can produce; it creates no accepted model-backed rows, overlays, approvals, seed aggregates, full-paper rows, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#67"
+    notes:
+      - "Routed aggregate source-policy validator locking as denominator-provenance guardrail evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the change only makes validate_ara reject future G5/G6 source-policy drift; it creates no accepted model-backed rows, overlays, approvals, seed aggregates, full-paper rows, or Qwen/vLLM execution."
