@@ -506,6 +506,7 @@ def check_stage_command_policy(
     prefix: str,
     stage: dict[str, Any] | None,
     record: dict[str, Any],
+    dataset_slice: Any,
     errors: list[str],
 ) -> None:
     if stage is None:
@@ -535,6 +536,18 @@ def check_stage_command_policy(
     for fragment in fragments:
         if fragment not in source_command:
             errors.append(f"{prefix} {stage_id} source_command must include {fragment!r}")
+
+    if not isinstance(dataset_slice, dict):
+        return
+    case_range = parse_case_range(dataset_slice.get("case_range"))
+    if case_range is None:
+        return
+    start, end = case_range
+    for fragment in (f"--start_idx {start}", f"--end_idx {end}"):
+        if fragment not in source_command:
+            errors.append(
+                f"{prefix} {stage_id} source_command must include dataset range fragment {fragment!r}"
+            )
 
 
 def source_result_paths(extra: Any) -> list[str] | None:
@@ -853,7 +866,7 @@ def check_record(
     check_stage_dataset_slice(prefix, stage, record, dataset_slice, errors)
     check_stage_seed_policy(prefix, stage, record, errors)
     check_stage_runtime_policy(prefix, stage, record, errors)
-    check_stage_command_policy(prefix, stage, record, errors)
+    check_stage_command_policy(prefix, stage, record, dataset_slice, errors)
 
     artifact_paths = record.get("artifact_paths")
     if not isinstance(artifact_paths, list) or not artifact_paths:

@@ -175,7 +175,9 @@ what Leaven actually ran.
 - Result rows must also satisfy the named runbook stage's generated
   `expected_command_policy`: `extra.command_policy` must match the generated
   policy kind, and `source_command` must include the upstream command fragments
-  required for that stage.
+  required for that stage. When the row has a `dataset_slice.case_range`,
+  `source_command` must also include matching concrete `--start_idx` and
+  `--end_idx` fragments.
 - Aggregate result rows must also satisfy the named runbook stage's generated
   `expected_aggregate_policy`: seed-aggregate rows must cite inspectable source
   result JSONL rows whose held-out single-seed predecessor rows pass result

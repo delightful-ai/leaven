@@ -1193,6 +1193,23 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "subset command-policy drift",
         )
 
+        def mutate_subset_to_wrong_source_range(row: dict[str, Any]) -> None:
+            row["source_command"] = (
+                "python run_spreadsheetbench.py --start_idx 0 --end_idx 2 "
+                "&& python evaluate_with_official.py --start_idx 0 --end_idx 2"
+            )
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "subset-wrong-source-range.jsonl",
+            mutate_subset_to_wrong_source_range,
+            "G2 source_command must include dataset range fragment '--start_idx 200'",
+            errors,
+            "subset source-command range drift",
+        )
+
         wrong_range_args = importer_base_args(
             tmp_path / "wrong-case-range.jsonl",
             prompt_artifact_paths(repo_root, tmp_path),
