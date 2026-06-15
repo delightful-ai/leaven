@@ -1219,6 +1219,8 @@ Current result:
 - Verifies staged denominator labels include model one-case, paper subset,
   evolving split, training validation, held-out single-seed, seed aggregate, and
   paper-denominator reproduction labels.
+- Verifies every runbook `forbidden_label` keeps the stage from claiming a
+  stronger denominator than its evidence can support.
 - Verifies model one-case, evolving split, and training validation rows remain
   non-overlay result rows.
 

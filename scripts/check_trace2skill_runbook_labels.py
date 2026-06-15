@@ -11,6 +11,17 @@ from pathlib import Path
 
 
 RUNBOOK_ONLY_LABELS = {"guardrail-ready"}
+EXPECTED_FORBIDDEN_LABELS = {
+    "G0": "paper reproduction",
+    "G1": "paper reproduction",
+    "G1M": "held-out split reproduced",
+    "G2": "held-out split reproduced",
+    "G3": "held-out result",
+    "G3V": "held-out result",
+    "G4": "paper aggregate",
+    "G5": "cross-model paper reproduction",
+    "G6": "anything stronger than completed rows",
+}
 RESULT_PROOF_CLASSIFICATIONS = {
     "mechanics-smoke",
     "deterministic-one-case",
@@ -36,14 +47,13 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def load_runbook_labels(ara_root: Path) -> set[str]:
+def load_runbook_stages(ara_root: Path) -> list[dict[str, object]]:
     runbook_path = ara_root / "results/full_denominator_runbook.json"
     runbook = json.loads(read(runbook_path))
-    labels: set[str] = set()
-    for stage in runbook.get("stages", []):
-        if isinstance(stage, dict) and isinstance(stage.get("allowed_label"), str):
-            labels.add(stage["allowed_label"])
-    return labels
+    stages = runbook.get("stages")
+    if not isinstance(stages, list):
+        return []
+    return [stage for stage in stages if isinstance(stage, dict)]
 
 
 def extract_python_set(path: Path, name: str) -> set[str]:
@@ -111,7 +121,10 @@ def check_code_constants(repo_root: Path, expected: set[str]) -> list[str]:
 
 def check_runbook_labels(repo_root: Path, ara_root: Path) -> list[str]:
     errors: list[str] = []
-    runbook_labels = load_runbook_labels(ara_root)
+    stages = load_runbook_stages(ara_root)
+    runbook_labels = {
+        stage["allowed_label"] for stage in stages if isinstance(stage.get("allowed_label"), str)
+    }
     unexpected = runbook_labels - RESULT_PROOF_CLASSIFICATIONS - RUNBOOK_ONLY_LABELS
     if unexpected:
         errors.append(f"full_denominator_runbook.json uses unsupported allowed_label values: {sorted(unexpected)}")
@@ -127,6 +140,27 @@ def check_runbook_labels(repo_root: Path, ara_root: Path) -> list[str]:
     } - runbook_labels
     if missing_from_runbook:
         errors.append(f"full_denominator_runbook.json missing staged labels: {sorted(missing_from_runbook)}")
+
+    stages_by_id = {stage.get("id"): stage for stage in stages}
+    for stage_id, expected_forbidden in EXPECTED_FORBIDDEN_LABELS.items():
+        stage = stages_by_id.get(stage_id)
+        if not isinstance(stage, dict):
+            errors.append(f"full_denominator_runbook.json missing stage {stage_id}")
+            continue
+        actual_forbidden = stage.get("forbidden_label")
+        if actual_forbidden != expected_forbidden:
+            errors.append(
+                f"full_denominator_runbook.json stage {stage_id} forbidden_label is "
+                f"{actual_forbidden!r}, expected {expected_forbidden!r}"
+            )
+    forbidden_labels = {
+        stage["forbidden_label"] for stage in stages if isinstance(stage.get("forbidden_label"), str)
+    }
+    leaked = forbidden_labels & runbook_labels
+    if leaked:
+        errors.append(
+            f"full_denominator_runbook.json uses forbidden labels as allowed labels: {sorted(leaked)}"
+        )
 
     errors.extend(check_readme_labels(ara_root, RESULT_PROOF_CLASSIFICATIONS))
     errors.extend(check_schema_notes(ara_root))
