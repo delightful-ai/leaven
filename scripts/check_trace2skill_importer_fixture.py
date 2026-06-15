@@ -279,13 +279,63 @@ def check_mutated_result_intake(
     )
 
 
-def source_heldout_row(seed: int) -> dict[str, Any]:
+def source_heldout_row(repo_root: Path, tmp_path: Path, seed: int) -> dict[str, Any]:
+    prompt = touch(
+        repo_root,
+        tmp_path / f"heldout_seed_{seed}/rendered_prompts/52807/agent_prompt.md",
+        f"fixture held-out seed {seed} rendered agent prompt\n",
+    )
+    prompt_manifest = touch(
+        repo_root,
+        tmp_path / f"heldout_seed_{seed}/prompt_render_manifest.json",
+        '{"schema_version":"fixture.heldout_prompt_manifest.v1"}\n',
+    )
+    eval_result = touch(
+        repo_root,
+        tmp_path / f"heldout_seed_{seed}/outputs/eval_official_results.json",
+        '{"schema_version":"fixture.heldout_eval.v1"}\n',
+    )
     return {
+        "schema_version": "leaven.trace2skill.result.v1",
+        "run_id": f"trace2skill-heldout-fixture-seed-{seed}",
+        "created_at": "2026-06-14T00:00:03Z",
         "proof_classification": "held-out-single-seed-candidate",
+        "dataset_slice": {
+            "name": "SpreadsheetBench-Verified",
+            "split": "held_out",
+            "case_range": "200..400",
+            "case_count": 200,
+            "denominator": "held-out-200..400",
+        },
+        "model_id": "fixture-model",
+        "serving_backend": "fixture-backend",
         "seed": seed,
+        "skill_source": {"kind": "fixture-heldout"},
+        "metric_name": "official_instance_accuracy",
+        "metric_value": 50.0,
+        "metric_unit": "percent",
+        "plot_binding": None,
+        "cost": {
+            "usd": None,
+            "prompt_tokens": None,
+            "completion_tokens": None,
+        },
+        "runtime": {
+            "seconds": None,
+            "workers": 128,
+            "max_turns": 100,
+        },
+        "source_command": (
+            "python run_spreadsheetbench.py --start_idx 200 --end_idx 400 "
+            "&& python evaluate_with_official.py --start_idx 200 --end_idx 400"
+        ),
+        "artifact_paths": [APPROVAL_ARTIFACT, prompt, prompt_manifest, eval_result],
         "extra": {
             "runbook_stage_id": "G4",
+            "approval_artifact_paths": [APPROVAL_ARTIFACT],
+            "command_policy": "upstream-eval",
         },
+        "notes": "",
     }
 
 
@@ -293,7 +343,7 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
     source_paths: list[str] = []
     for seed in (41, 42, 43):
         source_path = tmp_path / f"heldout_seed_{seed}.jsonl"
-        write_jsonl(source_path, [source_heldout_row(seed)])
+        write_jsonl(source_path, [source_heldout_row(repo_root, tmp_path, seed)])
         source_paths.append(source_path.relative_to(repo_root).as_posix())
 
     prompt_manifest = repo_root / "docs/ara/trace2skill_spreadsheetbench/results/fixture_aggregate.prompt_render_manifest.json"
@@ -355,6 +405,27 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
             "G5 aggregate rows must cite at least 3 source result path(s)",
             errors,
             "aggregate source-result drift",
+        )
+
+        invalid_source_paths = list(source_paths)
+        invalid_source_path = tmp_path / "heldout_seed_41_invalid.jsonl"
+        invalid_source_row = source_heldout_row(repo_root, tmp_path, 41)
+        invalid_source_row["runtime"] = dict(invalid_source_row["runtime"])
+        invalid_source_row["runtime"]["workers"] = 1
+        write_jsonl(invalid_source_path, [invalid_source_row])
+        invalid_source_paths[0] = invalid_source_path.relative_to(repo_root).as_posix()
+        invalid_aggregate_row = json.loads(json.dumps(aggregate_row))
+        invalid_aggregate_row["artifact_paths"] = [APPROVAL_ARTIFACT, prompt_manifest_rel, *invalid_source_paths]
+        invalid_aggregate_row["extra"]["source_result_paths"] = invalid_source_paths
+        invalid_aggregate_output = tmp_path / "aggregate-invalid-source-row.jsonl"
+        write_jsonl(invalid_aggregate_output, [invalid_aggregate_row])
+        check_result_intake_for_rows(
+            repo_root,
+            ara_root,
+            invalid_aggregate_output,
+            "does not pass result intake",
+            errors,
+            "aggregate invalid source row",
         )
     finally:
         prompt_manifest.unlink(missing_ok=True)

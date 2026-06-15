@@ -348,8 +348,13 @@ def source_result_paths(extra: Any) -> list[str] | None:
     return paths
 
 
-def source_rows(repo_root: Path, rel_paths: list[str], errors: list[str], prefix: str) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
+def source_rows(
+    repo_root: Path,
+    rel_paths: list[str],
+    errors: list[str],
+    prefix: str,
+) -> list[tuple[Path, int, dict[str, Any]]]:
+    rows: list[tuple[Path, int, dict[str, Any]]] = []
     for rel_path in rel_paths:
         path = repo_root / rel_path
         try:
@@ -357,7 +362,7 @@ def source_rows(repo_root: Path, rel_paths: list[str], errors: list[str], prefix
         except (json.JSONDecodeError, OSError, ValueError) as exc:
             errors.append(f"{prefix} source result path {rel_path!r} is not valid JSONL: {exc}")
             continue
-        rows.extend(record for _, record in loaded)
+        rows.extend((path, line_number, record) for line_number, record in loaded)
     return rows
 
 
@@ -367,6 +372,7 @@ def check_stage_aggregate_policy(
     prefix: str,
     stage: dict[str, Any] | None,
     record: dict[str, Any],
+    runbook_stages: dict[str, dict[str, Any]],
     artifact_paths: Any,
     errors: list[str],
 ) -> None:
@@ -407,7 +413,22 @@ def check_stage_aggregate_policy(
         source_stage_id = expected.get("source_runbook_stage_id")
         source_proof = expected.get("source_proof_classification")
         observed: set[int] = set()
-        for source in rows:
+        for source_path, line_number, source in rows:
+            source_errors: list[str] = []
+            check_record(
+                repo_root,
+                source_path,
+                line_number,
+                source,
+                runbook_stages,
+                source_errors,
+                validate_aggregate=False,
+            )
+            if source_errors:
+                errors.append(
+                    f"{prefix} {stage_id} source row {source_path.relative_to(repo_root)}:{line_number} "
+                    f"does not pass result intake: {source_errors!r}"
+                )
             source_extra = source.get("extra")
             if not isinstance(source_extra, dict):
                 continue
@@ -428,7 +449,7 @@ def check_stage_aggregate_policy(
         if not isinstance(classifications, list) or not all(isinstance(item, str) for item in classifications):
             errors.append(f"{prefix} runbook stage {stage_id!r} expected_aggregate_policy source_proof_classifications must be strings")
             return
-        if not any(source.get("proof_classification") in classifications for source in rows):
+        if not any(source.get("proof_classification") in classifications for _, _, source in rows):
             errors.append(f"{prefix} {stage_id} full-paper rows must cite aggregate or candidate source result rows")
         return
 
@@ -442,6 +463,7 @@ def check_record(
     record: dict[str, Any],
     runbook_stages: dict[str, dict[str, Any]],
     errors: list[str],
+    validate_aggregate: bool = True,
 ) -> None:
     prefix = f"{path.relative_to(repo_root)}:{line_number}"
     proof = record.get("proof_classification")
@@ -474,7 +496,8 @@ def check_record(
     else:
         for rel_path in artifact_paths:
             check_artifact_path(repo_root, prefix, rel_path, errors)
-    check_stage_aggregate_policy(repo_root, path, prefix, stage, record, artifact_paths, errors)
+    if validate_aggregate:
+        check_stage_aggregate_policy(repo_root, path, prefix, stage, record, runbook_stages, artifact_paths, errors)
     check_required_prompt_artifacts(prefix, proof, stage, artifact_paths, errors)
 
     skill_path = record.get("skill_source", {}).get("path")

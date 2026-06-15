@@ -844,8 +844,9 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
   `skill_evolver.run_parallel_skill_evolution` commands.
 - Validates aggregate provenance against the named runbook stage's generated
   `expected_aggregate_policy`: seed aggregate rows must cite inspectable G4
-  held-out source result JSONL rows for seeds `41`, `42`, and `43`; full-paper
-  rows must cite aggregate or paper-candidate source result JSONL rows.
+  held-out source result JSONL rows that themselves pass result intake for
+  seeds `41`, `42`, and `43`; full-paper rows must cite aggregate or
+  paper-candidate source result JSONL rows.
 - Requires approval-gated rows to include prompt artifact paths matching their
   runbook stage expectations, such as rendered prompts and prompt-render
   manifests.

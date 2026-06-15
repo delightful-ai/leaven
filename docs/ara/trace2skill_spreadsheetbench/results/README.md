@@ -111,9 +111,9 @@ evidence is checked against generated `expected_command_policy`, so rows must
 carry `extra.command_policy` and a `source_command` containing the upstream
 command fragments required by the originating stage. Aggregate evidence is
 checked against generated `expected_aggregate_policy`, so seed aggregates must
-cite inspectable held-out single-seed result JSONL rows for seeds `41`, `42`,
-and `43`, and full-paper rows must cite aggregate or paper-candidate source
-rows.
+cite inspectable held-out single-seed result JSONL rows that themselves pass
+result intake for seeds `41`, `42`, and `43`, and full-paper rows must cite
+aggregate or paper-candidate source rows.
 
 The full-denominator approval packet can be checked with:
 
