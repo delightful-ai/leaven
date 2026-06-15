@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T19:34-07:00"
-  turn_count: 27
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, approval-artifact result-intake guard, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, approval-state validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
+  last_turn: "2026-06-14T19:37-07:00"
+  turn_count: 28
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, approval-artifact result-intake guard, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, approval-state validation, deterministic one-case result-freshness validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -175,6 +175,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Added approval-state checker; the full-run approval packet must be either runnable or intentionally blocked with matching closeout/status docs before validation passes."
+  - turn: 28
+    type: experiment
+    id: "PM-2026-06-14-029"
+    routing: direct
+    provenance: ai-executed
+    summary: "Added deterministic one-case result-freshness checker; deterministic_one_case.jsonl is rebuilt in a temporary directory from current one-case artifacts and compared with the committed row before validation passes."
 
 ai_actions:
   - turn: 1
@@ -460,6 +466,14 @@ ai_actions:
       - "scripts/validate_ara.py"
       - "scripts/AGENTS.md"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 28
+    action: "Added scripts/check_trace2skill_one_case_result_freshness.py, wired it into validate_ara.py, and documented the deterministic one-case result-row freshness proof."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/check_trace2skill_one_case_result_freshness.py"
+      - "scripts/validate_ara.py"
+      - "scripts/AGENTS.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -518,6 +532,8 @@ key_context:
     excerpt: "Plot-freshness check passed directly and through validate_ara; it regenerates trace2skill_targets.png from current ARA evidence/result-row state and compares the PNG hash while leaving overlays, paper-denominator rows, approval, and Qwen/vLLM execution absent."
   - turn: 27
     excerpt: "Approval-state check passed directly and through validate_ara; it confirms the full-run packet is intentionally blocked and that closeout/status docs carry the same unresolved fields while leaving approval, model endpoints, credentials, tolerance, and Qwen/vLLM execution absent."
+  - turn: 28
+    excerpt: "Deterministic one-case result-freshness check passed directly and through validate_ara; it rebuilds deterministic_one_case.jsonl from current one-case artifacts with the documented relative run-dir path and compares the committed row while leaving model-backed one-case, overlays, paper-denominator rows, approval, and Qwen/vLLM execution absent."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."

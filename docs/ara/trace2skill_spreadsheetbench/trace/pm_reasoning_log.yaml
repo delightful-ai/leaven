@@ -107,3 +107,8 @@ entries:
     notes:
       - "Routed approval-state validation as approval/closeout consistency evidence."
       - "Kept reproduction claims unchanged because the checker proves blocked-state consistency only; it does not fill approvals, create result rows, or execute Qwen/vLLM."
+  - turn: "2026-06-14_001#28"
+    notes:
+      - "Routed deterministic one-case result-freshness validation as result-row integrity evidence."
+      - "Kept reproduction claims unchanged because the checker proves the one-case JSONL is current only; it does not create overlays, model-backed rows, approval, or Qwen/vLLM execution."
+      - "Debug note: the checker must call build_trace2skill_one_case_result.py with the documented repo-relative run-dir; an absolute run-dir regenerates semantically equivalent JSON with absolute artifact paths and is the wrong operator path to compare."
