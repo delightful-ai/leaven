@@ -789,6 +789,7 @@ uv run --with pyyaml python scripts/import_trace2skill_eval_results.py \
   --run-id trace2skill-import-fixture \
   --created-at 2026-06-14T00:00:02Z \
   --proof-classification paper-subset \
+  --runbook-stage-id G2 \
   --split fixture \
   --case-range 0..2 \
   --case-count 2 \
@@ -808,6 +809,8 @@ Current result:
   `official_avg_soft_score`, and `official_avg_hard_score`.
 - Converts evaluator fractions to percent-valued Leaven result rows.
 - Defaults every row to `plot_binding: null`.
+- Requires every row to carry `extra.runbook_stage_id` and validates the stage
+  label against `full_denominator_runbook.json` during result intake.
 - Requires approval-gated proof classifications, including `paper-subset`, to
   include at least one inspectable `--approval-artifact-path`.
 - Requires `--eval-results`, `--skill-path`, `--artifact-path`, and

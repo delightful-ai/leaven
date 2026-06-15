@@ -64,6 +64,7 @@ uv run --with pyyaml python scripts/import_trace2skill_eval_results.py \
   --run-id <run_id> \
   --created-at <timestamp> \
   --proof-classification paper-subset \
+  --runbook-stage-id G2 \
   --split <split> \
   --case-range <start..end> \
   --case-count <n> \
@@ -86,7 +87,9 @@ classification requires at least one `--approval-artifact-path`; this includes
 `paper-denominator-reproduction`. `paper-denominator-reproduction` also requires
 `--allow-paper-denominator-reproduction`. Every `--eval-results`,
 `--skill-path`, `--artifact-path`, and `--approval-artifact-path` value must
-exist locally when the importer runs.
+exist locally when the importer runs. Every row must carry
+`extra.runbook_stage_id` naming a stage in `full_denominator_runbook.json`; that
+stage's `allowed_label` must match the row's `proof_classification`.
 
 The full-denominator approval packet can be checked with:
 

@@ -98,6 +98,7 @@ def build_record(run_dir: Path, created_at: str | None) -> dict[str, Any]:
         ],
         "notes": "Deterministic one-case result record. plot_binding is null by design: this row must not be overlaid on paper-target SpreadsheetBench/Qwen/vLLM plots.",
         "extra": {
+            "runbook_stage_id": "G1",
             "case_id": score["case_id"],
             "answer_sheet": score["answer_sheet"],
             "answer_position": score["answer_position"],

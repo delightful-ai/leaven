@@ -271,6 +271,7 @@ def build_records(args: argparse.Namespace) -> list[dict[str, Any]]:
         }
         if args.proof_classification in APPROVAL_REQUIRED_PROOF_CLASSIFICATIONS:
             record["extra"]["approval_artifact_paths"] = args.approval_artifact_path
+        record["extra"]["runbook_stage_id"] = args.runbook_stage_id
         if args.proof_classification == "paper-denominator-reproduction":
             record["extra"]["paper_denominator_reproduction_allowed_by"] = (
                 "--allow-paper-denominator-reproduction"
@@ -295,6 +296,12 @@ def main() -> int:
     parser.add_argument("--run-id", type=non_empty, required=True)
     parser.add_argument("--created-at", type=non_empty, required=True)
     parser.add_argument("--proof-classification", choices=sorted(ALLOWED_PROOF_CLASSIFICATIONS), required=True)
+    parser.add_argument(
+        "--runbook-stage-id",
+        type=non_empty,
+        required=True,
+        help="Full-denominator runbook stage id whose allowed_label matches the proof classification.",
+    )
     parser.add_argument("--dataset-name", default="SpreadsheetBench-Verified")
     parser.add_argument("--split", type=non_empty, required=True)
     parser.add_argument("--case-range", type=non_empty, required=True)

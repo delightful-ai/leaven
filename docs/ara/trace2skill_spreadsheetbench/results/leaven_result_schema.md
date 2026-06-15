@@ -56,6 +56,7 @@ what Leaven actually ran.
     "docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md"
   ],
   "extra": {
+    "runbook_stage_id": "G4",
     "approval_artifact_paths": [
       "docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md"
     ]
@@ -84,6 +85,7 @@ what Leaven actually ran.
 | `runtime` | object | Include `seconds`; include workers/turn budget when relevant. |
 | `source_command` | string | Exact command or harness invocation that produced the metric. |
 | `artifact_paths` | array | Non-empty list of inspectable artifacts. |
+| `extra.runbook_stage_id` | string | Must name a stage in `full_denominator_runbook.json`; that stage's `allowed_label` must match `proof_classification`. |
 | `extra.approval_artifact_paths` | array | Required for every approval-gated class: `model-one-case`, `paper-subset`, `evolving-split-run`, `training-validation-candidate`, `held-out-single-seed-candidate`, `seed-aggregate-candidate`, `paper-denominator-candidate`, and `paper-denominator-reproduction`. Each entry must also appear in `artifact_paths`. |
 | `notes` | string | Empty string is allowed; missing is not. |
 
@@ -113,3 +115,6 @@ what Leaven actually ran.
 - Approval-gated rows must carry at least one inspectable
   `extra.approval_artifact_paths` entry and that same path must be included in
   `artifact_paths`.
+- Result rows must carry `extra.runbook_stage_id`; result intake rejects rows
+  whose stage is missing from the generated full-denominator runbook or whose
+  stage `allowed_label` differs from the row's `proof_classification`.

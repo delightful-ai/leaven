@@ -65,11 +65,32 @@ def check_artifact_path(repo_root: Path, prefix: str, rel_path: str, errors: lis
         errors.append(f"{prefix} artifact path is not inspectable: {rel_path}")
 
 
-def check_record(repo_root: Path, path: Path, line_number: int, record: dict[str, Any], errors: list[str]) -> None:
+def check_record(
+    repo_root: Path,
+    path: Path,
+    line_number: int,
+    record: dict[str, Any],
+    runbook_stages: dict[str, dict[str, Any]],
+    errors: list[str],
+) -> None:
     prefix = f"{path.relative_to(repo_root)}:{line_number}"
     proof = record.get("proof_classification")
     binding = record.get("plot_binding")
     denominator = record.get("dataset_slice", {}).get("denominator")
+    extra = record.get("extra")
+
+    stage_id = extra.get("runbook_stage_id") if isinstance(extra, dict) else None
+    if not isinstance(stage_id, str) or not stage_id:
+        errors.append(f"{prefix} extra.runbook_stage_id must name the originating runbook stage")
+    else:
+        stage = runbook_stages.get(stage_id)
+        if stage is None:
+            errors.append(f"{prefix} extra.runbook_stage_id {stage_id!r} is not in full_denominator_runbook.json")
+        elif stage.get("allowed_label") != proof:
+            errors.append(
+                f"{prefix} proof_classification {proof!r} does not match runbook stage "
+                f"{stage_id} allowed_label {stage.get('allowed_label')!r}"
+            )
 
     artifact_paths = record.get("artifact_paths")
     if not isinstance(artifact_paths, list) or not artifact_paths:
@@ -83,7 +104,6 @@ def check_record(repo_root: Path, path: Path, line_number: int, record: dict[str
         check_artifact_path(repo_root, prefix, skill_path, errors)
 
     if proof in APPROVAL_REQUIRED_PROOF_CLASSIFICATIONS:
-        extra = record.get("extra")
         approval_paths = extra.get("approval_artifact_paths") if isinstance(extra, dict) else None
         if not isinstance(approval_paths, list) or not approval_paths:
             errors.append(f"{prefix} {proof} rows must include extra.approval_artifact_paths")
@@ -149,6 +169,12 @@ def check_result_intake(repo_root: Path, ara_root: Path) -> list[str]:
     repo_root = repo_root.resolve()
     ara_root = ara_root.resolve()
     results_dir = ara_root / "results"
+    runbook = json.loads((ara_root / "results/full_denominator_runbook.json").read_text(encoding="utf-8"))
+    runbook_stages = {
+        stage["id"]: stage
+        for stage in runbook.get("stages", [])
+        if isinstance(stage, dict) and isinstance(stage.get("id"), str)
+    }
     for path in sorted(results_dir.glob("*.jsonl")):
         try:
             rows = load_jsonl(path)
@@ -156,7 +182,7 @@ def check_result_intake(repo_root: Path, ara_root: Path) -> list[str]:
             errors.append(str(exc))
             continue
         for line_number, record in rows:
-            check_record(repo_root, path, line_number, record, errors)
+            check_record(repo_root, path, line_number, record, runbook_stages, errors)
     return errors
 
 
