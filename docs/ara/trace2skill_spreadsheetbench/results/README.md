@@ -21,6 +21,9 @@ paper split or Qwen/vLLM aggregate.
 The current acceptance and denominator audit is recorded in
 [`denominator_status.md`](denominator_status.md).
 
+Current public model/serving availability research for the approval packet is
+recorded in [`model_availability.md`](model_availability.md).
+
 The paper target plot can be regenerated without result records:
 
 ```bash

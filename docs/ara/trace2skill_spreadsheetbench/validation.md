@@ -277,3 +277,25 @@ Limit:
 
 - This is a status audit, not a final closeout. It does not run held-out rows,
   seeds `41/42/43`, or cross-model paper metrics.
+
+## 2026-06-14 Model Availability Research
+
+Artifact:
+
+```text
+docs/ara/trace2skill_spreadsheetbench/results/model_availability.md
+```
+
+Scope:
+
+- Records that public `Qwen/Qwen3.5-122B-A10B` and `Qwen/Qwen3.5-35B-A3B`
+  model repositories exist.
+- Records documented vLLM/OpenAI-compatible serving paths and the 122B hardware
+  sizing note found during availability research.
+- Maps the local upstream reproduction hooks for model name, seeds,
+  generation configs, workers, split indices, and evolution worker settings.
+
+Limit:
+
+- This does not provision a model endpoint, approve cost, approve hardware,
+  create credentials, or launch a Qwen/vLLM run.

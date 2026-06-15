@@ -92,3 +92,11 @@ approval:
 ```
 
 All `null` values must be resolved before full-denominator execution.
+
+## Availability Research
+
+`model_availability.md` confirms that public Hugging Face repositories exist for
+both paper model names and that vLLM/OpenAI-compatible serving paths are
+documented. This does not approve execution. The approval packet above still
+needs concrete endpoint, hardware, credentials, cost, retention, and tolerance
+approval values.

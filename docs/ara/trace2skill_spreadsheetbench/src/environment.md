@@ -44,3 +44,5 @@ recorded and approved.
 | Artifact root | explicit durable path and retention policy | Pending. |
 
 See `results/full_run_plan.md` for the full approval packet and subset gates.
+See `results/model_availability.md` for public model/serving availability
+research.
