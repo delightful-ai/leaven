@@ -212,3 +212,7 @@ entries:
     notes:
       - "Routed scratch-overlay approval admission as scoreboard-integrity and authorization guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the check only prevents blocked approval-gated scratch/top-level rows from being drawn as overlays; it creates no accepted Leaven overlay rows, approvals, analyst responses, Stage 3 merges, seed aggregates, full-paper rows, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#54"
+    notes:
+      - "Routed imported skill-artifact audit as paper-protocol artifact guardrail evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the check only ensures future imported rows audit file-backed optimized skill artifacts; it creates no accepted Leaven overlay rows, approvals, analyst responses, Stage 3 merges, seed aggregates, full-paper rows, or Qwen/vLLM execution."
