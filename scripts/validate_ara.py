@@ -452,6 +452,85 @@ def validate_trace2skill_approval_state(errors: list[str], root: Path) -> None:
         fail(errors, f"approval state: {approval_error}")
 
 
+def validate_trace2skill_approval_packet_contract(errors: list[str], root: Path) -> None:
+    repo_root = repo_root_for(root.resolve())
+    checker_path = repo_root / "scripts/check_trace2skill_approval_packet.py"
+    if not checker_path.is_file():
+        fail(errors, "missing scripts/check_trace2skill_approval_packet.py")
+        return
+    spec = importlib.util.spec_from_file_location("check_trace2skill_approval_packet", checker_path)
+    if spec is None or spec.loader is None:
+        fail(errors, f"cannot import {checker_path}")
+        return
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    plan_path = root / "results/full_run_plan.md"
+    if not plan_path.is_file():
+        fail(errors, "missing results/full_run_plan.md")
+        return
+    try:
+        packet = module.approval_packet(plan_path.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        fail(errors, f"approval packet contract cannot parse packet: {exc}")
+        return
+
+    def set_path(target: dict[str, Any], path: tuple[str, ...], value: Any) -> None:
+        cursor = target
+        for part in path[:-1]:
+            next_cursor = cursor.get(part)
+            if not isinstance(next_cursor, dict):
+                next_cursor = {}
+                cursor[part] = next_cursor
+            cursor = next_cursor
+        cursor[path[-1]] = value
+
+    filled_packet = json.loads(json.dumps(packet))
+    filled_values: dict[tuple[str, ...], Any] = {
+        ("models", "qwen_122b"): "Qwen3.5-122B-A10B",
+        ("models", "qwen_35b"): "Qwen3.5-35B-A3B",
+        ("serving", "host"): "https://approved-vllm.example.invalid/v1",
+        ("serving", "version"): "vllm-fixture",
+        ("serving", "tensor_parallel"): 8,
+        ("serving", "gpu_type"): "A800",
+        ("serving", "gpu_count"): 8,
+        ("budget", "max_usd"): 1,
+        ("budget", "max_wall_clock_hours"): 1,
+        ("budget", "max_gpu_hours"): 1,
+        ("credentials", "api_key_env"): "TRACE2SKILL_API_KEY",
+        ("credentials", "redaction_policy"): "redact request and response secrets",
+        ("credentials", "log_retention"): "retain until closeout audit",
+        ("artifacts", "root"): "tmp/trace2skill-paper-denominator/approved-fixture",
+        ("artifacts", "retention"): "retain until closeout audit",
+        ("approval", "approved_by"): "approval-fixture",
+        ("approval", "approved_at"): "2026-06-14T12:00:00Z",
+        ("tolerance", "approved"): True,
+    }
+    for path, value in filled_values.items():
+        set_path(filled_packet, path, value)
+
+    filled_errors = module.packet_errors(filled_packet, root.resolve())
+    if filled_errors:
+        fail(errors, f"approval packet contract valid fixture failed: {filled_errors}")
+
+    wrong_model_packet = json.loads(json.dumps(filled_packet))
+    set_path(wrong_model_packet, ("models", "qwen_122b"), "fixture-model")
+    wrong_model_errors = module.packet_errors(wrong_model_packet, root.resolve())
+    expected_error = "models.qwen_122b must be 'Qwen3.5-122B-A10B', got 'fixture-model'"
+    if expected_error not in wrong_model_errors:
+        fail(errors, "approval packet contract failed to reject non-paper 122B model id")
+
+    wrong_small_model_packet = json.loads(json.dumps(filled_packet))
+    set_path(wrong_small_model_packet, ("models", "qwen_35b"), "fixture-small-model")
+    wrong_small_model_errors = module.packet_errors(wrong_small_model_packet, root.resolve())
+    expected_small_error = (
+        "models.qwen_35b must be 'Qwen3.5-35B-A3B', got 'fixture-small-model'"
+    )
+    if expected_small_error not in wrong_small_model_errors:
+        fail(errors, "approval packet contract failed to reject non-paper 35B model id")
+
+
 def validate_trace2skill_runbook_freshness(errors: list[str], root: Path) -> None:
     repo_root = repo_root_for(root.resolve())
     checker_path = repo_root / "scripts/check_trace2skill_runbook_freshness.py"
@@ -735,6 +814,7 @@ def validate(root: Path) -> list[str]:
     validate_trace2skill_rigor_followup(errors, root)
     validate_trace2skill_runbook_labels(errors, root)
     validate_trace2skill_approval_state(errors, root)
+    validate_trace2skill_approval_packet_contract(errors, root)
     validate_trace2skill_runbook_freshness(errors, root)
     validate_trace2skill_artifact_contract(errors, root)
     validate_trace2skill_closeout_freshness(errors, root)

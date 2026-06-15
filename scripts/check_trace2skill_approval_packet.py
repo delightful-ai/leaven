@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,11 @@ EXPECTED_EXACT_VALUES: dict[tuple[str, ...], Any] = {
     ("protocol", "merge_batch_size"): 32,
     ("protocol", "react_turn_budget"): 100,
     ("tolerance", "approved"): True,
+}
+
+EXPECTED_FILLED_VALUES: dict[tuple[str, ...], Any] = {
+    ("models", "qwen_122b"): "Qwen3.5-122B-A10B",
+    ("models", "qwen_35b"): "Qwen3.5-35B-A3B",
 }
 
 REQUIRED_APPROVAL_FIELDS = [
@@ -103,6 +109,14 @@ def unresolved(value: Any) -> bool:
     return False
 
 
+def is_utc_approval_timestamp(value: Any) -> bool:
+    if isinstance(value, str):
+        return bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", value))
+    if isinstance(value, datetime):
+        return value.tzinfo is not None and value.utcoffset() == timezone.utc.utcoffset(None)
+    return False
+
+
 def packet_errors(packet: dict[str, Any], ara_root: Path | None = None) -> list[str]:
     errors: list[str] = []
     for path in REQUIRED_APPROVAL_FIELDS:
@@ -113,6 +127,11 @@ def packet_errors(packet: dict[str, Any], ara_root: Path | None = None) -> list[
     for path, expected in EXPECTED_EXACT_VALUES.items():
         actual = lookup(packet, path)
         if actual != expected:
+            errors.append(f"{'.'.join(path)} must be {expected!r}, got {actual!r}")
+
+    for path, expected in EXPECTED_FILLED_VALUES.items():
+        actual = lookup(packet, path)
+        if not unresolved(actual) and actual != expected:
             errors.append(f"{'.'.join(path)} must be {expected!r}, got {actual!r}")
 
     for path in POSITIVE_INTEGER_FIELDS:
@@ -131,9 +150,7 @@ def packet_errors(packet: dict[str, Any], ara_root: Path | None = None) -> list[
 
     approved_at = lookup(packet, ("approval", "approved_at"))
     if not unresolved(approved_at):
-        if not isinstance(approved_at, str) or not re.fullmatch(
-            r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", approved_at
-        ):
+        if not is_utc_approval_timestamp(approved_at):
             errors.append("approval.approved_at must be UTC ISO-8601 like 2026-06-14T12:00:00Z")
 
     api_key_env = lookup(packet, ("credentials", "api_key_env"))

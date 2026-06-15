@@ -547,6 +547,8 @@ Scope:
 - Verifies fixed paper-denominator fields: vLLM backend, SpreadsheetBench path,
   seeds `41/42/43`, workers `128`, merge batch size `32`, and ReAct turn budget
   `100`.
+- Verifies filled model approval values preserve the exact paper model ids:
+  `Qwen3.5-122B-A10B` and `Qwen3.5-35B-A3B`.
 - Requires concrete approval values for model endpoints/weights, hardware,
   dataset checksum or manifest, cost, credentials, retention, and approval
   metadata before normal preflight can pass.
