@@ -256,3 +256,7 @@ entries:
     notes:
       - "Routed full-paper source-classification enforcement as denominator-provenance guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the check only prevents full-paper rows from citing unsupported predecessor classifications directly; it creates no accepted model-backed rows, overlays, approvals, seed aggregates, full-paper rows, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#65"
+    notes:
+      - "Routed seed-aggregate source-classification enforcement as denominator-provenance guardrail evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the check only prevents seed-aggregate rows from citing unsupported predecessor classifications directly; it creates no accepted model-backed rows, overlays, approvals, seed aggregates, full-paper rows, or Qwen/vLLM execution."
