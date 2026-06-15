@@ -120,3 +120,7 @@ entries:
     notes:
       - "Routed result/runbook-stage binding as denominator-provenance integrity evidence."
       - "Kept reproduction claims unchanged because the binding proves rows name their intended generated runbook gate only; it does not create model-backed rows, overlays, approval, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#31"
+    notes:
+      - "Routed official-eval importer fixture validation as importer/admission-control evidence."
+      - "Kept reproduction claims unchanged because the checker proves fixture import and refusal behavior only; it writes no top-level result rows, creates no overlays, approves no tolerance, and does not execute Qwen/vLLM."
