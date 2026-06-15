@@ -148,3 +148,7 @@ entries:
     notes:
       - "Routed closeout result-intake gating as final-audit hygiene, not reproduction evidence."
       - "Kept reproduction claims unchanged because the closeout audit now refuses invalid result rows before counting them; it creates no model-backed rows, overlays, approvals, analyst responses, Stage 3 merges, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#38"
+    notes:
+      - "Routed runbook dataset-slice result-intake binding as denominator-provenance guardrail evidence."
+      - "Kept reproduction claims unchanged because the new checks only reject mislabeled future rows; they create no model-backed rows, overlays, approvals, analyst responses, Stage 3 merges, or Qwen/vLLM execution."
