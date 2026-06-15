@@ -111,6 +111,42 @@ Limit:
   Qwen/vLLM execution or promote any mechanics test to paper-denominator
   evidence.
 
+## 2026-06-14 Paper Table Fidelity Check
+
+Artifact:
+
+```text
+scripts/check_trace2skill_table_fidelity.py
+scripts/validate_ara.py
+docs/ara/trace2skill_spreadsheetbench/evidence/tables/*.md
+tmp/skill_opt_sources/arx_2603.25158/src/tables/*.tex
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_table_fidelity.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Current result:
+
+```text
+PASS: docs/ara/trace2skill_spreadsheetbench table fidelity (6 tables)
+```
+
+Scope:
+
+- Compares ordered body cells in six ARA Markdown evidence tables against the
+  corresponding paper TeX source tables.
+- Covers `table_main_v1`, `table_seq_parallel`, `table_reasoning_bank`,
+  `table_agentic_ablation`, `table_math`, and `table_vqa`.
+- The same check now runs inside `scripts/validate_ara.py`.
+
+Limit:
+
+- This proves table-cell transcription fidelity only. It does not prove Leaven
+  reproduced any paper target value.
+
 ## 2026-06-14 Result Overlay Schema Check
 
 Command:

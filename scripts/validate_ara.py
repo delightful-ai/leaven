@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import re
 import sys
@@ -104,6 +105,23 @@ def repo_root_for(root: Path) -> Path:
         if (candidate / "examples/trace2skill_spreadsheetbench/tests").is_dir():
             return candidate
     return Path.cwd()
+
+
+def validate_trace2skill_table_fidelity(errors: list[str], root: Path) -> None:
+    repo_root = repo_root_for(root.resolve())
+    checker_path = repo_root / "scripts/check_trace2skill_table_fidelity.py"
+    if not checker_path.is_file():
+        fail(errors, "missing scripts/check_trace2skill_table_fidelity.py")
+        return
+    spec = importlib.util.spec_from_file_location("check_trace2skill_table_fidelity", checker_path)
+    if spec is None or spec.loader is None:
+        fail(errors, f"cannot import {checker_path}")
+        return
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    for table_error in module.check_table_fidelity(repo_root, root):
+        fail(errors, f"table fidelity: {table_error}")
 
 
 def validate_result_record(errors: list[str], record: Any, rel_path: Path, line_number: int) -> None:
@@ -309,6 +327,8 @@ def validate(root: Path) -> list[str]:
             fail(errors, f"{evidence.relative_to(root)} missing **Source** field")
         if "|" not in text:
             fail(errors, f"{evidence.relative_to(root)} missing Markdown table")
+
+    validate_trace2skill_table_fidelity(errors, root)
 
     mechanics_evidence = root / "evidence/leaven_mechanics_tests.md"
     if mechanics_evidence.is_file():
