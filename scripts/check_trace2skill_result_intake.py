@@ -686,12 +686,60 @@ def check_paper_run_command_flags(
             errors.append(
                 f"{prefix} {proof} run_error_analysis command must include --max_turns {max_turns}"
             )
+        success_analysis_command = command_segment(source_command, "analysis/run_success_analysis_llm.py")
+        if (
+            success_analysis_command is not None
+            and model_id in PAPER_MODEL_IDS
+            and model_id not in command_flag_values(success_analysis_command, "model")
+        ):
+            errors.append(
+                f"{prefix} {proof} run_success_analysis_llm command must include --model {model_id!r}"
+            )
+        if (
+            success_analysis_command is not None
+            and workers is not None
+            and str(workers) not in command_flag_values(success_analysis_command, "max_workers")
+        ):
+            errors.append(
+                f"{prefix} {proof} run_success_analysis_llm command must include --max_workers {workers}"
+            )
+        skill_evolution_command = command_segment(source_command, "skill_evolver.run_parallel_skill_evolution")
+        if (
+            skill_evolution_command is not None
+            and model_id in PAPER_MODEL_IDS
+            and model_id not in command_flag_values(skill_evolution_command, "model")
+        ):
+            errors.append(
+                f"{prefix} {proof} skill_evolver command must include --model {model_id!r}"
+            )
+        if (
+            skill_evolution_command is not None
+            and workers is not None
+            and str(workers) not in command_flag_values(skill_evolution_command, "max-workers")
+        ):
+            errors.append(
+                f"{prefix} {proof} skill_evolver command must include --max-workers {workers}"
+            )
+        if (
+            skill_evolution_command is not None
+            and seed is not None
+            and str(seed) not in command_flag_values(skill_evolution_command, "seed")
+        ):
+            errors.append(f"{prefix} {proof} skill_evolver command must include --seed {seed}")
         if workers is not None and str(workers) not in command_flag_values(source_command, "max_workers"):
             errors.append(f"{prefix} {proof} source_command must include --max_workers {workers}")
         if workers is not None and str(workers) not in command_flag_values(source_command, "max-workers"):
             errors.append(f"{prefix} {proof} source_command must include --max-workers {workers}")
         extra = record.get("extra")
         merge_batch_size = extra.get("merge_batch_size") if isinstance(extra, dict) else None
+        if (
+            skill_evolution_command is not None
+            and merge_batch_size is not None
+            and str(merge_batch_size) not in command_flag_values(skill_evolution_command, "merge-batch-size")
+        ):
+            errors.append(
+                f"{prefix} {proof} skill_evolver command must include --merge-batch-size {merge_batch_size}"
+            )
         if merge_batch_size is not None and str(merge_batch_size) not in command_flag_values(
             source_command,
             "merge-batch-size",

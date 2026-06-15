@@ -198,11 +198,13 @@ what Leaven actually ran.
   `--workers`, and `--max_turns` flags. Skill-evolution rows must additionally
   include matching `--model`, `--workers`, and `--max_turns` on the
   `analysis/run_error_analysis.py` command itself, matching `--max_workers` for
-  success-analysis fanout, and matching `--max-workers` for the evolution
-  fanout, and rows that carry
-  `extra.merge_batch_size` must also include matching `--merge-batch-size`.
-  Model, seed, runtime, analyst fanout, evolution fanout, and merge metadata
-  alone are not command evidence.
+  success-analysis fanout on the `analysis/run_success_analysis_llm.py` command
+  itself, matching `--model`, `--max-workers`, and `--seed` on the
+  `skill_evolver.run_parallel_skill_evolution` command itself, and rows that
+  carry `extra.merge_batch_size` must also include matching
+  `--merge-batch-size` on that skill-evolution command. Model, seed, runtime,
+  analyst fanout, evolution fanout, and merge metadata alone are not command
+  evidence.
 - Official evaluator-derived rows must keep `extra.source_metric` bound to the
   metric actually being counted. Non-overlay official rows use the canonical
   `official_*` metric names, and overlay rows may bind raw official metrics

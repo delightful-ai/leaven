@@ -168,6 +168,12 @@ fanout, or batch size `32`.
 The `analysis/run_error_analysis.py` command segment must also carry its own
 matching `--model`, `--workers`, and `--max_turns` flags; a correct baseline
 SpreadsheetBench command cannot stand in for the error-analysis invocation.
+The `analysis/run_success_analysis_llm.py` command segment must carry matching
+`--model` and `--max_workers` flags, and the
+`skill_evolver.run_parallel_skill_evolution` command segment must carry matching
+`--model`, `--max-workers`, `--merge-batch-size`, and `--seed` flags; earlier
+commands in the same shell pipeline cannot stand in for these paper-stage
+invocations.
 Official evaluator-derived rows must keep `extra.source_metric` tied to the
 metric actually counted by the
 evaluator. Non-overlay imports use canonical `official_*` metric names, and

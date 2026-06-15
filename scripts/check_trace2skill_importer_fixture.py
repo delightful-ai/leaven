@@ -716,7 +716,7 @@ def source_evolving_row(
             "&& python evaluate_with_official.py --start_idx 0 --end_idx 200 "
             "&& python analyze_results.py "
             f"&& python analysis/run_error_analysis.py --model {model_id} --workers 128 --max_turns 100 "
-            "&& python analysis/run_success_analysis_llm.py --max_workers 128 "
+            f"&& python analysis/run_success_analysis_llm.py --model {model_id} --max_workers 128 "
             f"&& python -m skill_evolver.run_parallel_skill_evolution --model {model_id} "
             f"--merge-batch-size 32 --max-workers 128 --seed {seed}"
         ),
@@ -833,6 +833,23 @@ def check_evolving_result_intake(repo_root: Path, ara_root: Path, tmp_path: Path
         "evolving error-analysis max-turn drift",
     )
 
+    def mutate_evolving_to_missing_success_analysis_model(row: dict[str, Any]) -> None:
+        row["source_command"] = row["source_command"].replace(
+            "analysis/run_success_analysis_llm.py --model Qwen3.5-122B-A10B --max_workers 128",
+            "analysis/run_success_analysis_llm.py --max_workers 128",
+        )
+
+    check_mutated_result_intake(
+        repo_root,
+        ara_root,
+        output,
+        tmp_path / "evolving-missing-success-analysis-model.jsonl",
+        mutate_evolving_to_missing_success_analysis_model,
+        "evolving-split-run run_success_analysis_llm command must include --model 'Qwen3.5-122B-A10B'",
+        errors,
+        "evolving success-analysis model drift",
+    )
+
     def mutate_evolving_to_wrong_source_success_workers(row: dict[str, Any]) -> None:
         row["source_command"] = row["source_command"].replace("--max_workers 128", "--max_workers 1")
 
@@ -859,6 +876,37 @@ def check_evolving_result_intake(repo_root: Path, ara_root: Path, tmp_path: Path
         "evolving-split-run source_command must include --max-workers 128",
         errors,
         "evolving source-command max-workers drift",
+    )
+
+    def mutate_evolving_to_missing_skill_evolver_model(row: dict[str, Any]) -> None:
+        row["source_command"] = row["source_command"].replace(
+            "skill_evolver.run_parallel_skill_evolution --model Qwen3.5-122B-A10B ",
+            "skill_evolver.run_parallel_skill_evolution ",
+        )
+
+    check_mutated_result_intake(
+        repo_root,
+        ara_root,
+        output,
+        tmp_path / "evolving-missing-skill-evolver-model.jsonl",
+        mutate_evolving_to_missing_skill_evolver_model,
+        "evolving-split-run skill_evolver command must include --model 'Qwen3.5-122B-A10B'",
+        errors,
+        "evolving skill-evolver model drift",
+    )
+
+    def mutate_evolving_to_wrong_skill_evolver_seed(row: dict[str, Any]) -> None:
+        row["source_command"] = row["source_command"].replace("--seed 41", "--seed 99")
+
+    check_mutated_result_intake(
+        repo_root,
+        ara_root,
+        output,
+        tmp_path / "evolving-wrong-skill-evolver-seed.jsonl",
+        mutate_evolving_to_wrong_skill_evolver_seed,
+        "evolving-split-run skill_evolver command must include --seed 41",
+        errors,
+        "evolving skill-evolver seed drift",
     )
 
 
