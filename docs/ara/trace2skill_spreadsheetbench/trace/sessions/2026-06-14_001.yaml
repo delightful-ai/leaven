@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T21:14-07:00"
-  turn_count: 51
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, generated runbook dataset-slice contract, generated runbook seed-policy contract, generated runbook runtime-policy contract, generated runbook command-policy contract, generated runbook aggregate-policy contract, aggregate predecessor-row intake guard, full-paper source-chain intake guard, base result-row shape guard, full-paper model identity pre-overlay guard, plot overlay result-intake guard, model-run file-artifact guard, blocked-approval result admission guard, file-artifact epilogue commit, one non-overlay result row, strict official-eval importer, importer-fixture validation, Stage 2 rendered-prompt validation/freshness, rendered-prompt artifact-contract validation, prompt-artifact result-intake admission, pre-write official-eval import admission, closeout result-intake gate, runbook dataset-slice result-intake guard, approval-artifact result-intake guard, runbook-stage result binding, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, dataset-manifest freshness validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, approval-state validation, deterministic one-case result-freshness validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
+  last_turn: "2026-06-14T21:18-07:00"
+  turn_count: 52
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, generated runbook dataset-slice contract, generated runbook seed-policy contract, generated runbook runtime-policy contract, generated runbook command-policy contract, generated runbook aggregate-policy contract, aggregate predecessor-row intake guard, full-paper source-chain intake guard, base result-row shape guard, full-paper model identity pre-overlay guard, plot overlay result-intake guard, blocked-approval plot overlay guard, model-run file-artifact guard, blocked-approval result admission guard, file-artifact epilogue commit, one non-overlay result row, strict official-eval importer, importer-fixture validation, Stage 2 rendered-prompt validation/freshness, rendered-prompt artifact-contract validation, prompt-artifact result-intake admission, pre-write official-eval import admission, closeout result-intake gate, runbook dataset-slice result-intake guard, approval-artifact result-intake guard, runbook-stage result binding, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, dataset-manifest freshness validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, approval-state validation, deterministic one-case result-freshness validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -319,6 +319,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Tightened Trace2Skill result intake so approval-gated rows cannot land in top-level ARA results while the approval packet is blocked."
+  - turn: 52
+    type: experiment
+    id: "PM-2026-06-14-053"
+    routing: direct
+    provenance: ai-executed
+    summary: "Tightened Trace2Skill plotting so top-level approval-gated overlays cannot render while the approval packet is blocked."
 
 ai_actions:
   - turn: 1
@@ -839,6 +845,15 @@ ai_actions:
       - "docs/ara/trace2skill_spreadsheetbench/results/leaven_result_schema.md"
       - "docs/ara/trace2skill_spreadsheetbench/results/README.md"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 52
+    action: "Updated scripts/plot_trace2skill_ara.py so top-level approval-gated result overlays receive the same approval-packet blocker context as result intake, extended scripts/check_trace2skill_plot_result_intake.py with a blocked top-level overlay fixture, and documented the plotting boundary."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/plot_trace2skill_ara.py"
+      - "scripts/check_trace2skill_plot_result_intake.py"
+      - "scripts/check_trace2skill_result_intake.py"
+      - "docs/ara/trace2skill_spreadsheetbench/plots/README.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -945,6 +960,8 @@ key_context:
     excerpt: "File-artifact epilogue commit 2908cd84 landed after YAML parse, validate_ara, approval-packet --expect-blocked, jj status, and goal-state checks; no new execution evidence or accepted model-backed rows were created."
   - turn: 51
     excerpt: "Result intake now rejects approval-gated rows written into top-level ARA results while full_run_plan.md fails the normal approval preflight; fixture proves target-only rows can test shape but the same blocked row cannot become accepted result evidence."
+  - turn: 52
+    excerpt: "Plotter admission now rejects a shape-valid top-level paper-subset overlay while full_run_plan.md is blocked, while the paper-target-only matplotlib/pandas command still renders without loading approval YAML."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."

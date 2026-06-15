@@ -204,3 +204,7 @@ entries:
     notes:
       - "Routed blocked-approval result admission as paper-protocol authorization guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the check only prevents approval-gated rows from landing in top-level ARA results while the approval packet is blocked; it creates no accepted Leaven overlay rows, approvals, analyst responses, Stage 3 merges, seed aggregates, full-paper rows, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#52"
+    notes:
+      - "Routed blocked-approval plot overlay admission as scoreboard-integrity and authorization guardrail evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the check only prevents blocked approval-gated top-level rows from being drawn as overlays; it creates no accepted Leaven overlay rows, approvals, analyst responses, Stage 3 merges, seed aggregates, full-paper rows, or Qwen/vLLM execution."
