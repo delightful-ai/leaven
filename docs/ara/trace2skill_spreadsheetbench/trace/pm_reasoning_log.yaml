@@ -27,3 +27,7 @@ entries:
     notes:
       - "Routed artifact-path existence checks as intake guardrail evidence; this narrows false-result admission without changing any paper denominator."
       - "Did not promote a new claim because the checks prove refusal behavior, not Trace2Skill task performance."
+  - turn: "2026-06-14_001#8"
+    notes:
+      - "Routed one_case_run classification as mechanics-map repair and focused gate evidence, not as paper-denominator progress."
+      - "Kept claims unchanged because the new evidence only prevents an existing test target from being unclassified."

@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T18:23-07:00"
-  turn_count: 7
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, and local artifact-path refusal now make the full-denominator path more executable without approving a run."
+  last_turn: "2026-06-14T18:27-07:00"
+  turn_count: 8
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, local artifact-path refusal, and enforced mechanics-test classification now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -55,6 +55,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Hardened official eval importer so eval, skill, artifact, and approval artifact paths must exist locally before result rows are written."
+  - turn: 8
+    type: experiment
+    id: "PM-2026-06-14-009"
+    routing: direct
+    provenance: ai-executed
+    summary: "Bound one_case_run into the ARA mechanics evidence and validator; expanded focused mechanics gate passed 53 tests."
 
 ai_actions:
   - turn: 1
@@ -151,6 +157,13 @@ ai_actions:
       - "scripts/import_trace2skill_eval_results.py"
       - "docs/ara/trace2skill_spreadsheetbench/results/README.md"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 8
+    action: "Added one_case_run to leaven_mechanics_tests.md, taught validate_ara.py to require all current mechanics test targets to be classified, and updated validation.md with the 53-test focused gate."
+    provenance: ai-executed
+    files_changed:
+      - "docs/ara/trace2skill_spreadsheetbench/evidence/leaven_mechanics_tests.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+      - "scripts/validate_ara.py"
 
 claims_touched: []
 
@@ -169,6 +182,8 @@ key_context:
     excerpt: "Importer fixture output stayed in tmp/, defaulted to plot_binding=null, and paper-denominator-reproduction refused even with the override flag until an approval artifact path was provided."
   - turn: 7
     excerpt: "Importer now raises FileNotFoundError for missing --artifact-path or --approval-artifact-path values; fixture import still writes four non-overlay tmp rows."
+  - turn: 8
+    excerpt: "The expanded focused gate passed 53 tests across manifest, run_artifacts, patch_bridge, patch_replay, one_case, one_case_run, cli, workbook_score, and acp_external_worker."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."
