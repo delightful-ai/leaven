@@ -18,6 +18,9 @@ The deterministic one-case ACP worker result is recorded in
 paper target bars because its denominator is one local solved case, not a full
 paper split or Qwen/vLLM aggregate.
 
+The current acceptance and denominator audit is recorded in
+[`denominator_status.md`](denominator_status.md).
+
 The paper target plot can be regenerated without result records:
 
 ```bash

@@ -102,6 +102,7 @@ separately and labeled by denominator.
 | [plots/trace2skill_targets.png](plots/trace2skill_targets.png) | Paper target sheet generated from ARA evidence tables. |
 | [results/README.md](results/README.md) | Leaven result-record rules, proof classifications, and overlay binding. |
 | [results/leaven_result_schema.md](results/leaven_result_schema.md) | JSONL schema for real Leaven metrics that can be plotted against paper targets. |
+| [results/denominator_status.md](results/denominator_status.md) | Handoff acceptance audit and current denominator status. |
 | [results/one_case_live.md](results/one_case_live.md) | Deterministic one-case ACP worker proof and artifact manifest. |
 | [results/full_run_plan.md](results/full_run_plan.md) | Approval gate for Qwen/vLLM paper-denominator execution. |
 | [reviews/rigor_review.md](reviews/rigor_review.md) | Seal Level 2 semantic rigor review and blockers. |

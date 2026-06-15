@@ -255,3 +255,25 @@ Scope:
 Limit:
 
 - The tolerance policy is proposed, not approved. Full Qwen/vLLM execution remains blocked on the approval packet.
+
+## 2026-06-14 Denominator Status Audit
+
+Artifact:
+
+```text
+docs/ara/trace2skill_spreadsheetbench/results/denominator_status.md
+```
+
+Scope:
+
+- Compares the current ARA state to every acceptance item in
+  `docs/working-memory/trace2skill-ara-reproduction-goal-handoff.yaml`.
+- States the strongest currently reproduced denominator as deterministic
+  one-case ACP worker proof.
+- Names the unresolved approval blocker for full Qwen/vLLM paper-denominator
+  execution.
+
+Limit:
+
+- This is a status audit, not a final closeout. It does not run held-out rows,
+  seeds `41/42/43`, or cross-model paper metrics.
