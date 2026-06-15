@@ -292,3 +292,7 @@ entries:
     notes:
       - "Routed approval packet value-shape contract as approval-readiness/proxy-refusal evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the change only rejects malformed future approval values and missing referenced manifests/policies; it creates no model-backed one-case row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#74"
+    notes:
+      - "Routed approval packet paper-model identity contract as approval-readiness/proxy-refusal evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the change only prevents future approval packets from substituting non-paper model ids; it creates no model-backed one-case row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
