@@ -167,6 +167,22 @@
     "Should non-overlay result notes and overlay JSONL live in separate subdirectories as more subset evidence accumulates?",
     "What failure accounting policy applies when one of the 128 analyst workers fails or returns an invalid patch?"
   ],
+  "post_review_followup": {
+    "status": "partial_followup_applied",
+    "addressed_findings": ["F02", "F04"],
+    "partially_addressed_findings": ["F03", "F05"],
+    "remaining_blockers": [
+      "F01 full-run approval fields remain unresolved.",
+      "The tolerance policy is proposed but not approved.",
+      "Exact rendered prompts remain future live-run artifacts."
+    ],
+    "followup_artifacts": [
+      "src/configs/tolerance.md",
+      "evidence/prompt_templates.md",
+      "trace/exploration_tree.yaml",
+      "logic/claims.md"
+    ]
+  },
   "read_order": [
     "PAPER.md",
     "logic/claims.md",

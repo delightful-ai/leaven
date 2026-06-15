@@ -49,6 +49,8 @@ root:
         - id: DE1
           type: dead_end
           title: Single-call LLM analysis over-attributes parse failures.
+          failure_mode: Single-call analysis misclassifies many parse failures as semantic spreadsheet mistakes.
+          lesson: Keep artifact-access agentic analysis distinct from text-only LLM diagnosis when reproducing the ablation.
           support_level: explicit
           sources:
             - tmp/skill_opt_sources/arx_2603.25158/full_source.md:820
@@ -69,6 +71,8 @@ root:
         - id: DE2
           type: dead_end
           title: Sequential editing drifts because each update changes later context.
+          failure_mode: Updating the skill after each small batch changes the context seen by later edits and loses the paper's many-to-one consolidation shape.
+          lesson: Preserve independent patch generation and hierarchical merge when testing the parallel-vs-sequential runtime/score claim.
           support_level: explicit
           sources:
             - tmp/skill_opt_sources/arx_2603.25158/full_source.md:601

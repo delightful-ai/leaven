@@ -69,6 +69,7 @@ separately and labeled by denominator.
 |------|-------------|--------|
 | [configs/training.md](src/configs/training.md) | Dataset, seed, worker, merge, and turn-budget configuration. | C01, C02, C03 |
 | [configs/model.md](src/configs/model.md) | Model and serving configuration. | C01, C02, C03 |
+| [configs/tolerance.md](src/configs/tolerance.md) | Proposed reproduction tolerance and failure-accounting policy. | C01, C02, C07 |
 | [execution/trace2skill_pipeline.py](src/execution/trace2skill_pipeline.py) | Typed stub of the paper loop and Leaven result denominator records. | C01, C07 |
 | [environment.md](src/environment.md) | Dependencies, hardware, code paths, and approval notes. | C07 |
 
@@ -91,6 +92,7 @@ separately and labeled by denominator.
 | [tables/table_vqa.md](evidence/tables/table_vqa.md) | Raw paper Table `tab:vqa`. |
 | [figures/figure_trace2skill_framework.md](evidence/figures/figure_trace2skill_framework.md) | Source figure path and caption for the Trace2Skill pipeline. |
 | [leaven_mechanics_tests.md](evidence/leaven_mechanics_tests.md) | Leaven mechanics-test proof classifications and limits. |
+| [prompt_templates.md](evidence/prompt_templates.md) | Upstream prompt-template family index and reproduction boundary. |
 
 ### Plot Targets and Validation
 

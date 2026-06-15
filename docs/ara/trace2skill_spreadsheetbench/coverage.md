@@ -36,12 +36,13 @@
 
 ### Known Gaps
 
-- The appendix prompt templates are referenced but not yet transcribed into a dedicated ARA prompt evidence file.
+- Prompt template families are indexed in `evidence/prompt_templates.md`; exact rendered live-call prompts remain future run artifacts.
 - The full bibliography is summarized in `logic/related_work.md` but not exhaustively converted into one RW block per citation.
 - No Leaven result overlay JSONL exists yet; only the schema and overlay reader exist.
 - No model-backed one-case `13-1` live result has been added to this ARA; the current one-case result is a deterministic local ACP worker proof.
 - No held-out `200..400` run, seed aggregate, cross-model run, or full Qwen/vLLM paper denominator has been executed.
 - No full-run approval packet has been filled with concrete model endpoints, hardware, cost envelope, credentials, or artifact-retention decision.
-- Rigor review blockers remain open: reproduction tolerance, dead-end failure/lesson detail, C07/E09 proof link, and prompt-template evidence.
+- Rigor review follow-ups landed for reproduction tolerance, dead-end failure/lesson detail, C07/E09 proof link, and prompt-template evidence.
+- The full-run approval packet remains unresolved for model endpoints, hardware, cost envelope, credentials, tolerance approval, and artifact retention.
 - The plot target sheet is a scoreboard only and is not reproduction evidence.
 - The focused mechanics gate is not reproduction evidence beyond the classifications in `evidence/leaven_mechanics_tests.md`.

@@ -40,6 +40,7 @@ recorded and approved.
 | Merge batch size | `32` | Pending merge-tree approval. |
 | ReAct turn budget | `100` | Pending timeout/turn-budget approval. |
 | Cost envelope | explicit max USD/GPU-hours/wall time | Pending. |
+| Reproduction tolerance | `src/configs/tolerance.md` | Pending approval. |
 | Artifact root | explicit durable path and retention policy | Pending. |
 
 See `results/full_run_plan.md` for the full approval packet and subset gates.

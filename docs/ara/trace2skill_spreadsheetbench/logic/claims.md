@@ -64,7 +64,7 @@
 - **Statement**: Leaven has not reproduced Trace2Skill 1:1 until result records distinguish paper targets from Leaven outputs and prove the relevant denominator.
 - **Status**: hypothesis for the reproduction workflow; current status pending.
 - **Falsification criteria**: A completed closeout artifact proves all handoff acceptance items and updates this claim with evidence.
-- **Proof**: [E08]
+- **Proof**: [E08, E09]
 - **Evidence basis**: Goal handoff artifact, execution plan, and `evidence/leaven_mechanics_tests.md` define the denominator and forbidden proxy completions.
 - **Interpretation**: This claim governs closeout language more than the paper's scientific contribution.
 - **Dependencies**: C01, C02, C03, C04, C05, C06

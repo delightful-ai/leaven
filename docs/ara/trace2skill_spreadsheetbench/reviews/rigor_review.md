@@ -22,10 +22,27 @@ full Qwen/vLLM run until the approval packet is filled.
 | ID | Severity | Finding | Fix |
 |----|----------|---------|-----|
 | F01 | Major | `results/full_run_plan.md` still has null approval fields such as `max_usd: null`. | Fill every approval field before launching full denominator execution. |
-| F02 | Major | `trace/exploration_tree.yaml` has dead-end nodes but no explicit `failure_mode` or `lesson` fields. | Add transferable failure details for DE1 and DE2. |
-| F03 | Major | Claims refer to an agreed reproduction tolerance, but no tolerance policy exists yet. | Define per-cell, seed-aggregate, runtime, and environment-drift tolerance. |
-| F04 | Minor | C07 cites only E08 even though E09 now owns the approval gate. | Cite E09 from C07 or split overlay and full-closeout claims. |
-| F05 | Minor | Prompt templates remain referenced but not transcribed into a dedicated evidence file. | Add prompt evidence before live analyst-call reproduction. |
+| F02 | Major | `trace/exploration_tree.yaml` has dead-end nodes but no explicit `failure_mode` or `lesson` fields. | Addressed after review. |
+| F03 | Major | Claims refer to an agreed reproduction tolerance, but no tolerance policy exists yet. | Proposed policy added after review; approval still required. |
+| F04 | Minor | C07 cites only E08 even though E09 now owns the approval gate. | Addressed after review. |
+| F05 | Minor | Prompt templates remain referenced but not transcribed into a dedicated evidence file. | Prompt family index added after review; rendered prompts remain future run artifacts. |
+
+## Post-Review Follow-Up
+
+Addressed after the initial review:
+
+- `src/configs/tolerance.md` proposes metric, runtime, protocol-drift, retry,
+  and failure-accounting policy.
+- `evidence/prompt_templates.md` indexes upstream prompt-template families.
+- `trace/exploration_tree.yaml` now includes `failure_mode` and `lesson` for
+  DE1 and DE2.
+- C07 now cites both E08 and E09.
+
+Still blocking full reproduction:
+
+- the full-run approval packet is unresolved;
+- the proposed tolerance policy is not approved;
+- exact rendered prompts must be captured during live analyst/model runs.
 
 ## Dimension Scores
 
@@ -41,8 +58,7 @@ full Qwen/vLLM run until the approval packet is filled.
 ## Recommendation
 
 Continue using this ARA as the denominator. Do not call the current state a
-reproduction. The next highest-leverage fixes are: define the tolerance policy,
-add prompt evidence, and fill the approval packet only when the user is ready to
-approve model/hardware/cost.
+reproduction. The next highest-leverage fix is filling and approving the
+full-run packet only when the user is ready to approve model/hardware/cost.
 
 The machine-readable review is in `level2_report.json`.

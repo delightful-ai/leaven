@@ -226,10 +226,32 @@ Weak Accept: usable as an anti-proxy denominator package, not as reproduction pr
 Top blockers:
 
 - Full-run approval fields are unresolved.
-- Reproduction tolerance policy is not defined.
-- Exploration dead ends need explicit `failure_mode` and `lesson` fields.
-- Prompt-template evidence remains missing.
+- Full-run approval fields are unresolved.
+- Proposed reproduction tolerance exists but is not approved.
+- Prompt-template families are indexed, but exact rendered live-call prompts remain future run artifacts.
 
 Limit:
 
 - The review is semantic judgment over the ARA contents after Level 1 validation. It does not execute the paper run.
+
+## 2026-06-14 Post-Review Follow-Ups
+
+Artifacts:
+
+```text
+docs/ara/trace2skill_spreadsheetbench/src/configs/tolerance.md
+docs/ara/trace2skill_spreadsheetbench/evidence/prompt_templates.md
+docs/ara/trace2skill_spreadsheetbench/trace/exploration_tree.yaml
+docs/ara/trace2skill_spreadsheetbench/logic/claims.md
+```
+
+Scope:
+
+- Adds a proposed per-metric/runtime/protocol-drift tolerance policy.
+- Indexes upstream prompt-template families.
+- Adds `failure_mode` and `lesson` fields to the two dead-end exploration nodes.
+- Links C07 to E09 so the full-run approval gate is part of closeout proof.
+
+Limit:
+
+- The tolerance policy is proposed, not approved. Full Qwen/vLLM execution remains blocked on the approval packet.

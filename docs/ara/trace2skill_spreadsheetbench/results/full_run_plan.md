@@ -21,6 +21,7 @@ budget conditions and writes denominator-labeled result records.
 | Merge batch size | `32` | Captured in ARA config. | Approval for merge tree shape and retry policy. |
 | ReAct turn budget | `100` | Captured in ARA config. | Approval for per-case agent budget and timeout behavior. |
 | Cost/runtime envelope | Paper reports runtime, not Leaven cost. | Unknown. | Explicit max USD, max wall time, max GPU hours, storage path, and stop condition. |
+| Reproduction tolerance | Proposed in `src/configs/tolerance.md` | Not approved. | Approve per-metric tolerance, runtime interpretation, retry, and failure-accounting policy. |
 | Credentials | OpenAI-compatible endpoint style in upstream. | Not configured for this plan. | Token/env var names, redaction policy, and log retention policy. |
 | Artifact root | Leaven run artifacts | Proposed: `tmp/trace2skill-paper-denominator/<run_id>` until promoted. | Approval for artifact retention and whether outputs can be committed, archived, or externalized. |
 
@@ -79,6 +80,9 @@ budget:
   max_usd: null
   max_wall_clock_hours: null
   max_gpu_hours: null
+tolerance:
+  policy: docs/ara/trace2skill_spreadsheetbench/src/configs/tolerance.md
+  approved: null
 artifacts:
   root: tmp/trace2skill-paper-denominator/<run_id>
   retention: null
