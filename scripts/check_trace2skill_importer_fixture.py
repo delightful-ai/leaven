@@ -127,7 +127,8 @@ def importer_base_args(
         "--command-policy",
         "upstream-eval",
         "--source-command",
-        "python run_spreadsheetbench.py --start_idx 200 --end_idx 202 && python evaluate_with_official.py --start_idx 200 --end_idx 202",
+        "python run_spreadsheetbench.py --model Qwen3.5-122B-A10B --start_idx 200 --end_idx 202 "
+        "&& python evaluate_with_official.py --start_idx 200 --end_idx 202",
     ]
 
 
@@ -405,7 +406,7 @@ def model_one_case_row(repo_root: Path, tmp_path: Path) -> dict[str, Any]:
             "max_turns": 100,
         },
         "source_command": (
-            "python run_spreadsheetbench.py --start_idx 0 --end_idx 1 "
+            "python run_spreadsheetbench.py --model Qwen3.5-122B-A10B --start_idx 0 --end_idx 1 "
             "&& python evaluate_with_official.py --start_idx 0 --end_idx 1"
         ),
         "artifact_paths": artifact_paths,
@@ -498,7 +499,7 @@ def source_heldout_row(
             "max_turns": 100,
         },
         "source_command": (
-            "python run_spreadsheetbench.py --start_idx 200 --end_idx 400 "
+            f"python run_spreadsheetbench.py --model {model_id} --start_idx 200 --end_idx 400 "
             "&& python evaluate_with_official.py --start_idx 200 --end_idx 400"
         ),
         "artifact_paths": [APPROVAL_ARTIFACT, prompt, prompt_manifest, eval_result],
@@ -585,7 +586,7 @@ def source_training_validation_row(
             "max_turns": 100,
         },
         "source_command": (
-            "python run_spreadsheetbench.py --start_idx 0 --end_idx 200 "
+            f"python run_spreadsheetbench.py --model {model_id} --start_idx 0 --end_idx 200 "
             "&& python evaluate_with_official.py --start_idx 0 --end_idx 200"
         ),
         "artifact_paths": [
@@ -1330,6 +1331,23 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "G2 source_command must include dataset range fragment '--start_idx 200'",
             errors,
             "subset source-command range drift",
+        )
+
+        def mutate_subset_to_wrong_source_model(row: dict[str, Any]) -> None:
+            row["source_command"] = row["source_command"].replace(
+                "Qwen3.5-122B-A10B",
+                "Qwen3.5-35B-A3B",
+            )
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "subset-wrong-source-model.jsonl",
+            mutate_subset_to_wrong_source_model,
+            "paper-subset source_command must name model_id 'Qwen3.5-122B-A10B'",
+            errors,
+            "subset source-command model drift",
         )
 
         wrong_range_args = importer_base_args(

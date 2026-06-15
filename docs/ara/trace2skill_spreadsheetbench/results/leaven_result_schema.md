@@ -190,7 +190,9 @@ what Leaven actually ran.
   policy kind, and `source_command` must include the upstream command fragments
   required for that stage. When the row has a `dataset_slice.case_range`,
   `source_command` must also include matching concrete `--start_idx` and
-  `--end_idx` fragments.
+  `--end_idx` fragments. Approval-gated rows backed by a generated command
+  policy must also name the same paper `model_id` in `source_command`; model
+  metadata alone is not command evidence.
 - Official evaluator-derived rows must keep `extra.source_metric` bound to the
   metric actually being counted. Non-overlay official rows use the canonical
   `official_*` metric names, and overlay rows may bind raw official metrics

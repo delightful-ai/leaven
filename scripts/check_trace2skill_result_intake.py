@@ -586,6 +586,27 @@ def check_paper_protocol_identity(
         errors.append(f"{prefix} {proof} rows must use vLLM")
 
 
+def check_paper_model_command_identity(
+    prefix: str,
+    proof: Any,
+    stage: dict[str, Any] | None,
+    record: dict[str, Any],
+    errors: list[str],
+) -> None:
+    if proof not in APPROVAL_REQUIRED_PROOF_CLASSIFICATIONS:
+        return
+    if stage is None or stage.get("expected_command_policy") is None:
+        return
+    model_id = record.get("model_id")
+    if model_id not in PAPER_MODEL_IDS:
+        return
+    source_command = record.get("source_command")
+    if not isinstance(source_command, str) or not source_command:
+        return
+    if model_id not in source_command:
+        errors.append(f"{prefix} {proof} source_command must name model_id {model_id!r}")
+
+
 def check_official_source_metric(
     prefix: str,
     record: dict[str, Any],
@@ -1067,6 +1088,7 @@ def check_record(
     check_stage_runtime_policy(prefix, stage, record, errors)
     check_stage_command_policy(prefix, stage, record, dataset_slice, errors)
     check_paper_protocol_identity(prefix, proof, record, errors)
+    check_paper_model_command_identity(prefix, proof, stage, record, errors)
 
     artifact_paths = record.get("artifact_paths")
     if not isinstance(artifact_paths, list) or not artifact_paths:
