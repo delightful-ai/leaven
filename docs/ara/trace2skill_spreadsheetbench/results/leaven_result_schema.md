@@ -129,3 +129,7 @@ what Leaven actually ran.
   subset rows must be held-out subsets below the 200-case paper denominator,
   G3/G3V use `0..200`, G4 uses `200..400`, and aggregate or full-paper rows
   use their explicit denominator labels.
+- Result rows must also satisfy the named runbook stage's generated
+  `expected_seed_policy`: model one-case and subset rows use seed `41`,
+  evolving/validation/held-out single-seed rows use one of `41`, `42`, or `43`,
+  and aggregate/full-paper rows carry `extra.seeds: [41, 42, 43]`.

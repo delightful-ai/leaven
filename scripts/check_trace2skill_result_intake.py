@@ -200,6 +200,70 @@ def check_stage_dataset_slice(
         errors.append(f"{prefix} {stage_id} rows must use dataset_slice.denominator {expected.get('denominator')!r}")
 
 
+def normalize_seed(value: Any) -> int | None:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
+def normalize_seed_list(value: Any) -> list[int] | None:
+    if not isinstance(value, list):
+        return None
+    normalized: list[int] = []
+    for item in value:
+        seed = normalize_seed(item)
+        if seed is None:
+            return None
+        normalized.append(seed)
+    return normalized
+
+
+def check_stage_seed_policy(
+    prefix: str,
+    stage: dict[str, Any] | None,
+    record: dict[str, Any],
+    errors: list[str],
+) -> None:
+    if stage is None:
+        return
+    stage_id = stage.get("id")
+    expected = stage.get("expected_seed_policy")
+    if expected is None:
+        return
+    if not isinstance(expected, dict):
+        errors.append(f"{prefix} runbook stage {stage_id!r} expected_seed_policy must be an object or null")
+        return
+
+    kind = expected.get("kind")
+    seed = normalize_seed(record.get("seed"))
+    expected_seeds = normalize_seed_list(expected.get("seeds"))
+
+    if kind == "exact":
+        expected_seed = normalize_seed(expected.get("seed"))
+        if seed != expected_seed:
+            errors.append(f"{prefix} {stage_id} rows must use seed {expected_seed}")
+        return
+
+    if kind == "one-of":
+        if expected_seeds is None or seed not in expected_seeds:
+            errors.append(f"{prefix} {stage_id} rows must use one of seeds {expected.get('seeds')!r}")
+        return
+
+    if kind == "all-of":
+        extra = record.get("extra")
+        observed = normalize_seed_list(extra.get("seeds") if isinstance(extra, dict) else None)
+        if expected_seeds is None or observed != expected_seeds:
+            errors.append(f"{prefix} {stage_id} aggregate rows must carry extra.seeds {expected.get('seeds')!r}")
+        return
+
+    errors.append(f"{prefix} runbook stage {stage_id!r} expected_seed_policy has unknown kind {kind!r}")
+
+
 def check_record(
     repo_root: Path,
     path: Path,
@@ -229,6 +293,7 @@ def check_record(
                 f"{stage_id} allowed_label {stage.get('allowed_label')!r}"
             )
     check_stage_dataset_slice(prefix, stage, dataset_slice, errors)
+    check_stage_seed_policy(prefix, stage, record, errors)
 
     artifact_paths = record.get("artifact_paths")
     if not isinstance(artifact_paths, list) or not artifact_paths:
@@ -286,8 +351,6 @@ def check_record(
         case_count = record.get("dataset_slice", {}).get("case_count")
         if not isinstance(case_count, int) or case_count < 200:
             errors.append(f"{prefix} paper-denominator rows must cover at least the 200-case paper split")
-        if record.get("seed") not in {41, 42, 43, "41", "42", "43"}:
-            errors.append(f"{prefix} paper-denominator rows must use seed 41, 42, or 43")
 
     if proof == "paper-denominator-reproduction":
         if record.get("serving_backend") != "vLLM":

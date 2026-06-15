@@ -830,6 +830,9 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
   `expected_dataset_slice`: subset rows are held-out subsets below the 200-case
   paper denominator, G3/G3V use `0..200`, G4 uses `200..400`, and
   aggregate/full-paper rows keep their explicit denominator labels.
+- Validates the row seed evidence against the named runbook stage's generated
+  `expected_seed_policy`: G1M/G2 require seed `41`, G3/G3V/G4 require one of
+  `[41, 42, 43]`, and G5/G6 require `extra.seeds: [41, 42, 43]`.
 - Requires approval-gated rows to include prompt artifact paths matching their
   runbook stage expectations, such as rendered prompts and prompt-render
   manifests.
@@ -842,8 +845,9 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
   `--approval-artifact-path` are explicitly present.
 - The checker exercises those refusal paths directly: missing runbook stage id,
   wrong runbook stage label, missing prompt artifacts for `paper-subset`,
-  subset denominator drift, missing approval evidence for `paper-subset`, and
-  accidental `paper-denominator-reproduction` without the explicit allow flag.
+  subset denominator drift, subset seed drift, missing approval evidence for
+  `paper-subset`, and accidental `paper-denominator-reproduction` without the
+  explicit allow flag.
 
 Limit:
 

@@ -41,6 +41,7 @@ def stage(
     allowed_label: str,
     forbidden_label: str,
     expected_dataset_slice: dict[str, Any] | None = None,
+    expected_seed_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "id": stage_id,
@@ -53,6 +54,7 @@ def stage(
         "allowed_label": allowed_label,
         "forbidden_label": forbidden_label,
         "expected_dataset_slice": expected_dataset_slice,
+        "expected_seed_policy": expected_seed_policy,
     }
 
 
@@ -104,6 +106,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             "guardrail-ready",
             "paper reproduction",
             None,
+            None,
         ),
         stage(
             "G1",
@@ -134,6 +137,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
                 "case_count": 1,
                 "denominator_contains": "one-case-13-1",
             },
+            None,
         ),
         stage(
             "G1M",
@@ -163,6 +167,10 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
                 "case_range": "0..1",
                 "case_count": 1,
                 "denominator_contains": "one-case-13-1",
+            },
+            {
+                "kind": "exact",
+                "seed": 41,
             },
         ),
         stage(
@@ -198,6 +206,10 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
                 "case_count_max_exclusive": held_out["case_count"],
                 "denominator_contains": "subset",
                 "forbidden_denominator_fragments": ["paper-denominator", "full-paper"],
+            },
+            {
+                "kind": "exact",
+                "seed": 41,
             },
         ),
         stage(
@@ -248,6 +260,10 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
                 "case_count": evolving["case_count"],
                 "denominator": "evolving-split-0..200",
             },
+            {
+                "kind": "one-of",
+                "seeds": packet["protocol"]["seeds"],
+            },
         ),
         stage(
             "G3V",
@@ -284,6 +300,10 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
                 "case_count": evolving["case_count"],
                 "denominator": "training-validation-0..200",
             },
+            {
+                "kind": "one-of",
+                "seeds": packet["protocol"]["seeds"],
+            },
         ),
         stage(
             "G4",
@@ -315,6 +335,10 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
                 "case_count": held_out["case_count"],
                 "denominator": "held-out-200..400",
             },
+            {
+                "kind": "one-of",
+                "seeds": packet["protocol"]["seeds"],
+            },
         ),
         stage(
             "G5",
@@ -342,6 +366,10 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
                 "denominator": "seed-aggregate-41-42-43",
                 "seeds": packet["protocol"]["seeds"],
             },
+            {
+                "kind": "all-of",
+                "seeds": packet["protocol"]["seeds"],
+            },
         ),
         stage(
             "G6",
@@ -367,6 +395,10 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
                 "denominator": "full-paper-denominator",
                 "required_split_ranges": [evolving["range"], held_out["range"]],
                 "case_count": manifest["case_count"],
+                "seeds": packet["protocol"]["seeds"],
+            },
+            {
+                "kind": "all-of",
                 "seeds": packet["protocol"]["seeds"],
             },
         ),
@@ -432,6 +464,7 @@ def write_markdown(runbook: dict[str, Any], output: Path) -> None:
                 f"- Allowed label: `{stage_item['allowed_label']}`",
                 f"- Forbidden label: `{stage_item['forbidden_label']}`",
                 f"- Expected dataset slice: `{json.dumps(stage_item['expected_dataset_slice'], sort_keys=True)}`",
+                f"- Expected seed policy: `{json.dumps(stage_item['expected_seed_policy'], sort_keys=True)}`",
                 "",
                 "Commands:",
                 "",

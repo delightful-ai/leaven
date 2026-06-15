@@ -73,6 +73,7 @@
         "docs/ara/trace2skill_spreadsheetbench/validation.md"
       ],
       "expected_dataset_slice": null,
+      "expected_seed_policy": null,
       "forbidden_label": "paper reproduction",
       "id": "G0",
       "runnable_now": true,
@@ -103,6 +104,7 @@
         "denominator_contains": "one-case-13-1",
         "kind": "one-case"
       },
+      "expected_seed_policy": null,
       "forbidden_label": "paper reproduction",
       "id": "G1",
       "runnable_now": true,
@@ -141,6 +143,10 @@
         "case_range": "0..1",
         "denominator_contains": "one-case-13-1",
         "kind": "one-case"
+      },
+      "expected_seed_policy": {
+        "kind": "exact",
+        "seed": 41
       },
       "forbidden_label": "held-out split reproduced",
       "id": "G1M",
@@ -188,6 +194,10 @@
         "kind": "held-out-subset",
         "range_end_max": 400,
         "range_start_min": 200
+      },
+      "expected_seed_policy": {
+        "kind": "exact",
+        "seed": 41
       },
       "forbidden_label": "held-out split reproduced",
       "id": "G2",
@@ -247,6 +257,14 @@
         "denominator": "evolving-split-0..200",
         "kind": "exact-range"
       },
+      "expected_seed_policy": {
+        "kind": "one-of",
+        "seeds": [
+          41,
+          42,
+          43
+        ]
+      },
       "forbidden_label": "held-out result",
       "id": "G3",
       "runnable_now": false,
@@ -292,6 +310,14 @@
         "denominator": "training-validation-0..200",
         "kind": "exact-range"
       },
+      "expected_seed_policy": {
+        "kind": "one-of",
+        "seeds": [
+          41,
+          42,
+          43
+        ]
+      },
       "forbidden_label": "held-out result",
       "id": "G3V",
       "runnable_now": false,
@@ -332,6 +358,14 @@
         "denominator": "held-out-200..400",
         "kind": "exact-range"
       },
+      "expected_seed_policy": {
+        "kind": "one-of",
+        "seeds": [
+          41,
+          42,
+          43
+        ]
+      },
       "forbidden_label": "paper aggregate",
       "id": "G4",
       "runnable_now": false,
@@ -357,6 +391,14 @@
       "expected_dataset_slice": {
         "denominator": "seed-aggregate-41-42-43",
         "kind": "aggregate",
+        "seeds": [
+          41,
+          42,
+          43
+        ]
+      },
+      "expected_seed_policy": {
+        "kind": "all-of",
         "seeds": [
           41,
           42,
@@ -391,6 +433,14 @@
           "0..200",
           "200..400"
         ],
+        "seeds": [
+          41,
+          42,
+          43
+        ]
+      },
+      "expected_seed_policy": {
+        "kind": "all-of",
         "seeds": [
           41,
           42,

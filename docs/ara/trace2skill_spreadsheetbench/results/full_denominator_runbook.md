@@ -45,6 +45,7 @@ Normal approval preflight passes: `false`
 - Allowed label: `guardrail-ready`
 - Forbidden label: `paper reproduction`
 - Expected dataset slice: `null`
+- Expected seed policy: `null`
 
 Commands:
 
@@ -68,6 +69,7 @@ Expected artifacts:
 - Allowed label: `deterministic-one-case`
 - Forbidden label: `paper reproduction`
 - Expected dataset slice: `{"case_count": 1, "case_range": "0..1", "denominator_contains": "one-case-13-1", "kind": "one-case"}`
+- Expected seed policy: `null`
 
 Commands:
 
@@ -95,6 +97,7 @@ Expected artifacts:
 - Allowed label: `model-one-case`
 - Forbidden label: `held-out split reproduced`
 - Expected dataset slice: `{"case_count": 1, "case_range": "0..1", "denominator_contains": "one-case-13-1", "kind": "one-case"}`
+- Expected seed policy: `{"kind": "exact", "seed": 41}`
 
 Commands:
 
@@ -131,6 +134,7 @@ Expected artifacts:
 - Allowed label: `paper-subset`
 - Forbidden label: `held-out split reproduced`
 - Expected dataset slice: `{"case_count_max_exclusive": 200, "case_count_min": 1, "denominator_contains": "subset", "forbidden_denominator_fragments": ["paper-denominator", "full-paper"], "kind": "held-out-subset", "range_end_max": 400, "range_start_min": 200}`
+- Expected seed policy: `{"kind": "exact", "seed": 41}`
 
 Commands:
 
@@ -169,6 +173,7 @@ Expected artifacts:
 - Allowed label: `evolving-split-run`
 - Forbidden label: `held-out result`
 - Expected dataset slice: `{"case_count": 200, "case_range": "0..200", "denominator": "evolving-split-0..200", "kind": "exact-range"}`
+- Expected seed policy: `{"kind": "one-of", "seeds": [41, 42, 43]}`
 
 Commands:
 
@@ -224,6 +229,7 @@ Expected artifacts:
 - Allowed label: `training-validation-candidate`
 - Forbidden label: `held-out result`
 - Expected dataset slice: `{"case_count": 200, "case_range": "0..200", "denominator": "training-validation-0..200", "kind": "exact-range"}`
+- Expected seed policy: `{"kind": "one-of", "seeds": [41, 42, 43]}`
 
 Commands:
 
@@ -266,6 +272,7 @@ Expected artifacts:
 - Allowed label: `held-out-single-seed-candidate`
 - Forbidden label: `paper aggregate`
 - Expected dataset slice: `{"case_count": 200, "case_range": "200..400", "denominator": "held-out-200..400", "kind": "exact-range"}`
+- Expected seed policy: `{"kind": "one-of", "seeds": [41, 42, 43]}`
 
 Commands:
 
@@ -303,6 +310,7 @@ Expected artifacts:
 - Allowed label: `seed-aggregate-candidate`
 - Forbidden label: `cross-model paper reproduction`
 - Expected dataset slice: `{"denominator": "seed-aggregate-41-42-43", "kind": "aggregate", "seeds": [41, 42, 43]}`
+- Expected seed policy: `{"kind": "all-of", "seeds": [41, 42, 43]}`
 
 Commands:
 
@@ -328,6 +336,7 @@ Expected artifacts:
 - Allowed label: `paper-denominator-reproduction`
 - Forbidden label: `anything stronger than completed rows`
 - Expected dataset slice: `{"case_count": 400, "denominator": "full-paper-denominator", "kind": "full-paper", "required_split_ranges": ["0..200", "200..400"], "seeds": [41, 42, 43]}`
+- Expected seed policy: `{"kind": "all-of", "seeds": [41, 42, 43]}`
 
 Commands:
 

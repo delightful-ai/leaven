@@ -837,6 +837,33 @@ def validate(root: Path) -> list[str]:
                                 fail(errors, f"results/full_denominator_runbook.json {stage_id} missing expected_dataset_slice")
                             elif expected_slice.get("kind") != expected_kind:
                                 fail(errors, f"results/full_denominator_runbook.json {stage_id} expected_dataset_slice kind must be {expected_kind}")
+                        expected_seed_kinds = {
+                            "G0": None,
+                            "G1": None,
+                            "G1M": "exact",
+                            "G2": "exact",
+                            "G3": "one-of",
+                            "G3V": "one-of",
+                            "G4": "one-of",
+                            "G5": "all-of",
+                            "G6": "all-of",
+                        }
+                        for stage_id, expected_kind in expected_seed_kinds.items():
+                            stage = by_id.get(stage_id)
+                            if stage is None:
+                                continue
+                            seed_policy = stage.get("expected_seed_policy")
+                            if expected_kind is None:
+                                if seed_policy is not None:
+                                    fail(errors, f"results/full_denominator_runbook.json {stage_id} expected_seed_policy must be null")
+                            elif not isinstance(seed_policy, dict):
+                                fail(errors, f"results/full_denominator_runbook.json {stage_id} missing expected_seed_policy")
+                            elif seed_policy.get("kind") != expected_kind:
+                                fail(errors, f"results/full_denominator_runbook.json {stage_id} expected_seed_policy kind must be {expected_kind}")
+                            elif expected_kind == "exact" and seed_policy.get("seed") != 41:
+                                fail(errors, f"results/full_denominator_runbook.json {stage_id} expected_seed_policy seed must be 41")
+                            elif expected_kind in {"one-of", "all-of"} and seed_policy.get("seeds") != [41, 42, 43]:
+                                fail(errors, f"results/full_denominator_runbook.json {stage_id} expected_seed_policy seeds must be [41, 42, 43]")
 
     return errors
 

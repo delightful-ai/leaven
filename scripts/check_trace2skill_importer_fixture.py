@@ -316,6 +316,20 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "held-out range drift",
         )
 
+        def mutate_subset_to_wrong_seed(row: dict[str, Any]) -> None:
+            row["seed"] = 99
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "subset-wrong-seed.jsonl",
+            mutate_subset_to_wrong_seed,
+            "G2 rows must use seed 41",
+            errors,
+            "subset seed drift",
+        )
+
         expect_failure(
             repo_root,
             importer_base_args(tmp_path / "missing-prompt.jsonl"),

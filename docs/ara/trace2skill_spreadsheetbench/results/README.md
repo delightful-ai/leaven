@@ -102,6 +102,9 @@ artifacts fail without producing a JSONL artifact. Result intake also checks
 the `dataset_slice` against the runbook stage's generated
 `expected_dataset_slice`, so subset rows cannot silently become 200-case
 paper-denominator rows and held-out rows must use the paper `200..400` split.
+It also checks the runbook stage's generated `expected_seed_policy`, so
+approval-gated rows cannot drift to off-protocol seeds while still looking like
+paper-denominator progress.
 
 The full-denominator approval packet can be checked with:
 
