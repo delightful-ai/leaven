@@ -9,6 +9,8 @@ import json
 import subprocess
 import sys
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +24,7 @@ EXPECTED_METRICS = {
 APPROVAL_ARTIFACT = "docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md"
 ARA_DIR = "docs/ara/trace2skill_spreadsheetbench"
 FIXTURE = "scripts/fixtures/trace2skill_eval_official_results_sample.json"
+RESULT_FIXTURE_SCRATCH_PATTERNS = ("fixture_*.jsonl", "fixture_*.json")
 
 
 def repo_root_for(ara_root: Path) -> Path:
@@ -40,6 +43,30 @@ def import_result_intake_checker(repo_root: Path) -> Any:
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def result_fixture_scratch_paths(ara_root: Path) -> list[Path]:
+    results_dir = ara_root / "results"
+    if not results_dir.is_dir():
+        return []
+    paths: set[Path] = set()
+    for pattern in RESULT_FIXTURE_SCRATCH_PATTERNS:
+        paths.update(path for path in results_dir.glob(pattern) if path.is_file())
+    return sorted(paths)
+
+
+def remove_result_fixture_scratch(ara_root: Path) -> None:
+    for path in result_fixture_scratch_paths(ara_root):
+        path.unlink()
+
+
+@contextmanager
+def cleaned_result_fixture_scratch(ara_root: Path) -> Iterator[None]:
+    remove_result_fixture_scratch(ara_root)
+    try:
+        yield
+    finally:
+        remove_result_fixture_scratch(ara_root)
 
 
 def touch(repo_root: Path, path: Path, text: str) -> str:
@@ -1373,7 +1400,10 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
     target_dir.mkdir(exist_ok=True)
     check_runbook_stage(repo_root, ara_root, errors)
 
-    with tempfile.TemporaryDirectory(prefix="trace2skill-importer-fixture-", dir=target_dir) as tmp:
+    with cleaned_result_fixture_scratch(ara_root), tempfile.TemporaryDirectory(
+        prefix="trace2skill-importer-fixture-",
+        dir=target_dir,
+    ) as tmp:
         tmp_path = Path(tmp)
         output = tmp_path / "imported.jsonl"
         check_positive_import(repo_root, output, errors)
@@ -1886,6 +1916,13 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "refusing paper-denominator-reproduction without --allow-paper-denominator-reproduction",
             errors,
             "missing paper-denominator allow flag",
+        )
+
+    remaining_scratch = result_fixture_scratch_paths(ara_root)
+    if remaining_scratch:
+        errors.append(
+            "importer fixture left result scratch files: "
+            + ", ".join(path.relative_to(repo_root).as_posix() for path in remaining_scratch)
         )
 
     return errors
