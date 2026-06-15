@@ -1,0 +1,5 @@
+entries:
+  - turn: "2026-06-14_001#1"
+    notes:
+      - "Routed model availability as session/action evidence rather than a new scientific claim; the paper reproduction denominator remains unresolved."
+      - "Did not crystallize new observations because the user has not approved model execution, endpoint choice, tolerance policy, or artifact-retention terms."

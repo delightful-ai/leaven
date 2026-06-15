@@ -1,0 +1,8 @@
+sessions:
+  - id: "2026-06-14_001"
+    date: "2026-06-14"
+    summary: "Recorded public Qwen model availability research while keeping full-denominator execution blocked on approval."
+    turn_count: 1
+    events_count: 1
+    claims_touched: []
+    open_threads: 1
