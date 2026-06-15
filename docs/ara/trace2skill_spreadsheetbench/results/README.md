@@ -24,6 +24,13 @@ The current acceptance and denominator audit is recorded in
 Current public model/serving availability research for the approval packet is
 recorded in [`model_availability.md`](model_availability.md).
 
+The local 400-row SpreadsheetBench-Verified dataset manifest is recorded in
+[`dataset_manifest.json`](dataset_manifest.json) and can be rebuilt with:
+
+```bash
+uv run python scripts/build_trace2skill_dataset_manifest.py
+```
+
 The full-denominator approval packet can be checked with:
 
 ```bash

@@ -34,7 +34,7 @@ recorded and approved.
 | 122B model | `Qwen3.5-122B-A10B` | Pending approval. |
 | 35B model | `Qwen3.5-35B-A3B` | Pending approval. |
 | Serving backend | vLLM | Pending host/version/tensor-parallel plan. |
-| Dataset | `data/spreadsheetbench_verified/spreadsheetbench_verified_400` | Pending checksum or manifest confirmation. |
+| Dataset | `data/spreadsheetbench_verified/spreadsheetbench_verified_400` | Manifested in `results/dataset_manifest.json`: 400 records, split `0..200` / `200..400`, no missing spreadsheet directories. |
 | Seeds | `41`, `42`, `43` | Pending approval for all three. |
 | Stage 2 workers | `128` | Pending concurrency and failure-policy approval. |
 | Merge batch size | `32` | Pending merge-tree approval. |

@@ -13,7 +13,7 @@ budget conditions and writes denominator-labeled result records.
 | 122B model | `Qwen3.5-122B-A10B` | Public model/source availability researched; not provisioned locally. | Model source, weights/API endpoint, license, and operator approval. |
 | 35B model | `Qwen3.5-35B-A3B` | Public model/source availability researched; not provisioned locally. | Model source, weights/API endpoint, license, and operator approval. |
 | Serving backend | vLLM | Not provisioned for this run. | Host/GPU plan, vLLM version, tensor-parallel shape, request limits. |
-| Dataset | 400-row SpreadsheetBench-Verified path | Local upstream sample paths exist; full run path must be rechecked. | Exact `data/spreadsheetbench_verified/spreadsheetbench_verified_400` path and checksum/provenance. |
+| Dataset | 400-row SpreadsheetBench-Verified path | Local dataset manifest recorded. | Approval that `results/dataset_manifest.json` is the intended data provenance for this run. |
 | Evolving split | rows `0..200` | Captured in ARA config. | Approval that these rows feed trajectory collection and skill evolution only. |
 | Held-out split | rows `200..400` | Captured in ARA config. | Approval that these rows are untouched until final evaluation. |
 | Seeds | `41`, `42`, `43` | Captured in ARA config. | Approval for all three seeds; single seed remains subset evidence. |
@@ -72,7 +72,7 @@ serving:
   gpu_count: null
 dataset:
   path: data/spreadsheetbench_verified/spreadsheetbench_verified_400
-  checksum_or_manifest: null
+  checksum_or_manifest: docs/ara/trace2skill_spreadsheetbench/results/dataset_manifest.json
 protocol:
   seeds: [41, 42, 43]
   stage2_workers: 128

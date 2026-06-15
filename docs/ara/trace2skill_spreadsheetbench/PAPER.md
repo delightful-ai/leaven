@@ -103,6 +103,7 @@ separately and labeled by denominator.
 | [results/README.md](results/README.md) | Leaven result-record rules, proof classifications, and overlay binding. |
 | [results/leaven_result_schema.md](results/leaven_result_schema.md) | JSONL schema for real Leaven metrics that can be plotted against paper targets. |
 | [results/denominator_status.md](results/denominator_status.md) | Handoff acceptance audit and current denominator status. |
+| [results/dataset_manifest.json](results/dataset_manifest.json) | Deterministic local manifest for the 400-row SpreadsheetBench-Verified dataset. |
 | [results/one_case_live.md](results/one_case_live.md) | Deterministic one-case ACP worker proof and artifact manifest. |
 | [results/full_run_plan.md](results/full_run_plan.md) | Approval gate for Qwen/vLLM paper-denominator execution. |
 | [results/model_availability.md](results/model_availability.md) | Current public model/serving availability research for the approval packet. |

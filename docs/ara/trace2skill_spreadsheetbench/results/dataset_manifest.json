@@ -1,0 +1,61 @@
+{
+  "case_count": 400,
+  "case_order": {
+    "first_id": "13-1",
+    "last_id": "59902",
+    "sha256": "ac05d2035ad776af9d901689423645316e707e6e8426a04d2eae6591929b64e9"
+  },
+  "dataset_json": {
+    "bytes": 306533,
+    "sha256": "bcecaa89a005bd4e3bbe98da150a86e8062c27f262e575d5e47bd9861b3525e7"
+  },
+  "record_shape": {
+    "instruction_type_counts": {
+      "Cell-Level Manipulation": 275,
+      "Sheet-Level Manipulation": 125
+    },
+    "keys_by_presence_count": {
+      "answer_position": 400,
+      "answer_sheet": 125,
+      "data_position": 125,
+      "exclude": 2,
+      "id": 400,
+      "instruction": 400,
+      "instruction_type": 400,
+      "spreadsheet_path": 400
+    }
+  },
+  "referenced_workbooks": {
+    "aggregate_sha256": "777bdd2359f0524b3ee2b717645e63cddc23972abd6926d4a123e625c105e6cd",
+    "file_count": 2394,
+    "files_per_case_max": 6,
+    "files_per_case_min": 2,
+    "missing_directories": [],
+    "missing_directory_count": 0,
+    "total_bytes": 62063139
+  },
+  "schema_version": "leaven.trace2skill.dataset_manifest.v1",
+  "source": {
+    "data_root": "tmp/repros/trace2skill-upstream/data",
+    "dataset_json": "spreadsheetbench_verified/spreadsheetbench_verified_400/dataset.json",
+    "dataset_path": "spreadsheetbench_verified/spreadsheetbench_verified_400"
+  },
+  "splits": [
+    {
+      "case_count": 200,
+      "case_order_sha256": "4e7e54c59d34e671fb02861636f636fe46f50271a40df055cb4a349561cbef93",
+      "first_id": "13-1",
+      "last_id": "52575",
+      "name": "evolving",
+      "range": "0..200"
+    },
+    {
+      "case_count": 200,
+      "case_order_sha256": "eb68c9b69307708ebf7ac04c86c82efddafebc85c5b428ba65d24ee5478f2d3d",
+      "first_id": "52807",
+      "last_id": "59902",
+      "name": "held_out",
+      "range": "200..400"
+    }
+  ]
+}

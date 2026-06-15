@@ -331,3 +331,34 @@ Limit:
 
 - `--expect-blocked` is a guardrail proof only. It confirms that the current
   packet is not runnable; it is not reproduction evidence.
+
+## 2026-06-14 Dataset Manifest
+
+Artifact:
+
+```text
+docs/ara/trace2skill_spreadsheetbench/results/dataset_manifest.json
+scripts/build_trace2skill_dataset_manifest.py
+```
+
+Command:
+
+```bash
+uv run python scripts/build_trace2skill_dataset_manifest.py
+```
+
+Recorded facts:
+
+- `dataset.json` has 400 records and SHA-256
+  `bcecaa89a005bd4e3bbe98da150a86e8062c27f262e575d5e47bd9861b3525e7`.
+- Ordered case ids run from `13-1` to `59902`, with full-order SHA-256
+  `ac05d2035ad776af9d901689423645316e707e6e8426a04d2eae6591929b64e9`.
+- Evolving split `0..200` runs from `13-1` to `52575`.
+- Held-out split `200..400` runs from `52807` to `59902`.
+- Referenced spreadsheet directories are all present; the aggregate workbook
+  hash covers 2,394 files.
+
+Limit:
+
+- This manifests local data provenance and split materialization only. It does
+  not approve a Qwen/vLLM run and does not produce any Leaven metric rows.
