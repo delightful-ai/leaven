@@ -665,11 +665,15 @@ def check_stage_aggregate_policy(
                     f"does not pass result intake: {source_errors!r}"
                 )
             source_extra = source.get("extra")
-            if not isinstance(source_extra, dict):
-                continue
-            if source_extra.get("runbook_stage_id") != source_stage_id:
-                continue
-            if source.get("proof_classification") != source_proof:
+            if (
+                not isinstance(source_extra, dict)
+                or source_extra.get("runbook_stage_id") != source_stage_id
+                or source.get("proof_classification") != source_proof
+            ):
+                errors.append(
+                    f"{prefix} {stage_id} source row {source_path.relative_to(repo_root)}:{line_number} "
+                    f"must use proof_classification {source_proof!r} from runbook stage {source_stage_id!r}"
+                )
                 continue
             check_source_identity_matches(
                 prefix,

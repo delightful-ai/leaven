@@ -654,6 +654,31 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
     try:
         check_result_intake_for_rows(repo_root, ara_root, aggregate_output, None, errors, "aggregate intake")
 
+        unsupported_source_path = tmp_path / "aggregate_training_validation_source.jsonl"
+        write_jsonl(unsupported_source_path, [source_training_validation_row(repo_root, tmp_path, 41)])
+        unsupported_source_rel = unsupported_source_path.relative_to(repo_root).as_posix()
+        unsupported_source_aggregate_row = json.loads(json.dumps(aggregate_row))
+        unsupported_source_aggregate_row["artifact_paths"] = [
+            APPROVAL_ARTIFACT,
+            prompt_manifest_rel,
+            *source_paths,
+            unsupported_source_rel,
+        ]
+        unsupported_source_aggregate_row["extra"]["source_result_paths"] = [
+            *source_paths,
+            unsupported_source_rel,
+        ]
+        unsupported_source_aggregate_output = tmp_path / "aggregate-unsupported-source-classification.jsonl"
+        write_jsonl(unsupported_source_aggregate_output, [unsupported_source_aggregate_row])
+        check_result_intake_for_rows(
+            repo_root,
+            ara_root,
+            unsupported_source_aggregate_output,
+            "must use proof_classification 'held-out-single-seed-candidate' from runbook stage 'G4'",
+            errors,
+            "aggregate unsupported source classification",
+        )
+
         invalid_heldout_model_output = tmp_path / "heldout-invalid-model.jsonl"
         write_jsonl(
             invalid_heldout_model_output,
