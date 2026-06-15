@@ -176,3 +176,7 @@ entries:
     notes:
       - "Routed aggregate predecessor-row intake as paper-protocol guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because predecessor-row validation only rejects future aggregates backed by invalid source rows; it creates no model-backed rows, overlays, approvals, analyst responses, Stage 3 merges, seed aggregates, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#45"
+    notes:
+      - "Routed full-paper recursive source-chain intake as paper-protocol guardrail evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because full-paper source-chain validation only rejects future full-paper rows backed by invalid aggregate/candidate rows; it creates no model-backed rows, overlays, approvals, analyst responses, Stage 3 merges, seed aggregates, full-paper rows, or Qwen/vLLM execution."
