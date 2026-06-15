@@ -340,3 +340,7 @@ entries:
     notes:
       - "Routed source-command run-flag enforcement as paper-protocol and command-provenance guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the change only prevents approval-gated command-backed rows from satisfying seed, worker, or max-turn evidence with metadata alone; it creates no accepted model-backed row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#86"
+    notes:
+      - "Routed source-command merge-batch enforcement as paper-protocol and command-provenance guardrail evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the change only prevents G3 skill-evolution rows from satisfying merge-batch evidence with metadata or upstream defaults alone; it creates no accepted evolving-split row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
