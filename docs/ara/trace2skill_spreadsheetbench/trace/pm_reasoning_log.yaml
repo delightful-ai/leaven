@@ -168,3 +168,7 @@ entries:
     notes:
       - "Routed generated expected_command_policy fields as paper/upstream-protocol guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because command policy only rejects off-protocol future rows; it creates no model-backed rows, overlays, approvals, analyst responses, Stage 3 merges, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#43"
+    notes:
+      - "Routed generated expected_aggregate_policy fields as paper-protocol guardrail evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because aggregate policy only rejects off-protocol future aggregate/full-paper rows; it creates no model-backed rows, overlays, approvals, analyst responses, Stage 3 merges, seed aggregates, or Qwen/vLLM execution."
