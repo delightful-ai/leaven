@@ -240,3 +240,7 @@ entries:
     notes:
       - "Routed aggregate/full-paper source identity enforcement as denominator-provenance guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the check only prevents aggregate/full-paper rows from mixing source rows across model, serving, metric, or unit identities; it creates no accepted model-backed rows, overlays, approvals, seed aggregates, full-paper rows, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#61"
+    notes:
+      - "Routed paper-denominator-class model/backend identity enforcement as denominator-provenance guardrail evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the check only prevents held-out, seed-aggregate, paper-candidate, and full-paper rows from carrying non-paper model ids or non-vLLM backends; it creates no accepted model-backed rows, overlays, approvals, seed aggregates, full-paper rows, or Qwen/vLLM execution."
