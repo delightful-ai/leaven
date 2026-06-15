@@ -3,6 +3,12 @@
 All numeric values in this evidence layer are paper targets unless an entry is
 explicitly labeled as a Leaven result. No Leaven result overlays exist yet.
 
+Check this index with:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_evidence_bindings.py docs/ara/trace2skill_spreadsheetbench
+```
+
 | Evidence file | Source | Claims | Notes |
 |---------------|--------|--------|-------|
 | [tables/table_main_spreadsheetbench.md](tables/table_main_spreadsheetbench.md) | `tmp/skill_opt_sources/arx_2603.25158/src/tables/table_main_v1.tex` | C01 | Main SpreadsheetBench/WikiTQ paper target table. |
