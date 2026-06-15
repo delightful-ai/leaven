@@ -368,3 +368,7 @@ entries:
     notes:
       - "Routed deterministic one-case prepared-artifact binding as one-case denominator hardening, not model-backed or paper-denominator execution."
       - "Kept reproduction claims unchanged because the change only binds existing local deterministic ACP evidence to the prepared prompt and input/golden workbooks; it creates no model-backed one-case row, overlay, approval, subset, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#93"
+    notes:
+      - "Routed generated-runbook G1 source-artifact binding as one-case proof-contract hardening, not model-backed or paper-denominator execution."
+      - "Kept reproduction claims unchanged because the change only prevents the runbook from omitting prepared prompt and init/golden workbook expectations; it creates no model-backed one-case row, overlay, approval, subset, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
