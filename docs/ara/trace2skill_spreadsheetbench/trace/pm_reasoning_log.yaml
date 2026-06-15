@@ -380,3 +380,7 @@ entries:
     notes:
       - "Routed importer fixture scratch containment as result-evidence hygiene, not denominator execution."
       - "Kept reproduction claims unchanged because the change only prevents validation scratch rows from surviving in top-level ARA results; it creates no accepted model-backed row, overlay, approval, subset, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#96"
+    notes:
+      - "Routed live Codex smoke as provider-availability evidence, not Trace2Skill denominator execution."
+      - "Kept reproduction claims unchanged because gpt-5.4-mini Codex reachability is not Qwen3.5/vLLM SpreadsheetBench execution and creates no accepted model-backed row, overlay, subset, held-out split, seed aggregate, or full-paper row."
