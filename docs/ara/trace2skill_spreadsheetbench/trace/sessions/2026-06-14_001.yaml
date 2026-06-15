@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T19:57-07:00"
-  turn_count: 33
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, importer-fixture validation, Stage 2 rendered-prompt validation/freshness, approval-artifact result-intake guard, runbook-stage result binding, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, dataset-manifest freshness validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, approval-state validation, deterministic one-case result-freshness validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
+  last_turn: "2026-06-14T20:06-07:00"
+  turn_count: 34
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, importer-fixture validation, Stage 2 rendered-prompt validation/freshness, rendered-prompt artifact-contract validation, approval-artifact result-intake guard, runbook-stage result binding, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, dataset-manifest freshness validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, approval-state validation, deterministic one-case result-freshness validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -211,6 +211,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Upgraded Stage 2 rendered-prompt validation to regenerate the deterministic one-case prompt/fanout artifacts before checking their hashes and pending-call semantics."
+  - turn: 34
+    type: experiment
+    id: "PM-2026-06-14-035"
+    routing: direct
+    provenance: ai-executed
+    summary: "Required full-denominator approval and runbook stages to name rendered agent prompts, Stage 2 analyst prompts/fanout, Stage 3 merge prompts/manifests, and prompt-render manifests before future model-backed results can satisfy the artifact contract."
 
 ai_actions:
   - turn: 1
@@ -552,6 +558,16 @@ ai_actions:
       - "scripts/check_trace2skill_stage2_prompt_artifacts.py"
       - "docs/ara/trace2skill_spreadsheetbench/evidence/stage2_rendered_prompts.md"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 34
+    action: "Extended the Trace2Skill runbook generator, approval packet, artifact-contract checker, generated runbook, and validation notes so future model-backed stages must produce rendered prompt artifacts and prompt-render manifests."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/build_trace2skill_runbook.py"
+      - "scripts/check_trace2skill_artifact_contract.py"
+      - "docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md"
+      - "docs/ara/trace2skill_spreadsheetbench/results/full_denominator_runbook.json"
+      - "docs/ara/trace2skill_spreadsheetbench/results/full_denominator_runbook.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -622,6 +638,8 @@ key_context:
     excerpt: "Stage 2 rendered-prompt artifact check passed directly and through validate_ara; it verifies the one-case pending MAP analyst prompt SHA-256 94893fef2c3459bbe76bb63854dd2e9aab813625877c584867d34eadba700ba4, exact upstream success-path prompt-template text, and a single pending success-13-1-1 fanout call with response null while leaving analyst execution, parsing, merge, overlays, approval, and Qwen/vLLM absent."
   - turn: 33
     excerpt: "Stage 2 prompt freshness now passed directly and through validate_ara: the checker runs `cargo run -p trace2skill_spreadsheetbench -- --prepare-one-case-analyst-fanout --run-dir tmp/trace2skill-one-case-live` before validating the prompt/fanout hashes, so stale ignored tmp artifacts no longer satisfy the ARA gate."
+  - turn: 34
+    excerpt: "Rendered prompt artifacts are now part of the full-denominator contract: approval and generated runbook stages require agent prompts, Stage 2 analyst prompts/fanout, Stage 3 merge prompts/manifests, and prompt-render manifests; artifact contract, runbook freshness, status docs, approval expected-blocked, and validate_ara all passed while Qwen/vLLM execution remains absent."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."
