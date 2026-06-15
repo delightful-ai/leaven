@@ -498,6 +498,96 @@ def source_heldout_row(repo_root: Path, tmp_path: Path, seed: int) -> dict[str, 
     }
 
 
+def source_training_validation_row(repo_root: Path, tmp_path: Path, seed: int) -> dict[str, Any]:
+    base = tmp_path / f"validation_train_seed_{seed}"
+    baseline_prompt = touch(
+        repo_root,
+        base / "baseline_rendered_prompts/13-1/agent_prompt.md",
+        f"fixture validation seed {seed} baseline prompt\n",
+    )
+    baseline_manifest = touch(
+        repo_root,
+        base / "baseline_prompt_render_manifest.json",
+        '{"schema_version":"fixture.validation_baseline_prompt_manifest.v1"}\n',
+    )
+    baseline_eval = touch(
+        repo_root,
+        base / "baseline_outputs/eval_official_results.json",
+        '{"schema_version":"fixture.validation_baseline_eval.v1"}\n',
+    )
+    evolved_prompt = touch(
+        repo_root,
+        base / "evolved_rendered_prompts/13-1/agent_prompt.md",
+        f"fixture validation seed {seed} evolved prompt\n",
+    )
+    evolved_manifest = touch(
+        repo_root,
+        base / "evolved_prompt_render_manifest.json",
+        '{"schema_version":"fixture.validation_evolved_prompt_manifest.v1"}\n',
+    )
+    evolved_eval = touch(
+        repo_root,
+        base / "evolved_outputs/eval_official_results.json",
+        '{"schema_version":"fixture.validation_evolved_eval.v1"}\n',
+    )
+    best_seed_note = touch(
+        repo_root,
+        tmp_path / "best_seed_selection_note.md",
+        f"fixture selected seed {seed} from training validation only\n",
+    )
+    return {
+        "schema_version": "leaven.trace2skill.result.v1",
+        "run_id": f"trace2skill-training-validation-fixture-seed-{seed}",
+        "created_at": "2026-06-14T00:00:03Z",
+        "proof_classification": "training-validation-candidate",
+        "dataset_slice": {
+            "name": "SpreadsheetBench-Verified",
+            "split": "evolving",
+            "case_range": "0..200",
+            "case_count": 200,
+            "denominator": "training-validation-0..200",
+        },
+        "model_id": "fixture-model",
+        "serving_backend": "fixture-backend",
+        "seed": seed,
+        "skill_source": {"kind": "fixture-training-validation"},
+        "metric_name": "official_instance_accuracy",
+        "metric_value": 50.0,
+        "metric_unit": "percent",
+        "plot_binding": None,
+        "cost": {
+            "usd": None,
+            "prompt_tokens": None,
+            "completion_tokens": None,
+        },
+        "runtime": {
+            "seconds": None,
+            "workers": 128,
+            "max_turns": 100,
+        },
+        "source_command": (
+            "python run_spreadsheetbench.py --start_idx 0 --end_idx 200 "
+            "&& python evaluate_with_official.py --start_idx 0 --end_idx 200"
+        ),
+        "artifact_paths": [
+            APPROVAL_ARTIFACT,
+            baseline_prompt,
+            baseline_manifest,
+            baseline_eval,
+            evolved_prompt,
+            evolved_manifest,
+            evolved_eval,
+            best_seed_note,
+        ],
+        "extra": {
+            "runbook_stage_id": "G3V",
+            "approval_artifact_paths": [APPROVAL_ARTIFACT],
+            "command_policy": "upstream-eval",
+        },
+        "notes": "",
+    }
+
+
 def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Path, errors: list[str]) -> None:
     source_paths: list[str] = []
     for seed in (41, 42, 43):
@@ -629,6 +719,9 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
 
         full_paper_output = tmp_path / "full-paper.jsonl"
         aggregate_output_rel = aggregate_output.relative_to(repo_root).as_posix()
+        training_validation_output = tmp_path / "training-validation-seed-41.jsonl"
+        write_jsonl(training_validation_output, [source_training_validation_row(repo_root, tmp_path, 41)])
+        training_validation_output_rel = training_validation_output.relative_to(repo_root).as_posix()
         full_paper_row = {
             "schema_version": "leaven.trace2skill.result.v1",
             "run_id": "trace2skill-full-paper-fixture",
@@ -658,17 +751,36 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
                 "seconds": None,
             },
             "source_command": "aggregate seed-aggregate-41-42-43 into full-paper fixture",
-            "artifact_paths": [APPROVAL_ARTIFACT, prompt_manifest_rel, aggregate_output_rel],
+            "artifact_paths": [
+                APPROVAL_ARTIFACT,
+                prompt_manifest_rel,
+                training_validation_output_rel,
+                aggregate_output_rel,
+            ],
             "extra": {
                 "runbook_stage_id": "G6",
                 "approval_artifact_paths": [APPROVAL_ARTIFACT],
                 "seeds": [41, 42, 43],
-                "source_result_paths": [aggregate_output_rel],
+                "source_result_paths": [training_validation_output_rel, aggregate_output_rel],
             },
             "notes": "",
         }
         write_jsonl(full_paper_output, [full_paper_row])
         check_result_intake_for_rows(repo_root, ara_root, full_paper_output, None, errors, "full-paper intake")
+
+        missing_training_output = tmp_path / "full-paper-missing-training-source.jsonl"
+        missing_training_row = json.loads(json.dumps(full_paper_row))
+        missing_training_row["artifact_paths"] = [APPROVAL_ARTIFACT, prompt_manifest_rel, aggregate_output_rel]
+        missing_training_row["extra"]["source_result_paths"] = [aggregate_output_rel]
+        write_jsonl(missing_training_output, [missing_training_row])
+        check_result_intake_for_rows(
+            repo_root,
+            ara_root,
+            missing_training_output,
+            "G6 full-paper rows must cite source result rows covering split ranges ['0..200']",
+            errors,
+            "full-paper missing training source range",
+        )
 
         invalid_case_count_output = tmp_path / "full-paper-invalid-case-count.jsonl"
         invalid_case_count_row = json.loads(json.dumps(full_paper_row))

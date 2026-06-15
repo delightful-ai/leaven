@@ -523,6 +523,7 @@
       "expected_aggregate_policy": {
         "kind": "full-paper",
         "source_proof_classifications": [
+          "training-validation-candidate",
           "seed-aggregate-candidate",
           "paper-denominator-candidate"
         ],

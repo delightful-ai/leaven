@@ -666,8 +666,18 @@ def check_stage_aggregate_policy(
             if source.get("proof_classification") in classifications
         ]
         if not matching_sources:
-            errors.append(f"{prefix} {stage_id} full-paper rows must cite aggregate or candidate source result rows")
+            errors.append(
+                f"{prefix} {stage_id} full-paper rows must cite training-validation, "
+                "seed-aggregate, or paper-candidate source result rows"
+            )
             return
+        dataset_expected = stage.get("expected_dataset_slice")
+        required_ranges = (
+            dataset_expected.get("required_split_ranges")
+            if isinstance(dataset_expected, dict)
+            else None
+        )
+        observed_ranges: set[str] = set()
         for source_path, source_line_number, source in matching_sources:
             source_errors: list[str] = []
             check_record(
@@ -688,6 +698,16 @@ def check_stage_aggregate_policy(
                 errors.append(
                     f"{prefix} {stage_id} source row {source_path.relative_to(repo_root)}:{source_line_number} "
                     f"does not pass result intake: {source_errors!r}"
+                )
+            source_slice = source.get("dataset_slice")
+            source_range = source_slice.get("case_range") if isinstance(source_slice, dict) else None
+            if isinstance(source_range, str) and source_range:
+                observed_ranges.add(source_range)
+        if isinstance(required_ranges, list) and all(isinstance(item, str) for item in required_ranges):
+            missing = [case_range for case_range in required_ranges if case_range not in observed_ranges]
+            if missing:
+                errors.append(
+                    f"{prefix} {stage_id} full-paper rows must cite source result rows covering split ranges {missing!r}"
                 )
         return
 

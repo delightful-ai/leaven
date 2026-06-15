@@ -363,7 +363,7 @@ Expected artifacts:
 - Expected seed policy: `{"kind": "all-of", "seeds": [41, 42, 43]}`
 - Expected runtime policy: `null`
 - Expected command policy: `null`
-- Expected aggregate policy: `{"kind": "full-paper", "source_proof_classifications": ["seed-aggregate-candidate", "paper-denominator-candidate"], "source_result_paths_min": 1}`
+- Expected aggregate policy: `{"kind": "full-paper", "source_proof_classifications": ["training-validation-candidate", "seed-aggregate-candidate", "paper-denominator-candidate"], "source_result_paths_min": 1}`
 
 Commands:
 

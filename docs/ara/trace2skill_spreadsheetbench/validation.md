@@ -866,8 +866,10 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
 - Validates aggregate provenance against the named runbook stage's generated
   `expected_aggregate_policy`: seed aggregate rows must cite inspectable G4
   held-out source result JSONL rows that themselves pass result intake for
-  seeds `41`, `42`, and `43`; full-paper rows must cite aggregate or
-  paper-candidate source result JSONL rows that also pass result intake.
+  seeds `41`, `42`, and `43`; full-paper rows must cite training-validation,
+  seed-aggregate, or paper-candidate source result JSONL rows that also pass
+  result intake and together cover generated required split ranges such as
+  `0..200` and `200..400`.
 - Verifies recursive aggregate source-row intake carries approval blockers for
   top-level ARA `results/*.jsonl` source rows, so blocked approval-gated source
   rows cannot support a seed aggregate while `full_run_plan.md` remains blocked.
@@ -898,11 +900,12 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
   wrong runbook stage label, missing prompt artifacts for `paper-subset`,
   missing base schema id, stringly metric value, missing official evaluator
   artifact, model one-case case-id drift, subset denominator drift, subset split
-  drift, aggregate case-count drift, full-paper case-count drift, subset seed
-  drift, subset worker drift, full-paper serving/model drift with null plot
-  binding, blocked real-results approval preflight, missing skill artifact,
-  skill metadata missing from the artifact audit, missing approval evidence for
-  `paper-subset`, and accidental
+  drift, aggregate case-count drift, full-paper case-count drift, full-paper
+  missing required split-range source coverage, subset seed drift, subset worker
+  drift, full-paper serving/model drift with null plot binding, blocked
+  real-results approval preflight, missing skill artifact, skill metadata
+  missing from the artifact audit, missing approval evidence for `paper-subset`,
+  and accidental
   `paper-denominator-reproduction` without the explicit allow flag.
 
 Limit:

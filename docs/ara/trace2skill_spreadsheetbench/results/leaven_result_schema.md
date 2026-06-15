@@ -171,7 +171,9 @@ what Leaven actually ran.
   `expected_aggregate_policy`: seed-aggregate rows must cite inspectable source
   result JSONL rows whose held-out single-seed predecessor rows pass result
   intake and cover seeds `41`, `42`, and `43`; full-paper rows must cite
-  aggregate or paper-candidate source result rows that also pass result intake.
+  training-validation, seed-aggregate, or paper-candidate source result rows
+  that also pass result intake and together cover the generated required split
+  ranges such as `0..200` and `200..400`.
   If a cited source row lives in top-level ARA `results/*.jsonl`, approval-gated
   source rows must also pass the runnable approval-packet preflight before they
   can support an aggregate or full-paper row.

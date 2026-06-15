@@ -503,6 +503,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             {
                 "kind": "full-paper",
                 "source_proof_classifications": [
+                    "training-validation-candidate",
                     "seed-aggregate-candidate",
                     "paper-denominator-candidate",
                 ],
