@@ -122,7 +122,7 @@ def audit(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
     approval = import_approval_checker(repo_root)
     full_run_plan = ara_dir / "results/full_run_plan.md"
     packet = approval.approval_packet(full_run_plan.read_text(encoding="utf-8"))
-    approval_errors = approval.packet_errors(packet)
+    approval_errors = approval.packet_errors(packet, ara_dir.resolve())
 
     acceptance: dict[str, dict[str, Any]] = {}
     acceptance["ara_level1_valid"] = status_entry(

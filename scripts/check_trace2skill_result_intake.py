@@ -108,7 +108,7 @@ def approval_packet_errors(ara_root: Path) -> list[str]:
         packet = checker.approval_packet(plan_path.read_text(encoding="utf-8"))
     except (ModuleNotFoundError, RuntimeError, ValueError) as exc:
         return [str(exc)]
-    return checker.packet_errors(packet)
+    return checker.packet_errors(packet, ara_root.resolve())
 
 
 def is_actual_ara_result_path(ara_root: Path, path: Path) -> bool:

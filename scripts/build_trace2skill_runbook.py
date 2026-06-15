@@ -67,7 +67,7 @@ def stage(
 def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
     approval = import_approval_checker(repo_root)
     packet = approval.approval_packet((ara_dir / "results/full_run_plan.md").read_text(encoding="utf-8"))
-    approval_errors = approval.packet_errors(packet)
+    approval_errors = approval.packet_errors(packet, ara_dir.resolve())
     manifest = load_json(ara_dir / "results/dataset_manifest.json")
     splits = {item["name"]: item for item in manifest["splits"]}
     evolving = splits["evolving"]

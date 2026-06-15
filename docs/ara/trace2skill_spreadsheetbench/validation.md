@@ -550,6 +550,9 @@ Scope:
 - Requires concrete approval values for model endpoints/weights, hardware,
   dataset checksum or manifest, cost, credentials, retention, and approval
   metadata before normal preflight can pass.
+- Verifies filled approval values have runnable shapes: positive integer GPU
+  fields, positive numeric budget fields, UTC approval timestamps, environment
+  variable credential names, and existing local manifest/policy paths.
 - Requires the expected artifact list to include run metadata, manifests,
   trajectories, score reports, evolved skill output, and `leaven_results.jsonl`.
 

@@ -82,7 +82,7 @@ def check_approval_state(repo_root: Path, ara_root: Path) -> list[str]:
             return [f"missing approval-state input: {path}"]
 
     packet = approval.approval_packet(read(plan_path))
-    packet_errors = approval.packet_errors(packet)
+    packet_errors = approval.packet_errors(packet, ara_root)
     closeout = json.loads(read(closeout_path))
 
     if packet_errors:
