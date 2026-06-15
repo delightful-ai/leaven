@@ -372,3 +372,7 @@ entries:
     notes:
       - "Routed generated-runbook G1 source-artifact binding as one-case proof-contract hardening, not model-backed or paper-denominator execution."
       - "Kept reproduction claims unchanged because the change only prevents the runbook from omitting prepared prompt and init/golden workbook expectations; it creates no model-backed one-case row, overlay, approval, subset, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#94"
+    notes:
+      - "Routed model-backed output-workbook artifact enforcement as runbook/result-intake guardrail evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the change only prevents approval-gated rows from counting official evaluator JSON without inspectable produced workbooks; it creates no model-backed one-case row, overlay, approval, subset, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
