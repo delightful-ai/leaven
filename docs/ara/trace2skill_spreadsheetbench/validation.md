@@ -555,6 +555,9 @@ Scope:
 - Verifies filled approval values have runnable shapes: positive integer GPU
   fields, positive numeric budget fields, UTC approval timestamps, environment
   variable credential names, and existing local manifest/policy paths.
+- Verifies the fixed `dataset.path` resolves inside the local upstream
+  Trace2Skill checkout and that the dataset manifest source names the same
+  SpreadsheetBench-Verified path.
 - Requires the expected artifact list to include run metadata, manifests,
   trajectories, score reports, evolved skill output, and `leaven_results.jsonl`.
 

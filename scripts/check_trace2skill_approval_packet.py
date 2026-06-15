@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from datetime import datetime, timezone
@@ -72,6 +73,8 @@ REFERENCE_PATH_FIELDS = [
     ("dataset", "checksum_or_manifest"),
     ("tolerance", "policy"),
 ]
+
+UPSTREAM_ROOT = Path("tmp/repros/trace2skill-upstream")
 
 
 def approval_packet(markdown: str) -> dict[str, Any]:
@@ -172,6 +175,36 @@ def packet_errors(packet: dict[str, Any], ara_root: Path | None = None) -> list[
             candidate = repo_root / value
             if not candidate.is_file():
                 errors.append(f"{'.'.join(path)} path does not exist: {value}")
+
+        dataset_path = lookup(packet, ("dataset", "path"))
+        if not unresolved(dataset_path):
+            if not isinstance(dataset_path, str):
+                errors.append(
+                    f"dataset.path must be an upstream-relative path string, got {dataset_path!r}"
+                )
+            else:
+                upstream_dataset_path = repo_root / UPSTREAM_ROOT / dataset_path
+                if not upstream_dataset_path.is_dir():
+                    errors.append(f"dataset.path upstream directory does not exist: {dataset_path}")
+                manifest_path = lookup(packet, ("dataset", "checksum_or_manifest"))
+                if isinstance(manifest_path, str) and not unresolved(manifest_path):
+                    manifest_file = repo_root / manifest_path
+                    if manifest_file.is_file():
+                        try:
+                            manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+                        except json.JSONDecodeError as exc:
+                            errors.append(f"dataset.checksum_or_manifest is not valid JSON: {exc}")
+                        else:
+                            source = manifest.get("source") if isinstance(manifest, dict) else None
+                            manifested_path = (
+                                source.get("dataset_path") if isinstance(source, dict) else None
+                            )
+                            expected_manifest_path = dataset_path.removeprefix("data/")
+                            if manifested_path != expected_manifest_path:
+                                errors.append(
+                                    "dataset.checksum_or_manifest source.dataset_path must match "
+                                    f"dataset.path without data/ prefix, got {manifested_path!r}"
+                                )
 
     expected_artifacts = lookup(packet, ("artifacts", "expected"))
     if not isinstance(expected_artifacts, list) or not expected_artifacts:
