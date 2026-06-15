@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T19:16-07:00"
-  turn_count: 22
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, runbook-freshness validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
+  last_turn: "2026-06-14T19:20-07:00"
+  turn_count: 23
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, runbook-freshness validation, artifact-contract validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -145,6 +145,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Added runbook-freshness checker; the full-denominator runbook JSON and Markdown are regenerated in a temporary directory and compared with committed outputs before validation passes."
+  - turn: 23
+    type: experiment
+    id: "PM-2026-06-14-024"
+    routing: direct
+    provenance: ai-executed
+    summary: "Added artifact-contract checker; approval-packet expected artifacts and generated runbook stage artifacts now must include the evidence fragments needed for future denominator-specific result intake."
 
 ai_actions:
   - turn: 1
@@ -386,6 +392,17 @@ ai_actions:
       - "scripts/validate_ara.py"
       - "scripts/AGENTS.md"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 23
+    action: "Added scripts/check_trace2skill_artifact_contract.py, wired it into validate_ara.py, updated the runbook generator to list one-case manifest/transcript evidence and future Leaven result JSONL outputs, regenerated the runbook, and documented the artifact-contract proof."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/check_trace2skill_artifact_contract.py"
+      - "scripts/build_trace2skill_runbook.py"
+      - "scripts/validate_ara.py"
+      - "scripts/AGENTS.md"
+      - "docs/ara/trace2skill_spreadsheetbench/results/full_denominator_runbook.json"
+      - "docs/ara/trace2skill_spreadsheetbench/results/full_denominator_runbook.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -434,6 +451,8 @@ key_context:
     excerpt: "Upstream execution-code manifest check passed directly and through validate_ara; it pins eight runbook-called Python entrypoints by path, role, bytes, line_count, and SHA-256 while leaving runtime environment and Qwen/vLLM execution unproved."
   - turn: 22
     excerpt: "Runbook-freshness check passed directly and through validate_ara; it regenerates the full-denominator runbook JSON/Markdown from the approval packet and dataset manifest and compares the committed outputs exactly while leaving approval and Qwen/vLLM execution blocked."
+  - turn: 23
+    excerpt: "Artifact-contract check passed directly and through validate_ara; it verifies approval-packet and runbook expected artifacts include one-case manifest/transcript evidence, normalized trajectory/score/skill artifacts, and future Leaven result JSONL outputs while leaving approval and Qwen/vLLM execution blocked."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."

@@ -87,3 +87,7 @@ entries:
     notes:
       - "Routed runbook-freshness validation as generated-artifact integrity evidence for the approval/runbook gate."
       - "Kept reproduction claims unchanged because the checker proves JSON/Markdown runbook freshness only; approval fields, result rows, overlays, and Qwen/vLLM execution remain future artifacts."
+  - turn: "2026-06-14_001#23"
+    notes:
+      - "Routed artifact-contract validation as future result-intake readiness evidence, not execution evidence."
+      - "Kept reproduction claims unchanged because the checker proves expected artifact coverage only; the future model-backed artifacts, result rows, overlays, approval, and Qwen/vLLM execution remain absent."
