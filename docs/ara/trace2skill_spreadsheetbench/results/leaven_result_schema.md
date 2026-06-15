@@ -124,3 +124,7 @@ what Leaven actually ran.
 - Result rows must carry `extra.runbook_stage_id`; result intake rejects rows
   whose stage is missing from the generated full-denominator runbook or whose
   stage `allowed_label` differs from the row's `proof_classification`.
+- Result rows must also keep `dataset_slice` consistent with the named runbook
+  stage: one-case stages stay one-case, subset rows stay below the 200-case
+  paper denominator, G3/G3V use `0..200`, G4 uses `200..400`, and aggregate or
+  full-paper rows use their explicit denominator labels.

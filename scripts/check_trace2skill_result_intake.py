@@ -114,6 +114,61 @@ def check_required_prompt_artifacts(
             errors.append(f"{prefix} missing prompt artifact matching runbook expectation {source!r}")
 
 
+def check_stage_dataset_slice(
+    prefix: str,
+    stage_id: str | None,
+    dataset_slice: Any,
+    errors: list[str],
+) -> None:
+    if not isinstance(stage_id, str):
+        return
+    if not isinstance(dataset_slice, dict):
+        errors.append(f"{prefix} dataset_slice must be an object")
+        return
+
+    denominator = dataset_slice.get("denominator")
+    case_range = dataset_slice.get("case_range")
+    case_count = dataset_slice.get("case_count")
+
+    if stage_id in {"G1", "G1M"}:
+        if case_count != 1:
+            errors.append(f"{prefix} {stage_id} one-case rows must have dataset_slice.case_count 1")
+        if not isinstance(denominator, str) or "one-case-13-1" not in denominator:
+            errors.append(f"{prefix} {stage_id} one-case rows must name a one-case-13-1 denominator")
+        return
+
+    if stage_id == "G2":
+        if not isinstance(case_count, int) or case_count < 1 or case_count >= 200:
+            errors.append(f"{prefix} G2 paper-subset rows must stay below the 200-case paper denominator")
+        if not isinstance(denominator, str) or "subset" not in denominator:
+            errors.append(f"{prefix} G2 paper-subset rows must use an explicit subset denominator")
+        if isinstance(denominator, str) and ("paper-denominator" in denominator or "full-paper" in denominator):
+            errors.append(f"{prefix} G2 paper-subset rows must not name a full paper denominator")
+        return
+
+    exact_stage_slices = {
+        "G3": ("0..200", 200, "evolving-split-0..200"),
+        "G3V": ("0..200", 200, "training-validation-0..200"),
+        "G4": ("200..400", 200, "held-out-200..400"),
+    }
+    if stage_id in exact_stage_slices:
+        expected_range, expected_count, expected_denominator = exact_stage_slices[stage_id]
+        if case_range != expected_range:
+            errors.append(f"{prefix} {stage_id} rows must use dataset_slice.case_range {expected_range!r}")
+        if case_count != expected_count:
+            errors.append(f"{prefix} {stage_id} rows must use dataset_slice.case_count {expected_count}")
+        if denominator != expected_denominator:
+            errors.append(f"{prefix} {stage_id} rows must use dataset_slice.denominator {expected_denominator!r}")
+        return
+
+    exact_denominators = {
+        "G5": "seed-aggregate-41-42-43",
+        "G6": "full-paper-denominator",
+    }
+    if stage_id in exact_denominators and denominator != exact_denominators[stage_id]:
+        errors.append(f"{prefix} {stage_id} rows must use dataset_slice.denominator {exact_denominators[stage_id]!r}")
+
+
 def check_record(
     repo_root: Path,
     path: Path,
@@ -125,7 +180,8 @@ def check_record(
     prefix = f"{path.relative_to(repo_root)}:{line_number}"
     proof = record.get("proof_classification")
     binding = record.get("plot_binding")
-    denominator = record.get("dataset_slice", {}).get("denominator")
+    dataset_slice = record.get("dataset_slice")
+    denominator = dataset_slice.get("denominator") if isinstance(dataset_slice, dict) else None
     extra = record.get("extra")
 
     stage_id = extra.get("runbook_stage_id") if isinstance(extra, dict) else None
@@ -141,6 +197,7 @@ def check_record(
                 f"{prefix} proof_classification {proof!r} does not match runbook stage "
                 f"{stage_id} allowed_label {stage.get('allowed_label')!r}"
             )
+    check_stage_dataset_slice(prefix, stage_id, dataset_slice, errors)
 
     artifact_paths = record.get("artifact_paths")
     if not isinstance(artifact_paths, list) or not artifact_paths:

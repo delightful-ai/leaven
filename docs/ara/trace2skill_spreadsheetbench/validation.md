@@ -826,6 +826,10 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
 - Requires every row to carry `extra.runbook_stage_id` and validates the stage
   label against `full_denominator_runbook.json` before write and during result
   intake.
+- Validates the row `dataset_slice` against the named runbook stage: subset
+  rows stay below the 200-case paper denominator, G3/G3V use `0..200`, G4 uses
+  `200..400`, and aggregate/full-paper rows keep their explicit denominator
+  labels.
 - Requires approval-gated rows to include prompt artifact paths matching their
   runbook stage expectations, such as rendered prompts and prompt-render
   manifests.
@@ -838,8 +842,8 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
   `--approval-artifact-path` are explicitly present.
 - The checker exercises those refusal paths directly: missing runbook stage id,
   wrong runbook stage label, missing prompt artifacts for `paper-subset`,
-  missing approval evidence for `paper-subset`, and accidental
-  `paper-denominator-reproduction` without the explicit allow flag.
+  subset denominator drift, missing approval evidence for `paper-subset`, and
+  accidental `paper-denominator-reproduction` without the explicit allow flag.
 
 Limit:
 

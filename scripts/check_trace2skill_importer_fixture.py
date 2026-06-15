@@ -241,6 +241,33 @@ def check_result_intake_for_rows(
         errors.append(f"{label}: expected intake error {expected_error!r}, got {intake_errors!r}")
 
 
+def check_mutated_result_intake(
+    repo_root: Path,
+    ara_root: Path,
+    source_output: Path,
+    mutated_output: Path,
+    mutate: Any,
+    expected_error: str,
+    errors: list[str],
+    label: str,
+) -> None:
+    rows = load_jsonl(source_output)
+    mutated = [dict(row) for row in rows]
+    mutate(mutated[0])
+    mutated_output.write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in mutated),
+        encoding="utf-8",
+    )
+    check_result_intake_for_rows(
+        repo_root,
+        ara_root,
+        mutated_output,
+        expected_error,
+        errors,
+        label,
+    )
+
+
 def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
     errors: list[str] = []
     target_dir = repo_root / "target"
@@ -252,6 +279,42 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
         output = tmp_path / "imported.jsonl"
         check_positive_import(repo_root, output, errors)
         check_result_intake_for_rows(repo_root, ara_root, output, None, errors, "positive import intake")
+
+        def mutate_subset_to_paper_sized(row: dict[str, Any]) -> None:
+            row["dataset_slice"] = dict(row["dataset_slice"])
+            row["dataset_slice"]["case_count"] = 200
+            row["dataset_slice"]["denominator"] = "full-paper-denominator"
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "subset-drift.jsonl",
+            mutate_subset_to_paper_sized,
+            "G2 paper-subset rows must stay below the 200-case paper denominator",
+            errors,
+            "subset denominator drift",
+        )
+
+        def mutate_heldout_to_training_range(row: dict[str, Any]) -> None:
+            row["proof_classification"] = "held-out-single-seed-candidate"
+            row["dataset_slice"] = dict(row["dataset_slice"])
+            row["dataset_slice"]["case_range"] = "0..200"
+            row["dataset_slice"]["case_count"] = 200
+            row["dataset_slice"]["denominator"] = "held-out-200..400"
+            row["extra"] = dict(row["extra"])
+            row["extra"]["runbook_stage_id"] = "G4"
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "heldout-range-drift.jsonl",
+            mutate_heldout_to_training_range,
+            "G4 rows must use dataset_slice.case_range '200..400'",
+            errors,
+            "held-out range drift",
+        )
 
         expect_failure(
             repo_root,
