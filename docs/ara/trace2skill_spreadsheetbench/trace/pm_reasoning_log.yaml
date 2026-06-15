@@ -316,3 +316,7 @@ entries:
     notes:
       - "Routed overlay target-label enforcement as scoreboard-integrity and target-provenance guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the change only prevents result intake and closeout from accepting overlay labels absent from committed target provenance; it creates no accepted model-backed row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#80"
+    notes:
+      - "Routed overlay model-family enforcement as scoreboard-integrity and target-provenance guardrail evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the change only prevents known Qwen paper model rows from binding to the wrong 122B/35B target label; it creates no accepted model-backed row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
