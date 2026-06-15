@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T17:23-07:00"
-  turn_count: 2
-  summary: "Approval preflight and dataset manifest now make more of the full-denominator gate executable without approving a run."
+  last_turn: "2026-06-14T17:39-07:00"
+  turn_count: 3
+  summary: "Approval preflight, dataset manifest, and closeout audit now make more of the full-denominator gate executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -25,6 +25,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Generated deterministic dataset_manifest.json for the local 400-row SpreadsheetBench-Verified dataset and reran ARA validation."
+  - turn: 3
+    type: experiment
+    id: "PM-2026-06-14-004"
+    routing: direct
+    provenance: ai-executed
+    summary: "Generated closeout_audit.json/md; audit keeps overall_complete false and lists missing paper-denominator evidence."
 
 ai_actions:
   - turn: 1
@@ -63,6 +69,18 @@ ai_actions:
       - "docs/ara/trace2skill_spreadsheetbench/src/environment.md"
       - "docs/ara/trace2skill_spreadsheetbench/results/denominator_status.md"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 3
+    action: "Added scripts/audit_trace2skill_closeout.py, generated closeout_audit.json/md, and extended validate_ara.py to check the audit schema and incomplete status."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/audit_trace2skill_closeout.py"
+      - "scripts/validate_ara.py"
+      - "docs/ara/trace2skill_spreadsheetbench/results/closeout_audit.json"
+      - "docs/ara/trace2skill_spreadsheetbench/results/closeout_audit.md"
+      - "docs/ara/trace2skill_spreadsheetbench/PAPER.md"
+      - "docs/ara/trace2skill_spreadsheetbench/results/README.md"
+      - "docs/ara/trace2skill_spreadsheetbench/results/denominator_status.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -71,6 +89,8 @@ key_context:
     excerpt: "Availability research established public model repositories and serving paths, but left endpoint, hardware, credentials, cost, retention, and tolerance approval unresolved."
   - turn: 2
     excerpt: "Dataset provenance is now resolved by manifest, but normal approval preflight still fails on model, serving, budget, credential, retention, approval, and tolerance fields."
+  - turn: 3
+    excerpt: "Closeout audit says overall_complete=false, result_jsonl_files=[], and missing denominators include model-backed one-case, subset, 0..200, 200..400, seed aggregate, cross-model rows, and full paper denominator."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."
