@@ -104,7 +104,9 @@ the `dataset_slice` against the runbook stage's generated
 paper-denominator rows and held-out rows must use the paper `200..400` split.
 It also checks the runbook stage's generated `expected_seed_policy`, so
 approval-gated rows cannot drift to off-protocol seeds while still looking like
-paper-denominator progress.
+paper-denominator progress. Runtime fields are checked against generated
+`expected_runtime_policy`, so rows must carry the paper worker count, ReAct turn
+budget, and merge batch size where the originating stage requires them.
 
 The full-denominator approval packet can be checked with:
 

@@ -864,6 +864,37 @@ def validate(root: Path) -> list[str]:
                                 fail(errors, f"results/full_denominator_runbook.json {stage_id} expected_seed_policy seed must be 41")
                             elif expected_kind in {"one-of", "all-of"} and seed_policy.get("seeds") != [41, 42, 43]:
                                 fail(errors, f"results/full_denominator_runbook.json {stage_id} expected_seed_policy seeds must be [41, 42, 43]")
+                        expected_runtime_kinds = {
+                            "G0": None,
+                            "G1": None,
+                            "G1M": "upstream-run",
+                            "G2": "upstream-run",
+                            "G3": "skill-evolution",
+                            "G3V": "upstream-run",
+                            "G4": "upstream-run",
+                            "G5": None,
+                            "G6": None,
+                        }
+                        for stage_id, expected_kind in expected_runtime_kinds.items():
+                            stage = by_id.get(stage_id)
+                            if stage is None:
+                                continue
+                            runtime_policy = stage.get("expected_runtime_policy")
+                            if expected_kind is None:
+                                if runtime_policy is not None:
+                                    fail(errors, f"results/full_denominator_runbook.json {stage_id} expected_runtime_policy must be null")
+                            elif not isinstance(runtime_policy, dict):
+                                fail(errors, f"results/full_denominator_runbook.json {stage_id} missing expected_runtime_policy")
+                            elif runtime_policy.get("kind") != expected_kind:
+                                fail(errors, f"results/full_denominator_runbook.json {stage_id} expected_runtime_policy kind must be {expected_kind}")
+                            else:
+                                expected_workers = 1 if stage_id == "G1M" else 128
+                                if runtime_policy.get("workers") != expected_workers:
+                                    fail(errors, f"results/full_denominator_runbook.json {stage_id} expected_runtime_policy workers must be {expected_workers}")
+                                if runtime_policy.get("max_turns") != 100:
+                                    fail(errors, f"results/full_denominator_runbook.json {stage_id} expected_runtime_policy max_turns must be 100")
+                                if expected_kind == "skill-evolution" and runtime_policy.get("merge_batch_size") != 32:
+                                    fail(errors, f"results/full_denominator_runbook.json {stage_id} expected_runtime_policy merge_batch_size must be 32")
 
     return errors
 

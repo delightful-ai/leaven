@@ -292,6 +292,7 @@ def build_records(args: argparse.Namespace) -> list[dict[str, Any]]:
         "runtime": {
             "seconds": args.runtime_seconds,
             "workers": args.workers,
+            "max_turns": args.max_turns,
         },
         "source_command": args.source_command,
         "artifact_paths": artifact_paths,
@@ -324,6 +325,8 @@ def build_records(args: argparse.Namespace) -> list[dict[str, Any]]:
         if args.proof_classification in APPROVAL_REQUIRED_PROOF_CLASSIFICATIONS:
             record["extra"]["approval_artifact_paths"] = args.approval_artifact_path
         record["extra"]["runbook_stage_id"] = args.runbook_stage_id
+        if args.merge_batch_size is not None:
+            record["extra"]["merge_batch_size"] = args.merge_batch_size
         if args.proof_classification == "paper-denominator-reproduction":
             record["extra"]["paper_denominator_reproduction_allowed_by"] = (
                 "--allow-paper-denominator-reproduction"
@@ -383,6 +386,8 @@ def main() -> int:
     parser.add_argument("--completion-tokens", type=int)
     parser.add_argument("--runtime-seconds", type=float)
     parser.add_argument("--workers", type=int)
+    parser.add_argument("--max-turns", type=int)
+    parser.add_argument("--merge-batch-size", type=int)
     parser.add_argument("--notes", default="")
     parser.add_argument(
         "--plot-binding-json",

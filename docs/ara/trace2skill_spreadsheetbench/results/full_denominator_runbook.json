@@ -73,6 +73,7 @@
         "docs/ara/trace2skill_spreadsheetbench/validation.md"
       ],
       "expected_dataset_slice": null,
+      "expected_runtime_policy": null,
       "expected_seed_policy": null,
       "forbidden_label": "paper reproduction",
       "id": "G0",
@@ -104,6 +105,7 @@
         "denominator_contains": "one-case-13-1",
         "kind": "one-case"
       },
+      "expected_runtime_policy": null,
       "expected_seed_policy": null,
       "forbidden_label": "paper reproduction",
       "id": "G1",
@@ -143,6 +145,11 @@
         "case_range": "0..1",
         "denominator_contains": "one-case-13-1",
         "kind": "one-case"
+      },
+      "expected_runtime_policy": {
+        "kind": "upstream-run",
+        "max_turns": 100,
+        "workers": 1
       },
       "expected_seed_policy": {
         "kind": "exact",
@@ -194,6 +201,11 @@
         "kind": "held-out-subset",
         "range_end_max": 400,
         "range_start_min": 200
+      },
+      "expected_runtime_policy": {
+        "kind": "upstream-run",
+        "max_turns": 100,
+        "workers": 128
       },
       "expected_seed_policy": {
         "kind": "exact",
@@ -257,6 +269,12 @@
         "denominator": "evolving-split-0..200",
         "kind": "exact-range"
       },
+      "expected_runtime_policy": {
+        "kind": "skill-evolution",
+        "max_turns": 100,
+        "merge_batch_size": 32,
+        "workers": 128
+      },
       "expected_seed_policy": {
         "kind": "one-of",
         "seeds": [
@@ -310,6 +328,11 @@
         "denominator": "training-validation-0..200",
         "kind": "exact-range"
       },
+      "expected_runtime_policy": {
+        "kind": "upstream-run",
+        "max_turns": 100,
+        "workers": 128
+      },
       "expected_seed_policy": {
         "kind": "one-of",
         "seeds": [
@@ -358,6 +381,11 @@
         "denominator": "held-out-200..400",
         "kind": "exact-range"
       },
+      "expected_runtime_policy": {
+        "kind": "upstream-run",
+        "max_turns": 100,
+        "workers": 128
+      },
       "expected_seed_policy": {
         "kind": "one-of",
         "seeds": [
@@ -397,6 +425,7 @@
           43
         ]
       },
+      "expected_runtime_policy": null,
       "expected_seed_policy": {
         "kind": "all-of",
         "seeds": [
@@ -439,6 +468,7 @@
           43
         ]
       },
+      "expected_runtime_policy": null,
       "expected_seed_policy": {
         "kind": "all-of",
         "seeds": [

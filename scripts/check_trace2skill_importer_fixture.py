@@ -91,6 +91,10 @@ def importer_base_args(output: Path, artifact_paths: list[str] | None = None) ->
         "fixture-backend",
         "--seed",
         "41",
+        "--workers",
+        "128",
+        "--max-turns",
+        "100",
         "--skill-kind",
         "fixture-skill",
         *artifact_args,
@@ -328,6 +332,21 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "G2 rows must use seed 41",
             errors,
             "subset seed drift",
+        )
+
+        def mutate_subset_to_wrong_workers(row: dict[str, Any]) -> None:
+            row["runtime"] = dict(row["runtime"])
+            row["runtime"]["workers"] = 1
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "subset-wrong-workers.jsonl",
+            mutate_subset_to_wrong_workers,
+            "G2 rows must use runtime.workers 128",
+            errors,
+            "subset worker drift",
         )
 
         expect_failure(

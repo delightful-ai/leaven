@@ -264,6 +264,46 @@ def check_stage_seed_policy(
     errors.append(f"{prefix} runbook stage {stage_id!r} expected_seed_policy has unknown kind {kind!r}")
 
 
+def check_stage_runtime_policy(
+    prefix: str,
+    stage: dict[str, Any] | None,
+    record: dict[str, Any],
+    errors: list[str],
+) -> None:
+    if stage is None:
+        return
+    stage_id = stage.get("id")
+    expected = stage.get("expected_runtime_policy")
+    if expected is None:
+        return
+    if not isinstance(expected, dict):
+        errors.append(f"{prefix} runbook stage {stage_id!r} expected_runtime_policy must be an object or null")
+        return
+
+    runtime = record.get("runtime")
+    if not isinstance(runtime, dict):
+        errors.append(f"{prefix} runtime must be an object")
+        return
+
+    kind = expected.get("kind")
+    if kind not in {"upstream-run", "skill-evolution"}:
+        errors.append(f"{prefix} runbook stage {stage_id!r} expected_runtime_policy has unknown kind {kind!r}")
+        return
+
+    if runtime.get("workers") != expected.get("workers"):
+        errors.append(f"{prefix} {stage_id} rows must use runtime.workers {expected.get('workers')}")
+    if runtime.get("max_turns") != expected.get("max_turns"):
+        errors.append(f"{prefix} {stage_id} rows must use runtime.max_turns {expected.get('max_turns')}")
+
+    if kind == "skill-evolution":
+        extra = record.get("extra")
+        merge_batch_size = extra.get("merge_batch_size") if isinstance(extra, dict) else None
+        if merge_batch_size != expected.get("merge_batch_size"):
+            errors.append(
+                f"{prefix} {stage_id} rows must use extra.merge_batch_size {expected.get('merge_batch_size')}"
+            )
+
+
 def check_record(
     repo_root: Path,
     path: Path,
@@ -294,6 +334,7 @@ def check_record(
             )
     check_stage_dataset_slice(prefix, stage, dataset_slice, errors)
     check_stage_seed_policy(prefix, stage, record, errors)
+    check_stage_runtime_policy(prefix, stage, record, errors)
 
     artifact_paths = record.get("artifact_paths")
     if not isinstance(artifact_paths, list) or not artifact_paths:

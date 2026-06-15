@@ -84,7 +84,7 @@ what Leaven actually ran.
 | `metric_unit` | string | `percent`, `delta_points`, `minutes`, or `fraction`. |
 | `plot_binding` | object or null | Object rows must include `panel`, `x_label`, `series`, and `axis`; null rows are valid non-overlay result records. |
 | `cost` | object | Include available spend/token fields; use null for unknown fields. |
-| `runtime` | object | Include `seconds`; include workers/turn budget when relevant. |
+| `runtime` | object | Include `seconds`; include `workers` and `max_turns` when the runbook stage requires them. |
 | `source_command` | string | Exact command or harness invocation that produced the metric. |
 | `artifact_paths` | array | Non-empty list of inspectable artifacts. |
 | `extra.runbook_stage_id` | string | Must name a stage in `full_denominator_runbook.json`; that stage's `allowed_label` must match `proof_classification`. |
@@ -133,3 +133,7 @@ what Leaven actually ran.
   `expected_seed_policy`: model one-case and subset rows use seed `41`,
   evolving/validation/held-out single-seed rows use one of `41`, `42`, or `43`,
   and aggregate/full-paper rows carry `extra.seeds: [41, 42, 43]`.
+- Result rows must also satisfy the named runbook stage's generated
+  `expected_runtime_policy`: upstream run rows carry the paper worker count and
+  ReAct turn budget, and skill-evolution rows additionally carry
+  `extra.merge_batch_size: 32`.
