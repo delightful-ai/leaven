@@ -172,3 +172,7 @@ entries:
     notes:
       - "Routed generated expected_aggregate_policy fields as paper-protocol guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because aggregate policy only rejects off-protocol future aggregate/full-paper rows; it creates no model-backed rows, overlays, approvals, analyst responses, Stage 3 merges, seed aggregates, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#44"
+    notes:
+      - "Routed aggregate predecessor-row intake as paper-protocol guardrail evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because predecessor-row validation only rejects future aggregates backed by invalid source rows; it creates no model-backed rows, overlays, approvals, analyst responses, Stage 3 merges, seed aggregates, or Qwen/vLLM execution."
