@@ -136,3 +136,7 @@ entries:
     notes:
       - "Routed rendered-prompt artifact-contract validation as future execution auditability evidence, not model-execution evidence."
       - "Kept reproduction claims unchanged because the checker now requires future prompt artifacts and manifests only; it does not create model-backed rows, overlays, approvals, analyst responses, Stage 3 merges, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#35"
+    notes:
+      - "Routed prompt-artifact result-intake admission as future result-row auditability evidence, not new execution evidence."
+      - "Kept reproduction claims unchanged because the fixture proves only that rows missing prompt artifacts are refused; it does not create accepted model-backed rows, overlays, approvals, analyst responses, Stage 3 merges, or Qwen/vLLM execution."
