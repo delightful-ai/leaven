@@ -1135,6 +1135,26 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "overlay model-family drift",
         )
 
+        def mutate_parallel_overlay_to_wrong_model_series(row: dict[str, Any]) -> None:
+            row["model_id"] = "Qwen3.5-35B-A3B"
+            row["plot_binding"] = {
+                "panel": "parallel_vs_sequential",
+                "x_label": "Parallel (ours)",
+                "series": "Leaven 122B Vrf",
+                "axis": "left",
+            }
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "wrong-parallel-series-family-overlay.jsonl",
+            mutate_parallel_overlay_to_wrong_model_series,
+            "plot_binding.series 'Leaven 122B Vrf' requires 122B model family, got model_id 'Qwen3.5-35B-A3B'",
+            errors,
+            "parallel overlay series-family drift",
+        )
+
         def mutate_missing_eval_artifact(row: dict[str, Any]) -> None:
             row["artifact_paths"] = [
                 path

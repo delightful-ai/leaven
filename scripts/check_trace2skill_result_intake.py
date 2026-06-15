@@ -704,6 +704,36 @@ def check_plot_binding_model_family(
         )
 
 
+def check_parallel_plot_binding_series_family(
+    prefix: str,
+    record: dict[str, Any],
+    binding: Any,
+    errors: list[str],
+) -> None:
+    if not isinstance(binding, dict):
+        return
+    if binding.get("panel") != "parallel_vs_sequential" or binding.get("axis") != "left":
+        return
+    model_id = record.get("model_id")
+    actual_family = MODEL_ID_FAMILIES.get(model_id)
+    if actual_family is None:
+        return
+    series = binding.get("series")
+    if not isinstance(series, str):
+        return
+    expected_family = model_family_from_label(series)
+    if expected_family is None:
+        errors.append(
+            f"{prefix} parallel_vs_sequential left-axis overlays for model_id {model_id!r} "
+            "must name 122B or 35B in plot_binding.series"
+        )
+    elif expected_family != actual_family:
+        errors.append(
+            f"{prefix} plot_binding.series {series!r} requires {expected_family} model family, "
+            f"got model_id {model_id!r}"
+        )
+
+
 def source_result_paths(extra: Any) -> list[str] | None:
     if not isinstance(extra, dict):
         return None
@@ -1109,6 +1139,7 @@ def check_record(
         errors.append(f"{prefix} paper-subset overlays must use an explicit subset denominator")
     check_plot_binding_target_label(repo_root, prefix, binding, errors)
     check_plot_binding_model_family(prefix, record, binding, errors)
+    check_parallel_plot_binding_series_family(prefix, record, binding, errors)
 
 
 def repo_root_for(ara_root: Path) -> Path:

@@ -123,6 +123,10 @@ what Leaven actually ran.
 - When an overlay label names a model family such as `122B` or `35B`, known
   Qwen paper model ids must match that family; a 35B row cannot be overlaid on
   a 122B paper target label.
+- The `parallel_vs_sequential` score panel stores model family in the plotted
+  target series rather than the x-axis label. For known Qwen paper model rows
+  on that panel's left axis, `plot_binding.series` must name the matching
+  `122B` or `35B` family.
 - Artifact paths and `skill_source.path` values must be repo-relative,
   inspectable files at validation time. When `skill_source.path` is present,
   the same path must also appear in `artifact_paths`; a file-backed optimized

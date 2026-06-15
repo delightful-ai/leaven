@@ -62,7 +62,10 @@ classification is not compatible with the target panel. Overlay rows must also
 use a `plot_binding.x_label` present in the committed target-plot provenance
 for that panel, so closeout cannot count a row the plotter would later reject.
 When the target label names a model family such as `122B` or `35B`, known Qwen
-paper model ids must match that family.
+paper model ids must match that family. For the `parallel_vs_sequential` score
+panel, the x-label is only the editing condition; known Qwen paper model rows
+on the left axis must name the matching `122B` or `35B` family in
+`plot_binding.series`.
 
 Official SpreadsheetBench evaluator output can be converted into Leaven result
 rows only after a real Leaven run has produced an inspectable
@@ -260,14 +263,14 @@ Supported panels:
 |-------|----------------------|
 | `same_model_deepening_vrf` | One displayed x label in the same-model Vrf panel. |
 | `avg_improvement` | One displayed x label in the average-improvement panel. |
-| `parallel_vs_sequential` | One condition label in the parallel-vs-sequential panel. Use `axis: "right"` only for runtime minutes. |
+| `parallel_vs_sequential` | One condition label in the parallel-vs-sequential panel. Use `axis: "right"` only for runtime minutes. Left-axis score overlays for known Qwen paper models must name the matching `122B` or `35B` family in `plot_binding.series`. |
 | `reasoningbank` | One metric label in the ReasoningBank comparison panel. |
 
 This explicit binding is intentional. The plotter must not guess which paper row
 a Leaven metric is meant to compare against. Result intake also checks the
 binding against the committed target-plot provenance before plots or closeout
 can consume the row, and rejects known paper model ids bound to the wrong
-model-family label.
+model-family label or parallel-panel series family.
 
 Use `plot_binding: null` only for non-overlay result rows whose denominator
 would be misleading on the paper-target panels.
