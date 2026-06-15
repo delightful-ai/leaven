@@ -95,3 +95,7 @@ entries:
     notes:
       - "Routed approval-artifact result-intake hardening as admission-control evidence for future model-backed rows."
       - "Kept reproduction claims unchanged because this only requires approval evidence on future rows; it does not fill approval fields, create result rows, draw overlays, or execute Qwen/vLLM."
+  - turn: "2026-06-14_001#25"
+    notes:
+      - "Routed closeout-freshness validation as generated-closeout integrity evidence."
+      - "Kept reproduction claims unchanged because the checker proves closeout currentness only; approval, result rows, overlays, and Qwen/vLLM execution remain absent."
