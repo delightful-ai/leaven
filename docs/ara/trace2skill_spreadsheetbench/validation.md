@@ -290,6 +290,38 @@ Limit:
 
 - This proves generated runbook freshness only. It does not approve the packet, fill unresolved model/hardware/cost fields, launch Qwen/vLLM, or create paper-denominator result rows.
 
+## 2026-06-14 Artifact Contract Check
+
+Artifact:
+
+```text
+scripts/check_trace2skill_artifact_contract.py
+docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md
+docs/ara/trace2skill_spreadsheetbench/results/full_denominator_runbook.json
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_artifact_contract.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Current result:
+
+```text
+PASS: docs/ara/trace2skill_spreadsheetbench artifact contract
+```
+
+Scope:
+
+- Verifies the approval packet still expects normalized run metadata, dataset manifest, trajectory manifests, trajectories, score reports, skill-evolution artifacts, held-out eval artifacts, and `leaven_results.jsonl`.
+- Verifies every generated runbook stage lists the artifact fragments needed for its stated denominator, including one-case manifest/transcript evidence and future Leaven result JSONL outputs for model-backed/subset/held-out stages.
+- The same check now runs inside `scripts/validate_ara.py`.
+
+Limit:
+
+- This proves artifact-expectation coverage only. It does not prove those future artifacts exist, approve model/hardware/cost, import result rows, draw overlays, or execute Qwen/vLLM.
+
 ## 2026-06-14 Deterministic One-Case ACP Worker Run
 
 Prepare command:

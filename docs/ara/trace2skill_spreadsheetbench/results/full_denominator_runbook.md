@@ -75,8 +75,10 @@ cargo run -p trace2skill_spreadsheetbench -- --run-one-case-acp-worker --run-dir
 ```
 
 Expected artifacts:
+- `tmp/trace2skill-one-case-live/manifest.json`
 - `tmp/trace2skill-one-case-live/13-1_output.xlsx`
 - `tmp/trace2skill-one-case-live/acp_result.json`
+- `tmp/trace2skill-one-case-live/agent_transcript.md`
 - `tmp/trace2skill-one-case-live/score_report.json`
 - `tmp/trace2skill-one-case-live/trajectory.json`
 
@@ -111,6 +113,7 @@ Expected artifacts:
 - `model_one_case_seed_41/logs`
 - `model_one_case_seed_41/work`
 - `model_one_case_seed_41/outputs/eval_official_results.json`
+- `model_one_case_seed_41/leaven_results.jsonl`
 
 ### G2: Small-N held-out subset gate
 
@@ -145,6 +148,7 @@ Expected artifacts:
 - `subset_<start>_<end>_seed_41/logs`
 - `subset_<start>_<end>_seed_41/work`
 - `subset_<start>_<end>_seed_41/outputs/eval_official_results.json`
+- `subset_<start>_<end>_seed_41/leaven_results.jsonl`
 
 ### G3: Evolving split trajectory and skill evolution
 
@@ -262,6 +266,7 @@ Expected artifacts:
 - `heldout_seed_<best>/logs`
 - `heldout_seed_<best>/work`
 - `heldout_seed_<best>/outputs/eval_official_results.json`
+- `heldout_seed_<best>/leaven_results.jsonl`
 
 ### G5: Seed aggregate and result rows
 
