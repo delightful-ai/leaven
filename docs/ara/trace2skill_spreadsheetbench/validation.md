@@ -844,3 +844,33 @@ Limit:
 - This proves source prompt identity only. It does not prove rendered prompts
   for live analyst calls, filled trajectory fields, model outputs, parser
   results, or Qwen/vLLM execution.
+
+## 2026-06-14 Upstream Execution Code Manifest Check
+
+Artifact:
+
+```text
+scripts/check_trace2skill_upstream_code_manifest.py
+docs/ara/trace2skill_spreadsheetbench/src/execution/upstream_code_manifest.json
+docs/ara/trace2skill_spreadsheetbench/results/full_denominator_runbook.json
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_upstream_code_manifest.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Current result:
+
+- Verifies the upstream Python entrypoints used by the generated runbook are
+  represented by repo-relative path, role, byte size, line count, and SHA-256.
+- Verifies the generated runbook still references the pinned run, evaluation,
+  analysis, parser, and parallel skill-evolution entrypoints.
+- The integrated Seal Level 1 validator now runs this check after protocol
+  config fidelity.
+
+Limit:
+
+- This proves source-code identity only. It does not run the entrypoints,
+  validate their runtime environment, produce result rows, or execute Qwen/vLLM.

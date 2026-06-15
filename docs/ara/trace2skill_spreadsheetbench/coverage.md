@@ -34,6 +34,7 @@
 - Full paper-denominator approval packet and subset-gate plan in `results/full_run_plan.md`.
 - Seal Level 2 semantic rigor review in `reviews/rigor_review.md` and `level2_report.json`.
 - Prompt-template family evidence plus `prompt_templates.manifest.json`, which records every upstream prompt/released-skill file path, byte count, line count, and SHA-256.
+- Upstream execution-code manifest for the run/eval/analysis/evolution Python entrypoints used by the generated runbook.
 
 ### Known Gaps
 

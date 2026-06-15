@@ -57,3 +57,8 @@ runtime comparison is about 3 minutes for parallel consolidation versus about
 The typed stub in `src/execution/trace2skill_pipeline.py` captures the stage
 shape and result-denominator records. It is not an executable paper reproduction
 until connected to real run/eval/model artifacts.
+
+The upstream executable entrypoints used by the generated full-denominator
+runbook are pinned in `src/execution/upstream_code_manifest.json` by
+repo-relative path, role, byte count, line count, and SHA-256. That manifest is
+source identity evidence only; it does not prove the entrypoints have been run.

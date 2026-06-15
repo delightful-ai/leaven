@@ -1,0 +1,64 @@
+{
+  "file_count": 8,
+  "files": [
+    {
+      "bytes": 21506,
+      "line_count": 653,
+      "path": "run_spreadsheetbench.py",
+      "role": "SpreadsheetBench agent execution entrypoint.",
+      "sha256": "7d3fe0969ea0fdc94b73b701cafbfe172a3da2efd07dd82b66febc9d44263870"
+    },
+    {
+      "bytes": 13424,
+      "line_count": 381,
+      "path": "evaluate_with_official.py",
+      "role": "Official SpreadsheetBench evaluator entrypoint.",
+      "sha256": "f0b19588b3276ad6cbe9ffe6403e21ceb2f2fba176acf9c7569c74dc5aede2ed"
+    },
+    {
+      "bytes": 10519,
+      "line_count": 329,
+      "path": "analyze_results.py",
+      "role": "Trajectory outcome analysis entrypoint.",
+      "sha256": "de6545a14976099f7678921871925f75df7cbeb38b4f077752f0999325130ef0"
+    },
+    {
+      "bytes": 22233,
+      "line_count": 601,
+      "path": "analysis/run_error_analysis.py",
+      "role": "Stage 2 error-analysis trajectory analyst entrypoint.",
+      "sha256": "acbe23861298c0928175711cc1a7cac36d1e3972139ceeb8a8c09538e429f33a"
+    },
+    {
+      "bytes": 14080,
+      "line_count": 405,
+      "path": "analysis/run_success_analysis_llm.py",
+      "role": "Stage 2 success-analysis trajectory analyst entrypoint.",
+      "sha256": "05b9e263e95db0efa122a9551bf3f6e76479828201219ed3fd7be43289417905"
+    },
+    {
+      "bytes": 5946,
+      "line_count": 194,
+      "path": "analysis/parse_error_analysis_outputs.py",
+      "role": "Error-analysis parser entrypoint.",
+      "sha256": "a9ff683348fc990295b30791a766a1dfae6a724b173c0584350ee58cefda4e3f"
+    },
+    {
+      "bytes": 5396,
+      "line_count": 163,
+      "path": "analysis/parse_success_analysis_outputs.py",
+      "role": "Success-analysis parser entrypoint.",
+      "sha256": "8495c12937a87eb4caca7f662774325d8c0ee23dfa1e6e70422c7b700e029c64"
+    },
+    {
+      "bytes": 25810,
+      "line_count": 749,
+      "path": "skill_evolver/run_parallel_skill_evolution.py",
+      "role": "Stage 2/3 parallel patch generation and merge entrypoint.",
+      "sha256": "d4741ee074d38b7161b997a4c629ea520ded76de2c5bae4302acf7df5925eb36"
+    }
+  ],
+  "generated_by": "scripts/check_trace2skill_upstream_code_manifest.py --write",
+  "schema_version": "leaven.trace2skill.upstream_code_manifest.v1",
+  "source_root": "tmp/repros/trace2skill-upstream"
+}

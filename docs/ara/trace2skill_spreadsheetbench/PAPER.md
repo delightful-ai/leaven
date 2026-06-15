@@ -71,6 +71,7 @@ separately and labeled by denominator.
 | [configs/model.md](src/configs/model.md) | Model and serving configuration. | C01, C02, C03 |
 | [configs/tolerance.md](src/configs/tolerance.md) | Proposed reproduction tolerance and failure-accounting policy. | C01, C02, C07 |
 | [execution/trace2skill_pipeline.py](src/execution/trace2skill_pipeline.py) | Typed stub of the paper loop and Leaven result denominator records. | C01, C07 |
+| [execution/upstream_code_manifest.json](src/execution/upstream_code_manifest.json) | SHA-256 manifest for upstream run/eval/analysis/evolution Python entrypoints. | C01, C02, C04, C07 |
 | [environment.md](src/environment.md) | Dependencies, hardware, code paths, and approval notes. | C07 |
 
 ### Exploration Graph (`/trace`)
