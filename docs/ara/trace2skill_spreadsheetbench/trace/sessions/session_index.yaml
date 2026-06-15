@@ -1,8 +1,8 @@
 sessions:
   - id: "2026-06-14_001"
     date: "2026-06-14"
-    summary: "Recorded model availability, approval preflight, dataset manifest, closeout audit, and generated runbook while keeping full-denominator execution blocked on approval."
-    turn_count: 4
-    events_count: 5
+    summary: "Recorded model availability, approval preflight, dataset manifest, closeout audit, runbook, and one non-overlay result row while keeping full-denominator execution blocked on approval."
+    turn_count: 5
+    events_count: 6
     claims_touched: []
     open_threads: 1

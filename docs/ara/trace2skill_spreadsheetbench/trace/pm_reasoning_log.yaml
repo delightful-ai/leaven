@@ -15,3 +15,7 @@ entries:
     notes:
       - "Routed runbook generation as execution-readiness evidence; it maps stages and commands but does not itself satisfy a paper-denominator result."
       - "Did not promote runbook readiness to a claim of reproduction because approval preflight remains blocked and result JSONL overlays are absent."
+  - turn: "2026-06-14_001#5"
+    notes:
+      - "Routed deterministic_one_case.jsonl as result-record evidence with plot_binding=null, preserving separation between one-case proof and paper-target overlays."
+      - "Kept closeout incomplete because paper_denominator_records remains zero."

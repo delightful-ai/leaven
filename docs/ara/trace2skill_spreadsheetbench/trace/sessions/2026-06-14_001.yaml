@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T17:59-07:00"
-  turn_count: 4
-  summary: "Approval preflight, dataset manifest, closeout audit, and generated runbook now make more of the full-denominator gate executable without approving a run."
+  last_turn: "2026-06-14T18:15-07:00"
+  turn_count: 5
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, and one non-overlay result row now make more of the full-denominator gate executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -37,6 +37,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Generated full_denominator_runbook.json/md with stages G0, G1, G1M, G2, G3, G3V, G4, G5, and G6."
+  - turn: 5
+    type: experiment
+    id: "PM-2026-06-14-006"
+    routing: direct
+    provenance: ai-executed
+    summary: "Generated deterministic_one_case.jsonl as a non-overlay Leaven result row; closeout audit reports one total row and zero paper-denominator rows."
 
 ai_actions:
   - turn: 1
@@ -102,6 +108,22 @@ ai_actions:
       - "docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md"
       - "docs/ara/trace2skill_spreadsheetbench/results/denominator_status.md"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 5
+    action: "Added scripts/build_trace2skill_one_case_result.py, generated deterministic_one_case.jsonl, and taught result validation/plotting to accept plot_binding=null for non-overlay records."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/build_trace2skill_one_case_result.py"
+      - "scripts/plot_trace2skill_ara.py"
+      - "scripts/validate_ara.py"
+      - "scripts/audit_trace2skill_closeout.py"
+      - "docs/ara/trace2skill_spreadsheetbench/results/deterministic_one_case.jsonl"
+      - "docs/ara/trace2skill_spreadsheetbench/results/leaven_result_schema.md"
+      - "docs/ara/trace2skill_spreadsheetbench/results/README.md"
+      - "docs/ara/trace2skill_spreadsheetbench/results/one_case_live.md"
+      - "docs/ara/trace2skill_spreadsheetbench/results/closeout_audit.json"
+      - "docs/ara/trace2skill_spreadsheetbench/results/closeout_audit.md"
+      - "docs/ara/trace2skill_spreadsheetbench/PAPER.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -114,6 +136,8 @@ key_context:
     excerpt: "Closeout audit says overall_complete=false, result_jsonl_files=[], and missing denominators include model-backed one-case, subset, 0..200, 200..400, seed aggregate, cross-model rows, and full paper denominator."
   - turn: 4
     excerpt: "Runbook normal_preflight_passes=false; only G0 and G1 are runnable now, while every model-backed or paper-denominator stage remains approval-required."
+  - turn: 5
+    excerpt: "Result record summary now reports total_records=1, non_overlay_records=1, paper_denominator_records=0."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."
