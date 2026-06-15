@@ -141,6 +141,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             "paper reproduction",
             {
                 "kind": "one-case",
+                "split": "one-case",
                 "case_id": "13-1",
                 "case_range": "0..1",
                 "case_count": 1,
@@ -175,6 +176,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             "held-out split reproduced",
             {
                 "kind": "one-case",
+                "split": "one-case",
                 "case_id": "13-1",
                 "case_range": "0..1",
                 "case_count": 1,
@@ -224,6 +226,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             "held-out split reproduced",
             {
                 "kind": "held-out-subset",
+                "split": held_out["name"],
                 "range_start_min": 200,
                 "range_end_max": 400,
                 "case_count_min": 1,
@@ -292,6 +295,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             "held-out result",
             {
                 "kind": "exact-range",
+                "split": evolving["name"],
                 "case_range": evolving["range"],
                 "case_count": evolving["case_count"],
                 "denominator": "evolving-split-0..200",
@@ -349,6 +353,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             "held-out result",
             {
                 "kind": "exact-range",
+                "split": evolving["name"],
                 "case_range": evolving["range"],
                 "case_count": evolving["case_count"],
                 "denominator": "training-validation-0..200",
@@ -396,6 +401,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             "paper aggregate",
             {
                 "kind": "exact-range",
+                "split": held_out["name"],
                 "case_range": held_out["range"],
                 "case_count": held_out["case_count"],
                 "denominator": "held-out-200..400",
@@ -440,6 +446,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             "cross-model paper reproduction",
             {
                 "kind": "aggregate",
+                "split": held_out["name"],
                 "denominator": "seed-aggregate-41-42-43",
                 "seeds": packet["protocol"]["seeds"],
             },
@@ -478,6 +485,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             "anything stronger than completed rows",
             {
                 "kind": "full-paper",
+                "split": "all",
                 "denominator": "full-paper-denominator",
                 "required_split_ranges": [evolving["range"], held_out["range"]],
                 "case_count": manifest["case_count"],

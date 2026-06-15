@@ -331,8 +331,13 @@ def check_stage_dataset_slice(
 
     kind = expected.get("kind")
     denominator = dataset_slice.get("denominator")
+    split = dataset_slice.get("split")
     case_range = dataset_slice.get("case_range")
     case_count = dataset_slice.get("case_count")
+    expected_split = expected.get("split")
+
+    if expected_split is not None and split != expected_split:
+        errors.append(f"{prefix} {stage_id} rows must use dataset_slice.split {expected_split!r}")
 
     if kind == "one-case":
         if case_range != expected.get("case_range"):

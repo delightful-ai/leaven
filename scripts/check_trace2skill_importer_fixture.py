@@ -374,7 +374,7 @@ def model_one_case_row(repo_root: Path, tmp_path: Path) -> dict[str, Any]:
         "proof_classification": "model-one-case",
         "dataset_slice": {
             "name": "SpreadsheetBench-Verified",
-            "split": "one_case",
+            "split": "one-case",
             "case_range": "0..1",
             "case_count": 1,
             "denominator": "one-case-13-1-model-backed",
@@ -796,6 +796,21 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "G2 paper-subset rows must stay below the 200-case paper denominator",
             errors,
             "subset denominator drift",
+        )
+
+        def mutate_subset_to_wrong_split(row: dict[str, Any]) -> None:
+            row["dataset_slice"] = dict(row["dataset_slice"])
+            row["dataset_slice"]["split"] = "evolving"
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "subset-wrong-split.jsonl",
+            mutate_subset_to_wrong_split,
+            "G2 rows must use dataset_slice.split 'held_out'",
+            errors,
+            "subset split drift",
         )
 
         def mutate_heldout_to_training_range(row: dict[str, Any]) -> None:

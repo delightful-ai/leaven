@@ -150,7 +150,8 @@ what Leaven actually ran.
 - Result rows must also keep `dataset_slice` consistent with the named runbook
   stage's generated `expected_dataset_slice`: one-case stages stay one-case,
   one-case stages with a generated `case_id` must carry the exact matching
-  `extra.case_id` such as `13-1`, subset rows must be held-out subsets below
+  `extra.case_id` such as `13-1`, every stage with a generated split must use
+  that exact `dataset_slice.split`, subset rows must be held-out subsets below
   the 200-case paper denominator, G3/G3V use `0..200`, G4 uses `200..400`, and
   aggregate or full-paper rows use their explicit denominator labels.
 - Result rows must also satisfy the named runbook stage's generated

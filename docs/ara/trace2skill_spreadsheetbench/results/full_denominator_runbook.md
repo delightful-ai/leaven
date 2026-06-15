@@ -71,7 +71,7 @@ Expected artifacts:
 - Approval required: `false`
 - Allowed label: `deterministic-one-case`
 - Forbidden label: `paper reproduction`
-- Expected dataset slice: `{"case_count": 1, "case_id": "13-1", "case_range": "0..1", "denominator_contains": "one-case-13-1", "kind": "one-case"}`
+- Expected dataset slice: `{"case_count": 1, "case_id": "13-1", "case_range": "0..1", "denominator_contains": "one-case-13-1", "kind": "one-case", "split": "one-case"}`
 - Expected seed policy: `null`
 - Expected runtime policy: `null`
 - Expected command policy: `null`
@@ -102,7 +102,7 @@ Expected artifacts:
 - Approval required: `true`
 - Allowed label: `model-one-case`
 - Forbidden label: `held-out split reproduced`
-- Expected dataset slice: `{"case_count": 1, "case_id": "13-1", "case_range": "0..1", "denominator_contains": "one-case-13-1", "kind": "one-case"}`
+- Expected dataset slice: `{"case_count": 1, "case_id": "13-1", "case_range": "0..1", "denominator_contains": "one-case-13-1", "kind": "one-case", "split": "one-case"}`
 - Expected seed policy: `{"kind": "exact", "seed": 41}`
 - Expected runtime policy: `{"kind": "upstream-run", "max_turns": 100, "workers": 1}`
 - Expected command policy: `{"kind": "upstream-eval", "required_source_command_fragments": ["run_spreadsheetbench.py", "evaluate_with_official.py"]}`
@@ -142,7 +142,7 @@ Expected artifacts:
 - Approval required: `true`
 - Allowed label: `paper-subset`
 - Forbidden label: `held-out split reproduced`
-- Expected dataset slice: `{"case_count_max_exclusive": 200, "case_count_min": 1, "denominator_contains": "subset", "forbidden_denominator_fragments": ["paper-denominator", "full-paper"], "kind": "held-out-subset", "range_end_max": 400, "range_start_min": 200}`
+- Expected dataset slice: `{"case_count_max_exclusive": 200, "case_count_min": 1, "denominator_contains": "subset", "forbidden_denominator_fragments": ["paper-denominator", "full-paper"], "kind": "held-out-subset", "range_end_max": 400, "range_start_min": 200, "split": "held_out"}`
 - Expected seed policy: `{"kind": "exact", "seed": 41}`
 - Expected runtime policy: `{"kind": "upstream-run", "max_turns": 100, "workers": 128}`
 - Expected command policy: `{"kind": "upstream-eval", "required_source_command_fragments": ["run_spreadsheetbench.py", "evaluate_with_official.py"]}`
@@ -184,7 +184,7 @@ Expected artifacts:
 - Approval required: `true`
 - Allowed label: `evolving-split-run`
 - Forbidden label: `held-out result`
-- Expected dataset slice: `{"case_count": 200, "case_range": "0..200", "denominator": "evolving-split-0..200", "kind": "exact-range"}`
+- Expected dataset slice: `{"case_count": 200, "case_range": "0..200", "denominator": "evolving-split-0..200", "kind": "exact-range", "split": "evolving"}`
 - Expected seed policy: `{"kind": "one-of", "seeds": [41, 42, 43]}`
 - Expected runtime policy: `{"kind": "skill-evolution", "max_turns": 100, "merge_batch_size": 32, "workers": 128}`
 - Expected command policy: `{"kind": "skill-evolution", "required_source_command_fragments": ["run_spreadsheetbench.py", "evaluate_with_official.py", "analyze_results.py", "analysis/run_error_analysis.py", "analysis/run_success_analysis_llm.py", "skill_evolver.run_parallel_skill_evolution"]}`
@@ -243,7 +243,7 @@ Expected artifacts:
 - Approval required: `true`
 - Allowed label: `training-validation-candidate`
 - Forbidden label: `held-out result`
-- Expected dataset slice: `{"case_count": 200, "case_range": "0..200", "denominator": "training-validation-0..200", "kind": "exact-range"}`
+- Expected dataset slice: `{"case_count": 200, "case_range": "0..200", "denominator": "training-validation-0..200", "kind": "exact-range", "split": "evolving"}`
 - Expected seed policy: `{"kind": "one-of", "seeds": [41, 42, 43]}`
 - Expected runtime policy: `{"kind": "upstream-run", "max_turns": 100, "workers": 128}`
 - Expected command policy: `{"kind": "upstream-eval", "required_source_command_fragments": ["run_spreadsheetbench.py", "evaluate_with_official.py"]}`
@@ -289,7 +289,7 @@ Expected artifacts:
 - Approval required: `true`
 - Allowed label: `held-out-single-seed-candidate`
 - Forbidden label: `paper aggregate`
-- Expected dataset slice: `{"case_count": 200, "case_range": "200..400", "denominator": "held-out-200..400", "kind": "exact-range"}`
+- Expected dataset slice: `{"case_count": 200, "case_range": "200..400", "denominator": "held-out-200..400", "kind": "exact-range", "split": "held_out"}`
 - Expected seed policy: `{"kind": "one-of", "seeds": [41, 42, 43]}`
 - Expected runtime policy: `{"kind": "upstream-run", "max_turns": 100, "workers": 128}`
 - Expected command policy: `{"kind": "upstream-eval", "required_source_command_fragments": ["run_spreadsheetbench.py", "evaluate_with_official.py"]}`
@@ -330,7 +330,7 @@ Expected artifacts:
 - Approval required: `true`
 - Allowed label: `seed-aggregate-candidate`
 - Forbidden label: `cross-model paper reproduction`
-- Expected dataset slice: `{"denominator": "seed-aggregate-41-42-43", "kind": "aggregate", "seeds": [41, 42, 43]}`
+- Expected dataset slice: `{"denominator": "seed-aggregate-41-42-43", "kind": "aggregate", "seeds": [41, 42, 43], "split": "held_out"}`
 - Expected seed policy: `{"kind": "all-of", "seeds": [41, 42, 43]}`
 - Expected runtime policy: `null`
 - Expected command policy: `null`
@@ -359,7 +359,7 @@ Expected artifacts:
 - Approval required: `true`
 - Allowed label: `paper-denominator-reproduction`
 - Forbidden label: `anything stronger than completed rows`
-- Expected dataset slice: `{"case_count": 400, "denominator": "full-paper-denominator", "kind": "full-paper", "required_split_ranges": ["0..200", "200..400"], "seeds": [41, 42, 43]}`
+- Expected dataset slice: `{"case_count": 400, "denominator": "full-paper-denominator", "kind": "full-paper", "required_split_ranges": ["0..200", "200..400"], "seeds": [41, 42, 43], "split": "all"}`
 - Expected seed policy: `{"kind": "all-of", "seeds": [41, 42, 43]}`
 - Expected runtime policy: `null`
 - Expected command policy: `null`
