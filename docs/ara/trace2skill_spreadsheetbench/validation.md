@@ -299,3 +299,35 @@ Limit:
 
 - This does not provision a model endpoint, approve cost, approve hardware,
   create credentials, or launch a Qwen/vLLM run.
+
+## 2026-06-14 Approval Packet Preflight
+
+Artifact:
+
+```text
+scripts/check_trace2skill_approval_packet.py
+docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_approval_packet.py docs/ara/trace2skill_spreadsheetbench --expect-blocked
+```
+
+Scope:
+
+- Extracts the fenced YAML approval packet from `results/full_run_plan.md`.
+- Verifies fixed paper-denominator fields: vLLM backend, SpreadsheetBench path,
+  seeds `41/42/43`, workers `128`, merge batch size `32`, and ReAct turn budget
+  `100`.
+- Requires concrete approval values for model endpoints/weights, hardware,
+  dataset checksum or manifest, cost, credentials, retention, and approval
+  metadata before normal preflight can pass.
+- Requires the expected artifact list to include run metadata, manifests,
+  trajectories, score reports, evolved skill output, and `leaven_results.jsonl`.
+
+Limit:
+
+- `--expect-blocked` is a guardrail proof only. It confirms that the current
+  packet is not runnable; it is not reproduction evidence.

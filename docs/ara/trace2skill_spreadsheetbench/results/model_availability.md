@@ -45,4 +45,8 @@ These fields remain unresolved in `full_run_plan.md`:
 - artifact retention and promotion policy;
 - approval of `src/configs/tolerance.md`.
 
+The machine-checkable packet is in `full_run_plan.md` and is intentionally
+expected to fail `scripts/check_trace2skill_approval_packet.py` until those
+fields are filled.
+
 No Qwen/vLLM execution should start until those fields are filled and approved.

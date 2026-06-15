@@ -24,6 +24,18 @@ The current acceptance and denominator audit is recorded in
 Current public model/serving availability research for the approval packet is
 recorded in [`model_availability.md`](model_availability.md).
 
+The full-denominator approval packet can be checked with:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_approval_packet.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Until the packet is approved, the expected proof is the blocked preflight:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_approval_packet.py docs/ara/trace2skill_spreadsheetbench --expect-blocked
+```
+
 The paper target plot can be regenerated without result records:
 
 ```bash

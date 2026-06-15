@@ -10,8 +10,8 @@ budget conditions and writes denominator-labeled result records.
 
 | Requirement | Paper target | Leaven status | Approval needed |
 |-------------|--------------|---------------|-----------------|
-| 122B model | `Qwen3.5-122B-A10B` | Not confirmed locally. | Model source, weights/API endpoint, license, and operator approval. |
-| 35B model | `Qwen3.5-35B-A3B` | Not confirmed locally. | Model source, weights/API endpoint, license, and operator approval. |
+| 122B model | `Qwen3.5-122B-A10B` | Public model/source availability researched; not provisioned locally. | Model source, weights/API endpoint, license, and operator approval. |
+| 35B model | `Qwen3.5-35B-A3B` | Public model/source availability researched; not provisioned locally. | Model source, weights/API endpoint, license, and operator approval. |
 | Serving backend | vLLM | Not provisioned for this run. | Host/GPU plan, vLLM version, tensor-parallel shape, request limits. |
 | Dataset | 400-row SpreadsheetBench-Verified path | Local upstream sample paths exist; full run path must be rechecked. | Exact `data/spreadsheetbench_verified/spreadsheetbench_verified_400` path and checksum/provenance. |
 | Evolving split | rows `0..200` | Captured in ARA config. | Approval that these rows feed trajectory collection and skill evolution only. |
@@ -68,6 +68,8 @@ serving:
   host: null
   version: null
   tensor_parallel: null
+  gpu_type: null
+  gpu_count: null
 dataset:
   path: data/spreadsheetbench_verified/spreadsheetbench_verified_400
   checksum_or_manifest: null
@@ -80,18 +82,49 @@ budget:
   max_usd: null
   max_wall_clock_hours: null
   max_gpu_hours: null
+credentials:
+  api_key_env: null
+  redaction_policy: null
+  log_retention: null
 tolerance:
   policy: docs/ara/trace2skill_spreadsheetbench/src/configs/tolerance.md
   approved: null
 artifacts:
   root: tmp/trace2skill-paper-denominator/<run_id>
   retention: null
+  expected:
+    - run_metadata.json
+    - dataset_manifest.json
+    - trajectory_generation/{seed}/{case_id}/manifest.json
+    - trajectory_generation/{seed}/{case_id}/trajectory.json
+    - trajectory_generation/{seed}/{case_id}/score_report.json
+    - skill_evolution/{seed}/patch_pool.jsonl
+    - skill_evolution/{seed}/merge_tree.json
+    - skill_evolution/{seed}/skill/SKILL.md
+    - heldout_eval/{seed}/{case_id}/manifest.json
+    - heldout_eval/{seed}/{case_id}/trajectory.json
+    - heldout_eval/{seed}/{case_id}/score_report.json
+    - leaven_results.jsonl
 approval:
   approved_by: null
   approved_at: null
 ```
 
 All `null` values must be resolved before full-denominator execution.
+The `artifacts.root` template must also be replaced with a concrete run id.
+
+Before a Qwen/vLLM-scale run, check the packet:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_approval_packet.py docs/ara/trace2skill_spreadsheetbench
+```
+
+The command must fail while the packet is unresolved. To verify that the current
+blocked state is intentional, run:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_approval_packet.py docs/ara/trace2skill_spreadsheetbench --expect-blocked
+```
 
 ## Availability Research
 
