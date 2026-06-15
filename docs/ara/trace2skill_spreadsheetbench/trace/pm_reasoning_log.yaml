@@ -184,3 +184,7 @@ entries:
     notes:
       - "Routed base result-row shape intake as paper-protocol guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because schema-shape validation only rejects malformed future rows; it creates no model-backed rows, overlays, approvals, analyst responses, Stage 3 merges, seed aggregates, full-paper rows, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#47"
+    notes:
+      - "Routed full-paper model/backend identity intake as paper-protocol guardrail evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the check only rejects future full-paper rows whose model or serving backend drifts from the paper protocol; it creates no model-backed rows, overlays, approvals, analyst responses, Stage 3 merges, seed aggregates, full-paper rows, or Qwen/vLLM execution."
