@@ -847,6 +847,30 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
         write_jsonl(full_paper_output, [full_paper_row])
         check_result_intake_for_rows(repo_root, ara_root, full_paper_output, None, errors, "full-paper intake")
 
+        unsupported_source_output = tmp_path / "full-paper-unsupported-source-classification.jsonl"
+        unsupported_source_row = json.loads(json.dumps(full_paper_row))
+        unsupported_source_row["artifact_paths"] = [
+            APPROVAL_ARTIFACT,
+            prompt_manifest_rel,
+            training_validation_output_rel,
+            aggregate_output_rel,
+            source_paths[0],
+        ]
+        unsupported_source_row["extra"]["source_result_paths"] = [
+            training_validation_output_rel,
+            aggregate_output_rel,
+            source_paths[0],
+        ]
+        write_jsonl(unsupported_source_output, [unsupported_source_row])
+        check_result_intake_for_rows(
+            repo_root,
+            ara_root,
+            unsupported_source_output,
+            "proof_classification must be one of ['training-validation-candidate', 'seed-aggregate-candidate', 'paper-denominator-candidate']",
+            errors,
+            "full-paper unsupported source classification",
+        )
+
         missing_training_output = tmp_path / "full-paper-missing-training-source.jsonl"
         missing_training_row = json.loads(json.dumps(full_paper_row))
         missing_training_row["artifact_paths"] = [APPROVAL_ARTIFACT, prompt_manifest_rel, aggregate_output_rel]

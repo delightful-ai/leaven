@@ -711,17 +711,6 @@ def check_stage_aggregate_policy(
         if not isinstance(classifications, list) or not all(isinstance(item, str) for item in classifications):
             errors.append(f"{prefix} runbook stage {stage_id!r} expected_aggregate_policy source_proof_classifications must be strings")
             return
-        matching_sources = [
-            (source_path, source_line_number, source)
-            for source_path, source_line_number, source in rows
-            if source.get("proof_classification") in classifications
-        ]
-        if not matching_sources:
-            errors.append(
-                f"{prefix} {stage_id} full-paper rows must cite training-validation, "
-                "seed-aggregate, or paper-candidate source result rows"
-            )
-            return
         dataset_expected = stage.get("expected_dataset_slice")
         required_ranges = (
             dataset_expected.get("required_split_ranges")
@@ -730,7 +719,8 @@ def check_stage_aggregate_policy(
         )
         observed_ranges: set[str] = set()
         metric_values_by_range: dict[str, tuple[float, int]] = {}
-        for source_path, source_line_number, source in matching_sources:
+        matching_source_keys: set[tuple[Path, int]] = set()
+        for source_path, source_line_number, source in rows:
             source_errors: list[str] = []
             check_record(
                 repo_root,
@@ -751,6 +741,13 @@ def check_stage_aggregate_policy(
                     f"{prefix} {stage_id} source row {source_path.relative_to(repo_root)}:{source_line_number} "
                     f"does not pass result intake: {source_errors!r}"
                 )
+            if source.get("proof_classification") not in classifications:
+                errors.append(
+                    f"{prefix} {stage_id} source row {source_path.relative_to(repo_root)}:{source_line_number} "
+                    f"proof_classification must be one of {classifications!r}"
+                )
+                continue
+            matching_source_keys.add((source_path, source_line_number))
             source_slice = source.get("dataset_slice")
             source_range = source_slice.get("case_range") if isinstance(source_slice, dict) else None
             if isinstance(source_range, str) and source_range:
@@ -774,6 +771,12 @@ def check_stage_aggregate_policy(
                 repo_root,
                 errors,
             )
+        if not matching_source_keys:
+            errors.append(
+                f"{prefix} {stage_id} full-paper rows must cite training-validation, "
+                "seed-aggregate, or paper-candidate source result rows"
+            )
+            return
         if isinstance(required_ranges, list) and all(isinstance(item, str) for item in required_ranges):
             missing = [case_range for case_range in required_ranges if case_range not in observed_ranges]
             if missing:

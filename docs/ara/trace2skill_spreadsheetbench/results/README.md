@@ -143,11 +143,14 @@ equal to the mean of the cited seed metric values. Full-paper rows must cite
 training-validation, seed-aggregate, or paper-candidate source rows that also
 pass result intake and together cover the generated required split ranges such
 as `0..200` and `200..400`, with the full-paper `metric_value` equal to the
-case-count-weighted mean of those cited split metrics. Aggregate and full-paper
-source rows must also match the parent row's `model_id`, `serving_backend`,
-`metric_name`, and `metric_unit`, so a seed aggregate or full-paper row cannot
-silently combine incompatible model or metric conditions. When a cited source
-row lives in top-level ARA
+case-count-weighted mean of those cited split metrics. Every cited full-paper
+source row must have a full-paper source classification named by the generated
+aggregate policy; a held-out single-seed row can support a seed aggregate, but
+it cannot be cited directly as a full-paper predecessor. Aggregate and
+full-paper source rows must also match the parent row's `model_id`,
+`serving_backend`, `metric_name`, and `metric_unit`, so a seed aggregate or
+full-paper row cannot silently combine incompatible model or metric conditions.
+When a cited source row lives in top-level ARA
 `results/*.jsonl`, approval-gated source rows must also pass the runnable
 approval-packet preflight before they can count as aggregate or full-paper
 support.

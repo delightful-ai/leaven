@@ -180,8 +180,11 @@ what Leaven actually ran.
   training-validation, seed-aggregate, or paper-candidate source result rows
   that also pass result intake and together cover the generated required split
   ranges such as `0..200` and `200..400`, and the full-paper `metric_value` must
-  equal the case-count-weighted mean of those cited split metrics. Aggregate and
-  full-paper source rows must match the parent row's `model_id`,
+  equal the case-count-weighted mean of those cited split metrics. Every cited
+  full-paper source row must have a source proof classification named by the
+  generated aggregate policy; held-out single-seed rows must feed seed
+  aggregates before they can contribute to G6. Aggregate and full-paper source
+  rows must match the parent row's `model_id`,
   `serving_backend`, `metric_name`, and `metric_unit`, so source rows from a
   different model, backend, or metric cannot support a paper-shaped aggregate.
   If a cited source row lives in top-level ARA `results/*.jsonl`, approval-gated
