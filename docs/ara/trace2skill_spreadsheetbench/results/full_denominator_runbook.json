@@ -485,6 +485,8 @@
       ],
       "expected_command_policy": null,
       "expected_dataset_slice": {
+        "case_count": 200,
+        "case_range": "200..400",
         "denominator": "seed-aggregate-41-42-43",
         "kind": "aggregate",
         "seeds": [
@@ -534,6 +536,7 @@
       "expected_command_policy": null,
       "expected_dataset_slice": {
         "case_count": 400,
+        "case_range": "0..400",
         "denominator": "full-paper-denominator",
         "kind": "full-paper",
         "required_split_ranges": [

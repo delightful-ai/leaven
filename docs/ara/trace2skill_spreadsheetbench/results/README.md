@@ -121,7 +121,8 @@ the `dataset_slice` against the runbook stage's generated
 `expected_dataset_slice`, so one-case rows must carry the generated
 `extra.case_id` such as `13-1`, every stage with a generated split must use
 that exact `dataset_slice.split`, subset rows cannot silently become 200-case
-paper-denominator rows, and held-out rows must use the paper `200..400` split.
+paper-denominator rows, held-out rows must use the paper `200..400` split, and
+aggregate/full-paper rows must keep generated case ranges and counts.
 It also checks the runbook stage's generated `expected_seed_policy`, so
 approval-gated rows cannot drift to off-protocol seeds while still looking like
 paper-denominator progress. Runtime fields are checked against generated

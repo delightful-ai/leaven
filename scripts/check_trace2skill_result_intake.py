@@ -389,8 +389,13 @@ def check_stage_dataset_slice(
             errors.append(f"{prefix} {stage_id} rows must use dataset_slice.denominator {expected.get('denominator')!r}")
         return
 
-    if kind in {"aggregate", "full-paper"} and denominator != expected.get("denominator"):
-        errors.append(f"{prefix} {stage_id} rows must use dataset_slice.denominator {expected.get('denominator')!r}")
+    if kind in {"aggregate", "full-paper"}:
+        if case_range != expected.get("case_range"):
+            errors.append(f"{prefix} {stage_id} rows must use dataset_slice.case_range {expected.get('case_range')!r}")
+        if case_count != expected.get("case_count"):
+            errors.append(f"{prefix} {stage_id} rows must use dataset_slice.case_count {expected.get('case_count')}")
+        if denominator != expected.get("denominator"):
+            errors.append(f"{prefix} {stage_id} rows must use dataset_slice.denominator {expected.get('denominator')!r}")
 
 
 def normalize_seed(value: Any) -> int | None:

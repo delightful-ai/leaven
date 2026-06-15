@@ -330,7 +330,7 @@ Expected artifacts:
 - Approval required: `true`
 - Allowed label: `seed-aggregate-candidate`
 - Forbidden label: `cross-model paper reproduction`
-- Expected dataset slice: `{"denominator": "seed-aggregate-41-42-43", "kind": "aggregate", "seeds": [41, 42, 43], "split": "held_out"}`
+- Expected dataset slice: `{"case_count": 200, "case_range": "200..400", "denominator": "seed-aggregate-41-42-43", "kind": "aggregate", "seeds": [41, 42, 43], "split": "held_out"}`
 - Expected seed policy: `{"kind": "all-of", "seeds": [41, 42, 43]}`
 - Expected runtime policy: `null`
 - Expected command policy: `null`
@@ -359,7 +359,7 @@ Expected artifacts:
 - Approval required: `true`
 - Allowed label: `paper-denominator-reproduction`
 - Forbidden label: `anything stronger than completed rows`
-- Expected dataset slice: `{"case_count": 400, "denominator": "full-paper-denominator", "kind": "full-paper", "required_split_ranges": ["0..200", "200..400"], "seeds": [41, 42, 43], "split": "all"}`
+- Expected dataset slice: `{"case_count": 400, "case_range": "0..400", "denominator": "full-paper-denominator", "kind": "full-paper", "required_split_ranges": ["0..200", "200..400"], "seeds": [41, 42, 43], "split": "all"}`
 - Expected seed policy: `{"kind": "all-of", "seeds": [41, 42, 43]}`
 - Expected runtime policy: `null`
 - Expected command policy: `null`

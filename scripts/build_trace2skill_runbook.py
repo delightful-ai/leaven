@@ -447,6 +447,8 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             {
                 "kind": "aggregate",
                 "split": held_out["name"],
+                "case_range": held_out["range"],
+                "case_count": held_out["case_count"],
                 "denominator": "seed-aggregate-41-42-43",
                 "seeds": packet["protocol"]["seeds"],
             },
@@ -486,6 +488,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             {
                 "kind": "full-paper",
                 "split": "all",
+                "case_range": f"0..{manifest['case_count']}",
                 "denominator": "full-paper-denominator",
                 "required_split_ranges": [evolving["range"], held_out["range"]],
                 "case_count": manifest["case_count"],

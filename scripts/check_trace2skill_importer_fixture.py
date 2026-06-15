@@ -567,6 +567,21 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
             "aggregate source-result drift",
         )
 
+        def mutate_aggregate_to_wrong_case_count(row: dict[str, Any]) -> None:
+            row["dataset_slice"] = dict(row["dataset_slice"])
+            row["dataset_slice"]["case_count"] = 199
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            aggregate_output,
+            tmp_path / "aggregate-wrong-case-count.jsonl",
+            mutate_aggregate_to_wrong_case_count,
+            "G5 rows must use dataset_slice.case_count 200",
+            errors,
+            "aggregate case-count drift",
+        )
+
         invalid_source_paths = list(source_paths)
         invalid_source_path = tmp_path / "heldout_seed_41_invalid.jsonl"
         invalid_source_row = source_heldout_row(repo_root, tmp_path, 41)
@@ -654,6 +669,19 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
         }
         write_jsonl(full_paper_output, [full_paper_row])
         check_result_intake_for_rows(repo_root, ara_root, full_paper_output, None, errors, "full-paper intake")
+
+        invalid_case_count_output = tmp_path / "full-paper-invalid-case-count.jsonl"
+        invalid_case_count_row = json.loads(json.dumps(full_paper_row))
+        invalid_case_count_row["dataset_slice"]["case_count"] = 200
+        write_jsonl(invalid_case_count_output, [invalid_case_count_row])
+        check_result_intake_for_rows(
+            repo_root,
+            ara_root,
+            invalid_case_count_output,
+            "G6 rows must use dataset_slice.case_count 400",
+            errors,
+            "full-paper invalid case count",
+        )
 
         invalid_serving_output = tmp_path / "full-paper-invalid-serving.jsonl"
         invalid_serving_row = json.loads(json.dumps(full_paper_row))

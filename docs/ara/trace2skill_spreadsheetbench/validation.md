@@ -849,7 +849,8 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
   `extra.case_id: 13-1`, every stage with a generated split must use that exact
   `dataset_slice.split`, subset rows are held-out subsets below the 200-case
   paper denominator, G3/G3V use `0..200`, G4 uses `200..400`, and
-  aggregate/full-paper rows keep their explicit denominator labels.
+  aggregate/full-paper rows keep their generated case ranges, case counts, and
+  explicit denominator labels.
 - Validates the row seed evidence against the named runbook stage's generated
   `expected_seed_policy`: G1M/G2 require seed `41`, G3/G3V/G4 require one of
   `[41, 42, 43]`, and G5/G6 require `extra.seeds: [41, 42, 43]`.
@@ -897,10 +898,11 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
   wrong runbook stage label, missing prompt artifacts for `paper-subset`,
   missing base schema id, stringly metric value, missing official evaluator
   artifact, model one-case case-id drift, subset denominator drift, subset split
-  drift, subset seed drift, subset worker drift, full-paper serving/model drift
-  with null plot binding, blocked real-results approval preflight, missing
-  skill artifact, skill metadata missing from the artifact audit, missing
-  approval evidence for `paper-subset`, and accidental
+  drift, aggregate case-count drift, full-paper case-count drift, subset seed
+  drift, subset worker drift, full-paper serving/model drift with null plot
+  binding, blocked real-results approval preflight, missing skill artifact,
+  skill metadata missing from the artifact audit, missing approval evidence for
+  `paper-subset`, and accidental
   `paper-denominator-reproduction` without the explicit allow flag.
 
 Limit:
