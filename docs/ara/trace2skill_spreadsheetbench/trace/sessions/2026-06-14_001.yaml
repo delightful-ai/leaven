@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T22:41-07:00"
-  turn_count: 72
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one-case case-id guard, result split-identity guard, aggregate/full-paper exact-denominator guard, aggregate/full-paper source identity guard, paper-denominator paper-model identity guard, aggregate metric-mean guard, aggregate source-classification guard, full-paper metric-mean guard, full-paper source-classification guard, full-paper unreachable source-class cut, aggregate source-policy validator lock, runbook forbidden-label contract, PAPER closeout-boundary contract, one-case status-prose consistency guard, closeout denominator evidence key hard-cut, denominator status evidence heading hard-cut, generated runbook dataset-slice contract, generated runbook seed-policy contract, generated runbook runtime-policy contract, generated runbook command-policy contract, generated runbook aggregate-policy contract, aggregate predecessor-row intake guard, full-paper source-chain intake guard, full-paper split-range source coverage guard, aggregate source approval guard, base result-row shape guard, full-paper model identity pre-overlay guard, plot overlay result-intake guard, blocked-approval plot overlay guard, blocked-approval scratch overlay guard, imported skill-artifact audit guard, model-run file-artifact guard, blocked-approval result admission guard, file-artifact epilogue commit, one non-overlay result row, strict official-eval importer, importer-fixture validation, Stage 2 rendered-prompt validation/freshness, rendered-prompt artifact-contract validation, prompt-artifact result-intake admission, pre-write official-eval import admission, closeout result-intake gate, runbook dataset-slice result-intake guard, approval-artifact result-intake guard, runbook-stage result binding, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, dataset-manifest freshness validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, approval-state validation, deterministic one-case result-freshness validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
+  last_turn: "2026-06-14T22:48-07:00"
+  turn_count: 73
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one-case case-id guard, result split-identity guard, aggregate/full-paper exact-denominator guard, aggregate/full-paper source identity guard, paper-denominator paper-model identity guard, aggregate metric-mean guard, aggregate source-classification guard, full-paper metric-mean guard, full-paper source-classification guard, full-paper unreachable source-class cut, aggregate source-policy validator lock, runbook forbidden-label contract, PAPER closeout-boundary contract, approval packet value-shape contract, one-case status-prose consistency guard, closeout denominator evidence key hard-cut, denominator status evidence heading hard-cut, generated runbook dataset-slice contract, generated runbook seed-policy contract, generated runbook runtime-policy contract, generated runbook command-policy contract, generated runbook aggregate-policy contract, aggregate predecessor-row intake guard, full-paper source-chain intake guard, full-paper split-range source coverage guard, aggregate source approval guard, base result-row shape guard, full-paper model identity pre-overlay guard, plot overlay result-intake guard, blocked-approval plot overlay guard, blocked-approval scratch overlay guard, imported skill-artifact audit guard, model-run file-artifact guard, blocked-approval result admission guard, file-artifact epilogue commit, one non-overlay result row, strict official-eval importer, importer-fixture validation, Stage 2 rendered-prompt validation/freshness, rendered-prompt artifact-contract validation, prompt-artifact result-intake admission, pre-write official-eval import admission, closeout result-intake gate, runbook dataset-slice result-intake guard, approval-artifact result-intake guard, runbook-stage result binding, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, dataset-manifest freshness validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, approval-state validation, deterministic one-case result-freshness validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -445,6 +445,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Locked the Trace2Skill PAPER.md completion boundary so result overlays alone cannot be described as enough to prove reproduction."
+  - turn: 73
+    type: experiment
+    id: "PM-2026-06-14-074"
+    routing: direct
+    provenance: ai-executed
+    summary: "Locked Trace2Skill approval packet value shapes so filled run approvals must use positive numeric GPU/budget fields, UTC approval time, env-var credential names, and existing manifest/policy paths."
 
 ai_actions:
   - turn: 1
@@ -1157,6 +1163,16 @@ ai_actions:
       - "docs/ara/trace2skill_spreadsheetbench/PAPER.md"
       - "scripts/validate_ara.py"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 73
+    action: "Locked Trace2Skill approval packet value-shape validation and propagated the same approval blockers through closeout, runbook, approval-state, and result-intake call sites."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/check_trace2skill_approval_packet.py"
+      - "scripts/check_trace2skill_approval_state.py"
+      - "scripts/build_trace2skill_runbook.py"
+      - "scripts/audit_trace2skill_closeout.py"
+      - "scripts/check_trace2skill_result_intake.py"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -1305,6 +1321,8 @@ key_context:
     excerpt: "Runbook-label validation now requires exact forbidden_label boundaries for G0..G6 and rejects forbidden-label reuse as allowed_label, so one-case, subset, seed, and full-paper stages cannot weaken their stronger-than-evidence claim boundaries without failing validate_ara."
   - turn: 72
     excerpt: "PAPER.md now says Leaven reproduction is unproven until approved paper-denominator result rows pass intake and closeout; validate_ara rejects the old overlay-only completion sentence and requires the approved closeout boundary."
+  - turn: 73
+    excerpt: "Approval packet preflight now rejects malformed filled values and missing referenced manifest/policy paths, while closeout/runbook/result-intake/approval-state call sites pass ara_root so future shape blockers propagate through validate_ara."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."
