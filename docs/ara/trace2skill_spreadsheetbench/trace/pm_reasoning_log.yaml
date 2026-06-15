@@ -276,3 +276,7 @@ entries:
     notes:
       - "Routed closeout denominator evidence key hard-cut as status integrity/proxy-refusal evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the change only renames and validates closeout evidence categories; it creates no model-backed one-case row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#70"
+    notes:
+      - "Routed denominator status heading hard-cut as status integrity/proxy-refusal evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the change only prevents the human status audit from heading target/mechanics/local-one-case evidence as a reproduced denominator; it creates no model-backed one-case row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
