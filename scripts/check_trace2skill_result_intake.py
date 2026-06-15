@@ -729,6 +729,7 @@ def check_stage_aggregate_policy(
             else None
         )
         observed_ranges: set[str] = set()
+        metric_values_by_range: dict[str, tuple[float, int]] = {}
         for source_path, source_line_number, source in matching_sources:
             source_errors: list[str] = []
             check_record(
@@ -754,6 +755,15 @@ def check_stage_aggregate_policy(
             source_range = source_slice.get("case_range") if isinstance(source_slice, dict) else None
             if isinstance(source_range, str) and source_range:
                 observed_ranges.add(source_range)
+                metric_value = source.get("metric_value")
+                case_count = source_slice.get("case_count") if isinstance(source_slice, dict) else None
+                if is_json_number(metric_value) and isinstance(case_count, int) and not isinstance(case_count, bool):
+                    if source_range in metric_values_by_range:
+                        errors.append(
+                            f"{prefix} {stage_id} full-paper rows must cite at most one metric row for split range {source_range!r}"
+                        )
+                    else:
+                        metric_values_by_range[source_range] = (float(metric_value), case_count)
             check_source_identity_matches(
                 prefix,
                 stage_id,
@@ -770,6 +780,31 @@ def check_stage_aggregate_policy(
                 errors.append(
                     f"{prefix} {stage_id} full-paper rows must cite source result rows covering split ranges {missing!r}"
                 )
+            missing_metric_values = [
+                case_range for case_range in required_ranges if case_range not in metric_values_by_range
+            ]
+            if missing_metric_values:
+                errors.append(
+                    f"{prefix} {stage_id} full-paper rows must cite numeric source metric_values for split ranges {missing_metric_values!r}"
+                )
+            elif is_json_number(record.get("metric_value")):
+                total_cases = sum(metric_values_by_range[case_range][1] for case_range in required_ranges)
+                if total_cases <= 0:
+                    errors.append(
+                        f"{prefix} {stage_id} full-paper source metric case counts must be positive"
+                    )
+                else:
+                    expected_metric = (
+                        sum(
+                            metric_values_by_range[case_range][0] * metric_values_by_range[case_range][1]
+                            for case_range in required_ranges
+                        )
+                        / total_cases
+                    )
+                    if not math.isclose(float(record["metric_value"]), expected_metric, rel_tol=0, abs_tol=1e-9):
+                        errors.append(
+                            f"{prefix} {stage_id} full-paper metric_value must equal weighted mean source metric_value {expected_metric}"
+                        )
         return
 
     errors.append(f"{prefix} runbook stage {stage_id!r} expected_aggregate_policy has unknown kind {kind!r}")

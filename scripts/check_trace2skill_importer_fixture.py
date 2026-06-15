@@ -902,6 +902,19 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
             "full-paper invalid case count",
         )
 
+        invalid_metric_output = tmp_path / "full-paper-invalid-metric-value.jsonl"
+        invalid_metric_row = json.loads(json.dumps(full_paper_row))
+        invalid_metric_row["metric_value"] = 51.0
+        write_jsonl(invalid_metric_output, [invalid_metric_row])
+        check_result_intake_for_rows(
+            repo_root,
+            ara_root,
+            invalid_metric_output,
+            "G6 full-paper metric_value must equal weighted mean source metric_value 50.0",
+            errors,
+            "full-paper metric-value drift",
+        )
+
         invalid_serving_output = tmp_path / "full-paper-invalid-serving.jsonl"
         invalid_serving_row = json.loads(json.dumps(full_paper_row))
         invalid_serving_row["serving_backend"] = "fixture-backend"
