@@ -165,6 +165,9 @@ Skill-evolution rows must also include concrete `--max_workers`,
 runtime worker count and `extra.merge_batch_size`; a row cannot rely on
 metadata or on upstream defaults for the paper's analyst fanout, evolution
 fanout, or batch size `32`.
+The `analysis/run_error_analysis.py` command segment must also carry its own
+matching `--model`, `--workers`, and `--max_turns` flags; a correct baseline
+SpreadsheetBench command cannot stand in for the error-analysis invocation.
 Official evaluator-derived rows must keep `extra.source_metric` tied to the
 metric actually counted by the
 evaluator. Non-overlay imports use canonical `official_*` metric names, and

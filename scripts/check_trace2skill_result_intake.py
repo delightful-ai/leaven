@@ -593,6 +593,13 @@ def command_flag_values(source_command: str, flag: str) -> list[str]:
     )
 
 
+def command_segment(source_command: str, fragment: str) -> str | None:
+    for segment in re.split(r"\s*(?:&&|;)\s*", source_command):
+        if fragment in segment:
+            return segment
+    return None
+
+
 def check_paper_model_command_identity(
     prefix: str,
     proof: Any,
@@ -649,7 +656,36 @@ def check_paper_run_command_flags(
 
     runtime_policy = stage.get("expected_runtime_policy")
     if isinstance(runtime_policy, dict) and runtime_policy.get("kind") == "skill-evolution":
+        error_analysis_command = command_segment(source_command, "analysis/run_error_analysis.py")
+        if error_analysis_command is None:
+            errors.append(f"{prefix} {proof} source_command must include analysis/run_error_analysis.py")
+        model_id = record.get("model_id")
+        if (
+            error_analysis_command is not None
+            and model_id in PAPER_MODEL_IDS
+            and model_id not in command_flag_values(error_analysis_command, "model")
+        ):
+            errors.append(
+                f"{prefix} {proof} run_error_analysis command must include --model {model_id!r}"
+            )
         workers = runtime.get("workers")
+        if (
+            error_analysis_command is not None
+            and workers is not None
+            and str(workers) not in command_flag_values(error_analysis_command, "workers")
+        ):
+            errors.append(
+                f"{prefix} {proof} run_error_analysis command must include --workers {workers}"
+            )
+        max_turns = runtime.get("max_turns")
+        if (
+            error_analysis_command is not None
+            and max_turns is not None
+            and str(max_turns) not in command_flag_values(error_analysis_command, "max_turns")
+        ):
+            errors.append(
+                f"{prefix} {proof} run_error_analysis command must include --max_turns {max_turns}"
+            )
         if workers is not None and str(workers) not in command_flag_values(source_command, "max_workers"):
             errors.append(f"{prefix} {proof} source_command must include --max_workers {workers}")
         if workers is not None and str(workers) not in command_flag_values(source_command, "max-workers"):

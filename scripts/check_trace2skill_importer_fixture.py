@@ -715,7 +715,7 @@ def source_evolving_row(
             f"--max_turns 100 --seeds {seed} --start_idx 0 --end_idx 200 "
             "&& python evaluate_with_official.py --start_idx 0 --end_idx 200 "
             "&& python analyze_results.py "
-            "&& python analysis/run_error_analysis.py "
+            f"&& python analysis/run_error_analysis.py --model {model_id} --workers 128 --max_turns 100 "
             "&& python analysis/run_success_analysis_llm.py --max_workers 128 "
             f"&& python -m skill_evolver.run_parallel_skill_evolution --model {model_id} "
             f"--merge-batch-size 32 --max-workers 128 --seed {seed}"
@@ -763,6 +763,74 @@ def check_evolving_result_intake(repo_root: Path, ara_root: Path, tmp_path: Path
         "evolving-split-run source_command must include --merge-batch-size 32",
         errors,
         "evolving source-command merge-batch drift",
+    )
+
+    def mutate_evolving_to_missing_error_analysis(row: dict[str, Any]) -> None:
+        row["source_command"] = row["source_command"].replace(
+            "&& python analysis/run_error_analysis.py --model Qwen3.5-122B-A10B --workers 128 --max_turns 100 ",
+            "",
+        )
+
+    check_mutated_result_intake(
+        repo_root,
+        ara_root,
+        output,
+        tmp_path / "evolving-missing-error-analysis.jsonl",
+        mutate_evolving_to_missing_error_analysis,
+        "evolving-split-run source_command must include analysis/run_error_analysis.py",
+        errors,
+        "evolving missing error-analysis command",
+    )
+
+    def mutate_evolving_to_wrong_error_analysis_model(row: dict[str, Any]) -> None:
+        row["source_command"] = row["source_command"].replace(
+            "analysis/run_error_analysis.py --model Qwen3.5-122B-A10B",
+            "analysis/run_error_analysis.py --model Qwen3.5-35B-A3B",
+        )
+
+    check_mutated_result_intake(
+        repo_root,
+        ara_root,
+        output,
+        tmp_path / "evolving-wrong-error-analysis-model.jsonl",
+        mutate_evolving_to_wrong_error_analysis_model,
+        "evolving-split-run run_error_analysis command must include --model 'Qwen3.5-122B-A10B'",
+        errors,
+        "evolving error-analysis model drift",
+    )
+
+    def mutate_evolving_to_wrong_error_analysis_workers(row: dict[str, Any]) -> None:
+        row["source_command"] = row["source_command"].replace(
+            "analysis/run_error_analysis.py --model Qwen3.5-122B-A10B --workers 128",
+            "analysis/run_error_analysis.py --model Qwen3.5-122B-A10B --workers 1",
+        )
+
+    check_mutated_result_intake(
+        repo_root,
+        ara_root,
+        output,
+        tmp_path / "evolving-wrong-error-analysis-workers.jsonl",
+        mutate_evolving_to_wrong_error_analysis_workers,
+        "evolving-split-run run_error_analysis command must include --workers 128",
+        errors,
+        "evolving error-analysis worker drift",
+    )
+
+    def mutate_evolving_to_wrong_error_analysis_max_turns(row: dict[str, Any]) -> None:
+        row["source_command"] = row["source_command"].replace(
+            "analysis/run_error_analysis.py --model Qwen3.5-122B-A10B --workers 128 --max_turns 100",
+            "analysis/run_error_analysis.py --model Qwen3.5-122B-A10B --workers 128 --max_turns 99",
+        )
+
+    check_mutated_result_intake(
+        repo_root,
+        ara_root,
+        output,
+        tmp_path / "evolving-wrong-error-analysis-max-turns.jsonl",
+        mutate_evolving_to_wrong_error_analysis_max_turns,
+        "evolving-split-run run_error_analysis command must include --max_turns 100",
+        errors,
+        "evolving error-analysis max-turn drift",
     )
 
     def mutate_evolving_to_wrong_source_success_workers(row: dict[str, Any]) -> None:

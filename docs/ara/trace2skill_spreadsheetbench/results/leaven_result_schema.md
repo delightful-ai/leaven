@@ -196,8 +196,10 @@ what Leaven actually ran.
   `--model` flag. When those rows carry `seed`, `runtime.workers`, or
   `runtime.max_turns`, `source_command` must include matching `--seeds`,
   `--workers`, and `--max_turns` flags. Skill-evolution rows must additionally
-  include matching `--max_workers` for success-analysis fanout and
-  `--max-workers` for the evolution fanout, and rows that carry
+  include matching `--model`, `--workers`, and `--max_turns` on the
+  `analysis/run_error_analysis.py` command itself, matching `--max_workers` for
+  success-analysis fanout, and matching `--max-workers` for the evolution
+  fanout, and rows that carry
   `extra.merge_batch_size` must also include matching `--merge-batch-size`.
   Model, seed, runtime, analyst fanout, evolution fanout, and merge metadata
   alone are not command evidence.
