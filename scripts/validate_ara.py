@@ -895,6 +895,50 @@ def validate(root: Path) -> list[str]:
                                     fail(errors, f"results/full_denominator_runbook.json {stage_id} expected_runtime_policy max_turns must be 100")
                                 if expected_kind == "skill-evolution" and runtime_policy.get("merge_batch_size") != 32:
                                     fail(errors, f"results/full_denominator_runbook.json {stage_id} expected_runtime_policy merge_batch_size must be 32")
+                        expected_command_kinds = {
+                            "G0": None,
+                            "G1": None,
+                            "G1M": "upstream-eval",
+                            "G2": "upstream-eval",
+                            "G3": "skill-evolution",
+                            "G3V": "upstream-eval",
+                            "G4": "upstream-eval",
+                            "G5": None,
+                            "G6": None,
+                        }
+                        for stage_id, expected_kind in expected_command_kinds.items():
+                            stage = by_id.get(stage_id)
+                            if stage is None:
+                                continue
+                            command_policy = stage.get("expected_command_policy")
+                            if expected_kind is None:
+                                if command_policy is not None:
+                                    fail(errors, f"results/full_denominator_runbook.json {stage_id} expected_command_policy must be null")
+                            elif not isinstance(command_policy, dict):
+                                fail(errors, f"results/full_denominator_runbook.json {stage_id} missing expected_command_policy")
+                            elif command_policy.get("kind") != expected_kind:
+                                fail(errors, f"results/full_denominator_runbook.json {stage_id} expected_command_policy kind must be {expected_kind}")
+                            else:
+                                fragments = command_policy.get("required_source_command_fragments")
+                                if not isinstance(fragments, list):
+                                    fail(errors, f"results/full_denominator_runbook.json {stage_id} expected_command_policy fragments must be a list")
+                                    continue
+                                required = ["run_spreadsheetbench.py", "evaluate_with_official.py"]
+                                if expected_kind == "skill-evolution":
+                                    required.extend(
+                                        [
+                                            "analyze_results.py",
+                                            "analysis/run_error_analysis.py",
+                                            "analysis/run_success_analysis_llm.py",
+                                            "skill_evolver.run_parallel_skill_evolution",
+                                        ]
+                                    )
+                                for fragment in required:
+                                    if fragment not in fragments:
+                                        fail(
+                                            errors,
+                                            f"results/full_denominator_runbook.json {stage_id} expected_command_policy missing {fragment}",
+                                        )
 
     return errors
 

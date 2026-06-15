@@ -100,8 +100,10 @@ def importer_base_args(output: Path, artifact_paths: list[str] | None = None) ->
         *artifact_args,
         "--approval-artifact-path",
         APPROVAL_ARTIFACT,
+        "--command-policy",
+        "upstream-eval",
         "--source-command",
-        "fixture importer smoke",
+        "python run_spreadsheetbench.py --start_idx 200 --end_idx 202 && python evaluate_with_official.py --start_idx 200 --end_idx 202",
     ]
 
 
@@ -347,6 +349,21 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "G2 rows must use runtime.workers 128",
             errors,
             "subset worker drift",
+        )
+
+        def mutate_subset_to_wrong_command_policy(row: dict[str, Any]) -> None:
+            row["extra"] = dict(row["extra"])
+            row["extra"]["command_policy"] = "fixture-smoke"
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "subset-wrong-command-policy.jsonl",
+            mutate_subset_to_wrong_command_policy,
+            "G2 rows must use extra.command_policy 'upstream-eval'",
+            errors,
+            "subset command-policy drift",
         )
 
         expect_failure(

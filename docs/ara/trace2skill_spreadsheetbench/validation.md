@@ -837,6 +837,11 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
   `expected_runtime_policy`: model one-case uses one worker, paper subset,
   validation, and held-out rows use `128` workers and `100` max turns, and
   skill-evolution rows also require merge batch size `32`.
+- Validates the row command evidence against the named runbook stage's generated
+  `expected_command_policy`: upstream-eval rows must name the
+  `run_spreadsheetbench.py` and `evaluate_with_official.py` command family,
+  while skill-evolution rows must additionally name analysis and
+  `skill_evolver.run_parallel_skill_evolution` commands.
 - Requires approval-gated rows to include prompt artifact paths matching their
   runbook stage expectations, such as rendered prompts and prompt-render
   manifests.

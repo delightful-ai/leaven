@@ -325,6 +325,8 @@ def build_records(args: argparse.Namespace) -> list[dict[str, Any]]:
         if args.proof_classification in APPROVAL_REQUIRED_PROOF_CLASSIFICATIONS:
             record["extra"]["approval_artifact_paths"] = args.approval_artifact_path
         record["extra"]["runbook_stage_id"] = args.runbook_stage_id
+        if args.command_policy is not None:
+            record["extra"]["command_policy"] = args.command_policy
         if args.merge_batch_size is not None:
             record["extra"]["merge_batch_size"] = args.merge_batch_size
         if args.proof_classification == "paper-denominator-reproduction":
@@ -374,6 +376,7 @@ def main() -> int:
     parser.add_argument("--skill-kind", type=non_empty, required=True)
     parser.add_argument("--skill-path")
     parser.add_argument("--source-command", type=non_empty, required=True)
+    parser.add_argument("--command-policy")
     parser.add_argument("--artifact-path", action="append", default=[])
     parser.add_argument(
         "--approval-artifact-path",

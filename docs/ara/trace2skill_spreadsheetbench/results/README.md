@@ -106,7 +106,10 @@ It also checks the runbook stage's generated `expected_seed_policy`, so
 approval-gated rows cannot drift to off-protocol seeds while still looking like
 paper-denominator progress. Runtime fields are checked against generated
 `expected_runtime_policy`, so rows must carry the paper worker count, ReAct turn
-budget, and merge batch size where the originating stage requires them.
+budget, and merge batch size where the originating stage requires them. Command
+evidence is checked against generated `expected_command_policy`, so rows must
+carry `extra.command_policy` and a `source_command` containing the upstream
+command fragments required by the originating stage.
 
 The full-denominator approval packet can be checked with:
 

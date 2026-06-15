@@ -72,6 +72,7 @@
         "docs/ara/trace2skill_spreadsheetbench/results/closeout_audit.json",
         "docs/ara/trace2skill_spreadsheetbench/validation.md"
       ],
+      "expected_command_policy": null,
       "expected_dataset_slice": null,
       "expected_runtime_policy": null,
       "expected_seed_policy": null,
@@ -99,6 +100,7 @@
         "tmp/trace2skill-one-case-live/stage2_analyst_prompt.md",
         "tmp/trace2skill-one-case-live/stage2_fanout.json"
       ],
+      "expected_command_policy": null,
       "expected_dataset_slice": {
         "case_count": 1,
         "case_range": "0..1",
@@ -140,6 +142,13 @@
         "model_one_case_seed_41/outputs/eval_official_results.json",
         "model_one_case_seed_41/leaven_results.jsonl"
       ],
+      "expected_command_policy": {
+        "kind": "upstream-eval",
+        "required_source_command_fragments": [
+          "run_spreadsheetbench.py",
+          "evaluate_with_official.py"
+        ]
+      },
       "expected_dataset_slice": {
         "case_count": 1,
         "case_range": "0..1",
@@ -190,6 +199,13 @@
         "subset_<start>_<end>_seed_41/outputs/eval_official_results.json",
         "subset_<start>_<end>_seed_41/leaven_results.jsonl"
       ],
+      "expected_command_policy": {
+        "kind": "upstream-eval",
+        "required_source_command_fragments": [
+          "run_spreadsheetbench.py",
+          "evaluate_with_official.py"
+        ]
+      },
       "expected_dataset_slice": {
         "case_count_max_exclusive": 200,
         "case_count_min": 1,
@@ -263,6 +279,17 @@
         "skill_evolution_seed_{seed}/error_driven_skill_evolution/stage3_merge_manifest.json",
         "skill_evolution_seed_{seed}/error_driven_skill_evolution/skills"
       ],
+      "expected_command_policy": {
+        "kind": "skill-evolution",
+        "required_source_command_fragments": [
+          "run_spreadsheetbench.py",
+          "evaluate_with_official.py",
+          "analyze_results.py",
+          "analysis/run_error_analysis.py",
+          "analysis/run_success_analysis_llm.py",
+          "skill_evolver.run_parallel_skill_evolution"
+        ]
+      },
       "expected_dataset_slice": {
         "case_count": 200,
         "case_range": "0..200",
@@ -322,6 +349,13 @@
         "validation_train_seed_{seed}/evolved_outputs/eval_official_results.json",
         "best_seed_selection_note.md"
       ],
+      "expected_command_policy": {
+        "kind": "upstream-eval",
+        "required_source_command_fragments": [
+          "run_spreadsheetbench.py",
+          "evaluate_with_official.py"
+        ]
+      },
       "expected_dataset_slice": {
         "case_count": 200,
         "case_range": "0..200",
@@ -375,6 +409,13 @@
         "heldout_seed_<best>/outputs/eval_official_results.json",
         "heldout_seed_<best>/leaven_results.jsonl"
       ],
+      "expected_command_policy": {
+        "kind": "upstream-eval",
+        "required_source_command_fragments": [
+          "run_spreadsheetbench.py",
+          "evaluate_with_official.py"
+        ]
+      },
       "expected_dataset_slice": {
         "case_count": 200,
         "case_range": "200..400",
@@ -416,6 +457,7 @@
         "docs/ara/trace2skill_spreadsheetbench/plots/trace2skill_targets.png",
         "docs/ara/trace2skill_spreadsheetbench/results/closeout_audit.json"
       ],
+      "expected_command_policy": null,
       "expected_dataset_slice": {
         "denominator": "seed-aggregate-41-42-43",
         "kind": "aggregate",
@@ -454,6 +496,7 @@
         "complete rendered prompt manifests for every claimed model call",
         "updated closeout_audit.json with overall_complete true only after objective-wide proof"
       ],
+      "expected_command_policy": null,
       "expected_dataset_slice": {
         "case_count": 400,
         "denominator": "full-paper-denominator",

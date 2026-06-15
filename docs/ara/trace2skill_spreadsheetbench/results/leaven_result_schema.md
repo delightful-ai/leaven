@@ -46,7 +46,8 @@ what Leaven actually ran.
   },
   "runtime": {
     "seconds": null,
-    "workers": 128
+    "workers": 128,
+    "max_turns": 100
   },
   "source_command": "LEAVEN_TRACE2SKILL_LIVE=1 ...",
   "artifact_paths": [
@@ -59,6 +60,7 @@ what Leaven actually ran.
   ],
   "extra": {
     "runbook_stage_id": "G4",
+    "command_policy": "upstream-eval",
     "approval_artifact_paths": [
       "docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md"
     ]
@@ -88,6 +90,7 @@ what Leaven actually ran.
 | `source_command` | string | Exact command or harness invocation that produced the metric. |
 | `artifact_paths` | array | Non-empty list of inspectable artifacts. |
 | `extra.runbook_stage_id` | string | Must name a stage in `full_denominator_runbook.json`; that stage's `allowed_label` must match `proof_classification`. |
+| `extra.command_policy` | string | Required when the named runbook stage has `expected_command_policy`; must match that policy's `kind`. |
 | `extra.approval_artifact_paths` | array | Required for every approval-gated class: `model-one-case`, `paper-subset`, `evolving-split-run`, `training-validation-candidate`, `held-out-single-seed-candidate`, `seed-aggregate-candidate`, `paper-denominator-candidate`, and `paper-denominator-reproduction`. Each entry must also appear in `artifact_paths`. |
 | `notes` | string | Empty string is allowed; missing is not. |
 
@@ -137,3 +140,7 @@ what Leaven actually ran.
   `expected_runtime_policy`: upstream run rows carry the paper worker count and
   ReAct turn budget, and skill-evolution rows additionally carry
   `extra.merge_batch_size: 32`.
+- Result rows must also satisfy the named runbook stage's generated
+  `expected_command_policy`: `extra.command_policy` must match the generated
+  policy kind, and `source_command` must include the upstream command fragments
+  required for that stage.

@@ -304,6 +304,41 @@ def check_stage_runtime_policy(
             )
 
 
+def check_stage_command_policy(
+    prefix: str,
+    stage: dict[str, Any] | None,
+    record: dict[str, Any],
+    errors: list[str],
+) -> None:
+    if stage is None:
+        return
+    stage_id = stage.get("id")
+    expected = stage.get("expected_command_policy")
+    if expected is None:
+        return
+    if not isinstance(expected, dict):
+        errors.append(f"{prefix} runbook stage {stage_id!r} expected_command_policy must be an object or null")
+        return
+
+    extra = record.get("extra")
+    command_policy = extra.get("command_policy") if isinstance(extra, dict) else None
+    expected_kind = expected.get("kind")
+    if command_policy != expected_kind:
+        errors.append(f"{prefix} {stage_id} rows must use extra.command_policy {expected_kind!r}")
+
+    source_command = record.get("source_command")
+    if not isinstance(source_command, str) or not source_command:
+        errors.append(f"{prefix} source_command must be a non-empty string")
+        return
+    fragments = expected.get("required_source_command_fragments")
+    if not isinstance(fragments, list) or not all(isinstance(item, str) and item for item in fragments):
+        errors.append(f"{prefix} runbook stage {stage_id!r} expected_command_policy fragments must be strings")
+        return
+    for fragment in fragments:
+        if fragment not in source_command:
+            errors.append(f"{prefix} {stage_id} source_command must include {fragment!r}")
+
+
 def check_record(
     repo_root: Path,
     path: Path,
@@ -335,6 +370,7 @@ def check_record(
     check_stage_dataset_slice(prefix, stage, dataset_slice, errors)
     check_stage_seed_policy(prefix, stage, record, errors)
     check_stage_runtime_policy(prefix, stage, record, errors)
+    check_stage_command_policy(prefix, stage, record, errors)
 
     artifact_paths = record.get("artifact_paths")
     if not isinstance(artifact_paths, list) or not artifact_paths:

@@ -47,6 +47,7 @@ Normal approval preflight passes: `false`
 - Expected dataset slice: `null`
 - Expected seed policy: `null`
 - Expected runtime policy: `null`
+- Expected command policy: `null`
 
 Commands:
 
@@ -72,6 +73,7 @@ Expected artifacts:
 - Expected dataset slice: `{"case_count": 1, "case_range": "0..1", "denominator_contains": "one-case-13-1", "kind": "one-case"}`
 - Expected seed policy: `null`
 - Expected runtime policy: `null`
+- Expected command policy: `null`
 
 Commands:
 
@@ -101,6 +103,7 @@ Expected artifacts:
 - Expected dataset slice: `{"case_count": 1, "case_range": "0..1", "denominator_contains": "one-case-13-1", "kind": "one-case"}`
 - Expected seed policy: `{"kind": "exact", "seed": 41}`
 - Expected runtime policy: `{"kind": "upstream-run", "max_turns": 100, "workers": 1}`
+- Expected command policy: `{"kind": "upstream-eval", "required_source_command_fragments": ["run_spreadsheetbench.py", "evaluate_with_official.py"]}`
 
 Commands:
 
@@ -139,6 +142,7 @@ Expected artifacts:
 - Expected dataset slice: `{"case_count_max_exclusive": 200, "case_count_min": 1, "denominator_contains": "subset", "forbidden_denominator_fragments": ["paper-denominator", "full-paper"], "kind": "held-out-subset", "range_end_max": 400, "range_start_min": 200}`
 - Expected seed policy: `{"kind": "exact", "seed": 41}`
 - Expected runtime policy: `{"kind": "upstream-run", "max_turns": 100, "workers": 128}`
+- Expected command policy: `{"kind": "upstream-eval", "required_source_command_fragments": ["run_spreadsheetbench.py", "evaluate_with_official.py"]}`
 
 Commands:
 
@@ -179,6 +183,7 @@ Expected artifacts:
 - Expected dataset slice: `{"case_count": 200, "case_range": "0..200", "denominator": "evolving-split-0..200", "kind": "exact-range"}`
 - Expected seed policy: `{"kind": "one-of", "seeds": [41, 42, 43]}`
 - Expected runtime policy: `{"kind": "skill-evolution", "max_turns": 100, "merge_batch_size": 32, "workers": 128}`
+- Expected command policy: `{"kind": "skill-evolution", "required_source_command_fragments": ["run_spreadsheetbench.py", "evaluate_with_official.py", "analyze_results.py", "analysis/run_error_analysis.py", "analysis/run_success_analysis_llm.py", "skill_evolver.run_parallel_skill_evolution"]}`
 
 Commands:
 
@@ -236,6 +241,7 @@ Expected artifacts:
 - Expected dataset slice: `{"case_count": 200, "case_range": "0..200", "denominator": "training-validation-0..200", "kind": "exact-range"}`
 - Expected seed policy: `{"kind": "one-of", "seeds": [41, 42, 43]}`
 - Expected runtime policy: `{"kind": "upstream-run", "max_turns": 100, "workers": 128}`
+- Expected command policy: `{"kind": "upstream-eval", "required_source_command_fragments": ["run_spreadsheetbench.py", "evaluate_with_official.py"]}`
 
 Commands:
 
@@ -280,6 +286,7 @@ Expected artifacts:
 - Expected dataset slice: `{"case_count": 200, "case_range": "200..400", "denominator": "held-out-200..400", "kind": "exact-range"}`
 - Expected seed policy: `{"kind": "one-of", "seeds": [41, 42, 43]}`
 - Expected runtime policy: `{"kind": "upstream-run", "max_turns": 100, "workers": 128}`
+- Expected command policy: `{"kind": "upstream-eval", "required_source_command_fragments": ["run_spreadsheetbench.py", "evaluate_with_official.py"]}`
 
 Commands:
 
@@ -319,6 +326,7 @@ Expected artifacts:
 - Expected dataset slice: `{"denominator": "seed-aggregate-41-42-43", "kind": "aggregate", "seeds": [41, 42, 43]}`
 - Expected seed policy: `{"kind": "all-of", "seeds": [41, 42, 43]}`
 - Expected runtime policy: `null`
+- Expected command policy: `null`
 
 Commands:
 
@@ -346,6 +354,7 @@ Expected artifacts:
 - Expected dataset slice: `{"case_count": 400, "denominator": "full-paper-denominator", "kind": "full-paper", "required_split_ranges": ["0..200", "200..400"], "seeds": [41, 42, 43]}`
 - Expected seed policy: `{"kind": "all-of", "seeds": [41, 42, 43]}`
 - Expected runtime policy: `null`
+- Expected command policy: `null`
 
 Commands:
 

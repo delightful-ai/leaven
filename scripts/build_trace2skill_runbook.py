@@ -43,6 +43,7 @@ def stage(
     expected_dataset_slice: dict[str, Any] | None = None,
     expected_seed_policy: dict[str, Any] | None = None,
     expected_runtime_policy: dict[str, Any] | None = None,
+    expected_command_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "id": stage_id,
@@ -57,6 +58,7 @@ def stage(
         "expected_dataset_slice": expected_dataset_slice,
         "expected_seed_policy": expected_seed_policy,
         "expected_runtime_policy": expected_runtime_policy,
+        "expected_command_policy": expected_command_policy,
     }
 
 
@@ -110,6 +112,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             None,
             None,
             None,
+            None,
         ),
         stage(
             "G1",
@@ -140,6 +143,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
                 "case_count": 1,
                 "denominator_contains": "one-case-13-1",
             },
+            None,
             None,
             None,
         ),
@@ -180,6 +184,13 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
                 "kind": "upstream-run",
                 "workers": 1,
                 "max_turns": turn_budget,
+            },
+            {
+                "kind": "upstream-eval",
+                "required_source_command_fragments": [
+                    "run_spreadsheetbench.py",
+                    "evaluate_with_official.py",
+                ],
             },
         ),
         stage(
@@ -224,6 +235,13 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
                 "kind": "upstream-run",
                 "workers": workers,
                 "max_turns": turn_budget,
+            },
+            {
+                "kind": "upstream-eval",
+                "required_source_command_fragments": [
+                    "run_spreadsheetbench.py",
+                    "evaluate_with_official.py",
+                ],
             },
         ),
         stage(
@@ -284,6 +302,17 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
                 "max_turns": turn_budget,
                 "merge_batch_size": merge_batch_size,
             },
+            {
+                "kind": "skill-evolution",
+                "required_source_command_fragments": [
+                    "run_spreadsheetbench.py",
+                    "evaluate_with_official.py",
+                    "analyze_results.py",
+                    "analysis/run_error_analysis.py",
+                    "analysis/run_success_analysis_llm.py",
+                    "skill_evolver.run_parallel_skill_evolution",
+                ],
+            },
         ),
         stage(
             "G3V",
@@ -329,6 +358,13 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
                 "workers": workers,
                 "max_turns": turn_budget,
             },
+            {
+                "kind": "upstream-eval",
+                "required_source_command_fragments": [
+                    "run_spreadsheetbench.py",
+                    "evaluate_with_official.py",
+                ],
+            },
         ),
         stage(
             "G4",
@@ -369,6 +405,13 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
                 "workers": workers,
                 "max_turns": turn_budget,
             },
+            {
+                "kind": "upstream-eval",
+                "required_source_command_fragments": [
+                    "run_spreadsheetbench.py",
+                    "evaluate_with_official.py",
+                ],
+            },
         ),
         stage(
             "G5",
@@ -401,6 +444,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
                 "seeds": packet["protocol"]["seeds"],
             },
             None,
+            None,
         ),
         stage(
             "G6",
@@ -432,6 +476,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
                 "kind": "all-of",
                 "seeds": packet["protocol"]["seeds"],
             },
+            None,
             None,
         ),
     ]
@@ -498,6 +543,7 @@ def write_markdown(runbook: dict[str, Any], output: Path) -> None:
                 f"- Expected dataset slice: `{json.dumps(stage_item['expected_dataset_slice'], sort_keys=True)}`",
                 f"- Expected seed policy: `{json.dumps(stage_item['expected_seed_policy'], sort_keys=True)}`",
                 f"- Expected runtime policy: `{json.dumps(stage_item['expected_runtime_policy'], sort_keys=True)}`",
+                f"- Expected command policy: `{json.dumps(stage_item['expected_command_policy'], sort_keys=True)}`",
                 "",
                 "Commands:",
                 "",
