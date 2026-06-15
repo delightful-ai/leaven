@@ -152,3 +152,7 @@ entries:
     notes:
       - "Routed runbook dataset-slice result-intake binding as denominator-provenance guardrail evidence."
       - "Kept reproduction claims unchanged because the new checks only reject mislabeled future rows; they create no model-backed rows, overlays, approvals, analyst responses, Stage 3 merges, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#39"
+    notes:
+      - "Routed generated expected_dataset_slice fields as runbook contract hardening, not denominator execution."
+      - "Kept reproduction claims unchanged because the generated contract only constrains future rows; it creates no model-backed rows, overlays, approvals, analyst responses, Stage 3 merges, or Qwen/vLLM execution."
