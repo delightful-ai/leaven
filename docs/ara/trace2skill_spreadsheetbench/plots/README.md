@@ -39,8 +39,11 @@ Current plot panels:
 - distilled portable skill versus ReasoningBank retrieval memory.
 
 Leaven overlays read separate result records from `results/*.jsonl` and display
-a separate legend or marker. If no result JSONL files exist, the plotter renders
-paper targets only. Do not edit paper evidence values to make a plot.
+a separate legend or marker. The plotter runs the result-intake checker before
+drawing overlays, so scratch rows, missing artifact paths, wrong runbook stages,
+or approval-gated rows without admission evidence fail before an image is
+written. If no result JSONL files exist, the plotter renders paper targets only.
+Do not edit paper evidence values to make a plot.
 
 The current manifest records zero overlay records and one non-overlay
 deterministic one-case record. That is intentional: the one-case row has

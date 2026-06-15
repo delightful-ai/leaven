@@ -316,6 +316,23 @@ def validate_trace2skill_plot_freshness(errors: list[str], root: Path) -> None:
         fail(errors, f"plot freshness: {freshness_error}")
 
 
+def validate_trace2skill_plot_result_intake(errors: list[str], root: Path) -> None:
+    repo_root = repo_root_for(root.resolve())
+    checker_path = repo_root / "scripts/check_trace2skill_plot_result_intake.py"
+    if not checker_path.is_file():
+        fail(errors, "missing scripts/check_trace2skill_plot_result_intake.py")
+        return
+    spec = importlib.util.spec_from_file_location("check_trace2skill_plot_result_intake", checker_path)
+    if spec is None or spec.loader is None:
+        fail(errors, f"cannot import {checker_path}")
+        return
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    for plot_error in module.check_plot_result_intake(repo_root, root.resolve()):
+        fail(errors, f"plot result-intake gate: {plot_error}")
+
+
 def validate_trace2skill_result_intake(errors: list[str], root: Path) -> None:
     repo_root = repo_root_for(root.resolve())
     checker_path = repo_root / "scripts/check_trace2skill_result_intake.py"
@@ -702,6 +719,7 @@ def validate(root: Path) -> list[str]:
     validate_trace2skill_stage2_prompt_artifacts(errors, root)
     validate_trace2skill_plot_provenance(errors, root)
     validate_trace2skill_plot_freshness(errors, root)
+    validate_trace2skill_plot_result_intake(errors, root)
     validate_trace2skill_result_intake(errors, root)
     validate_trace2skill_importer_fixture(errors, root)
     validate_trace2skill_evidence_bindings(errors, root)

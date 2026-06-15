@@ -272,27 +272,33 @@ Limit:
   current ARA evidence and current result-row state. It does not create Leaven
   overlays, approve Qwen/vLLM execution, or prove any paper-denominator result.
 
-## 2026-06-14 Temporary Overlay Parser Smoke
+## 2026-06-14 Overlay Result-Intake Gate
 
 Command:
 
 ```bash
-uv run --with matplotlib --with pandas python scripts/plot_trace2skill_ara.py docs/ara/trace2skill_spreadsheetbench --results /tmp/trace2skill-overlay-smoke.jsonl --output /tmp/trace2skill-overlay-smoke.png
+uv run --with pyyaml python scripts/check_trace2skill_plot_result_intake.py docs/ara/trace2skill_spreadsheetbench
 ```
 
 Result:
 
 ```text
-PASS: temporary overlay PNG was written outside the repo.
+PASS: docs/ara/trace2skill_spreadsheetbench plot result-intake gate
 ```
 
 Scope:
 
-- Confirms one valid result-shaped JSONL row can bind to a displayed plot label and render as an overlay marker.
+- Confirms `scripts/plot_trace2skill_ara.py` runs the result-intake checker
+  before drawing result overlays.
+- The checker creates a plot-shaped but provenance-invalid overlay row under
+  `target/` and expects the plotter to fail before writing an image.
+- The integrated Seal Level 1 validator now runs this gate after plot freshness
+  and before result intake.
 
 Limit:
 
-- The smoke row was temporary, classified `mechanics-smoke`, and was not stored in the ARA. It is not a Leaven result.
+- This proves overlay admission control only. It does not add Leaven overlay
+  rows, approve Qwen/vLLM execution, or prove any paper-denominator result.
 
 ## 2026-06-14 Runbook Freshness Check
 

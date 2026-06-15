@@ -8,8 +8,10 @@ unless separate Leaven result overlays are added later.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import math
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -81,6 +83,50 @@ def default_result_paths(ara_dir: Path) -> list[Path]:
     if not results_dir.is_dir():
         return []
     return sorted(results_dir.glob("*.jsonl"))
+
+
+def repo_root_for(ara_root: Path) -> Path:
+    for candidate in (ara_root, *ara_root.parents):
+        if (candidate / "scripts/check_trace2skill_result_intake.py").is_file():
+            return candidate
+    return Path.cwd()
+
+
+def check_result_intake(repo_root: Path, ara_dir: Path, paths: list[Path]) -> None:
+    if not paths:
+        return
+    checker_path = repo_root / "scripts/check_trace2skill_result_intake.py"
+    spec = importlib.util.spec_from_file_location("check_trace2skill_result_intake", checker_path)
+    if spec is None or spec.loader is None:
+        raise ValueError(f"cannot import result-intake checker: {checker_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    runbook = json.loads((ara_dir / "results/full_denominator_runbook.json").read_text(encoding="utf-8"))
+    runbook_stages = {
+        stage["id"]: stage
+        for stage in runbook.get("stages", [])
+        if isinstance(stage, dict) and isinstance(stage.get("id"), str)
+    }
+    errors: list[str] = []
+    for path in paths:
+        resolved = path.resolve()
+        try:
+            rows = module.load_jsonl(resolved)
+        except (json.JSONDecodeError, OSError, ValueError) as exc:
+            errors.append(f"{path} is not valid result JSONL: {exc}")
+            continue
+        for line_number, record in rows:
+            try:
+                resolved.relative_to(repo_root)
+            except ValueError:
+                errors.append(f"{path}:{line_number} result files must live under the repo root")
+                continue
+            module.check_record(repo_root, resolved, line_number, record, runbook_stages, errors)
+    if errors:
+        detail = "; ".join(errors)
+        raise ValueError(f"result overlays failed result intake: {detail}")
 
 
 def load_result_records(paths: list[Path]) -> list[dict[str, Any]]:
@@ -198,10 +244,12 @@ def main() -> int:
     args = parser.parse_args()
 
     ara_dir = args.ara_dir
+    repo_root = repo_root_for(ara_dir.resolve()).resolve()
     tables_dir = ara_dir / "evidence/tables"
     output = args.output or ara_dir / "plots/trace2skill_targets.png"
     output.parent.mkdir(parents=True, exist_ok=True)
     result_paths = [] if args.no_result_overlays else (args.results or default_result_paths(ara_dir))
+    check_result_intake(repo_root, ara_dir.resolve(), result_paths)
     result_records = load_result_records(result_paths)
 
     main_table = parse_markdown_table(tables_dir / "table_main_spreadsheetbench.md")
