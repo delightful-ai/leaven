@@ -147,6 +147,45 @@ Limit:
 - This proves table-cell transcription fidelity only. It does not prove Leaven
   reproduced any paper target value.
 
+## 2026-06-14 Prompt Index Fidelity Check
+
+Artifact:
+
+```text
+scripts/check_trace2skill_prompt_index.py
+scripts/validate_ara.py
+docs/ara/trace2skill_spreadsheetbench/evidence/prompt_templates.md
+tmp/repros/trace2skill-upstream/
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_prompt_index.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Current result:
+
+```text
+PASS: docs/ara/trace2skill_spreadsheetbench prompt index (5 families)
+```
+
+Scope:
+
+- Checks the five prompt families indexed in `prompt_templates.md` against the
+  local upstream Trace2Skill checkout.
+- Verifies family counts for spreadsheet system prompts, error-evolving
+  prompts, success/combined evolving prompts, parallel merge/application
+  prompts, and released skill files.
+- Verifies every representative path in the index is locally inspectable.
+- The same check now runs inside `scripts/validate_ara.py`.
+
+Limit:
+
+- This proves prompt-index fidelity only. It does not copy full prompts into
+  the ARA or prove rendered live-call prompts, model execution, analyst output,
+  or merge behavior.
+
 ## 2026-06-14 Result Overlay Schema Check
 
 Command:
