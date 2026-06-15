@@ -197,6 +197,23 @@ def validate_trace2skill_config_fidelity(errors: list[str], root: Path) -> None:
         fail(errors, f"config fidelity: {config_error}")
 
 
+def validate_trace2skill_dataset_manifest_freshness(errors: list[str], root: Path) -> None:
+    repo_root = repo_root_for(root.resolve())
+    checker_path = repo_root / "scripts/check_trace2skill_dataset_manifest_freshness.py"
+    if not checker_path.is_file():
+        fail(errors, "missing scripts/check_trace2skill_dataset_manifest_freshness.py")
+        return
+    spec = importlib.util.spec_from_file_location("check_trace2skill_dataset_manifest_freshness", checker_path)
+    if spec is None or spec.loader is None:
+        fail(errors, f"cannot import {checker_path}")
+        return
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    for freshness_error in module.check_dataset_manifest_freshness(repo_root, root.resolve()):
+        fail(errors, f"dataset manifest freshness: {freshness_error}")
+
+
 def validate_trace2skill_upstream_code_manifest(errors: list[str], root: Path) -> None:
     repo_root = repo_root_for(root.resolve())
     checker_path = repo_root / "scripts/check_trace2skill_upstream_code_manifest.py"
@@ -644,6 +661,7 @@ def validate(root: Path) -> list[str]:
     validate_trace2skill_prompt_manifest(errors, root)
     validate_trace2skill_figure_index(errors, root)
     validate_trace2skill_config_fidelity(errors, root)
+    validate_trace2skill_dataset_manifest_freshness(errors, root)
     validate_trace2skill_upstream_code_manifest(errors, root)
     validate_trace2skill_one_case_artifacts(errors, root)
     validate_trace2skill_one_case_result_freshness(errors, root)

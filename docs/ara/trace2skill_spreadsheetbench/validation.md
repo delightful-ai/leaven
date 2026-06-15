@@ -610,6 +610,42 @@ Limit:
 - This manifests local data provenance and split materialization only. It does
   not approve a Qwen/vLLM run and does not produce any Leaven metric rows.
 
+## 2026-06-14 Dataset Manifest Freshness Check
+
+Artifact:
+
+```text
+scripts/check_trace2skill_dataset_manifest_freshness.py
+scripts/build_trace2skill_dataset_manifest.py
+docs/ara/trace2skill_spreadsheetbench/results/dataset_manifest.json
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_dataset_manifest_freshness.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Current result:
+
+```text
+PASS: docs/ara/trace2skill_spreadsheetbench dataset manifest freshness
+```
+
+Scope:
+
+- Rebuilds `dataset_manifest.json` into a temporary directory from the current
+  local upstream SpreadsheetBench data.
+- Compares the temporary manifest byte-for-byte with the committed manifest.
+- The integrated Seal Level 1 validator now runs this freshness check after the
+  protocol/config fidelity check.
+
+Limit:
+
+- This proves only that Leaven's recorded 400-row dataset provenance and split
+  manifest are current. It does not approve model execution, inspect held-out
+  results, create overlays, or reproduce any Trace2Skill paper metric.
+
 ## 2026-06-14 Closeout Audit
 
 Artifact:
