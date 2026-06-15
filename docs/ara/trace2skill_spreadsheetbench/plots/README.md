@@ -19,6 +19,18 @@ Expected output:
 docs/ara/trace2skill_spreadsheetbench/plots/trace2skill_targets.png
 ```
 
+The plot provenance manifest is checked with:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_plot_provenance.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Regenerate the manifest after an intentional plot or evidence-table change with:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_plot_provenance.py docs/ara/trace2skill_spreadsheetbench --write
+```
+
 Current plot panels:
 
 - same-model Deepening baseline versus evolved SpreadsheetBench-Verified Vrf;
@@ -29,3 +41,7 @@ Current plot panels:
 Leaven overlays read separate result records from `results/*.jsonl` and display
 a separate legend or marker. If no result JSONL files exist, the plotter renders
 paper targets only. Do not edit paper evidence values to make a plot.
+
+The current manifest records zero overlay records and one non-overlay
+deterministic one-case record. That is intentional: the one-case row has
+`plot_binding: null` and must not be drawn on full-paper target axes.

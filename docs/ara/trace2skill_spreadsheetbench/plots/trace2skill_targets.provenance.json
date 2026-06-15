@@ -1,0 +1,174 @@
+{
+  "input_tables": [
+    {
+      "bytes": 2991,
+      "path": "evidence/tables/table_main_spreadsheetbench.md",
+      "sha256": "8dbf605c5bf0cf5e03dda5ec4be2e748bc249d474530bc1c841c7088acc4f670"
+    },
+    {
+      "bytes": 986,
+      "path": "evidence/tables/table_parallel_vs_sequential.md",
+      "sha256": "281019ecaf95c770df2b9e685bf7615071c69fc0551609f2d54ba14da87cf778"
+    },
+    {
+      "bytes": 1011,
+      "path": "evidence/tables/table_reasoningbank.md",
+      "sha256": "d7b8d461e7bc1ed90465fee24a11c5bbac9639205fc8e2948dfb8bd1f50339f7"
+    }
+  ],
+  "limits": [
+    "Paper targets are not Leaven reproduction results.",
+    "Records with plot_binding=null are intentionally not overlaid.",
+    "Full paper reproduction requires paper-denominator result rows, not this plot manifest."
+  ],
+  "panels": {
+    "avg_improvement": [
+      {
+        "value": 9.18,
+        "x_label": "122B\nDeep +Error"
+      },
+      {
+        "value": -0.9,
+        "x_label": "122B\nDeep +Success"
+      },
+      {
+        "value": 9.19,
+        "x_label": "122B\nDeep +Combined"
+      },
+      {
+        "value": 7.04,
+        "x_label": "122B\nCreate +Error"
+      },
+      {
+        "value": 17.62,
+        "x_label": "122B\nCreate +Success"
+      },
+      {
+        "value": 14.96,
+        "x_label": "122B\nCreate +Combined"
+      },
+      {
+        "value": 4.47,
+        "x_label": "35B\nDeep +Error"
+      },
+      {
+        "value": 9.85,
+        "x_label": "35B\nDeep +Success"
+      },
+      {
+        "value": 14.78,
+        "x_label": "35B\nDeep +Combined"
+      },
+      {
+        "value": 18.26,
+        "x_label": "35B\nCreate +Error"
+      },
+      {
+        "value": 4.54,
+        "x_label": "35B\nCreate +Success"
+      },
+      {
+        "value": 11.69,
+        "x_label": "35B\nCreate +Combined"
+      }
+    ],
+    "parallel_vs_sequential": [
+      {
+        "122B Vrf": 59.0,
+        "35B Vrf": 26.17,
+        "Time": 15.0,
+        "x_label": "Seq-B=4"
+      },
+      {
+        "122B Vrf": 61.83,
+        "35B Vrf": 26.0,
+        "Time": 60.0,
+        "x_label": "Seq-B=1"
+      },
+      {
+        "122B Vrf": 65.83,
+        "35B Vrf": 27.0,
+        "Time": 3.0,
+        "x_label": "Parallel (ours)"
+      }
+    ],
+    "reasoningbank": [
+      {
+        "ReasoningBank": 56.0,
+        "Trace2Skill skill": 69.83,
+        "metric": "122B Vrf"
+      },
+      {
+        "ReasoningBank": 40.1,
+        "Trace2Skill skill": 47.17,
+        "metric": "122B Soft"
+      },
+      {
+        "ReasoningBank": 21.3,
+        "Trace2Skill skill": 29.53,
+        "metric": "122B Hard"
+      },
+      {
+        "ReasoningBank": 20.5,
+        "Trace2Skill skill": 29.67,
+        "metric": "35B Vrf"
+      },
+      {
+        "ReasoningBank": 17.3,
+        "Trace2Skill skill": 18.8,
+        "metric": "35B Soft"
+      },
+      {
+        "ReasoningBank": 4.97,
+        "Trace2Skill skill": 5.73,
+        "metric": "35B Hard"
+      }
+    ],
+    "same_model_deepening_vrf": [
+      {
+        "value": 48.33,
+        "x_label": "Human\n122B"
+      },
+      {
+        "value": 65.83,
+        "x_label": "+Error\n122B"
+      },
+      {
+        "value": 69.83,
+        "x_label": "+Combined\n122B"
+      },
+      {
+        "value": 9.67,
+        "x_label": "Human\n35B"
+      },
+      {
+        "value": 27.0,
+        "x_label": "+Error\n35B"
+      },
+      {
+        "value": 29.67,
+        "x_label": "+Combined\n35B"
+      }
+    ]
+  },
+  "plot": {
+    "bytes": 274124,
+    "kind": "paper-target-sheet",
+    "path": "plots/trace2skill_targets.png",
+    "sha256": "b65665159aa769810184fbd295bc9c17df8a00e48d9cf4c5e757d1444b25c985"
+  },
+  "result_overlay_summary": {
+    "non_overlay_records": 1,
+    "non_overlay_sources": [
+      "results/deterministic_one_case.jsonl:1"
+    ],
+    "overlay_records": 0,
+    "overlay_sources": [],
+    "paper_denominator_records": 0,
+    "records_total": 1,
+    "sources": [
+      "results/deterministic_one_case.jsonl:1"
+    ]
+  },
+  "schema_version": "leaven.trace2skill.plot_provenance.v1"
+}
