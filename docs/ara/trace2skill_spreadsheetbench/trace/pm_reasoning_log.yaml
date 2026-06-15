@@ -284,3 +284,7 @@ entries:
     notes:
       - "Routed runbook forbidden-label contract as runbook claim-boundary/proxy-refusal evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the change only makes validate_ara reject runbook stages whose forbidden labels no longer block stronger-than-evidence claims; it creates no model-backed one-case row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#72"
+    notes:
+      - "Routed PAPER closeout-boundary contract as manifest claim-boundary/proxy-refusal evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the change only prevents the ARA front door from implying overlays alone prove reproduction; it creates no model-backed one-case row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
