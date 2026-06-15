@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T18:33-07:00"
-  turn_count: 10
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, and prompt-index validation now make the full-denominator path more executable without approving a run."
+  last_turn: "2026-06-14T18:36-07:00"
+  turn_count: 11
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, and framework figure-source validation now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -73,6 +73,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Added prompt-index checker; five prompt families matched upstream counts and representative paths."
+  - turn: 11
+    type: experiment
+    id: "PM-2026-06-14-012"
+    routing: direct
+    provenance: ai-executed
+    summary: "Added figure-index checker; the ARA framework figure matched the upstream source path, byte size, SHA-256 digest, and PNG magic bytes."
 
 ai_actions:
   - turn: 1
@@ -190,6 +196,14 @@ ai_actions:
       - "scripts/check_trace2skill_prompt_index.py"
       - "scripts/validate_ara.py"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 11
+    action: "Added scripts/check_trace2skill_figure_index.py, wired it into validate_ara.py, and recorded the framework figure-source fidelity pass in validation.md."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/check_trace2skill_figure_index.py"
+      - "scripts/validate_ara.py"
+      - "docs/ara/trace2skill_spreadsheetbench/evidence/figures/figure_trace2skill_framework.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -214,6 +228,8 @@ key_context:
     excerpt: "Table fidelity check passed for table_main_v1, table_seq_parallel, table_reasoning_bank, table_agentic_ablation, table_math, and table_vqa."
   - turn: 10
     excerpt: "Prompt index check passed for spreadsheet system prompts, error-evolving prompts, success/combined prompts, parallel merge/application prompts, and released skill files."
+  - turn: 11
+    excerpt: "Figure index check passed for fig:pipeline, source path tmp/skill_opt_sources/arx_2603.25158/src/figures/trace2skill_framwork.png, 379440 bytes, and SHA-256 4ec0830d426a92198fb5b028a93a908de77787d983bee2f53813fb784f54845c."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."
