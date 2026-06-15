@@ -562,6 +562,41 @@ Limit:
   remain incomplete until approved Qwen/vLLM runs produce denominator-labeled
   Leaven result records.
 
+## 2026-06-14 Closeout Freshness Check
+
+Artifact:
+
+```text
+scripts/check_trace2skill_closeout_freshness.py
+scripts/audit_trace2skill_closeout.py
+docs/ara/trace2skill_spreadsheetbench/results/closeout_audit.{json,md}
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_closeout_freshness.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Current result:
+
+```text
+PASS: docs/ara/trace2skill_spreadsheetbench closeout freshness
+```
+
+Scope:
+
+- Regenerates the closeout audit into a temporary directory.
+- Verifies committed JSON and Markdown closeout outputs exactly match current
+  approval, result-row, dataset-manifest, and deterministic one-case state.
+- The same check now runs inside `scripts/validate_ara.py`.
+
+Limit:
+
+- This proves generated closeout freshness only. It does not make
+  `overall_complete` true, approve model/hardware/cost, create result rows,
+  draw overlays, or execute Qwen/vLLM.
+
 ## 2026-06-14 Full-Denominator Runbook
 
 Artifact:

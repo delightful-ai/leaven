@@ -367,6 +367,23 @@ def validate_trace2skill_artifact_contract(errors: list[str], root: Path) -> Non
         fail(errors, f"artifact contract: {contract_error}")
 
 
+def validate_trace2skill_closeout_freshness(errors: list[str], root: Path) -> None:
+    repo_root = repo_root_for(root.resolve())
+    checker_path = repo_root / "scripts/check_trace2skill_closeout_freshness.py"
+    if not checker_path.is_file():
+        fail(errors, "missing scripts/check_trace2skill_closeout_freshness.py")
+        return
+    spec = importlib.util.spec_from_file_location("check_trace2skill_closeout_freshness", checker_path)
+    if spec is None or spec.loader is None:
+        fail(errors, f"cannot import {checker_path}")
+        return
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    for freshness_error in module.check_closeout_freshness(repo_root, root.resolve()):
+        fail(errors, f"closeout freshness: {freshness_error}")
+
+
 def validate_result_record(errors: list[str], record: Any, rel_path: Path, line_number: int) -> None:
     prefix = f"{rel_path}:{line_number}"
     if not isinstance(record, dict):
@@ -586,6 +603,7 @@ def validate(root: Path) -> list[str]:
     validate_trace2skill_runbook_labels(errors, root)
     validate_trace2skill_runbook_freshness(errors, root)
     validate_trace2skill_artifact_contract(errors, root)
+    validate_trace2skill_closeout_freshness(errors, root)
 
     mechanics_evidence = root / "evidence/leaven_mechanics_tests.md"
     if mechanics_evidence.is_file():

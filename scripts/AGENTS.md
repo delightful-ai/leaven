@@ -19,6 +19,7 @@ Current scripts:
 - `check_trace2skill_runbook_labels.py`: no-spend ARA checker for result proof classifications; verifies generated runbook labels, result docs, importer/plotter/validator constants, and non-overlay restrictions stay synchronized.
 - `check_trace2skill_runbook_freshness.py`: no-spend ARA checker that regenerates the full-denominator runbook in a temp directory and verifies the committed JSON/Markdown outputs are not stale.
 - `check_trace2skill_artifact_contract.py`: no-spend ARA checker for full-denominator artifact expectations; verifies approval-packet expected artifacts and per-stage runbook expected artifacts keep the future result-intake evidence contract visible.
+- `check_trace2skill_closeout_freshness.py`: no-spend ARA checker that regenerates the closeout audit in a temp directory and verifies committed JSON/Markdown outputs still match current approval, result, dataset, and one-case state.
 
 ## Local Rules
 - Keep script defaults local and credential-free. Network, cloud, live model, or destructive behavior must be an explicit flag or environment opt-in.
