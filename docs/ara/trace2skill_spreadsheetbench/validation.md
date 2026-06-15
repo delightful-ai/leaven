@@ -893,6 +893,45 @@ Limit:
   not prove model-backed Qwen/vLLM execution, held-out rows `200..400`, seed
   aggregation, cross-model rows, or full-paper reproduction.
 
+## 2026-06-14 Deterministic One-Case Result Freshness Check
+
+Artifact:
+
+```text
+scripts/check_trace2skill_one_case_result_freshness.py
+scripts/build_trace2skill_one_case_result.py
+docs/ara/trace2skill_spreadsheetbench/results/deterministic_one_case.jsonl
+tmp/trace2skill-one-case-live/
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_one_case_result_freshness.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Current result:
+
+```text
+PASS: docs/ara/trace2skill_spreadsheetbench deterministic one-case result freshness
+```
+
+Scope:
+
+- Rebuilds `deterministic_one_case.jsonl` into a temporary directory from the
+  current deterministic one-case manifest, ACP receipt, transcript, score
+  report, trajectory, output workbook, and worker script.
+- Compares the temporary JSONL byte-for-byte with the committed result row.
+- The integrated Seal Level 1 validator now runs this freshness check after the
+  deterministic one-case artifact check.
+
+Limit:
+
+- This proves the stored deterministic one-case result row is fresh with
+  respect to current local one-case artifacts. It does not make the row a
+  paper-target overlay, model-backed one-case, held-out split, seed aggregate,
+  or full Trace2Skill reproduction.
+
 ## 2026-06-14 Status Doc Consistency Check
 
 Artifact:
