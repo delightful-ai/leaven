@@ -93,6 +93,7 @@ what Leaven actually ran.
 | `artifact_paths` | array | Non-empty list of inspectable artifacts. |
 | `extra.runbook_stage_id` | string | Must name a stage in `full_denominator_runbook.json`; that stage's `allowed_label` must match `proof_classification`. |
 | `extra.command_policy` | string | Required when the named runbook stage has `expected_command_policy`; must match that policy's `kind`. |
+| `extra.source_metric` | string | Required for rows imported from official SpreadsheetBench evaluator summaries; must name the official source metric behind `metric_name` and any `plot_binding`. |
 | `extra.source_result_paths` | array | Required when the named runbook stage has `expected_aggregate_policy`; each entry must be an inspectable result JSONL, must also appear in `artifact_paths`, and predecessor rows must pass result intake. |
 | `extra.approval_artifact_paths` | array | Required for every approval-gated class: `model-one-case`, `paper-subset`, `evolving-split-run`, `training-validation-candidate`, `held-out-single-seed-candidate`, `seed-aggregate-candidate`, `paper-denominator-candidate`, and `paper-denominator-reproduction`. Each entry must also appear in `artifact_paths`. |
 | `notes` | string | Empty string is allowed; missing is not. |
@@ -178,6 +179,11 @@ what Leaven actually ran.
   required for that stage. When the row has a `dataset_slice.case_range`,
   `source_command` must also include matching concrete `--start_idx` and
   `--end_idx` fragments.
+- Official evaluator-derived rows must keep `extra.source_metric` bound to the
+  metric actually being counted. Non-overlay official rows use the canonical
+  `official_*` metric names, and overlay rows may bind raw official metrics
+  only to compatible score panels. Raw evaluator metrics cannot be relabeled as
+  derived average-improvement or runtime overlays.
 - Aggregate result rows must also satisfy the named runbook stage's generated
   `expected_aggregate_policy`: seed-aggregate rows must cite inspectable source
   result JSONL rows whose held-out single-seed predecessor rows pass result

@@ -141,7 +141,12 @@ carry `extra.command_policy` and a `source_command` containing the upstream
 command fragments required by the originating stage. Range-bearing rows must
 also include concrete `--start_idx` and `--end_idx` fragments matching their
 declared `dataset_slice.case_range`; a row cannot claim held-out range
-`200..202` while its recorded command names `0..2`. Aggregate evidence is
+`200..202` while its recorded command names `0..2`. Official evaluator-derived
+rows must keep `extra.source_metric` tied to the metric actually counted by the
+evaluator. Non-overlay imports use canonical `official_*` metric names, and
+overlays may bind raw official metrics only to compatible score panels; raw
+official evaluator metrics cannot be relabeled as derived average-improvement
+or runtime overlays. Aggregate evidence is
 checked against generated `expected_aggregate_policy`, so seed aggregates must
 cite inspectable held-out single-seed result JSONL rows that themselves pass
 result intake for seeds `41`, `42`, and `43`, with the aggregate `metric_value`

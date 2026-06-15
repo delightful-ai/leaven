@@ -61,6 +61,22 @@ PROMPT_ARTIFACT_WORDS = {
 OPTIONAL_ROW_ARTIFACT_FRAGMENTS = {
     "leaven_results.jsonl",
 }
+OFFICIAL_SOURCE_METRIC_NAMES = {
+    "instance_accuracy": "official_instance_accuracy",
+    "test_case_accuracy": "official_test_case_accuracy",
+    "avg_soft_score": "official_avg_soft_score",
+    "avg_hard_score": "official_avg_hard_score",
+}
+OFFICIAL_SOURCE_METRIC_PLOT_BINDINGS = {
+    ("same_model_deepening_vrf", "left"): {"instance_accuracy"},
+    ("parallel_vs_sequential", "left"): {"instance_accuracy"},
+    ("reasoningbank", "left"): {"instance_accuracy", "avg_soft_score", "avg_hard_score"},
+}
+REASONINGBANK_LABEL_SOURCE_METRICS = {
+    "Vrf": "instance_accuracy",
+    "Soft": "avg_soft_score",
+    "Hard": "avg_hard_score",
+}
 
 
 def parse_case_range(raw: Any) -> tuple[int, int] | None:
@@ -550,6 +566,59 @@ def check_stage_command_policy(
             )
 
 
+def check_official_source_metric(
+    prefix: str,
+    record: dict[str, Any],
+    binding: Any,
+    errors: list[str],
+) -> None:
+    extra = record.get("extra")
+    source_metric = extra.get("source_metric") if isinstance(extra, dict) else None
+    if source_metric is None:
+        return
+    if source_metric not in OFFICIAL_SOURCE_METRIC_NAMES:
+        errors.append(
+            f"{prefix} extra.source_metric must be one of {sorted(OFFICIAL_SOURCE_METRIC_NAMES)!r}"
+        )
+        return
+
+    canonical_name = OFFICIAL_SOURCE_METRIC_NAMES[source_metric]
+    if binding is None:
+        if record.get("metric_name") != canonical_name:
+            errors.append(
+                f"{prefix} non-overlay official source_metric {source_metric!r} "
+                f"must use metric_name {canonical_name!r}"
+            )
+        return
+
+    if not isinstance(binding, dict):
+        return
+    panel = binding.get("panel")
+    axis = binding.get("axis")
+    allowed = OFFICIAL_SOURCE_METRIC_PLOT_BINDINGS.get((panel, axis))
+    if allowed is None or source_metric not in allowed:
+        errors.append(
+            f"{prefix} official source_metric {source_metric!r} cannot bind to plot panel {panel!r}/axis {axis!r}"
+        )
+        return
+
+    if panel == "reasoningbank":
+        x_label = binding.get("x_label")
+        if isinstance(x_label, str):
+            expected = next(
+                (
+                    metric
+                    for label_fragment, metric in REASONINGBANK_LABEL_SOURCE_METRICS.items()
+                    if label_fragment in x_label
+                ),
+                None,
+            )
+            if expected is not None and source_metric != expected:
+                errors.append(
+                    f"{prefix} reasoningbank x_label {x_label!r} requires source_metric {expected!r}"
+                )
+
+
 def source_result_paths(extra: Any) -> list[str] | None:
     if not isinstance(extra, dict):
         return None
@@ -926,6 +995,8 @@ def check_record(
             errors.append(f"{prefix} paper-denominator rows must use vLLM")
         if record.get("model_id") not in {"Qwen3.5-122B-A10B", "Qwen3.5-35B-A3B"}:
             errors.append(f"{prefix} paper-denominator row has non-paper model_id")
+
+    check_official_source_metric(prefix, record, binding, errors)
 
     if binding is None:
         return

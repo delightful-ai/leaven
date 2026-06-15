@@ -1061,6 +1061,41 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "string metric value",
         )
 
+        def mutate_official_source_metric_to_wrong_name(row: dict[str, Any]) -> None:
+            row["extra"] = dict(row["extra"])
+            row["extra"]["source_metric"] = "avg_soft_score"
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "wrong-source-metric-name.jsonl",
+            mutate_official_source_metric_to_wrong_name,
+            "non-overlay official source_metric 'avg_soft_score' must use metric_name 'official_avg_soft_score'",
+            errors,
+            "official source-metric name drift",
+        )
+
+        def mutate_official_source_metric_to_derived_overlay(row: dict[str, Any]) -> None:
+            row["metric_unit"] = "delta_points"
+            row["plot_binding"] = {
+                "panel": "avg_improvement",
+                "x_label": "122B\nDeep +Combined",
+                "series": "Fixture",
+                "axis": "left",
+            }
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "source-metric-derived-overlay.jsonl",
+            mutate_official_source_metric_to_derived_overlay,
+            "official source_metric 'instance_accuracy' cannot bind to plot panel 'avg_improvement'/axis 'left'",
+            errors,
+            "official source-metric derived overlay drift",
+        )
+
         def mutate_missing_eval_artifact(row: dict[str, Any]) -> None:
             row["artifact_paths"] = [
                 path
