@@ -126,8 +126,8 @@ def check_result_intake(repo_root: Path, ara_dir: Path, paths: list[Path]) -> No
             approval_blockers = (
                 module.approval_packet_errors(ara_dir)
                 if (
-                    module.is_actual_ara_result_path(ara_dir, resolved)
-                    and record.get("proof_classification") in module.APPROVAL_REQUIRED_PROOF_CLASSIFICATIONS
+                    record.get("proof_classification") in module.APPROVAL_REQUIRED_PROOF_CLASSIFICATIONS
+                    and record.get("plot_binding") is not None
                 )
                 else None
             )

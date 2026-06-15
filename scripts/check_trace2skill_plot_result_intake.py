@@ -179,8 +179,24 @@ def check_plot_result_intake(repo_root: Path, ara_root: Path) -> list[str]:
         "invalid runbook overlay",
     )
 
+    scratch_blocked_results = target_dir / "blocked-approval-overlay.jsonl"
+    scratch_blocked_output = target_dir / "blocked-approval-overlay.png"
+    scratch_blocked_results.write_text(
+        json.dumps(blocked_approval_overlay_row(repo_root, target_dir), sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    expect_plotter_refusal(
+        repo_root,
+        ara_root,
+        scratch_blocked_results,
+        scratch_blocked_output,
+        "require a runnable approval packet",
+        errors,
+        "blocked scratch approval overlay",
+    )
+
     blocked_results = ara_root / "results/fixture_blocked_approval_overlay.jsonl"
-    blocked_output = target_dir / "blocked-approval-overlay.png"
+    blocked_output = target_dir / "blocked-approval-ara-overlay.png"
     try:
         blocked_results.write_text(
             json.dumps(blocked_approval_overlay_row(repo_root, target_dir), sort_keys=True) + "\n",

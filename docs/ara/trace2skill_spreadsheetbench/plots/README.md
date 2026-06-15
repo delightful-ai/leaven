@@ -42,12 +42,13 @@ Leaven overlays read separate result records from `results/*.jsonl` and display
 a separate legend or marker. The plotter runs the result-intake checker before
 drawing overlays, so scratch rows, missing artifact paths, wrong runbook stages,
 or approval-gated rows without admission evidence fail before an image is
-written. Top-level ARA `results/*.jsonl` overlays that use approval-gated proof
-classifications also require the full-run approval packet to pass normal
-preflight; a blocked `full_run_plan.md` cannot be drawn as reproduced evidence.
-If no result JSONL files exist, or only non-overlay rows exist, the plotter
-renders paper targets only with the documented matplotlib/pandas command. Do not
-edit paper evidence values to make a plot.
+written. Any overlay row with an approval-gated proof classification requires
+the full-run approval packet to pass normal preflight; a blocked
+`full_run_plan.md` cannot be drawn as reproduced evidence from either scratch
+JSONL or top-level ARA `results/*.jsonl`. If no result JSONL files exist, or
+only non-overlay rows exist, the plotter renders paper targets only with the
+documented matplotlib/pandas command. Do not edit paper evidence values to make
+a plot.
 
 The current manifest records zero overlay records and one non-overlay
 deterministic one-case record. That is intentional: the one-case row has
