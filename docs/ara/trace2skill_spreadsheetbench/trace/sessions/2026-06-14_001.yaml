@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T18:31-07:00"
-  turn_count: 9
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, local artifact-path refusal, enforced mechanics-test classification, and paper table-fidelity validation now make the full-denominator path more executable without approving a run."
+  last_turn: "2026-06-14T18:33-07:00"
+  turn_count: 10
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, and prompt-index validation now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -67,6 +67,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Added table-fidelity checker; six ARA evidence tables matched their Trace2Skill TeX source body cells."
+  - turn: 10
+    type: experiment
+    id: "PM-2026-06-14-011"
+    routing: direct
+    provenance: ai-executed
+    summary: "Added prompt-index checker; five prompt families matched upstream counts and representative paths."
 
 ai_actions:
   - turn: 1
@@ -177,6 +183,13 @@ ai_actions:
       - "scripts/check_trace2skill_table_fidelity.py"
       - "scripts/validate_ara.py"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 10
+    action: "Added scripts/check_trace2skill_prompt_index.py, wired it into validate_ara.py, and recorded the five-family prompt-index pass in validation.md."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/check_trace2skill_prompt_index.py"
+      - "scripts/validate_ara.py"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -199,6 +212,8 @@ key_context:
     excerpt: "The expanded focused gate passed 53 tests across manifest, run_artifacts, patch_bridge, patch_replay, one_case, one_case_run, cli, workbook_score, and acp_external_worker."
   - turn: 9
     excerpt: "Table fidelity check passed for table_main_v1, table_seq_parallel, table_reasoning_bank, table_agentic_ablation, table_math, and table_vqa."
+  - turn: 10
+    excerpt: "Prompt index check passed for spreadsheet system prompts, error-evolving prompts, success/combined prompts, parallel merge/application prompts, and released skill files."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."

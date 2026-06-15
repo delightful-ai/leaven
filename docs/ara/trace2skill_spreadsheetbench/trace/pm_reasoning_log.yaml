@@ -35,3 +35,7 @@ entries:
     notes:
       - "Routed table-fidelity validation as ARA denominator evidence; it strengthens target transcription, not reproduced results."
       - "Did not stage a new performance claim because the check compares paper source cells to ARA cells only."
+  - turn: "2026-06-14_001#10"
+    notes:
+      - "Routed prompt-index validation as source-anchor evidence; it checks counts and representative paths, not rendered live prompts."
+      - "Did not stage a new reproduction claim because no model call, analyst call, or merge run occurred."
