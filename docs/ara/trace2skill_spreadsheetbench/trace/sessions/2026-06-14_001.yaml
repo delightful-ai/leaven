@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T19:06-07:00"
-  turn_count: 19
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
+  last_turn: "2026-06-14T19:10-07:00"
+  turn_count: 20
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -127,6 +127,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Added runbook-label checker; runbook stage labels, result proof classifications, importer/plotter/validator constants, and non-overlay restrictions must stay synchronized."
+  - turn: 20
+    type: experiment
+    id: "PM-2026-06-14-021"
+    routing: direct
+    provenance: ai-executed
+    summary: "Added prompt-source manifest checker; every upstream prompt and released-skill file is identified by path, byte size, line count, and SHA-256 before validation passes."
 
 ai_actions:
   - turn: 1
@@ -333,6 +339,20 @@ ai_actions:
       - "docs/ara/trace2skill_spreadsheetbench/results/leaven_result_schema.md"
       - "docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 20
+    action: "Added scripts/check_trace2skill_prompt_manifest.py, generated evidence/prompt_templates.manifest.json for 103 upstream prompt/released-skill files, wired it into validate_ara.py, and updated prompt evidence docs."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/check_trace2skill_prompt_manifest.py"
+      - "scripts/validate_ara.py"
+      - "scripts/AGENTS.md"
+      - "docs/ara/trace2skill_spreadsheetbench/evidence/prompt_templates.manifest.json"
+      - "docs/ara/trace2skill_spreadsheetbench/evidence/prompt_templates.md"
+      - "docs/ara/trace2skill_spreadsheetbench/evidence/README.md"
+      - "docs/ara/trace2skill_spreadsheetbench/PAPER.md"
+      - "docs/ara/trace2skill_spreadsheetbench/coverage.md"
+      - "docs/ara/trace2skill_spreadsheetbench/results/denominator_status.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -375,6 +395,8 @@ key_context:
     excerpt: "Rigor-follow-up check passed directly and through validate_ara; it verifies Level 2 addressed findings F02/F04 are backed by dead-end failure/lesson fields and C07 E08/E09 proof links, while F03/F05 remain partial and approval/rendered-prompt blockers remain open."
   - turn: 19
     excerpt: "Runbook-label check passed directly and through validate_ara; it verifies model-one-case, paper-subset, evolving-split-run, training-validation-candidate, held-out-single-seed-candidate, seed-aggregate-candidate, and paper-denominator-reproduction labels are accepted consistently without creating result rows or overlays."
+  - turn: 20
+    excerpt: "Prompt-source manifest check passed directly and through validate_ara; it records 103 upstream prompt/released-skill files across five families with path, bytes, line_count, and SHA-256 while leaving rendered live-call prompts as future run artifacts."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."
