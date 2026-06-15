@@ -188,3 +188,7 @@ entries:
     notes:
       - "Routed full-paper model/backend identity intake as paper-protocol guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the check only rejects future full-paper rows whose model or serving backend drifts from the paper protocol; it creates no model-backed rows, overlays, approvals, analyst responses, Stage 3 merges, seed aggregates, full-paper rows, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#48"
+    notes:
+      - "Routed plot overlay result-intake admission as scoreboard-integrity evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because plotter admission only rejects future overlay rows that fail provenance intake; it creates no accepted Leaven overlay rows, approvals, analyst responses, Stage 3 merges, seed aggregates, full-paper rows, or Qwen/vLLM execution."

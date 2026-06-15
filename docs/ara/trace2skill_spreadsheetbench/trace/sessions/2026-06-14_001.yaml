@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T20:59-07:00"
-  turn_count: 47
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, generated runbook dataset-slice contract, generated runbook seed-policy contract, generated runbook runtime-policy contract, generated runbook command-policy contract, generated runbook aggregate-policy contract, aggregate predecessor-row intake guard, full-paper source-chain intake guard, base result-row shape guard, full-paper model identity pre-overlay guard, one non-overlay result row, strict official-eval importer, importer-fixture validation, Stage 2 rendered-prompt validation/freshness, rendered-prompt artifact-contract validation, prompt-artifact result-intake admission, pre-write official-eval import admission, closeout result-intake gate, runbook dataset-slice result-intake guard, approval-artifact result-intake guard, runbook-stage result binding, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, dataset-manifest freshness validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, approval-state validation, deterministic one-case result-freshness validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
+  last_turn: "2026-06-14T21:03-07:00"
+  turn_count: 48
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, generated runbook dataset-slice contract, generated runbook seed-policy contract, generated runbook runtime-policy contract, generated runbook command-policy contract, generated runbook aggregate-policy contract, aggregate predecessor-row intake guard, full-paper source-chain intake guard, base result-row shape guard, full-paper model identity pre-overlay guard, plot overlay result-intake guard, one non-overlay result row, strict official-eval importer, importer-fixture validation, Stage 2 rendered-prompt validation/freshness, rendered-prompt artifact-contract validation, prompt-artifact result-intake admission, pre-write official-eval import admission, closeout result-intake gate, runbook dataset-slice result-intake guard, approval-artifact result-intake guard, runbook-stage result binding, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, dataset-manifest freshness validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, approval-state validation, deterministic one-case result-freshness validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -295,6 +295,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Tightened Trace2Skill paper-denominator result intake so full-paper model and serving identity checks run before plot-binding handling."
+  - turn: 48
+    type: experiment
+    id: "PM-2026-06-14-049"
+    routing: direct
+    provenance: ai-executed
+    summary: "Tightened Trace2Skill plotting so result overlays must pass result intake before the standalone plotter can draw them."
 
 ai_actions:
   - turn: 1
@@ -787,6 +793,15 @@ ai_actions:
       - "docs/ara/trace2skill_spreadsheetbench/results/leaven_result_schema.md"
       - "docs/ara/trace2skill_spreadsheetbench/results/README.md"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 48
+    action: "Updated scripts/plot_trace2skill_ara.py so standalone plotting imports the result-intake checker before loading overlays, added scripts/check_trace2skill_plot_result_intake.py to prove a shape-valid but provenance-invalid overlay row is rejected before image write, wired the gate into validate_ara, and documented overlay admission in plots/README.md and validation.md."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/plot_trace2skill_ara.py"
+      - "scripts/check_trace2skill_plot_result_intake.py"
+      - "scripts/validate_ara.py"
+      - "docs/ara/trace2skill_spreadsheetbench/plots/README.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -885,6 +900,8 @@ key_context:
     excerpt: "Result intake now rejects rows missing schema_version, rows with non-numeric metric_value, and other malformed base envelope fields before provenance checks; fixture proves accepted G2 rows fail when those fields drift."
   - turn: 47
     excerpt: "Result intake now rejects paper-denominator-reproduction rows with non-vLLM serving or non-paper model ids before plot binding is considered; fixture proves null plot_binding no longer bypasses model/backend identity checks."
+  - turn: 48
+    excerpt: "Plotter overlay rendering now depends on result-intake admission; the new gate proves a plot-shaped paper-subset row missing runbook admission fails before any PNG is written."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."
