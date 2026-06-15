@@ -1335,8 +1335,8 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
 
         def mutate_subset_to_wrong_source_model(row: dict[str, Any]) -> None:
             row["source_command"] = row["source_command"].replace(
-                "Qwen3.5-122B-A10B",
-                "Qwen3.5-35B-A3B",
+                "--model Qwen3.5-122B-A10B",
+                "--model Qwen3.5-35B-A3B # claimed model_id Qwen3.5-122B-A10B",
             )
 
         check_mutated_result_intake(
@@ -1345,7 +1345,7 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             output,
             tmp_path / "subset-wrong-source-model.jsonl",
             mutate_subset_to_wrong_source_model,
-            "paper-subset source_command must name model_id 'Qwen3.5-122B-A10B'",
+            "paper-subset source_command must include --model 'Qwen3.5-122B-A10B'",
             errors,
             "subset source-command model drift",
         )

@@ -603,8 +603,14 @@ def check_paper_model_command_identity(
     source_command = record.get("source_command")
     if not isinstance(source_command, str) or not source_command:
         return
-    if model_id not in source_command:
-        errors.append(f"{prefix} {proof} source_command must name model_id {model_id!r}")
+    model_flags = re.findall(r"(?<!\S)--model(?:=|\s+)(?:['\"])?([^'\"\s;&|]+)", source_command)
+    if model_id not in model_flags:
+        errors.append(f"{prefix} {proof} source_command must include --model {model_id!r}")
+    for command_model_id in model_flags:
+        if command_model_id in PAPER_MODEL_IDS and command_model_id != model_id:
+            errors.append(
+                f"{prefix} {proof} source_command must not include --model {command_model_id!r}"
+            )
 
 
 def check_official_source_metric(

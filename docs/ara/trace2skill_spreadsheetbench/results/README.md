@@ -153,10 +153,12 @@ command fragments required by the originating stage. Range-bearing rows must
 also include concrete `--start_idx` and `--end_idx` fragments matching their
 declared `dataset_slice.case_range`; a row cannot claim held-out range
 `200..202` while its recorded command names `0..2`. Command-backed
-approval-gated rows must also name the same paper `model_id` in
-`source_command`, so metadata cannot claim Qwen paper identity when the
-recorded run command names another model or no model. Official evaluator-derived
-rows must keep `extra.source_metric` tied to the metric actually counted by the
+approval-gated rows must also include a concrete `--model <model_id>` flag
+matching the same paper `model_id`, and must not include another paper model in
+a different `--model` flag. Metadata cannot claim Qwen paper identity when the
+recorded run command names another model, no model, or only mentions the model
+outside the executed flag. Official evaluator-derived rows must keep
+`extra.source_metric` tied to the metric actually counted by the
 evaluator. Non-overlay imports use canonical `official_*` metric names, and
 overlays may bind raw official metrics only to compatible score panels; raw
 official evaluator metrics cannot be relabeled as derived average-improvement
