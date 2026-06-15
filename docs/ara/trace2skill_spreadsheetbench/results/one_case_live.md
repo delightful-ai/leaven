@@ -51,6 +51,7 @@ cargo run -p trace2skill_spreadsheetbench -- --run-one-case-acp-worker --run-dir
 |----------|------|---------|
 | Prepared prompt | `tmp/trace2skill-one-case-live/agent_prompt.md` | Prompt handed to the one-case worker. |
 | Init workbook | `tmp/trace2skill-one-case-live/1_13-1_init.xlsx` | Real unsolved benchmark input. |
+| Golden workbook | `tmp/trace2skill-one-case-live/1_13-1_golden.xlsx` | Official answer workbook used only by the scorer. |
 | Output workbook | `tmp/trace2skill-one-case-live/13-1_output.xlsx` | Worker-produced workbook required for success. |
 | ACP result | `tmp/trace2skill-one-case-live/acp_result.json` | `leaven/agent.run` result binding the workbook artifact. |
 | Transcript | `tmp/trace2skill-one-case-live/agent_transcript.md` | Worker action trace. |

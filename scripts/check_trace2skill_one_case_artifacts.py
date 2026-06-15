@@ -42,6 +42,9 @@ def fail_unless(errors: list[str], condition: bool, message: str) -> None:
 def check_required_files(repo_root: Path, run_dir: Path, errors: list[str]) -> dict[str, Path]:
     files = {
         "manifest": run_dir / "manifest.json",
+        "prompt": run_dir / "agent_prompt.md",
+        "init_workbook": run_dir / "1_13-1_init.xlsx",
+        "golden_workbook": run_dir / "1_13-1_golden.xlsx",
         "acp": run_dir / "acp_result.json",
         "transcript": run_dir / "agent_transcript.md",
         "score": run_dir / "score_report.json",
@@ -102,6 +105,21 @@ def check_one_case_artifacts(repo_root: Path, ara_root: Path) -> list[str]:
     )
     fail_unless(
         errors,
+        manifest.get("prompt_file") == files["prompt"].as_posix(),
+        "manifest.json prompt_file must point at agent_prompt.md",
+    )
+    fail_unless(
+        errors,
+        manifest.get("init_workbook") == files["init_workbook"].as_posix(),
+        "manifest.json init_workbook must point at 1_13-1_init.xlsx",
+    )
+    fail_unless(
+        errors,
+        manifest.get("golden_workbook") == files["golden_workbook"].as_posix(),
+        "manifest.json golden_workbook must point at 1_13-1_golden.xlsx",
+    )
+    fail_unless(
+        errors,
         manifest.get("output_workbook") == files["output_workbook"].as_posix(),
         "manifest.json output_workbook must point at 13-1_output.xlsx",
     )
@@ -157,10 +175,28 @@ def check_one_case_artifacts(repo_root: Path, ara_root: Path) -> list[str]:
     fail_unless(errors, extra.get("case_id") == "13-1", "result extra.case_id must be 13-1")
     fail_unless(errors, extra.get("matched_cells") == 120, "result extra.matched_cells must be 120")
     fail_unless(errors, extra.get("total_cells") == 120, "result extra.total_cells must be 120")
+    for label in ("prompt", "init_workbook", "golden_workbook"):
+        rel_path = files[label].as_posix()
+        if rel_path not in record.get("artifact_paths", []):
+            errors.append(f"result artifact_paths must include prepared {label}: {rel_path}")
 
     if one_case_doc.is_file():
         doc = one_case_doc.read_text(encoding="utf-8")
-        for needle in (EXPECTED_OUTPUT_SHA256, "`plot_binding` is intentionally `null`", "Not a paper reproduction"):
+        doc_needles = [
+            EXPECTED_OUTPUT_SHA256,
+            "`plot_binding` is intentionally `null`",
+            "Not a paper reproduction",
+            "| Score | `1.0` |",
+            "| Matched cells | `120` |",
+            "| Total cells | `120` |",
+            "| Passed | `true` |",
+            f"| Output workbook bytes | `{EXPECTED_OUTPUT_BYTES}` |",
+            f"`{files['prompt'].as_posix()}`",
+            f"`{files['init_workbook'].as_posix()}`",
+            f"`{files['golden_workbook'].as_posix()}`",
+            f"`{files['output_workbook'].as_posix()}`",
+        ]
+        for needle in doc_needles:
             if needle not in doc:
                 errors.append(f"one_case_live.md missing {needle!r}")
     else:

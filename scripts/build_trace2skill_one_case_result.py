@@ -25,7 +25,9 @@ def build_record(run_dir: Path, created_at: str | None) -> dict[str, Any]:
     acp_path = run_dir / "acp_result.json"
     transcript_path = run_dir / "agent_transcript.md"
     worker_path = run_dir / "trace2skill_acp_worker.py"
+    prompt_path = run_dir / "agent_prompt.md"
     for label, path in (
+        ("prepared prompt", prompt_path),
         ("score report", score_path),
         ("manifest", manifest_path),
         ("trajectory", trajectory_path),
@@ -41,6 +43,10 @@ def build_record(run_dir: Path, created_at: str | None) -> dict[str, Any]:
     acp = load_json(acp_path)
 
     output_workbook = Path(score["candidate_workbook"]["path"])
+    init_workbook = Path(manifest["init_workbook"])
+    golden_workbook = Path(score["golden_workbook"]["path"])
+    require_file(init_workbook, "init workbook")
+    require_file(golden_workbook, "golden workbook")
     require_file(output_workbook, "output workbook")
     if score.get("passed") is not True:
         raise ValueError("score_report.json does not mark the one-case result as passed")
@@ -88,6 +94,9 @@ def build_record(run_dir: Path, created_at: str | None) -> dict[str, Any]:
         },
         "source_command": "cargo run -p trace2skill_spreadsheetbench -- --run-one-case-acp-worker --run-dir tmp/trace2skill-one-case-live --model-id local-openpyxl-trace2skill-agent",
         "artifact_paths": [
+            prompt_path.as_posix(),
+            init_workbook.as_posix(),
+            golden_workbook.as_posix(),
             manifest_path.as_posix(),
             acp_path.as_posix(),
             transcript_path.as_posix(),
