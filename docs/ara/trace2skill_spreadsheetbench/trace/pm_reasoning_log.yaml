@@ -312,3 +312,7 @@ entries:
     notes:
       - "Routed official source-metric identity enforcement as denominator-provenance and scoreboard-integrity guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the change only prevents official evaluator rows from swapping metric identity or plotting raw evaluator metrics as derived overlays; it creates no accepted model-backed row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#79"
+    notes:
+      - "Routed overlay target-label enforcement as scoreboard-integrity and target-provenance guardrail evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the change only prevents result intake and closeout from accepting overlay labels absent from committed target provenance; it creates no accepted model-backed row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
