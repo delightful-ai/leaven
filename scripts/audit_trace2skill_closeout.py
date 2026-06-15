@@ -135,6 +135,8 @@ def audit(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
         "blocked",
         [
             f"{ara_rel}/results/full_run_plan.md",
+            f"{ara_rel}/results/full_denominator_runbook.md",
+            f"{ara_rel}/results/full_denominator_runbook.json",
             dataset_manifest_path,
             "scripts/check_trace2skill_approval_packet.py",
         ],

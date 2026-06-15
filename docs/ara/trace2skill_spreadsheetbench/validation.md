@@ -393,3 +393,33 @@ Limit:
 - This is a closeout guardrail, not a reproduction result. It is expected to
   remain incomplete until approved Qwen/vLLM runs produce denominator-labeled
   Leaven result records.
+
+## 2026-06-14 Full-Denominator Runbook
+
+Artifact:
+
+```text
+scripts/build_trace2skill_runbook.py
+docs/ara/trace2skill_spreadsheetbench/results/full_denominator_runbook.md
+docs/ara/trace2skill_spreadsheetbench/results/full_denominator_runbook.json
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/build_trace2skill_runbook.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Current result:
+
+- Normal approval preflight is `false`.
+- Runnable-now stages are limited to no-spend guardrails and deterministic
+  one-case Leaven seam proof.
+- Approval-required stages are model-backed one-case, small-N subset, evolving
+  split `0..200`, training-set validation, held-out split `200..400`, seed
+  aggregate, and cross-model/full paper rows.
+
+Limit:
+
+- This is an execution map and artifact checklist. It does not approve model
+  work and does not create Leaven metric rows.

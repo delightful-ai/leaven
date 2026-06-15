@@ -107,6 +107,7 @@ separately and labeled by denominator.
 | [results/dataset_manifest.json](results/dataset_manifest.json) | Deterministic local manifest for the 400-row SpreadsheetBench-Verified dataset. |
 | [results/one_case_live.md](results/one_case_live.md) | Deterministic one-case ACP worker proof and artifact manifest. |
 | [results/full_run_plan.md](results/full_run_plan.md) | Approval gate for Qwen/vLLM paper-denominator execution. |
+| [results/full_denominator_runbook.md](results/full_denominator_runbook.md) / [full_denominator_runbook.json](results/full_denominator_runbook.json) | Generated stage runbook from no-spend guardrails through full paper denominator. |
 | [results/model_availability.md](results/model_availability.md) | Current public model/serving availability research for the approval packet. |
 | [reviews/rigor_review.md](reviews/rigor_review.md) | Seal Level 2 semantic rigor review and blockers. |
 | [level2_report.json](level2_report.json) | Machine-readable Seal Level 2 review report. |

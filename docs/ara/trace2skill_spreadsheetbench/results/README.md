@@ -53,6 +53,16 @@ It writes [`closeout_audit.md`](closeout_audit.md) and
 [`closeout_audit.json`](closeout_audit.json). While the full paper denominator
 is missing, the audit must keep `overall_complete` false.
 
+The full-denominator runbook can be regenerated with:
+
+```bash
+uv run --with pyyaml python scripts/build_trace2skill_runbook.py docs/ara/trace2skill_spreadsheetbench
+```
+
+It writes [`full_denominator_runbook.md`](full_denominator_runbook.md) and
+[`full_denominator_runbook.json`](full_denominator_runbook.json). It is a staged
+execution map, not permission to launch model work.
+
 The paper target plot can be regenerated without result records:
 
 ```bash

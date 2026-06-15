@@ -27,6 +27,8 @@
     "full_denominator_plan_approved": {
       "evidence": [
         "docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md",
+        "docs/ara/trace2skill_spreadsheetbench/results/full_denominator_runbook.md",
+        "docs/ara/trace2skill_spreadsheetbench/results/full_denominator_runbook.json",
         "docs/ara/trace2skill_spreadsheetbench/results/dataset_manifest.json",
         "scripts/check_trace2skill_approval_packet.py"
       ],

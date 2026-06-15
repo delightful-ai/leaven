@@ -337,6 +337,30 @@ def validate(root: Path) -> list[str]:
                             if acceptance_id not in acceptance:
                                 fail(errors, f"results/closeout_audit.json missing {acceptance_id}")
 
+            runbook_path = results_dir / "full_denominator_runbook.json"
+            if runbook_path.exists():
+                try:
+                    runbook = json.loads(read(runbook_path))
+                except json.JSONDecodeError as exc:
+                    fail(errors, f"results/full_denominator_runbook.json is not valid JSON: {exc}")
+                    runbook = None
+                if isinstance(runbook, dict):
+                    if runbook.get("schema_version") != "leaven.trace2skill.runbook.v1":
+                        fail(errors, "results/full_denominator_runbook.json has wrong schema_version")
+                    approval_state = runbook.get("approval_state")
+                    if not isinstance(approval_state, dict):
+                        fail(errors, "results/full_denominator_runbook.json missing approval_state")
+                    elif approval_state.get("normal_preflight_passes") is not False:
+                        fail(errors, "results/full_denominator_runbook.json must keep normal_preflight_passes false until approved")
+                    stages = runbook.get("stages")
+                    if not isinstance(stages, list):
+                        fail(errors, "results/full_denominator_runbook.json missing stages")
+                    else:
+                        stage_ids = {stage.get("id") for stage in stages if isinstance(stage, dict)}
+                        for stage_id in ("G0", "G1", "G1M", "G2", "G3", "G3V", "G4", "G5", "G6"):
+                            if stage_id not in stage_ids:
+                                fail(errors, f"results/full_denominator_runbook.json missing {stage_id}")
+
     return errors
 
 
