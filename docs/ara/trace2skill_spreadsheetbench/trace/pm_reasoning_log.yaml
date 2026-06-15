@@ -71,3 +71,7 @@ entries:
     notes:
       - "Routed rigor-follow-up validation as ARA review-integrity evidence, not as a fresh Level 2 review."
       - "Kept reproduction claims unchanged because the checker proves addressed review items are synchronized with current artifacts; it does not approve tolerance, capture rendered prompts, add overlays, or execute Qwen/vLLM."
+  - turn: "2026-06-14_001#19"
+    notes:
+      - "Routed runbook-label validation as denominator-vocabulary integrity evidence."
+      - "Kept reproduction claims unchanged because the checker only makes future result rows admissible under exact staged labels; it writes no ARA result rows, creates no overlays, and does not execute Qwen/vLLM."
