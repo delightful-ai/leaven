@@ -647,6 +647,16 @@ def check_paper_run_command_flags(
         if value is not None and str(value) not in command_flag_values(source_command, flag):
             errors.append(f"{prefix} {proof} source_command must include --{flag} {value}")
 
+    runtime_policy = stage.get("expected_runtime_policy")
+    if isinstance(runtime_policy, dict) and runtime_policy.get("kind") == "skill-evolution":
+        extra = record.get("extra")
+        merge_batch_size = extra.get("merge_batch_size") if isinstance(extra, dict) else None
+        if merge_batch_size is not None and str(merge_batch_size) not in command_flag_values(
+            source_command,
+            "merge-batch-size",
+        ):
+            errors.append(f"{prefix} {proof} source_command must include --merge-batch-size {merge_batch_size}")
+
 
 def check_official_source_metric(
     prefix: str,

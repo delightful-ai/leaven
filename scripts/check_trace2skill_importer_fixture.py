@@ -612,6 +612,160 @@ def source_training_validation_row(
     }
 
 
+def source_evolving_row(
+    repo_root: Path,
+    tmp_path: Path,
+    seed: int,
+    model_id: str = "Qwen3.5-122B-A10B",
+    serving_backend: str = "vLLM",
+) -> dict[str, Any]:
+    base = tmp_path / f"evolving_seed_{seed}"
+    prompt = touch(
+        repo_root,
+        base / f"baseline_seed_{seed}/rendered_prompts/52807/agent_prompt.md",
+        f"fixture evolving seed {seed} rendered prompt\n",
+    )
+    prompt_manifest = touch(
+        repo_root,
+        base / f"baseline_seed_{seed}/prompt_render_manifest.json",
+        '{"schema_version":"fixture.evolving_prompt_manifest.v1"}\n',
+    )
+    eval_result = touch(
+        repo_root,
+        base / f"baseline_seed_{seed}/outputs/eval_official_results.json",
+        '{"schema_version":"fixture.evolving_eval.v1"}\n',
+    )
+    error_analysis = touch(
+        repo_root,
+        base / f"baseline_seed_{seed}/error_analysis_parsed.json",
+        '{"schema_version":"fixture.error_analysis.v1"}\n',
+    )
+    error_prompt = touch(
+        repo_root,
+        base / f"baseline_seed_{seed}/stage2_analyst_prompts/52807/error_prompt.md",
+        "fixture error analyst prompt\n",
+    )
+    success_prompt = touch(
+        repo_root,
+        base / f"baseline_seed_{seed}/stage2_analyst_prompts/52807/success_prompt.md",
+        "fixture success analyst prompt\n",
+    )
+    fanout = touch(
+        repo_root,
+        base / f"baseline_seed_{seed}/stage2_fanout.jsonl",
+        '{"schema_version":"fixture.stage2_fanout.v1"}\n',
+    )
+    success_analysis = touch(
+        repo_root,
+        base / f"baseline_seed_{seed}/success_analysis_parsed.json",
+        '{"schema_version":"fixture.success_analysis.v1"}\n',
+    )
+    change_log = touch(
+        repo_root,
+        base / f"skill_evolution_seed_{seed}/error_driven_skill_evolution/change.log",
+        "fixture skill evolution change log\n",
+    )
+    merge_prompt = touch(
+        repo_root,
+        base / f"skill_evolution_seed_{seed}/error_driven_skill_evolution/stage3_merge_prompts/batch-000.md",
+        "fixture merge prompt\n",
+    )
+    merge_manifest = touch(
+        repo_root,
+        base / f"skill_evolution_seed_{seed}/error_driven_skill_evolution/stage3_merge_manifest.json",
+        '{"schema_version":"fixture.stage3_merge_manifest.v1"}\n',
+    )
+    skill = touch(
+        repo_root,
+        base / f"skill_evolution_seed_{seed}/error_driven_skill_evolution/skills/xlsx/SKILL.md",
+        "# Fixture evolved skill\n",
+    )
+    return {
+        "schema_version": "leaven.trace2skill.result.v1",
+        "run_id": f"trace2skill-evolving-fixture-seed-{seed}",
+        "created_at": "2026-06-14T00:00:03Z",
+        "proof_classification": "evolving-split-run",
+        "dataset_slice": {
+            "name": "SpreadsheetBench-Verified",
+            "split": "evolving",
+            "case_range": "0..200",
+            "case_count": 200,
+            "denominator": "evolving-split-0..200",
+        },
+        "model_id": model_id,
+        "serving_backend": serving_backend,
+        "seed": seed,
+        "skill_source": {"kind": "fixture-evolved-skill", "path": skill},
+        "metric_name": "official_instance_accuracy",
+        "metric_value": 50.0,
+        "metric_unit": "percent",
+        "plot_binding": None,
+        "cost": {
+            "usd": None,
+            "prompt_tokens": None,
+            "completion_tokens": None,
+        },
+        "runtime": {
+            "seconds": None,
+            "workers": 128,
+            "max_turns": 100,
+        },
+        "source_command": (
+            f"python run_spreadsheetbench.py --model {model_id} --workers 128 "
+            f"--max_turns 100 --seeds {seed} --start_idx 0 --end_idx 200 "
+            "&& python evaluate_with_official.py --start_idx 0 --end_idx 200 "
+            "&& python analyze_results.py "
+            "&& python analysis/run_error_analysis.py "
+            "&& python analysis/run_success_analysis_llm.py "
+            f"&& python -m skill_evolver.run_parallel_skill_evolution --model {model_id} "
+            f"--merge-batch-size 32 --max-workers 128 --seed {seed}"
+        ),
+        "artifact_paths": [
+            APPROVAL_ARTIFACT,
+            prompt,
+            prompt_manifest,
+            eval_result,
+            error_analysis,
+            error_prompt,
+            success_prompt,
+            fanout,
+            success_analysis,
+            change_log,
+            merge_prompt,
+            merge_manifest,
+            skill,
+        ],
+        "extra": {
+            "runbook_stage_id": "G3",
+            "approval_artifact_paths": [APPROVAL_ARTIFACT],
+            "command_policy": "skill-evolution",
+            "source_metric": "instance_accuracy",
+            "merge_batch_size": 32,
+        },
+        "notes": "",
+    }
+
+
+def check_evolving_result_intake(repo_root: Path, ara_root: Path, tmp_path: Path, errors: list[str]) -> None:
+    output = tmp_path / "evolving.jsonl"
+    write_jsonl(output, [source_evolving_row(repo_root, tmp_path, 41)])
+    check_result_intake_for_rows(repo_root, ara_root, output, None, errors, "evolving intake")
+
+    def mutate_evolving_to_wrong_source_merge_batch(row: dict[str, Any]) -> None:
+        row["source_command"] = row["source_command"].replace("--merge-batch-size 32", "--merge-batch-size 5")
+
+    check_mutated_result_intake(
+        repo_root,
+        ara_root,
+        output,
+        tmp_path / "evolving-wrong-source-merge-batch.jsonl",
+        mutate_evolving_to_wrong_source_merge_batch,
+        "evolving-split-run source_command must include --merge-batch-size 32",
+        errors,
+        "evolving source-command merge-batch drift",
+    )
+
+
 def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Path, errors: list[str]) -> None:
     source_paths: list[str] = []
     for seed in (41, 42, 43):
@@ -1035,6 +1189,7 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
         check_result_intake_for_rows(repo_root, ara_root, output, None, errors, "positive import intake")
         check_model_one_case_result_intake(repo_root, ara_root, tmp_path, errors)
         check_real_results_require_runnable_approval(repo_root, ara_root, tmp_path, errors)
+        check_evolving_result_intake(repo_root, ara_root, tmp_path, errors)
         check_aggregate_result_intake(repo_root, ara_root, tmp_path, errors)
         eval_results = eval_results_artifact_path(repo_root, tmp_path)
 

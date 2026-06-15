@@ -160,6 +160,9 @@ a different `--model` flag. When the row carries `seed`, `runtime.workers`, or
 and `--max_turns` flags. Metadata cannot claim Qwen paper identity or paper run
 settings when the recorded command names another model, seed, worker count, turn
 budget, no concrete flag, or only mentions the value outside the executed flag.
+Skill-evolution rows must also include a concrete `--merge-batch-size` value in
+the command that matches `extra.merge_batch_size`; a row cannot rely on
+metadata or on the upstream default for the paper's batch size `32`.
 Official evaluator-derived rows must keep `extra.source_metric` tied to the
 metric actually counted by the
 evaluator. Non-overlay imports use canonical `official_*` metric names, and

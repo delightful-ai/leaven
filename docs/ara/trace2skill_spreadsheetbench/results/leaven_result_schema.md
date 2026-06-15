@@ -195,8 +195,9 @@ what Leaven actually ran.
   same paper `model_id` and must not include a different paper model in another
   `--model` flag. When those rows carry `seed`, `runtime.workers`, or
   `runtime.max_turns`, `source_command` must include matching `--seeds`,
-  `--workers`, and `--max_turns` flags. Model, seed, and runtime metadata alone
-  are not command evidence.
+  `--workers`, and `--max_turns` flags. Skill-evolution rows that carry
+  `extra.merge_batch_size` must also include matching `--merge-batch-size`.
+  Model, seed, runtime, and merge metadata alone are not command evidence.
 - Official evaluator-derived rows must keep `extra.source_metric` bound to the
   metric actually being counted. Non-overlay official rows use the canonical
   `official_*` metric names, and overlay rows may bind raw official metrics
