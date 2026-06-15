@@ -238,9 +238,22 @@ def validate_records_against_result_intake(args: argparse.Namespace, records: li
 
     checker = import_result_intake_checker(repo_root)
     runbook_stages = load_runbook_stages(ara_root)
+    approval_blockers = (
+        checker.approval_packet_errors(ara_root)
+        if checker.is_actual_ara_result_path(ara_root, output_path)
+        else None
+    )
     errors: list[str] = []
     for line_number, record in enumerate(records, start=1):
-        checker.check_record(repo_root, output_path, line_number, record, runbook_stages, errors)
+        checker.check_record(
+            repo_root,
+            output_path,
+            line_number,
+            record,
+            runbook_stages,
+            errors,
+            approval_blockers=approval_blockers,
+        )
     if errors:
         joined = "\n- ".join(errors)
         raise ValueError(f"result intake preflight failed:\n- {joined}")

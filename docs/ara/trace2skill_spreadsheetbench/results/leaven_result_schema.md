@@ -129,6 +129,10 @@ what Leaven actually ran.
 - Approval-gated rows must carry at least one inspectable
   `extra.approval_artifact_paths` entry and that same path must be included in
   `artifact_paths`.
+- A committed top-level `results/*.jsonl` row for an approval-gated proof
+  classification must also have a runnable approval packet in
+  `results/full_run_plan.md`. An inspectable approval artifact path proves
+  provenance only; it is not approval while the packet is blocked.
 - Approval-gated rows must also carry every prompt artifact required by their
   `extra.runbook_stage_id` in `full_denominator_runbook.json`, such as rendered
   agent prompts, Stage 2 analyst prompt/fanout files, Stage 3 merge prompts, or

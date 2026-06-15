@@ -262,6 +262,33 @@ def check_result_intake_for_rows(
         errors.append(f"{label}: expected intake error {expected_error!r}, got {intake_errors!r}")
 
 
+def check_real_results_require_runnable_approval(
+    repo_root: Path,
+    ara_root: Path,
+    tmp_path: Path,
+    errors: list[str],
+) -> None:
+    output = ara_root / "results/fixture_blocked_approval_import.jsonl"
+    if output.exists():
+        output.unlink()
+    artifact_paths = prompt_artifact_paths(repo_root, tmp_path / "blocked_approval")
+    eval_results = eval_results_artifact_path(repo_root, tmp_path / "blocked_approval")
+    result = run_importer(
+        repo_root,
+        importer_base_args(output, artifact_paths, eval_results),
+    )
+    if result.returncode == 0:
+        errors.append("blocked real-results import: importer unexpectedly succeeded")
+    elif "require a runnable approval packet" not in result.stderr:
+        errors.append(
+            "blocked real-results import: stderr did not contain runnable approval refusal; "
+            f"stderr was {result.stderr!r}"
+        )
+    if output.exists():
+        errors.append(f"blocked real-results import wrote unexpected file: {output}")
+        output.unlink()
+
+
 def check_mutated_result_intake(
     repo_root: Path,
     ara_root: Path,
@@ -536,6 +563,7 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
         output = tmp_path / "imported.jsonl"
         check_positive_import(repo_root, output, errors)
         check_result_intake_for_rows(repo_root, ara_root, output, None, errors, "positive import intake")
+        check_real_results_require_runnable_approval(repo_root, ara_root, tmp_path, errors)
         check_aggregate_result_intake(repo_root, ara_root, tmp_path, errors)
         eval_results = eval_results_artifact_path(repo_root, tmp_path)
 

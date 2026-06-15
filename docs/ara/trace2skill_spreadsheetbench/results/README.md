@@ -102,7 +102,11 @@ exist locally when the importer runs. Every row must carry
 stage's `allowed_label` must match the row's `proof_classification`. If that
 runbook stage expects rendered prompts, fanout files, or prompt-render
 manifests, result intake also requires matching prompt artifacts in
-`artifact_paths`. For model-backed run stages, result intake also requires
+`artifact_paths`. If the importer output path is a top-level ARA
+`results/*.jsonl` file, approval-gated rows also require the approval packet in
+`results/full_run_plan.md` to pass the normal runnable preflight; merely naming
+the blocked plan as an approval artifact is not permission. For model-backed run
+stages, result intake also requires
 file-shaped runbook artifacts such as prompt manifests, official evaluator
 outputs, parsed analysis JSON, fanout JSONL, merge manifests, change logs, or
 selection notes; directory placeholders and the row's own `leaven_results.jsonl`

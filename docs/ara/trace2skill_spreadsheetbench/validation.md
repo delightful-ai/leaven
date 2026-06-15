@@ -867,6 +867,11 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
   `leaven_results.jsonl` are not used as artifact-path requirements.
 - Requires approval-gated proof classifications, including `paper-subset`, to
   include at least one inspectable `--approval-artifact-path`.
+- Refuses approval-gated imports into top-level ARA `results/*.jsonl` while
+  `results/full_run_plan.md` fails the normal approval preflight. The fixture
+  still writes target-only rows outside the ARA to exercise row shape, but the
+  same row cannot become accepted ARA result evidence by pointing at a blocked
+  plan file.
 - Requires `--eval-results`, `--skill-path`, `--artifact-path`, and
   `--approval-artifact-path` values to be locally inspectable when provided.
 - Refuses `paper-denominator-reproduction` unless
@@ -876,9 +881,9 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
   wrong runbook stage label, missing prompt artifacts for `paper-subset`,
   missing base schema id, stringly metric value, missing official evaluator
   artifact, subset denominator drift, subset seed drift, subset worker drift,
-  full-paper serving/model drift with null plot binding, missing approval
-  evidence for `paper-subset`, and accidental `paper-denominator-reproduction`
-  without the explicit allow flag.
+  full-paper serving/model drift with null plot binding, blocked real-results
+  approval preflight, missing approval evidence for `paper-subset`, and
+  accidental `paper-denominator-reproduction` without the explicit allow flag.
 
 Limit:
 

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import math
 import re
@@ -85,6 +86,36 @@ def load_jsonl(path: Path) -> list[tuple[int, dict[str, Any]]]:
             raise ValueError(f"{path}:{line_number} must be a JSON object")
         rows.append((line_number, record))
     return rows
+
+
+def import_approval_packet_checker() -> Any:
+    path = Path(__file__).with_name("check_trace2skill_approval_packet.py")
+    spec = importlib.util.spec_from_file_location("check_trace2skill_approval_packet", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot import {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def approval_packet_errors(ara_root: Path) -> list[str]:
+    plan_path = ara_root / "results/full_run_plan.md"
+    if not plan_path.is_file():
+        return [f"missing approval packet: {plan_path.relative_to(ara_root)}"]
+    try:
+        checker = import_approval_packet_checker()
+        packet = checker.approval_packet(plan_path.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        return [str(exc)]
+    return checker.packet_errors(packet)
+
+
+def is_actual_ara_result_path(ara_root: Path, path: Path) -> bool:
+    try:
+        return path.resolve().parent == (ara_root / "results").resolve()
+    except OSError:
+        return False
 
 
 def is_json_number(value: Any) -> bool:
@@ -637,6 +668,7 @@ def check_record(
     errors: list[str],
     validate_aggregate: bool = True,
     aggregate_stack: set[str] | None = None,
+    approval_blockers: list[str] | None = None,
 ) -> None:
     prefix = f"{path.relative_to(repo_root)}:{line_number}"
     check_base_record_shape(prefix, record, errors)
@@ -691,6 +723,11 @@ def check_record(
         check_artifact_path(repo_root, prefix, skill_path, errors)
 
     if proof in APPROVAL_REQUIRED_PROOF_CLASSIFICATIONS:
+        if approval_blockers:
+            errors.append(
+                f"{prefix} {proof} rows require a runnable approval packet; "
+                f"blocked by {len(approval_blockers)} approval blocker(s)"
+            )
         approval_paths = extra.get("approval_artifact_paths") if isinstance(extra, dict) else None
         if not isinstance(approval_paths, list) or not approval_paths:
             errors.append(f"{prefix} {proof} rows must include extra.approval_artifact_paths")
@@ -760,6 +797,7 @@ def check_result_intake(repo_root: Path, ara_root: Path) -> list[str]:
         for stage in runbook.get("stages", [])
         if isinstance(stage, dict) and isinstance(stage.get("id"), str)
     }
+    approval_blockers = approval_packet_errors(ara_root)
     for path in sorted(results_dir.glob("*.jsonl")):
         try:
             rows = load_jsonl(path)
@@ -767,7 +805,15 @@ def check_result_intake(repo_root: Path, ara_root: Path) -> list[str]:
             errors.append(str(exc))
             continue
         for line_number, record in rows:
-            check_record(repo_root, path, line_number, record, runbook_stages, errors)
+            check_record(
+                repo_root,
+                path,
+                line_number,
+                record,
+                runbook_stages,
+                errors,
+                approval_blockers=approval_blockers,
+            )
     return errors
 
 
