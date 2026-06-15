@@ -252,3 +252,7 @@ entries:
     notes:
       - "Routed full-paper metric-mean enforcement as denominator-provenance guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the check only prevents full-paper rows from reporting arbitrary parent metrics unrelated to cited required split rows; it creates no accepted model-backed rows, overlays, approvals, seed aggregates, full-paper rows, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#64"
+    notes:
+      - "Routed full-paper source-classification enforcement as denominator-provenance guardrail evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the check only prevents full-paper rows from citing unsupported predecessor classifications directly; it creates no accepted model-backed rows, overlays, approvals, seed aggregates, full-paper rows, or Qwen/vLLM execution."
