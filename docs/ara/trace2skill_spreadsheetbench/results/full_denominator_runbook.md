@@ -179,7 +179,7 @@ for SEED in "${SEEDS[@]}"; do
   EVOLUTION_DIR="$RUN_ROOT/skill_evolution_seed_${SEED}/error_driven_skill_evolution"
   EVOLVED_SKILLS="$EVOLUTION_DIR/skills"
   mkdir -p "$EVOLVED_SKILLS" && cp -r spreadsheet_agent/skills/. "$EVOLVED_SKILLS"
-  python -m skill_evolver.run_parallel_skill_evolution --input-json "$BASELINE_DIR/error_analysis_parsed.json" --skill-dir "$EVOLVED_SKILLS/xlsx" --model "$MODEL" --verbose --batch-size 1 --changelog "$EVOLUTION_DIR/change.log" --save-intermediates --intermediates-dir "$EVOLUTION_DIR/intermediates" --max-workers "$WORKERS" --prompt generic --generation-config "$THINK_GENERATION_CONFIG" --parse-failure-dir "$EVOLUTION_DIR/parse_failures" --patch-pipeline json --seed "$SEED"
+  python -m skill_evolver.run_parallel_skill_evolution --input-json "$BASELINE_DIR/error_analysis_parsed.json" --skill-dir "$EVOLVED_SKILLS/xlsx" --model "$MODEL" --verbose --batch-size 1 --merge-batch-size "$MERGE_BATCH_SIZE" --changelog "$EVOLUTION_DIR/change.log" --save-intermediates --intermediates-dir "$EVOLUTION_DIR/intermediates" --max-workers "$WORKERS" --prompt generic --generation-config "$THINK_GENERATION_CONFIG" --parse-failure-dir "$EVOLUTION_DIR/parse_failures" --patch-pipeline json --seed "$SEED"
 done
 ```
 

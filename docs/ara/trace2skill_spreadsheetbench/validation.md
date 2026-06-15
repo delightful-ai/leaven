@@ -630,3 +630,42 @@ Limit:
 - This proves source anchoring for the framework figure only. It does not prove
   plotted Leaven metrics, source-image visual equivalence beyond the file
   identity check, or any paper-denominator reproduction.
+
+## 2026-06-14 Protocol Configuration Fidelity Check
+
+Artifact:
+
+```text
+scripts/check_trace2skill_config_fidelity.py
+docs/ara/trace2skill_spreadsheetbench/src/configs/training.md
+docs/ara/trace2skill_spreadsheetbench/src/configs/model.md
+docs/ara/trace2skill_spreadsheetbench/results/full_denominator_runbook.md
+docs/ara/trace2skill_spreadsheetbench/results/full_denominator_runbook.json
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_config_fidelity.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Current result:
+
+- Verifies the ARA config tables against the paper implementation paragraph,
+  upstream README reproduction variables, dataset manifest, Qwen generation
+  JSON files, and generated full-denominator runbook.
+- Confirms the paper-denominator protocol values: 400 SpreadsheetBench rows,
+  splits `0..200` and `200..400`, seeds `41/42/43`, 128 workers, merge batch
+  size 32, ReAct turn budget 100, vLLM serving, and Qwen3.5 model/config IDs.
+- Records the important upstream caveat: the upstream README omits
+  `--merge-batch-size`, and the upstream script default is `5`; the Leaven
+  runbook now passes `--merge-batch-size "$MERGE_BATCH_SIZE"` explicitly so an
+  approved run does not silently use the non-paper merge tree.
+- The integrated Seal Level 1 validator now runs this config-fidelity check
+  alongside table, prompt, and figure fidelity checks.
+
+Limit:
+
+- This is protocol evidence and runbook hardening only. It does not launch
+  Qwen/vLLM, create paper-denominator result rows, or prove that the configured
+  run has been executed.

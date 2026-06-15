@@ -11,6 +11,7 @@
 | Stage 1 trajectories | 1 trajectory per problem | Paper implementation detail. | Not specified in paper. | More/fewer trajectories change patch pool. | `tmp/skill_opt_sources/arx_2603.25158/full_source.md:159` |
 | Stage 2 workers | 128 sub-agents | Paper implementation detail and runtime claim basis. | Not specified in paper. | Lower worker counts change runtime denominator. | `tmp/skill_opt_sources/arx_2603.25158/full_source.md:159` |
 | Merge batch size | 32 | Paper implementation detail. | Not specified in paper. | Changes merge tree shape. | `tmp/skill_opt_sources/arx_2603.25158/full_source.md:159` |
+| Upstream reproduction caveat | README omits `--merge-batch-size`; upstream script default `5` differs from paper value `32`. | Leaven full-denominator runbook must pass `--merge-batch-size "$MERGE_BATCH_SIZE"` explicitly. | N/A | Otherwise an approved run can silently use a non-paper merge tree. | `tmp/repros/trace2skill-upstream/README.md`, `tmp/repros/trace2skill-upstream/skill_evolver/run_parallel_skill_evolution.py` |
 | ReAct turn budget | 100 | Paper implementation detail. | Not specified in paper. | Changes task-solving and analyst capacity. | `tmp/skill_opt_sources/arx_2603.25158/full_source.md:159` |
 
 ## Non-Spreadsheet Targets
