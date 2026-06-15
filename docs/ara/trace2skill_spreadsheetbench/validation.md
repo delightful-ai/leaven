@@ -236,6 +236,42 @@ Limit:
 
 - This remains a paper target sheet until real Leaven result records are added.
 
+## 2026-06-14 Plot Freshness Check
+
+Artifact:
+
+```text
+scripts/check_trace2skill_plot_freshness.py
+docs/ara/trace2skill_spreadsheetbench/plots/trace2skill_targets.png
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_plot_freshness.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Current result:
+
+```text
+PASS: docs/ara/trace2skill_spreadsheetbench plot freshness
+```
+
+Scope:
+
+- Regenerates `plots/trace2skill_targets.png` into a temporary directory by
+  invoking `scripts/plot_trace2skill_ara.py` with `uv run --with matplotlib
+  --with pandas`.
+- Compares the committed PNG SHA-256 to the temporary render.
+- The integrated Seal Level 1 validator now runs this freshness check after
+  the plot-provenance check.
+
+Limit:
+
+- This proves the checked-in paper target plot is freshly renderable from
+  current ARA evidence and current result-row state. It does not create Leaven
+  overlays, approve Qwen/vLLM execution, or prove any paper-denominator result.
+
 ## 2026-06-14 Temporary Overlay Parser Smoke
 
 Command:
