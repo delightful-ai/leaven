@@ -93,6 +93,7 @@ separately and labeled by denominator.
 | [figures/figure_trace2skill_framework.md](evidence/figures/figure_trace2skill_framework.md) | Source figure path and caption for the Trace2Skill pipeline. |
 | [leaven_mechanics_tests.md](evidence/leaven_mechanics_tests.md) | Leaven mechanics-test proof classifications and limits. |
 | [prompt_templates.md](evidence/prompt_templates.md) | Upstream prompt-template family index and reproduction boundary. |
+| [prompt_templates.manifest.json](evidence/prompt_templates.manifest.json) | SHA-256 manifest for every indexed upstream prompt and released skill file. |
 
 ### Plot Targets and Validation
 

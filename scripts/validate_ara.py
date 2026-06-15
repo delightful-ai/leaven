@@ -146,6 +146,23 @@ def validate_trace2skill_prompt_index(errors: list[str], root: Path) -> None:
         fail(errors, f"prompt index: {prompt_error}")
 
 
+def validate_trace2skill_prompt_manifest(errors: list[str], root: Path) -> None:
+    repo_root = repo_root_for(root.resolve())
+    checker_path = repo_root / "scripts/check_trace2skill_prompt_manifest.py"
+    if not checker_path.is_file():
+        fail(errors, "missing scripts/check_trace2skill_prompt_manifest.py")
+        return
+    spec = importlib.util.spec_from_file_location("check_trace2skill_prompt_manifest", checker_path)
+    if spec is None or spec.loader is None:
+        fail(errors, f"cannot import {checker_path}")
+        return
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    for prompt_error in module.check_prompt_manifest(repo_root, root):
+        fail(errors, f"prompt manifest: {prompt_error}")
+
+
 def validate_trace2skill_figure_index(errors: list[str], root: Path) -> None:
     repo_root = repo_root_for(root.resolve())
     checker_path = repo_root / "scripts/check_trace2skill_figure_index.py"
@@ -505,6 +522,7 @@ def validate(root: Path) -> list[str]:
 
     validate_trace2skill_table_fidelity(errors, root)
     validate_trace2skill_prompt_index(errors, root)
+    validate_trace2skill_prompt_manifest(errors, root)
     validate_trace2skill_figure_index(errors, root)
     validate_trace2skill_config_fidelity(errors, root)
     validate_trace2skill_one_case_artifacts(errors, root)

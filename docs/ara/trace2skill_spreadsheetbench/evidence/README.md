@@ -19,7 +19,7 @@ uv run --with pyyaml python scripts/check_trace2skill_evidence_bindings.py docs/
 | [tables/table_vqa.md](tables/table_vqa.md) | `tmp/skill_opt_sources/arx_2603.25158/src/tables/table_vqa.tex` | C05 | DocVQA transfer target table. |
 | [figures/figure_trace2skill_framework.md](figures/figure_trace2skill_framework.md) | `tmp/skill_opt_sources/arx_2603.25158/src/figures/trace2skill_framwork.png` | C01, C02, C04 | Source framework figure and caption. |
 | [leaven_mechanics_tests.md](leaven_mechanics_tests.md) | `examples/trace2skill_spreadsheetbench/tests/` | C06, C07 | Focused Leaven mechanics and one-case proof classification. |
-| [prompt_templates.md](prompt_templates.md) | `tmp/repros/trace2skill-upstream/skill_evolver/prompts/` | C01, C02, C03, C04, C07 | Prompt-template family index for agent, analyst, merge, verification, and released-skill prompts. |
+| [prompt_templates.md](prompt_templates.md) | `tmp/repros/trace2skill-upstream/skill_evolver/prompts/` | C01, C02, C03, C04, C07 | Prompt-template family index for agent, analyst, merge, verification, and released-skill prompts; exact file hashes live in `prompt_templates.manifest.json`. |
 
 ## Missing Evidence
 

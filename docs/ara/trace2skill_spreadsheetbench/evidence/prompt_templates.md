@@ -5,6 +5,15 @@
 The upstream prompt tree is part of the paper denominator because Stage 2
 analyst calls and Stage 3 merge behavior depend on prompt wording and output
 formats. This file indexes the prompt families without copying full prompt text.
+Exact source identity for every indexed prompt file is recorded in
+`prompt_templates.manifest.json`.
+
+Regenerate and check the prompt-source manifest with:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_prompt_manifest.py docs/ara/trace2skill_spreadsheetbench --write
+uv run --with pyyaml python scripts/check_trace2skill_prompt_manifest.py docs/ara/trace2skill_spreadsheetbench
+```
 
 | Prompt family | File count | Representative paths | Reproduction role | Claims |
 |---------------|------------|----------------------|-------------------|--------|

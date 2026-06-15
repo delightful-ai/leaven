@@ -33,10 +33,11 @@
 - Deterministic one-case ACP worker run for case `13-1`, with workbook, ACP result, score report, manifest, transcript, and trajectory artifacts under `tmp/trace2skill-one-case-live`.
 - Full paper-denominator approval packet and subset-gate plan in `results/full_run_plan.md`.
 - Seal Level 2 semantic rigor review in `reviews/rigor_review.md` and `level2_report.json`.
+- Prompt-template family evidence plus `prompt_templates.manifest.json`, which records every upstream prompt/released-skill file path, byte count, line count, and SHA-256.
 
 ### Known Gaps
 
-- Prompt template families are indexed in `evidence/prompt_templates.md`; exact rendered live-call prompts remain future run artifacts.
+- Prompt template families and source file identities are indexed in `evidence/prompt_templates.md` and `evidence/prompt_templates.manifest.json`; exact rendered live-call prompts remain future run artifacts.
 - The full bibliography is summarized in `logic/related_work.md` but not exhaustively converted into one RW block per citation.
 - No Leaven result overlay JSONL exists yet; only the schema and overlay reader exist.
 - No model-backed one-case `13-1` live result has been added to this ARA; the current one-case result is a deterministic local ACP worker proof.

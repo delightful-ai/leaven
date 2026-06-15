@@ -813,3 +813,34 @@ Limit:
 
 - This synchronizes denominator vocabulary only. It does not create any new
   result rows, approve the full run, or execute Qwen/vLLM.
+
+## 2026-06-14 Prompt Source Manifest Check
+
+Artifact:
+
+```text
+scripts/check_trace2skill_prompt_manifest.py
+docs/ara/trace2skill_spreadsheetbench/evidence/prompt_templates.manifest.json
+docs/ara/trace2skill_spreadsheetbench/evidence/prompt_templates.md
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_prompt_manifest.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Current result:
+
+- Verifies every upstream prompt-template and released-skill prompt file is
+  represented by repo-relative path, byte size, line count, and SHA-256.
+- Confirms the ARA prompt evidence identifies the exact prompt source corpus
+  without copying full prompt text into the ARA.
+- The integrated Seal Level 1 validator now runs this manifest check after the
+  prompt-family index check.
+
+Limit:
+
+- This proves source prompt identity only. It does not prove rendered prompts
+  for live analyst calls, filled trajectory fields, model outputs, parser
+  results, or Qwen/vLLM execution.

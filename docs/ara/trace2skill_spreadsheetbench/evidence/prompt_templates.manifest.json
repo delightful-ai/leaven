@@ -1,0 +1,666 @@
+{
+  "families": [
+    {
+      "family": "Spreadsheet agent system prompts",
+      "file_count": 2,
+      "files": [
+        {
+          "bytes": 4572,
+          "line_count": 110,
+          "path": "spreadsheet_agent/system_prompt/cli_only_full_system_v1.txt",
+          "sha256": "d78f50a08e928e1a134b87e1ed36384be62354b6a630375ca4abfd09ff08b7ff"
+        },
+        {
+          "bytes": 4971,
+          "line_count": 120,
+          "path": "spreadsheet_agent/system_prompt/cli_skill_preloaded_full_system_v1.txt",
+          "sha256": "0a67b0d11b69f808fcecd09548868ccf9eb6f42ba9d3d646d6bac44735dc654c"
+        }
+      ],
+      "glob": "*.txt",
+      "source_dir": "spreadsheet_agent/system_prompt"
+    },
+    {
+      "family": "Error evolving agent",
+      "file_count": 18,
+      "files": [
+        {
+          "bytes": 23,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/skill_evolving_agent/changes_made_so_far_header.txt",
+          "sha256": "bd710f223f3909938e4e113cc2bdfe4a49f51041f54b78c27fa326a17bf76fc2"
+        },
+        {
+          "bytes": 67,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/skill_evolving_agent/compressed_failure_patterns_header.txt",
+          "sha256": "35afe41513a2e1d00f0dfda24fabb070daa353532721bfb4a91785471739c4b2"
+        },
+        {
+          "bytes": 180,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/skill_evolving_agent/compressed_failure_patterns_intro.txt",
+          "sha256": "e813d68b77b07c90d58cd675ee6f70f2815f6e2dbf4c9a6ff7862ecfe85070b6"
+        },
+        {
+          "bytes": 33,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/skill_evolving_agent/current_skill_folder_header.txt",
+          "sha256": "150ce789d977a85a212f6a2aaa545970c286c9e1284f196dac1a7ac992522c7c"
+        },
+        {
+          "bytes": 62,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/skill_evolving_agent/error_analysis_records_header.txt",
+          "sha256": "611aa7f4c869cf864536c950b105b4aacc6278d3d972c767586ffe81c0cbc2dc"
+        },
+        {
+          "bytes": 2849,
+          "line_count": 58,
+          "path": "skill_evolver/prompts/skill_evolving_agent/error_record_section_generic.txt",
+          "sha256": "6dcc0cb52f60eeb852b5d0f6675e824dfd90c42aa8bfcc45ec2ad9156831ee93"
+        },
+        {
+          "bytes": 2387,
+          "line_count": 54,
+          "path": "skill_evolver/prompts/skill_evolving_agent/error_record_section_patterns.txt",
+          "sha256": "fdb87f6384af559cbb051c19917b6ace376004740b2deee80d2059b07627e38e"
+        },
+        {
+          "bytes": 1925,
+          "line_count": 47,
+          "path": "skill_evolver/prompts/skill_evolving_agent/error_record_section_patterns_generic.txt",
+          "sha256": "febabfd0d1f7544862dbe837f642d7865a32afdb84816f420f6657273959d0c3"
+        },
+        {
+          "bytes": 3760,
+          "line_count": 68,
+          "path": "skill_evolver/prompts/skill_evolving_agent/error_record_section_skill.txt",
+          "sha256": "b50329d1274e1dc09f7b7474a3c6af78fe3ec12af178b4eb9024171f86442c22"
+        },
+        {
+          "bytes": 604,
+          "line_count": 8,
+          "path": "skill_evolver/prompts/skill_evolving_agent/final_consolidation_checklist.txt",
+          "sha256": "12ba16b24a357951b012567368a43a7c8e0eb554bb73ccb9f599dcafd6b1ed6e"
+        },
+        {
+          "bytes": 23,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/skill_evolving_agent/final_consolidation_header.txt",
+          "sha256": "14833894e6fee874a1cf9c80da5b1f3f8e248afe12e9d47ef47a56923151ccfe"
+        },
+        {
+          "bytes": 244,
+          "line_count": 3,
+          "path": "skill_evolver/prompts/skill_evolving_agent/json_retry_prompt.txt",
+          "sha256": "1fa29ea9d1c3d65ed222bb40fe12a6670248d2aa9be7ec19bac55337bc23ea0c"
+        },
+        {
+          "bytes": 3006,
+          "line_count": 57,
+          "path": "skill_evolver/prompts/skill_evolving_agent/modification_strategies_section.txt",
+          "sha256": "a451cb2aed3112a78fb7852d49e5e6be02906606ced14ae3ae194df9e095cb98"
+        },
+        {
+          "bytes": 57,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/skill_evolving_agent/reference_files_status_line.txt",
+          "sha256": "f2fad0bf0662990b6bf25a30918e4fe13f75de5e82d875e4436865256a992ff5"
+        },
+        {
+          "bytes": 115,
+          "line_count": 2,
+          "path": "skill_evolver/prompts/skill_evolving_agent/size_warning.txt",
+          "sha256": "d5d9ba0f05bdd49e22075ce6bf96a6fd3d339e66a66d6fb5ce66fbf3d982b42f"
+        },
+        {
+          "bytes": 28,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/skill_evolving_agent/skill_folder_size_status_header.txt",
+          "sha256": "8e0314588ac0464cf3dd037db4869fac80ec15d7995139e4ba3927c0e66d33bc"
+        },
+        {
+          "bytes": 59,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/skill_evolving_agent/skill_md_status_line.txt",
+          "sha256": "d1ce6b7dbb488d218d63d7454aa095be17a189780874a13c0d3f83308e9d75f5"
+        },
+        {
+          "bytes": 2910,
+          "line_count": 62,
+          "path": "skill_evolver/prompts/skill_evolving_agent/system_prompt_base.txt",
+          "sha256": "a3a9f65c6a01df081c81b4c5b652904671bddaf874c12ff7ae4f0d5afead42fc"
+        }
+      ],
+      "glob": "*.txt",
+      "source_dir": "skill_evolver/prompts/skill_evolving_agent"
+    },
+    {
+      "family": "Success / combined evolving agent",
+      "file_count": 43,
+      "files": [
+        {
+          "bytes": 65,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/combined_analysis_records_header.txt",
+          "sha256": "cffe331314b6e999b10c3a3bf100e67294afccb5f8d682a425db5956faa771bb"
+        },
+        {
+          "bytes": 156,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/combined_first_constraint_replacement.txt",
+          "sha256": "328118a7c2420523e7e68153dd8b5c5cf3ca33fb4db03927955c06887804c50f"
+        },
+        {
+          "bytes": 278,
+          "line_count": 4,
+          "path": "skill_evolver/prompts/success_evolving_agent/combined_goal_replacement.txt",
+          "sha256": "08c6aa92a4cfebcbf57801d44d764b41bf27f7ce6a34b7ade157e70bc2fad8ae"
+        },
+        {
+          "bytes": 93,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/combined_input_replacement.txt",
+          "sha256": "e3f05f389a1f648cccf45082ac112e5e365229b60b846180b2d36b2c52aa3dee"
+        },
+        {
+          "bytes": 284,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/combined_intro_replacement.txt",
+          "sha256": "c8fbf1046737fe1bb41d27c6dfdf8d1b01a69d25465eb1e895348e6651c60851"
+        },
+        {
+          "bytes": 1307,
+          "line_count": 37,
+          "path": "skill_evolver/prompts/success_evolving_agent/combined_markdown_merge_system_prompt.txt",
+          "sha256": "8db0e79b8d44edefc79109491ee55b7031f7721d8d7ce50b4d4323a7a6c6b1ea"
+        },
+        {
+          "bytes": 3028,
+          "line_count": 36,
+          "path": "skill_evolver/prompts/success_evolving_agent/combined_merge_system_prompt.txt",
+          "sha256": "c9b707e3dafacd96536c92fe43b78507d3b20e6b6d1552d67e61d3b5377e706f"
+        },
+        {
+          "bytes": 3235,
+          "line_count": 53,
+          "path": "skill_evolver/prompts/success_evolving_agent/combined_modification_strategies_section.txt",
+          "sha256": "964a0f60739c6491adf7cd5651f8399c8f5f542a203e0450d21444b91cab0a84"
+        },
+        {
+          "bytes": 171,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/combined_output_reasoning_replacement.txt",
+          "sha256": "84ebe59b1b7495a97de64082cbecf71ba22950d79d6146ec7752594700a1bca8"
+        },
+        {
+          "bytes": 53,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/combined_patches_to_merge_header.txt",
+          "sha256": "41e8b6c40e0c8bb4fbf06947e0afb238abcdcc0f5d2f7180648a2ebc38293597"
+        },
+        {
+          "bytes": 175,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/combined_patches_to_merge_intro.txt",
+          "sha256": "fcfe43328375b5100497da9fea14ad959bac1ca19d107307e5c65cb401869665"
+        },
+        {
+          "bytes": 105,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/combined_patterns_input_replacement.txt",
+          "sha256": "3ca387c4446fcde93d2aef8c033e98034f3ae2445bbf1c9bed8af7a34f51c119"
+        },
+        {
+          "bytes": 523,
+          "line_count": 12,
+          "path": "skill_evolver/prompts/success_evolving_agent/combined_patterns_section.txt",
+          "sha256": "dd421242ac89ae11728a5c737d44ace42644678238bce1fc0a6b8426850aa681"
+        },
+        {
+          "bytes": 1378,
+          "line_count": 38,
+          "path": "skill_evolver/prompts/success_evolving_agent/combined_record_section.txt",
+          "sha256": "41c24cabdbc1385c0a2f131548304e88a9a11aca661f6c0b8b92b61740997214"
+        },
+        {
+          "bytes": 62,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/combined_semantic_patches_to_merge_header.txt",
+          "sha256": "01738ec879413a35d05bd9a116ebd31bddf98a3449941e0792f928c4ea0c5b96"
+        },
+        {
+          "bytes": 197,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/combined_semantic_patches_to_merge_intro.txt",
+          "sha256": "5a3009e4f930b577717c16da119e7ebeaa65faf5f4c2ee0ba6ea04fadc900ce2"
+        },
+        {
+          "bytes": 100,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/combined_traceability_constraint.txt",
+          "sha256": "71d0069772ca9e768d987404e60f684828f68647671123f1562a5e09579d9ad0"
+        },
+        {
+          "bytes": 65,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/compressed_mixed_patterns_header.txt",
+          "sha256": "099d4a70cb17cf7314a860da8710225ccb5cfc6cd2d70c2e420e9251c5ad9f31"
+        },
+        {
+          "bytes": 170,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/compressed_mixed_patterns_intro.txt",
+          "sha256": "d4136b7921082b60bbe843b6d60cb49642803f2a9bb0ade737b1fb03ba0aa779"
+        },
+        {
+          "bytes": 67,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/compressed_success_patterns_header.txt",
+          "sha256": "63e43abe23b9d18dfe5928381e212a69e2bd91bccac688a6853b7ec92040a4aa"
+        },
+        {
+          "bytes": 202,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/compressed_success_patterns_intro.txt",
+          "sha256": "d1cfc7051120781978dfea255b3f507ffc16a72d34c4a52dd346b8ca310ffcad"
+        },
+        {
+          "bytes": 33,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/current_skill_folder_header.txt",
+          "sha256": "150ce789d977a85a212f6a2aaa545970c286c9e1284f196dac1a7ac992522c7c"
+        },
+        {
+          "bytes": 57,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/reference_files_status_line.txt",
+          "sha256": "f2fad0bf0662990b6bf25a30918e4fe13f75de5e82d875e4436865256a992ff5"
+        },
+        {
+          "bytes": 115,
+          "line_count": 2,
+          "path": "skill_evolver/prompts/success_evolving_agent/size_warning.txt",
+          "sha256": "d5d9ba0f05bdd49e22075ce6bf96a6fd3d339e66a66d6fb5ce66fbf3d982b42f"
+        },
+        {
+          "bytes": 28,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/skill_folder_size_status_header.txt",
+          "sha256": "8e0314588ac0464cf3dd037db4869fac80ec15d7995139e4ba3927c0e66d33bc"
+        },
+        {
+          "bytes": 59,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/skill_md_status_line.txt",
+          "sha256": "d1ce6b7dbb488d218d63d7454aa095be17a189780874a13c0d3f83308e9d75f5"
+        },
+        {
+          "bytes": 64,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/success_analysis_records_header.txt",
+          "sha256": "78f839f8fdd3daba022edbfcd3e05674f463566116bc2322fbf4f1f0761072da"
+        },
+        {
+          "bytes": 134,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/success_first_constraint_replacement.txt",
+          "sha256": "233076adb1d15a3e7b03eee51de3df5826d3d00eb458b344b22a14ead5561ecd"
+        },
+        {
+          "bytes": 267,
+          "line_count": 4,
+          "path": "skill_evolver/prompts/success_evolving_agent/success_goal_replacement.txt",
+          "sha256": "e36717022cb3c8c126a0066f8baaccc60514daf55e5572a7be8c1c4f25e98673"
+        },
+        {
+          "bytes": 79,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/success_input_replacement.txt",
+          "sha256": "8c285dd61f25ba64cacec4c0c7b848736bdf98c5a04beffc8e0f0dfbaa8b99d4"
+        },
+        {
+          "bytes": 256,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/success_intro_replacement.txt",
+          "sha256": "35b727b95066e4c39f998aa4dc2bd3fba1b6bd1894a78ccd2ec14a3b3fa80953"
+        },
+        {
+          "bytes": 1254,
+          "line_count": 37,
+          "path": "skill_evolver/prompts/success_evolving_agent/success_markdown_merge_system_prompt.txt",
+          "sha256": "5754b1822c0c2f816a30f9bb80c5dc1f0d59ccad0a4c27cae019b611d7a373cf"
+        },
+        {
+          "bytes": 2921,
+          "line_count": 36,
+          "path": "skill_evolver/prompts/success_evolving_agent/success_merge_system_prompt.txt",
+          "sha256": "7bb6d9cfe0f4e11859942fdba978879fa17e88620b84c80e8bc5da679498a20d"
+        },
+        {
+          "bytes": 3301,
+          "line_count": 55,
+          "path": "skill_evolver/prompts/success_evolving_agent/success_modification_strategies_section.txt",
+          "sha256": "da1a8c6c71938d177d0013fd842e8f4e11ad4edbdf32467ce507aa99321a5890"
+        },
+        {
+          "bytes": 115,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/success_output_reasoning_replacement.txt",
+          "sha256": "2483918cf52a7177378945facf74e55ab2b1850b82c0d4d13620391bae1abf86"
+        },
+        {
+          "bytes": 52,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/success_patches_to_merge_header.txt",
+          "sha256": "938fbef907a14554f24dd1371488545904faf143a8db9dd5411b31a3fbc3809e"
+        },
+        {
+          "bytes": 160,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/success_patches_to_merge_intro.txt",
+          "sha256": "35a0740e8ac48e8a55efbce4da52037d8728b55aa10b3126eafbce187761fc88"
+        },
+        {
+          "bytes": 91,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/success_patterns_input_replacement.txt",
+          "sha256": "a3a1149532291918b5f54820e345afaef6aac2b210e07541535397f038dd1097"
+        },
+        {
+          "bytes": 673,
+          "line_count": 13,
+          "path": "skill_evolver/prompts/success_evolving_agent/success_patterns_section.txt",
+          "sha256": "373b9349e97216b0531145586155cf668ce60d64d0ab8b28885d4beeddfc1e85"
+        },
+        {
+          "bytes": 1530,
+          "line_count": 36,
+          "path": "skill_evolver/prompts/success_evolving_agent/success_record_section.txt",
+          "sha256": "9b1470894b9f83fb69fad45198e3bca74721569c1458469a7910a47c9be4e558"
+        },
+        {
+          "bytes": 61,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/success_semantic_patches_to_merge_header.txt",
+          "sha256": "fdb8919a994486227333361e5732a5e6eabf31e3ee4e3e115144e9899ecd511a"
+        },
+        {
+          "bytes": 182,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/success_semantic_patches_to_merge_intro.txt",
+          "sha256": "c85d9963719071339665c1e06091ec2401f8ec420fb91acda7a9cfc17a242c05"
+        },
+        {
+          "bytes": 89,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/success_evolving_agent/success_traceability_constraint.txt",
+          "sha256": "8babc55e930a2b9b65fc0158e143f7a3b709ddf6ddf0fe24b7942e22064769f1"
+        }
+      ],
+      "glob": "*.txt",
+      "source_dir": "skill_evolver/prompts/success_evolving_agent"
+    },
+    {
+      "family": "Parallel merge/application agent",
+      "file_count": 36,
+      "files": [
+        {
+          "bytes": 97,
+          "line_count": 2,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/apply_all_edits_instruction.txt",
+          "sha256": "4428496e8c27a185dd037dee4ff96ad0423860b8e504496813581130ba8d93a4"
+        },
+        {
+          "bytes": 559,
+          "line_count": 9,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/apply_constraints.txt",
+          "sha256": "9ca8fbb79e8a0863c8e74ce1e530c0631b4f6f62a2bd05156a24876a1661c882"
+        },
+        {
+          "bytes": 944,
+          "line_count": 19,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/apply_system_prompt_template.txt",
+          "sha256": "761ee906563b0182151958cb5675f8c0b38852ad8ec42207812162bc13139b73"
+        },
+        {
+          "bytes": 191,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/continue_json_prompt.txt",
+          "sha256": "fdf4f39b10b02d09a71e2866f75f7923fee596b3df2b793936952c251ae0f38c"
+        },
+        {
+          "bytes": 258,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/continue_semantic_prompt.txt",
+          "sha256": "2b578384159a32f9c43185c5a42c5c9a4c59368c47bac55edf6d2de46f6af6f5"
+        },
+        {
+          "bytes": 52,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/current_content_header.txt",
+          "sha256": "e6581b95abd5201bfe240d4cd747de55c461cbdacf666e5ffe0d0074eec8b379"
+        },
+        {
+          "bytes": 33,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/current_skill_folder_header.txt",
+          "sha256": "150ce789d977a85a212f6a2aaa545970c286c9e1284f196dac1a7ac992522c7c"
+        },
+        {
+          "bytes": 45,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/edits_to_translate_header.txt",
+          "sha256": "cfbd2b874b09dfa9fbd05721d52475d01cddaa43d094da29009df1923a4b98f6"
+        },
+        {
+          "bytes": 53,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/failed_validation_header.txt",
+          "sha256": "a5718332317eeb638e1d4438a318e4491a51f328770999198b0639eee83a3244"
+        },
+        {
+          "bytes": 249,
+          "line_count": 3,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/json_format_fix_prompt.txt",
+          "sha256": "aa74c5e5eb4888625dea0c91942b649bb905215d500a745002bbcac2eb870bab"
+        },
+        {
+          "bytes": 1335,
+          "line_count": 21,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/map_output_format.txt",
+          "sha256": "9031a1872d064e52191bbc75ade2ecf6958f01659a5f1697970556e823f1f0e3"
+        },
+        {
+          "bytes": 266,
+          "line_count": 16,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/markdown_format_fix_example.txt",
+          "sha256": "9bd3849956d5174d1803f6258961e7d4c1eb6f9f16f5b2fd37ed8809eb27d10f"
+        },
+        {
+          "bytes": 262,
+          "line_count": 16,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/markdown_format_fix_example_heading.txt",
+          "sha256": "e32caaf552d3eb4eb823f1cf8ed410899c07c84eb9bfcae72d2ff1698efdc3f3"
+        },
+        {
+          "bytes": 316,
+          "line_count": 3,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/markdown_format_fix_prompt.txt",
+          "sha256": "4f6ec5fde54711462d33a3f02f6cc1280edb0015945f576bdeff9f55ff7e1e38"
+        },
+        {
+          "bytes": 274,
+          "line_count": 3,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/markdown_format_fix_prompt_heading.txt",
+          "sha256": "719d1231e9e5f2c078c2af18a2ee90b5111b90d1e58ac2d917a12ecdf3f4abdd"
+        },
+        {
+          "bytes": 1803,
+          "line_count": 46,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/markdown_map_output_format.txt",
+          "sha256": "c917469757b2bb3e7fc1f95bc68df41857960102c3282e70de9053b7a2e109d2"
+        },
+        {
+          "bytes": 1836,
+          "line_count": 45,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/markdown_map_output_format_heading.txt",
+          "sha256": "4bd3e90494ee38d0b8bae38c8aee71ddd411ab1473e41e0eb2ac0fd881cbf63e"
+        },
+        {
+          "bytes": 1049,
+          "line_count": 37,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/markdown_merge_system_prompt.txt",
+          "sha256": "7a3e60a6592996874cdf6165ee59095af1bf6fb98b53ce38d453c8aea19ee11b"
+        },
+        {
+          "bytes": 994,
+          "line_count": 34,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/markdown_merge_system_prompt_heading.txt",
+          "sha256": "9188f4cb3522fe70ba2926e12f9f463ef25cf5b3f3191a5530969099287a5128"
+        },
+        {
+          "bytes": 1151,
+          "line_count": 23,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/markdown_translation_system_prompt.txt",
+          "sha256": "124a17f4f98980c817f342ca5c3da05e3593878eade1032586c678f6f7b93bc5"
+        },
+        {
+          "bytes": 2780,
+          "line_count": 36,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/merge_system_prompt.txt",
+          "sha256": "8e62f924dcb9938ee0056c8e5bbbac324eb2995ee4ee35ea67822b51102709bb"
+        },
+        {
+          "bytes": 25,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/merged_patch_to_apply_header.txt",
+          "sha256": "7cd856bc68c2d4c00d4f22046cb0ccba1dd3ff3b7a1e1cd76ed0a8687529f69a"
+        },
+        {
+          "bytes": 36,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/missing_file_header.txt",
+          "sha256": "bc7c17ca06bdd1294817799db23269bbc9fb68c6b351c2b60abd26a8bfd17bdc"
+        },
+        {
+          "bytes": 34,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/original_skill_folder_header.txt",
+          "sha256": "d5fb3b5b0289840e5178efd1b2a27f3a3f50feda294cc7e0c483637bcc8869be"
+        },
+        {
+          "bytes": 44,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/patches_to_merge_header.txt",
+          "sha256": "cf36342a02b0bfb4df9a95ba979c8fc7dea74eb43ca6ce11c8ea0735e1c144c5"
+        },
+        {
+          "bytes": 57,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/reference_files_status_line.txt",
+          "sha256": "f2fad0bf0662990b6bf25a30918e4fe13f75de5e82d875e4436865256a992ff5"
+        },
+        {
+          "bytes": 29,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/semantic_edit_instruction_header.txt",
+          "sha256": "17ee413b98018b3bece2c9c82da5b657e433231742c29f3e7c34e2f477283798"
+        },
+        {
+          "bytes": 53,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/semantic_patches_to_merge_header.txt",
+          "sha256": "466fb9bbc7acdea8702f9d235f0bd2e2f6cb3212ae50111c444957fab8736cf7"
+        },
+        {
+          "bytes": 29,
+          "line_count": 2,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/skill_folder_size_status_header.txt",
+          "sha256": "516f7e6b662272801e6e0ec3e1a37d48ff7842c546d8364b78e841845f34ced9"
+        },
+        {
+          "bytes": 59,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/skill_md_status_line.txt",
+          "sha256": "d1ce6b7dbb488d218d63d7454aa095be17a189780874a13c0d3f83308e9d75f5"
+        },
+        {
+          "bytes": 130,
+          "line_count": 2,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/translate_edits_instruction.txt",
+          "sha256": "c5ad35416cca438a611e1483f5a088e854db899b74c25f70fc0899ed0e16a160"
+        },
+        {
+          "bytes": 142,
+          "line_count": 2,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/translate_semantic_instruction.txt",
+          "sha256": "162649c752f5bcea75b8b3cb78ffc7477bd87c12645187255a50689873d01004"
+        },
+        {
+          "bytes": 963,
+          "line_count": 13,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/translation_system_prompt.txt",
+          "sha256": "3216f99e0c27442a178afce60d8658634055112d97c94f63703d9425bdcb76d1"
+        },
+        {
+          "bytes": 20,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/validation_error_header.txt",
+          "sha256": "833b907acd80795f0cbc359ff0469d330f0cda1634e102aefafa7770eb0e15d1"
+        },
+        {
+          "bytes": 136,
+          "line_count": 1,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/verification_instruction.txt",
+          "sha256": "c105783d64fb99a10fbede500f114bf1128c8866de84ee87fa3888dc3c8ac29c"
+        },
+        {
+          "bytes": 2287,
+          "line_count": 38,
+          "path": "skill_evolver/prompts/parallel_evolving_agent/verification_system_prompt.txt",
+          "sha256": "43bd947dac792d9aeedcafaee9eb28c07b4848d6d56a50646568f01bee6e554e"
+        }
+      ],
+      "glob": "*.txt",
+      "source_dir": "skill_evolver/prompts/parallel_evolving_agent"
+    },
+    {
+      "family": "Released skill prompts",
+      "file_count": 4,
+      "files": [
+        {
+          "bytes": 45673,
+          "line_count": 869,
+          "path": "released_skills/trace2skill-xlsx-122B-combined/SKILL.md",
+          "sha256": "2405fc8df1e00eb5f359bc745de6d5b2305bc1cb789beee89371ba1fe08538e5"
+        },
+        {
+          "bytes": 22255,
+          "line_count": 481,
+          "path": "released_skills/trace2skill-xlsx-35B-combined/SKILL.md",
+          "sha256": "cc7dc2d4aea4ce06dc8e882f7d04f497a4b1837e165d5f0780dc49befd5c5f68"
+        },
+        {
+          "bytes": 21786,
+          "line_count": 359,
+          "path": "released_skills/xlsx-122B/SKILL.md",
+          "sha256": "3d615565ec20b72228799edc3aece98f02e123ee8b3a4bece0f7a8d3622f1238"
+        },
+        {
+          "bytes": 5367,
+          "line_count": 89,
+          "path": "released_skills/xlsx-35B/SKILL.md",
+          "sha256": "abc36f1fdf19c2f08af332cf3df7cb8d8f8d3a9bbf4b82db58d7a2bffb476900"
+        }
+      ],
+      "glob": "*/SKILL.md",
+      "source_dir": "released_skills"
+    }
+  ],
+  "generated_by": "scripts/check_trace2skill_prompt_manifest.py --write",
+  "schema_version": "leaven.trace2skill.prompt_manifest.v1",
+  "source_root": "tmp/repros/trace2skill-upstream",
+  "total_files": 103
+}
