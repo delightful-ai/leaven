@@ -123,6 +123,11 @@ the `dataset_slice` against the runbook stage's generated
 that exact `dataset_slice.split`, subset rows cannot silently become 200-case
 paper-denominator rows, held-out rows must use the paper `200..400` split, and
 aggregate/full-paper rows must keep generated case ranges and counts.
+All paper-denominator-class rows (`held-out-single-seed-candidate`,
+`seed-aggregate-candidate`, `paper-denominator-candidate`, and
+`paper-denominator-reproduction`) must use a paper model id
+(`Qwen3.5-122B-A10B` or `Qwen3.5-35B-A3B`) and `vLLM`, so fixture-model rows
+cannot masquerade as held-out, aggregate, or full-paper evidence.
 It also checks the runbook stage's generated `expected_seed_policy`, so
 approval-gated rows cannot drift to off-protocol seeds while still looking like
 paper-denominator progress. Runtime fields are checked against generated

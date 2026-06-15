@@ -849,12 +849,10 @@ def check_record(
         case_count = record.get("dataset_slice", {}).get("case_count")
         if not isinstance(case_count, int) or case_count < 200:
             errors.append(f"{prefix} paper-denominator rows must cover at least the 200-case paper split")
-
-    if proof == "paper-denominator-reproduction":
         if record.get("serving_backend") != "vLLM":
-            errors.append(f"{prefix} paper-denominator-reproduction rows must use vLLM")
+            errors.append(f"{prefix} paper-denominator rows must use vLLM")
         if record.get("model_id") not in {"Qwen3.5-122B-A10B", "Qwen3.5-35B-A3B"}:
-            errors.append(f"{prefix} paper-denominator-reproduction row has non-paper model_id")
+            errors.append(f"{prefix} paper-denominator row has non-paper model_id")
 
     if binding is None:
         return

@@ -851,6 +851,9 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
   paper denominator, G3/G3V use `0..200`, G4 uses `200..400`, and
   aggregate/full-paper rows keep their generated case ranges, case counts, and
   explicit denominator labels.
+- Validates paper-denominator-class row identity: held-out, seed-aggregate,
+  paper-candidate, and full-paper rows must use a paper model id
+  (`Qwen3.5-122B-A10B` or `Qwen3.5-35B-A3B`) and `vLLM`.
 - Validates the row seed evidence against the named runbook stage's generated
   `expected_seed_policy`: G1M/G2 require seed `41`, G3/G3V/G4 require one of
   `[41, 42, 43]`, and G5/G6 require `extra.seeds: [41, 42, 43]`.
@@ -902,10 +905,11 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
   wrong runbook stage label, missing prompt artifacts for `paper-subset`,
   missing base schema id, stringly metric value, missing official evaluator
   artifact, model one-case case-id drift, subset denominator drift, subset split
-  drift, aggregate case-count drift, aggregate source model drift, full-paper
-  case-count drift, full-paper missing required split-range source coverage,
-  full-paper source model drift, subset seed drift, subset worker drift,
-  full-paper serving/model drift with null plot binding, blocked
+  drift, held-out paper model drift, aggregate case-count drift, aggregate
+  serving drift, aggregate source model drift, full-paper case-count drift,
+  full-paper missing required split-range source coverage, full-paper source
+  model drift, subset seed drift, subset worker drift, full-paper serving/model
+  drift with null plot binding, blocked
   real-results approval preflight, missing skill artifact, skill metadata
   missing from the artifact audit, missing approval evidence for `paper-subset`,
   and accidental

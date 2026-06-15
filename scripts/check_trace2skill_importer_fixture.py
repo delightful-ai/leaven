@@ -654,6 +654,20 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
     try:
         check_result_intake_for_rows(repo_root, ara_root, aggregate_output, None, errors, "aggregate intake")
 
+        invalid_heldout_model_output = tmp_path / "heldout-invalid-model.jsonl"
+        write_jsonl(
+            invalid_heldout_model_output,
+            [source_heldout_row(repo_root, tmp_path, 41, model_id="fixture-model")],
+        )
+        check_result_intake_for_rows(
+            repo_root,
+            ara_root,
+            invalid_heldout_model_output,
+            "paper-denominator row has non-paper model_id",
+            errors,
+            "held-out invalid model id",
+        )
+
         def mutate_aggregate_to_missing_source_seed(row: dict[str, Any]) -> None:
             row["extra"] = dict(row["extra"])
             row["extra"]["source_result_paths"] = list(row["extra"]["source_result_paths"][:-1])
@@ -682,6 +696,20 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
             "G5 rows must use dataset_slice.case_count 200",
             errors,
             "aggregate case-count drift",
+        )
+
+        def mutate_aggregate_to_wrong_serving_backend(row: dict[str, Any]) -> None:
+            row["serving_backend"] = "fixture-backend"
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            aggregate_output,
+            tmp_path / "aggregate-wrong-serving.jsonl",
+            mutate_aggregate_to_wrong_serving_backend,
+            "paper-denominator rows must use vLLM",
+            errors,
+            "aggregate serving drift",
         )
 
         invalid_source_paths = list(source_paths)
@@ -868,7 +896,7 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
             repo_root,
             ara_root,
             invalid_serving_output,
-            "paper-denominator-reproduction rows must use vLLM",
+            "paper-denominator rows must use vLLM",
             errors,
             "full-paper invalid serving backend",
         )
@@ -881,7 +909,7 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
             repo_root,
             ara_root,
             invalid_model_output,
-            "paper-denominator-reproduction row has non-paper model_id",
+            "paper-denominator row has non-paper model_id",
             errors,
             "full-paper invalid model id",
         )
