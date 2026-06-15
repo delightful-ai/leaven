@@ -348,3 +348,7 @@ entries:
     notes:
       - "Routed source-command evolution-worker enforcement as paper-protocol and command-provenance guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the change only prevents G3 skill-evolution rows from satisfying fanout-worker evidence with baseline-run workers or metadata alone; it creates no accepted evolving-split row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#88"
+    notes:
+      - "Routed source-command success-analysis-worker enforcement as paper-protocol and command-provenance guardrail evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the change only prevents G3 skill-evolution rows from satisfying success-analysis worker evidence with baseline-run workers, evolution workers, or metadata alone; it creates no accepted evolving-split row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
