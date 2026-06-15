@@ -1115,6 +1115,26 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "overlay target-label drift",
         )
 
+        def mutate_overlay_to_wrong_model_family(row: dict[str, Any]) -> None:
+            row["model_id"] = "Qwen3.5-35B-A3B"
+            row["plot_binding"] = {
+                "panel": "same_model_deepening_vrf",
+                "x_label": "+Combined\n122B",
+                "series": "Fixture",
+                "axis": "left",
+            }
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "wrong-model-family-overlay.jsonl",
+            mutate_overlay_to_wrong_model_family,
+            "plot_binding.x_label '+Combined\\n122B' requires 122B model family, got model_id 'Qwen3.5-35B-A3B'",
+            errors,
+            "overlay model-family drift",
+        )
+
         def mutate_missing_eval_artifact(row: dict[str, Any]) -> None:
             row["artifact_paths"] = [
                 path

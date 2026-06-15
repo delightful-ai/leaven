@@ -61,6 +61,8 @@ protocol, and overlay rows whose metric unit, denominator, or paper
 classification is not compatible with the target panel. Overlay rows must also
 use a `plot_binding.x_label` present in the committed target-plot provenance
 for that panel, so closeout cannot count a row the plotter would later reject.
+When the target label names a model family such as `122B` or `35B`, known Qwen
+paper model ids must match that family.
 
 Official SpreadsheetBench evaluator output can be converted into Leaven result
 rows only after a real Leaven run has produced an inspectable
@@ -264,7 +266,8 @@ Supported panels:
 This explicit binding is intentional. The plotter must not guess which paper row
 a Leaven metric is meant to compare against. Result intake also checks the
 binding against the committed target-plot provenance before plots or closeout
-can consume the row.
+can consume the row, and rejects known paper model ids bound to the wrong
+model-family label.
 
 Use `plot_binding: null` only for non-overlay result rows whose denominator
 would be misleading on the paper-target panels.

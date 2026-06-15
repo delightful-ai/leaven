@@ -78,6 +78,10 @@ REASONINGBANK_LABEL_SOURCE_METRICS = {
     "Soft": "avg_soft_score",
     "Hard": "avg_hard_score",
 }
+MODEL_ID_FAMILIES = {
+    "Qwen3.5-122B-A10B": "122B",
+    "Qwen3.5-35B-A3B": "35B",
+}
 
 
 def parse_case_range(raw: Any) -> tuple[int, int] | None:
@@ -669,6 +673,37 @@ def check_plot_binding_target_label(
         )
 
 
+def model_family_from_label(label: str) -> str | None:
+    if "122B" in label:
+        return "122B"
+    if "35B" in label:
+        return "35B"
+    return None
+
+
+def check_plot_binding_model_family(
+    prefix: str,
+    record: dict[str, Any],
+    binding: Any,
+    errors: list[str],
+) -> None:
+    if not isinstance(binding, dict):
+        return
+    x_label = binding.get("x_label")
+    if not isinstance(x_label, str):
+        return
+    expected_family = model_family_from_label(x_label)
+    if expected_family is None:
+        return
+    model_id = record.get("model_id")
+    actual_family = MODEL_ID_FAMILIES.get(model_id)
+    if actual_family is not None and actual_family != expected_family:
+        errors.append(
+            f"{prefix} plot_binding.x_label {x_label!r} requires {expected_family} model family, "
+            f"got model_id {model_id!r}"
+        )
+
+
 def source_result_paths(extra: Any) -> list[str] | None:
     if not isinstance(extra, dict):
         return None
@@ -1073,6 +1108,7 @@ def check_record(
     if proof == "paper-subset" and "subset" not in str(denominator):
         errors.append(f"{prefix} paper-subset overlays must use an explicit subset denominator")
     check_plot_binding_target_label(repo_root, prefix, binding, errors)
+    check_plot_binding_model_family(prefix, record, binding, errors)
 
 
 def repo_root_for(ara_root: Path) -> Path:

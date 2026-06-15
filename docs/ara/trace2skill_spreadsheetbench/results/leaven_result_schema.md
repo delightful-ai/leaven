@@ -120,6 +120,9 @@ what Leaven actually ran.
 - Overlay rows must use a `plot_binding.x_label` that exists in the committed
   target-plot provenance for the named panel; closeout cannot count an overlay
   row that the plotter would later reject.
+- When an overlay label names a model family such as `122B` or `35B`, known
+  Qwen paper model ids must match that family; a 35B row cannot be overlaid on
+  a 122B paper target label.
 - Artifact paths and `skill_source.path` values must be repo-relative,
   inspectable files at validation time. When `skill_source.path` is present,
   the same path must also appear in `artifact_paths`; a file-backed optimized
