@@ -103,3 +103,7 @@ entries:
     notes:
       - "Routed plot-freshness validation as target-scoreboard integrity evidence."
       - "Kept reproduction claims unchanged because the checker proves committed target PNG freshness only; it does not create overlays, result rows, approval, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#27"
+    notes:
+      - "Routed approval-state validation as approval/closeout consistency evidence."
+      - "Kept reproduction claims unchanged because the checker proves blocked-state consistency only; it does not fill approvals, create result rows, or execute Qwen/vLLM."

@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T19:31-07:00"
-  turn_count: 26
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, approval-artifact result-intake guard, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
+  last_turn: "2026-06-14T19:34-07:00"
+  turn_count: 27
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, approval-artifact result-intake guard, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, approval-state validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -169,6 +169,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Added plot-freshness checker; trace2skill_targets.png is regenerated in a temporary directory and byte-compared with the committed paper-target plot before validation passes."
+  - turn: 27
+    type: experiment
+    id: "PM-2026-06-14-028"
+    routing: direct
+    provenance: ai-executed
+    summary: "Added approval-state checker; the full-run approval packet must be either runnable or intentionally blocked with matching closeout/status docs before validation passes."
 
 ai_actions:
   - turn: 1
@@ -446,6 +452,14 @@ ai_actions:
       - "scripts/validate_ara.py"
       - "scripts/AGENTS.md"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 27
+    action: "Added scripts/check_trace2skill_approval_state.py, wired it into validate_ara.py, and documented the approval-state consistency proof."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/check_trace2skill_approval_state.py"
+      - "scripts/validate_ara.py"
+      - "scripts/AGENTS.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -502,6 +516,8 @@ key_context:
     excerpt: "Closeout-freshness check passed directly and through validate_ara; it regenerates closeout_audit.json/md from current approval, result-row, dataset-manifest, and one-case state while leaving overall_complete false and Qwen/vLLM execution blocked."
   - turn: 26
     excerpt: "Plot-freshness check passed directly and through validate_ara; it regenerates trace2skill_targets.png from current ARA evidence/result-row state and compares the PNG hash while leaving overlays, paper-denominator rows, approval, and Qwen/vLLM execution absent."
+  - turn: 27
+    excerpt: "Approval-state check passed directly and through validate_ara; it confirms the full-run packet is intentionally blocked and that closeout/status docs carry the same unresolved fields while leaving approval, model endpoints, credentials, tolerance, and Qwen/vLLM execution absent."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."
