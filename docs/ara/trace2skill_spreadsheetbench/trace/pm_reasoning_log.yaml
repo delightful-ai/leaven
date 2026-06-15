@@ -228,3 +228,7 @@ entries:
     notes:
       - "Routed result split identity enforcement as denominator-provenance guardrail evidence, not model-backed execution."
       - "Kept reproduction claims unchanged because the check only prevents range-shaped rows from hiding the wrong split label; it creates no accepted model-backed rows, overlays, approvals, seed aggregates, full-paper rows, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#58"
+    notes:
+      - "Routed aggregate/full-paper exact range and count enforcement as denominator-provenance guardrail evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the check only prevents aggregate/full-paper-shaped rows from hiding short denominators; it creates no accepted model-backed rows, overlays, approvals, seed aggregates, full-paper rows, or Qwen/vLLM execution."
