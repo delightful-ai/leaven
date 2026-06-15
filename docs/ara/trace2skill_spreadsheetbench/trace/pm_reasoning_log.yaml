@@ -124,3 +124,7 @@ entries:
     notes:
       - "Routed official-eval importer fixture validation as importer/admission-control evidence."
       - "Kept reproduction claims unchanged because the checker proves fixture import and refusal behavior only; it writes no top-level result rows, creates no overlays, approves no tolerance, and does not execute Qwen/vLLM."
+  - turn: "2026-06-14_001#32"
+    notes:
+      - "Routed Stage 2 rendered-prompt validation as one-case prompt-materialization evidence."
+      - "Kept reproduction claims unchanged because the checker proves pending prompt/fanout artifacts only; it does not execute analyst calls, parse responses, merge patches, create overlays, approve tolerance, or run Qwen/vLLM."
