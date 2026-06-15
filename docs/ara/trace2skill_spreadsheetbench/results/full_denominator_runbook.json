@@ -524,8 +524,7 @@
         "kind": "full-paper",
         "source_proof_classifications": [
           "training-validation-candidate",
-          "seed-aggregate-candidate",
-          "paper-denominator-candidate"
+          "seed-aggregate-candidate"
         ],
         "source_result_paths_min": 1
       },

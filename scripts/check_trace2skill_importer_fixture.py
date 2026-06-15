@@ -891,7 +891,7 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
             repo_root,
             ara_root,
             unsupported_source_output,
-            "proof_classification must be one of ['training-validation-candidate', 'seed-aggregate-candidate', 'paper-denominator-candidate']",
+            "proof_classification must be one of ['training-validation-candidate', 'seed-aggregate-candidate']",
             errors,
             "full-paper unsupported source classification",
         )

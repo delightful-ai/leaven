@@ -141,9 +141,9 @@ cite inspectable held-out single-seed result JSONL rows that themselves pass
 result intake for seeds `41`, `42`, and `43`, with the aggregate `metric_value`
 equal to the mean of the cited seed metric values; every cited seed-aggregate
 source row must be a G4 held-out single-seed candidate. Full-paper rows must
-cite training-validation, seed-aggregate, or paper-candidate source rows that
-also pass result intake and together cover the generated required split ranges
-such as `0..200` and `200..400`, with the full-paper `metric_value` equal to the
+cite training-validation or seed-aggregate source rows that also pass result
+intake and together cover the generated required split ranges such as `0..200`
+and `200..400`, with the full-paper `metric_value` equal to the
 case-count-weighted mean of those cited split metrics. Every cited full-paper
 source row must have a full-paper source classification named by the generated
 aggregate policy; a held-out single-seed row can support a seed aggregate, but

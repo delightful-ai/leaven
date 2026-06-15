@@ -872,9 +872,9 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
   seeds `41`, `42`, and `43`, and the aggregate `metric_value` must equal the
   mean of the cited seed metric values. Every cited seed-aggregate source row
   must be a G4 held-out single-seed candidate. Full-paper rows must cite
-  training-validation, seed-aggregate, or paper-candidate source result JSONL
-  rows that also pass result intake and together cover generated required split
-  ranges such as `0..200` and `200..400`. The full-paper `metric_value` must
+  training-validation or seed-aggregate source result JSONL rows that also pass
+  result intake and together cover generated required split ranges such as
+  `0..200` and `200..400`. The full-paper `metric_value` must
   equal the case-count-weighted mean of those cited split metrics. Every cited
   full-paper source row must use a source proof classification named by the
   generated aggregate policy. Aggregate and full-paper source rows must also

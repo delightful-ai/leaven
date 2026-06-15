@@ -777,8 +777,8 @@ def check_stage_aggregate_policy(
             )
         if not matching_source_keys:
             errors.append(
-                f"{prefix} {stage_id} full-paper rows must cite training-validation, "
-                "seed-aggregate, or paper-candidate source result rows"
+                f"{prefix} {stage_id} full-paper rows must cite training-validation "
+                "or seed-aggregate source result rows"
             )
             return
         if isinstance(required_ranges, list) and all(isinstance(item, str) for item in required_ranges):

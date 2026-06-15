@@ -505,7 +505,6 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
                 "source_proof_classifications": [
                     "training-validation-candidate",
                     "seed-aggregate-candidate",
-                    "paper-denominator-candidate",
                 ],
                 "source_result_paths_min": 1,
             },
