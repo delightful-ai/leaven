@@ -207,3 +207,29 @@ Scope:
 Limit:
 
 - The approval packet is not filled or approved. No full-denominator execution has been launched.
+
+## 2026-06-14 Seal Level 2 Semantic Rigor Review
+
+Artifacts:
+
+```text
+docs/ara/trace2skill_spreadsheetbench/level2_report.json
+docs/ara/trace2skill_spreadsheetbench/reviews/rigor_review.md
+```
+
+Result:
+
+```text
+Weak Accept: usable as an anti-proxy denominator package, not as reproduction proof.
+```
+
+Top blockers:
+
+- Full-run approval fields are unresolved.
+- Reproduction tolerance policy is not defined.
+- Exploration dead ends need explicit `failure_mode` and `lesson` fields.
+- Prompt-template evidence remains missing.
+
+Limit:
+
+- The review is semantic judgment over the ARA contents after Level 1 validation. It does not execute the paper run.

@@ -1,0 +1,188 @@
+{
+  "artifact": "trace2skill_spreadsheetbench",
+  "artifact_dir": "docs/ara/trace2skill_spreadsheetbench",
+  "review_version": "3.0.0",
+  "prerequisite": "Level 1 passed",
+  "overall": {
+    "grade": "Weak Accept",
+    "mean_score": 3.5,
+    "one_line_summary": "The ARA is a strong anti-proxy denominator package, but it is not yet rigorous enough to support a reproduced-paper claim or an unapproved full run.",
+    "strengths_summary": [
+      "Paper targets are consistently separated from Leaven results.",
+      "The reproduction denominator is explicit across claims, configs, result docs, and full-run approval gates.",
+      "Current Leaven mechanics and one-case evidence are classified conservatively."
+    ],
+    "weaknesses_summary": [
+      "Full rerun tolerances and statistical aggregation rules are not yet concrete.",
+      "The exploration tree documents decisions but underspecifies dead-end failure modes and lessons.",
+      "The full-run approval packet is intentionally unresolved, so method execution remains blocked."
+    ]
+  },
+  "dimensions": {
+    "D1_evidence_relevance": {
+      "score": 4,
+      "strengths": [
+        "C01-C05 cite directly relevant paper target tables.",
+        "C06 and C07 cite local mechanics and denominator evidence instead of paper tables alone."
+      ],
+      "weaknesses": [
+        "C07 now depends on the full-run approval gate, but its proof field only names E08."
+      ],
+      "suggestions": [
+        "Update C07 to include E09 or split workflow-completion claims from overlay-format claims."
+      ]
+    },
+    "D2_falsifiability": {
+      "score": 3,
+      "strengths": [
+        "Paper-target claims name faithful reruns and source-transcription errors as falsifiers.",
+        "Proxy-refusal claims are explicitly falsifiable by discovering full denominator evidence."
+      ],
+      "weaknesses": [
+        "Several falsification criteria still rely on an undefined reproduction tolerance.",
+        "C07's falsification criterion is closeout-driven rather than an independently executable check."
+      ],
+      "suggestions": [
+        "Define numeric or procedural tolerance for table reproduction before any live denominator run.",
+        "Make C07 falsifiable by a checklist over result records, plots, artifact paths, and approval packet fields."
+      ]
+    },
+    "D3_scope_calibration": {
+      "score": 4,
+      "strengths": [
+        "The ARA repeatedly refuses to call one-case, mechanics, target plots, or proxy live loops full reproduction.",
+        "The full-run plan defines subset gates with forbidden stronger labels."
+      ],
+      "weaknesses": [
+        "The result directory now contains a one-case result note but no overlay JSONL; this is correct, but readers may still expect every result under results/ to be plottable."
+      ],
+      "suggestions": [
+        "Keep the current README distinction and consider separate subdirectories for overlayable metrics versus non-overlay result notes if more non-overlay results accumulate."
+      ]
+    },
+    "D4_argument_coherence": {
+      "score": 4,
+      "strengths": [
+        "The problem-to-solution arc is coherent: paper claims become target evidence, Leaven outputs must declare denominators, and full execution is approval-gated.",
+        "The one-case ACP proof is integrated without weakening the full-denominator boundary."
+      ],
+      "weaknesses": [
+        "Experiment dependencies remain somewhat tangled because E08 verifies overlay/closeout behavior while E09 verifies approval readiness."
+      ],
+      "suggestions": [
+        "Consider separating result-overlay mechanics, approval readiness, and final closeout into distinct claims or experiment families."
+      ]
+    },
+    "D5_exploration_integrity": {
+      "score": 3,
+      "strengths": [
+        "The tree includes real dead ends around single-call LLM analysis and sequential editing.",
+        "The inferred decision to separate targets from results is honest and central to the goal."
+      ],
+      "weaknesses": [
+        "Dead-end nodes do not carry explicit failure_mode and lesson fields, so the negative-result transfer value is weaker than the reviewer standard expects.",
+        "Decision nodes give source-backed choices but sparse alternatives."
+      ],
+      "suggestions": [
+        "Add failure_mode and lesson fields to DE1 and DE2.",
+        "Add alternatives for D1-D4, especially retrieval-at-inference and sequential editing."
+      ]
+    },
+    "D6_methodological_rigor": {
+      "score": 3,
+      "strengths": [
+        "The ARA captures baselines, split protocol, model identities, seeds, worker count, merge batch size, and turn budget.",
+        "The full-run plan prevents accidental spend and labels subset gates honestly."
+      ],
+      "weaknesses": [
+        "The full-run approval packet is still null-filled.",
+        "No variance, tolerance, retry, failed-run, or partial-run reporting policy is defined yet.",
+        "Prompt-template evidence is still acknowledged as missing from a dedicated ARA prompt file."
+      ],
+      "suggestions": [
+        "Before full execution, define retry policy, variance reporting, seed aggregation, acceptable drift thresholds, and failure accounting.",
+        "Transcribe or index the appendix/upstream prompt templates as evidence before analyst-call reproduction."
+      ]
+    }
+  },
+  "findings": [
+    {
+      "finding_id": "F01",
+      "dimension": "D6_methodological_rigor",
+      "severity": "major",
+      "target_file": "results/full_run_plan.md",
+      "target_entity": "approval_packet",
+      "evidence_span": "max_usd: null",
+      "observation": "The full-run approval packet intentionally leaves cost, hardware, model endpoint, and retention fields unresolved.",
+      "reasoning": "This is appropriate before approval, but it is a hard blocker for any full Qwen/vLLM-scale execution or reproduction claim.",
+      "suggestion": "Resolve every null in the approval packet and record approval before launching the full denominator run."
+    },
+    {
+      "finding_id": "F02",
+      "dimension": "D5_exploration_integrity",
+      "severity": "major",
+      "target_file": "trace/exploration_tree.yaml",
+      "target_entity": "DE1, DE2",
+      "observation": "The dead-end nodes are present but do not include explicit failure_mode and lesson fields.",
+      "reasoning": "The tree documents that alternatives failed, but it is less useful for future agents because the transferable lesson is only implicit in each title.",
+      "suggestion": "Add failure_mode and lesson fields for each dead_end node, with source-backed specifics."
+    },
+    {
+      "finding_id": "F03",
+      "dimension": "D2_falsifiability",
+      "severity": "major",
+      "target_file": "logic/claims.md",
+      "target_entity": "C01-C04",
+      "evidence_span": "within the agreed statistical/reproduction tolerance",
+      "observation": "The paper-rerun claims refer to an agreed tolerance, but the ARA does not yet define that tolerance.",
+      "reasoning": "Without a tolerance or seed-aggregation policy, a future rerun cannot be judged as reproduced, drifted, or failed in a calibrated way.",
+      "suggestion": "Add a tolerance policy covering per-cell deltas, seed means, runtime approximation, and acceptable environment deviations."
+    },
+    {
+      "finding_id": "F04",
+      "dimension": "D1_evidence_relevance",
+      "severity": "minor",
+      "target_file": "logic/claims.md",
+      "target_entity": "C07",
+      "evidence_span": "**Proof**: [E08]",
+      "observation": "C07 governs full closeout language, but its proof field points only at E08 even though E09 now owns the full-run approval gate.",
+      "reasoning": "The claim remains directionally correct, but the proof link underrepresents the new approval artifact that now blocks full denominator execution.",
+      "suggestion": "Update C07 to cite E09 or split C07 into overlay-record and full-closeout claims."
+    },
+    {
+      "finding_id": "F05",
+      "dimension": "D6_methodological_rigor",
+      "severity": "minor",
+      "target_file": "coverage.md",
+      "target_entity": "Known Gaps",
+      "evidence_span": "The appendix prompt templates are referenced but not yet transcribed into a dedicated ARA prompt evidence file.",
+      "observation": "Prompt-template evidence is acknowledged as missing.",
+      "reasoning": "Trace2Skill's analyst behavior depends heavily on prompt templates, so prompt evidence should be promoted before live analyst-call reproduction.",
+      "suggestion": "Add a dedicated prompt evidence file that indexes the upstream system, analyst, merge, and output-format templates."
+    }
+  ],
+  "questions_for_authors": [
+    "What exact per-metric tolerance will count as reproducing a paper table cell under seeds 41, 42, and 43?",
+    "Which Qwen3.5 model source or endpoint is authorized for the full denominator run?",
+    "Should non-overlay result notes and overlay JSONL live in separate subdirectories as more subset evidence accumulates?",
+    "What failure accounting policy applies when one of the 128 analyst workers fails or returns an invalid patch?"
+  ],
+  "read_order": [
+    "PAPER.md",
+    "logic/claims.md",
+    "logic/experiments.md",
+    "logic/problem.md",
+    "logic/concepts.md",
+    "logic/solution/architecture.md",
+    "logic/solution/algorithm.md",
+    "logic/solution/constraints.md",
+    "logic/solution/heuristics.md",
+    "logic/related_work.md",
+    "trace/exploration_tree.yaml",
+    "evidence/README.md",
+    "evidence/tables/table_main_spreadsheetbench.md",
+    "evidence/tables/table_parallel_vs_sequential.md",
+    "results/one_case_live.md",
+    "results/full_run_plan.md"
+  ]
+}

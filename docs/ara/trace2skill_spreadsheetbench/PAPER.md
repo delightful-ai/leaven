@@ -102,5 +102,7 @@ separately and labeled by denominator.
 | [results/leaven_result_schema.md](results/leaven_result_schema.md) | JSONL schema for real Leaven metrics that can be plotted against paper targets. |
 | [results/one_case_live.md](results/one_case_live.md) | Deterministic one-case ACP worker proof and artifact manifest. |
 | [results/full_run_plan.md](results/full_run_plan.md) | Approval gate for Qwen/vLLM paper-denominator execution. |
+| [reviews/rigor_review.md](reviews/rigor_review.md) | Seal Level 2 semantic rigor review and blockers. |
+| [level2_report.json](level2_report.json) | Machine-readable Seal Level 2 review report. |
 | [coverage.md](coverage.md) | Coverage pass notes and known gaps. |
 | [validation.md](validation.md) | Local Seal Level 1 validation commands and results. |
