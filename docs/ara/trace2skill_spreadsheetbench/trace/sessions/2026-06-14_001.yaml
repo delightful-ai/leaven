@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T19:37-07:00"
-  turn_count: 28
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, approval-artifact result-intake guard, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, approval-state validation, deterministic one-case result-freshness validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
+  last_turn: "2026-06-14T19:40-07:00"
+  turn_count: 29
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, approval-artifact result-intake guard, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, dataset-manifest freshness validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, approval-state validation, deterministic one-case result-freshness validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -181,6 +181,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Added deterministic one-case result-freshness checker; deterministic_one_case.jsonl is rebuilt in a temporary directory from current one-case artifacts and compared with the committed row before validation passes."
+  - turn: 29
+    type: experiment
+    id: "PM-2026-06-14-030"
+    routing: direct
+    provenance: ai-executed
+    summary: "Added dataset-manifest freshness checker; dataset_manifest.json is rebuilt in a temporary directory from current local SpreadsheetBench data and compared with the committed manifest before validation passes."
 
 ai_actions:
   - turn: 1
@@ -474,6 +480,14 @@ ai_actions:
       - "scripts/validate_ara.py"
       - "scripts/AGENTS.md"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 29
+    action: "Added scripts/check_trace2skill_dataset_manifest_freshness.py, wired it into validate_ara.py, and documented the 400-row dataset manifest freshness proof."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/check_trace2skill_dataset_manifest_freshness.py"
+      - "scripts/validate_ara.py"
+      - "scripts/AGENTS.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -534,6 +548,8 @@ key_context:
     excerpt: "Approval-state check passed directly and through validate_ara; it confirms the full-run packet is intentionally blocked and that closeout/status docs carry the same unresolved fields while leaving approval, model endpoints, credentials, tolerance, and Qwen/vLLM execution absent."
   - turn: 28
     excerpt: "Deterministic one-case result-freshness check passed directly and through validate_ara; it rebuilds deterministic_one_case.jsonl from current one-case artifacts with the documented relative run-dir path and compares the committed row while leaving model-backed one-case, overlays, paper-denominator rows, approval, and Qwen/vLLM execution absent."
+  - turn: 29
+    excerpt: "Dataset-manifest freshness check passed directly and through validate_ara; it rebuilds dataset_manifest.json from the current local 400-row SpreadsheetBench data and compares the committed manifest while leaving approval, model execution, overlays, held-out results, and Qwen/vLLM execution absent."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."

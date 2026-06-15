@@ -112,3 +112,7 @@ entries:
       - "Routed deterministic one-case result-freshness validation as result-row integrity evidence."
       - "Kept reproduction claims unchanged because the checker proves the one-case JSONL is current only; it does not create overlays, model-backed rows, approval, or Qwen/vLLM execution."
       - "Debug note: the checker must call build_trace2skill_one_case_result.py with the documented repo-relative run-dir; an absolute run-dir regenerates semantically equivalent JSON with absolute artifact paths and is the wrong operator path to compare."
+  - turn: "2026-06-14_001#29"
+    notes:
+      - "Routed dataset-manifest freshness validation as source-denominator integrity evidence."
+      - "Kept reproduction claims unchanged because the checker proves the 400-row local dataset manifest is current only; it does not approve execution, inspect held-out results, create overlays, or run Qwen/vLLM."
