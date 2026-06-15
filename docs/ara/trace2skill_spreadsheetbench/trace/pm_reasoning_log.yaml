@@ -272,3 +272,7 @@ entries:
     notes:
       - "Routed one-case status-prose consistency as status integrity evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the change only prevents stale validation prose from denying the already recorded deterministic local ACP one-case proof; it creates no model-backed one-case row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#69"
+    notes:
+      - "Routed closeout denominator evidence key hard-cut as status integrity/proxy-refusal evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the change only renames and validates closeout evidence categories; it creates no model-backed one-case row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
