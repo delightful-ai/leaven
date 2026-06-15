@@ -79,3 +79,7 @@ entries:
     notes:
       - "Routed prompt-source manifest validation as source-identity evidence, not rendered-prompt or model-execution evidence."
       - "Kept reproduction claims unchanged because the manifest hashes the prompt corpus only; live filled prompts, analyst outputs, parser results, overlays, and Qwen/vLLM execution remain future artifacts."
+  - turn: "2026-06-14_001#21"
+    notes:
+      - "Routed upstream execution-code manifest validation as source-code identity evidence, not runtime proof."
+      - "Kept reproduction claims unchanged because the manifest pins runbook-called upstream entrypoints only; runtime environment, result rows, overlays, and Qwen/vLLM execution remain future artifacts."
