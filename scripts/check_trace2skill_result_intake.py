@@ -57,6 +57,9 @@ PROMPT_ARTIFACT_WORDS = {
     "stage3_merge_prompts",
     "stage3_merge_manifest",
 }
+OPTIONAL_ROW_ARTIFACT_FRAGMENTS = {
+    "leaven_results.jsonl",
+}
 
 
 def parse_case_range(raw: Any) -> tuple[int, int] | None:
@@ -207,6 +210,41 @@ def stage_prompt_artifact_patterns(stage: dict[str, Any]) -> list[tuple[str, re.
         pattern_text = re.sub(r"<[^>]+>", r"[^/]+", pattern_text)
         patterns.append((artifact_text, re.compile(pattern_text)))
     return patterns
+
+
+def stage_required_file_artifact_patterns(stage: dict[str, Any]) -> list[tuple[str, re.Pattern[str]]]:
+    expected = stage.get("expected_artifacts")
+    if not isinstance(expected, list):
+        return []
+    patterns: list[tuple[str, re.Pattern[str]]] = []
+    for artifact in expected:
+        artifact_text = str(artifact)
+        if Path(artifact_text).name in OPTIONAL_ROW_ARTIFACT_FRAGMENTS:
+            continue
+        if " " in artifact_text:
+            continue
+        if "." not in Path(artifact_text).name:
+            continue
+        pattern_text = re.escape(artifact_text)
+        pattern_text = re.sub(r"\\\{[^}]+\\\}", r"[^/]+", pattern_text)
+        pattern_text = re.sub(r"<[^>]+>", r"[^/]+", pattern_text)
+        patterns.append((artifact_text, re.compile(pattern_text)))
+    return patterns
+
+
+def check_required_stage_file_artifacts(
+    prefix: str,
+    stage: dict[str, Any] | None,
+    artifact_paths: Any,
+    errors: list[str],
+) -> None:
+    if stage is None or stage.get("expected_command_policy") is None:
+        return
+    if not isinstance(artifact_paths, list):
+        return
+    for source, pattern in stage_required_file_artifact_patterns(stage):
+        if not any(pattern.search(str(path)) for path in artifact_paths):
+            errors.append(f"{prefix} missing artifact matching runbook expectation {source!r}")
 
 
 def check_required_prompt_artifacts(
@@ -646,6 +684,7 @@ def check_record(
             aggregate_stack or set(),
         )
     check_required_prompt_artifacts(prefix, proof, stage, artifact_paths, errors)
+    check_required_stage_file_artifacts(prefix, stage, artifact_paths, errors)
 
     skill_path = record.get("skill_source", {}).get("path")
     if skill_path is not None:

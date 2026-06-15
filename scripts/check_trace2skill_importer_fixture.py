@@ -57,14 +57,23 @@ def prompt_artifact_paths(repo_root: Path, tmp_path: Path) -> list[str]:
     ]
 
 
-def importer_base_args(output: Path, artifact_paths: list[str] | None = None) -> list[str]:
+def eval_results_artifact_path(repo_root: Path, tmp_path: Path) -> str:
+    eval_results = tmp_path / "subset_200_202_seed_41/outputs/eval_official_results.json"
+    return touch(repo_root, eval_results, (repo_root / FIXTURE).read_text(encoding="utf-8"))
+
+
+def importer_base_args(
+    output: Path,
+    artifact_paths: list[str] | None = None,
+    eval_results: str | None = None,
+) -> list[str]:
     artifact_args: list[str] = []
     for artifact_path in artifact_paths or []:
         artifact_args.extend(["--artifact-path", artifact_path])
     return [
         "scripts/import_trace2skill_eval_results.py",
         "--eval-results",
-        FIXTURE,
+        eval_results or FIXTURE,
         "--output",
         output.as_posix(),
         "--ara-dir",
@@ -155,7 +164,8 @@ def expect_failure(
 
 def check_positive_import(repo_root: Path, output: Path, errors: list[str]) -> None:
     artifact_paths = prompt_artifact_paths(repo_root, output.parent)
-    result = run_importer(repo_root, importer_base_args(output, artifact_paths))
+    eval_results = eval_results_artifact_path(repo_root, output.parent)
+    result = run_importer(repo_root, importer_base_args(output, artifact_paths, eval_results))
     if result.returncode != 0:
         errors.append(f"positive import failed: {result.stderr.strip()}")
         return
@@ -191,7 +201,7 @@ def check_positive_import(repo_root: Path, output: Path, errors: list[str]) -> N
         if not isinstance(artifact_paths, list):
             errors.append(f"{prefix}: artifact_paths is not a list")
             continue
-        for expected_path in (FIXTURE, APPROVAL_ARTIFACT, *prompt_artifact_paths(repo_root, output.parent)):
+        for expected_path in (eval_results, APPROVAL_ARTIFACT, *prompt_artifact_paths(repo_root, output.parent)):
             if expected_path not in artifact_paths:
                 errors.append(f"{prefix}: artifact_paths missing {expected_path}")
 
@@ -527,6 +537,7 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
         check_positive_import(repo_root, output, errors)
         check_result_intake_for_rows(repo_root, ara_root, output, None, errors, "positive import intake")
         check_aggregate_result_intake(repo_root, ara_root, tmp_path, errors)
+        eval_results = eval_results_artifact_path(repo_root, tmp_path)
 
         def mutate_missing_schema_version(row: dict[str, Any]) -> None:
             row.pop("schema_version", None)
@@ -554,6 +565,24 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "metric_value must be numeric",
             errors,
             "string metric value",
+        )
+
+        def mutate_missing_eval_artifact(row: dict[str, Any]) -> None:
+            row["artifact_paths"] = [
+                path
+                for path in row["artifact_paths"]
+                if "outputs/eval_official_results.json" not in path
+            ]
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "missing-eval-artifact.jsonl",
+            mutate_missing_eval_artifact,
+            "missing artifact matching runbook expectation",
+            errors,
+            "missing official eval artifact",
         )
 
         def mutate_subset_to_paper_sized(row: dict[str, Any]) -> None:
@@ -638,13 +667,17 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
 
         expect_failure(
             repo_root,
-            importer_base_args(tmp_path / "missing-prompt.jsonl"),
+            importer_base_args(tmp_path / "missing-prompt.jsonl", eval_results=eval_results),
             "missing prompt artifact matching runbook expectation",
             errors,
             "missing prompt artifact",
         )
 
-        wrong_stage_args = importer_base_args(tmp_path / "wrong-stage.jsonl", prompt_artifact_paths(repo_root, tmp_path))
+        wrong_stage_args = importer_base_args(
+            tmp_path / "wrong-stage.jsonl",
+            prompt_artifact_paths(repo_root, tmp_path),
+            eval_results,
+        )
         stage_id_index = wrong_stage_args.index("--runbook-stage-id") + 1
         wrong_stage_args[stage_id_index] = "G1"
         expect_failure(
@@ -655,7 +688,7 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "wrong runbook stage label",
         )
 
-        missing_stage_args = importer_base_args(tmp_path / "missing-stage.jsonl")
+        missing_stage_args = importer_base_args(tmp_path / "missing-stage.jsonl", eval_results=eval_results)
         stage_flag_index = missing_stage_args.index("--runbook-stage-id")
         del missing_stage_args[stage_flag_index : stage_flag_index + 2]
         expect_failure(
@@ -666,7 +699,7 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "missing runbook stage",
         )
 
-        missing_approval_args = importer_base_args(tmp_path / "missing-approval.jsonl")
+        missing_approval_args = importer_base_args(tmp_path / "missing-approval.jsonl", eval_results=eval_results)
         approval_flag_index = missing_approval_args.index("--approval-artifact-path")
         del missing_approval_args[approval_flag_index : approval_flag_index + 2]
         expect_failure(
@@ -677,7 +710,7 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "missing approval artifact",
         )
 
-        paper_denominator_args = importer_base_args(tmp_path / "paper-denominator.jsonl")
+        paper_denominator_args = importer_base_args(tmp_path / "paper-denominator.jsonl", eval_results=eval_results)
         proof_index = paper_denominator_args.index("--proof-classification") + 1
         paper_denominator_args[proof_index] = "paper-denominator-reproduction"
         stage_id_index = paper_denominator_args.index("--runbook-stage-id") + 1

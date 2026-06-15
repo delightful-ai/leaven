@@ -102,9 +102,14 @@ exist locally when the importer runs. Every row must carry
 stage's `allowed_label` must match the row's `proof_classification`. If that
 runbook stage expects rendered prompts, fanout files, or prompt-render
 manifests, result intake also requires matching prompt artifacts in
-`artifact_paths`. The importer runs that same result-intake check before
-writing its output, so rows with a wrong runbook stage or missing prompt
-artifacts fail without producing a JSONL artifact. Result intake also checks
+`artifact_paths`. For model-backed run stages, result intake also requires
+file-shaped runbook artifacts such as prompt manifests, official evaluator
+outputs, parsed analysis JSON, fanout JSONL, merge manifests, change logs, or
+selection notes; directory placeholders and the row's own `leaven_results.jsonl`
+are not used as artifact-path requirements. The importer runs that same
+result-intake check before writing its output, so rows with a wrong runbook
+stage or missing runbook-required file artifacts fail without producing a JSONL
+artifact. Result intake also checks
 the `dataset_slice` against the runbook stage's generated
 `expected_dataset_slice`, so subset rows cannot silently become 200-case
 paper-denominator rows and held-out rows must use the paper `200..400` split.

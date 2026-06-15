@@ -860,6 +860,11 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
 - Requires approval-gated rows to include prompt artifact paths matching their
   runbook stage expectations, such as rendered prompts and prompt-render
   manifests.
+- Requires model-backed run rows to include file-shaped artifacts matching
+  their runbook stage expectations, such as prompt manifests, official
+  evaluator outputs, parsed analysis JSON, fanout JSONL, merge manifests,
+  change logs, or selection notes. Directory placeholders and the row's own
+  `leaven_results.jsonl` are not used as artifact-path requirements.
 - Requires approval-gated proof classifications, including `paper-subset`, to
   include at least one inspectable `--approval-artifact-path`.
 - Requires `--eval-results`, `--skill-path`, `--artifact-path`, and
@@ -869,10 +874,11 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
   `--approval-artifact-path` are explicitly present.
 - The checker exercises those refusal paths directly: missing runbook stage id,
   wrong runbook stage label, missing prompt artifacts for `paper-subset`,
-  missing base schema id, stringly metric value, subset denominator drift,
-  subset seed drift, subset worker drift, full-paper serving/model drift with
-  null plot binding, missing approval evidence for `paper-subset`, and accidental
-  `paper-denominator-reproduction` without the explicit allow flag.
+  missing base schema id, stringly metric value, missing official evaluator
+  artifact, subset denominator drift, subset seed drift, subset worker drift,
+  full-paper serving/model drift with null plot binding, missing approval
+  evidence for `paper-subset`, and accidental `paper-denominator-reproduction`
+  without the explicit allow flag.
 
 Limit:
 
