@@ -62,6 +62,7 @@ rows only after a real Leaven run has produced an inspectable
 uv run --with pyyaml python scripts/import_trace2skill_eval_results.py \
   --eval-results path/to/eval_official_results.json \
   --output docs/ara/trace2skill_spreadsheetbench/results/<run_id>.jsonl \
+  --ara-dir docs/ara/trace2skill_spreadsheetbench \
   --run-id <run_id> \
   --created-at <timestamp> \
   --proof-classification paper-subset \
@@ -95,7 +96,9 @@ exist locally when the importer runs. Every row must carry
 stage's `allowed_label` must match the row's `proof_classification`. If that
 runbook stage expects rendered prompts, fanout files, or prompt-render
 manifests, result intake also requires matching prompt artifacts in
-`artifact_paths`.
+`artifact_paths`. The importer runs that same result-intake check before
+writing its output, so rows with a wrong runbook stage or missing prompt
+artifacts fail without producing a JSONL artifact.
 
 The full-denominator approval packet can be checked with:
 

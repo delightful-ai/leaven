@@ -787,6 +787,7 @@ Command:
 uv run --with pyyaml python scripts/import_trace2skill_eval_results.py \
   --eval-results scripts/fixtures/trace2skill_eval_official_results_sample.json \
   --output tmp/trace2skill-import-fixture/imported.jsonl \
+  --ara-dir docs/ara/trace2skill_spreadsheetbench \
   --run-id trace2skill-import-fixture \
   --created-at 2026-06-14T00:00:02Z \
   --proof-classification paper-subset \
@@ -818,8 +819,10 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
   `official_avg_soft_score`, and `official_avg_hard_score`.
 - Converts evaluator fractions to percent-valued Leaven result rows.
 - Defaults every row to `plot_binding: null`.
+- Runs the result-intake checker before writing output rows.
 - Requires every row to carry `extra.runbook_stage_id` and validates the stage
-  label against `full_denominator_runbook.json` during result intake.
+  label against `full_denominator_runbook.json` before write and during result
+  intake.
 - Requires approval-gated rows to include prompt artifact paths matching their
   runbook stage expectations, such as rendered prompts and prompt-render
   manifests.
@@ -831,9 +834,9 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
   `--allow-paper-denominator-reproduction` and at least one
   `--approval-artifact-path` are explicitly present.
 - The checker exercises those refusal paths directly: missing runbook stage id,
-  missing prompt artifacts for `paper-subset`, missing approval evidence for
-  `paper-subset`, and accidental `paper-denominator-reproduction` without the
-  explicit allow flag.
+  wrong runbook stage label, missing prompt artifacts for `paper-subset`,
+  missing approval evidence for `paper-subset`, and accidental
+  `paper-denominator-reproduction` without the explicit allow flag.
 
 Limit:
 

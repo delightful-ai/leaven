@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import math
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -194,6 +196,56 @@ def percent(value: float) -> float:
     return value * 100.0
 
 
+def repo_root_for(ara_root: Path) -> Path:
+    for candidate in (ara_root, *ara_root.parents):
+        if (candidate / "docs/ara/trace2skill_spreadsheetbench/results").is_dir():
+            return candidate
+    return Path.cwd()
+
+
+def import_result_intake_checker(repo_root: Path) -> Any:
+    path = repo_root / "scripts/check_trace2skill_result_intake.py"
+    spec = importlib.util.spec_from_file_location("check_trace2skill_result_intake", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot import {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_runbook_stages(ara_root: Path) -> dict[str, dict[str, Any]]:
+    runbook_path = ara_root / "results/full_denominator_runbook.json"
+    require_existing_path(runbook_path, "--ara-dir runbook")
+    runbook = json.loads(runbook_path.read_text(encoding="utf-8"))
+    if not isinstance(runbook, dict):
+        raise ValueError(f"{runbook_path} must contain a JSON object")
+    return {
+        stage["id"]: stage
+        for stage in runbook.get("stages", [])
+        if isinstance(stage, dict) and isinstance(stage.get("id"), str)
+    }
+
+
+def validate_records_against_result_intake(args: argparse.Namespace, records: list[dict[str, Any]]) -> None:
+    ara_root = args.ara_dir.resolve()
+    repo_root = repo_root_for(ara_root).resolve()
+    output_path = (Path.cwd() / args.output).resolve() if not args.output.is_absolute() else args.output.resolve()
+    try:
+        output_path.relative_to(repo_root)
+    except ValueError as exc:
+        raise ValueError(f"--output must be inside the repo for result-intake preflight: {output_path}") from exc
+
+    checker = import_result_intake_checker(repo_root)
+    runbook_stages = load_runbook_stages(ara_root)
+    errors: list[str] = []
+    for line_number, record in enumerate(records, start=1):
+        checker.check_record(repo_root, output_path, line_number, record, runbook_stages, errors)
+    if errors:
+        joined = "\n- ".join(errors)
+        raise ValueError(f"result intake preflight failed:\n- {joined}")
+
+
 def build_records(args: argparse.Namespace) -> list[dict[str, Any]]:
     if args.proof_classification == "paper-denominator-reproduction" and not args.allow_paper_denominator_reproduction:
         raise ValueError(
@@ -293,6 +345,12 @@ def main() -> int:
     )
     parser.add_argument("--eval-results", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--ara-dir",
+        type=Path,
+        default=Path("docs/ara/trace2skill_spreadsheetbench"),
+        help="ARA root containing results/full_denominator_runbook.json for pre-write result-intake checks.",
+    )
     parser.add_argument("--run-id", type=non_empty, required=True)
     parser.add_argument("--created-at", type=non_empty, required=True)
     parser.add_argument("--proof-classification", choices=sorted(ALLOWED_PROOF_CLASSIFICATIONS), required=True)
@@ -343,6 +401,7 @@ def main() -> int:
         raise ValueError("--case-count must be positive")
 
     records = build_records(args)
+    validate_records_against_result_intake(args, records)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         "".join(json.dumps(record, sort_keys=True) + "\n" for record in records),

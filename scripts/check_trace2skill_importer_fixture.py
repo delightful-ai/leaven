@@ -20,6 +20,7 @@ EXPECTED_METRICS = {
     "official_avg_hard_score": 50.0,
 }
 APPROVAL_ARTIFACT = "docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md"
+ARA_DIR = "docs/ara/trace2skill_spreadsheetbench"
 FIXTURE = "scripts/fixtures/trace2skill_eval_official_results_sample.json"
 
 
@@ -66,6 +67,8 @@ def importer_base_args(output: Path, artifact_paths: list[str] | None = None) ->
         FIXTURE,
         "--output",
         output.as_posix(),
+        "--ara-dir",
+        ARA_DIR,
         "--run-id",
         "trace2skill-import-fixture",
         "--created-at",
@@ -250,19 +253,24 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
         check_positive_import(repo_root, output, errors)
         check_result_intake_for_rows(repo_root, ara_root, output, None, errors, "positive import intake")
 
-        missing_prompt_output = tmp_path / "missing-prompt.jsonl"
-        missing_prompt_result = run_importer(repo_root, importer_base_args(missing_prompt_output))
-        if missing_prompt_result.returncode != 0:
-            errors.append(f"missing prompt import unexpectedly failed: {missing_prompt_result.stderr.strip()}")
-        else:
-            check_result_intake_for_rows(
-                repo_root,
-                ara_root,
-                missing_prompt_output,
-                "missing prompt artifact matching runbook expectation",
-                errors,
-                "missing prompt artifact intake",
-            )
+        expect_failure(
+            repo_root,
+            importer_base_args(tmp_path / "missing-prompt.jsonl"),
+            "missing prompt artifact matching runbook expectation",
+            errors,
+            "missing prompt artifact",
+        )
+
+        wrong_stage_args = importer_base_args(tmp_path / "wrong-stage.jsonl", prompt_artifact_paths(repo_root, tmp_path))
+        stage_id_index = wrong_stage_args.index("--runbook-stage-id") + 1
+        wrong_stage_args[stage_id_index] = "G1"
+        expect_failure(
+            repo_root,
+            wrong_stage_args,
+            "does not match runbook stage G1 allowed_label 'deterministic-one-case'",
+            errors,
+            "wrong runbook stage label",
+        )
 
         missing_stage_args = importer_base_args(tmp_path / "missing-stage.jsonl")
         stage_flag_index = missing_stage_args.index("--runbook-stage-id")
