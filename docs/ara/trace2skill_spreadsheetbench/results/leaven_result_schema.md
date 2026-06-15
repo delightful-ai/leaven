@@ -2,10 +2,11 @@
 
 Schema id: `leaven.trace2skill.result.v1`
 
-This is the minimal result envelope for plotting Leaven-produced measurements
-against Trace2Skill paper targets. It is deliberately stricter than the paper
-tables: paper targets say what to match; result rows say what Leaven actually
-ran.
+This is the minimal result envelope for Leaven-produced measurements. Rows may
+either bind to a paper-target plot panel or remain non-overlay records when the
+denominator would make a paper-target overlay misleading. It is deliberately
+stricter than the paper tables: paper targets say what to match; result rows say
+what Leaven actually ran.
 
 ## Record Shape
 
@@ -71,8 +72,8 @@ ran.
 | `skill_source` | object | Must include `kind`; include `path` when the skill is file-backed. |
 | `metric_name` | string | Human-readable metric label, e.g. `122B Vrf`. |
 | `metric_value` | number | The plotted numeric value. |
-| `metric_unit` | string | `percent`, `delta_points`, or `minutes`. |
-| `plot_binding` | object | Must include `panel`, `x_label`, `series`, and `axis`. |
+| `metric_unit` | string | `percent`, `delta_points`, `minutes`, or `fraction`. |
+| `plot_binding` | object or null | Object rows must include `panel`, `x_label`, `series`, and `axis`; null rows are valid non-overlay result records. |
 | `cost` | object | Include available spend/token fields; use null for unknown fields. |
 | `runtime` | object | Include `seconds`; include workers/turn budget when relevant. |
 | `source_command` | string | Exact command or harness invocation that produced the metric. |
@@ -88,5 +89,7 @@ ran.
   deterministic fixture, or mechanics-only gate.
 - Do not write success rows for SpreadsheetBench cases when the score envelope
   exists but the output workbook artifact is missing.
+- Use `plot_binding: null` for real Leaven results whose denominator cannot be
+  shown honestly on the paper-target panels.
 - Do not silently repair denominator drift in the plotter. If `plot_binding`
   does not match a displayed paper target label, validation must fail.

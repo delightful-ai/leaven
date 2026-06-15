@@ -9,11 +9,11 @@ Full paper-denominator reproduction is not proven: approval preflight is blocked
 | Acceptance id | Status | Remaining |
 |---------------|--------|-----------|
 | `ara_level1_valid` | `satisfied_current_package` | Re-run the validator after any ARA evidence or schema change. |
-| `plots_from_ara` | `satisfied_targets_only` | No paper-denominator Leaven result JSONL overlay rows exist yet.<br>Target plots remain target evidence, not reproduction evidence. |
+| `plots_from_ara` | `satisfied_targets_only` | Only non-overlay deterministic one-case JSONL exists; no paper-denominator overlay rows exist yet.<br>Target plots remain target evidence, not reproduction evidence. |
 | `current_mechanics_classified` | `satisfied_current_tests` | Re-run focused Rust tests after changing example mechanics or proof classifications. |
 | `one_case_live_or_explicit_blocker` | `satisfied_deterministic_one_case` | This is deterministic local ACP one-case evidence only.<br>Model-backed one-case evidence remains absent until approved. |
 | `full_denominator_plan_approved` | `blocked` | models.qwen_122b is unresolved<br>models.qwen_35b is unresolved<br>serving.host is unresolved<br>serving.version is unresolved<br>serving.tensor_parallel is unresolved<br>serving.gpu_type is unresolved<br>serving.gpu_count is unresolved<br>budget.max_usd is unresolved<br>budget.max_wall_clock_hours is unresolved<br>budget.max_gpu_hours is unresolved<br>credentials.api_key_env is unresolved<br>credentials.redaction_policy is unresolved<br>credentials.log_retention is unresolved<br>artifacts.root is unresolved<br>artifacts.retention is unresolved<br>approval.approved_by is unresolved<br>approval.approved_at is unresolved<br>tolerance.approved must be True, got None |
-| `reproduced_claim_limited_to_actual_denominator` | `guardrail_active_not_final_closeout` | No held-out 200..400 result rows exist.<br>No seed aggregate rows exist.<br>No cross-model paper-denominator rows exist.<br>Final closeout remains impossible while normal approval preflight fails. |
+| `reproduced_claim_limited_to_actual_denominator` | `guardrail_active_not_final_closeout` | No held-out 200..400 paper-denominator result rows exist.<br>No seed aggregate rows exist.<br>No cross-model paper-denominator rows exist.<br>Final closeout remains impossible while normal approval preflight fails. |
 
 ## Current Denominators
 
@@ -30,6 +30,13 @@ Missing:
 - `seed-aggregate-41-42-43`
 - `cross-model-paper-rows`
 - `full-paper-denominator`
+
+## Result Records
+
+- JSONL files: `1`
+- Total rows: `1`
+- Non-overlay rows: `1`
+- Paper-denominator rows: `0`
 
 ## Dataset Manifest
 

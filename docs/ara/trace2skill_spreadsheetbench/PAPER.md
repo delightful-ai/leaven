@@ -102,6 +102,7 @@ separately and labeled by denominator.
 | [plots/trace2skill_targets.png](plots/trace2skill_targets.png) | Paper target sheet generated from ARA evidence tables. |
 | [results/README.md](results/README.md) | Leaven result-record rules, proof classifications, and overlay binding. |
 | [results/leaven_result_schema.md](results/leaven_result_schema.md) | JSONL schema for real Leaven metrics that can be plotted against paper targets. |
+| [results/deterministic_one_case.jsonl](results/deterministic_one_case.jsonl) | Non-overlay Leaven result record for deterministic case `13-1`. |
 | [results/denominator_status.md](results/denominator_status.md) | Handoff acceptance audit and current denominator status. |
 | [results/closeout_audit.md](results/closeout_audit.md) / [closeout_audit.json](results/closeout_audit.json) | Executable closeout audit against the goal handoff acceptance items. |
 | [results/dataset_manifest.json](results/dataset_manifest.json) | Deterministic local manifest for the 400-row SpreadsheetBench-Verified dataset. |

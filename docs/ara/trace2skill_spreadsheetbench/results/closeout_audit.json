@@ -57,6 +57,7 @@
     "one_case_live_or_explicit_blocker": {
       "evidence": [
         "docs/ara/trace2skill_spreadsheetbench/results/one_case_live.md",
+        "docs/ara/trace2skill_spreadsheetbench/results/deterministic_one_case.jsonl",
         "tmp/trace2skill-one-case-live/13-1_output.xlsx",
         "tmp/trace2skill-one-case-live/score_report.json",
         "tmp/trace2skill-one-case-live/trajectory.json",
@@ -72,10 +73,11 @@
       "evidence": [
         "docs/ara/trace2skill_spreadsheetbench/plots/trace2skill_targets.png",
         "scripts/plot_trace2skill_ara.py",
-        "docs/ara/trace2skill_spreadsheetbench/results/leaven_result_schema.md"
+        "docs/ara/trace2skill_spreadsheetbench/results/leaven_result_schema.md",
+        "docs/ara/trace2skill_spreadsheetbench/results/deterministic_one_case.jsonl"
       ],
       "remaining": [
-        "No paper-denominator Leaven result JSONL overlay rows exist yet.",
+        "Only non-overlay deterministic one-case JSONL exists; no paper-denominator overlay rows exist yet.",
         "Target plots remain target evidence, not reproduction evidence."
       ],
       "status": "satisfied_targets_only"
@@ -87,7 +89,7 @@
         "docs/ara/trace2skill_spreadsheetbench/level2_report.json"
       ],
       "remaining": [
-        "No held-out 200..400 result rows exist.",
+        "No held-out 200..400 paper-denominator result rows exist.",
         "No seed aggregate rows exist.",
         "No cross-model paper-denominator rows exist.",
         "Final closeout remains impossible while normal approval preflight fails."
@@ -145,6 +147,13 @@
     "mechanics-tests-classified",
     "deterministic-one-case-13-1"
   ],
-  "result_jsonl_files": [],
+  "result_jsonl_files": [
+    "docs/ara/trace2skill_spreadsheetbench/results/deterministic_one_case.jsonl"
+  ],
+  "result_record_summary": {
+    "non_overlay_records": 1,
+    "paper_denominator_records": 0,
+    "total_records": 1
+  },
   "schema_version": "leaven.trace2skill.closeout_audit.v1"
 }

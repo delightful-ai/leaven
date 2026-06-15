@@ -20,7 +20,7 @@ ALLOWED_PROOF_CLASSIFICATIONS = {
     "paper-denominator-candidate",
     "paper-denominator-reproduction",
 }
-ALLOWED_METRIC_UNITS = {"percent", "delta_points", "minutes"}
+ALLOWED_METRIC_UNITS = {"percent", "delta_points", "minutes", "fraction"}
 SUPPORTED_RESULT_PANELS = {
     "same_model_deepening_vrf",
     "avg_improvement",
@@ -153,11 +153,13 @@ def validate_result_record(errors: list[str], record: Any, rel_path: Path, line_
     skill_source = record["skill_source"]
     if not isinstance(skill_source, dict) or not isinstance(skill_source.get("kind"), str) or not skill_source["kind"]:
         fail(errors, f"{prefix} skill_source.kind must be a non-empty string")
-    for field in ("plot_binding", "cost", "runtime"):
+    for field in ("cost", "runtime"):
         if not isinstance(record[field], dict):
             fail(errors, f"{prefix} {field} must be an object")
 
     binding = record["plot_binding"]
+    if binding is not None and not isinstance(binding, dict):
+        fail(errors, f"{prefix} plot_binding must be an object or null")
     if isinstance(binding, dict):
         for field in ("panel", "x_label", "series", "axis"):
             if not isinstance(binding.get(field), str) or not binding[field]:
@@ -322,6 +324,12 @@ def validate(root: Path) -> list[str]:
                         fail(errors, "results/closeout_audit.json has wrong schema_version")
                     if closeout_audit.get("overall_complete") is not False:
                         fail(errors, "results/closeout_audit.json must keep overall_complete false until paper denominator is proven")
+                    summary = closeout_audit.get("result_record_summary")
+                    if summary is not None:
+                        if not isinstance(summary, dict):
+                            fail(errors, "results/closeout_audit.json result_record_summary must be an object")
+                        elif summary.get("paper_denominator_records") not in {0, None}:
+                            fail(errors, "results/closeout_audit.json must report zero paper_denominator_records until paper denominator is proven")
                     acceptance = closeout_audit.get("acceptance")
                     if not isinstance(acceptance, dict):
                         fail(errors, "results/closeout_audit.json missing acceptance object")

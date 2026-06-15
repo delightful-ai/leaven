@@ -24,7 +24,7 @@ ALLOWED_PROOF_CLASSIFICATIONS = {
     "paper-denominator-candidate",
     "paper-denominator-reproduction",
 }
-ALLOWED_METRIC_UNITS = {"percent", "delta_points", "minutes"}
+ALLOWED_METRIC_UNITS = {"percent", "delta_points", "minutes", "fraction"}
 SUPPORTED_PANELS = {
     "same_model_deepening_vrf",
     "avg_improvement",
@@ -152,18 +152,21 @@ def validate_result_record(record: Any, path: Path, line_number: int) -> None:
     skill_source = record["skill_source"]
     if not isinstance(skill_source, dict) or not isinstance(skill_source.get("kind"), str) or not skill_source["kind"]:
         raise ValueError(f"{prefix} skill_source.kind must be a non-empty string")
-    for field in ("plot_binding", "cost", "runtime"):
+    for field in ("cost", "runtime"):
         if not isinstance(record[field], dict):
             raise ValueError(f"{prefix} {field} must be an object")
 
     binding = record["plot_binding"]
-    for field in ("panel", "x_label", "series", "axis"):
-        if not isinstance(binding.get(field), str) or not binding[field]:
-            raise ValueError(f"{prefix} plot_binding.{field} must be a non-empty string")
-    if binding["panel"] not in SUPPORTED_PANELS:
-        raise ValueError(f"{prefix} plot_binding.panel is not supported")
-    if binding["axis"] not in {"left", "right"}:
-        raise ValueError(f"{prefix} plot_binding.axis must be left or right")
+    if binding is not None and not isinstance(binding, dict):
+        raise ValueError(f"{prefix} plot_binding must be an object or null")
+    if isinstance(binding, dict):
+        for field in ("panel", "x_label", "series", "axis"):
+            if not isinstance(binding.get(field), str) or not binding[field]:
+                raise ValueError(f"{prefix} plot_binding.{field} must be a non-empty string")
+        if binding["panel"] not in SUPPORTED_PANELS:
+            raise ValueError(f"{prefix} plot_binding.panel is not supported")
+        if binding["axis"] not in {"left", "right"}:
+            raise ValueError(f"{prefix} plot_binding.axis must be left or right")
 
     artifacts = record["artifact_paths"]
     if not isinstance(artifacts, list) or not artifacts:
@@ -368,6 +371,9 @@ def overlay_points(
     label_positions = {label: index for index, label in indexed_labels.items()}
     for index, record in enumerate(result_records):
         binding = record["plot_binding"]
+        if binding is None:
+            plotted_results.add(index)
+            continue
         if binding["panel"] != panel or binding["axis"] != axis:
             continue
         x_label = binding["x_label"]

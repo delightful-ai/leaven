@@ -1,7 +1,8 @@
 # Leaven Result Records
 
-This directory is reserved for Leaven-produced result records that can be plotted
-against the Trace2Skill paper targets.
+This directory is reserved for Leaven-produced result records. Some can be
+plotted against Trace2Skill paper targets; others are non-overlay rows when
+their denominator would make a paper-target overlay misleading.
 
 No file in this directory is a paper target. No file in this directory should be
 created from historical planning YAML, fixed fixture claims, mechanics tests, or
@@ -11,12 +12,14 @@ can be inspected.
 
 ## Current State
 
-No Leaven overlay JSONL exists yet.
+One non-overlay Leaven JSONL exists for the deterministic one-case proof. No
+paper-denominator overlay JSONL exists yet.
 
 The deterministic one-case ACP worker result is recorded in
-[`one_case_live.md`](one_case_live.md). It is intentionally not plotted against
-paper target bars because its denominator is one local solved case, not a full
-paper split or Qwen/vLLM aggregate.
+[`one_case_live.md`](one_case_live.md) and
+[`deterministic_one_case.jsonl`](deterministic_one_case.jsonl). It is
+intentionally not plotted against paper target bars because its denominator is
+one local solved case, not a full paper split or Qwen/vLLM aggregate.
 
 The current acceptance and denominator audit is recorded in
 [`denominator_status.md`](denominator_status.md).
@@ -30,6 +33,15 @@ The local 400-row SpreadsheetBench-Verified dataset manifest is recorded in
 ```bash
 uv run python scripts/build_trace2skill_dataset_manifest.py
 ```
+
+The deterministic one-case result record can be rebuilt with:
+
+```bash
+uv run python scripts/build_trace2skill_one_case_result.py
+```
+
+Its `plot_binding` is `null` so it is not drawn on paper-denominator target
+plots.
 
 The full-denominator approval packet can be checked with:
 
@@ -96,7 +108,7 @@ Allowed `proof_classification` values:
 
 ## Plot Binding
 
-Every result row must declare where it can be overlaid:
+Every overlay result row must declare where it can be overlaid:
 
 ```json
 {
@@ -120,3 +132,6 @@ Supported panels:
 
 This explicit binding is intentional. The plotter must not guess which paper row
 a Leaven metric is meant to compare against.
+
+Use `plot_binding: null` only for non-overlay result rows whose denominator
+would be misleading on the paper-target panels.

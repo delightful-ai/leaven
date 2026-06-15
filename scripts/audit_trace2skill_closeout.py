@@ -56,6 +56,14 @@ def json_file(repo_root: Path, rel_path: str) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def jsonl_records(path: Path) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            records.append(json.loads(line))
+    return records
+
+
 def status_entry(status: str, evidence: list[str], remaining: list[str]) -> dict[str, Any]:
     return {
         "status": status,
@@ -68,6 +76,13 @@ def audit(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
     ara_rel = rel(ara_dir, repo_root)
     results_dir = ara_dir / "results"
     result_jsonl = sorted(results_dir.glob("*.jsonl")) if results_dir.is_dir() else []
+    result_records = [record for path in result_jsonl for record in jsonl_records(path)]
+    paper_denominator_result_records = [
+        record
+        for record in result_records
+        if record.get("proof_classification")
+        in {"paper-denominator-candidate", "paper-denominator-reproduction"}
+    ]
 
     dataset_manifest_path = "docs/ara/trace2skill_spreadsheetbench/results/dataset_manifest.json"
     dataset_manifest = json_file(repo_root, dataset_manifest_path)
@@ -98,9 +113,10 @@ def audit(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             f"{ara_rel}/plots/trace2skill_targets.png",
             "scripts/plot_trace2skill_ara.py",
             f"{ara_rel}/results/leaven_result_schema.md",
+            f"{ara_rel}/results/deterministic_one_case.jsonl",
         ],
         [
-            "No paper-denominator Leaven result JSONL overlay rows exist yet.",
+            "Only non-overlay deterministic one-case JSONL exists; no paper-denominator overlay rows exist yet.",
             "Target plots remain target evidence, not reproduction evidence.",
         ],
     )
@@ -120,6 +136,7 @@ def audit(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
         "satisfied_deterministic_one_case" if one_case_ok else "blocked_or_missing",
         [
             f"{ara_rel}/results/one_case_live.md",
+            f"{ara_rel}/results/deterministic_one_case.jsonl",
             "tmp/trace2skill-one-case-live/13-1_output.xlsx",
             score_report_path,
             "tmp/trace2skill-one-case-live/trajectory.json",
@@ -150,7 +167,7 @@ def audit(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             f"{ara_rel}/level2_report.json",
         ],
         [
-            "No held-out 200..400 result rows exist.",
+            "No held-out 200..400 paper-denominator result rows exist.",
             "No seed aggregate rows exist.",
             "No cross-model paper-denominator rows exist.",
             "Final closeout remains impossible while normal approval preflight fails.",
@@ -187,6 +204,11 @@ def audit(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             ],
         },
         "result_jsonl_files": [rel(path, repo_root) for path in result_jsonl],
+        "result_record_summary": {
+            "total_records": len(result_records),
+            "non_overlay_records": sum(1 for record in result_records if record.get("plot_binding") is None),
+            "paper_denominator_records": len(paper_denominator_result_records),
+        },
         "reproduced_denominators": reproduced_denominators,
         "missing_denominators": missing_denominators,
         "forbidden_proxy_completion_labels": FORBIDDEN_PROXY_LABELS,
@@ -224,6 +246,13 @@ def write_markdown(report: dict[str, Any], output: Path) -> None:
     lines.extend(f"- `{item}`" for item in report["missing_denominators"])
     lines.extend(
         [
+            "",
+            "## Result Records",
+            "",
+            f"- JSONL files: `{len(report['result_jsonl_files'])}`",
+            f"- Total rows: `{report['result_record_summary']['total_records']}`",
+            f"- Non-overlay rows: `{report['result_record_summary']['non_overlay_records']}`",
+            f"- Paper-denominator rows: `{report['result_record_summary']['paper_denominator_records']}`",
             "",
             "## Dataset Manifest",
             "",

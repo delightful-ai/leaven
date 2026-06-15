@@ -57,11 +57,12 @@ cargo run -p trace2skill_spreadsheetbench -- --run-one-case-acp-worker --run-dir
 | Trajectory evidence | `tmp/trace2skill-one-case-live/trajectory.json` | Leaven trajectory evidence for the scored run. |
 | Manifest | `tmp/trace2skill-one-case-live/manifest.json` | Updated run manifest with scored status. |
 | Worker script | `tmp/trace2skill-one-case-live/trace2skill_acp_worker.py` | Durable local Python worker used by the ACP command. |
+| Result JSONL | `docs/ara/trace2skill_spreadsheetbench/results/deterministic_one_case.jsonl` | Denominator-labeled Leaven result record with `plot_binding: null`. |
 
 ## Boundary
 
-This result intentionally is not written as `results/*.jsonl` for target-plot
-overlay. A one-case local deterministic solver score would be misleading if
-drawn on the same axes as full paper SpreadsheetBench/Qwen/vLLM targets. It
-should become a plot overlay only if the ARA grows a dedicated one-case panel
-with its own denominator label.
+This result is written as `results/deterministic_one_case.jsonl`, but its
+`plot_binding` is intentionally `null`. A one-case local deterministic solver
+score would be misleading if drawn on the same axes as full paper
+SpreadsheetBench/Qwen/vLLM targets. It should become a visible plot only if the
+ARA grows a dedicated one-case panel with its own denominator label.

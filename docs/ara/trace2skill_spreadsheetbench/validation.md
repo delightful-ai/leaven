@@ -423,3 +423,32 @@ Limit:
 
 - This is an execution map and artifact checklist. It does not approve model
   work and does not create Leaven metric rows.
+
+## 2026-06-14 Deterministic One-Case Result JSONL
+
+Artifact:
+
+```text
+scripts/build_trace2skill_one_case_result.py
+docs/ara/trace2skill_spreadsheetbench/results/deterministic_one_case.jsonl
+```
+
+Command:
+
+```bash
+uv run python scripts/build_trace2skill_one_case_result.py
+```
+
+Current result:
+
+- One row with `proof_classification: deterministic-one-case`.
+- `metric_name: workbook_score`, `metric_value: 1.0`, and
+  `metric_unit: fraction`.
+- `plot_binding` is `null`, so the paper-target plotter validates the record
+  but does not overlay it on SpreadsheetBench/Qwen/vLLM target panels.
+
+Limit:
+
+- This is a real Leaven result record for the deterministic one-case seam proof,
+  not held-out, seed-aggregate, cross-model, or full paper reproduction
+  evidence.
