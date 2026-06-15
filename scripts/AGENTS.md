@@ -10,6 +10,7 @@ Current scripts:
 - `check_trace2skill_config_fidelity.py`: no-spend ARA checker that verifies Trace2Skill SpreadsheetBench protocol/config values against the paper source bundle, upstream README/code, dataset manifest, Qwen generation config files, and generated full-denominator runbook.
 - `check_trace2skill_one_case_artifacts.py`: no-spend ARA checker that verifies deterministic one-case ACP artifacts, workbook score evidence, non-overlay Leaven result JSONL, and closeout one-case consistency.
 - `check_trace2skill_plot_provenance.py`: no-spend ARA checker/generator for the target-plot provenance JSON; verifies plot PNG identity, table input hashes, computed panel values, and current overlay/non-overlay result separation.
+- `check_trace2skill_result_intake.py`: no-spend ARA checker for result JSONL intake; verifies artifact paths and skill-source paths are inspectable, mechanics/one-case rows cannot overlay, and overlay rows use denominator-appropriate units/classifications.
 
 ## Local Rules
 - Keep script defaults local and credential-free. Network, cloud, live model, or destructive behavior must be an explicit flag or environment opt-in.

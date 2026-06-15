@@ -43,6 +43,16 @@ uv run python scripts/build_trace2skill_one_case_result.py
 Its `plot_binding` is `null` so it is not drawn on paper-denominator target
 plots.
 
+All result JSONL files are checked with:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_result_intake.py docs/ara/trace2skill_spreadsheetbench
+```
+
+This rejects missing artifact paths, absolute artifact paths, mechanics or
+one-case rows with plot bindings, and overlay rows whose metric unit,
+denominator, or paper classification is not compatible with the target panel.
+
 Official SpreadsheetBench evaluator output can be converted into Leaven result
 rows only after a real Leaven run has produced an inspectable
 `eval_official_results.json`:

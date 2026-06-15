@@ -93,3 +93,10 @@ what Leaven actually ran.
   shown honestly on the paper-target panels.
 - Do not silently repair denominator drift in the plotter. If `plot_binding`
   does not match a displayed paper target label, validation must fail.
+- Artifact paths and `skill_source.path` values must be repo-relative,
+  inspectable files at validation time.
+- `mechanics-smoke` and `deterministic-one-case` rows must always use
+  `plot_binding: null`.
+- Overlay rows must use units compatible with their panel: percent for score
+  axes, minutes for runtime axes, and delta points for average-improvement
+  axes.

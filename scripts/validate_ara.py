@@ -209,6 +209,23 @@ def validate_trace2skill_plot_provenance(errors: list[str], root: Path) -> None:
         fail(errors, f"plot provenance: {plot_error}")
 
 
+def validate_trace2skill_result_intake(errors: list[str], root: Path) -> None:
+    repo_root = repo_root_for(root.resolve())
+    checker_path = repo_root / "scripts/check_trace2skill_result_intake.py"
+    if not checker_path.is_file():
+        fail(errors, "missing scripts/check_trace2skill_result_intake.py")
+        return
+    spec = importlib.util.spec_from_file_location("check_trace2skill_result_intake", checker_path)
+    if spec is None or spec.loader is None:
+        fail(errors, f"cannot import {checker_path}")
+        return
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    for result_error in module.check_result_intake(repo_root, root):
+        fail(errors, f"result intake: {result_error}")
+
+
 def validate_result_record(errors: list[str], record: Any, rel_path: Path, line_number: int) -> None:
     prefix = f"{rel_path}:{line_number}"
     if not isinstance(record, dict):
@@ -419,6 +436,7 @@ def validate(root: Path) -> list[str]:
     validate_trace2skill_config_fidelity(errors, root)
     validate_trace2skill_one_case_artifacts(errors, root)
     validate_trace2skill_plot_provenance(errors, root)
+    validate_trace2skill_result_intake(errors, root)
 
     mechanics_evidence = root / "evidence/leaven_mechanics_tests.md"
     if mechanics_evidence.is_file():
