@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T21:59-07:00"
-  turn_count: 61
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one-case case-id guard, result split-identity guard, aggregate/full-paper exact-denominator guard, aggregate/full-paper source identity guard, paper-denominator paper-model identity guard, generated runbook dataset-slice contract, generated runbook seed-policy contract, generated runbook runtime-policy contract, generated runbook command-policy contract, generated runbook aggregate-policy contract, aggregate predecessor-row intake guard, full-paper source-chain intake guard, full-paper split-range source coverage guard, aggregate source approval guard, base result-row shape guard, full-paper model identity pre-overlay guard, plot overlay result-intake guard, blocked-approval plot overlay guard, blocked-approval scratch overlay guard, imported skill-artifact audit guard, model-run file-artifact guard, blocked-approval result admission guard, file-artifact epilogue commit, one non-overlay result row, strict official-eval importer, importer-fixture validation, Stage 2 rendered-prompt validation/freshness, rendered-prompt artifact-contract validation, prompt-artifact result-intake admission, pre-write official-eval import admission, closeout result-intake gate, runbook dataset-slice result-intake guard, approval-artifact result-intake guard, runbook-stage result binding, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, dataset-manifest freshness validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, approval-state validation, deterministic one-case result-freshness validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
+  last_turn: "2026-06-14T22:03-07:00"
+  turn_count: 62
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one-case case-id guard, result split-identity guard, aggregate/full-paper exact-denominator guard, aggregate/full-paper source identity guard, paper-denominator paper-model identity guard, aggregate metric-mean guard, generated runbook dataset-slice contract, generated runbook seed-policy contract, generated runbook runtime-policy contract, generated runbook command-policy contract, generated runbook aggregate-policy contract, aggregate predecessor-row intake guard, full-paper source-chain intake guard, full-paper split-range source coverage guard, aggregate source approval guard, base result-row shape guard, full-paper model identity pre-overlay guard, plot overlay result-intake guard, blocked-approval plot overlay guard, blocked-approval scratch overlay guard, imported skill-artifact audit guard, model-run file-artifact guard, blocked-approval result admission guard, file-artifact epilogue commit, one non-overlay result row, strict official-eval importer, importer-fixture validation, Stage 2 rendered-prompt validation/freshness, rendered-prompt artifact-contract validation, prompt-artifact result-intake admission, pre-write official-eval import admission, closeout result-intake gate, runbook dataset-slice result-intake guard, approval-artifact result-intake guard, runbook-stage result binding, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, dataset-manifest freshness validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, approval-state validation, deterministic one-case result-freshness validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -379,6 +379,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Tightened Trace2Skill paper-denominator-class result intake so held-out, seed-aggregate, paper-candidate, and full-paper rows must use paper model ids and vLLM."
+  - turn: 62
+    type: experiment
+    id: "PM-2026-06-14-063"
+    routing: direct
+    provenance: ai-executed
+    summary: "Tightened Trace2Skill seed-aggregate intake so G5 aggregate metric_value must equal the mean of the cited required seed metric values."
 
 ai_actions:
   - turn: 1
@@ -1003,6 +1009,15 @@ ai_actions:
       - "docs/ara/trace2skill_spreadsheetbench/results/README.md"
       - "docs/ara/trace2skill_spreadsheetbench/results/leaven_result_schema.md"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 62
+    action: "Updated scripts/check_trace2skill_result_intake.py so seed-aggregate rows collect one numeric source metric_value per required seed and require the parent metric_value to equal their arithmetic mean; extended scripts/check_trace2skill_importer_fixture.py with aggregate metric-value drift refusal; documented the aggregate metric-mean guard."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/check_trace2skill_result_intake.py"
+      - "scripts/check_trace2skill_importer_fixture.py"
+      - "docs/ara/trace2skill_spreadsheetbench/results/README.md"
+      - "docs/ara/trace2skill_spreadsheetbench/results/leaven_result_schema.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -1129,6 +1144,8 @@ key_context:
     excerpt: "Aggregate/full-paper source-chain intake now requires cited source rows to match the parent row's model, serving backend, metric name, and metric unit; G5 and G6 source-model drift fixtures are rejected, and no Qwen/vLLM execution or accepted aggregate/full-paper rows were created."
   - turn: 61
     excerpt: "Paper-denominator-class result intake now requires held-out, seed-aggregate, paper-candidate, and full-paper rows to use Qwen3.5 paper model ids with vLLM; fixture-model held-out and non-vLLM aggregate rows are rejected, and no Qwen/vLLM execution or accepted paper-denominator rows were created."
+  - turn: 62
+    excerpt: "Seed-aggregate result intake now requires G5 aggregate metric_value to equal the arithmetic mean of cited source metric values for seeds 41/42/43; aggregate metric-value drift is rejected, and no Qwen/vLLM execution or accepted seed-aggregate/full-paper rows were created."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."

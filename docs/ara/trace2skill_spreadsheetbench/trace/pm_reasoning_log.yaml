@@ -244,3 +244,7 @@ entries:
     notes:
       - "Routed paper-denominator-class model/backend identity enforcement as denominator-provenance guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the check only prevents held-out, seed-aggregate, paper-candidate, and full-paper rows from carrying non-paper model ids or non-vLLM backends; it creates no accepted model-backed rows, overlays, approvals, seed aggregates, full-paper rows, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#62"
+    notes:
+      - "Routed seed-aggregate metric-mean enforcement as denominator-provenance guardrail evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the check only prevents seed-aggregate rows from reporting arbitrary parent metrics unrelated to cited seed rows; it creates no accepted model-backed rows, overlays, approvals, seed aggregates, full-paper rows, or Qwen/vLLM execution."
