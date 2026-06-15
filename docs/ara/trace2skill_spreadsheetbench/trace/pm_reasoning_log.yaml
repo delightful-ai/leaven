@@ -55,3 +55,7 @@ entries:
     notes:
       - "Routed plot-provenance validation as target-scoreboard evidence; it checks input hashes, computed panel values, PNG identity, and overlay separation."
       - "Did not promote target plots to reproduction evidence because the manifest still reports zero overlay records and zero paper-denominator records."
+  - turn: "2026-06-14_001#15"
+    notes:
+      - "Routed result-intake validation as admission-control evidence for future Leaven result rows."
+      - "Debugged and fixed a relative/absolute path mismatch found only through integrated validate_ara import mode, then kept the rule strict: artifacts must be inspectable and one-case/mechanics rows cannot overlay."
