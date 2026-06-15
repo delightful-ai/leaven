@@ -97,7 +97,10 @@ classification requires at least one `--approval-artifact-path`; this includes
 `paper-denominator-reproduction`. `paper-denominator-reproduction` also requires
 `--allow-paper-denominator-reproduction`. Every `--eval-results`,
 `--skill-path`, `--artifact-path`, and `--approval-artifact-path` value must
-exist locally when the importer runs. When `--skill-path` is present, the
+exist locally when the importer runs. The official evaluator payload must also
+carry per-case `results[*].id` values matching the declared
+`--case-range` in upstream SpreadsheetBench order; summary totals alone are not
+enough to import a range-labeled result. When `--skill-path` is present, the
 importer also writes that same path into `artifact_paths`; result intake rejects
 file-backed `skill_source.path` metadata that is missing from the artifact
 audit. Every row must carry

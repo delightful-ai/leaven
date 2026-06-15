@@ -67,6 +67,13 @@ def eval_results_artifact_path(repo_root: Path, tmp_path: Path) -> str:
     return touch(repo_root, eval_results, (repo_root / FIXTURE).read_text(encoding="utf-8"))
 
 
+def mutated_eval_results_artifact_path(repo_root: Path, tmp_path: Path, mutate: Any) -> str:
+    eval_results = tmp_path / "subset_200_202_seed_41/outputs/eval_official_results.json"
+    payload = json.loads((repo_root / FIXTURE).read_text(encoding="utf-8"))
+    mutate(payload)
+    return touch(repo_root, eval_results, json.dumps(payload, indent=2) + "\n")
+
+
 def importer_base_args(
     output: Path,
     artifact_paths: list[str] | None = None,
@@ -1184,6 +1191,41 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "G2 rows must use extra.command_policy 'upstream-eval'",
             errors,
             "subset command-policy drift",
+        )
+
+        wrong_range_args = importer_base_args(
+            tmp_path / "wrong-case-range.jsonl",
+            prompt_artifact_paths(repo_root, tmp_path),
+            eval_results,
+        )
+        case_range_index = wrong_range_args.index("--case-range") + 1
+        wrong_range_args[case_range_index] = "201..203"
+        expect_failure(
+            repo_root,
+            wrong_range_args,
+            "eval result ids do not match declared dataset case range",
+            errors,
+            "wrong eval case range",
+        )
+
+        def remove_first_result_id(payload: dict[str, Any]) -> None:
+            payload["results"][0].pop("id", None)
+
+        missing_id_eval_results = mutated_eval_results_artifact_path(
+            repo_root,
+            tmp_path / "missing_result_id",
+            remove_first_result_id,
+        )
+        expect_failure(
+            repo_root,
+            importer_base_args(
+                tmp_path / "missing-result-id.jsonl",
+                prompt_artifact_paths(repo_root, tmp_path / "missing_result_id"),
+                missing_id_eval_results,
+            ),
+            "results[1].id must be a non-empty string",
+            errors,
+            "missing eval result id",
         )
 
         expect_failure(

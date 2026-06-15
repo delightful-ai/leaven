@@ -155,6 +155,10 @@ what Leaven actually ran.
   the 200-case paper denominator, G3/G3V use `0..200`, G4 uses `200..400`, and
   aggregate or full-paper rows use their generated case ranges, case counts,
   and explicit denominator labels.
+- Official SpreadsheetBench evaluator imports additionally check the
+  `eval_official_results.json` per-case `results[*].id` list against the
+  declared `dataset_slice.case_range` in upstream dataset order. A row cannot
+  claim `200..400`, `200..202`, or `0..200` from summary metrics alone.
 - Paper-denominator-class rows (`held-out-single-seed-candidate`,
   `seed-aggregate-candidate`, `paper-denominator-candidate`, and
   `paper-denominator-reproduction`) must use a paper model id

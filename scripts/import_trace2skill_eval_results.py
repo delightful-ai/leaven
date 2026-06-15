@@ -86,7 +86,62 @@ def close_enough(left: float, right: float) -> bool:
     return math.isclose(left, right, rel_tol=0, abs_tol=1e-9)
 
 
-def validate_eval_result(eval_result: dict[str, Any], expected_case_count: int) -> dict[str, Any]:
+def parse_case_range(raw: str) -> tuple[int, int]:
+    parts = raw.split("..", 1)
+    if len(parts) != 2:
+        raise ValueError("--case-range must use <start>..<end>")
+    try:
+        start = int(parts[0])
+        end = int(parts[1])
+    except ValueError as exc:
+        raise ValueError("--case-range must use integer bounds") from exc
+    if end <= start:
+        raise ValueError("--case-range end must be greater than start")
+    return start, end
+
+
+def expected_case_ids_for_range(ara_root: Path, case_range: str, case_count: int) -> list[str]:
+    start, end = parse_case_range(case_range)
+    if end - start != case_count:
+        raise ValueError("--case-count must equal --case-range length")
+
+    repo_root = repo_root_for(ara_root)
+    manifest = load_json(ara_root / "results/dataset_manifest.json")
+    source = manifest.get("source")
+    if not isinstance(source, dict):
+        raise ValueError("dataset_manifest.json missing source object")
+    data_root = source.get("data_root")
+    dataset_json = source.get("dataset_json")
+    if not isinstance(data_root, str) or not isinstance(dataset_json, str):
+        raise ValueError("dataset_manifest.json source must include data_root and dataset_json")
+
+    dataset_path = repo_root / data_root / dataset_json
+    loaded = json.loads(dataset_path.read_text(encoding="utf-8"))
+    if not isinstance(loaded, list):
+        raise ValueError(f"{dataset_path} must contain a JSON array")
+    if end > len(loaded):
+        raise ValueError("--case-range exceeds SpreadsheetBench dataset length")
+
+    case_ids: list[str] = []
+    for index, row in enumerate(loaded[start:end], start=start):
+        if not isinstance(row, dict):
+            raise ValueError(f"dataset row {index} missing object shape")
+        raw_id = row.get("id")
+        if (
+            not isinstance(raw_id, (int, str))
+            or isinstance(raw_id, bool)
+            or str(raw_id) == ""
+        ):
+            raise ValueError(f"dataset row {index} missing non-empty id")
+        case_ids.append(str(raw_id))
+    return case_ids
+
+
+def validate_eval_result(
+    eval_result: dict[str, Any],
+    expected_case_count: int,
+    expected_case_ids: list[str],
+) -> dict[str, Any]:
     summary = eval_result.get("summary")
     results = eval_result.get("results")
     if not isinstance(summary, dict):
@@ -105,6 +160,8 @@ def validate_eval_result(eval_result: dict[str, Any], expected_case_count: int) 
         )
     if len(results) != total_instances:
         raise ValueError(f"results length {len(results)} does not match summary.total_instances {total_instances}")
+    if total_instances != len(expected_case_ids):
+        raise ValueError("summary.total_instances does not match declared case range")
     if not 0 <= fully_correct <= total_instances:
         raise ValueError("summary.fully_correct_instances is outside 0..total_instances")
     if total_test_cases < 1:
@@ -132,9 +189,14 @@ def validate_eval_result(eval_result: dict[str, Any], expected_case_count: int) 
 
     soft_scores: list[float] = []
     hard_scores: list[float] = []
+    observed_case_ids: list[str] = []
     for index, result in enumerate(results, start=1):
         if not isinstance(result, dict):
             raise ValueError(f"results[{index}] must be an object")
+        instance_id = result.get("id")
+        if not isinstance(instance_id, str) or not instance_id:
+            raise ValueError(f"results[{index}].id must be a non-empty string")
+        observed_case_ids.append(instance_id)
         soft = require_number(result, "soft_score", f"results[{index}]")
         hard = require_number(result, "hard_score", f"results[{index}]")
         if not 0 <= soft <= 1:
@@ -143,6 +205,12 @@ def validate_eval_result(eval_result: dict[str, Any], expected_case_count: int) 
             raise ValueError(f"results[{index}].hard_score must be 0 or 1")
         soft_scores.append(soft)
         hard_scores.append(hard)
+
+    if observed_case_ids != expected_case_ids:
+        raise ValueError(
+            "eval result ids do not match declared dataset case range: "
+            f"expected {expected_case_ids!r}, got {observed_case_ids!r}"
+        )
 
     if not close_enough(avg_soft_score, sum(soft_scores) / len(soft_scores)):
         raise ValueError("summary.avg_soft_score does not match result mean")
@@ -276,8 +344,13 @@ def build_records(args: argparse.Namespace) -> list[dict[str, Any]]:
     if args.proof_classification in APPROVAL_REQUIRED_PROOF_CLASSIFICATIONS and not args.approval_artifact_path:
         raise ValueError(f"{args.proof_classification} requires at least one --approval-artifact-path")
 
+    expected_case_ids = expected_case_ids_for_range(
+        args.ara_dir.resolve(),
+        args.case_range,
+        args.case_count,
+    )
     eval_result = load_json(args.eval_results)
-    summary = validate_eval_result(eval_result, args.case_count)
+    summary = validate_eval_result(eval_result, args.case_count, expected_case_ids)
     seed = parse_seed(args.seed)
     plot_bindings = parse_plot_bindings(args.plot_binding_json, args.proof_classification)
     require_existing_artifact_paths(args.artifact_path, "--artifact-path")
