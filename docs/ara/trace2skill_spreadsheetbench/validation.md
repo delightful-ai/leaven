@@ -669,3 +669,42 @@ Limit:
 - This is protocol evidence and runbook hardening only. It does not launch
   Qwen/vLLM, create paper-denominator result rows, or prove that the configured
   run has been executed.
+
+## 2026-06-14 Deterministic One-Case Artifact Check
+
+Artifact:
+
+```text
+scripts/check_trace2skill_one_case_artifacts.py
+docs/ara/trace2skill_spreadsheetbench/results/one_case_live.md
+docs/ara/trace2skill_spreadsheetbench/results/deterministic_one_case.jsonl
+tmp/trace2skill-one-case-live/
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_one_case_artifacts.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Current result:
+
+- Verifies the deterministic one-case run directory has the expected manifest,
+  ACP result, transcript, score report, trajectory, worker script, and output
+  workbook.
+- Confirms case `13-1` scored `1.0` with `120/120` matched cells and no
+  mismatches.
+- Confirms the output workbook is `8423` bytes with SHA-256
+  `131cf073e40f73b5f152d3a4d718532ee6c980e467e48e1a136e1275cd31bf40`, and that
+  the ACP receipt reports the same workbook digest.
+- Confirms `deterministic_one_case.jsonl` remains a single
+  `deterministic-one-case` record with denominator `one-case-13-1-only` and
+  `plot_binding: null`.
+- The integrated Seal Level 1 validator and closeout audit now use this checker
+  before treating the deterministic one-case denominator as satisfied.
+
+Limit:
+
+- This proves the local deterministic ACP one-case denominator only. It does
+  not prove model-backed Qwen/vLLM execution, held-out rows `200..400`, seed
+  aggregation, cross-model rows, or full-paper reproduction.

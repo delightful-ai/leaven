@@ -8,6 +8,7 @@ Current scripts:
 - `p8-gepa-debug-sqlite.py`: exports an existing P8 `reports/p8-aime.json` file, and optionally an upstream GEPA `gepa_state.bin`, into local SQLite tables for optimizer debugging. It does not call providers, fetch datasets, or mutate source.
 - `ensure_leaven_workspace.sh`: guard for paper-lane shell examples that must run from the main `/Users/darin/src/personal/leaven` jj workspace. It performs no network or provider work.
 - `check_trace2skill_config_fidelity.py`: no-spend ARA checker that verifies Trace2Skill SpreadsheetBench protocol/config values against the paper source bundle, upstream README/code, dataset manifest, Qwen generation config files, and generated full-denominator runbook.
+- `check_trace2skill_one_case_artifacts.py`: no-spend ARA checker that verifies deterministic one-case ACP artifacts, workbook score evidence, non-overlay Leaven result JSONL, and closeout one-case consistency.
 
 ## Local Rules
 - Keep script defaults local and credential-free. Network, cloud, live model, or destructive behavior must be an explicit flag or environment opt-in.

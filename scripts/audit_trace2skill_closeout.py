@@ -43,6 +43,17 @@ def import_approval_checker(repo_root: Path) -> Any:
     return module
 
 
+def import_one_case_checker(repo_root: Path) -> Any:
+    path = repo_root / "scripts/check_trace2skill_one_case_artifacts.py"
+    spec = importlib.util.spec_from_file_location("check_trace2skill_one_case_artifacts", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot import {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def rel(path: Path, root: Path) -> str:
     return path.relative_to(root).as_posix()
 
@@ -88,6 +99,8 @@ def audit(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
     dataset_manifest = json_file(repo_root, dataset_manifest_path)
     score_report_path = "tmp/trace2skill-one-case-live/score_report.json"
     score_report = json_file(repo_root, score_report_path) if file_exists(repo_root, score_report_path) else {}
+    one_case_checker = import_one_case_checker(repo_root)
+    one_case_errors = one_case_checker.check_one_case_artifacts(repo_root, ara_dir)
 
     approval = import_approval_checker(repo_root)
     full_run_plan = ara_dir / "results/full_run_plan.md"
@@ -129,23 +142,26 @@ def audit(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
         ["Re-run focused Rust tests after changing example mechanics or proof classifications."],
     )
 
-    one_case_ok = bool(score_report.get("passed")) and file_exists(
-        repo_root, "tmp/trace2skill-one-case-live/13-1_output.xlsx"
-    )
+    one_case_ok = bool(score_report.get("passed")) and not one_case_errors
     acceptance["one_case_live_or_explicit_blocker"] = status_entry(
         "satisfied_deterministic_one_case" if one_case_ok else "blocked_or_missing",
         [
             f"{ara_rel}/results/one_case_live.md",
             f"{ara_rel}/results/deterministic_one_case.jsonl",
+            "scripts/check_trace2skill_one_case_artifacts.py",
             "tmp/trace2skill-one-case-live/13-1_output.xlsx",
             score_report_path,
             "tmp/trace2skill-one-case-live/trajectory.json",
             "tmp/trace2skill-one-case-live/acp_result.json",
         ],
-        [
-            "This is deterministic local ACP one-case evidence only.",
-            "Model-backed one-case evidence remains absent until approved.",
-        ],
+        (
+            [
+                "This is deterministic local ACP one-case evidence only.",
+                "Model-backed one-case evidence remains absent until approved.",
+            ]
+            if one_case_ok
+            else one_case_errors
+        ),
     )
 
     acceptance["full_denominator_plan_approved"] = status_entry(

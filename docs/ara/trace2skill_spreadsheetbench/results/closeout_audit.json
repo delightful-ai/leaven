@@ -58,6 +58,7 @@
       "evidence": [
         "docs/ara/trace2skill_spreadsheetbench/results/one_case_live.md",
         "docs/ara/trace2skill_spreadsheetbench/results/deterministic_one_case.jsonl",
+        "scripts/check_trace2skill_one_case_artifacts.py",
         "tmp/trace2skill-one-case-live/13-1_output.xlsx",
         "tmp/trace2skill-one-case-live/score_report.json",
         "tmp/trace2skill-one-case-live/trajectory.json",

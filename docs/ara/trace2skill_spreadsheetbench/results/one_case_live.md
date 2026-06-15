@@ -43,6 +43,7 @@ cargo run -p trace2skill_spreadsheetbench -- --run-one-case-acp-worker --run-dir
 | Total cells | `120` | `tmp/trace2skill-one-case-live/score_report.json` |
 | Passed | `true` | `tmp/trace2skill-one-case-live/score_report.json` |
 | Output workbook bytes | `8423` | `tmp/trace2skill-one-case-live/13-1_output.xlsx` |
+| Output workbook SHA-256 | `131cf073e40f73b5f152d3a4d718532ee6c980e467e48e1a136e1275cd31bf40` | `tmp/trace2skill-one-case-live/13-1_output.xlsx` |
 
 ## Artifacts
 
