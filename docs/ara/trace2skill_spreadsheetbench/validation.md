@@ -600,3 +600,33 @@ Limit:
 
 - The fixture is script coverage only. It is not stored under top-level
   `results/*.jsonl`, not plotted, and not evidence for paper reproduction.
+
+## 2026-06-14 Paper Figure Fidelity Check
+
+Artifact:
+
+```text
+scripts/check_trace2skill_figure_index.py
+docs/ara/trace2skill_spreadsheetbench/evidence/figures/figure_trace2skill_framework.md
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_figure_index.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Current result:
+
+- Verifies the ARA framework figure index points at the inspectable upstream
+  `trace2skill_framwork.png` file.
+- Checks the source identifier `fig:pipeline`, source path, byte size,
+  SHA-256 digest, and PNG magic bytes.
+- The integrated Seal Level 1 validator now runs this figure-fidelity check
+  alongside paper table and prompt-index checks.
+
+Limit:
+
+- This proves source anchoring for the framework figure only. It does not prove
+  plotted Leaven metrics, source-image visual equivalence beyond the file
+  identity check, or any paper-denominator reproduction.

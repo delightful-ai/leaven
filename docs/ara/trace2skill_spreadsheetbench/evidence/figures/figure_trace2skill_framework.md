@@ -8,6 +8,8 @@
 |-------|-------|
 | Source identifier | `fig:pipeline` |
 | Source file | `tmp/skill_opt_sources/arx_2603.25158/src/figures/trace2skill_framwork.png` |
+| Source bytes | 379440 |
+| Source SHA-256 | `4ec0830d426a92198fb5b028a93a908de77787d983bee2f53813fb784f54845c` |
 | ARA copy status | Referenced in place; not copied. |
 | Claims | C01, C02, C04 |
 
