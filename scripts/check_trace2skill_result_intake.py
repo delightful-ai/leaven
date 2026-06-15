@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 from pathlib import Path
 from typing import Any
 
 
+RESULT_SCHEMA_VERSION = "leaven.trace2skill.result.v1"
 NON_OVERLAY_ONLY_CLASSIFICATIONS = {
     "mechanics-smoke",
     "deterministic-one-case",
@@ -34,6 +36,12 @@ APPROVAL_REQUIRED_PROOF_CLASSIFICATIONS = {
     "paper-denominator-candidate",
     "paper-denominator-reproduction",
 }
+ALLOWED_PROOF_CLASSIFICATIONS = (
+    NON_OVERLAY_ONLY_CLASSIFICATIONS
+    | PAPER_DENOMINATOR_CLASSIFICATIONS
+    | APPROVAL_REQUIRED_PROOF_CLASSIFICATIONS
+)
+ALLOWED_METRIC_UNITS = {"percent", "delta_points", "minutes", "fraction"}
 PLOT_AXIS_UNITS = {
     ("same_model_deepening_vrf", "left"): {"percent"},
     ("avg_improvement", "left"): {"delta_points"},
@@ -74,6 +82,101 @@ def load_jsonl(path: Path) -> list[tuple[int, dict[str, Any]]]:
             raise ValueError(f"{path}:{line_number} must be a JSON object")
         rows.append((line_number, record))
     return rows
+
+
+def is_json_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def check_non_empty_string(prefix: str, record: dict[str, Any], key: str, errors: list[str]) -> None:
+    if not isinstance(record.get(key), str) or not record.get(key):
+        errors.append(f"{prefix} {key} must be a non-empty string")
+
+
+def check_base_record_shape(prefix: str, record: dict[str, Any], errors: list[str]) -> None:
+    if record.get("schema_version") != RESULT_SCHEMA_VERSION:
+        errors.append(f"{prefix} schema_version must be {RESULT_SCHEMA_VERSION!r}")
+
+    for key in ("run_id", "created_at", "model_id", "metric_name", "source_command"):
+        check_non_empty_string(prefix, record, key, errors)
+
+    proof = record.get("proof_classification")
+    if proof not in ALLOWED_PROOF_CLASSIFICATIONS:
+        errors.append(
+            f"{prefix} proof_classification must be one of {sorted(ALLOWED_PROOF_CLASSIFICATIONS)!r}"
+        )
+
+    dataset_slice = record.get("dataset_slice")
+    if not isinstance(dataset_slice, dict):
+        errors.append(f"{prefix} dataset_slice must be an object")
+    else:
+        for key in ("name", "split", "denominator"):
+            if not isinstance(dataset_slice.get(key), str) or not dataset_slice.get(key):
+                errors.append(f"{prefix} dataset_slice.{key} must be a non-empty string")
+        case_count = dataset_slice.get("case_count")
+        if not isinstance(case_count, int) or isinstance(case_count, bool) or case_count < 0:
+            errors.append(f"{prefix} dataset_slice.case_count must be a non-negative integer")
+
+    seed = record.get("seed")
+    if seed is not None and not (
+        (isinstance(seed, str) and seed)
+        or (isinstance(seed, (int, float)) and not isinstance(seed, bool) and math.isfinite(seed))
+    ):
+        errors.append(f"{prefix} seed must be a number, non-empty string, or null")
+
+    skill_source = record.get("skill_source")
+    if not isinstance(skill_source, dict):
+        errors.append(f"{prefix} skill_source must be an object")
+    elif not isinstance(skill_source.get("kind"), str) or not skill_source.get("kind"):
+        errors.append(f"{prefix} skill_source.kind must be a non-empty string")
+
+    if not is_json_number(record.get("metric_value")):
+        errors.append(f"{prefix} metric_value must be numeric")
+
+    metric_unit = record.get("metric_unit")
+    if metric_unit not in ALLOWED_METRIC_UNITS:
+        errors.append(f"{prefix} metric_unit must be one of {sorted(ALLOWED_METRIC_UNITS)!r}")
+
+    binding = record.get("plot_binding")
+    if binding is not None:
+        if not isinstance(binding, dict):
+            errors.append(f"{prefix} plot_binding must be an object or null")
+        else:
+            for key in ("panel", "x_label", "series", "axis"):
+                if not isinstance(binding.get(key), str) or not binding.get(key):
+                    errors.append(f"{prefix} plot_binding.{key} must be a non-empty string")
+
+    cost = record.get("cost")
+    if not isinstance(cost, dict):
+        errors.append(f"{prefix} cost must be an object")
+    else:
+        for key in ("usd", "prompt_tokens", "completion_tokens"):
+            if key in cost and cost[key] is not None and not is_json_number(cost[key]):
+                errors.append(f"{prefix} cost.{key} must be numeric or null")
+
+    runtime = record.get("runtime")
+    if not isinstance(runtime, dict):
+        errors.append(f"{prefix} runtime must be an object")
+    else:
+        if "seconds" not in runtime:
+            errors.append(f"{prefix} runtime.seconds must be present")
+        elif runtime["seconds"] is not None and not is_json_number(runtime["seconds"]):
+            errors.append(f"{prefix} runtime.seconds must be numeric or null")
+        for key in ("workers", "max_turns"):
+            if key in runtime and runtime[key] is not None:
+                value = runtime[key]
+                if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                    errors.append(f"{prefix} runtime.{key} must be a non-negative integer or null")
+
+    if "artifact_paths" not in record:
+        errors.append(f"{prefix} artifact_paths must be a non-empty list")
+
+    extra = record.get("extra")
+    if not isinstance(extra, dict):
+        errors.append(f"{prefix} extra must be an object")
+
+    if not isinstance(record.get("notes"), str):
+        errors.append(f"{prefix} notes must be a string")
 
 
 def check_artifact_path(repo_root: Path, prefix: str, rel_path: str, errors: list[str]) -> None:
@@ -498,6 +601,7 @@ def check_record(
     aggregate_stack: set[str] | None = None,
 ) -> None:
     prefix = f"{path.relative_to(repo_root)}:{line_number}"
+    check_base_record_shape(prefix, record, errors)
     proof = record.get("proof_classification")
     binding = record.get("plot_binding")
     dataset_slice = record.get("dataset_slice")

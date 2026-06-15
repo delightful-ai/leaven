@@ -49,10 +49,15 @@ All result JSONL files are checked with:
 uv run --with pyyaml python scripts/check_trace2skill_result_intake.py docs/ara/trace2skill_spreadsheetbench
 ```
 
-This rejects missing artifact paths, absolute artifact paths, mechanics or
-one-case rows with plot bindings, approval-gated rows missing runbook-required
-prompt artifacts, and overlay rows whose metric unit, denominator, or paper
-classification is not compatible with the target panel.
+This first enforces the base Leaven result envelope from
+[`leaven_result_schema.md`](leaven_result_schema.md): schema id, run id,
+created timestamp, proof classification, dataset slice, model id, seed shape,
+skill source, metric fields, cost/runtime objects, source command, artifacts,
+extra object, and notes. It then rejects missing artifact paths, absolute
+artifact paths, mechanics or one-case rows with plot bindings, approval-gated
+rows missing runbook-required prompt artifacts, and overlay rows whose metric
+unit, denominator, or paper classification is not compatible with the target
+panel.
 
 Official SpreadsheetBench evaluator output can be converted into Leaven result
 rows only after a real Leaven run has produced an inspectable

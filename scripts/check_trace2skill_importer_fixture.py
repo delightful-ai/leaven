@@ -502,6 +502,34 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
         check_result_intake_for_rows(repo_root, ara_root, output, None, errors, "positive import intake")
         check_aggregate_result_intake(repo_root, ara_root, tmp_path, errors)
 
+        def mutate_missing_schema_version(row: dict[str, Any]) -> None:
+            row.pop("schema_version", None)
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "missing-schema-version.jsonl",
+            mutate_missing_schema_version,
+            "schema_version must be 'leaven.trace2skill.result.v1'",
+            errors,
+            "missing schema version",
+        )
+
+        def mutate_metric_value_to_string(row: dict[str, Any]) -> None:
+            row["metric_value"] = str(row["metric_value"])
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "string-metric-value.jsonl",
+            mutate_metric_value_to_string,
+            "metric_value must be numeric",
+            errors,
+            "string metric value",
+        )
+
         def mutate_subset_to_paper_sized(row: dict[str, Any]) -> None:
             row["dataset_slice"] = dict(row["dataset_slice"])
             row["dataset_slice"]["case_count"] = 200

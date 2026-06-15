@@ -101,6 +101,9 @@ what Leaven actually ran.
 - Do not write paper target rows as Leaven result rows.
 - Do not write rows from historical YAML claims unless the underlying artifacts
   and command can be inspected now.
+- Result intake rejects rows that omit the base envelope fields above or encode
+  required numeric metrics as strings before provenance, plotting, or closeout
+  checks can count them.
 - Do not write a `paper-denominator-reproduction` row for a subset, single seed,
   deterministic fixture, or mechanics-only gate.
 - Do not write success rows for SpreadsheetBench cases when the score envelope

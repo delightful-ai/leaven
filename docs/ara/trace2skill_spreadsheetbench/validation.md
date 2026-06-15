@@ -823,6 +823,10 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
 - Converts evaluator fractions to percent-valued Leaven result rows.
 - Defaults every row to `plot_binding: null`.
 - Runs the result-intake checker before writing output rows.
+- Validates the base Leaven result envelope before provenance checks:
+  `schema_version`, run id, timestamp, proof classification, dataset slice,
+  model id, seed shape, skill source, metric fields, cost/runtime objects,
+  source command, artifacts, `extra`, and notes.
 - Requires every row to carry `extra.runbook_stage_id` and validates the stage
   label against `full_denominator_runbook.json` before write and during result
   intake.
@@ -859,8 +863,9 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
   `--approval-artifact-path` are explicitly present.
 - The checker exercises those refusal paths directly: missing runbook stage id,
   wrong runbook stage label, missing prompt artifacts for `paper-subset`,
-  subset denominator drift, subset seed drift, subset worker drift, missing
-  approval evidence for `paper-subset`, and accidental
+  missing base schema id, stringly metric value, subset denominator drift,
+  subset seed drift, subset worker drift, missing approval evidence for
+  `paper-subset`, and accidental
   `paper-denominator-reproduction` without the explicit allow flag.
 
 Limit:
