@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T20:32-07:00"
-  turn_count: 40
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, generated runbook dataset-slice contract, generated runbook seed-policy contract, one non-overlay result row, strict official-eval importer, importer-fixture validation, Stage 2 rendered-prompt validation/freshness, rendered-prompt artifact-contract validation, prompt-artifact result-intake admission, pre-write official-eval import admission, closeout result-intake gate, runbook dataset-slice result-intake guard, approval-artifact result-intake guard, runbook-stage result binding, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, dataset-manifest freshness validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, approval-state validation, deterministic one-case result-freshness validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
+  last_turn: "2026-06-14T20:36-07:00"
+  turn_count: 41
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, generated runbook dataset-slice contract, generated runbook seed-policy contract, generated runbook runtime-policy contract, one non-overlay result row, strict official-eval importer, importer-fixture validation, Stage 2 rendered-prompt validation/freshness, rendered-prompt artifact-contract validation, prompt-artifact result-intake admission, pre-write official-eval import admission, closeout result-intake gate, runbook dataset-slice result-intake guard, approval-artifact result-intake guard, runbook-stage result binding, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, dataset-manifest freshness validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, approval-state validation, deterministic one-case result-freshness validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -253,6 +253,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Generated Trace2Skill expected_seed_policy fields for full-denominator runbook stages and made result intake reject off-protocol seeds, including a fixture mutation to seed 99."
+  - turn: 41
+    type: experiment
+    id: "PM-2026-06-14-042"
+    routing: direct
+    provenance: ai-executed
+    summary: "Generated Trace2Skill expected_runtime_policy fields for full-denominator runbook stages and made result intake reject rows whose workers, max turns, or merge batch size drift from the paper protocol."
 
 ai_actions:
   - turn: 1
@@ -668,6 +674,20 @@ ai_actions:
       - "docs/ara/trace2skill_spreadsheetbench/results/leaven_result_schema.md"
       - "docs/ara/trace2skill_spreadsheetbench/results/README.md"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 41
+    action: "Updated scripts/build_trace2skill_runbook.py to generate expected_runtime_policy for model-backed/subset/evolving/validation/held-out stages, updated importer/result-intake/validate_ara to carry and validate runtime fields, regenerated runbook JSON/Markdown, added a wrong-worker importer fixture mutation, and documented the runtime contract."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/build_trace2skill_runbook.py"
+      - "scripts/import_trace2skill_eval_results.py"
+      - "scripts/check_trace2skill_result_intake.py"
+      - "scripts/check_trace2skill_importer_fixture.py"
+      - "scripts/validate_ara.py"
+      - "docs/ara/trace2skill_spreadsheetbench/results/full_denominator_runbook.json"
+      - "docs/ara/trace2skill_spreadsheetbench/results/full_denominator_runbook.md"
+      - "docs/ara/trace2skill_spreadsheetbench/results/leaven_result_schema.md"
+      - "docs/ara/trace2skill_spreadsheetbench/results/README.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -752,6 +772,8 @@ key_context:
     excerpt: "Runbook freshness now proves expected_dataset_slice is generated from the approval packet and dataset manifest: G2 declares held-out subset bounds, G3/G3V declare 0..200, G4 declares 200..400, and result intake reads those fields while Qwen/vLLM approval remains blocked."
   - turn: 40
     excerpt: "Runbook freshness now proves expected_seed_policy is generated from the paper protocol: G1M/G2 require seed 41, G3/G3V/G4 accept one of 41/42/43, G5/G6 require extra.seeds [41,42,43], and result intake rejects a mutated G2 seed 99 row."
+  - turn: 41
+    excerpt: "Runbook freshness now proves expected_runtime_policy is generated from the paper protocol: G1M uses one worker, G2/G3V/G4 require workers 128 and max_turns 100, G3 additionally requires merge_batch_size 32, and result intake rejects a mutated G2 worker=1 row."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."
