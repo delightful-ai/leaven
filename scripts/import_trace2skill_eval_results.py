@@ -274,11 +274,19 @@ def build_records(args: argparse.Namespace) -> list[dict[str, Any]]:
     require_existing_artifact_paths(args.artifact_path, "--artifact-path")
     require_existing_artifact_paths(args.approval_artifact_path, "--approval-artifact-path")
 
-    artifact_paths = [args.eval_results.as_posix(), *args.artifact_path, *args.approval_artifact_path]
     skill_source = {"kind": args.skill_kind}
+    skill_artifact_paths: list[str] = []
     if args.skill_path:
         require_existing_path(Path(args.skill_path), "--skill-path")
         skill_source["path"] = args.skill_path
+        skill_artifact_paths.append(args.skill_path)
+
+    artifact_paths = [
+        args.eval_results.as_posix(),
+        *skill_artifact_paths,
+        *args.artifact_path,
+        *args.approval_artifact_path,
+    ]
 
     base = {
         "schema_version": RESULT_SCHEMA_VERSION,

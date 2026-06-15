@@ -117,7 +117,9 @@ what Leaven actually ran.
 - Do not silently repair denominator drift in the plotter. If `plot_binding`
   does not match a displayed paper target label, validation must fail.
 - Artifact paths and `skill_source.path` values must be repo-relative,
-  inspectable files at validation time.
+  inspectable files at validation time. When `skill_source.path` is present,
+  the same path must also appear in `artifact_paths`; a file-backed optimized
+  skill is part of the row's artifact audit, not just metadata.
 - `mechanics-smoke` and `deterministic-one-case` rows must always use
   `plot_binding: null`.
 - `model-one-case`, `evolving-split-run`, and `training-validation-candidate`

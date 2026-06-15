@@ -97,7 +97,10 @@ classification requires at least one `--approval-artifact-path`; this includes
 `paper-denominator-reproduction`. `paper-denominator-reproduction` also requires
 `--allow-paper-denominator-reproduction`. Every `--eval-results`,
 `--skill-path`, `--artifact-path`, and `--approval-artifact-path` value must
-exist locally when the importer runs. Every row must carry
+exist locally when the importer runs. When `--skill-path` is present, the
+importer also writes that same path into `artifact_paths`; result intake rejects
+file-backed `skill_source.path` metadata that is missing from the artifact
+audit. Every row must carry
 `extra.runbook_stage_id` naming a stage in `full_denominator_runbook.json`; that
 stage's `allowed_label` must match the row's `proof_classification`. If that
 runbook stage expects rendered prompts, fanout files, or prompt-render

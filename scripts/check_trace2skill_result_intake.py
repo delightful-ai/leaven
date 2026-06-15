@@ -718,9 +718,12 @@ def check_record(
     check_required_prompt_artifacts(prefix, proof, stage, artifact_paths, errors)
     check_required_stage_file_artifacts(prefix, stage, artifact_paths, errors)
 
-    skill_path = record.get("skill_source", {}).get("path")
+    skill_source = record.get("skill_source")
+    skill_path = skill_source.get("path") if isinstance(skill_source, dict) else None
     if skill_path is not None:
         check_artifact_path(repo_root, prefix, skill_path, errors)
+        if isinstance(artifact_paths, list) and skill_path not in artifact_paths:
+            errors.append(f"{prefix} skill_source.path {skill_path!r} must also appear in artifact_paths")
 
     if proof in APPROVAL_REQUIRED_PROOF_CLASSIFICATIONS:
         if approval_blockers:

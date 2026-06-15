@@ -882,6 +882,9 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
   plan file.
 - Requires `--eval-results`, `--skill-path`, `--artifact-path`, and
   `--approval-artifact-path` values to be locally inspectable when provided.
+- Verifies that a provided `--skill-path` is written into both
+  `skill_source.path` and `artifact_paths`, so optimized-skill files remain part
+  of the row's inspectable artifact audit rather than metadata only.
 - Refuses `paper-denominator-reproduction` unless
   `--allow-paper-denominator-reproduction` and at least one
   `--approval-artifact-path` are explicitly present.
@@ -890,7 +893,8 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
   missing base schema id, stringly metric value, missing official evaluator
   artifact, subset denominator drift, subset seed drift, subset worker drift,
   full-paper serving/model drift with null plot binding, blocked real-results
-  approval preflight, missing approval evidence for `paper-subset`, and
+  approval preflight, missing skill artifact, skill metadata missing from the
+  artifact audit, missing approval evidence for `paper-subset`, and
   accidental `paper-denominator-reproduction` without the explicit allow flag.
 
 Limit:
