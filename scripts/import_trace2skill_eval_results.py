@@ -14,7 +14,12 @@ RESULT_SCHEMA_VERSION = "leaven.trace2skill.result.v1"
 ALLOWED_PROOF_CLASSIFICATIONS = {
     "mechanics-smoke",
     "deterministic-one-case",
+    "model-one-case",
     "paper-subset",
+    "evolving-split-run",
+    "training-validation-candidate",
+    "held-out-single-seed-candidate",
+    "seed-aggregate-candidate",
     "paper-denominator-candidate",
     "paper-denominator-reproduction",
 }
@@ -26,6 +31,8 @@ OVERALL_METRICS = {
 }
 PLOT_CAPABLE_PROOF_CLASSIFICATIONS = {
     "paper-subset",
+    "held-out-single-seed-candidate",
+    "seed-aggregate-candidate",
     "paper-denominator-candidate",
     "paper-denominator-reproduction",
 }

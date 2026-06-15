@@ -10,8 +10,19 @@ from pathlib import Path
 from typing import Any
 
 
-NON_OVERLAY_ONLY_CLASSIFICATIONS = {"mechanics-smoke", "deterministic-one-case"}
-PAPER_DENOMINATOR_CLASSIFICATIONS = {"paper-denominator-candidate", "paper-denominator-reproduction"}
+NON_OVERLAY_ONLY_CLASSIFICATIONS = {
+    "mechanics-smoke",
+    "deterministic-one-case",
+    "model-one-case",
+    "evolving-split-run",
+    "training-validation-candidate",
+}
+PAPER_DENOMINATOR_CLASSIFICATIONS = {
+    "held-out-single-seed-candidate",
+    "seed-aggregate-candidate",
+    "paper-denominator-candidate",
+    "paper-denominator-reproduction",
+}
 PLOT_AXIS_UNITS = {
     ("same_model_deepening_vrf", "left"): {"percent"},
     ("avg_improvement", "left"): {"delta_points"},

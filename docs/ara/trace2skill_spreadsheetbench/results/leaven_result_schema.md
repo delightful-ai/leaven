@@ -97,6 +97,9 @@ what Leaven actually ran.
   inspectable files at validation time.
 - `mechanics-smoke` and `deterministic-one-case` rows must always use
   `plot_binding: null`.
+- `model-one-case`, `evolving-split-run`, and `training-validation-candidate`
+  rows must also use `plot_binding: null`; they are real execution evidence but
+  not paper-target overlays.
 - Overlay rows must use units compatible with their panel: percent for score
   axes, minutes for runtime axes, and delta points for average-improvement
   axes.

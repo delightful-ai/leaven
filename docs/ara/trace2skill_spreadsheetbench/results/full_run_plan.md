@@ -32,6 +32,7 @@ budget conditions and writes denominator-labeled result records.
 | G1 | case `13-1` | run manifest, output workbook, ACP/result envelope, transcript, score report, trajectory | `deterministic-one-case` or `model-one-case` | paper reproduction |
 | G2 | small `N` cases | per-case manifests, trajectories, score reports, analyst fan-out sanity | `paper-subset` | held-out split reproduced |
 | G3 | rows `0..200` | trajectory generation, patch pool, merge tree, evolved skill, training/evolving validation | `evolving-split-run` | held-out result |
+| G3V | rows `0..200` validation | baseline/evolved training-set scores and best-seed selection note | `training-validation-candidate` | held-out result |
 | G4 | rows `200..400` | untouched held-out score for one approved seed/model condition | `held-out-single-seed-candidate` | paper aggregate |
 | G5 | seeds `41/42/43` | three held-out runs for one model/condition with identical protocol | `seed-aggregate-candidate` | cross-model paper reproduction |
 | G6 | 122B and 35B target conditions | all paper-required model/condition rows with target overlays and artifact audit | `paper-denominator-reproduction` | anything stronger than the actual completed rows |
@@ -43,11 +44,12 @@ budget conditions and writes denominator-labeled result records.
 3. Run a model-backed one-case gate and write a result note distinct from the deterministic local ACP worker proof.
 4. Run a small `N`-case subset with trajectory import and analyst fan-out sanity checks.
 5. Run rows `0..200` for trajectory collection and skill evolution.
-6. Run rows `200..400` for held-out evaluation only after the evolved skill is fixed.
-7. Repeat for seeds `41`, `42`, and `43`.
-8. Repeat approved model/condition rows needed for the target table being claimed.
-9. Write `results/*.jsonl` only for metrics that bind to paper target plot labels without denominator drift.
-10. Regenerate plots and run the ARA validator.
+6. Validate candidate evolved skills on rows `0..200` and select the best seed without inspecting held-out rows.
+7. Run rows `200..400` for held-out evaluation only after the evolved skill is fixed.
+8. Repeat for seeds `41`, `42`, and `43`.
+9. Repeat approved model/condition rows needed for the target table being claimed.
+10. Write `results/*.jsonl` only for metrics that bind to paper target plot labels without denominator drift.
+11. Regenerate plots and run the ARA validator.
 
 ## Stop Conditions
 

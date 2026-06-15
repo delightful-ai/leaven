@@ -143,7 +143,12 @@ Allowed `proof_classification` values:
 |-------|---------|-----------------------------|
 | `mechanics-smoke` | Leaven plumbing works on deterministic or proxy data. | No |
 | `deterministic-one-case` | The public seam solved one real SpreadsheetBench case with inspectable artifacts. | No |
+| `model-one-case` | A model-backed run solved one real SpreadsheetBench case with inspectable artifacts. | No |
 | `paper-subset` | A real subset of the paper denominator ran with stated deviations. | No |
+| `evolving-split-run` | Rows `0..200` were used for trajectory collection and skill evolution only. | No |
+| `training-validation-candidate` | Rows `0..200` were used to select or validate an evolved skill before held-out evaluation. | No |
+| `held-out-single-seed-candidate` | Rows `200..400` were evaluated for one approved seed/model condition. | No |
+| `seed-aggregate-candidate` | Seeds `41/42/43` were aggregated for one approved model/condition. | No |
 | `paper-denominator-candidate` | A run targets the paper denominator but is not yet seed/model aggregate complete. | No |
 | `paper-denominator-reproduction` | The row belongs to the approved full denominator: paper split, seeds, model IDs, serving path, and artifact audit. | Yes, only with matching closeout evidence |
 

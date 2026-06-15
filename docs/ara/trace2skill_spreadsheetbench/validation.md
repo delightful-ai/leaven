@@ -781,3 +781,35 @@ Limit:
 - This checks follow-up consistency for the existing semantic review. It does
   not rerun a new independent Level 2 review, approve tolerance, capture
   rendered live prompts, or execute Qwen/vLLM.
+
+## 2026-06-14 Runbook Label Consistency Check
+
+Artifact:
+
+```text
+scripts/check_trace2skill_runbook_labels.py
+docs/ara/trace2skill_spreadsheetbench/results/full_denominator_runbook.json
+docs/ara/trace2skill_spreadsheetbench/results/README.md
+docs/ara/trace2skill_spreadsheetbench/results/leaven_result_schema.md
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_runbook_labels.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Current result:
+
+- Verifies every result-bearing runbook `allowed_label` is accepted by the
+  JSONL schema, importer, plotter, and validator.
+- Verifies staged denominator labels include model one-case, paper subset,
+  evolving split, training validation, held-out single-seed, seed aggregate, and
+  paper-denominator reproduction labels.
+- Verifies model one-case, evolving split, and training validation rows remain
+  non-overlay result rows.
+
+Limit:
+
+- This synchronizes denominator vocabulary only. It does not create any new
+  result rows, approve the full run, or execute Qwen/vLLM.
