@@ -15,7 +15,7 @@
 - **Expected outcome**:
   - Evolved skills outperform their stated baselines in the pattern reported by the paper.
 - **Baselines**: No Skill, Human-Written, Parametric.
-- **Dependencies**: E08
+- **Dependencies**: E09
 
 ## E02: Parallel Consolidation Versus Sequential Editing
 - **Verifies**: C02
@@ -32,7 +32,7 @@
 - **Expected outcome**:
   - Parallel consolidation is faster and competitive or better on the primary score.
 - **Baselines**: Seq-B=4, Seq-B=1.
-- **Dependencies**: E08
+- **Dependencies**: E09
 
 ## E03: Portable Skill Versus ReasoningBank Retrieval
 - **Verifies**: C03
@@ -49,7 +49,7 @@
 - **Expected outcome**:
   - A distilled portable skill outperforms retrieval memory under the paper protocol.
 - **Baselines**: ReasoningBank.
-- **Dependencies**: E08
+- **Dependencies**: E09
 
 ## E04: Agentic Error Analysis Ablation
 - **Verifies**: C04
@@ -66,7 +66,7 @@
 - **Expected outcome**:
   - Agentic error analysis is more transferable than single-call analysis.
 - **Baselines**: +Error LLM.
-- **Dependencies**: E08
+- **Dependencies**: E09
 
 ## E05: Math Skill Transfer Target
 - **Verifies**: C05
@@ -133,4 +133,21 @@
 - **Expected outcome**:
   - Closeout language matches the proven denominator.
 - **Baselines**: paper target rows.
-- **Dependencies**: E01, E02, E03, E04
+- **Dependencies**: E01, E02, E03, E04, E09
+
+## E09: Full Paper-Denominator Approval Gate
+- **Verifies**: C07
+- **Setup**:
+  - Model: Qwen3.5-122B-A10B and Qwen3.5-35B-A3B only after availability is confirmed.
+  - Hardware: vLLM serving plan with approved GPU/runtime/cost envelope.
+  - Dataset: 400-row SpreadsheetBench-Verified with rows `0..200` for evolving and rows `200..400` for held-out evaluation.
+  - System: Trace2Skill trajectory generation, success/error analyst fan-out, hierarchical merge, and final skill evaluation.
+- **Procedure**:
+  1. Fill and approve `results/full_run_plan.md`.
+  2. Run subset gates in order: one case, small `N`, rows `0..200`, rows `200..400`, seeds `41/42/43`, then cross-model/condition rows.
+  3. Stop on any denominator drift or missing artifact.
+- **Metrics**: approval packet completeness, model identity, split, seeds, worker count, merge batch size, ReAct turn budget, cost/runtime, artifact root.
+- **Expected outcome**:
+  - The user can approve or reject the exact compute/spend plan before any Qwen/vLLM-scale execution.
+- **Baselines**: none.
+- **Dependencies**: E07, E08

@@ -190,3 +190,20 @@ Scope:
 Limit:
 
 - This is `deterministic-one-case` evidence only. It does not use Qwen3.5, vLLM, Trace2Skill analyst calls, live hierarchical merge, held-out `200..400`, seeds `41/42/43`, or paper aggregate metrics.
+
+## 2026-06-14 Full Run Approval Gate
+
+Artifact:
+
+```text
+docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md
+```
+
+Scope:
+
+- Records the required model, vLLM, dataset, split, seed, worker, merge, turn-budget, cost, credential, and artifact-retention approvals before any Qwen/vLLM-scale run.
+- Defines subset gates from one case through small `N`, evolving rows `0..200`, held-out rows `200..400`, seed aggregation, and cross-model/condition coverage.
+
+Limit:
+
+- The approval packet is not filled or approved. No full-denominator execution has been launched.

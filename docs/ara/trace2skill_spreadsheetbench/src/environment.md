@@ -26,3 +26,20 @@
 Do not launch Qwen/vLLM-scale runs until model availability, hardware, workers,
 merge batch size, ReAct turn budget, seeds, cost, and output artifact plan are
 recorded and approved.
+
+## Full Run Approval Matrix
+
+| Item | Required value | Status |
+|------|----------------|--------|
+| 122B model | `Qwen3.5-122B-A10B` | Pending approval. |
+| 35B model | `Qwen3.5-35B-A3B` | Pending approval. |
+| Serving backend | vLLM | Pending host/version/tensor-parallel plan. |
+| Dataset | `data/spreadsheetbench_verified/spreadsheetbench_verified_400` | Pending checksum or manifest confirmation. |
+| Seeds | `41`, `42`, `43` | Pending approval for all three. |
+| Stage 2 workers | `128` | Pending concurrency and failure-policy approval. |
+| Merge batch size | `32` | Pending merge-tree approval. |
+| ReAct turn budget | `100` | Pending timeout/turn-budget approval. |
+| Cost envelope | explicit max USD/GPU-hours/wall time | Pending. |
+| Artifact root | explicit durable path and retention policy | Pending. |
+
+See `results/full_run_plan.md` for the full approval packet and subset gates.
