@@ -51,3 +51,7 @@ entries:
     notes:
       - "Routed deterministic one-case artifact validation as denominator-specific evidence; it checks local ACP artifacts and the non-overlay result row together."
       - "Did not promote this to a paper reproduction claim because the checker explicitly excludes model-backed one-case, held-out split, seed aggregate, and cross-model denominators."
+  - turn: "2026-06-14_001#14"
+    notes:
+      - "Routed plot-provenance validation as target-scoreboard evidence; it checks input hashes, computed panel values, PNG identity, and overlay separation."
+      - "Did not promote target plots to reproduction evidence because the manifest still reports zero overlay records and zero paper-denominator records."

@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T18:44-07:00"
-  turn_count: 13
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, framework figure-source validation, protocol-config validation, and deterministic one-case artifact validation now make the full-denominator path more executable without approving a run."
+  last_turn: "2026-06-14T18:47-07:00"
+  turn_count: 14
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, strict official-eval importer, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, and plot-provenance validation now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -91,6 +91,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Added one-case artifact checker; deterministic case 13-1 workbook, score report, ACP receipt, trajectory, and non-overlay result JSONL are now validated together."
+  - turn: 14
+    type: experiment
+    id: "PM-2026-06-14-015"
+    routing: direct
+    provenance: ai-executed
+    summary: "Added plot-provenance checker; target plot input table hashes, computed panel values, PNG identity, and zero-overlay result state are now validated together."
 
 ai_actions:
   - turn: 1
@@ -239,6 +245,15 @@ ai_actions:
       - "docs/ara/trace2skill_spreadsheetbench/results/one_case_live.md"
       - "docs/ara/trace2skill_spreadsheetbench/results/closeout_audit.json"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 14
+    action: "Added scripts/check_trace2skill_plot_provenance.py, generated trace2skill_targets.provenance.json, wired the check into validate_ara.py, and documented plot-provenance regeneration."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/check_trace2skill_plot_provenance.py"
+      - "scripts/validate_ara.py"
+      - "scripts/AGENTS.md"
+      - "docs/ara/trace2skill_spreadsheetbench/plots/README.md"
+      - "docs/ara/trace2skill_spreadsheetbench/plots/trace2skill_targets.provenance.json"
 
 claims_touched: []
 
@@ -269,6 +284,8 @@ key_context:
     excerpt: "Config fidelity check passed; it caught and documented that upstream README omits --merge-batch-size while upstream code defaults to 5, so Leaven's full-denominator runbook now explicitly passes paper value 32."
   - turn: 13
     excerpt: "One-case artifact check passed; it verifies the 13-1 output workbook SHA-256 131cf073e40f73b5f152d3a4d718532ee6c980e467e48e1a136e1275cd31bf40, score 1.0, 120/120 matched cells, ACP receipt, trajectory, and plot_binding=null result row."
+  - turn: 14
+    excerpt: "Plot provenance check passed; it records table input hashes, panel values, target PNG SHA-256 b65665159aa769810184fbd295bc9c17df8a00e48d9cf4c5e757d1444b25c985, one non-overlay deterministic result, zero overlays, and zero paper-denominator records."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."
