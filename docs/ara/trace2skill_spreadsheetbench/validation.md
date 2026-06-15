@@ -683,8 +683,8 @@ uv run --with pyyaml python scripts/audit_trace2skill_closeout.py docs/ara/trace
 Current result:
 
 - `overall_complete` is `false`.
-- Current denominators are limited to paper-target capture, mechanics-test
-  classification, and deterministic one-case `13-1`.
+- `current_denominator_evidence` is limited to paper-target capture,
+  mechanics-test classification, and deterministic one-case `13-1`.
 - Missing denominators include model-backed one-case, small-N subset,
   evolving split `0..200`, held-out split `200..400`, seed aggregate
   `41/42/43`, cross-model paper rows, and full paper denominator.
@@ -1143,6 +1143,9 @@ Current result:
   JSONL file, one total row, zero overlay rows, and zero paper-denominator rows.
 - Verifies `closeout_audit.json` reports the same result-row summary as the
   actual `results/*.jsonl` files.
+- Rejects the old `reproduced_denominators` closeout key so target capture,
+  mechanics tests, and deterministic one-case evidence cannot be mistaken for
+  reproduced paper denominators by JSON consumers.
 - Verifies `validation.md` no longer carries the stale early caveat that the
   current ARA lacks one-case live proof after closeout has accepted the
   deterministic local ACP `13-1` proof.

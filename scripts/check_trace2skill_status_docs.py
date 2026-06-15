@@ -81,9 +81,16 @@ def check_closeout_summary(ara_root: Path, summary: ResultSummary) -> list[str]:
         return ["missing results/closeout_audit.json"]
 
     closeout = json.loads(read(closeout_path))
+    if "reproduced_denominators" in closeout:
+        errors.append("results/closeout_audit.json must use current_denominator_evidence, not reproduced_denominators")
+    current_denominator_evidence = closeout.get("current_denominator_evidence")
+    if not isinstance(current_denominator_evidence, list) or not current_denominator_evidence:
+        errors.append("results/closeout_audit.json missing non-empty current_denominator_evidence")
+
     closeout_summary = closeout.get("result_record_summary")
     if not isinstance(closeout_summary, dict):
-        return ["results/closeout_audit.json missing result_record_summary"]
+        errors.append("results/closeout_audit.json missing result_record_summary")
+        return errors
 
     expected = {
         "total_records": summary.total_rows,

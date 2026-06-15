@@ -17,7 +17,7 @@ Full paper-denominator reproduction is not proven: approval preflight is blocked
 
 ## Current Denominators
 
-Reproduced or captured:
+Captured or limited evidence:
 - `paper-targets-captured`
 - `mechanics-tests-classified`
 - `deterministic-one-case-13-1`

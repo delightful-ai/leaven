@@ -207,7 +207,7 @@ def audit(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
         ],
     )
 
-    reproduced_denominators = [
+    current_denominator_evidence = [
         "paper-targets-captured",
         "mechanics-tests-classified",
         "deterministic-one-case-13-1",
@@ -247,7 +247,7 @@ def audit(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             "non_overlay_records": sum(1 for record in result_records if record.get("plot_binding") is None),
             "paper_denominator_records": len(paper_denominator_result_records),
         },
-        "reproduced_denominators": reproduced_denominators,
+        "current_denominator_evidence": current_denominator_evidence,
         "missing_denominators": missing_denominators,
         "forbidden_proxy_completion_labels": FORBIDDEN_PROXY_LABELS,
     }
@@ -276,10 +276,10 @@ def write_markdown(report: dict[str, Any], output: Path) -> None:
             "",
             "## Current Denominators",
             "",
-            "Reproduced or captured:",
+            "Captured or limited evidence:",
         ]
     )
-    lines.extend(f"- `{item}`" for item in report["reproduced_denominators"])
+    lines.extend(f"- `{item}`" for item in report["current_denominator_evidence"])
     lines.extend(["", "Missing:"])
     lines.extend(f"- `{item}`" for item in report["missing_denominators"])
     lines.extend(

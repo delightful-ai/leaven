@@ -98,6 +98,11 @@
       "status": "guardrail_active_not_final_closeout"
     }
   },
+  "current_denominator_evidence": [
+    "paper-targets-captured",
+    "mechanics-tests-classified",
+    "deterministic-one-case-13-1"
+  ],
   "dataset_manifest_summary": {
     "case_count": 400,
     "case_order_sha256": "ac05d2035ad776af9d901689423645316e707e6e8426a04d2eae6591929b64e9",
@@ -143,11 +148,6 @@
   ],
   "overall_complete": false,
   "reason": "Full paper-denominator reproduction is not proven: approval preflight is blocked and no paper-denominator Leaven result JSONL rows exist.",
-  "reproduced_denominators": [
-    "paper-targets-captured",
-    "mechanics-tests-classified",
-    "deterministic-one-case-13-1"
-  ],
   "result_intake_summary": {
     "checker": "scripts/check_trace2skill_result_intake.py",
     "errors": [],
