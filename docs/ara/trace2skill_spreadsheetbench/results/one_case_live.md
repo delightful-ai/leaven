@@ -56,6 +56,8 @@ cargo run -p trace2skill_spreadsheetbench -- --run-one-case-acp-worker --run-dir
 | Transcript | `tmp/trace2skill-one-case-live/agent_transcript.md` | Worker action trace. |
 | Score report | `tmp/trace2skill-one-case-live/score_report.json` | Exact answer-range scorer output. |
 | Trajectory evidence | `tmp/trace2skill-one-case-live/trajectory.json` | Leaven trajectory evidence for the scored run. |
+| Stage 2 analyst prompt | `tmp/trace2skill-one-case-live/stage2_analyst_prompt.md` | Rendered pending analyst prompt from upstream prompt templates and scored trajectory evidence. |
+| Stage 2 fanout | `tmp/trace2skill-one-case-live/stage2_fanout.json` | Pending one-call Stage 2 MAP fanout envelope with no model response. |
 | Manifest | `tmp/trace2skill-one-case-live/manifest.json` | Updated run manifest with scored status. |
 | Worker script | `tmp/trace2skill-one-case-live/trace2skill_acp_worker.py` | Durable local Python worker used by the ACP command. |
 | Result JSONL | `docs/ara/trace2skill_spreadsheetbench/results/deterministic_one_case.jsonl` | Denominator-labeled Leaven result record with `plot_binding: null`. |
@@ -67,3 +69,8 @@ This result is written as `results/deterministic_one_case.jsonl`, but its
 score would be misleading if drawn on the same axes as full paper
 SpreadsheetBench/Qwen/vLLM targets. It should become a visible plot only if the
 ARA grows a dedicated one-case panel with its own denominator label.
+
+The Stage 2 prompt/fanout artifacts are likewise bounded. They prove the
+one-case scored trajectory can be rendered into a pending MAP analyst call using
+upstream prompt-template text. They do not prove analyst execution, response
+parsing, skill patch merge, or paper metric parity.

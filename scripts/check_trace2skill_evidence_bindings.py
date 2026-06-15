@@ -20,6 +20,7 @@ EXPECTED_EVIDENCE_FILES = {
     "figures/figure_trace2skill_framework.md",
     "leaven_mechanics_tests.md",
     "prompt_templates.md",
+    "stage2_rendered_prompts.md",
 }
 
 

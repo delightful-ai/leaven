@@ -265,6 +265,23 @@ def validate_trace2skill_one_case_result_freshness(errors: list[str], root: Path
         fail(errors, f"one-case result freshness: {freshness_error}")
 
 
+def validate_trace2skill_stage2_prompt_artifacts(errors: list[str], root: Path) -> None:
+    repo_root = repo_root_for(root.resolve())
+    checker_path = repo_root / "scripts/check_trace2skill_stage2_prompt_artifacts.py"
+    if not checker_path.is_file():
+        fail(errors, "missing scripts/check_trace2skill_stage2_prompt_artifacts.py")
+        return
+    spec = importlib.util.spec_from_file_location("check_trace2skill_stage2_prompt_artifacts", checker_path)
+    if spec is None or spec.loader is None:
+        fail(errors, f"cannot import {checker_path}")
+        return
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    for prompt_error in module.check_stage2_prompt_artifacts(repo_root, root.resolve()):
+        fail(errors, f"Stage 2 rendered prompt artifacts: {prompt_error}")
+
+
 def validate_trace2skill_plot_provenance(errors: list[str], root: Path) -> None:
     repo_root = repo_root_for(root.resolve())
     checker_path = repo_root / "scripts/check_trace2skill_plot_provenance.py"
@@ -682,6 +699,7 @@ def validate(root: Path) -> list[str]:
     validate_trace2skill_upstream_code_manifest(errors, root)
     validate_trace2skill_one_case_artifacts(errors, root)
     validate_trace2skill_one_case_result_freshness(errors, root)
+    validate_trace2skill_stage2_prompt_artifacts(errors, root)
     validate_trace2skill_plot_provenance(errors, root)
     validate_trace2skill_plot_freshness(errors, root)
     validate_trace2skill_result_intake(errors, root)

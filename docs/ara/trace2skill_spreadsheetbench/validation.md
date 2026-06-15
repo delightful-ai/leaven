@@ -981,6 +981,44 @@ Limit:
   paper-target overlay, model-backed one-case, held-out split, seed aggregate,
   or full Trace2Skill reproduction.
 
+## 2026-06-14 Stage 2 Rendered Prompt Artifacts
+
+Artifact:
+
+```text
+scripts/check_trace2skill_stage2_prompt_artifacts.py
+docs/ara/trace2skill_spreadsheetbench/evidence/stage2_rendered_prompts.md
+tmp/trace2skill-one-case-live/stage2_analyst_prompt.md
+tmp/trace2skill-one-case-live/stage2_fanout.json
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_stage2_prompt_artifacts.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Current result:
+
+- Verifies the rendered one-case Stage 2 MAP analyst prompt exists and has
+  SHA-256
+  `94893fef2c3459bbe76bb63854dd2e9aab813625877c584867d34eadba700ba4`.
+- Verifies the rendered prompt embeds exact upstream source-template text for
+  the success-path Stage 2 prompt files under
+  `tmp/repros/trace2skill-upstream/skill_evolver/prompts/`.
+- Verifies `stage2_fanout.json` has exactly one pending `Success` call,
+  `success-13-1-1`, with `response: null`, `retry_count: 0`, and a prompt
+  BlobRef pointing at `stage2_analyst_prompt.md`.
+- The integrated Seal Level 1 validator now runs this check alongside the
+  deterministic one-case artifact and result-freshness checks.
+
+Limit:
+
+- This proves rendered-prompt and pending-fanout artifact fidelity only for the
+  deterministic one-case path. It does not execute the analyst model call,
+  parse a response, merge patches, approve tolerance, create overlays, or run
+  Qwen/vLLM.
+
 ## 2026-06-14 Status Doc Consistency Check
 
 Artifact:

@@ -95,6 +95,7 @@ separately and labeled by denominator.
 | [leaven_mechanics_tests.md](evidence/leaven_mechanics_tests.md) | Leaven mechanics-test proof classifications and limits. |
 | [prompt_templates.md](evidence/prompt_templates.md) | Upstream prompt-template family index and reproduction boundary. |
 | [prompt_templates.manifest.json](evidence/prompt_templates.manifest.json) | SHA-256 manifest for every indexed upstream prompt and released skill file. |
+| [stage2_rendered_prompts.md](evidence/stage2_rendered_prompts.md) | Deterministic one-case pending Stage 2 analyst prompt/fanout artifacts and boundary. |
 
 ### Plot Targets and Validation
 
