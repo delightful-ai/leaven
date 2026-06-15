@@ -208,7 +208,10 @@ Scope:
 
 Limit:
 
-- No `results/*.jsonl` files exist yet, so this proves the result envelope and validator path only. It does not prove a Leaven run.
+- At the time of this schema-only check, no `results/*.jsonl` files existed,
+  so it proved the result envelope and validator path only. Current result-row
+  state is checked by the later deterministic one-case and status-doc
+  consistency sections.
 
 ## 2026-06-14 Plot Target Generation With Empty Result Overlay Set
 
@@ -708,3 +711,37 @@ Limit:
 - This proves the local deterministic ACP one-case denominator only. It does
   not prove model-backed Qwen/vLLM execution, held-out rows `200..400`, seed
   aggregation, cross-model rows, or full-paper reproduction.
+
+## 2026-06-14 Status Doc Consistency Check
+
+Artifact:
+
+```text
+scripts/check_trace2skill_status_docs.py
+docs/ara/trace2skill_spreadsheetbench/results/denominator_status.md
+docs/ara/trace2skill_spreadsheetbench/results/closeout_audit.json
+docs/ara/trace2skill_spreadsheetbench/validation.md
+```
+
+Command:
+
+```bash
+uv run --with pyyaml python scripts/check_trace2skill_status_docs.py docs/ara/trace2skill_spreadsheetbench
+```
+
+Current result:
+
+- Verifies `denominator_status.md` uses the current ARA file count from
+  `validate_ara.py`.
+- Verifies the human status docs match the current result JSONL state: one
+  JSONL file, one total row, zero overlay rows, and zero paper-denominator rows.
+- Verifies `closeout_audit.json` reports the same result-row summary as the
+  actual `results/*.jsonl` files.
+- The integrated Seal Level 1 validator now runs this status-doc check after
+  result intake and evidence-binding validation.
+
+Limit:
+
+- This prevents stale status prose from contradicting current artifacts. It does
+  not add Leaven result rows, overlay metrics, or Qwen/vLLM paper-denominator
+  execution.

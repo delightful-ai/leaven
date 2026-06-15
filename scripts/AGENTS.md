@@ -12,6 +12,7 @@ Current scripts:
 - `check_trace2skill_plot_provenance.py`: no-spend ARA checker/generator for the target-plot provenance JSON; verifies plot PNG identity, table input hashes, computed panel values, and current overlay/non-overlay result separation.
 - `check_trace2skill_result_intake.py`: no-spend ARA checker for result JSONL intake; verifies artifact paths and skill-source paths are inspectable, mechanics/one-case rows cannot overlay, and overlay rows use denominator-appropriate units/classifications.
 - `check_trace2skill_evidence_bindings.py`: no-spend ARA checker for claim/experiment/evidence wiring; verifies every evidence file is indexed, every indexed source exists, every indexed claim exists, and claim/experiment references are not dangling.
+- `check_trace2skill_status_docs.py`: no-spend ARA checker for human status docs; verifies current file counts, result-row summaries, and known overlay/non-overlay state stay synchronized with artifacts.
 
 ## Local Rules
 - Keep script defaults local and credential-free. Network, cloud, live model, or destructive behavior must be an explicit flag or environment opt-in.
