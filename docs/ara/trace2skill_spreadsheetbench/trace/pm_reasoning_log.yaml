@@ -47,3 +47,7 @@ entries:
     notes:
       - "Routed protocol-config validation as execution-readiness evidence; it checks paper/upstream config anchoring and runbook flags, not a live Qwen/vLLM run."
       - "Recorded the upstream merge-batch mismatch as a guardrail: paper value 32 must be passed explicitly because upstream code defaults to 5 and the README omits the flag."
+  - turn: "2026-06-14_001#13"
+    notes:
+      - "Routed deterministic one-case artifact validation as denominator-specific evidence; it checks local ACP artifacts and the non-overlay result row together."
+      - "Did not promote this to a paper reproduction claim because the checker explicitly excludes model-backed one-case, held-out split, seed aggregate, and cross-model denominators."

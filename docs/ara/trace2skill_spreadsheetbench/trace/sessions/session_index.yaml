@@ -1,8 +1,8 @@
 sessions:
   - id: "2026-06-14_001"
     date: "2026-06-14"
-    summary: "Recorded model availability, approval preflight, dataset manifest, closeout audit, runbook, one non-overlay result row, strict official-eval importer, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, figure-source validation, and protocol-config validation while keeping full-denominator execution blocked on approval."
-    turn_count: 12
-    events_count: 13
+    summary: "Recorded model availability, approval preflight, dataset manifest, closeout audit, runbook, one non-overlay result row, strict official-eval importer, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, figure-source validation, protocol-config validation, and deterministic one-case artifact validation while keeping full-denominator execution blocked on approval."
+    turn_count: 13
+    events_count: 14
     claims_touched: []
     open_threads: 1
