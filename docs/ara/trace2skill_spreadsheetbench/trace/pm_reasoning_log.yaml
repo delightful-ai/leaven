@@ -83,3 +83,7 @@ entries:
     notes:
       - "Routed upstream execution-code manifest validation as source-code identity evidence, not runtime proof."
       - "Kept reproduction claims unchanged because the manifest pins runbook-called upstream entrypoints only; runtime environment, result rows, overlays, and Qwen/vLLM execution remain future artifacts."
+  - turn: "2026-06-14_001#22"
+    notes:
+      - "Routed runbook-freshness validation as generated-artifact integrity evidence for the approval/runbook gate."
+      - "Kept reproduction claims unchanged because the checker proves JSON/Markdown runbook freshness only; approval fields, result rows, overlays, and Qwen/vLLM execution remain future artifacts."
