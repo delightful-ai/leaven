@@ -344,3 +344,7 @@ entries:
     notes:
       - "Routed source-command merge-batch enforcement as paper-protocol and command-provenance guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the change only prevents G3 skill-evolution rows from satisfying merge-batch evidence with metadata or upstream defaults alone; it creates no accepted evolving-split row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#87"
+    notes:
+      - "Routed source-command evolution-worker enforcement as paper-protocol and command-provenance guardrail evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the change only prevents G3 skill-evolution rows from satisfying fanout-worker evidence with baseline-run workers or metadata alone; it creates no accepted evolving-split row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
