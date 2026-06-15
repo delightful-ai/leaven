@@ -304,3 +304,7 @@ entries:
     notes:
       - "Routed official-eval case-range id enforcement as denominator-provenance guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the change only prevents official evaluator summaries from being imported under the wrong SpreadsheetBench range; it creates no accepted model-backed row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#77"
+    notes:
+      - "Routed source-command range enforcement as denominator-provenance guardrail evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the change only prevents result rows from claiming a dataset range whose recorded run/eval command names different start/end bounds; it creates no accepted model-backed row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
