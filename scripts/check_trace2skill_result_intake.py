@@ -311,6 +311,7 @@ def check_required_prompt_artifacts(
 def check_stage_dataset_slice(
     prefix: str,
     stage: dict[str, Any] | None,
+    record: dict[str, Any],
     dataset_slice: Any,
     errors: list[str],
 ) -> None:
@@ -341,6 +342,12 @@ def check_stage_dataset_slice(
         required = expected.get("denominator_contains")
         if not isinstance(denominator, str) or not isinstance(required, str) or required not in denominator:
             errors.append(f"{prefix} {stage_id} rows must name a denominator containing {required!r}")
+        expected_case_id = expected.get("case_id")
+        if expected_case_id is not None:
+            extra = record.get("extra")
+            case_id = extra.get("case_id") if isinstance(extra, dict) else None
+            if case_id != expected_case_id:
+                errors.append(f"{prefix} {stage_id} rows must carry extra.case_id {expected_case_id!r}")
         return
 
     if kind == "held-out-subset":
@@ -710,7 +717,7 @@ def check_record(
                 f"{prefix} proof_classification {proof!r} does not match runbook stage "
                 f"{stage_id} allowed_label {stage.get('allowed_label')!r}"
             )
-    check_stage_dataset_slice(prefix, stage, dataset_slice, errors)
+    check_stage_dataset_slice(prefix, stage, record, dataset_slice, errors)
     check_stage_seed_policy(prefix, stage, record, errors)
     check_stage_runtime_policy(prefix, stage, record, errors)
     check_stage_command_policy(prefix, stage, record, errors)

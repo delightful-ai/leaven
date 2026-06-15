@@ -141,6 +141,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             "paper reproduction",
             {
                 "kind": "one-case",
+                "case_id": "13-1",
                 "case_range": "0..1",
                 "case_count": 1,
                 "denominator_contains": "one-case-13-1",
@@ -174,6 +175,7 @@ def build_runbook(repo_root: Path, ara_dir: Path) -> dict[str, Any]:
             "held-out split reproduced",
             {
                 "kind": "one-case",
+                "case_id": "13-1",
                 "case_range": "0..1",
                 "case_count": 1,
                 "denominator_contains": "one-case-13-1",

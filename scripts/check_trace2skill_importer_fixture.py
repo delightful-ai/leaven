@@ -344,6 +344,100 @@ def check_mutated_result_intake(
     )
 
 
+def model_one_case_artifact_paths(repo_root: Path, tmp_path: Path) -> list[str]:
+    base = tmp_path / "model_one_case_seed_41"
+    return [
+        touch(
+            repo_root,
+            base / "rendered_prompts/13-1/agent_prompt.md",
+            "fixture model one-case prompt\n",
+        ),
+        touch(
+            repo_root,
+            base / "prompt_render_manifest.json",
+            '{"schema_version":"fixture.prompt_manifest.v1"}\n',
+        ),
+        touch(
+            repo_root,
+            base / "outputs/eval_official_results.json",
+            '{"schema_version":"fixture.eval.v1"}\n',
+        ),
+    ]
+
+
+def model_one_case_row(repo_root: Path, tmp_path: Path) -> dict[str, Any]:
+    artifact_paths = [APPROVAL_ARTIFACT, *model_one_case_artifact_paths(repo_root, tmp_path)]
+    return {
+        "schema_version": "leaven.trace2skill.result.v1",
+        "run_id": "trace2skill-model-one-case-fixture",
+        "created_at": "2026-06-14T00:00:03Z",
+        "proof_classification": "model-one-case",
+        "dataset_slice": {
+            "name": "SpreadsheetBench-Verified",
+            "split": "one_case",
+            "case_range": "0..1",
+            "case_count": 1,
+            "denominator": "one-case-13-1-model-backed",
+        },
+        "model_id": "fixture-model",
+        "serving_backend": "fixture-backend",
+        "seed": 41,
+        "skill_source": {"kind": "fixture-model-one-case"},
+        "metric_name": "official_instance_accuracy",
+        "metric_value": 100.0,
+        "metric_unit": "percent",
+        "plot_binding": None,
+        "cost": {
+            "usd": None,
+            "prompt_tokens": None,
+            "completion_tokens": None,
+        },
+        "runtime": {
+            "seconds": None,
+            "workers": 1,
+            "max_turns": 100,
+        },
+        "source_command": (
+            "python run_spreadsheetbench.py --start_idx 0 --end_idx 1 "
+            "&& python evaluate_with_official.py --start_idx 0 --end_idx 1"
+        ),
+        "artifact_paths": artifact_paths,
+        "extra": {
+            "runbook_stage_id": "G1M",
+            "approval_artifact_paths": [APPROVAL_ARTIFACT],
+            "command_policy": "upstream-eval",
+            "case_id": "13-1",
+        },
+        "notes": "",
+    }
+
+
+def check_model_one_case_result_intake(
+    repo_root: Path,
+    ara_root: Path,
+    tmp_path: Path,
+    errors: list[str],
+) -> None:
+    output = tmp_path / "model-one-case.jsonl"
+    write_jsonl(output, [model_one_case_row(repo_root, tmp_path)])
+    check_result_intake_for_rows(repo_root, ara_root, output, None, errors, "model one-case intake")
+
+    def mutate_case_id(row: dict[str, Any]) -> None:
+        row["extra"] = dict(row["extra"])
+        row["extra"]["case_id"] = "not-13-1"
+
+    check_mutated_result_intake(
+        repo_root,
+        ara_root,
+        output,
+        tmp_path / "model-one-case-wrong-case-id.jsonl",
+        mutate_case_id,
+        "G1M rows must carry extra.case_id '13-1'",
+        errors,
+        "model one-case case-id drift",
+    )
+
+
 def source_heldout_row(repo_root: Path, tmp_path: Path, seed: int) -> dict[str, Any]:
     prompt = touch(
         repo_root,
@@ -618,6 +712,7 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
         output = tmp_path / "imported.jsonl"
         check_positive_import(repo_root, output, errors)
         check_result_intake_for_rows(repo_root, ara_root, output, None, errors, "positive import intake")
+        check_model_one_case_result_intake(repo_root, ara_root, tmp_path, errors)
         check_real_results_require_runnable_approval(repo_root, ara_root, tmp_path, errors)
         check_aggregate_result_intake(repo_root, ara_root, tmp_path, errors)
         eval_results = eval_results_artifact_path(repo_root, tmp_path)

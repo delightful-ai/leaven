@@ -71,7 +71,7 @@ Expected artifacts:
 - Approval required: `false`
 - Allowed label: `deterministic-one-case`
 - Forbidden label: `paper reproduction`
-- Expected dataset slice: `{"case_count": 1, "case_range": "0..1", "denominator_contains": "one-case-13-1", "kind": "one-case"}`
+- Expected dataset slice: `{"case_count": 1, "case_id": "13-1", "case_range": "0..1", "denominator_contains": "one-case-13-1", "kind": "one-case"}`
 - Expected seed policy: `null`
 - Expected runtime policy: `null`
 - Expected command policy: `null`
@@ -102,7 +102,7 @@ Expected artifacts:
 - Approval required: `true`
 - Allowed label: `model-one-case`
 - Forbidden label: `held-out split reproduced`
-- Expected dataset slice: `{"case_count": 1, "case_range": "0..1", "denominator_contains": "one-case-13-1", "kind": "one-case"}`
+- Expected dataset slice: `{"case_count": 1, "case_id": "13-1", "case_range": "0..1", "denominator_contains": "one-case-13-1", "kind": "one-case"}`
 - Expected seed policy: `{"kind": "exact", "seed": 41}`
 - Expected runtime policy: `{"kind": "upstream-run", "max_turns": 100, "workers": 1}`
 - Expected command policy: `{"kind": "upstream-eval", "required_source_command_fragments": ["run_spreadsheetbench.py", "evaluate_with_official.py"]}`
