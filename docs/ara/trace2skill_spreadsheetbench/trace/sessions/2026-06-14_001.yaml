@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T22:22-07:00"
-  turn_count: 67
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one-case case-id guard, result split-identity guard, aggregate/full-paper exact-denominator guard, aggregate/full-paper source identity guard, paper-denominator paper-model identity guard, aggregate metric-mean guard, aggregate source-classification guard, full-paper metric-mean guard, full-paper source-classification guard, full-paper unreachable source-class cut, aggregate source-policy validator lock, generated runbook dataset-slice contract, generated runbook seed-policy contract, generated runbook runtime-policy contract, generated runbook command-policy contract, generated runbook aggregate-policy contract, aggregate predecessor-row intake guard, full-paper source-chain intake guard, full-paper split-range source coverage guard, aggregate source approval guard, base result-row shape guard, full-paper model identity pre-overlay guard, plot overlay result-intake guard, blocked-approval plot overlay guard, blocked-approval scratch overlay guard, imported skill-artifact audit guard, model-run file-artifact guard, blocked-approval result admission guard, file-artifact epilogue commit, one non-overlay result row, strict official-eval importer, importer-fixture validation, Stage 2 rendered-prompt validation/freshness, rendered-prompt artifact-contract validation, prompt-artifact result-intake admission, pre-write official-eval import admission, closeout result-intake gate, runbook dataset-slice result-intake guard, approval-artifact result-intake guard, runbook-stage result binding, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, dataset-manifest freshness validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, approval-state validation, deterministic one-case result-freshness validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
+  last_turn: "2026-06-14T22:26-07:00"
+  turn_count: 68
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one-case case-id guard, result split-identity guard, aggregate/full-paper exact-denominator guard, aggregate/full-paper source identity guard, paper-denominator paper-model identity guard, aggregate metric-mean guard, aggregate source-classification guard, full-paper metric-mean guard, full-paper source-classification guard, full-paper unreachable source-class cut, aggregate source-policy validator lock, one-case status-prose consistency guard, generated runbook dataset-slice contract, generated runbook seed-policy contract, generated runbook runtime-policy contract, generated runbook command-policy contract, generated runbook aggregate-policy contract, aggregate predecessor-row intake guard, full-paper source-chain intake guard, full-paper split-range source coverage guard, aggregate source approval guard, base result-row shape guard, full-paper model identity pre-overlay guard, plot overlay result-intake guard, blocked-approval plot overlay guard, blocked-approval scratch overlay guard, imported skill-artifact audit guard, model-run file-artifact guard, blocked-approval result admission guard, file-artifact epilogue commit, one non-overlay result row, strict official-eval importer, importer-fixture validation, Stage 2 rendered-prompt validation/freshness, rendered-prompt artifact-contract validation, prompt-artifact result-intake admission, pre-write official-eval import admission, closeout result-intake gate, runbook dataset-slice result-intake guard, approval-artifact result-intake guard, runbook-stage result binding, local artifact-path refusal, enforced mechanics-test classification, paper table-fidelity validation, prompt-index validation, prompt-source manifest validation, upstream execution-code manifest validation, dataset-manifest freshness validation, runbook-freshness validation, artifact-contract validation, closeout-freshness validation, plot-freshness validation, approval-state validation, deterministic one-case result-freshness validation, framework figure-source validation, protocol-config validation, deterministic one-case artifact validation, plot-provenance validation, result-intake validation, evidence-binding validation, status-doc consistency validation, rigor-follow-up validation, and runbook-label validation now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -415,6 +415,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Locked Trace2Skill ARA validation so G5 and G6 aggregate source policies must match the exact generated contracts."
+  - turn: 68
+    type: experiment
+    id: "PM-2026-06-14-069"
+    routing: direct
+    provenance: ai-executed
+    summary: "Tightened Trace2Skill status-doc validation so stale prose cannot deny the accepted deterministic one-case ACP proof."
 
 ai_actions:
   - turn: 1
@@ -1092,6 +1098,12 @@ ai_actions:
     provenance: ai-executed
     files_changed:
       - "scripts/validate_ara.py"
+  - turn: 68
+    action: "Updated scripts/check_trace2skill_status_docs.py to reject the stale validation sentence denying one-case live proof after closeout accepts satisfied_deterministic_one_case, and updated validation.md to route that proof to the later deterministic ACP one-case checks while keeping paper-denominator limits explicit."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/check_trace2skill_status_docs.py"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -1230,6 +1242,8 @@ key_context:
     excerpt: "G6 source policy now lists only training-validation-candidate and seed-aggregate-candidate predecessors; paper-denominator-candidate remains vocabulary but is no longer advertised as a generated G6 source route, and no Qwen/vLLM execution or accepted full-paper rows were created."
   - turn: 67
     excerpt: "ARA validation now rejects aggregate source-policy drift: G5 must remain the exact held-out single-seed aggregate contract and G6 must remain training-validation-candidate plus seed-aggregate-candidate only; no Qwen/vLLM execution or accepted aggregate/full-paper rows were created."
+  - turn: 68
+    excerpt: "Status-doc validation now rejects the obsolete claim that the current ARA lacks one-case live proof once closeout reports satisfied_deterministic_one_case; the accepted proof remains local deterministic ACP case 13-1 only, with model-backed Qwen/vLLM and paper-denominator evidence still absent."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."

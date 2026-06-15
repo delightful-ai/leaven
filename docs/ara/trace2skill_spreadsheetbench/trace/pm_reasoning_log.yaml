@@ -268,3 +268,7 @@ entries:
     notes:
       - "Routed aggregate source-policy validator locking as denominator-provenance guardrail evidence, not denominator execution."
       - "Kept reproduction claims unchanged because the change only makes validate_ara reject future G5/G6 source-policy drift; it creates no accepted model-backed rows, overlays, approvals, seed aggregates, full-paper rows, or Qwen/vLLM execution."
+  - turn: "2026-06-14_001#68"
+    notes:
+      - "Routed one-case status-prose consistency as status integrity evidence, not denominator execution."
+      - "Kept reproduction claims unchanged because the change only prevents stale validation prose from denying the already recorded deterministic local ACP one-case proof; it creates no model-backed one-case row, overlay, approval, held-out split, seed aggregate, full-paper row, or Qwen/vLLM execution."
