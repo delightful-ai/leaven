@@ -799,6 +799,8 @@ uv run --with pyyaml python scripts/import_trace2skill_eval_results.py \
   --serving-backend fixture-backend \
   --seed 41 \
   --skill-kind fixture-skill \
+  --artifact-path target/trace2skill-import-fixture/subset_0_2_seed_41/rendered_prompts/13-1/agent_prompt.md \
+  --artifact-path target/trace2skill-import-fixture/subset_0_2_seed_41/prompt_render_manifest.json \
   --approval-artifact-path docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md \
   --source-command 'fixture importer smoke'
 ```
@@ -818,6 +820,9 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
 - Defaults every row to `plot_binding: null`.
 - Requires every row to carry `extra.runbook_stage_id` and validates the stage
   label against `full_denominator_runbook.json` during result intake.
+- Requires approval-gated rows to include prompt artifact paths matching their
+  runbook stage expectations, such as rendered prompts and prompt-render
+  manifests.
 - Requires approval-gated proof classifications, including `paper-subset`, to
   include at least one inspectable `--approval-artifact-path`.
 - Requires `--eval-results`, `--skill-path`, `--artifact-path`, and
@@ -826,8 +831,9 @@ uv run --with pyyaml python scripts/check_trace2skill_importer_fixture.py docs/a
   `--allow-paper-denominator-reproduction` and at least one
   `--approval-artifact-path` are explicitly present.
 - The checker exercises those refusal paths directly: missing runbook stage id,
-  missing approval evidence for `paper-subset`, and accidental
-  `paper-denominator-reproduction` without the explicit allow flag.
+  missing prompt artifacts for `paper-subset`, missing approval evidence for
+  `paper-subset`, and accidental `paper-denominator-reproduction` without the
+  explicit allow flag.
 
 Limit:
 

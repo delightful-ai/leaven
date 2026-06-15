@@ -50,8 +50,9 @@ uv run --with pyyaml python scripts/check_trace2skill_result_intake.py docs/ara/
 ```
 
 This rejects missing artifact paths, absolute artifact paths, mechanics or
-one-case rows with plot bindings, and overlay rows whose metric unit,
-denominator, or paper classification is not compatible with the target panel.
+one-case rows with plot bindings, approval-gated rows missing runbook-required
+prompt artifacts, and overlay rows whose metric unit, denominator, or paper
+classification is not compatible with the target panel.
 
 Official SpreadsheetBench evaluator output can be converted into Leaven result
 rows only after a real Leaven run has produced an inspectable
@@ -74,6 +75,8 @@ uv run --with pyyaml python scripts/import_trace2skill_eval_results.py \
   --seed <seed> \
   --skill-kind trace2skill-evolved \
   --skill-path path/to/SKILL.md \
+  --artifact-path path/to/rendered_prompts/<case_id>/agent_prompt.md \
+  --artifact-path path/to/prompt_render_manifest.json \
   --approval-artifact-path docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md \
   --source-command '<exact command>'
 ```
@@ -89,7 +92,10 @@ classification requires at least one `--approval-artifact-path`; this includes
 `--skill-path`, `--artifact-path`, and `--approval-artifact-path` value must
 exist locally when the importer runs. Every row must carry
 `extra.runbook_stage_id` naming a stage in `full_denominator_runbook.json`; that
-stage's `allowed_label` must match the row's `proof_classification`.
+stage's `allowed_label` must match the row's `proof_classification`. If that
+runbook stage expects rendered prompts, fanout files, or prompt-render
+manifests, result intake also requires matching prompt artifacts in
+`artifact_paths`.
 
 The full-denominator approval packet can be checked with:
 

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import subprocess
 import sys
@@ -29,7 +30,36 @@ def repo_root_for(ara_root: Path) -> Path:
     return Path.cwd()
 
 
-def importer_base_args(output: Path) -> list[str]:
+def import_result_intake_checker(repo_root: Path) -> Any:
+    path = repo_root / "scripts/check_trace2skill_result_intake.py"
+    spec = importlib.util.spec_from_file_location("check_trace2skill_result_intake", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot import {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def touch(repo_root: Path, path: Path, text: str) -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path.relative_to(repo_root).as_posix()
+
+
+def prompt_artifact_paths(repo_root: Path, tmp_path: Path) -> list[str]:
+    prompt = tmp_path / "subset_0_2_seed_41/rendered_prompts/13-1/agent_prompt.md"
+    manifest = tmp_path / "subset_0_2_seed_41/prompt_render_manifest.json"
+    return [
+        touch(repo_root, prompt, "fixture rendered agent prompt\n"),
+        touch(repo_root, manifest, '{"schema_version":"fixture.prompt_manifest.v1"}\n'),
+    ]
+
+
+def importer_base_args(output: Path, artifact_paths: list[str] | None = None) -> list[str]:
+    artifact_args: list[str] = []
+    for artifact_path in artifact_paths or []:
+        artifact_args.extend(["--artifact-path", artifact_path])
     return [
         "scripts/import_trace2skill_eval_results.py",
         "--eval-results",
@@ -60,6 +90,7 @@ def importer_base_args(output: Path) -> list[str]:
         "41",
         "--skill-kind",
         "fixture-skill",
+        *artifact_args,
         "--approval-artifact-path",
         APPROVAL_ARTIFACT,
         "--source-command",
@@ -109,7 +140,8 @@ def expect_failure(
 
 
 def check_positive_import(repo_root: Path, output: Path, errors: list[str]) -> None:
-    result = run_importer(repo_root, importer_base_args(output))
+    artifact_paths = prompt_artifact_paths(repo_root, output.parent)
+    result = run_importer(repo_root, importer_base_args(output, artifact_paths))
     if result.returncode != 0:
         errors.append(f"positive import failed: {result.stderr.strip()}")
         return
@@ -145,7 +177,7 @@ def check_positive_import(repo_root: Path, output: Path, errors: list[str]) -> N
         if not isinstance(artifact_paths, list):
             errors.append(f"{prefix}: artifact_paths is not a list")
             continue
-        for expected_path in (FIXTURE, APPROVAL_ARTIFACT):
+        for expected_path in (FIXTURE, APPROVAL_ARTIFACT, *prompt_artifact_paths(repo_root, output.parent)):
             if expected_path not in artifact_paths:
                 errors.append(f"{prefix}: artifact_paths missing {expected_path}")
 
@@ -161,13 +193,17 @@ def check_positive_import(repo_root: Path, output: Path, errors: list[str]) -> N
             errors.append(f"{prefix}: extra.source_metric missing")
 
 
-def check_runbook_stage(repo_root: Path, ara_root: Path, errors: list[str]) -> None:
+def runbook_stages(ara_root: Path) -> dict[str, dict[str, Any]]:
     runbook = json.loads((ara_root / "results/full_denominator_runbook.json").read_text(encoding="utf-8"))
-    stages = {
+    return {
         stage.get("id"): stage
         for stage in runbook.get("stages", [])
         if isinstance(stage, dict)
     }
+
+
+def check_runbook_stage(repo_root: Path, ara_root: Path, errors: list[str]) -> None:
+    stages = runbook_stages(ara_root)
     stage = stages.get("G2")
     if stage is None:
         errors.append("runbook stage G2 is missing")
@@ -175,6 +211,31 @@ def check_runbook_stage(repo_root: Path, ara_root: Path, errors: list[str]) -> N
         errors.append(f"runbook stage G2 allowed_label is {stage.get('allowed_label')!r}")
     if not (repo_root / APPROVAL_ARTIFACT).is_file():
         errors.append(f"approval artifact is not inspectable: {APPROVAL_ARTIFACT}")
+
+
+def check_result_intake_for_rows(
+    repo_root: Path,
+    ara_root: Path,
+    output: Path,
+    expected_error: str | None,
+    errors: list[str],
+    label: str,
+) -> None:
+    checker = import_result_intake_checker(repo_root)
+    stages = runbook_stages(ara_root)
+    intake_errors: list[str] = []
+    try:
+        rows = load_jsonl(output)
+    except (json.JSONDecodeError, ValueError) as exc:
+        errors.append(f"{label}: {exc}")
+        return
+    for line_number, row in enumerate(rows, start=1):
+        checker.check_record(repo_root, output, line_number, row, stages, intake_errors)
+    if expected_error is None:
+        if intake_errors:
+            errors.append(f"{label}: result-intake errors: {intake_errors!r}")
+    elif not any(expected_error in error for error in intake_errors):
+        errors.append(f"{label}: expected intake error {expected_error!r}, got {intake_errors!r}")
 
 
 def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
@@ -187,6 +248,21 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
         tmp_path = Path(tmp)
         output = tmp_path / "imported.jsonl"
         check_positive_import(repo_root, output, errors)
+        check_result_intake_for_rows(repo_root, ara_root, output, None, errors, "positive import intake")
+
+        missing_prompt_output = tmp_path / "missing-prompt.jsonl"
+        missing_prompt_result = run_importer(repo_root, importer_base_args(missing_prompt_output))
+        if missing_prompt_result.returncode != 0:
+            errors.append(f"missing prompt import unexpectedly failed: {missing_prompt_result.stderr.strip()}")
+        else:
+            check_result_intake_for_rows(
+                repo_root,
+                ara_root,
+                missing_prompt_output,
+                "missing prompt artifact matching runbook expectation",
+                errors,
+                "missing prompt artifact intake",
+            )
 
         missing_stage_args = importer_base_args(tmp_path / "missing-stage.jsonl")
         stage_flag_index = missing_stage_args.index("--runbook-stage-id")

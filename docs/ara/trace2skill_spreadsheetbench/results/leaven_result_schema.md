@@ -51,6 +51,8 @@ what Leaven actually ran.
   "source_command": "LEAVEN_TRACE2SKILL_LIVE=1 ...",
   "artifact_paths": [
     "artifacts/trace2skill/run-.../manifest.json",
+    "artifacts/trace2skill/run-.../rendered_prompts/52807/agent_prompt.md",
+    "artifacts/trace2skill/run-.../prompt_render_manifest.json",
     "artifacts/trace2skill/run-.../score_report.json",
     "artifacts/trace2skill/run-.../trajectory.jsonl",
     "docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md"
@@ -115,6 +117,10 @@ what Leaven actually ran.
 - Approval-gated rows must carry at least one inspectable
   `extra.approval_artifact_paths` entry and that same path must be included in
   `artifact_paths`.
+- Approval-gated rows must also carry every prompt artifact required by their
+  `extra.runbook_stage_id` in `full_denominator_runbook.json`, such as rendered
+  agent prompts, Stage 2 analyst prompt/fanout files, Stage 3 merge prompts, or
+  prompt-render manifests.
 - Result rows must carry `extra.runbook_stage_id`; result intake rejects rows
   whose stage is missing from the generated full-denominator runbook or whose
   stage `allowed_label` differs from the row's `proof_classification`.

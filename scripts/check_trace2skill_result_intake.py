@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,14 @@ PLOT_AXIS_UNITS = {
     ("parallel_vs_sequential", "right"): {"minutes"},
     ("reasoningbank", "left"): {"percent"},
 }
+PROMPT_ARTIFACT_WORDS = {
+    "prompt",
+    "rendered_prompts",
+    "stage2_analyst_prompts",
+    "stage2_fanout",
+    "stage3_merge_prompts",
+    "stage3_merge_manifest",
+}
 
 
 def load_jsonl(path: Path) -> list[tuple[int, dict[str, Any]]]:
@@ -65,6 +74,46 @@ def check_artifact_path(repo_root: Path, prefix: str, rel_path: str, errors: lis
         errors.append(f"{prefix} artifact path is not inspectable: {rel_path}")
 
 
+def stage_prompt_artifact_patterns(stage: dict[str, Any]) -> list[tuple[str, re.Pattern[str] | None]]:
+    expected = stage.get("expected_artifacts")
+    if not isinstance(expected, list):
+        return []
+    patterns: list[tuple[str, re.Pattern[str] | None]] = []
+    for artifact in expected:
+        artifact_text = str(artifact)
+        if not any(word in artifact_text for word in PROMPT_ARTIFACT_WORDS):
+            continue
+        if "/" not in artifact_text and "." not in artifact_text:
+            patterns.append((artifact_text, None))
+            continue
+        pattern_text = re.escape(artifact_text)
+        pattern_text = re.sub(r"\\\{[^}]+\\\}", r"[^/]+", pattern_text)
+        pattern_text = re.sub(r"<[^>]+>", r"[^/]+", pattern_text)
+        patterns.append((artifact_text, re.compile(pattern_text)))
+    return patterns
+
+
+def check_required_prompt_artifacts(
+    prefix: str,
+    proof: Any,
+    stage: dict[str, Any] | None,
+    artifact_paths: Any,
+    errors: list[str],
+) -> None:
+    if proof not in APPROVAL_REQUIRED_PROOF_CLASSIFICATIONS or stage is None:
+        return
+    if not isinstance(artifact_paths, list):
+        return
+    artifact_text = "\n".join(str(path) for path in artifact_paths)
+    for source, pattern in stage_prompt_artifact_patterns(stage):
+        if pattern is None:
+            if "prompt" not in artifact_text:
+                errors.append(f"{prefix} missing prompt artifact evidence for runbook expectation {source!r}")
+            continue
+        if not any(pattern.search(str(path)) for path in artifact_paths):
+            errors.append(f"{prefix} missing prompt artifact matching runbook expectation {source!r}")
+
+
 def check_record(
     repo_root: Path,
     path: Path,
@@ -80,6 +129,7 @@ def check_record(
     extra = record.get("extra")
 
     stage_id = extra.get("runbook_stage_id") if isinstance(extra, dict) else None
+    stage: dict[str, Any] | None = None
     if not isinstance(stage_id, str) or not stage_id:
         errors.append(f"{prefix} extra.runbook_stage_id must name the originating runbook stage")
     else:
@@ -98,6 +148,7 @@ def check_record(
     else:
         for rel_path in artifact_paths:
             check_artifact_path(repo_root, prefix, rel_path, errors)
+    check_required_prompt_artifacts(prefix, proof, stage, artifact_paths, errors)
 
     skill_path = record.get("skill_source", {}).get("path")
     if skill_path is not None:
