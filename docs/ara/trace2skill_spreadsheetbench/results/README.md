@@ -123,8 +123,8 @@ manifests, result intake also requires matching prompt artifacts in
 the blocked plan as an approval artifact is not permission. For model-backed run
 stages, result intake also requires
 file-shaped runbook artifacts such as prompt manifests, official evaluator
-outputs, parsed analysis JSON, fanout JSONL, merge manifests, change logs, or
-selection notes; directory placeholders and the row's own `leaven_results.jsonl`
+outputs, per-case output workbooks, parsed analysis JSON, fanout JSONL, merge
+manifests, change logs, or selection notes; directory placeholders and the row's own `leaven_results.jsonl`
 are not used as artifact-path requirements. The importer runs that same
 result-intake check before writing its output, so rows with a wrong runbook
 stage or missing runbook-required file artifacts fail without producing a JSONL

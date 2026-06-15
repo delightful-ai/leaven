@@ -155,9 +155,10 @@ what Leaven actually ran.
   prompt-render manifests.
 - Model-backed run rows must also carry every file-shaped artifact required by
   their generated runbook stage, such as prompt manifests, official evaluator
-  outputs, parsed analysis JSON, fanout JSONL, merge manifests, change logs, or
-  selection notes. Directory placeholders and the row's own
-  `leaven_results.jsonl` are not used as artifact-path requirements.
+  outputs, per-case output workbooks, parsed analysis JSON, fanout JSONL,
+  merge manifests, change logs, or selection notes. Directory placeholders and
+  the row's own `leaven_results.jsonl` are not used as artifact-path
+  requirements.
 - Result rows must carry `extra.runbook_stage_id`; result intake rejects rows
   whose stage is missing from the generated full-denominator runbook or whose
   stage `allowed_label` differs from the row's `proof_classification`.

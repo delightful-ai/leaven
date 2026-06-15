@@ -60,6 +60,7 @@ STAGE_REQUIRED_FRAGMENTS = {
         "rendered_prompts/{case_id}/agent_prompt.md",
         "prompt_render_manifest.json",
         "outputs/eval_official_results.json",
+        "outputs/spreadsheet/{case_id}/{workbook}_output.xlsx",
         "leaven_results.jsonl",
     ],
     "G2": [
@@ -68,6 +69,7 @@ STAGE_REQUIRED_FRAGMENTS = {
         "rendered_prompts/{case_id}/agent_prompt.md",
         "prompt_render_manifest.json",
         "outputs/eval_official_results.json",
+        "outputs/spreadsheet/{case_id}/{workbook}_output.xlsx",
         "leaven_results.jsonl",
     ],
     "G3": [
@@ -76,6 +78,7 @@ STAGE_REQUIRED_FRAGMENTS = {
         "rendered_prompts/{case_id}/agent_prompt.md",
         "prompt_render_manifest.json",
         "outputs/eval_official_results.json",
+        "outputs/spreadsheet/{case_id}/{workbook}_output.xlsx",
         "error_analysis_parsed.json",
         "stage2_analyst_prompts/{case_id}/error_prompt.md",
         "stage2_analyst_prompts/{case_id}/success_prompt.md",
@@ -91,9 +94,11 @@ STAGE_REQUIRED_FRAGMENTS = {
         "baseline_rendered_prompts/{case_id}/agent_prompt.md",
         "baseline_prompt_render_manifest.json",
         "baseline_outputs/eval_official_results.json",
+        "baseline_outputs/spreadsheet/{case_id}/{workbook}_output.xlsx",
         "evolved_rendered_prompts/{case_id}/agent_prompt.md",
         "evolved_prompt_render_manifest.json",
         "evolved_outputs/eval_official_results.json",
+        "evolved_outputs/spreadsheet/{case_id}/{workbook}_output.xlsx",
         "best_seed_selection_note.md",
     ],
     "G4": [
@@ -102,6 +107,7 @@ STAGE_REQUIRED_FRAGMENTS = {
         "rendered_prompts/{case_id}/agent_prompt.md",
         "prompt_render_manifest.json",
         "outputs/eval_official_results.json",
+        "outputs/spreadsheet/{case_id}/{workbook}_output.xlsx",
         "leaven_results.jsonl",
     ],
     "G5": [

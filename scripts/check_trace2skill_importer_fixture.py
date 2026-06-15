@@ -51,9 +51,11 @@ def touch(repo_root: Path, path: Path, text: str) -> str:
 def prompt_artifact_paths(repo_root: Path, tmp_path: Path) -> list[str]:
     prompt = tmp_path / "subset_200_202_seed_41/rendered_prompts/52807/agent_prompt.md"
     manifest = tmp_path / "subset_200_202_seed_41/prompt_render_manifest.json"
+    output_workbook = tmp_path / "subset_200_202_seed_41/outputs/spreadsheet/52807/1_52807_output.xlsx"
     return [
         touch(repo_root, prompt, "fixture rendered agent prompt\n"),
         touch(repo_root, manifest, '{"schema_version":"fixture.prompt_manifest.v1"}\n'),
+        touch(repo_root, output_workbook, "fixture output workbook\n"),
     ]
 
 
@@ -371,6 +373,11 @@ def model_one_case_artifact_paths(repo_root: Path, tmp_path: Path) -> list[str]:
             base / "outputs/eval_official_results.json",
             '{"schema_version":"fixture.eval.v1"}\n',
         ),
+        touch(
+            repo_root,
+            base / "outputs/spreadsheet/13-1/1_13-1_output.xlsx",
+            "fixture model one-case output workbook\n",
+        ),
     ]
 
 
@@ -470,6 +477,11 @@ def source_heldout_row(
         tmp_path / f"heldout_seed_{seed}/outputs/eval_official_results.json",
         '{"schema_version":"fixture.heldout_eval.v1"}\n',
     )
+    output_workbook = touch(
+        repo_root,
+        tmp_path / f"heldout_seed_{seed}/outputs/spreadsheet/52807/1_52807_output.xlsx",
+        f"fixture held-out seed {seed} output workbook\n",
+    )
     return {
         "schema_version": "leaven.trace2skill.result.v1",
         "run_id": f"trace2skill-heldout-fixture-seed-{seed}",
@@ -505,7 +517,7 @@ def source_heldout_row(
             f"--max_turns 100 --seeds {seed} --start_idx 200 --end_idx 400 "
             "&& python evaluate_with_official.py --start_idx 200 --end_idx 400"
         ),
-        "artifact_paths": [APPROVAL_ARTIFACT, prompt, prompt_manifest, eval_result],
+        "artifact_paths": [APPROVAL_ARTIFACT, prompt, prompt_manifest, eval_result, output_workbook],
         "extra": {
             "runbook_stage_id": "G4",
             "approval_artifact_paths": [APPROVAL_ARTIFACT],
@@ -538,6 +550,11 @@ def source_training_validation_row(
         base / "baseline_outputs/eval_official_results.json",
         '{"schema_version":"fixture.validation_baseline_eval.v1"}\n',
     )
+    baseline_output_workbook = touch(
+        repo_root,
+        base / "baseline_outputs/spreadsheet/13-1/1_13-1_output.xlsx",
+        f"fixture validation seed {seed} baseline output workbook\n",
+    )
     evolved_prompt = touch(
         repo_root,
         base / "evolved_rendered_prompts/13-1/agent_prompt.md",
@@ -552,6 +569,11 @@ def source_training_validation_row(
         repo_root,
         base / "evolved_outputs/eval_official_results.json",
         '{"schema_version":"fixture.validation_evolved_eval.v1"}\n',
+    )
+    evolved_output_workbook = touch(
+        repo_root,
+        base / "evolved_outputs/spreadsheet/13-1/1_13-1_output.xlsx",
+        f"fixture validation seed {seed} evolved output workbook\n",
     )
     best_seed_note = touch(
         repo_root,
@@ -598,9 +620,11 @@ def source_training_validation_row(
             baseline_prompt,
             baseline_manifest,
             baseline_eval,
+            baseline_output_workbook,
             evolved_prompt,
             evolved_manifest,
             evolved_eval,
+            evolved_output_workbook,
             best_seed_note,
         ],
         "extra": {
@@ -634,6 +658,11 @@ def source_evolving_row(
         repo_root,
         base / f"baseline_seed_{seed}/outputs/eval_official_results.json",
         '{"schema_version":"fixture.evolving_eval.v1"}\n',
+    )
+    output_workbook = touch(
+        repo_root,
+        base / f"baseline_seed_{seed}/outputs/spreadsheet/52807/1_52807_output.xlsx",
+        f"fixture evolving seed {seed} output workbook\n",
     )
     error_analysis = touch(
         repo_root,
@@ -725,6 +754,7 @@ def source_evolving_row(
             prompt,
             prompt_manifest,
             eval_result,
+            output_workbook,
             error_analysis,
             error_prompt,
             success_prompt,
@@ -1492,6 +1522,24 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "missing artifact matching runbook expectation",
             errors,
             "missing official eval artifact",
+        )
+
+        def mutate_missing_output_workbook_artifact(row: dict[str, Any]) -> None:
+            row["artifact_paths"] = [
+                path
+                for path in row["artifact_paths"]
+                if "outputs/spreadsheet/" not in path
+            ]
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "missing-output-workbook-artifact.jsonl",
+            mutate_missing_output_workbook_artifact,
+            "missing artifact matching runbook expectation",
+            errors,
+            "missing output workbook artifact",
         )
 
         def mutate_missing_skill_artifact(row: dict[str, Any]) -> None:
