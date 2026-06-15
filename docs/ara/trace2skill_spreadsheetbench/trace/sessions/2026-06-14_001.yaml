@@ -2,9 +2,9 @@ session:
   id: "2026-06-14_001"
   date: "2026-06-14"
   started: "2026-06-14T17:10-07:00"
-  last_turn: "2026-06-14T18:15-07:00"
-  turn_count: 5
-  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, and one non-overlay result row now make more of the full-denominator gate executable without approving a run."
+  last_turn: "2026-06-14T18:20-07:00"
+  turn_count: 6
+  summary: "Approval preflight, dataset manifest, closeout audit, generated runbook, one non-overlay result row, and a strict official-eval importer now make the full-denominator path more executable without approving a run."
 
 events_logged:
   - turn: 1
@@ -43,6 +43,12 @@ events_logged:
     routing: direct
     provenance: ai-executed
     summary: "Generated deterministic_one_case.jsonl as a non-overlay Leaven result row; closeout audit reports one total row and zero paper-denominator rows."
+  - turn: 6
+    type: experiment
+    id: "PM-2026-06-14-007"
+    routing: direct
+    provenance: ai-executed
+    summary: "Added official eval importer; fixture import wrote four non-overlay rows and reproduction guard refused full-paper classification without approval artifact evidence."
 
 ai_actions:
   - turn: 1
@@ -124,6 +130,14 @@ ai_actions:
       - "docs/ara/trace2skill_spreadsheetbench/results/closeout_audit.md"
       - "docs/ara/trace2skill_spreadsheetbench/PAPER.md"
       - "docs/ara/trace2skill_spreadsheetbench/validation.md"
+  - turn: 6
+    action: "Added scripts/import_trace2skill_eval_results.py and a fixture official-evaluator JSON file, then documented the import path and reproduction-label guardrails."
+    provenance: ai-executed
+    files_changed:
+      - "scripts/import_trace2skill_eval_results.py"
+      - "scripts/fixtures/trace2skill_eval_official_results_sample.json"
+      - "docs/ara/trace2skill_spreadsheetbench/results/README.md"
+      - "docs/ara/trace2skill_spreadsheetbench/validation.md"
 
 claims_touched: []
 
@@ -138,6 +152,8 @@ key_context:
     excerpt: "Runbook normal_preflight_passes=false; only G0 and G1 are runnable now, while every model-backed or paper-denominator stage remains approval-required."
   - turn: 5
     excerpt: "Result record summary now reports total_records=1, non_overlay_records=1, paper_denominator_records=0."
+  - turn: 6
+    excerpt: "Importer fixture output stayed in tmp/, defaulted to plot_binding=null, and paper-denominator-reproduction refused even with the override flag until an approval artifact path was provided."
 
 open_threads:
   - "Full Qwen/vLLM paper-denominator execution remains blocked until model endpoint, serving hardware, budget, credentials, artifact retention, approval metadata, and tolerance approval are filled."

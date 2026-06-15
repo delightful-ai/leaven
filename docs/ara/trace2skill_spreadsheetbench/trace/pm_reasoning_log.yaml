@@ -19,3 +19,7 @@ entries:
     notes:
       - "Routed deterministic_one_case.jsonl as result-record evidence with plot_binding=null, preserving separation between one-case proof and paper-target overlays."
       - "Kept closeout incomplete because paper_denominator_records remains zero."
+  - turn: "2026-06-14_001#6"
+    notes:
+      - "Routed official-eval importer as execution-readiness and guardrail evidence, not as a reproduction result."
+      - "Did not stage or crystallize a new paper-performance claim because fixture rows are tmp-only and no Qwen/vLLM denominator run occurred."
