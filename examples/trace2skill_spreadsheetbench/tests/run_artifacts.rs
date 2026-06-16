@@ -9,8 +9,9 @@ use leaven_evidence::{
 };
 use leaven_kernel::{AgentSessionId, CaseId, Fingerprint};
 use trace2skill_spreadsheetbench::{
-    Trace2SkillRunArtifactInput, build_stage2_analyst_fanout_from_training_corpus,
-    build_training_corpus_from_run_artifacts, load_verified_400_manifest,
+    Trace2SkillManifestError, Trace2SkillRunArtifactInput,
+    build_stage2_analyst_fanout_from_training_corpus, build_training_corpus_from_run_artifacts,
+    load_verified_400_manifest,
 };
 
 #[test]
@@ -112,6 +113,47 @@ fn builds_training_corpus_from_upstream_results_and_logs_without_model_work() {
     assert_eq!(call.support_count(), 1);
     assert_eq!(call.retry_count(), 0);
     assert_eq!(fanout.pending_call_ids(), vec!["error-13-1-1"]);
+}
+
+#[test]
+fn build_training_corpus_rejects_unknown_upstream_task_ids() {
+    let root = unique_temp_dir("trace2skill-unknown-result");
+    let results_file = root.join("results.json");
+    fs::write(
+        &results_file,
+        r#"{
+          "agent_name": "cli_skill_preloaded_agent",
+          "model": "Qwen3.5-122B-A10B",
+          "seed": 41,
+          "results": [
+            {
+              "id": "not-in-verified-manifest",
+              "success": true,
+              "test_cases": []
+            }
+          ]
+        }"#,
+    )
+    .unwrap();
+    let manifest_path = fixture_manifest_path(&root);
+    let manifest = load_verified_400_manifest(&manifest_path).unwrap();
+
+    let error = build_training_corpus_from_run_artifacts(
+        &manifest,
+        Trace2SkillRunArtifactInput {
+            results_file: &results_file,
+            log_dir: None,
+            log_format: "markdown",
+            analysis_dir: None,
+        },
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        Trace2SkillManifestError::UnknownRunArtifactTask { task_id }
+            if task_id == "not-in-verified-manifest"
+    ));
 }
 
 #[test]
