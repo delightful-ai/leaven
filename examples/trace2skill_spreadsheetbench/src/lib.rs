@@ -163,7 +163,7 @@ pub fn build_training_corpus_from_run_artifacts(
     for result in run.results {
         let task_id = result.id.to_source_id();
         let Some(case_id) = case_by_source.get(&task_id).copied() else {
-            continue;
+            return Err(Trace2SkillManifestError::UnknownRunArtifactTask { task_id });
         };
         if !train_cases.contains(&case_id) {
             continue;
@@ -364,6 +364,12 @@ pub enum Trace2SkillManifestError {
     MissingArtifact {
         /// Expected artifact path.
         path: PathBuf,
+    },
+    /// Upstream results referenced a task that is not in the verified manifest.
+    #[error("Trace2Skill run artifacts contain unknown task id `{task_id}`")]
+    UnknownRunArtifactTask {
+        /// Unknown upstream task id.
+        task_id: String,
     },
     /// Trajectory corpus refused an upstream result.
     #[error(transparent)]
