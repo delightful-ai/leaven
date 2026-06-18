@@ -4,9 +4,12 @@ use std::{error::Error, fmt};
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use leaven_artifact_skill::{SkillBank, SkillBankChange};
+use leaven_artifact_skill::{SkillBank, SkillBankChange, SkillFile};
 
-use crate::{SkillBankChangeReport, SkillPatchEditKind, SkillPatchFileRef, SkillPatchPlan};
+use crate::{
+    SkillBankChangeReport, SkillLineRange, SkillPatchEditKind, SkillPatchFileRef, SkillPatchPlan,
+    SkillPatchRange,
+};
 
 /// Successful application of a validated skill patch plan.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -113,11 +116,105 @@ fn validate_changes_match_plan(
         .collect::<Vec<_>>();
     let actual = concrete_patch_intents(parent, changes);
     if counted(expected.iter()) == counted(actual.iter()) {
+        validate_line_range_preservation(parent, plan, changes)?;
         return Ok(());
     }
     Err(SkillPatchApplicationError::PlanMismatch(format!(
         "plan edits {expected:?} but concrete changes perform {actual:?}"
     )))
+}
+
+fn validate_line_range_preservation(
+    parent: &SkillBank,
+    plan: &SkillPatchPlan,
+    changes: &[SkillBankChange],
+) -> Result<(), SkillPatchApplicationError> {
+    let line_ranges = planned_line_ranges(plan);
+    if line_ranges.is_empty() {
+        return Ok(());
+    }
+    let Ok(child) = parent.apply_skill_change(&SkillBankChange::Atomic(changes.to_vec())) else {
+        return Ok(());
+    };
+    for (target, ranges) in line_ranges {
+        let Some(parent_file) = parent
+            .get(target.skill())
+            .and_then(|folder| folder.file(target.path()))
+        else {
+            return Err(SkillPatchApplicationError::PlanMismatch(format!(
+                "line-range edit targets missing parent file {target}"
+            )));
+        };
+        let Some(child_file) = child
+            .get(target.skill())
+            .and_then(|folder| folder.file(target.path()))
+        else {
+            return Err(SkillPatchApplicationError::PlanMismatch(format!(
+                "line-range edit removed target file {target}"
+            )));
+        };
+        validate_file_preserves_lines(&target, parent_file, child_file, &ranges)?;
+    }
+    Ok(())
+}
+
+fn planned_line_ranges(plan: &SkillPatchPlan) -> BTreeMap<SkillPatchFileRef, Vec<SkillLineRange>> {
+    let mut ranges = BTreeMap::new();
+    for edit in plan.edits() {
+        if let SkillPatchEditKind::Modify {
+            range: SkillPatchRange::Lines(range),
+        } = edit.kind()
+        {
+            ranges
+                .entry(edit.target().clone())
+                .or_insert_with(Vec::new)
+                .push(range);
+        }
+    }
+    ranges
+}
+
+fn validate_file_preserves_lines(
+    target: &SkillPatchFileRef,
+    parent_file: &SkillFile,
+    child_file: &SkillFile,
+    ranges: &[SkillLineRange],
+) -> Result<(), SkillPatchApplicationError> {
+    if parent_file.permissions() != child_file.permissions() {
+        return Err(SkillPatchApplicationError::PlanMismatch(format!(
+            "line-range edit changed file permissions for {target}"
+        )));
+    }
+
+    let child_lines = line_segments(child_file.bytes());
+    let mut child_cursor = 0;
+    for (line_index, parent_line) in line_segments(parent_file.bytes()).iter().enumerate() {
+        let line_number = line_index + 1;
+        if line_is_declared(line_number, ranges) {
+            continue;
+        }
+        let Some(relative_match) = child_lines[child_cursor..]
+            .iter()
+            .position(|child_line| child_line == parent_line)
+        else {
+            return Err(SkillPatchApplicationError::PlanMismatch(format!(
+                "line-range edit for {target} changed parent line {line_number} outside declared ranges"
+            )));
+        };
+        child_cursor += relative_match + 1;
+    }
+    Ok(())
+}
+
+fn line_segments(bytes: &[u8]) -> Vec<&[u8]> {
+    bytes.split_inclusive(|byte| *byte == b'\n').collect()
+}
+
+fn line_is_declared(line_number: usize, ranges: &[SkillLineRange]) -> bool {
+    let line_number = u64::try_from(line_number).unwrap_or(u64::MAX);
+    ranges.iter().any(|range| {
+        u64::from(range.start()) <= line_number && line_number <= u64::from(range.end())
+    })
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]

@@ -907,6 +907,51 @@ fn skill_patch_plan_rejects_create_overwrite_and_zero_support() {
 }
 
 #[test]
+fn skill_patch_plan_revalidates_deserialized_field_invariants() {
+    let parent = bank_with_alpha(
+        "Edits Rust tests. Use when Rust test failures need diagnosis.",
+        "Read the failing test output and patch the narrow code path.",
+        false,
+    );
+
+    let invalid_path_edits: Vec<SkillPatchPlanEdit> = serde_json::from_str(
+        r#"[
+            {
+                "target": {"skill": "alpha", "path": "scripts/../run.sh"},
+                "kind": {"Modify": {"range": {"Lines": {"start": 1, "end": 1}}}},
+                "support": {"count": 1},
+                "reference_links": []
+            }
+        ]"#,
+    )
+    .unwrap();
+    let invalid_path = SkillPatchPlan::validate(&parent, invalid_path_edits).unwrap_err();
+    assert!(matches!(
+        invalid_path,
+        SkillPatchPlanError::InvalidTargetPath {
+            edit_index: 0,
+            target
+        } if target.path().as_str() == "scripts/../run.sh"
+    ));
+
+    let invalid_range_edits: Vec<SkillPatchPlanEdit> = serde_json::from_str(
+        r#"[
+            {
+                "target": {"skill": "alpha", "path": "scripts/run.sh"},
+                "kind": {"Modify": {"range": {"Lines": {"start": 0, "end": 1}}}},
+                "support": {"count": 1},
+                "reference_links": []
+            }
+        ]"#,
+    )
+    .unwrap();
+    assert_eq!(
+        SkillPatchPlan::validate(&parent, invalid_range_edits).unwrap_err(),
+        SkillPatchPlanError::InvalidLineRange { start: 0, end: 1 }
+    );
+}
+
+#[test]
 fn skill_patch_plan_accepts_atomic_reference_create_and_skill_md_link() {
     let parent = bank_with_alpha(
         "Edits Rust tests. Use when Rust test failures need diagnosis.",
@@ -1364,6 +1409,43 @@ fn skill_patch_application_rejects_changes_that_do_not_match_plan_targets() {
         wrong_target,
         SkillPatchApplicationError::PlanMismatch(reason)
             if reason.contains("plan edits")
+    ));
+}
+
+#[test]
+fn skill_patch_application_rejects_line_range_writes_that_drop_parent_lines() {
+    let parent = bank_with_alpha(
+        "Edits Rust tests. Use when Rust test failures need diagnosis.",
+        "Read the failing test output and patch the narrow code path.",
+        false,
+    );
+    let alpha = SkillName::new("alpha").unwrap();
+    let script = SkillPath::new("scripts/run.sh").unwrap();
+    let plan = SkillPatchPlan::validate(
+        &parent,
+        vec![SkillPatchPlanEdit::modify(
+            SkillPatchFileRef::new(alpha.clone(), script.clone()),
+            SkillPatchRange::Lines(SkillLineRange::new(1, 1).unwrap()),
+            SkillPatchSupport::new(1).unwrap(),
+        )],
+    )
+    .unwrap();
+
+    let truncated = SkillPatchApplication::apply(
+        &parent,
+        plan,
+        vec![SkillBankChange::WriteFile {
+            skill: alpha,
+            path: script,
+            file: SkillFile::text("#!/bin/sh\n"),
+        }],
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        truncated,
+        SkillPatchApplicationError::PlanMismatch(reason)
+            if reason.contains("changed parent line 2 outside declared ranges")
     ));
 }
 
