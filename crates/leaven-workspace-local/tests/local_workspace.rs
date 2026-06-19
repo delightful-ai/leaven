@@ -326,6 +326,62 @@ fn local_workspace_lists_recursive_files_from_root_and_subdir() {
     });
 }
 
+#[cfg(unix)]
+#[test]
+fn local_workspace_file_apis_refuse_symlink_escape() {
+    futures::executor::block_on(async {
+        let parent = temp_parent("local-symlink-escape");
+        let outside = temp_parent("local-symlink-outside");
+        std::fs::write(outside.join("outside.txt"), b"outside").unwrap();
+        let factory = LocalWorkspaceFactory::new(&parent);
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mount = workspace.local_mount().unwrap().to_path_buf();
+        std::os::unix::fs::symlink(outside.join("outside.txt"), mount.join("linked-file")).unwrap();
+        std::os::unix::fs::symlink(&outside, mount.join("linked-dir")).unwrap();
+
+        let linked_file = WorkspacePath::new("linked-file").unwrap();
+        let linked_dir = WorkspacePath::new("linked-dir").unwrap();
+        let mut view = workspace.view();
+        let files = view.list_files(&WorkspacePath::root()).unwrap();
+        assert!(files.contains(&linked_file));
+        assert!(files.contains(&linked_dir));
+        assert!(!files.contains(&WorkspacePath::new("linked-dir/outside.txt").unwrap()));
+
+        assert!(matches!(
+            view.read_file(&linked_file).unwrap_err(),
+            leaven_workspace::WorkspaceError::Io(_)
+        ));
+        assert!(matches!(
+            view.write_file(&linked_file, b"changed").unwrap_err(),
+            leaven_workspace::WorkspaceError::Io(_)
+        ));
+        assert_eq!(
+            std::fs::read(outside.join("outside.txt")).unwrap(),
+            b"outside"
+        );
+        assert!(matches!(
+            view.set_executable(&linked_file, true).unwrap_err(),
+            leaven_workspace::WorkspaceError::Io(_)
+        ));
+        assert!(matches!(
+            view.is_executable(&linked_file).unwrap_err(),
+            leaven_workspace::WorkspaceError::Io(_)
+        ));
+
+        let mut command = Command::new("true");
+        command.cwd = Some(linked_dir);
+        assert!(matches!(
+            view.run_command(command).unwrap_err(),
+            leaven_workspace::WorkspaceError::Io(_)
+        ));
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+        remove_dir(&parent);
+        remove_dir(&outside);
+    });
+}
+
 #[test]
 fn local_workspace_write_fails_when_parent_path_is_file() {
     futures::executor::block_on(async {
