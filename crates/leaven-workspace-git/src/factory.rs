@@ -44,19 +44,25 @@ impl GitWorkspaceFactory {
 }
 
 impl WorkspaceFactory for GitWorkspaceFactory {
-    async fn allocate(&self, _config: WorkspaceConfig) -> Result<Workspace, FactoryError> {
-        let root = self.root.join(format!("leaven-git-{}", RunId::new()));
-        run_git_clone(&self.source, &root)?;
-        if let Some(checkout) = &self.checkout {
-            if let Err(error) = run_git_checkout(&root, checkout) {
+    fn allocate(
+        &self,
+        _config: WorkspaceConfig,
+    ) -> impl std::future::Future<Output = Result<Workspace, FactoryError>> + Send + '_ {
+        let result = (|| {
+            let root = self.root.join(format!("leaven-git-{}", RunId::new()));
+            run_git_clone(&self.source, &root)?;
+            if let Some(checkout) = &self.checkout
+                && let Err(error) = run_git_checkout(&root, checkout)
+            {
                 let _ = std::fs::remove_dir_all(&root);
                 return Err(error);
             }
-        }
-        Ok(Workspace::new(
-            root.clone(),
-            Box::new(GitWorkspaceBackend { root }),
-        ))
+            Ok(Workspace::new(
+                root.clone(),
+                Box::new(GitWorkspaceBackend { root }),
+            ))
+        })();
+        std::future::ready(result)
     }
 }
 
