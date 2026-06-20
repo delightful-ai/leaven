@@ -6922,7 +6922,7 @@ Provide the new parameter value within ``` blocks."
                     && line.ends_with("/reports/summary.json"))
         );
         assert!(lines.iter().any(|line| {
-            line.starts_with("compatibility=schema=leaven-run.compatibility.v3")
+            line.starts_with("compatibility=schema=leaven-run.compatibility.v4")
                 && line.contains(" run_kind=leaven-run.optimize ")
                 && line.contains(" cache=cache:auto/")
                 && line.contains(" lm_roles=2")

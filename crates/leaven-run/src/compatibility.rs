@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use crate::result::RunCompatibilitySummary;
 
 const MANIFEST_FILE: &str = "compatibility.json";
-const MANIFEST_SCHEMA: &str = "leaven-run.compatibility.v3";
+const MANIFEST_SCHEMA: &str = "leaven-run.compatibility.v4";
 const CACHE_PLACEHOLDER: &str = "cache:auto/eval-schema-pending/lm-schema-pending";
 const BUDGET_PLACEHOLDER: &str = "budget:ledger-compatibility-pending";
 
@@ -285,7 +285,7 @@ where
     T: Serialize,
 {
     let mut fingerprint = FingerprintBuilder::new();
-    fingerprint.update(b"leaven-run.case-content.v1");
+    fingerprint.update(b"leaven-run.case-content.v2");
     update_cases(&mut fingerprint, b"TRAIN", train)?;
     update_cases(&mut fingerprint, b"VALIDATION", validation)?;
     update_cases(&mut fingerprint, b"TEST", test)?;
@@ -304,16 +304,35 @@ where
     fingerprint.update(split);
     fingerprint.update(cases.len().to_le_bytes());
     for case in cases {
-        fingerprint.update(case.id.0.to_le_bytes());
-        fingerprint.update(serde_json::to_vec(&case.input)?);
-        fingerprint.update(serde_json::to_vec(&case.target)?);
-        fingerprint.update(serde_json::to_vec(&case.metadata)?);
+        let case_id = case.id.0.to_le_bytes();
+        update_framed(fingerprint, b"case.id", &case_id);
+        update_framed(
+            fingerprint,
+            b"case.input",
+            serde_json::to_vec(&case.input)?.as_slice(),
+        );
+        update_framed(
+            fingerprint,
+            b"case.target",
+            serde_json::to_vec(&case.target)?.as_slice(),
+        );
+        update_framed(
+            fingerprint,
+            b"case.metadata",
+            serde_json::to_vec(&case.metadata)?.as_slice(),
+        );
     }
     Ok(())
 }
 
+fn update_framed(fingerprint: &mut FingerprintBuilder, label: &[u8], bytes: &[u8]) {
+    fingerprint.update(label);
+    fingerprint.update(bytes.len().to_le_bytes());
+    fingerprint.update(bytes);
+}
+
 pub fn case_set_version(content: Fingerprint) -> CaseSetVersion {
-    CaseSetVersion(format!("leaven-run-cases-v1:{}", fingerprint_hex(content)))
+    CaseSetVersion(format!("leaven-run-cases-v2:{}", fingerprint_hex(content)))
 }
 
 pub fn store_fresh_manifest(
@@ -482,8 +501,20 @@ mod tests {
     use std::collections::BTreeMap;
 
     use leaven_engine::{PrivateStatePolicy, StateFormat};
+    use leaven_kernel::CaseId;
 
     use super::*;
+
+    #[test]
+    fn case_content_fingerprint_frames_serialized_case_fields() {
+        let left = [Case::targeted(CaseId::new(0), 1_u32, 23_u32)];
+        let right = [Case::targeted(CaseId::new(0), 12_u32, 3_u32)];
+
+        let left_fingerprint = case_content_fingerprint(&left, &[], &[]).unwrap();
+        let right_fingerprint = case_content_fingerprint(&right, &[], &[]).unwrap();
+
+        assert_ne!(left_fingerprint, right_fingerprint);
+    }
 
     #[test]
     fn optimizer_summaries_disclose_checkpoint_policy_and_format() {
