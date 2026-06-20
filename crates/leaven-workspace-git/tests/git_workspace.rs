@@ -145,7 +145,7 @@ fn git_workspace_refuses_symlink_escapes_for_file_operations() {
         assert!(slot.write_file(&linked_file, b"changed").is_err());
         assert_eq!(fs::read(&outside_file).unwrap(), b"secret");
         assert!(slot.read_file(&linked_file).is_err());
-        assert!(slot.set_executable(&linked_file, true).is_err());
+        assert!(slot.view_mut().set_executable(&linked_file, true).is_err());
         assert_eq!(
             fs::metadata(&outside_file).unwrap().permissions().mode(),
             original_mode
