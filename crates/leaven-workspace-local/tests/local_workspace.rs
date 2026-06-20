@@ -326,6 +326,55 @@ fn local_workspace_lists_recursive_files_from_root_and_subdir() {
     });
 }
 
+#[cfg(unix)]
+#[test]
+fn local_workspace_refuses_symlink_escapes_for_file_operations() {
+    use std::os::unix::fs::PermissionsExt;
+
+    futures::executor::block_on(async {
+        let parent = temp_parent("local-symlink-parent");
+        let outside = temp_parent("local-symlink-outside");
+        let outside_file = outside.join("secret.txt");
+        std::fs::write(&outside_file, b"secret").unwrap();
+        let original_mode = std::fs::metadata(&outside_file)
+            .unwrap()
+            .permissions()
+            .mode();
+        let factory = LocalWorkspaceFactory::new(&parent);
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mount = workspace.local_mount().unwrap().to_path_buf();
+        std::os::unix::fs::symlink(&outside, mount.join("linked-dir")).unwrap();
+        std::os::unix::fs::symlink(&outside_file, mount.join("linked-file")).unwrap();
+        let mut view = workspace.view();
+
+        let linked_child = WorkspacePath::new("linked-dir/pwned.txt").unwrap();
+        let linked_file = WorkspacePath::new("linked-file").unwrap();
+        assert!(view.write_file(&linked_child, b"pwned").is_err());
+        assert!(!outside.join("pwned.txt").exists());
+        assert!(view.write_file(&linked_file, b"changed").is_err());
+        assert_eq!(std::fs::read(&outside_file).unwrap(), b"secret");
+        assert!(view.read_file(&linked_file).is_err());
+        assert!(view.set_executable(&linked_file, true).is_err());
+        assert_eq!(
+            std::fs::metadata(&outside_file)
+                .unwrap()
+                .permissions()
+                .mode(),
+            original_mode
+        );
+
+        let files = view.list_files(&WorkspacePath::root()).unwrap();
+        assert!(files.contains(&WorkspacePath::new("linked-dir").unwrap()));
+        assert!(files.contains(&linked_file));
+        assert!(!files.contains(&WorkspacePath::new("linked-dir/secret.txt").unwrap()));
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+        remove_dir(&parent);
+        remove_dir(&outside);
+    });
+}
+
 #[test]
 fn local_workspace_write_fails_when_parent_path_is_file() {
     futures::executor::block_on(async {

@@ -117,6 +117,50 @@ fn git_workspace_lists_symlinks_without_following_them() {
     });
 }
 
+#[cfg(unix)]
+#[test]
+fn git_workspace_refuses_symlink_escapes_for_file_operations() {
+    use std::os::unix::fs::PermissionsExt;
+
+    block_on(async {
+        let source = fixture_repo();
+        let outside = tempfile::tempdir().unwrap();
+        let outside_file = outside.path().join("secret.txt");
+        fs::write(&outside_file, b"secret").unwrap();
+        let original_mode = fs::metadata(&outside_file).unwrap().permissions().mode();
+        let factory = GitWorkspaceFactory::local(source.path());
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mount = workspace
+            .local_mount()
+            .expect("git workspace has local mount")
+            .to_path_buf();
+        std::os::unix::fs::symlink(outside.path(), mount.join("linked-dir")).unwrap();
+        std::os::unix::fs::symlink(&outside_file, mount.join("linked-file")).unwrap();
+        let mut slot = workspace.slot(WorkspacePath::root()).unwrap();
+
+        let linked_child = WorkspacePath::new("linked-dir/pwned.txt").unwrap();
+        let linked_file = WorkspacePath::new("linked-file").unwrap();
+        assert!(slot.write_file(&linked_child, b"pwned").is_err());
+        assert!(!outside.path().join("pwned.txt").exists());
+        assert!(slot.write_file(&linked_file, b"changed").is_err());
+        assert_eq!(fs::read(&outside_file).unwrap(), b"secret");
+        assert!(slot.read_file(&linked_file).is_err());
+        assert!(slot.set_executable(&linked_file, true).is_err());
+        assert_eq!(
+            fs::metadata(&outside_file).unwrap().permissions().mode(),
+            original_mode
+        );
+
+        let files = slot.list_files(&WorkspacePath::root()).unwrap();
+        assert!(files.contains(&WorkspacePath::new("linked-dir").unwrap()));
+        assert!(files.contains(&linked_file));
+        assert!(!files.contains(&WorkspacePath::new("linked-dir/secret.txt").unwrap()));
+
+        drop(slot);
+        workspace.cleanup().await.unwrap();
+    });
+}
+
 #[test]
 fn git_checkout_captures_restores_and_deletes_program_refs() {
     block_on(async {
