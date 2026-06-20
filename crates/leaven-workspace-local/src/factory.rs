@@ -59,18 +59,21 @@ struct LocalWorkspaceBackend {
 impl WorkspaceBackend for LocalWorkspaceBackend {
     fn write_file(&mut self, path: &WorkspacePath, bytes: &[u8]) -> Result<(), WorkspaceError> {
         let path = self.host_path(path);
+        reject_symlink_components(&self.root, &path)?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|err| WorkspaceError::Io(err.to_string()))?;
         }
+        reject_symlink_components(&self.root, &path)?;
         std::fs::write(path, bytes).map_err(|err| WorkspaceError::Io(err.to_string()))
     }
 
     fn read_file(&mut self, path: &WorkspacePath) -> Result<Vec<u8>, WorkspaceError> {
-        std::fs::read(self.host_path(path)).map_err(|err| WorkspaceError::Io(err.to_string()))
+        let path = self.checked_host_path(path)?;
+        std::fs::read(path).map_err(|err| WorkspaceError::Io(err.to_string()))
     }
 
     fn list_files(&mut self, path: &WorkspacePath) -> Result<Vec<WorkspacePath>, WorkspaceError> {
-        let root = self.host_path(path);
+        let root = self.checked_host_path(path)?;
         let mut files = Vec::new();
         collect_files(&root, path.clone(), &mut files)?;
         files.sort();
@@ -82,11 +85,13 @@ impl WorkspaceBackend for LocalWorkspaceBackend {
         path: &WorkspacePath,
         executable: bool,
     ) -> Result<(), WorkspaceError> {
-        set_host_executable(&self.host_path(path), executable)
+        let path = self.checked_host_path(path)?;
+        set_host_executable(&path, executable)
     }
 
     fn is_executable(&mut self, path: &WorkspacePath) -> Result<bool, WorkspaceError> {
-        is_host_executable(&self.host_path(path))
+        let path = self.checked_host_path(path)?;
+        is_host_executable(&path)
     }
 
     fn run_command(&mut self, command: Command) -> Result<CommandOutput, WorkspaceError> {
@@ -96,10 +101,10 @@ impl WorkspaceBackend for LocalWorkspaceBackend {
             });
         }
 
-        let cwd = command
-            .cwd
-            .as_ref()
-            .map_or_else(|| self.root.clone(), |path| self.host_path(path));
+        let cwd = command.cwd.as_ref().map_or_else(
+            || Ok(self.root.clone()),
+            |path| self.checked_host_path(path),
+        )?;
 
         let start = Instant::now();
         let mut process = std::process::Command::new(&command.program);
@@ -196,6 +201,34 @@ impl LocalWorkspaceBackend {
     fn host_path(&self, path: &WorkspacePath) -> PathBuf {
         self.root.join(path.to_host_relative())
     }
+
+    fn checked_host_path(&self, path: &WorkspacePath) -> Result<PathBuf, WorkspaceError> {
+        let host_path = self.host_path(path);
+        reject_symlink_components(&self.root, &host_path)?;
+        Ok(host_path)
+    }
+}
+
+fn reject_symlink_components(root: &Path, host_path: &Path) -> Result<(), WorkspaceError> {
+    let relative = host_path
+        .strip_prefix(root)
+        .map_err(|err| WorkspaceError::Io(err.to_string()))?;
+    let mut current = root.to_path_buf();
+    for component in relative.components() {
+        current.push(component.as_os_str());
+        match std::fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(WorkspaceError::Io(format!(
+                    "workspace path crosses symlink: {}",
+                    current.display()
+                )));
+            }
+            Ok(_) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(err) => return Err(WorkspaceError::Io(err.to_string())),
+        }
+    }
+    Ok(())
 }
 
 fn collect_files(
@@ -204,9 +237,13 @@ fn collect_files(
     files: &mut Vec<WorkspacePath>,
 ) -> Result<(), WorkspaceError> {
     let metadata =
-        std::fs::metadata(host_path).map_err(|err| WorkspaceError::Io(err.to_string()))?;
-    if metadata.is_file() {
+        std::fs::symlink_metadata(host_path).map_err(|err| WorkspaceError::Io(err.to_string()))?;
+    let file_type = metadata.file_type();
+    if file_type.is_file() || file_type.is_symlink() {
         files.push(workspace_path);
+        return Ok(());
+    }
+    if !file_type.is_dir() {
         return Ok(());
     }
     for entry in std::fs::read_dir(host_path).map_err(|err| WorkspaceError::Io(err.to_string()))? {
