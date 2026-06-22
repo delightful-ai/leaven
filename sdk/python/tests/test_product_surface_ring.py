@@ -79,7 +79,8 @@ def test_dspy_adapter_is_absent_until_it_executes() -> None:
     assert forbidden.isdisjoint(lv.__all__)
     for name in forbidden:
         assert not hasattr(lv, name)
-    assert lv.x.__all__ == []
+    assert lv.x.__all__ == ["harbor"]
+    assert hasattr(lv.x, "harbor")
     assert not hasattr(lv.x, "dspy")
     assert importlib.util.find_spec("leaven.x.dspy") is None
 

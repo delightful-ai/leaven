@@ -18,18 +18,14 @@ import tempfile
 from pathlib import Path
 
 import leaven as lv
+from leaven.x.harbor import HarborTrialOutcome, trajectory_excerpt
 
 # Absolute imports (not relative): the optimize worker loads this module's file
 # standalone via `runpy.run_path`, where relative imports have no parent package.
 # The package is editable-installed, so absolute imports resolve.
 from codex_terminal_bench.kit import materialize_kit
 from codex_terminal_bench.trial import TrialOutcome, TrialPlan, run_trial
-from codex_terminal_bench.wire import (
-    RolloutOutcome,
-    decode_outcome,
-    decode_trajectory,
-    encode_outcome,
-)
+from codex_terminal_bench.wire import RolloutOutcome
 
 # The case-input key naming the pinned Terminal-Bench-2 task this rollout runs.
 TASK_INPUT_KEY = "task"
@@ -109,50 +105,21 @@ def _trial_name(case_id: str, candidate_id: str | None) -> str:
     return safe[:96]
 
 
+decode_outcome = HarborTrialOutcome.decode
+
+
 def _encode_outcome(outcome: TrialOutcome) -> str:
-    return encode_outcome(
-        RolloutOutcome(
-            reward=outcome.reward,
-            ctrf_passed=outcome.ctrf_passed,
-            ctrf_total=outcome.ctrf_total,
-            verifier_output=outcome.verifier_output,
-            trajectory_path=outcome.trajectory_path,
-            input_tokens=outcome.input_tokens,
-            output_tokens=outcome.output_tokens,
-            cost_usd=outcome.cost_usd,
-        )
-    )
+    return outcome.encode()
 
 
 # ----- rubric: verifier reward (w=1) + CTRF fraction (w=0.25) ------------------
-@lv.reward(weight=REWARD_WEIGHT)
-async def verifier(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> lv.RewardValue:
-    """Pass through the task verifier's pass/fail reward with reflective feedback.
-
-    Feedback names the failure (verifier output) and short excerpts of the
-    *agent's own behavior* from the trajectory, so the host's agentic reflection
-    can author a kit that changes how the agent works the task. Task solutions
-    and test internals are never embedded (the TB2 canary requirement).
-    """
-    _ = (case, cx)
-    parsed = decode_outcome(output.encode())
-    feedback = _verifier_feedback(parsed)
-    return lv.RewardValue(value=parsed.reward, feedback=feedback)
+verifier = lv.x.harbor.rewards.map_key("reward", weight=REWARD_WEIGHT)
+ctrf = lv.x.harbor.rewards.ctrf_fraction(weight=CTRF_WEIGHT)
 
 
-@lv.reward(weight=CTRF_WEIGHT)
-async def ctrf(output: str, case: lv.ScoringCaseView, cx: lv.RubricContext) -> lv.RewardValue:
-    """Score the CTRF passed/total fraction for partial-credit gradient."""
-    _ = (case, cx)
-    parsed = decode_outcome(output.encode())
-    fraction = parsed.ctrf_passed / parsed.ctrf_total if parsed.ctrf_total > 0 else 0.0
-    feedback = f"{parsed.ctrf_passed}/{parsed.ctrf_total} verifier sub-checks passed"
-    return lv.RewardValue(value=fraction, feedback=feedback)
-
-
-def _verifier_feedback(parsed: RolloutOutcome) -> str:
+def _verifier_feedback(parsed: HarborTrialOutcome | RolloutOutcome) -> str:
     lines = [parsed.verifier_output.strip()]
-    excerpt = _trajectory_excerpt(parsed.trajectory_path)
+    excerpt = trajectory_excerpt(parsed.trajectory_path)
     if excerpt:
         lines.append("Recent agent actions on this task:")
         lines.append(excerpt)
@@ -164,27 +131,7 @@ def _verifier_feedback(parsed: RolloutOutcome) -> str:
     return "\n".join(line for line in lines if line)
 
 
-def _trajectory_excerpt(trajectory_path: str | None, *, max_steps: int = 4) -> str:
-    """Summarize the last few of the AGENT'S OWN steps from the ATIF trajectory.
-
-    Only the agent's own messages/tool names are surfaced (truncated), never the
-    task instruction, verifier internals, or solution. This gives reflection a
-    view of how the agent behaved so it can improve the kit's working method.
-    """
-    if trajectory_path is None:
-        return ""
-    path = Path(trajectory_path)
-    if not path.is_file():
-        return ""
-    trajectory = decode_trajectory(path.read_bytes())
-    agent_steps = [step for step in trajectory.steps if step.source == "agent"]
-    lines: list[str] = []
-    for step in agent_steps[-max_steps:]:
-        message = step.message.strip().replace("\n", " ")
-        names = ", ".join(call.function_name for call in step.tool_calls if call.function_name)
-        label = f"tool[{names}] " if names else ""
-        lines.append(f"- {label}{message[:240]}")
-    return "\n".join(lines)
+_trajectory_excerpt = trajectory_excerpt
 
 
 # ----- composition (reused by the live run and the mock test) -----------------

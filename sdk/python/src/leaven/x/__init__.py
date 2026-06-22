@@ -5,4 +5,6 @@ Per spec: artifact and provider semantics that aren't core Leaven live under
 typed payloads, schema fingerprints, and capability constraints.
 """
 
-__all__: list[str] = []
+from . import harbor
+
+__all__ = ["harbor"]

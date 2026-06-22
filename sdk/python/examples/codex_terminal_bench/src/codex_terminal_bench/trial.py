@@ -19,6 +19,7 @@ from pathlib import Path
 
 from harbor.models.trial.config import AgentConfig, EnvironmentConfig, TaskConfig, TrialConfig
 from harbor.trial.trial import Trial
+from leaven.x.harbor import CtrfEvidence, HarborTrialOutcome, TokenEvidence
 
 from codex_terminal_bench.wire import CtrfReport, decode_ctrf
 
@@ -52,30 +53,7 @@ DEFAULT_CODEX_MODEL = "openai/gpt-5.4-mini"
 REWARD_KEY = "reward"
 
 
-@dataclass(frozen=True)
-class TrialOutcome:
-    """The rollout evidence extracted from one Harbor Trial."""
-
-    reward: float
-    """The task verifier's pass/fail reward (1.0 or 0.0)."""
-    ctrf_passed: int
-    """Number of CTRF test cases that passed."""
-    ctrf_total: int
-    """Total number of CTRF test cases."""
-    input_tokens: int | None
-    output_tokens: int | None
-    cost_usd: float | None
-    trajectory_path: str | None
-    """On-disk path to the agent's ATIF trajectory, when Harbor wrote one."""
-    verifier_output: str
-    """Human-readable verifier/CTRF summary used in scorer feedback."""
-
-    @property
-    def ctrf_fraction(self) -> float:
-        """Fraction of CTRF tests that passed (0.0 when there are no tests)."""
-        if self.ctrf_total <= 0:
-            return 0.0
-        return self.ctrf_passed / self.ctrf_total
+TrialOutcome = HarborTrialOutcome
 
 
 @dataclass(frozen=True)
@@ -145,12 +123,15 @@ def _fake_trial_outcome(plan: TrialPlan) -> TrialOutcome:
     )
     if not passed:
         verifier_output += "; failing: test_regex_matches_dates"
-    return TrialOutcome(
-        reward=reward,
-        ctrf_passed=ctrf_passed,
-        ctrf_total=_FAKE_TRIAL_TESTS,
-        input_tokens=0,
-        output_tokens=0,
+    return HarborTrialOutcome(
+        rewards={REWARD_KEY: reward},
+        ctrf=CtrfEvidence(
+            passed=ctrf_passed,
+            failed=_FAKE_TRIAL_TESTS - ctrf_passed,
+            total=_FAKE_TRIAL_TESTS,
+            failed_names=[] if passed else ["test_regex_matches_dates"],
+        ),
+        tokens=TokenEvidence(input=0, output=0),
         cost_usd=0.0,
         trajectory_path=None,
         verifier_output=verifier_output,
@@ -164,12 +145,16 @@ def _outcome_from_result(result, *, trials_dir: Path, trial_name: str) -> TrialO
     input_tokens, _cache, output_tokens, cost_usd = result.compute_token_cost_totals()
     trajectory_path = trial_dir / "agent" / "trajectory.json"
     verifier_output = _verifier_output(result, reward=reward, ctrf_summary=ctrf_summary)
-    return TrialOutcome(
-        reward=reward,
-        ctrf_passed=ctrf_passed,
-        ctrf_total=ctrf_total,
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
+    return HarborTrialOutcome(
+        trial_dir=str(trial_dir),
+        rewards={REWARD_KEY: reward},
+        ctrf=CtrfEvidence(
+            passed=ctrf_passed,
+            failed=max(ctrf_total - ctrf_passed, 0),
+            total=ctrf_total,
+            failed_names=_failed_test_names_from_path(trial_dir / "verifier" / "ctrf.json"),
+        ),
+        tokens=TokenEvidence(input=input_tokens, output=output_tokens),
         cost_usd=cost_usd,
         trajectory_path=str(trajectory_path) if trajectory_path.is_file() else None,
         verifier_output=verifier_output,
@@ -216,6 +201,12 @@ def _failed_test_names(report: CtrfReport) -> list[str]:
     return [
         test.name for test in report.results.tests if test.status not in {"passed", "skipped"}
     ]
+
+
+def _failed_test_names_from_path(ctrf_path: Path) -> list[str]:
+    if not ctrf_path.is_file():
+        return []
+    return _failed_test_names(decode_ctrf(ctrf_path.read_bytes()))
 
 
 def _verifier_output(result, *, reward: float, ctrf_summary: str) -> str:
