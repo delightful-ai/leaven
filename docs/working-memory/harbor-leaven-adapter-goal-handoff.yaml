@@ -1,0 +1,215 @@
+version: 1
+artifact_kind: leaven_goal_handoff
+status: aligned
+
+goal:
+  slug: harbor_leaven_adapter
+  original_intent:
+    user_question: >-
+      Can Harbor tasks/evals start working with Leaven in an expectable way, so
+      users bring Harbor task packages, trials, and ATIF evidence while Leaven
+      optimizes agent artifacts without custom Terminal-Bench glue?
+    user_should_be_able_to:
+      - Point Leaven at a local Harbor task package.
+      - Evaluate a Leaven AgentKitArtifact through a reusable Harbor-backed rollout.
+      - Score Harbor verifier output through normal Leaven reward helpers.
+      - Preserve Harbor reward vectors, CTRF, trajectory refs, logs, and cost evidence.
+      - Avoid learning or hand-writing the current Codex Terminal-Bench example glue.
+
+spec_package:
+  package_name: harbor_leaven_adapter
+  governing_docs:
+    - path: docs/specs/harbor_leaven_adapter.md
+      role: Product spec for Harbor task, rollout, outcome, scoring, evidence, dependency, and spend semantics.
+    - path: docs/working-memory/gepa-over-seam-continuation.md
+      role: Existing proof record for the Codex Terminal-Bench Harbor slice and no-spend mechanics.
+    - path: sdk/python/examples/codex_terminal_bench/src/codex_terminal_bench/scenario.py
+      role: Current repo-grounded Leaven composition shape: Task + Rollout.fn + Rubric([rewards]).
+    - path: sdk/python/examples/codex_terminal_bench/src/codex_terminal_bench/trial.py
+      role: Current Harbor Trial execution and rollout-evidence extraction proof.
+    - path: sdk/python/examples/codex_terminal_bench/src/codex_terminal_bench/agent.py
+      role: Current AgentKitArtifact to Harbor Codex workdir materialization proof.
+
+designed_surface:
+  public_surface:
+    - name: lv.x.harbor.task
+      user_interaction: >-
+        Read a local Harbor task package into a Leaven Task/Case while preserving
+        target isolation and Harbor provenance.
+    - name: lv.x.harbor.rollout.codex_agent_kit
+      user_interaction: >-
+        Produce a normal Leaven rollout that materializes the current
+        AgentKitArtifact and runs one Harbor Codex trial per case.
+    - name: lv.x.harbor.rewards.map_key
+      user_interaction: >-
+        Score a named Harbor verifier reward as a normal Leaven reward.
+    - name: lv.x.harbor.rewards.ctrf_fraction
+      user_interaction: >-
+        Score CTRF passed/total partial credit as a normal Leaven reward.
+    - name: lv.x.harbor.import_trial_result
+      user_interaction: >-
+        Import an existing Harbor trial directory into the same structured
+        rollout outcome used by live rollouts.
+  private_machinery_relevant_to_handoff:
+    - Harbor stays optional under leaven.x.harbor; core leaven imports must not require Harbor.
+    - Rubric remains Leaven's weighted vector of @lv.reward functions; no primary Rubric.harbor abstraction.
+    - Harbor/Docker/Codex spend is rollout spend and evidence, not hidden Leaven LM spend.
+    - ATIF trajectory excerpts are optimizer-visible feedback only when safe and agent-authored.
+
+intent_preservation:
+  verdict: preserved
+  reason: >-
+    The designed surface preserves the original intent because Harbor becomes a
+    normal Leaven task source, rollout backend, and reward/evidence adapter in
+    the existing lv.optimize(... Environment(task, rollout, rubric) ...) shape.
+    It avoids the earlier drift toward a new Rubric.harbor product concept.
+
+misleading_proxy_proofs:
+  - proxy: The old codex_terminal_bench example still passes.
+    why_insufficient: It may still require the custom example glue users should not write.
+    forbidden_as_completion_evidence: true
+  - proxy: A Rubric.harbor shortcut exists.
+    why_insufficient: It can hide the wrong abstraction unless structured outcome evidence and helper rewards exist.
+    forbidden_as_completion_evidence: true
+  - proxy: Harbor task.toml is parsed.
+    why_insufficient: Parsing alone does not prove Leaven task/case shape, stable ids, or target isolation.
+    forbidden_as_completion_evidence: true
+  - proxy: A live Harbor/Codex trial runs.
+    why_insufficient: Live execution does not prove reusable adapter API or deterministic no-spend mechanics.
+    forbidden_as_completion_evidence: true
+  - proxy: A full live Codex re-run with gpt-5.4-mini succeeds.
+    why_insufficient: Darin explicitly excluded this from the default proof denominator; it does not replace no-spend adapter tests.
+    forbidden_as_completion_evidence: true
+  - proxy: The outcome collapses to one pass/fail scalar.
+    why_insufficient: Proper scoring requires structured reward maps, CTRF, feedback, and evidence refs.
+    forbidden_as_completion_evidence: true
+
+spec_revisions_before_goal: []
+
+acceptance:
+  - id: local_harbor_task_to_leaven_task
+    claim: A local Harbor task package becomes a Leaven Task/Case without target leakage.
+    status: pending
+    proof_required:
+      kind: deterministic_tests
+      must_exercise:
+        - local task package fixture
+        - stable case id
+        - target is None
+        - solution/verifier-private material absent from runner-visible input
+        - Harbor provenance metadata
+    evidence: []
+    closeout_check: A parser-only proof is insufficient.
+
+  - id: structured_trial_outcome
+    claim: Harbor trial output is encoded/decoded as structured rollout evidence.
+    status: pending
+    proof_required:
+      kind: deterministic_tests
+      must_exercise:
+        - reward map
+        - CTRF passed/total/failing names
+        - verifier output
+        - trajectory path
+        - token/cost fields
+        - missing optional evidence
+        - malformed JSON errors
+    evidence: []
+    closeout_check: A pass/fail string does not satisfy this item.
+
+  - id: helper_rewards_score_harbor_evidence
+    claim: Harbor reward maps and CTRF can be scored by normal Leaven helper rewards.
+    status: pending
+    proof_required:
+      kind: deterministic_tests
+      must_exercise:
+        - lv.Rubric([lv.x.harbor.rewards.map_key(...)])
+        - lv.Rubric([lv.x.harbor.rewards.ctrf_fraction(...)])
+        - missing reward key feedback
+        - zero or missing CTRF total feedback
+    evidence: []
+    closeout_check: Completion cannot cite Rubric.harbor as the main proof.
+
+  - id: codex_agent_kit_rollout_adapter
+    claim: A Leaven AgentKitArtifact can be evaluated through a reusable Harbor Codex rollout.
+    status: pending
+    proof_required:
+      kind: no_spend_mechanics_test
+      must_exercise:
+        - AgentKitArtifact materialization to AGENTS.md and skills
+        - case task ref consumption
+        - fake-trial/no-Docker/no-live-model seam
+        - encoded HarborTrialOutcome
+    evidence: []
+    closeout_check: Live Codex/Docker is optional smoke only, not required proof.
+
+  - id: trajectory_feedback_safe
+    claim: ATIF trajectory excerpts can feed optimizer-visible feedback without leaking private task material.
+    status: pending
+    proof_required:
+      kind: deterministic_tests
+      must_exercise:
+        - missing trajectory
+        - malformed trajectory
+        - agent-authored steps
+        - non-agent steps excluded
+        - tool names summarized safely
+    evidence: []
+    closeout_check: Raw trajectory dumping is insufficient.
+
+  - id: codex_terminal_bench_reuses_adapter
+    claim: The existing Codex Terminal-Bench example uses adapter helpers for generic Harbor behavior.
+    status: pending
+    proof_required:
+      kind: refactor_and_regression_tests
+      must_exercise:
+        - existing no-spend kit optimization mechanics test
+        - Terminal-Bench-specific constants remain in the example
+        - generic outcome/reward/trajectory/agent materialization code comes from leaven.x.harbor
+    evidence: []
+    closeout_check: The example passing with old local glue is insufficient.
+
+  - id: optional_dependency_and_spend_boundary
+    claim: Leaven core imports without Harbor and default tests do not spend.
+    status: pending
+    proof_required:
+      kind: import_and_default_test_suite
+      must_exercise:
+        - import leaven without importing Harbor
+        - actionable missing-Harbor error only at adapter execution boundary
+        - no default Docker/Codex/networked model calls
+        - no required full live Codex test with gpt-5.4-mini or any specific model
+    evidence: []
+    closeout_check: Live smoke cannot replace this boundary proof.
+
+proof_denominator:
+  required:
+    - local Harbor task fixture tests
+    - structured outcome encode/decode tests
+    - helper reward tests
+    - trajectory excerpt safety tests
+    - no-spend Harbor rollout mechanics test
+    - codex_terminal_bench adapter-refactor regression test
+    - import boundary test proving core leaven does not require Harbor
+  optional:
+    - live Harbor/Codex smoke with explicit approval
+  explicitly_not_required:
+    - full live Codex re-runs with gpt-5.4-mini
+    - Harbor Hub or registry integration
+
+explicit_non_goals:
+  - Harbor Hub/upload integration.
+  - Harbor registry publishing flow.
+  - Rust core dependency on Harbor.
+  - Claiming all Harbor agents emit ATIF.
+  - Default live Docker/Codex/model spend.
+  - Primary Rubric.harbor abstraction.
+  - Replacing Leaven's existing lv.optimize(... Environment(...)) composition model.
+
+decision:
+  status: set_goal
+  reason: >-
+    Darin greenlit the corrected interpretation after excluding full live
+    Codex/gpt-5.4-mini re-runs from the proof denominator. The spec and
+    handoff are sufficient for an implementation goal if closeout proves every
+    non-dropped acceptance item above.
