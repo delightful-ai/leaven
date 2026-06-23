@@ -1,4 +1,11 @@
-"""Harbor-backed Leaven rollout helpers."""
+"""Harbor-backed Leaven rollout helpers.
+
+`agent_kit(agent=...)` builds a function-backed `lv.Rollout` that evaluates an
+`AgentKitArtifact` by running one Harbor Trial of the chosen agent. The kit is
+injected through the agent's real configuration surface (see
+`leaven.x.harbor.agents`), selected by `placement`; the task working directory is
+an explicit `workdir` parameter, never a hardcoded `/app`.
+"""
 
 import json
 import os
@@ -15,44 +22,56 @@ from leaven.x.harbor._types import (
     HarborTrialOutcome,
     TokenEvidence,
 )
+from leaven.x.harbor.agents import resolve
 
-DEFAULT_CODEX_MODEL = "openai/gpt-5.4-mini"
 DEFAULT_TASK_KEY = "harbor_task"
-LEAVEN_CODEX_IMPORT_PATH = "leaven.x.harbor:LeavenCodex"
 
 
 @dataclass(frozen=True)
 class HarborTrialPlan:
     """Inputs needed to execute one Harbor trial for a materialized kit."""
 
-    agent_kit_dir: Path
+    agent: str
+    staging_dir: Path
     trials_dir: Path
     trial_name: str
     task_path: str
-    codex_model: str = DEFAULT_CODEX_MODEL
-    openai_api_key: str = ""
-    timeout_multiplier: float = 1.0
+    model: str
+    placement: str
     workdir: str = "/app"
+    git_url: str | None = None
+    git_commit_id: str | None = None
+    api_key: str = ""
+    api_key_env: str = "OPENAI_API_KEY"
+    timeout_multiplier: float = 1.0
 
 
 TrialRunner = Callable[[HarborTrialPlan], Awaitable[HarborTrialOutcome]]
 
 
-def codex_agent_kit(
+def agent_kit(
     *,
-    model: str = DEFAULT_CODEX_MODEL,
+    agent: str,
+    model: str | None = None,
+    placement: str | None = None,
     task_key: str = DEFAULT_TASK_KEY,
     trials_dir: str | Path = ".leaven/harbor-trials",
     workdir: str = "/app",
+    git_url: str | None = None,
+    git_commit_id: str | None = None,
     timeout_multiplier: float = 1.0,
-    openai_api_key_env: str = "OPENAI_API_KEY",
+    api_key_env: str | None = None,
     trial_runner: TrialRunner | None = None,
 ) -> lv.Rollout:
-    """Build a no-target Harbor Codex rollout for Leaven AgentKit artifacts."""
+    """Build a no-target Harbor rollout that evaluates an AgentKit with `agent`."""
+    adapter = resolve(agent)
+    resolved_model = model or adapter.default_model
+    resolved_placement = placement or adapter.default_placement
+    resolved_key_env = api_key_env or adapter.api_key_env
     runner = trial_runner or _run_live_harbor_trial
     trials_root = Path(trials_dir)
 
-    @lv.runner(id="leaven.x.harbor.rollout.codex_agent_kit")
+    @lv.runner(id="leaven.x.harbor.rollout.agent_kit")
     async def run(
         kit: lv.AgentKitArtifact,
         case: lv.InputCaseView,
@@ -62,16 +81,21 @@ def codex_agent_kit(
         task_path = _task_path_from_case(case, task_key=task_key)
         trials_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="leaven-harbor-kit-", dir=trials_root) as kit_tmp:
-            kit_dir = materialize_agent_kit(kit, Path(kit_tmp) / "kit")
+            staging = materialize_agent_kit(kit, Path(kit_tmp) / "kit")
             plan = HarborTrialPlan(
-                agent_kit_dir=kit_dir,
+                agent=adapter.key,
+                staging_dir=staging,
                 trials_dir=trials_root,
                 trial_name=_trial_name(case.id, kit.candidate_id),
                 task_path=task_path,
-                codex_model=model,
-                openai_api_key=os.environ.get(openai_api_key_env, ""),
-                timeout_multiplier=timeout_multiplier,
+                model=resolved_model,
+                placement=resolved_placement,
                 workdir=workdir,
+                git_url=git_url,
+                git_commit_id=git_commit_id,
+                api_key=os.environ.get(resolved_key_env, ""),
+                api_key_env=resolved_key_env,
+                timeout_multiplier=timeout_multiplier,
             )
             outcome = await runner(plan)
         return outcome.encode()
@@ -98,7 +122,6 @@ async def _run_live_harbor_trial(plan: HarborTrialPlan) -> HarborTrialOutcome:
     """Run a live Harbor Trial lazily so importing Leaven does not require Harbor."""
     try:
         from harbor.models.trial.config import (  # noqa: PLC0415
-            AgentConfig,
             EnvironmentConfig,
             TaskConfig,
             TrialConfig,
@@ -106,26 +129,39 @@ async def _run_live_harbor_trial(plan: HarborTrialPlan) -> HarborTrialOutcome:
         from harbor.trial.trial import Trial  # noqa: PLC0415
     except ImportError as exc:
         raise HarborAdapterError(
-            "Harbor is required to execute live Harbor rollouts; install the Harbor "
-            "adapter dependency or pass a trial_runner for deterministic tests"
+            "Harbor is required to execute live Harbor rollouts; install with "
+            "`pip install 'leaven[harbor]'` or pass `trial_runner=` for deterministic tests"
         ) from exc
 
+    adapter = resolve(plan.agent)
+    agent_config = adapter.agent_config(
+        model=plan.model,
+        placement=plan.placement,
+        workdir=plan.workdir,
+        staging_dir=plan.staging_dir,
+        api_key=plan.api_key,
+    )
     config = TrialConfig(
-        task=TaskConfig(path=Path(plan.task_path)),
+        task=_task_config(plan, TaskConfig),
         trial_name=plan.trial_name,
         trials_dir=plan.trials_dir,
         timeout_multiplier=plan.timeout_multiplier,
-        agent=AgentConfig(
-            import_path=LEAVEN_CODEX_IMPORT_PATH,
-            model_name=plan.codex_model,
-            kwargs={"agent_kit_dir": str(plan.agent_kit_dir), "workdir": plan.workdir},
-            env={"OPENAI_API_KEY": plan.openai_api_key},
-        ),
+        agent=agent_config,
         environment=EnvironmentConfig(),
     )
     trial = await Trial.create(config)
     result = await trial.run()
     return _outcome_from_result(result, trial_dir=plan.trials_dir / plan.trial_name)
+
+
+def _task_config(plan: HarborTrialPlan, task_config_cls: type) -> object:
+    if plan.git_url:
+        return task_config_cls(
+            git_url=plan.git_url,
+            git_commit_id=plan.git_commit_id,
+            path=Path(plan.task_path),
+        )
+    return task_config_cls(path=Path(plan.task_path))
 
 
 def _outcome_from_result(result: object, *, trial_dir: Path) -> HarborTrialOutcome:
@@ -184,10 +220,8 @@ def _exception_message(result: object) -> str | None:
 
 
 __all__ = [
-    "DEFAULT_CODEX_MODEL",
     "DEFAULT_TASK_KEY",
-    "LEAVEN_CODEX_IMPORT_PATH",
     "HarborTrialPlan",
     "TrialRunner",
-    "codex_agent_kit",
+    "agent_kit",
 ]

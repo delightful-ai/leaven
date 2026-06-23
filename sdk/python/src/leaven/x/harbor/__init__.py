@@ -52,22 +52,17 @@ def import_trial_result(path: str | Path) -> HarborTrialOutcome:
 
 
 def __getattr__(name: str) -> object:
-    if name in {"rewards", "rollout"}:
+    if name in {"agents", "rewards", "rollout"}:
         module = importlib.import_module(f"leaven.x.harbor.{name}")
         globals()[name] = module
         return module
-    if name in {"DEFAULT_WORKDIR", "SKILLS_SUBDIR", "LeavenCodex"}:
+    if name in {"LeavenClaudeCode", "LeavenCodex"}:
         from leaven.x.harbor._agent import (  # noqa: PLC0415
-            DEFAULT_WORKDIR,
-            SKILLS_SUBDIR,
+            LeavenClaudeCode,
             LeavenCodex,
         )
 
-        values = {
-            "DEFAULT_WORKDIR": DEFAULT_WORKDIR,
-            "SKILLS_SUBDIR": SKILLS_SUBDIR,
-            "LeavenCodex": LeavenCodex,
-        }
+        values = {"LeavenClaudeCode": LeavenClaudeCode, "LeavenCodex": LeavenCodex}
         return values[name]
     raise AttributeError(name)
 
@@ -77,6 +72,7 @@ __all__ = [
     "HarborAdapterError",
     "HarborTrialOutcome",
     "TokenEvidence",
+    "agents",
     "case_from_task_dir",
     "import_trial_result",
     "materialize_agent_kit",

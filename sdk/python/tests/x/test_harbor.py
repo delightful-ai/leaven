@@ -172,44 +172,93 @@ def test_trajectory_excerpt_degrades_cleanly_for_missing_or_malformed(tmp_path: 
         lv.x.harbor.trajectory_excerpt(malformed, strict=True)
 
 
-@pytest.mark.asyncio
-async def test_codex_agent_kit_rollout_uses_fake_trial_without_live_spend(tmp_path: Path) -> None:
-    """Cutoff: rollout materializes an AgentKit and returns encoded Harbor evidence."""
-    calls: list[lv.x.harbor.rollout.HarborTrialPlan] = []
+def test_agents_registry_describes_each_supported_agent() -> None:
+    """Law: each registered agent declares its scope defaults and config surface."""
+    codex = lv.x.harbor.agents.resolve("codex")
+    assert codex.default_placement == "repo"
+    assert codex.api_key_env == "OPENAI_API_KEY"
+    assert codex.repo_prompt_file == "AGENTS.md"
+    assert codex.repo_skills_subdir == ".agents/skills"
 
-    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
-        calls.append(plan)
-        assert (plan.agent_kit_dir / "AGENTS.md").read_text(encoding="utf-8") == "be careful"
-        assert (
-            plan.agent_kit_dir / "skills" / "regex" / "notes.md"
-        ).read_text(encoding="utf-8") == "test edge cases"
-        assert plan.task_path == "/harbor/task"
-        assert plan.workdir == "/workspace"
-        return lv.x.harbor.HarborTrialOutcome(
-            trial_dir=str(plan.trials_dir / plan.trial_name),
-            rewards={"reward": 1.0},
-            ctrf=lv.x.harbor.CtrfEvidence(passed=5, failed=0, total=5),
-        )
+    claude = lv.x.harbor.agents.resolve("claude-code")
+    assert claude.default_placement == "user"
+    assert claude.user_prompt_mode == "append_flag"
+    assert claude.api_key_env == "ANTHROPIC_API_KEY"
+    assert claude.repo_prompt_file == "CLAUDE.md"
+    assert claude.repo_skills_subdir == ".claude/skills"
 
-    rollout = lv.x.harbor.rollout.codex_agent_kit(
-        model="openai/fake",
-        trials_dir=tmp_path / "trials",
-        workdir="/workspace",
-        trial_runner=fake_trial,
-    )
-    case = lv.InputCaseView(
-        id="case/one",
-        input={"harbor_task": {"path": "/harbor/task", "kind": "local"}},
-    )
-    kit = lv.AgentKitArtifact(
+
+def test_unknown_agent_is_rejected_actionably() -> None:
+    """Boundary: an unsupported agent names the supported set, never silently fails."""
+    with pytest.raises(lv.x.harbor.HarborAdapterError, match="unknown Harbor agent"):
+        lv.x.harbor.rollout.agent_kit(agent="nonesuch")
+
+
+def _kit() -> lv.AgentKitArtifact:
+    return lv.AgentKitArtifact(
         system_prompt="be careful",
         skills=[lv.AgentKitSkill(path="regex/notes.md", content="test edge cases")],
     )
 
-    encoded = await rollout.stage.func(kit, case, None)  # type: ignore[union-attr,arg-type]
+
+def _case() -> lv.InputCaseView:
+    return lv.InputCaseView(
+        id="case/one",
+        input={"harbor_task": {"path": "/harbor/task", "kind": "local"}},
+    )
+
+
+@pytest.mark.asyncio
+async def test_agent_kit_claude_code_uses_user_placement_by_default(tmp_path: Path) -> None:
+    """Cutoff: a Claude Code rollout stages the kit for workdir-independent injection."""
+    calls: list[lv.x.harbor.rollout.HarborTrialPlan] = []
+
+    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
+        calls.append(plan)
+        assert plan.agent == "claude-code"
+        assert plan.placement == "user"
+        assert plan.api_key_env == "ANTHROPIC_API_KEY"
+        assert (plan.staging_dir / "AGENTS.md").read_text(encoding="utf-8") == "be careful"
+        assert (
+            plan.staging_dir / "skills" / "regex" / "notes.md"
+        ).read_text(encoding="utf-8") == "test edge cases"
+        return lv.x.harbor.HarborTrialOutcome(rewards={"reward": 1.0})
+
+    rollout = lv.x.harbor.rollout.agent_kit(
+        agent="claude-code",
+        model="anthropic/claude-sonnet-4-6",
+        trials_dir=tmp_path / "trials",
+        trial_runner=fake_trial,
+    )
+    encoded = await rollout.stage.func(_kit(), _case(), None)  # type: ignore[union-attr,arg-type]
 
     assert calls, "fake trial seam must be used"
     assert lv.x.harbor.HarborTrialOutcome.decode(encoded).rewards["reward"] == 1.0
+
+
+@pytest.mark.asyncio
+async def test_agent_kit_codex_repo_placement_uses_configurable_workdir(tmp_path: Path) -> None:
+    """Cutoff: Codex defaults to repo placement with an explicit workdir, never /app."""
+    calls: list[lv.x.harbor.rollout.HarborTrialPlan] = []
+
+    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
+        calls.append(plan)
+        return lv.x.harbor.HarborTrialOutcome(rewards={"reward": 0.0})
+
+    rollout = lv.x.harbor.rollout.agent_kit(
+        agent="codex",
+        model="openai/gpt-5.4-mini",
+        trials_dir=tmp_path / "trials",
+        workdir="/workspace",
+        trial_runner=fake_trial,
+    )
+    await rollout.stage.func(_kit(), _case(), None)  # type: ignore[union-attr,arg-type]
+
+    plan = calls[0]
+    assert plan.agent == "codex"
+    assert plan.placement == "repo"
+    assert plan.workdir == "/workspace"
+    assert plan.task_path == "/harbor/task"
 
 
 def test_import_leaven_does_not_import_harbor_dependency() -> None:
@@ -217,4 +266,6 @@ def test_import_leaven_does_not_import_harbor_dependency() -> None:
     sys.modules.pop("harbor", None)
 
     assert lv.x.harbor.__name__ == "leaven.x.harbor"
+    # Touching the registry and rollout builder must not import Harbor.
+    lv.x.harbor.agents.resolve("codex")
     assert "harbor" not in sys.modules
