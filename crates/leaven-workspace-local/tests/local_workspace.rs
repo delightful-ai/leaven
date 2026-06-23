@@ -454,7 +454,7 @@ fn local_workspace_write_reports_directory_creation_failure() {
 
 fn assert_symlink_error(error: leaven_workspace::WorkspaceError) {
     assert!(
-        matches!(error, leaven_workspace::WorkspaceError::Io(message) if message.contains("symlink")),
+        matches!(&error, leaven_workspace::WorkspaceError::Io(message) if message.contains("symlink")),
         "unexpected workspace error: {error:?}"
     );
 }
