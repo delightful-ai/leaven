@@ -453,10 +453,15 @@ fn local_workspace_write_reports_directory_creation_failure() {
 }
 
 fn assert_symlink_error(error: leaven_workspace::WorkspaceError) {
-    assert!(
-        matches!(&error, leaven_workspace::WorkspaceError::Io(message) if message.contains("symlink")),
-        "unexpected workspace error: {error:?}"
-    );
+    match error {
+        leaven_workspace::WorkspaceError::Io(message) => {
+            assert!(
+                message.contains("symlink"),
+                "unexpected io error: {message}"
+            );
+        }
+        other => panic!("unexpected workspace error: {other:?}"),
+    }
 }
 
 fn temp_parent(label: &str) -> std::path::PathBuf {
