@@ -29,6 +29,9 @@ path, command, factory, or cleanup contracts.
   `WorkspacePath`; do not expose host path order.
 - Executable-bit helpers are Unix-backed here and explicit unsupported behavior
   elsewhere. Keep feature/OS differences visible in this backend.
+- Host-path mapping refuses existing symlink components before local read,
+  write, list, executable-bit, command-cwd, and cleanup operations. Lexical
+  `WorkspacePath` validation is necessary but not sufficient for this backend.
 
 ## Route Away
 - Add or change path/command/factory vocabulary in `leaven-workspace`, then

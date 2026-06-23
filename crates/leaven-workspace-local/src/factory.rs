@@ -1,3 +1,4 @@
+use std::io::ErrorKind;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -58,7 +59,7 @@ struct LocalWorkspaceBackend {
 
 impl WorkspaceBackend for LocalWorkspaceBackend {
     fn write_file(&mut self, path: &WorkspacePath, bytes: &[u8]) -> Result<(), WorkspaceError> {
-        let path = self.host_path(path);
+        let path = self.checked_host_path(path)?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|err| WorkspaceError::Io(err.to_string()))?;
         }
@@ -66,11 +67,12 @@ impl WorkspaceBackend for LocalWorkspaceBackend {
     }
 
     fn read_file(&mut self, path: &WorkspacePath) -> Result<Vec<u8>, WorkspaceError> {
-        std::fs::read(self.host_path(path)).map_err(|err| WorkspaceError::Io(err.to_string()))
+        std::fs::read(self.checked_host_path(path)?)
+            .map_err(|err| WorkspaceError::Io(err.to_string()))
     }
 
     fn list_files(&mut self, path: &WorkspacePath) -> Result<Vec<WorkspacePath>, WorkspaceError> {
-        let root = self.host_path(path);
+        let root = self.checked_host_path(path)?;
         let mut files = Vec::new();
         collect_files(&root, path.clone(), &mut files)?;
         files.sort();
@@ -82,11 +84,11 @@ impl WorkspaceBackend for LocalWorkspaceBackend {
         path: &WorkspacePath,
         executable: bool,
     ) -> Result<(), WorkspaceError> {
-        set_host_executable(&self.host_path(path), executable)
+        set_host_executable(&self.checked_host_path(path)?, executable)
     }
 
     fn is_executable(&mut self, path: &WorkspacePath) -> Result<bool, WorkspaceError> {
-        is_host_executable(&self.host_path(path))
+        is_host_executable(&self.checked_host_path(path)?)
     }
 
     fn run_command(&mut self, command: Command) -> Result<CommandOutput, WorkspaceError> {
@@ -96,10 +98,13 @@ impl WorkspaceBackend for LocalWorkspaceBackend {
             });
         }
 
-        let cwd = command
-            .cwd
-            .as_ref()
-            .map_or_else(|| self.root.clone(), |path| self.host_path(path));
+        let cwd = command.cwd.as_ref().map_or_else(
+            || {
+                reject_symlink(&self.root, "workspace root")?;
+                Ok(self.root.clone())
+            },
+            |path| self.checked_host_path(path),
+        )?;
 
         let start = Instant::now();
         let mut process = std::process::Command::new(&command.program);
@@ -142,9 +147,17 @@ impl WorkspaceBackend for LocalWorkspaceBackend {
 
     fn cleanup(self: Box<Self>) -> BoxFuture<'static, Result<(), WorkspaceError>> {
         async move {
-            if self.root.exists() {
-                std::fs::remove_dir_all(&self.root)
-                    .map_err(|err| WorkspaceError::Cleanup(err.to_string()))?;
+            match std::fs::symlink_metadata(&self.root) {
+                Ok(metadata) if metadata.file_type().is_symlink() || metadata.is_file() => {
+                    std::fs::remove_file(&self.root)
+                        .map_err(|err| WorkspaceError::Cleanup(err.to_string()))?;
+                }
+                Ok(_) => {
+                    std::fs::remove_dir_all(&self.root)
+                        .map_err(|err| WorkspaceError::Cleanup(err.to_string()))?;
+                }
+                Err(err) if err.kind() == ErrorKind::NotFound => {}
+                Err(err) => return Err(WorkspaceError::Cleanup(err.to_string())),
             }
             Ok(())
         }
@@ -193,9 +206,33 @@ fn wait_for_output(
 }
 
 impl LocalWorkspaceBackend {
-    fn host_path(&self, path: &WorkspacePath) -> PathBuf {
-        self.root.join(path.to_host_relative())
+    fn checked_host_path(&self, path: &WorkspacePath) -> Result<PathBuf, WorkspaceError> {
+        reject_symlink(&self.root, "workspace root")?;
+        let relative = path.to_host_relative();
+        let mut current = self.root.clone();
+        for component in relative.components() {
+            current.push(component.as_os_str());
+            match std::fs::symlink_metadata(&current) {
+                Ok(_) => reject_symlink(&current, path.as_str())?,
+                Err(err) if err.kind() == ErrorKind::NotFound => break,
+                Err(err) => return Err(WorkspaceError::Io(err.to_string())),
+            }
+        }
+        Ok(self.root.join(relative))
     }
+}
+
+fn reject_symlink(path: &Path, workspace_path: &str) -> Result<(), WorkspaceError> {
+    if std::fs::symlink_metadata(path)
+        .map_err(|err| WorkspaceError::Io(err.to_string()))?
+        .file_type()
+        .is_symlink()
+    {
+        return Err(WorkspaceError::Io(format!(
+            "workspace path contains symlink: {workspace_path}"
+        )));
+    }
+    Ok(())
 }
 
 fn collect_files(
@@ -204,7 +241,13 @@ fn collect_files(
     files: &mut Vec<WorkspacePath>,
 ) -> Result<(), WorkspaceError> {
     let metadata =
-        std::fs::metadata(host_path).map_err(|err| WorkspaceError::Io(err.to_string()))?;
+        std::fs::symlink_metadata(host_path).map_err(|err| WorkspaceError::Io(err.to_string()))?;
+    if metadata.file_type().is_symlink() {
+        return Err(WorkspaceError::Io(format!(
+            "workspace path contains symlink: {}",
+            workspace_path.as_str()
+        )));
+    }
     if metadata.is_file() {
         files.push(workspace_path);
         return Ok(());
