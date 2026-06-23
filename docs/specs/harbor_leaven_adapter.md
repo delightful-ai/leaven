@@ -72,7 +72,8 @@ task = lv.x.harbor.task("./harbor-task", split="train")
 
 environment = lv.Environment(
     task=task,
-    rollout=lv.x.harbor.rollout.codex_agent_kit(
+    rollout=lv.x.harbor.rollout.agent_kit(
+        agent="codex",  # or "claude-code", or an import_path
         model="openai/gpt-5.4",
         trials_dir=".leaven/harbor-trials",
     ),
@@ -113,7 +114,11 @@ leaven.x.harbor
   trajectory_excerpt(path, *, max_steps=4, strict=False) -> str
 
 leaven.x.harbor.rollout
-  codex_agent_kit(...) -> lv.Rollout
+  agent_kit(*, agent, model, placement="user", workdir="/app", ...) -> lv.Rollout
+
+leaven.x.harbor.agents
+  AGENTS: dict[str, HarborAgentAdapter]   # "codex", "claude-code"
+  resolve(agent) -> HarborAgentAdapter    # by name or import_path
 
 leaven.x.harbor.rewards
   map_key(key, *, weight=1.0, id=None) -> lv.RegisteredReward
@@ -173,29 +178,43 @@ Laws:
 
 ## 5. AgentKit Materialization
 
-For Codex-backed Harbor rollouts:
+A kit (`system_prompt` + `skills`) is injected through the chosen agent's real
+configuration surface, selected by `placement`. `/app` is no longer assumed: it
+is one task image's working directory, not an agent or Harbor fact, so it is only
+used as the explicit, overridable `workdir` default for `placement="repo"`.
+
+`placement="user"` (default, workdir-independent):
 
 ```text
-AgentKitArtifact.system_prompt -> <workdir>/AGENTS.md
-AgentKitArtifact.skills        -> <workdir>/.agents/skills/<path>
+Claude Code: system_prompt -> --append-system-prompt (Harbor CliFlag)
+             skills        -> AgentConfig.skills -> $CLAUDE_CONFIG_DIR/skills/
+Codex:       system_prompt -> $CODEX_HOME/AGENTS.md (appended global context)
+             skills        -> AgentConfig.skills -> $HOME/.agents/skills/
 ```
 
-The current proof assumes `/app`; adapter workdir must be configurable because
-not all Harbor tasks will use the same workdir.
+`placement="repo"` (materialize into the task `workdir`):
 
-This seam is deliberately Codex-kit-specific. A future Harbor agent adapter may
-support other candidate artifacts, but the first supported artifact is
-`AgentKitArtifact` because that is what the repo has proven.
+```text
+Claude Code: <workdir>/CLAUDE.md + <workdir>/.claude/skills/<n>/SKILL.md
+Codex:       <workdir>/AGENTS.md + <workdir>/.agents/skills/<path>
+```
+
+The supported candidate artifact is `AgentKitArtifact`; the supported agents are
+named in `leaven.x.harbor.agents.AGENTS` (`codex`, `claude-code`) or any Harbor
+agent reachable by import_path. Each agent contributes only a small
+system-prompt installer; skills are uniform via `AgentConfig.skills` for user
+scope. See `docs/plans/2026-06-22-harbor-agent-adapter-generalization.md`.
 
 ## 6. Rollout Semantics
 
-`lv.x.harbor.rollout.codex_agent_kit(...)` returns an `lv.Rollout` that is
+`lv.x.harbor.rollout.agent_kit(agent=..., ...)` returns an `lv.Rollout` that is
 function-backed in the current SDK:
 
 ```text
 AgentKitArtifact + InputCaseView
-  -> materialize kit
-  -> build Harbor TrialConfig
+  -> resolve agent adapter (agents.resolve)
+  -> materialize kit per placement
+  -> build Harbor TrialConfig via the adapter
   -> run one Harbor Trial
   -> return encoded HarborTrialOutcome string
 ```
@@ -207,11 +226,13 @@ truth inside the trial.
 Rollout configuration should include at least:
 
 ```python
-codex_agent_kit(
-    model="<configured-codex-model>",
+agent_kit(
+    agent="codex",                 # or "claude-code", or an import_path
+    model="<configured-model>",
+    placement="user",              # "user" (workdir-independent) | "repo"
     task_key="harbor_task",
     trials_dir=".leaven/harbor-trials",
-    workdir="/app",
+    workdir="/app",                # explicit; only used for placement="repo"
     timeout_multiplier=1.0,
 )
 ```
