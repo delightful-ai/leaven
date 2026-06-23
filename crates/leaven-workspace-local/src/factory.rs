@@ -1,3 +1,4 @@
+use std::future::{Future, ready};
 use std::io::ErrorKind;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -43,14 +44,21 @@ impl Default for LocalWorkspaceFactory {
 }
 
 impl WorkspaceFactory for LocalWorkspaceFactory {
-    async fn allocate(&self, _config: WorkspaceConfig) -> Result<Workspace, FactoryError> {
-        let root = self.root.join(format!("leaven-{}", RunId::new()));
-        std::fs::create_dir_all(&root).map_err(|err| FactoryError::Allocate(err.to_string()))?;
-        Ok(Workspace::new(
-            root.clone(),
-            Box::new(LocalWorkspaceBackend { root }),
-        ))
+    fn allocate(
+        &self,
+        _config: WorkspaceConfig,
+    ) -> impl Future<Output = Result<Workspace, FactoryError>> + Send + '_ {
+        ready(allocate_local_workspace(&self.root))
     }
+}
+
+fn allocate_local_workspace(parent: &Path) -> Result<Workspace, FactoryError> {
+    let root = parent.join(format!("leaven-{}", RunId::new()));
+    std::fs::create_dir_all(&root).map_err(|err| FactoryError::Allocate(err.to_string()))?;
+    Ok(Workspace::new(
+        root.clone(),
+        Box::new(LocalWorkspaceBackend { root }),
+    ))
 }
 
 struct LocalWorkspaceBackend {
