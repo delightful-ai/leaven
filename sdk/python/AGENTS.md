@@ -75,6 +75,15 @@ or examples, but they are not yet engine-supplied `cx.agent` / `cx.lm` values
 inside `lv.optimize(...).run()`. Do not claim this as full Python stage-context
 execution until the engine creates those bound contexts during stage dispatch.
 
+#### 4. Generic Harbor AgentKit adapter
+
+`lv.x.harbor.rollout.agent_kit(...)` can run a materialized
+`AgentKitArtifact` through Harbor agents. Codex supports repo and user
+placement. Claude Code uses repo placement by default: `CLAUDE.md` plus
+`.claude/skills` in the task workdir. Claude Code user placement is refused
+until Harbor quotes `--append-system-prompt` safely; the unquoted flag path can
+split multiword prompts and replace the real task instruction.
+
 The binary is resolved via `LEAVEN_BIN`, else `target/{debug,release}/leaven`
 under the repo root (`LEAVEN_REPO_ROOT` override). Build it with
 `cargo build -p leaven-cli`. The repo-root walk uses the topology-contract marker

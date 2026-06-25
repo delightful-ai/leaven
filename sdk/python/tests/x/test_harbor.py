@@ -181,8 +181,8 @@ def test_agents_registry_describes_each_supported_agent() -> None:
     assert codex.repo_skills_subdir == ".agents/skills"
 
     claude = lv.x.harbor.agents.resolve("claude-code")
-    assert claude.default_placement == "user"
-    assert claude.user_prompt_mode == "append_flag"
+    assert claude.default_placement == "repo"
+    assert claude.user_prompt_mode == "unsupported_append_flag"
     assert claude.api_key_env == "ANTHROPIC_API_KEY"
     assert claude.repo_prompt_file == "CLAUDE.md"
     assert claude.repo_skills_subdir == ".claude/skills"
@@ -209,14 +209,14 @@ def _case() -> lv.InputCaseView:
 
 
 @pytest.mark.asyncio
-async def test_agent_kit_claude_code_uses_user_placement_by_default(tmp_path: Path) -> None:
-    """Cutoff: a Claude Code rollout stages the kit for workdir-independent injection."""
+async def test_agent_kit_claude_code_uses_repo_placement_by_default(tmp_path: Path) -> None:
+    """Cutoff: Claude Code stages the kit in-repo because append flag quoting is unsafe."""
     calls: list[lv.x.harbor.rollout.HarborTrialPlan] = []
 
     async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
         calls.append(plan)
         assert plan.agent == "claude-code"
-        assert plan.placement == "user"
+        assert plan.placement == "repo"
         assert plan.api_key_env == "ANTHROPIC_API_KEY"
         assert (plan.staging_dir / "AGENTS.md").read_text(encoding="utf-8") == "be careful"
         assert (
@@ -234,6 +234,12 @@ async def test_agent_kit_claude_code_uses_user_placement_by_default(tmp_path: Pa
 
     assert calls, "fake trial seam must be used"
     assert lv.x.harbor.HarborTrialOutcome.decode(encoded).rewards["reward"] == 1.0
+
+
+def test_agent_kit_claude_code_refuses_user_placement_until_harbor_quotes_it() -> None:
+    """Boundary: the known-broken append-system-prompt path fails before Docker."""
+    with pytest.raises(lv.x.harbor.HarborAdapterError, match="Use placement='repo'"):
+        lv.x.harbor.rollout.agent_kit(agent="claude-code", placement="user")
 
 
 @pytest.mark.asyncio
@@ -259,6 +265,29 @@ async def test_agent_kit_codex_repo_placement_uses_configurable_workdir(tmp_path
     assert plan.placement == "repo"
     assert plan.workdir == "/workspace"
     assert plan.task_path == "/harbor/task"
+
+
+@pytest.mark.asyncio
+async def test_agent_kit_passes_extra_agent_env_for_live_auth(tmp_path: Path) -> None:
+    """Law: live auth env can ride through Harbor without becoming API-key glue."""
+    calls: list[lv.x.harbor.rollout.HarborTrialPlan] = []
+    oauth_env = {"CLAUDE_FORCE_OAUTH": "1", "CLAUDE_CODE_OAUTH_TOKEN": "token-test"}
+
+    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
+        calls.append(plan)
+        return lv.x.harbor.HarborTrialOutcome(rewards={"reward": 1.0})
+
+    rollout = lv.x.harbor.rollout.agent_kit(
+        agent="claude-code",
+        trials_dir=tmp_path / "trials",
+        agent_env=oauth_env,
+        trial_runner=fake_trial,
+    )
+    await rollout.stage.func(_kit(), _case(), None)  # type: ignore[union-attr,arg-type]
+
+    assert calls[0].api_key_env == "ANTHROPIC_API_KEY"
+    assert calls[0].api_key == ""
+    assert calls[0].agent_env == oauth_env
 
 
 def test_import_leaven_does_not_import_harbor_dependency() -> None:

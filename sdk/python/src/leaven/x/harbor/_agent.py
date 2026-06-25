@@ -8,8 +8,8 @@ These cover the cases that need agent-side behavior beyond a plain
 - Codex user-scope: write the kit's system prompt to ``$CODEX_HOME/AGENTS.md``
   (read as global, workdir-independent appended context).
 
-Claude Code user-scope needs no subclass: ``--append-system-prompt`` plus
-``AgentConfig.skills`` is pure configuration.
+Claude Code user-scope is deliberately disabled in ``agents.py`` until Harbor
+quotes ``--append-system-prompt`` safely.
 """
 
 from pathlib import Path, PurePosixPath
@@ -112,9 +112,8 @@ class LeavenCodex(_LeavenKitMixin, Codex):
 class LeavenClaudeCode(_LeavenKitMixin, ClaudeCode):
     """A Harbor Claude Code agent that injects a repo-scope Leaven AgentKit.
 
-    User-scope Claude Code needs no subclass (``--append-system-prompt`` plus
-    ``AgentConfig.skills``); this subclass exists for ``placement="repo"``, which
-    materializes the kit as ``<workdir>/CLAUDE.md`` and project skills.
+    This subclass exists for ``placement="repo"``, which materializes the kit as
+    ``<workdir>/CLAUDE.md`` and project skills.
     """
 
     def __init__(

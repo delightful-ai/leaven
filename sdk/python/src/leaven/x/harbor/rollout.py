@@ -43,6 +43,7 @@ class HarborTrialPlan:
     git_commit_id: str | None = None
     api_key: str = ""
     api_key_env: str = "OPENAI_API_KEY"
+    agent_env: dict[str, str] | None = None
     timeout_multiplier: float = 1.0
 
 
@@ -61,6 +62,7 @@ def agent_kit(
     git_commit_id: str | None = None,
     timeout_multiplier: float = 1.0,
     api_key_env: str | None = None,
+    agent_env: dict[str, str] | None = None,
     trial_runner: TrialRunner | None = None,
 ) -> lv.Rollout:
     """Build a no-target Harbor rollout that evaluates an AgentKit with `agent`."""
@@ -68,6 +70,12 @@ def agent_kit(
     resolved_model = model or adapter.default_model
     resolved_placement = placement or adapter.default_placement
     resolved_key_env = api_key_env or adapter.api_key_env
+    if resolved_placement == "user" and adapter.user_prompt_mode == "unsupported_append_flag":
+        raise HarborAdapterError(
+            f"{adapter.key} user placement is disabled: Harbor renders "
+            "--append-system-prompt without shell quoting, so multiword kit prompts "
+            "can replace the task instruction. Use placement='repo'."
+        )
     runner = trial_runner or _run_live_harbor_trial
     trials_root = Path(trials_dir)
 
@@ -95,6 +103,7 @@ def agent_kit(
                 git_commit_id=git_commit_id,
                 api_key=os.environ.get(resolved_key_env, ""),
                 api_key_env=resolved_key_env,
+                agent_env=agent_env,
                 timeout_multiplier=timeout_multiplier,
             )
             outcome = await runner(plan)
@@ -140,6 +149,7 @@ async def _run_live_harbor_trial(plan: HarborTrialPlan) -> HarborTrialOutcome:
         workdir=plan.workdir,
         staging_dir=plan.staging_dir,
         api_key=plan.api_key,
+        agent_env=plan.agent_env,
     )
     config = TrialConfig(
         task=_task_config(plan, TaskConfig),

@@ -3,14 +3,16 @@
 Each `HarborAgentAdapter` knows how to project a staged AgentKit (system prompt +
 skills) into a Harbor `AgentConfig` for a chosen `placement`:
 
-- ``placement="user"`` is workdir-independent. Claude Code appends the system
-  prompt via ``--append-system-prompt`` and takes skills via ``AgentConfig.skills``
-  (Harbor installs them to ``$CLAUDE_CONFIG_DIR/skills``). Codex writes the system
-  prompt to ``$CODEX_HOME/AGENTS.md`` (read as global appended context) and takes
-  skills via ``AgentConfig.skills`` (``$HOME/.agents/skills``).
+- ``placement="user"`` is workdir-independent for Codex: the adapter writes the
+  system prompt to ``$CODEX_HOME/AGENTS.md`` (read as global appended context)
+  and takes skills via ``AgentConfig.skills`` (``$HOME/.agents/skills``).
 - ``placement="repo"`` materializes the kit into the task ``workdir``: Codex reads
   ``<workdir>/AGENTS.md`` + ``<workdir>/.agents/skills`` (scanned cwd→repo root),
   Claude Code reads ``<workdir>/CLAUDE.md`` + ``<workdir>/.claude/skills``.
+
+Claude Code user placement is refused until Harbor quotes
+``--append-system-prompt`` values safely; otherwise multiword prompts are split
+by the shell before the real task instruction.
 
 Harbor itself is imported lazily inside :meth:`HarborAgentAdapter.agent_config`,
 so importing this module (and ``leaven``) never requires Harbor.
@@ -20,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from leaven.x.harbor._kit import staged_prompt, staged_skill_paths
+from leaven.x.harbor._kit import staged_skill_paths
 from leaven.x.harbor._types import HarborAdapterError
 
 if TYPE_CHECKING:
@@ -41,7 +43,7 @@ class HarborAgentAdapter:
     repo_skills_subdir: str
     default_model: str
     api_key_env: str
-    user_prompt_mode: str  # "append_flag" | "codex_home"
+    user_prompt_mode: str  # "unsupported_append_flag" | "codex_home"
     default_placement: str  # "user" | "repo"
 
     def agent_config(
@@ -52,11 +54,14 @@ class HarborAgentAdapter:
         workdir: str,
         staging_dir: Path,
         api_key: str,
+        agent_env: dict[str, str] | None = None,
     ) -> "AgentConfig":
         """Build the Harbor ``AgentConfig`` that injects the staged kit."""
         from harbor.models.trial.config import AgentConfig  # noqa: PLC0415
 
         env = {self.api_key_env: api_key} if api_key else {}
+        if agent_env:
+            env.update(agent_env)
 
         if placement == "repo":
             return AgentConfig(
@@ -73,14 +78,11 @@ class HarborAgentAdapter:
             )
 
         skills = staged_skill_paths(staging_dir)
-        if self.user_prompt_mode == "append_flag":
-            # Claude Code: pure config, no Leaven subclass needed.
-            return AgentConfig(
-                name=self.harbor_name,
-                model_name=model,
-                skills=skills,
-                kwargs={"append_system_prompt": staged_prompt(staging_dir)},
-                env=env,
+        if self.user_prompt_mode == "unsupported_append_flag":
+            raise HarborAdapterError(
+                f"{self.key} user placement is disabled: Harbor renders "
+                "--append-system-prompt without shell quoting, so multiword kit prompts "
+                "can replace the task instruction. Use placement='repo'."
             )
 
         # Codex user scope: the subclass writes $CODEX_HOME/AGENTS.md.
@@ -113,8 +115,8 @@ AGENTS: dict[str, HarborAgentAdapter] = {
         repo_skills_subdir=".claude/skills",
         default_model="anthropic/claude-sonnet-4-6",
         api_key_env="ANTHROPIC_API_KEY",
-        user_prompt_mode="append_flag",
-        default_placement="user",
+        user_prompt_mode="unsupported_append_flag",
+        default_placement="repo",
     ),
 }
 
