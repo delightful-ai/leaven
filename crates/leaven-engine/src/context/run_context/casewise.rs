@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use leaven_core::{
-    AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest, EvaluationSet,
-    OptimizationProblem, ResolvedEvaluationRequest,
+    Assessment, AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest,
+    EvaluationSet, OptimizationProblem, ResolvedEvaluationRequest,
 };
 use leaven_kernel::{AssessmentId, CandidateId, CaseId, Cost, ErrorKind, EvaluatorId, StageId};
 
@@ -216,9 +216,6 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
             granularity: request_granularity(&request),
             purpose: request_purpose(&request),
         };
-        let batch_policy = evaluator.cache_policy(&resolved_request);
-        let batch_cache_key =
-            self.evaluation_cache_key(evaluator.fingerprint(), batch_policy, &resolved_request);
         let request_id = self.record_evaluation_request(
             evaluator_id,
             request,
@@ -238,15 +235,8 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
                 return Err(RunContextError::Evaluation(error));
             }
         };
-        let report = self.complete_evaluation(
-            evaluator_id,
-            request_id,
-            &resolved_request,
-            batch_cache_key,
-            metered,
-        )?;
-        let cost = report.cost.clone();
-        let mut by_case = self.casewise_batch_rows_by_case(&report.assessment_ids)?;
+        let cost = metered.cost.clone();
+        let mut by_case = casewise_batch_assessments_by_case(metered.value, candidate)?;
         // Reject batches with rows for cases that were not requested *before*
         // touching the cache: those rows are pure noise from a misbehaving
         // evaluator, and caching the in-set siblings of a poisoned batch would
@@ -257,56 +247,106 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
                 "casewise batch returned rows outside requested cases".to_owned(),
             )));
         }
+        let mut ordered = Vec::with_capacity(missing.len());
+        let mut cache_status = CacheStatus::Bypassed(CacheBypassReason::CacheUnavailable);
         for miss in missing {
             let assessment = pop_casewise_batch_assessment(&mut by_case, miss.case)?;
-            if let Ok(cache_key) = miss.cache_key
-                && let Some(cache) = self.cache.as_mut()
-            {
-                cache.insert(cache_key, vec![assessment]);
+            match &miss.cache_key {
+                Ok(_) => cache_status = CacheStatus::Miss,
+                Err(reason) if !matches!(cache_status, CacheStatus::Miss) => {
+                    cache_status = CacheStatus::Bypassed(*reason);
+                }
+                Err(_) => {}
             }
-            rows.push((miss.index, vec![assessment]));
+            ordered.push((miss.index, miss.cache_key, assessment));
         }
         // Duplicate detection: any leftover rows after popping one per `miss`
         // indicate the evaluator returned more rows than requested for a case.
-        // The in-set rows already in cache are still legitimate evaluations,
-        // but the evaluator misbehaved — surface it.
+        // Refuse the whole batch before recording any row: partial cache writes
+        // make later requests treat a failed evaluator response as legitimate.
         if by_case.values().any(|assessments| !assessments.is_empty()) {
             return Err(RunContextError::Evaluation(EvaluationError::Message(
                 "casewise batch returned duplicate rows for requested cases".to_owned(),
             )));
         }
-        if self.cache.is_some() {
+        let mut cache_rows = Vec::with_capacity(ordered.len());
+        let mut assessments_to_record = Vec::with_capacity(ordered.len());
+        for (index, cache_key, assessment) in ordered {
+            cache_rows.push((index, cache_key));
+            assessments_to_record.push(assessment);
+        }
+        self.charge(StageId::from_evaluator(evaluator_id.clone()), cost.clone())?;
+        let assessment_ids =
+            self.record_assessments(request_id, evaluator_id, assessments_to_record)?;
+        let inserted_cache_rows = self.cache.is_some() && cache_status == CacheStatus::Miss;
+        let mut report_assessment_ids = Vec::with_capacity(assessment_ids.len());
+        for ((index, cache_key), assessment) in
+            cache_rows.into_iter().zip(assessment_ids.into_iter())
+        {
+            if let Ok(cache_key) = cache_key
+                && let Some(cache) = self.cache.as_mut()
+            {
+                cache.insert(cache_key, vec![assessment]);
+            }
+            rows.push((index, vec![assessment]));
+            report_assessment_ids.push(assessment);
+        }
+        if inserted_cache_rows {
             self.checkpoint()?;
         }
+        let report = EvaluationReport {
+            request_id,
+            resolved_set: resolved_request.set.id,
+            assessment_ids: report_assessment_ids,
+            cost: cost.clone(),
+            cache: if self.cache.is_some() {
+                cache_status
+            } else {
+                CacheStatus::Bypassed(CacheBypassReason::CacheUnavailable)
+            },
+        };
+        self.emit_evaluation_completed(evaluator_id, &report);
         Ok(cost)
-    }
-
-    fn casewise_batch_rows_by_case(
-        &self,
-        assessments: &[AssessmentId],
-    ) -> Result<BTreeMap<CaseId, VecDeque<AssessmentId>>, RunContextError> {
-        let mut by_case = BTreeMap::<CaseId, VecDeque<AssessmentId>>::new();
-        for assessment in assessments {
-            let assessment_view = self.graph().assessment(*assessment).ok_or_else(|| {
-                RunContextError::Evaluation(EvaluationError::Message(format!(
-                    "casewise batch assessment `{assessment}` is missing from graph"
-                )))
-            })?;
-            let AssessmentTarget::Case { case, .. } = assessment_view.target() else {
-                return Err(RunContextError::Evaluation(EvaluationError::Message(
-                    "casewise batch expected case-targeted assessments".to_owned(),
-                )));
-            };
-            by_case.entry(*case).or_default().push_back(*assessment);
-        }
-        Ok(by_case)
     }
 }
 
-fn pop_casewise_batch_assessment(
-    by_case: &mut BTreeMap<CaseId, VecDeque<AssessmentId>>,
+fn casewise_batch_assessments_by_case<P: OptimizationProblem>(
+    assessments: Vec<Assessment<P>>,
+    candidate: CandidateId,
+) -> Result<BTreeMap<CaseId, VecDeque<Assessment<P>>>, RunContextError> {
+    let mut by_case = BTreeMap::<CaseId, VecDeque<Assessment<P>>>::new();
+    for assessment in assessments {
+        let (row_candidate, case) = match &assessment {
+            Assessment::Independent {
+                candidate,
+                target: AssessmentTarget::Case { case, .. },
+                ..
+            } => (*candidate, *case),
+            Assessment::Independent { .. } => {
+                return Err(RunContextError::Evaluation(EvaluationError::Message(
+                    "casewise batch expected case-targeted assessments".to_owned(),
+                )));
+            }
+            Assessment::Pairwise { .. } | Assessment::Listwise { .. } => {
+                return Err(RunContextError::Evaluation(EvaluationError::Message(
+                    "casewise batch expected independent assessments".to_owned(),
+                )));
+            }
+        };
+        if row_candidate != candidate {
+            return Err(RunContextError::Evaluation(EvaluationError::Message(
+                "casewise batch returned rows for the wrong candidate".to_owned(),
+            )));
+        }
+        by_case.entry(case).or_default().push_back(assessment);
+    }
+    Ok(by_case)
+}
+
+fn pop_casewise_batch_assessment<P: OptimizationProblem>(
+    by_case: &mut BTreeMap<CaseId, VecDeque<Assessment<P>>>,
     case: CaseId,
-) -> Result<AssessmentId, RunContextError> {
+) -> Result<Assessment<P>, RunContextError> {
     by_case
         .get_mut(&case)
         .and_then(VecDeque::pop_front)
