@@ -312,6 +312,67 @@ fn registered_casewise_batch_requires_case_targets() {
         let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
 
         assert_eq!(result.best, Some(seed));
+        assert_no_casewise_assessment_residue(&engine);
+    });
+}
+
+#[test]
+fn registered_casewise_batch_requires_the_requested_candidate() {
+    block_on(async {
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let cases = CaseSet::new(vec!["case"]);
+        let mut engine = optimize::<TestProblem>()
+            .budget(Budget::metric_calls(10))
+            .evaluator(CasewiseRegisteredEvaluator {
+                behavior: CasewiseBehavior::WrongCandidate,
+                ..CasewiseRegisteredEvaluator::good()
+            })
+            .build();
+        let seed = engine
+            .insert_seed(TextArtifact("seed".to_owned()), 0)
+            .unwrap();
+        let mut optimizer = CasewiseErrorOptimizer {
+            seed,
+            set: EvaluationSet::All,
+            expected: CasewiseExpectedError::Evaluation(
+                "casewise batch returned assessment for the wrong candidate",
+            ),
+        };
+
+        let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
+
+        assert_eq!(result.best, Some(seed));
+        assert_no_casewise_assessment_residue(&engine);
+    });
+}
+
+#[test]
+fn registered_casewise_batch_requires_the_resolved_set() {
+    block_on(async {
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let cases = CaseSet::new(vec!["case"]);
+        let mut engine = optimize::<TestProblem>()
+            .budget(Budget::metric_calls(10))
+            .evaluator(CasewiseRegisteredEvaluator {
+                behavior: CasewiseBehavior::WrongEvaluationSet,
+                ..CasewiseRegisteredEvaluator::good()
+            })
+            .build();
+        let seed = engine
+            .insert_seed(TextArtifact("seed".to_owned()), 0)
+            .unwrap();
+        let mut optimizer = CasewiseErrorOptimizer {
+            seed,
+            set: EvaluationSet::All,
+            expected: CasewiseExpectedError::Evaluation(
+                "casewise batch returned assessment for the wrong evaluation set",
+            ),
+        };
+
+        let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
+
+        assert_eq!(result.best, Some(seed));
+        assert_no_casewise_assessment_residue(&engine);
     });
 }
 
@@ -339,6 +400,7 @@ fn registered_casewise_batch_requires_every_requested_case() {
         let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
 
         assert_eq!(result.best, Some(seed));
+        assert_no_casewise_assessment_residue(&engine);
     });
 }
 
@@ -368,6 +430,7 @@ fn registered_casewise_batch_rejects_rows_outside_requested_cases() {
         let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
 
         assert_eq!(result.best, Some(seed));
+        assert_no_casewise_assessment_residue(&engine);
     });
 }
 
@@ -397,6 +460,7 @@ fn registered_casewise_batch_rejects_duplicate_rows_for_requested_cases() {
         let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
 
         assert_eq!(result.best, Some(seed));
+        assert_no_casewise_assessment_residue(&engine);
     });
 }
 
@@ -627,6 +691,16 @@ impl CasewiseExpectedError {
     }
 }
 
+fn assert_no_casewise_assessment_residue(engine: &leaven_engine::Engine<TestProblem>) {
+    assert_eq!(engine.view().assessment_count(), 0);
+    assert!(
+        !engine
+            .view()
+            .events()
+            .any(|event| matches!(event, RunEvent::EvaluationCompleted { .. }))
+    );
+}
+
 struct FailingRegisteredEvaluation {
     seed: CandidateId,
 }
@@ -812,6 +886,8 @@ enum CasewiseBehavior {
     Good,
     Fails,
     UnscopedTarget,
+    WrongCandidate,
+    WrongEvaluationSet,
     MissingLastCase,
     ExtraCaseRows,
     DuplicateFirstCase,
@@ -875,11 +951,20 @@ impl Evaluator<TestProblem> for CasewiseRegisteredEvaluator {
         {
             cases.push(first);
         }
-        let set = EvaluationSetId::from_uuid(request.set.id.as_uuid());
+        let set = if matches!(self.behavior, CasewiseBehavior::WrongEvaluationSet) {
+            EvaluationSetId::new()
+        } else {
+            EvaluationSetId::from_uuid(request.set.id.as_uuid())
+        };
+        let candidate = if matches!(self.behavior, CasewiseBehavior::WrongCandidate) {
+            CandidateId::new()
+        } else {
+            candidates[0]
+        };
         let assessments = cases
             .into_iter()
             .map(|case| Assessment::Independent {
-                candidate: candidates[0],
+                candidate,
                 target: self.casewise_target(set, case),
                 evidence: TestEvidence { score: 6.0 },
                 cost: Cost::metric_calls(1),
