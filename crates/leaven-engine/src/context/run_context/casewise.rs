@@ -1,10 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use leaven_core::{
-    AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest, EvaluationSet,
-    OptimizationProblem, ResolvedEvaluationRequest,
+    Assessment, AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest,
+    EvaluationSet, OptimizationProblem, ResolvedEvaluationRequest,
 };
-use leaven_kernel::{AssessmentId, CandidateId, CaseId, Cost, ErrorKind, EvaluatorId, StageId};
+use leaven_kernel::{
+    AssessmentId, CandidateId, CaseId, Cost, ErrorKind, EvaluationSetId, EvaluatorId, StageId,
+};
 
 use crate::{
     CacheBypassReason, CacheStatus, CasewiseEvaluationReport, DynEvaluator, ErrorPolicy,
@@ -238,6 +240,12 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
                 return Err(RunContextError::Evaluation(error));
             }
         };
+        validate_casewise_batch_assessments(
+            &metered.value,
+            candidate,
+            &resolved_request,
+            &missing,
+        )?;
         let report = self.complete_evaluation(
             evaluator_id,
             request_id,
@@ -315,6 +323,74 @@ fn pop_casewise_batch_assessment(
                 "casewise batch did not return case `{case}`"
             )))
         })
+}
+
+fn validate_casewise_batch_assessments<P: OptimizationProblem>(
+    assessments: &[Assessment<P>],
+    candidate: CandidateId,
+    resolved_request: &ResolvedEvaluationRequest,
+    missing: &[CasewiseCacheMiss],
+) -> Result<(), RunContextError> {
+    let requested_counts = requested_case_counts(missing);
+    let expected_set = EvaluationSetId::from_uuid(resolved_request.set.id.as_uuid());
+    let mut observed_counts = BTreeMap::<CaseId, usize>::new();
+    for assessment in assessments {
+        let (row_candidate, set, case) = raw_independent_case_assessment(assessment)?;
+        if row_candidate != candidate {
+            return Err(RunContextError::Evaluation(EvaluationError::Message(
+                "casewise batch returned assessment for the wrong candidate".to_owned(),
+            )));
+        }
+        if set != expected_set {
+            return Err(RunContextError::Evaluation(EvaluationError::Message(
+                "casewise batch returned assessment for the wrong evaluation set".to_owned(),
+            )));
+        }
+        let Some(expected_count) = requested_counts.get(&case) else {
+            return Err(RunContextError::Evaluation(EvaluationError::Message(
+                "casewise batch returned rows outside requested cases".to_owned(),
+            )));
+        };
+        let observed_count = observed_counts.entry(case).or_default();
+        *observed_count += 1;
+        if *observed_count > *expected_count {
+            return Err(RunContextError::Evaluation(EvaluationError::Message(
+                "casewise batch returned duplicate rows for requested cases".to_owned(),
+            )));
+        }
+    }
+    for (case, expected_count) in requested_counts {
+        if observed_counts.get(&case).copied().unwrap_or_default() != expected_count {
+            return Err(RunContextError::Evaluation(EvaluationError::Message(
+                format!("casewise batch did not return case `{case}`"),
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn requested_case_counts(missing: &[CasewiseCacheMiss]) -> BTreeMap<CaseId, usize> {
+    let mut requested = BTreeMap::<CaseId, usize>::new();
+    for miss in missing {
+        *requested.entry(miss.case).or_default() += 1;
+    }
+    requested
+}
+
+fn raw_independent_case_assessment<P: OptimizationProblem>(
+    assessment: &Assessment<P>,
+) -> Result<(CandidateId, EvaluationSetId, CaseId), RunContextError> {
+    let Assessment::Independent {
+        candidate,
+        target: AssessmentTarget::Case { set, case },
+        ..
+    } = assessment
+    else {
+        return Err(RunContextError::Evaluation(EvaluationError::Message(
+            "casewise batch expected case-targeted assessments".to_owned(),
+        )));
+    };
+    Ok((*candidate, *set, *case))
 }
 
 impl<P: OptimizationProblem> RunContext<'_, P> {
