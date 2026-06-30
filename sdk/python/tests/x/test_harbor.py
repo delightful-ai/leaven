@@ -4,8 +4,8 @@ import json
 import sys
 from pathlib import Path
 
-import pytest
 from pydantic import ValidationError
+import pytest
 
 import leaven as lv
 

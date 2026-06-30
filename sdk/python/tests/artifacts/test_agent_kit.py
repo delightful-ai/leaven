@@ -1,7 +1,7 @@
 """Tests for the AgentKitArtifact wire projection (lower and read back)."""
 
-import pytest
 from pydantic import ValidationError
+import pytest
 
 from leaven.artifacts.agent_kit import (
     AGENT_KIT_ARTIFACT_TYPE,
