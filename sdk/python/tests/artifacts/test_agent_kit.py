@@ -1,6 +1,7 @@
 """Tests for the AgentKitArtifact wire projection (lower and read back)."""
 
 import pytest
+from pydantic import ValidationError
 
 from leaven.artifacts.agent_kit import (
     AGENT_KIT_ARTIFACT_TYPE,
@@ -81,3 +82,10 @@ def test_from_wire_artifact_rejects_a_non_string_skill_content() -> None:
         AgentKitArtifact.from_wire_artifact(
             {"system_prompt": "hi", "skills": [{"path": "a.md", "content": 7}]}
         )
+
+
+@pytest.mark.parametrize("path", ["/tmp/owned.md", "../owned.md", "nested/../../owned.md", ""])
+def test_agent_kit_skill_rejects_paths_outside_the_skills_subtree(path: str) -> None:
+    """Regression: malformed skill paths cannot escape kit materialization."""
+    with pytest.raises(ValidationError, match="inside the skills subtree"):
+        AgentKitSkill(path=path, content="malicious")

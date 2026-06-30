@@ -18,12 +18,14 @@ from a run carries only the projected `system_prompt` and `skills`.
 The wire `artifact_type` is `agent_kit` and the artifact body is
 `{system_prompt, skills}` with each skill a `{path, content}` record. Skill
 paths are portable relative POSIX paths inside the skills subtree; absolute
-paths and parent traversal are rejected by the host's `AgentKit` path law.
+paths and parent traversal are rejected before local materialization and by the
+host's `AgentKit` path law.
 """
 
+from pathlib import PurePosixPath
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..json_value import JsonObject, JsonValue
 
@@ -39,8 +41,8 @@ class AgentKitSkill(BaseModel):
 
     `path` is a portable relative POSIX path inside the skills subtree (the
     subtree Codex mounts under `.agents/skills`); `content` is the markdown body.
-    Absolute paths and parent traversal are rejected by the host's `AgentKit`
-    path law when the projection rides to the host.
+    Absolute paths and parent traversal are rejected before local materialization
+    and by the host's `AgentKit` path law when the projection rides to the host.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -49,6 +51,17 @@ class AgentKitSkill(BaseModel):
     """Skills-subtree-relative path (e.g. `regex/log-parsing.md`)."""
     content: str
     """Markdown content of the skill file."""
+
+    @field_validator("path")
+    @classmethod
+    def _reject_paths_outside_skills(cls, value: str) -> str:
+        path = PurePosixPath(value)
+        if value in {"", "."} or path.is_absolute() or ".." in path.parts:
+            raise ValueError(
+                "agent_kit skill path must be a non-empty relative POSIX path "
+                "inside the skills subtree"
+            )
+        return value
 
 
 class AgentKitArtifact(BaseModel):
