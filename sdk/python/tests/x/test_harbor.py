@@ -4,6 +4,7 @@ import json
 import sys
 from pathlib import Path
 
+from pydantic import ValidationError
 import pytest
 
 import leaven as lv
@@ -234,6 +235,23 @@ async def test_agent_kit_claude_code_uses_repo_placement_by_default(tmp_path: Pa
 
     assert calls, "fake trial seam must be used"
     assert lv.x.harbor.HarborTrialOutcome.decode(encoded).rewards["reward"] == 1.0
+
+
+def test_materialize_agent_kit_refuses_skill_path_traversal(tmp_path: Path) -> None:
+    """Regression: staging a kit must not write outside the kit directory."""
+    sentinel = tmp_path / "owned.md"
+    sentinel.write_text("keep me", encoding="utf-8")
+
+    with pytest.raises(ValidationError, match="inside the skills subtree"):
+        lv.x.harbor.materialize_agent_kit(
+            {
+                "system_prompt": "hi",
+                "skills": [{"path": "../../owned.md", "content": "overwrite"}],
+            },
+            tmp_path / "staging" / "kit",
+        )
+
+    assert sentinel.read_text(encoding="utf-8") == "keep me"
 
 
 def test_agent_kit_claude_code_refuses_user_placement_until_harbor_quotes_it() -> None:
