@@ -3,7 +3,10 @@
 import json
 from pathlib import Path
 
-from codex_terminal_bench.scenario import _trajectory_excerpt, _verifier_feedback
+import leaven as lv
+import pytest
+
+from codex_terminal_bench.scenario import _trajectory_excerpt, _verifier_feedback, verifier
 from codex_terminal_bench.trial import TrialOutcome
 from codex_terminal_bench.wire import RolloutOutcome
 
@@ -55,6 +58,40 @@ def test_verifier_feedback_includes_output_and_a_general_improvement_ask() -> No
     assert "teach a general working method" in feedback
     # The feedback asks for a general method, not the task's specific answer.
     assert "Do not encode the task's specific answer" in feedback
+
+
+@pytest.mark.asyncio
+async def test_verifier_reward_preserves_optimizer_visible_feedback(tmp_path: Path) -> None:
+    """Regression: the actual rubric reward must feed verifier and trajectory evidence to GEPA."""
+    trajectory = tmp_path / "trajectory.json"
+    trajectory.write_text(
+        json.dumps(
+            {
+                "steps": [
+                    {
+                        "source": "agent",
+                        "message": "I inspected boundary cases before editing.",
+                        "tool_calls": [{"function_name": "shell"}],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = TrialOutcome(
+        rewards={"reward": 0.25},
+        verifier_output="verifier reward: 0\nCTRF 1/4 tests passed; failing: test_dates",
+        trajectory_path=str(trajectory),
+    ).encode()
+
+    reward_value = await verifier.func(output, None, None)  # type: ignore[arg-type]
+
+    assert isinstance(reward_value, lv.RewardValue)
+    assert reward_value.value == 0.25
+    assert "CTRF 1/4 tests passed" in reward_value.feedback
+    assert "Recent agent actions on this task" in reward_value.feedback
+    assert "inspected boundary cases" in reward_value.feedback
+    assert "teach a general working method" in reward_value.feedback
 
 
 def test_trial_outcome_ctrf_fraction_is_zero_without_tests() -> None:
