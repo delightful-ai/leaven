@@ -112,11 +112,6 @@ def _encode_outcome(outcome: TrialOutcome) -> str:
     return outcome.encode()
 
 
-# ----- rubric: verifier reward (w=1) + CTRF fraction (w=0.25) ------------------
-verifier = lv.x.harbor.rewards.map_key("reward", weight=REWARD_WEIGHT)
-ctrf = lv.x.harbor.rewards.ctrf_fraction(weight=CTRF_WEIGHT)
-
-
 def _verifier_feedback(parsed: HarborTrialOutcome | RolloutOutcome) -> str:
     lines = [parsed.verifier_output.strip()]
     excerpt = trajectory_excerpt(parsed.trajectory_path)
@@ -129,6 +124,31 @@ def _verifier_feedback(parsed: HarborTrialOutcome | RolloutOutcome) -> str:
         "general working method."
     )
     return "\n".join(line for line in lines if line)
+
+
+# ----- rubric: verifier reward (w=1) + CTRF fraction (w=0.25) ------------------
+@lv.reward(weight=REWARD_WEIGHT, id="leaven.x.harbor.rewards.reward")
+async def verifier(
+    output: str,
+    case: lv.ScoringCaseView,
+    cx: lv.RubricContext,
+) -> lv.RewardValue:
+    """Score the Harbor verifier reward while keeping Terminal-Bench reflection evidence."""
+    _ = (case, cx)
+    outcome = decode_outcome(output)
+    if "reward" not in outcome.rewards:
+        return lv.RewardValue(
+            value=0.0,
+            feedback="\n".join(
+                line
+                for line in ["missing Harbor reward `reward`", _verifier_feedback(outcome)]
+                if line
+            ),
+        )
+    return lv.RewardValue(value=outcome.rewards["reward"], feedback=_verifier_feedback(outcome))
+
+
+ctrf = lv.x.harbor.rewards.ctrf_fraction(weight=CTRF_WEIGHT)
 
 
 _trajectory_excerpt = trajectory_excerpt
