@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 import leaven as lv
+from leaven.x.harbor.rollout import _outcome_from_result
 
 
 def _write_harbor_task(root: Path) -> Path:
@@ -78,6 +79,18 @@ def test_harbor_outcome_tolerates_missing_optional_evidence() -> None:
     assert decoded.ctrf is None
     assert decoded.trajectory_path is None
     assert decoded.tokens is None
+
+
+def test_harbor_outcome_extraction_tolerates_malformed_optional_ctrf(tmp_path: Path) -> None:
+    """Regression: a truncated CTRF report must not discard the completed trial result."""
+    ctrf_path = tmp_path / "verifier" / "ctrf.json"
+    ctrf_path.parent.mkdir()
+    ctrf_path.write_text("{not json", encoding="utf-8")
+
+    outcome = _outcome_from_result(object(), trial_dir=tmp_path)
+
+    assert outcome.ctrf is None
+    assert outcome.trial_dir == str(tmp_path)
 
 
 def test_harbor_outcome_rejects_malformed_json_actionably() -> None:

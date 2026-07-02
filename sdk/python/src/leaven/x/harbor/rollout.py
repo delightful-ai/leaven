@@ -199,13 +199,19 @@ def _read_ctrf(path: Path) -> CtrfEvidence | None:
     if not path.is_file():
         return None
 
-    data = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return None
     results = data.get("results", {}) if isinstance(data, dict) else {}
     summary = results.get("summary", {}) if isinstance(results, dict) else {}
     tests = results.get("tests", []) if isinstance(results, dict) else []
-    passed = int(summary.get("passed") or 0)
-    failed = int(summary.get("failed") or 0)
-    total = int(summary.get("tests") or passed + failed)
+    try:
+        passed = int(summary.get("passed") or 0)
+        failed = int(summary.get("failed") or 0)
+        total = int(summary.get("tests") or passed + failed)
+    except (TypeError, ValueError):
+        return None
     failed_names = [
         str(test.get("name") or "unnamed")
         for test in tests
