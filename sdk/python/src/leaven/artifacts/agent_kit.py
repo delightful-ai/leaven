@@ -23,7 +23,7 @@ paths and parent traversal are rejected by the host's `AgentKit` path law.
 
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..json_value import JsonObject, JsonValue
 
@@ -39,16 +39,23 @@ class AgentKitSkill(BaseModel):
 
     `path` is a portable relative POSIX path inside the skills subtree (the
     subtree Codex mounts under `.agents/skills`); `content` is the markdown body.
-    Absolute paths and parent traversal are rejected by the host's `AgentKit`
-    path law when the projection rides to the host.
+    Absolute paths, traversal, and platform-local separators are rejected at the
+    SDK boundary before the projection can be materialized locally or ride to
+    the host.
     """
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
     path: str
     """Skills-subtree-relative path (e.g. `regex/log-parsing.md`)."""
     content: str
     """Markdown content of the skill file."""
+
+    @field_validator("path")
+    @classmethod
+    def _validate_path(cls, value: str) -> str:
+        _validate_skill_path(value)
+        return value
 
 
 class AgentKitArtifact(BaseModel):
@@ -116,6 +123,30 @@ def _skill_from_wire(value: JsonValue) -> AgentKitSkill:
     if not isinstance(path, str) or not isinstance(content, str):
         raise TypeError("agent_kit skill must carry string path and content")
     return AgentKitSkill(path=path, content=content)
+
+
+def _validate_skill_path(path: str) -> None:
+    if path == "":
+        raise ValueError("agent_kit skill path is invalid: path is empty")
+    if path.startswith("/"):
+        raise ValueError("agent_kit skill path is invalid: path must be relative")
+    if "\\" in path:
+        raise ValueError("agent_kit skill path is invalid: path contains a backslash")
+    if "\0" in path:
+        raise ValueError("agent_kit skill path is invalid: path contains NUL")
+
+    normalized = path.rstrip("/")
+    if normalized == "":
+        raise ValueError("agent_kit skill path is invalid: path is empty")
+    for component in normalized.split("/"):
+        if component == "":
+            raise ValueError("agent_kit skill path is invalid: path contains an empty component")
+        if component == ".":
+            raise ValueError(
+                "agent_kit skill path is invalid: path contains a current-directory component"
+            )
+        if component == "..":
+            raise ValueError("agent_kit skill path is invalid: path contains parent traversal")
 
 
 class AgentKitChange(BaseModel):
