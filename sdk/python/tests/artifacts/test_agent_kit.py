@@ -61,6 +61,27 @@ def test_kit_runner_candidate_key_matches_the_host_projection_key() -> None:
     assert AGENT_KIT_CANDIDATE_KEY == "candidate_agent_kit"
 
 
+@pytest.mark.parametrize(
+    ("path", "reason"),
+    [
+        ("", "path is empty"),
+        ("/tmp/owned.md", "path must be relative"),
+        ("../owned.md", "parent traversal"),
+        ("regex/../owned.md", "parent traversal"),
+        ("regex//notes.md", "empty component"),
+        ("regex/./notes.md", "current-directory component"),
+        ("regex\\notes.md", "backslash"),
+        ("regex/\0/notes.md", "NUL"),
+    ],
+)
+def test_agent_kit_skill_rejects_paths_that_escape_the_skills_subtree(
+    path: str, reason: str
+) -> None:
+    """Law: SDK AgentKit skill paths obey the host's relative POSIX path law."""
+    with pytest.raises(ValueError, match=reason):
+        AgentKitSkill(path=path, content="unsafe")
+
+
 def test_from_wire_artifact_rejects_a_non_string_system_prompt() -> None:
     """Boundary: a malformed wire artifact is rejected, not coerced."""
     with pytest.raises(TypeError, match="string system_prompt"):
@@ -80,4 +101,12 @@ def test_from_wire_artifact_rejects_a_non_string_skill_content() -> None:
     with pytest.raises(TypeError, match="string path and content"):
         AgentKitArtifact.from_wire_artifact(
             {"system_prompt": "hi", "skills": [{"path": "a.md", "content": 7}]}
+        )
+
+
+def test_from_wire_artifact_rejects_a_skill_path_with_parent_traversal() -> None:
+    """Boundary: wire readback cannot smuggle traversal into local materialization."""
+    with pytest.raises(ValueError, match="parent traversal"):
+        AgentKitArtifact.from_wire_artifact(
+            {"system_prompt": "hi", "skills": [{"path": "../owned.md", "content": "x"}]}
         )

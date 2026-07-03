@@ -3,6 +3,7 @@
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -240,6 +241,21 @@ def test_agent_kit_claude_code_refuses_user_placement_until_harbor_quotes_it() -
     """Boundary: the known-broken append-system-prompt path fails before Docker."""
     with pytest.raises(lv.x.harbor.HarborAdapterError, match="Use placement='repo'"):
         lv.x.harbor.rollout.agent_kit(agent="claude-code", placement="user")
+
+
+def test_materialize_agent_kit_refuses_validation_bypassed_path_escape(tmp_path: Path) -> None:
+    """Regression: skill paths cannot overwrite files outside the staging tree."""
+    victim = tmp_path / "victim.md"
+    victim.write_text("keep me", encoding="utf-8")
+    kit = SimpleNamespace(
+        system_prompt="prompt",
+        skills=[SimpleNamespace(path="../victim.md", content="overwrite")],
+    )
+
+    with pytest.raises(ValueError, match="escapes the staging skills directory"):
+        lv.x.harbor.materialize_agent_kit(kit, tmp_path / "stage")
+
+    assert victim.read_text(encoding="utf-8") == "keep me"
 
 
 @pytest.mark.asyncio
