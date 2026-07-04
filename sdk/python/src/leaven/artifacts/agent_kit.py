@@ -21,9 +21,10 @@ paths are portable relative POSIX paths inside the skills subtree; absolute
 paths and parent traversal are rejected by the host's `AgentKit` path law.
 """
 
+from pathlib import PurePosixPath
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..json_value import JsonObject, JsonValue
 
@@ -49,6 +50,11 @@ class AgentKitSkill(BaseModel):
     """Skills-subtree-relative path (e.g. `regex/log-parsing.md`)."""
     content: str
     """Markdown content of the skill file."""
+
+    @field_validator("path")
+    @classmethod
+    def _validate_path(cls, value: str) -> str:
+        return validate_agent_kit_skill_path(value)
 
 
 class AgentKitArtifact(BaseModel):
@@ -118,6 +124,22 @@ def _skill_from_wire(value: JsonValue) -> AgentKitSkill:
     return AgentKitSkill(path=path, content=content)
 
 
+def validate_agent_kit_skill_path(path: str) -> str:
+    """Return a valid skills-subtree-relative POSIX path, or refuse it."""
+    pure = PurePosixPath(path)
+    if (
+        not pure.parts
+        or pure.is_absolute()
+        or any(part in {"..", ""} for part in pure.parts)
+        or "\\" in path
+    ):
+        raise ValueError(
+            "AgentKit skill path must be a non-empty relative POSIX path "
+            "inside the AgentKit skills subtree"
+        )
+    return path
+
+
 class AgentKitChange(BaseModel):
     """Marker for an agent-kit change effect.
 
@@ -140,4 +162,5 @@ __all__ = [
     "AgentKitArtifact",
     "AgentKitChange",
     "AgentKitSkill",
+    "validate_agent_kit_skill_path",
 ]
