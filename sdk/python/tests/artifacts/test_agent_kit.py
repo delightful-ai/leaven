@@ -1,6 +1,7 @@
 """Tests for the AgentKitArtifact wire projection (lower and read back)."""
 
 import pytest
+from pydantic import ValidationError
 
 from leaven.artifacts.agent_kit import (
     AGENT_KIT_ARTIFACT_TYPE,
@@ -59,6 +60,16 @@ def test_kit_runner_candidate_key_matches_the_host_projection_key() -> None:
     reads that exact key. A drift here silently breaks the kit rollout.
     """
     assert AGENT_KIT_CANDIDATE_KEY == "candidate_agent_kit"
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["", "/tmp/escape.md", "../escape.md", "safe/../escape.md", r"safe\bad.md"],
+)
+def test_agent_kit_skill_rejects_paths_outside_the_skills_subtree(path: str) -> None:
+    """Law: skill paths cannot address files outside the AgentKit skills subtree."""
+    with pytest.raises(ValidationError, match="skills subtree"):
+        AgentKitSkill(path=path, content="x")
 
 
 def test_from_wire_artifact_rejects_a_non_string_system_prompt() -> None:

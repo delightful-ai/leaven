@@ -213,7 +213,9 @@ async def test_agent_kit_claude_code_uses_repo_placement_by_default(tmp_path: Pa
     """Cutoff: Claude Code stages the kit in-repo because append flag quoting is unsafe."""
     calls: list[lv.x.harbor.rollout.HarborTrialPlan] = []
 
-    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
+    async def fake_trial(
+        plan: lv.x.harbor.rollout.HarborTrialPlan,
+    ) -> lv.x.harbor.HarborTrialOutcome:
         calls.append(plan)
         assert plan.agent == "claude-code"
         assert plan.placement == "repo"
@@ -265,6 +267,33 @@ async def test_agent_kit_codex_repo_placement_uses_configurable_workdir(tmp_path
     assert plan.placement == "repo"
     assert plan.workdir == "/workspace"
     assert plan.task_path == "/harbor/task"
+
+
+@pytest.mark.asyncio
+async def test_agent_kit_rollout_refuses_unvalidated_absolute_skill_path_before_writing(
+    tmp_path: Path,
+) -> None:
+    """Regression: Harbor staging must not write a validation-bypassed skill path."""
+    escaped = tmp_path / "escaped.md"
+    kit = lv.AgentKitArtifact.model_construct(
+        system_prompt="be careful",
+        skills=[lv.AgentKitSkill.model_construct(path=str(escaped), content="owned")],
+    )
+
+    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
+        _ = plan
+        raise AssertionError("invalid kit paths must fail before a Harbor trial starts")
+
+    rollout = lv.x.harbor.rollout.agent_kit(
+        agent="codex",
+        model="openai/gpt-5.4-mini",
+        trials_dir=tmp_path / "trials",
+        trial_runner=fake_trial,
+    )
+
+    with pytest.raises(ValueError, match="skills subtree"):
+        await rollout.stage.func(kit, _case(), None)  # type: ignore[union-attr,arg-type]
+    assert not escaped.exists()
 
 
 @pytest.mark.asyncio
