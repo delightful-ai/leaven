@@ -9,7 +9,7 @@ agent's real configuration surface: user-scope config (append-system-prompt /
 
 from pathlib import Path
 
-from leaven.artifacts.agent_kit import validate_agent_kit_skill_path
+from leaven.artifacts.agent_kit import AgentKitArtifact, validate_agent_kit_skill_path
 
 # Neutral staging names. The system prompt is staged as AGENTS.md (the kit's
 # canonical instruction file); adapters rename it per agent when uploading
@@ -18,7 +18,7 @@ KIT_PROMPT_FILE = "AGENTS.md"
 KIT_SKILLS_DIR = "skills"
 
 
-def materialize_agent_kit(kit: object, target_dir: Path) -> Path:
+def materialize_agent_kit(kit: AgentKitArtifact, target_dir: Path) -> Path:
     """Stage an AgentKit as `AGENTS.md` plus `skills/<path>` under target_dir."""
     target_dir.mkdir(parents=True, exist_ok=True)
     (target_dir / KIT_PROMPT_FILE).write_text(kit.system_prompt, encoding="utf-8")
