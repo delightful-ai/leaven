@@ -3,6 +3,7 @@
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -206,6 +207,24 @@ def _case() -> lv.InputCaseView:
         id="case/one",
         input={"harbor_task": {"path": "/harbor/task", "kind": "local"}},
     )
+
+
+def test_materialize_agent_kit_rejects_escaping_skill_paths_before_writes(
+    tmp_path: Path,
+) -> None:
+    """Regression: public Harbor staging cannot write skill files outside target_dir."""
+    outside = tmp_path / "outside.md"
+    target_dir = tmp_path / "kit"
+    kit = SimpleNamespace(
+        system_prompt="be careful",
+        skills=[SimpleNamespace(path="../outside.md", content="pwned")],
+    )
+
+    with pytest.raises(lv.x.harbor.HarborAdapterError, match="parent traversal"):
+        lv.x.harbor.materialize_agent_kit(kit, target_dir)
+
+    assert not outside.exists()
+    assert not target_dir.exists()
 
 
 @pytest.mark.asyncio

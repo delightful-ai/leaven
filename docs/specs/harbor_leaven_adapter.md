@@ -204,6 +204,9 @@ named in `leaven.x.harbor.agents.AGENTS` (`codex`, `claude-code`) or any Harbor
 agent reachable by import_path. Each agent contributes only a small
 system-prompt installer; skills are uniform via `AgentConfig.skills` for user
 scope. See `docs/plans/2026-06-22-harbor-agent-adapter-generalization.md`.
+SDK-side kit construction and Harbor materialization must enforce the same
+portable relative skill-path law as the host artifact: no absolute paths, parent
+traversal, empty components, backslashes, or NUL bytes before any staging writes.
 
 ## 6. Rollout Semantics
 
