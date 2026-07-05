@@ -2,15 +2,15 @@
 
 import pytest
 
-from leaven.artifacts.agent_kit import (
-    AGENT_KIT_ARTIFACT_TYPE,
-    AgentKitArtifact,
-    AgentKitSkill,
-)
 from leaven._seam_optimize.artifact_projection import (
     AGENT_KIT_CANDIDATE_KEY,
     artifact_from_record,
     project_seed,
+)
+from leaven.artifacts.agent_kit import (
+    AGENT_KIT_ARTIFACT_TYPE,
+    AgentKitArtifact,
+    AgentKitSkill,
 )
 
 
