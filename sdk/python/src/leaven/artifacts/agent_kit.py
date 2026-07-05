@@ -23,7 +23,7 @@ paths and parent traversal are rejected by the host's `AgentKit` path law.
 
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..json_value import JsonObject, JsonValue
 
@@ -34,13 +34,36 @@ AGENT_KIT_ARTIFACT_SCHEMA = "fp_schema_sha256_agent_kit"
 """Wire `artifact_schema` fingerprint the host validates the projection against."""
 
 
+def _normalize_skill_path(value: object) -> str:
+    if not isinstance(value, str):
+        raise TypeError("agent_kit skill path must be a string")
+    if value.startswith("/"):
+        raise ValueError("agent_kit skill path must be relative")
+    if "\\" in value:
+        raise ValueError("agent_kit skill path must be a portable POSIX path")
+    if "\0" in value:
+        raise ValueError("agent_kit skill path must not contain NUL")
+
+    normalized = value.rstrip("/")
+    if normalized == "":
+        raise ValueError("agent_kit skill path must not be empty")
+    for component in normalized.split("/"):
+        if component == "":
+            raise ValueError("agent_kit skill path must not contain empty components")
+        if component == ".":
+            raise ValueError("agent_kit skill path must not contain current-directory components")
+        if component == "..":
+            raise ValueError("agent_kit skill path must not contain parent traversal")
+    return normalized
+
+
 class AgentKitSkill(BaseModel):
     """One skill file in an agent kit.
 
     `path` is a portable relative POSIX path inside the skills subtree (the
     subtree Codex mounts under `.agents/skills`); `content` is the markdown body.
-    Absolute paths and parent traversal are rejected by the host's `AgentKit`
-    path law when the projection rides to the host.
+    Absolute paths and parent traversal are rejected at the SDK boundary and by
+    the host's `AgentKit` path law when the projection rides to the host.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -49,6 +72,11 @@ class AgentKitSkill(BaseModel):
     """Skills-subtree-relative path (e.g. `regex/log-parsing.md`)."""
     content: str
     """Markdown content of the skill file."""
+
+    @field_validator("path", mode="before")
+    @classmethod
+    def _path_stays_inside_skill_subtree(cls, value: object) -> str:
+        return _normalize_skill_path(value)
 
 
 class AgentKitArtifact(BaseModel):

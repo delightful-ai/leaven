@@ -51,6 +51,25 @@ def test_kit_round_trips_through_the_wire_artifact() -> None:
     assert projected.candidate_id == "cand_kit_child"
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "",
+        "/tmp/pwned.md",
+        "../outside.md",
+        "regex/../../outside.md",
+        "regex//notes.md",
+        "./notes.md",
+        "regex\\notes.md",
+        "regex/notes.md\0suffix",
+    ],
+)
+def test_agent_kit_skill_rejects_paths_outside_the_skills_subtree(path: str) -> None:
+    """Regression: local kit construction cannot carry host-escaping skill paths."""
+    with pytest.raises(ValueError, match="agent_kit skill path"):
+        AgentKitSkill(path=path, content="x")
+
+
 def test_kit_runner_candidate_key_matches_the_host_projection_key() -> None:
     """Law: the SDK kit candidate key matches the host's runner payload key.
 
