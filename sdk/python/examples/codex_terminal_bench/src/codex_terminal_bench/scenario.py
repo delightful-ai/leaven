@@ -18,8 +18,8 @@ import tempfile
 from pathlib import Path
 
 import leaven as lv
-from leaven.x.harbor import HarborTrialOutcome, trajectory_excerpt
 import leaven.x.harbor.rewards as harbor_rewards
+from leaven.x.harbor import HarborTrialOutcome, trajectory_excerpt
 
 # Absolute imports (not relative): the optimize worker loads this module's file
 # standalone via `runpy.run_path`, where relative imports have no parent package.
