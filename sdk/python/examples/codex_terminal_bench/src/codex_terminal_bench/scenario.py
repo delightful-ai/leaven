@@ -18,6 +18,7 @@ import tempfile
 from pathlib import Path
 
 import leaven as lv
+import leaven.x.harbor.rewards as harbor_rewards
 from leaven.x.harbor import HarborTrialOutcome, trajectory_excerpt
 
 # Absolute imports (not relative): the optimize worker loads this module's file
@@ -112,11 +113,6 @@ def _encode_outcome(outcome: TrialOutcome) -> str:
     return outcome.encode()
 
 
-# ----- rubric: verifier reward (w=1) + CTRF fraction (w=0.25) ------------------
-verifier = lv.x.harbor.rewards.map_key("reward", weight=REWARD_WEIGHT)
-ctrf = lv.x.harbor.rewards.ctrf_fraction(weight=CTRF_WEIGHT)
-
-
 def _verifier_feedback(parsed: HarborTrialOutcome | RolloutOutcome) -> str:
     lines = [parsed.verifier_output.strip()]
     excerpt = trajectory_excerpt(parsed.trajectory_path)
@@ -132,6 +128,22 @@ def _verifier_feedback(parsed: HarborTrialOutcome | RolloutOutcome) -> str:
 
 
 _trajectory_excerpt = trajectory_excerpt
+
+
+# ----- rubric: verifier reward (w=1) + CTRF fraction (w=0.25) ------------------
+@lv.reward(weight=REWARD_WEIGHT, id="leaven.x.harbor.rewards.reward")
+async def verifier(
+    output: str, case: lv.ScoringCaseView, cx: lv.RubricContext
+) -> lv.RewardValue:
+    """Score the task reward while preserving optimizer-visible trial feedback."""
+    _ = (case, cx)
+    parsed = decode_outcome(output)
+    if "reward" not in parsed.rewards:
+        return lv.RewardValue(value=0.0, feedback="missing Harbor reward `reward`")
+    return lv.RewardValue(value=parsed.rewards["reward"], feedback=_verifier_feedback(parsed))
+
+
+ctrf = harbor_rewards.ctrf_fraction(weight=CTRF_WEIGHT)
 
 
 # ----- composition (reused by the live run and the mock test) -----------------
