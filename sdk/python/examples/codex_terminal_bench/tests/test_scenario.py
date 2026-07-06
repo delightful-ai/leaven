@@ -87,6 +87,7 @@ async def test_verifier_reward_feeds_gepa_verifier_and_trajectory_feedback(tmp_p
         cast(lv.RubricContext, None),
     )
 
+    assert isinstance(value, lv.RewardValue)
     assert value.value == 0.0
     assert "verifier reward: 0" in value.feedback
     assert "failed regex-log hidden cases" in value.feedback
