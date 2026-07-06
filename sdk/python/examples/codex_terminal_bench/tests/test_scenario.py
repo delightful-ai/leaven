@@ -5,11 +5,11 @@ from pathlib import Path
 from typing import cast
 
 import leaven as lv
+from leaven.x.harbor import HarborTrialOutcome
 
 from codex_terminal_bench.scenario import _trajectory_excerpt, _verifier_feedback, verifier
 from codex_terminal_bench.trial import TrialOutcome
 from codex_terminal_bench.wire import RolloutOutcome
-from leaven.x.harbor import HarborTrialOutcome
 
 
 def test_trajectory_excerpt_surfaces_only_the_agents_own_steps(tmp_path: Path) -> None:
