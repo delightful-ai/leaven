@@ -19,6 +19,7 @@ from pathlib import Path
 
 import leaven as lv
 from leaven.x.harbor import HarborTrialOutcome, trajectory_excerpt
+import leaven.x.harbor.rewards as harbor_rewards
 
 # Absolute imports (not relative): the optimize worker loads this module's file
 # standalone via `runpy.run_path`, where relative imports have no parent package.
@@ -142,7 +143,7 @@ async def verifier(
     return lv.RewardValue(value=parsed.rewards["reward"], feedback=_verifier_feedback(parsed))
 
 
-ctrf = lv.x.harbor.rewards.ctrf_fraction(weight=CTRF_WEIGHT)
+ctrf = harbor_rewards.ctrf_fraction(weight=CTRF_WEIGHT)
 
 
 # ----- composition (reused by the live run and the mock test) -----------------

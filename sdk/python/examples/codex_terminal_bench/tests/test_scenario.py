@@ -8,7 +8,6 @@ import leaven as lv
 from leaven.x.harbor import HarborTrialOutcome
 
 from codex_terminal_bench.scenario import _trajectory_excerpt, _verifier_feedback, verifier
-from codex_terminal_bench.trial import TrialOutcome
 from codex_terminal_bench.wire import RolloutOutcome
 
 
@@ -100,14 +99,5 @@ async def test_verifier_reward_feeds_gepa_verifier_and_trajectory_feedback(tmp_p
 
 def test_trial_outcome_ctrf_fraction_is_zero_without_tests() -> None:
     """Law: an empty CTRF report scores a zero fraction, not a division error."""
-    outcome = TrialOutcome(
-        reward=0.0,
-        ctrf_passed=0,
-        ctrf_total=0,
-        input_tokens=None,
-        output_tokens=None,
-        cost_usd=None,
-        trajectory_path=None,
-        verifier_output="",
-    )
+    outcome = HarborTrialOutcome(rewards={"reward": 0.0}, verifier_output="")
     assert outcome.ctrf_fraction == 0.0
