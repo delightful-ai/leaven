@@ -24,7 +24,7 @@ from leaven.x.harbor import HarborTrialOutcome, trajectory_excerpt
 # standalone via `runpy.run_path`, where relative imports have no parent package.
 # The package is editable-installed, so absolute imports resolve.
 from codex_terminal_bench.kit import materialize_kit
-from codex_terminal_bench.trial import TrialOutcome, TrialPlan, run_trial
+from codex_terminal_bench.trial import REWARD_KEY, TrialOutcome, TrialPlan, run_trial
 from codex_terminal_bench.wire import RolloutOutcome
 
 # The case-input key naming the pinned Terminal-Bench-2 task this rollout runs.
@@ -113,7 +113,24 @@ def _encode_outcome(outcome: TrialOutcome) -> str:
 
 
 # ----- rubric: verifier reward (w=1) + CTRF fraction (w=0.25) ------------------
-verifier = lv.x.harbor.rewards.map_key("reward", weight=REWARD_WEIGHT)
+@lv.reward(weight=REWARD_WEIGHT, id="codex_terminal_bench.verifier")
+async def verifier(
+    output: str,
+    case: lv.ScoringCaseView,
+    cx: lv.RubricContext,
+) -> lv.RewardValue:
+    """Score the verifier reward and feed trial evidence to agentic reflection."""
+    _ = (case, cx)
+    parsed = decode_outcome(output)
+    feedback = _verifier_feedback(parsed)
+    if REWARD_KEY not in parsed.rewards:
+        missing = f"missing Harbor reward `{REWARD_KEY}`"
+        if feedback:
+            missing = f"{missing}\n{feedback}"
+        return lv.RewardValue(value=0.0, feedback=missing)
+    return lv.RewardValue(value=parsed.rewards[REWARD_KEY], feedback=feedback)
+
+
 ctrf = lv.x.harbor.rewards.ctrf_fraction(weight=CTRF_WEIGHT)
 
 

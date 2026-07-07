@@ -988,7 +988,11 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
     source_paths: list[str] = []
     for seed in (41, 42, 43):
         source_path = tmp_path / f"heldout_seed_{seed}.jsonl"
-        write_jsonl(source_path, [source_heldout_row(repo_root, tmp_path, seed)])
+        source_row = source_heldout_row(repo_root, tmp_path, seed)
+        other_metric_row = json.loads(json.dumps(source_row))
+        other_metric_row["metric_name"] = "official_test_case_accuracy"
+        other_metric_row["metric_value"] = 25.0
+        write_jsonl(source_path, [source_row, other_metric_row])
         source_paths.append(source_path.relative_to(repo_root).as_posix())
 
     prompt_manifest = repo_root / "docs/ara/trace2skill_spreadsheetbench/results/fixture_aggregate.prompt_render_manifest.json"
