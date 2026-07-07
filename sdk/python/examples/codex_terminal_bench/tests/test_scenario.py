@@ -3,7 +3,10 @@
 import json
 from pathlib import Path
 
-from codex_terminal_bench.scenario import _trajectory_excerpt, _verifier_feedback
+import leaven as lv
+import pytest
+
+from codex_terminal_bench.scenario import _trajectory_excerpt, _verifier_feedback, verifier
 from codex_terminal_bench.trial import TrialOutcome
 from codex_terminal_bench.wire import RolloutOutcome
 
@@ -55,6 +58,40 @@ def test_verifier_feedback_includes_output_and_a_general_improvement_ask() -> No
     assert "teach a general working method" in feedback
     # The feedback asks for a general method, not the task's specific answer.
     assert "Do not encode the task's specific answer" in feedback
+
+
+@pytest.mark.asyncio
+async def test_verifier_reward_feeds_trial_evidence_to_reflection(tmp_path: Path) -> None:
+    """Regression: the scorer feedback must carry verifier and trajectory evidence."""
+    trajectory = tmp_path / "trajectory.json"
+    trajectory.write_text(
+        json.dumps(
+            {
+                "steps": [
+                    {"source": "user", "message": "TASK INSTRUCTION (must not appear)"},
+                    {
+                        "source": "agent",
+                        "message": "I inspected the files before writing the regex.",
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = lv.x.harbor.HarborTrialOutcome(
+        rewards={"reward": 0.0},
+        verifier_output="verifier reward: 0\nCTRF 2/5 tests passed; failing: test_x",
+        trajectory_path=str(trajectory),
+    ).encode()
+    case = lv.ScoringCaseView(id="tb_regex_log", input={}, target=None)
+
+    reward = await verifier.func(output, case, None)  # type: ignore[arg-type]
+
+    assert reward.value == 0.0
+    assert "CTRF 2/5" in reward.feedback
+    assert "Recent agent actions on this task:" in reward.feedback
+    assert "I inspected the files" in reward.feedback
+    assert "TASK INSTRUCTION" not in reward.feedback
 
 
 def test_trial_outcome_ctrf_fraction_is_zero_without_tests() -> None:

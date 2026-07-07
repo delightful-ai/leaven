@@ -8,11 +8,11 @@ from codex_terminal_bench import agent, scenario, trial
 
 
 def test_terminal_bench_reuses_generic_harbor_adapter_helpers() -> None:
-    """Law: Terminal-Bench constants stay local, generic evidence helpers do not."""
+    """Law: Terminal-Bench keeps only its reflection feedback local."""
     assert trial.HarborTrialOutcome is lv.x.harbor.HarborTrialOutcome
     assert scenario.decode_outcome.__func__ is lv.x.harbor.HarborTrialOutcome.decode.__func__
     assert scenario.trajectory_excerpt is lv.x.harbor.trajectory_excerpt
-    assert scenario.verifier.id == "leaven.x.harbor.rewards.reward"
+    assert scenario.verifier.id == "codex_terminal_bench.verifier"
     assert scenario.ctrf.id == "leaven.x.harbor.rewards.ctrf_fraction"
 
 
