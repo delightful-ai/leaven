@@ -983,6 +983,10 @@ def check_source_identity_matches(
             )
 
 
+def source_metric_matches_parent(parent: dict[str, Any], source: dict[str, Any]) -> bool:
+    return source.get("metric_name") == parent.get("metric_name")
+
+
 def check_stage_aggregate_policy(
     repo_root: Path,
     current_path: Path,
@@ -1071,6 +1075,8 @@ def check_stage_aggregate_policy(
                     f"must use proof_classification {source_proof!r} from runbook stage {source_stage_id!r}"
                 )
                 continue
+            if not source_metric_matches_parent(record, source):
+                continue
             check_source_identity_matches(
                 prefix,
                 stage_id,
@@ -1146,6 +1152,8 @@ def check_stage_aggregate_policy(
                     f"{prefix} {stage_id} source row {source_path.relative_to(repo_root)}:{source_line_number} "
                     f"proof_classification must be one of {classifications!r}"
                 )
+                continue
+            if not source_metric_matches_parent(record, source):
                 continue
             matching_source_keys.add((source_path, source_line_number))
             source_slice = source.get("dataset_slice")
