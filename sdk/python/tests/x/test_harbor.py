@@ -282,7 +282,7 @@ async def test_agent_kit_codex_user_placement_refuses_agentkit_skills_before_tri
         trial_runner=fake_trial,
     )
 
-    with pytest.raises(lv.x.harbor.HarborAdapterError, match="AgentConfig.skills requires SKILL.md"):
+    with pytest.raises(lv.x.harbor.HarborAdapterError, match=r"AgentConfig\.skills requires SKILL\.md"):
         await rollout.stage.func(_kit(), _case(), None)  # type: ignore[union-attr,arg-type]
     assert calls == []
 
