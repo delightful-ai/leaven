@@ -114,7 +114,7 @@ leaven.x.harbor
   trajectory_excerpt(path, *, max_steps=4, strict=False) -> str
 
 leaven.x.harbor.rollout
-  agent_kit(*, agent, model, placement="user", workdir="/app", ...) -> lv.Rollout
+  agent_kit(*, agent, model, placement=None, workdir="/app", ...) -> lv.Rollout
 
 leaven.x.harbor.agents
   AGENTS: dict[str, HarborAgentAdapter]   # "codex", "claude-code"
@@ -183,7 +183,7 @@ configuration surface, selected by `placement`. `/app` is no longer assumed: it
 is one task image's working directory, not an agent or Harbor fact, so it is only
 used as the explicit, overridable `workdir` default for `placement="repo"`.
 
-`placement="user"` (default, workdir-independent):
+`placement="user"` (workdir-independent where supported):
 
 ```text
 Claude Code: system_prompt -> --append-system-prompt (Harbor CliFlag)
@@ -191,6 +191,14 @@ Claude Code: system_prompt -> --append-system-prompt (Harbor CliFlag)
 Codex:       system_prompt -> $CODEX_HOME/AGENTS.md (appended global context)
              skills        -> AgentConfig.skills -> $HOME/.agents/skills/
 ```
+
+Implemented cutoff: Claude Code user placement is disabled until Harbor quotes
+`--append-system-prompt` safely. Codex user placement is prompt-only for now:
+non-empty `AgentKitArtifact.skills` are refused because Harbor
+`AgentConfig.skills` resolves `SKILL.md` skill packages, while Leaven
+`AgentKitSkill` is a portable relative file projection inside the agent skills
+subtree (for example `regex/log-parsing.md`). Use `placement="repo"` for full
+AgentKit skills.
 
 `placement="repo"` (materialize into the task `workdir`):
 
@@ -229,7 +237,7 @@ Rollout configuration should include at least:
 agent_kit(
     agent="codex",                 # or "claude-code", or an import_path
     model="<configured-model>",
-    placement="user",              # "user" (workdir-independent) | "repo"
+    placement=None,                # agent default; current named agents default to "repo"
     task_key="harbor_task",
     trials_dir=".leaven/harbor-trials",
     workdir="/app",                # explicit; only used for placement="repo"

@@ -78,11 +78,14 @@ execution until the engine creates those bound contexts during stage dispatch.
 #### 4. Generic Harbor AgentKit adapter
 
 `lv.x.harbor.rollout.agent_kit(...)` can run a materialized
-`AgentKitArtifact` through Harbor agents. Codex supports repo and user
-placement. Claude Code uses repo placement by default: `CLAUDE.md` plus
-`.claude/skills` in the task workdir. Claude Code user placement is refused
-until Harbor quotes `--append-system-prompt` safely; the unquoted flag path can
-split multiword prompts and replace the real task instruction.
+`AgentKitArtifact` through Harbor agents. Codex and Claude Code use repo
+placement by default: `AGENTS.md` or `CLAUDE.md` plus the agent skills subtree in
+the task workdir. Codex user placement is prompt-only in this slice; non-empty
+AgentKit skills are refused because Harbor `AgentConfig.skills` accepts
+`SKILL.md` packages, not Leaven's generic skills-subtree file projection. Claude
+Code user placement is refused until Harbor quotes `--append-system-prompt`
+safely; the unquoted flag path can split multiword prompts and replace the real
+task instruction.
 
 The binary is resolved via `LEAVEN_BIN`, else `target/{debug,release}/leaven`
 under the repo root (`LEAVEN_REPO_ROOT` override). Build it with

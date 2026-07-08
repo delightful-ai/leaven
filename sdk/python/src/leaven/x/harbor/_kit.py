@@ -2,8 +2,8 @@
 
 A kit is staged as `<dir>/AGENTS.md` (the system prompt) plus `<dir>/skills/<path>`
 (skill files). Adapters in `agents.py` map this neutral layout onto each Harbor
-agent's real configuration surface: user-scope config (append-system-prompt /
-`$CODEX_HOME/AGENTS.md` + `AgentConfig.skills`) or repo-scope working-dir files
+agent's real configuration surface: prompt-only user-scope config
+(`$CODEX_HOME/AGENTS.md`) or repo-scope working-dir files
 (`<workdir>/CLAUDE.md` or `<workdir>/AGENTS.md` + the agent's skills subtree).
 """
 
