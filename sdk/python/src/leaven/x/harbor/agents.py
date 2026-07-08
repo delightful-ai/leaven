@@ -3,9 +3,10 @@
 Each `HarborAgentAdapter` knows how to project a staged AgentKit (system prompt +
 skills) into a Harbor `AgentConfig` for a chosen `placement`:
 
-- ``placement="user"`` is workdir-independent for Codex: the adapter writes the
-  system prompt to ``$CODEX_HOME/AGENTS.md`` (read as global appended context)
-  and takes skills via ``AgentConfig.skills`` (``$HOME/.agents/skills``).
+- ``placement="user"`` is prompt-only and workdir-independent for Codex: the
+  adapter writes the system prompt to ``$CODEX_HOME/AGENTS.md`` (read as global
+  appended context). Non-empty Leaven AgentKit skills are refused until they can
+  be projected into Harbor ``SKILL.md`` packages or native Codex user skills.
 - ``placement="repo"`` materializes the kit into the task ``workdir``: Codex reads
   ``<workdir>/AGENTS.md`` + ``<workdir>/.agents/skills`` (scanned cwd→repo root),
   Claude Code reads ``<workdir>/CLAUDE.md`` + ``<workdir>/.claude/skills``.
@@ -57,13 +58,13 @@ class HarborAgentAdapter:
         agent_env: dict[str, str] | None = None,
     ) -> "AgentConfig":
         """Build the Harbor ``AgentConfig`` that injects the staged kit."""
-        from harbor.models.trial.config import AgentConfig  # noqa: PLC0415
-
         env = {self.api_key_env: api_key} if api_key else {}
         if agent_env:
             env.update(agent_env)
 
         if placement == "repo":
+            from harbor.models.trial.config import AgentConfig  # noqa: PLC0415
+
             return AgentConfig(
                 import_path=self.leaven_import_path,
                 model_name=model,
@@ -77,15 +78,9 @@ class HarborAgentAdapter:
                 env=env,
             )
 
-        skills = staged_skill_paths(staging_dir)
-        if self.user_prompt_mode == "unsupported_append_flag":
-            raise HarborAdapterError(
-                f"{self.key} user placement is disabled: Harbor renders "
-                "--append-system-prompt without shell quoting, so multiword kit prompts "
-                "can replace the task instruction. Use placement='repo'."
-            )
+        skills = self.validate_user_staging(staging_dir)
+        from harbor.models.trial.config import AgentConfig  # noqa: PLC0415
 
-        # Codex user scope: the subclass writes $CODEX_HOME/AGENTS.md.
         return AgentConfig(
             import_path=self.leaven_import_path,
             model_name=model,
@@ -93,6 +88,24 @@ class HarborAgentAdapter:
             kwargs={"placement": "user", "agent_kit_dir": str(staging_dir)},
             env=env,
         )
+
+    def validate_user_staging(self, staging_dir: Path) -> list[Path]:
+        """Return Harbor skill inputs for user placement, or refuse unsafe mappings."""
+        skills = staged_skill_paths(staging_dir)
+        if self.user_prompt_mode == "unsupported_append_flag":
+            raise HarborAdapterError(
+                f"{self.key} user placement is disabled: Harbor renders "
+                "--append-system-prompt without shell quoting, so multiword kit prompts "
+                "can replace the task instruction. Use placement='repo'."
+            )
+        if self.user_prompt_mode == "codex_home" and skills:
+            raise HarborAdapterError(
+                f"{self.key} user placement with AgentKit skills is disabled: Harbor "
+                "AgentConfig.skills requires SKILL.md skill packages, but Leaven "
+                "AgentKit skills are portable files inside the agent skills subtree. "
+                "Use placement='repo' or omit skills."
+            )
+        return skills
 
 
 AGENTS: dict[str, HarborAgentAdapter] = {

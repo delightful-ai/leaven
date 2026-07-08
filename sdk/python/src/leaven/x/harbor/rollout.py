@@ -90,6 +90,8 @@ def agent_kit(
         trials_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="leaven-harbor-kit-", dir=trials_root) as kit_tmp:
             staging = materialize_agent_kit(kit, Path(kit_tmp) / "kit")
+            if resolved_placement == "user":
+                adapter.validate_user_staging(staging)
             plan = HarborTrialPlan(
                 agent=adapter.key,
                 staging_dir=staging,
