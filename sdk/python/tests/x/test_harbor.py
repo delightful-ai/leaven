@@ -3,8 +3,10 @@
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from pydantic import ValidationError
 
 import leaven as lv
 
@@ -208,12 +210,30 @@ def _case() -> lv.InputCaseView:
     )
 
 
+def test_materialize_agent_kit_rejects_escape_skill_paths_without_writing_outside(
+    tmp_path: Path,
+) -> None:
+    """Regression: raw kit-like objects cannot escape Harbor staging with skill paths."""
+    outside = tmp_path / "outside.md"
+    raw_kit = SimpleNamespace(
+        system_prompt="be careful",
+        skills=[SimpleNamespace(path=str(outside), content="owned")],
+    )
+
+    with pytest.raises(ValidationError, match="relative"):
+        lv.x.harbor.materialize_agent_kit(raw_kit, tmp_path / "staging")
+
+    assert not outside.exists()
+
+
 @pytest.mark.asyncio
 async def test_agent_kit_claude_code_uses_repo_placement_by_default(tmp_path: Path) -> None:
     """Cutoff: Claude Code stages the kit in-repo because append flag quoting is unsafe."""
     calls: list[lv.x.harbor.rollout.HarborTrialPlan] = []
 
-    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
+    async def fake_trial(
+        plan: lv.x.harbor.rollout.HarborTrialPlan,
+    ) -> lv.x.harbor.HarborTrialOutcome:
         calls.append(plan)
         assert plan.agent == "claude-code"
         assert plan.placement == "repo"
@@ -247,7 +267,9 @@ async def test_agent_kit_codex_repo_placement_uses_configurable_workdir(tmp_path
     """Cutoff: Codex defaults to repo placement with an explicit workdir, never /app."""
     calls: list[lv.x.harbor.rollout.HarborTrialPlan] = []
 
-    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
+    async def fake_trial(
+        plan: lv.x.harbor.rollout.HarborTrialPlan,
+    ) -> lv.x.harbor.HarborTrialOutcome:
         calls.append(plan)
         return lv.x.harbor.HarborTrialOutcome(rewards={"reward": 0.0})
 
@@ -273,7 +295,9 @@ async def test_agent_kit_passes_extra_agent_env_for_live_auth(tmp_path: Path) ->
     calls: list[lv.x.harbor.rollout.HarborTrialPlan] = []
     oauth_env = {"CLAUDE_FORCE_OAUTH": "1", "CLAUDE_CODE_OAUTH_TOKEN": "token-test"}
 
-    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
+    async def fake_trial(
+        plan: lv.x.harbor.rollout.HarborTrialPlan,
+    ) -> lv.x.harbor.HarborTrialOutcome:
         calls.append(plan)
         return lv.x.harbor.HarborTrialOutcome(rewards={"reward": 1.0})
 
@@ -288,6 +312,44 @@ async def test_agent_kit_passes_extra_agent_env_for_live_auth(tmp_path: Path) ->
     assert calls[0].api_key_env == "ANTHROPIC_API_KEY"
     assert calls[0].api_key == ""
     assert calls[0].agent_env == oauth_env
+
+
+@pytest.mark.asyncio
+async def test_agent_kit_trial_names_preserve_candidate_identity_when_truncated(
+    tmp_path: Path,
+) -> None:
+    """Regression: long case ids cannot collapse seed/child evidence directories."""
+    names: list[str] = []
+
+    async def fake_trial(
+        plan: lv.x.harbor.rollout.HarborTrialPlan,
+    ) -> lv.x.harbor.HarborTrialOutcome:
+        names.append(plan.trial_name)
+        return lv.x.harbor.HarborTrialOutcome(rewards={"reward": 1.0})
+
+    rollout = lv.x.harbor.rollout.agent_kit(
+        agent="codex",
+        trials_dir=tmp_path / "trials",
+        trial_runner=fake_trial,
+    )
+    long_case = lv.InputCaseView(
+        id=f"case-{'x' * 140}",
+        input={"harbor_task": {"path": "/harbor/task", "kind": "local"}},
+    )
+    await rollout.stage.func(  # type: ignore[union-attr,arg-type]
+        _kit().model_copy(update={"candidate_id": "candidate-alpha"}),
+        long_case,
+        None,
+    )
+    await rollout.stage.func(  # type: ignore[union-attr,arg-type]
+        _kit().model_copy(update={"candidate_id": "candidate-beta"}),
+        long_case,
+        None,
+    )
+
+    assert len(names) == 2
+    assert names[0] != names[1]
+    assert all(len(name) <= 96 for name in names)
 
 
 def test_import_leaven_does_not_import_harbor_dependency() -> None:
