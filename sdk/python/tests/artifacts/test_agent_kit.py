@@ -91,9 +91,7 @@ def test_from_wire_artifact_rejects_a_non_string_system_prompt() -> None:
 def test_from_wire_artifact_rejects_a_skill_missing_content() -> None:
     """Boundary: a skill missing path/content is rejected."""
     with pytest.raises(TypeError, match="must carry path and content"):
-        AgentKitArtifact.from_wire_artifact(
-            {"system_prompt": "hi", "skills": [{"path": "a.md"}]}
-        )
+        AgentKitArtifact.from_wire_artifact({"system_prompt": "hi", "skills": [{"path": "a.md"}]})
 
 
 def test_from_wire_artifact_rejects_a_non_string_skill_content() -> None:

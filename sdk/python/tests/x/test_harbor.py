@@ -239,9 +239,9 @@ async def test_agent_kit_claude_code_uses_repo_placement_by_default(tmp_path: Pa
         assert plan.placement == "repo"
         assert plan.api_key_env == "ANTHROPIC_API_KEY"
         assert (plan.staging_dir / "AGENTS.md").read_text(encoding="utf-8") == "be careful"
-        assert (
-            plan.staging_dir / "skills" / "regex" / "notes.md"
-        ).read_text(encoding="utf-8") == "test edge cases"
+        assert (plan.staging_dir / "skills" / "regex" / "notes.md").read_text(
+            encoding="utf-8"
+        ) == "test edge cases"
         return lv.x.harbor.HarborTrialOutcome(rewards={"reward": 1.0})
 
     rollout = lv.x.harbor.rollout.agent_kit(
