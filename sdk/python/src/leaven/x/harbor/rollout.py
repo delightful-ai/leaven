@@ -7,6 +7,7 @@ injected through the agent's real configuration surface (see
 an explicit `workdir` parameter, never a hardcoded `/app`.
 """
 
+import hashlib
 import json
 import os
 import tempfile
@@ -25,6 +26,8 @@ from leaven.x.harbor._types import (
 from leaven.x.harbor.agents import resolve
 
 DEFAULT_TASK_KEY = "harbor_task"
+TRIAL_NAME_HASH_CHARS = 12
+TRIAL_NAME_MAX_CHARS = 96
 
 
 @dataclass(frozen=True)
@@ -123,8 +126,13 @@ def _task_path_from_case(case: lv.InputCaseView, *, task_key: str) -> str:
 
 def _trial_name(case_id: str, candidate_id: str | None) -> str:
     candidate = candidate_id or "seed"
-    safe = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in f"{case_id}__{candidate}")
-    return safe[:96]
+    raw = f"{case_id}__{candidate}"
+    safe = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in raw)
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:TRIAL_NAME_HASH_CHARS]
+    suffix = f"__{digest}"
+    prefix_len = TRIAL_NAME_MAX_CHARS - len(suffix)
+    prefix = safe[:prefix_len].rstrip("-_") or "trial"
+    return f"{prefix}{suffix}"
 
 
 async def _run_live_harbor_trial(plan: HarborTrialPlan) -> HarborTrialOutcome:

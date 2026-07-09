@@ -23,7 +23,7 @@ paths and parent traversal are rejected by the host's `AgentKit` path law.
 
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..json_value import JsonObject, JsonValue
 
@@ -49,6 +49,27 @@ class AgentKitSkill(BaseModel):
     """Skills-subtree-relative path (e.g. `regex/log-parsing.md`)."""
     content: str
     """Markdown content of the skill file."""
+
+    @field_validator("path")
+    @classmethod
+    def _validate_path(cls, value: str) -> str:
+        """Mirror the public-seam AgentKit path law before local materialization."""
+        if value == "":
+            raise ValueError("agent_kit skill path is empty")
+        if value.startswith("/"):
+            raise ValueError("agent_kit skill path must be relative")
+        if "\\" in value:
+            raise ValueError("agent_kit skill path contains a backslash")
+        if "\0" in value:
+            raise ValueError("agent_kit skill path contains NUL")
+        for component in value.split("/"):
+            if component == "":
+                raise ValueError("agent_kit skill path contains an empty component")
+            if component == ".":
+                raise ValueError("agent_kit skill path contains a current-directory component")
+            if component == "..":
+                raise ValueError("agent_kit skill path contains parent traversal")
+        return value
 
 
 class AgentKitArtifact(BaseModel):

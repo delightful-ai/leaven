@@ -1,16 +1,17 @@
 """Tests for the AgentKitArtifact wire projection (lower and read back)."""
 
 import pytest
+from pydantic import ValidationError
 
-from leaven.artifacts.agent_kit import (
-    AGENT_KIT_ARTIFACT_TYPE,
-    AgentKitArtifact,
-    AgentKitSkill,
-)
 from leaven._seam_optimize.artifact_projection import (
     AGENT_KIT_CANDIDATE_KEY,
     artifact_from_record,
     project_seed,
+)
+from leaven.artifacts.agent_kit import (
+    AGENT_KIT_ARTIFACT_TYPE,
+    AgentKitArtifact,
+    AgentKitSkill,
 )
 
 
@@ -51,6 +52,26 @@ def test_kit_round_trips_through_the_wire_artifact() -> None:
     assert projected.candidate_id == "cand_kit_child"
 
 
+@pytest.mark.parametrize(
+    ("path", "message"),
+    [
+        ("", "empty"),
+        ("/etc/passwd", "relative"),
+        ("../escape/SKILL.md", "parent traversal"),
+        ("regex//notes.md", "empty component"),
+        ("./notes.md", "current-directory"),
+        ("regex\\notes.md", "backslash"),
+        ("regex/notes.md\0", "NUL"),
+    ],
+)
+def test_agent_kit_skill_rejects_paths_that_escape_the_skills_subtree(
+    path: str, message: str
+) -> None:
+    """Law: Python kit projections cannot carry host-path or traversal skill paths."""
+    with pytest.raises(ValidationError, match=message):
+        AgentKitSkill(path=path, content="owned")
+
+
 def test_kit_runner_candidate_key_matches_the_host_projection_key() -> None:
     """Law: the SDK kit candidate key matches the host's runner payload key.
 
@@ -70,9 +91,7 @@ def test_from_wire_artifact_rejects_a_non_string_system_prompt() -> None:
 def test_from_wire_artifact_rejects_a_skill_missing_content() -> None:
     """Boundary: a skill missing path/content is rejected."""
     with pytest.raises(TypeError, match="must carry path and content"):
-        AgentKitArtifact.from_wire_artifact(
-            {"system_prompt": "hi", "skills": [{"path": "a.md"}]}
-        )
+        AgentKitArtifact.from_wire_artifact({"system_prompt": "hi", "skills": [{"path": "a.md"}]})
 
 
 def test_from_wire_artifact_rejects_a_non_string_skill_content() -> None:
