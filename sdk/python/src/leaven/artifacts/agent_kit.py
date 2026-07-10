@@ -18,12 +18,14 @@ from a run carries only the projected `system_prompt` and `skills`.
 The wire `artifact_type` is `agent_kit` and the artifact body is
 `{system_prompt, skills}` with each skill a `{path, content}` record. Skill
 paths are portable relative POSIX paths inside the skills subtree; absolute
-paths and parent traversal are rejected by the host's `AgentKit` path law.
+paths and parent traversal are rejected by both the Python projection and the
+host's `AgentKit` path law.
 """
 
+from pathlib import PurePosixPath
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..json_value import JsonObject, JsonValue
 
@@ -39,8 +41,8 @@ class AgentKitSkill(BaseModel):
 
     `path` is a portable relative POSIX path inside the skills subtree (the
     subtree Codex mounts under `.agents/skills`); `content` is the markdown body.
-    Absolute paths and parent traversal are rejected by the host's `AgentKit`
-    path law when the projection rides to the host.
+    Absolute paths and parent traversal are rejected before any local
+    materialization or host projection.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -49,6 +51,11 @@ class AgentKitSkill(BaseModel):
     """Skills-subtree-relative path (e.g. `regex/log-parsing.md`)."""
     content: str
     """Markdown content of the skill file."""
+
+    @field_validator("path")
+    @classmethod
+    def _path_stays_in_skills_subtree(cls, value: str) -> str:
+        return _validate_agent_kit_skill_path(value)
 
 
 class AgentKitArtifact(BaseModel):
@@ -116,6 +123,21 @@ def _skill_from_wire(value: JsonValue) -> AgentKitSkill:
     if not isinstance(path, str) or not isinstance(content, str):
         raise TypeError("agent_kit skill must carry string path and content")
     return AgentKitSkill(path=path, content=content)
+
+
+def _validate_agent_kit_skill_path(value: str) -> str:
+    path = PurePosixPath(value)
+    if (
+        value in {"", "."}
+        or "\\" in value
+        or path.is_absolute()
+        or ".." in path.parts
+        or path.as_posix() != value
+    ):
+        raise ValueError(
+            "agent_kit skill path must be a relative POSIX path inside the skills subtree"
+        )
+    return value
 
 
 class AgentKitChange(BaseModel):
