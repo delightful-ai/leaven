@@ -34,8 +34,7 @@ def materialize_agent_kit(kit: AgentKitArtifact, target_dir: Path) -> Path:
 def _skill_output_path(target_dir: Path, raw_path: str) -> Path:
     path = PurePosixPath(raw_path)
     if (
-        raw_path == ""
-        or raw_path == "."
+        raw_path in {"", "."}
         or "\\" in raw_path
         or path.is_absolute()
         or ".." in path.parts

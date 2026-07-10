@@ -128,8 +128,7 @@ def _skill_from_wire(value: JsonValue) -> AgentKitSkill:
 def _validate_agent_kit_skill_path(value: str) -> str:
     path = PurePosixPath(value)
     if (
-        value == ""
-        or value == "."
+        value in {"", "."}
         or "\\" in value
         or path.is_absolute()
         or ".." in path.parts
