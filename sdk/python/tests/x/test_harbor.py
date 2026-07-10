@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 import leaven as lv
+from leaven.x.harbor.rollout import _outcome_from_result
 
 
 def _write_harbor_task(root: Path) -> Path:
@@ -78,6 +79,17 @@ def test_harbor_outcome_tolerates_missing_optional_evidence() -> None:
     assert decoded.ctrf is None
     assert decoded.trajectory_path is None
     assert decoded.tokens is None
+
+
+def test_harbor_outcome_treats_malformed_ctrf_as_absent(tmp_path: Path) -> None:
+    """Regression: bad optional CTRF evidence must not crash after a live trial."""
+    trial_dir = tmp_path / "trial"
+    (trial_dir / "verifier").mkdir(parents=True)
+    (trial_dir / "verifier" / "ctrf.json").write_text("{not json", encoding="utf-8")
+
+    outcome = _outcome_from_result(object(), trial_dir=trial_dir)
+
+    assert outcome.ctrf is None
 
 
 def test_harbor_outcome_rejects_malformed_json_actionably() -> None:
@@ -194,6 +206,45 @@ def test_unknown_agent_is_rejected_actionably() -> None:
         lv.x.harbor.rollout.agent_kit(agent="nonesuch")
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "",
+        ".",
+        "/tmp/escape.md",
+        "../escape.md",
+        "regex/../../escape.md",
+        "regex//notes.md",
+        "regex/./notes.md",
+        "regex\\notes.md",
+    ],
+)
+def test_agent_kit_skill_rejects_paths_outside_skills_subtree(path: str) -> None:
+    """Law: local AgentKit skills cannot name files outside the skills subtree."""
+    with pytest.raises(ValueError, match="relative POSIX path"):
+        lv.AgentKitSkill(path=path, content="escape")
+
+
+def test_materialize_agent_kit_refuses_bypassed_escape_path(tmp_path: Path) -> None:
+    """Regression: staging refuses path traversal even if model validation is bypassed."""
+    escaped = tmp_path / "owned.md"
+    kit = lv.AgentKitArtifact.model_construct(
+        system_prompt="be careful",
+        skills=[
+            lv.AgentKitSkill.model_construct(
+                path=str(escaped),
+                content="owned",
+            )
+        ],
+        candidate_id=None,
+    )
+
+    with pytest.raises(lv.x.harbor.HarborAdapterError, match="relative POSIX path"):
+        lv.x.harbor.materialize_agent_kit(kit, tmp_path / "stage")
+
+    assert not escaped.exists()
+
+
 def _kit() -> lv.AgentKitArtifact:
     return lv.AgentKitArtifact(
         system_prompt="be careful",
@@ -265,6 +316,36 @@ async def test_agent_kit_codex_repo_placement_uses_configurable_workdir(tmp_path
     assert plan.placement == "repo"
     assert plan.workdir == "/workspace"
     assert plan.task_path == "/harbor/task"
+
+
+@pytest.mark.asyncio
+async def test_agent_kit_trial_names_preserve_long_case_identity(tmp_path: Path) -> None:
+    """Regression: long case IDs cannot collapse into one Harbor trial directory."""
+    calls: list[lv.x.harbor.rollout.HarborTrialPlan] = []
+
+    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
+        calls.append(plan)
+        return lv.x.harbor.HarborTrialOutcome(rewards={"reward": 0.0})
+
+    rollout = lv.x.harbor.rollout.agent_kit(
+        agent="codex",
+        trials_dir=tmp_path / "trials",
+        trial_runner=fake_trial,
+    )
+    common_prefix = "case-" + ("a" * 140)
+    await rollout.stage.func(  # type: ignore[union-attr,arg-type]
+        _kit(),
+        lv.InputCaseView(id=f"{common_prefix}-first", input=_case().input),
+        None,
+    )
+    await rollout.stage.func(  # type: ignore[union-attr,arg-type]
+        _kit(),
+        lv.InputCaseView(id=f"{common_prefix}-second", input=_case().input),
+        None,
+    )
+
+    assert calls[0].trial_name != calls[1].trial_name
+    assert all(len(call.trial_name) <= 96 for call in calls)
 
 
 @pytest.mark.asyncio

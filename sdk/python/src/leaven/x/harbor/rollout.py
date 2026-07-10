@@ -12,6 +12,7 @@ import os
 import tempfile
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 
 import leaven as lv
@@ -123,8 +124,11 @@ def _task_path_from_case(case: lv.InputCaseView, *, task_key: str) -> str:
 
 def _trial_name(case_id: str, candidate_id: str | None) -> str:
     candidate = candidate_id or "seed"
-    safe = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in f"{case_id}__{candidate}")
-    return safe[:96]
+    raw = f"{case_id}__{candidate}"
+    safe = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in raw) or "trial"
+    digest = sha256(raw.encode("utf-8")).hexdigest()[:12]
+    max_prefix = 96 - len("__") - len(digest)
+    return f"{safe[:max_prefix]}__{digest}"
 
 
 async def _run_live_harbor_trial(plan: HarborTrialPlan) -> HarborTrialOutcome:
@@ -199,13 +203,21 @@ def _read_ctrf(path: Path) -> CtrfEvidence | None:
     if not path.is_file():
         return None
 
-    data = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
     results = data.get("results", {}) if isinstance(data, dict) else {}
     summary = results.get("summary", {}) if isinstance(results, dict) else {}
+    if not isinstance(summary, dict):
+        return None
     tests = results.get("tests", []) if isinstance(results, dict) else []
-    passed = int(summary.get("passed") or 0)
-    failed = int(summary.get("failed") or 0)
-    total = int(summary.get("tests") or passed + failed)
+    try:
+        passed = int(summary.get("passed") or 0)
+        failed = int(summary.get("failed") or 0)
+        total = int(summary.get("tests") or passed + failed)
+    except (TypeError, ValueError):
+        return None
     failed_names = [
         str(test.get("name") or "unnamed")
         for test in tests
