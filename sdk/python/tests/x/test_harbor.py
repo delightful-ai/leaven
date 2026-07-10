@@ -264,15 +264,17 @@ async def test_agent_kit_claude_code_uses_repo_placement_by_default(tmp_path: Pa
     """Cutoff: Claude Code stages the kit in-repo because append flag quoting is unsafe."""
     calls: list[lv.x.harbor.rollout.HarborTrialPlan] = []
 
-    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
+    async def fake_trial(
+        plan: lv.x.harbor.rollout.HarborTrialPlan,
+    ) -> lv.x.harbor.HarborTrialOutcome:
         calls.append(plan)
         assert plan.agent == "claude-code"
         assert plan.placement == "repo"
         assert plan.api_key_env == "ANTHROPIC_API_KEY"
         assert (plan.staging_dir / "AGENTS.md").read_text(encoding="utf-8") == "be careful"
-        assert (
-            plan.staging_dir / "skills" / "regex" / "notes.md"
-        ).read_text(encoding="utf-8") == "test edge cases"
+        assert (plan.staging_dir / "skills" / "regex" / "notes.md").read_text(
+            encoding="utf-8"
+        ) == "test edge cases"
         return lv.x.harbor.HarborTrialOutcome(rewards={"reward": 1.0})
 
     rollout = lv.x.harbor.rollout.agent_kit(
@@ -298,7 +300,9 @@ async def test_agent_kit_codex_repo_placement_uses_configurable_workdir(tmp_path
     """Cutoff: Codex defaults to repo placement with an explicit workdir, never /app."""
     calls: list[lv.x.harbor.rollout.HarborTrialPlan] = []
 
-    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
+    async def fake_trial(
+        plan: lv.x.harbor.rollout.HarborTrialPlan,
+    ) -> lv.x.harbor.HarborTrialOutcome:
         calls.append(plan)
         return lv.x.harbor.HarborTrialOutcome(rewards={"reward": 0.0})
 
@@ -323,7 +327,9 @@ async def test_agent_kit_trial_names_preserve_long_case_identity(tmp_path: Path)
     """Regression: long case IDs cannot collapse into one Harbor trial directory."""
     calls: list[lv.x.harbor.rollout.HarborTrialPlan] = []
 
-    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
+    async def fake_trial(
+        plan: lv.x.harbor.rollout.HarborTrialPlan,
+    ) -> lv.x.harbor.HarborTrialOutcome:
         calls.append(plan)
         return lv.x.harbor.HarborTrialOutcome(rewards={"reward": 0.0})
 
@@ -354,7 +360,9 @@ async def test_agent_kit_passes_extra_agent_env_for_live_auth(tmp_path: Path) ->
     calls: list[lv.x.harbor.rollout.HarborTrialPlan] = []
     oauth_env = {"CLAUDE_FORCE_OAUTH": "1", "CLAUDE_CODE_OAUTH_TOKEN": "token-test"}
 
-    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
+    async def fake_trial(
+        plan: lv.x.harbor.rollout.HarborTrialPlan,
+    ) -> lv.x.harbor.HarborTrialOutcome:
         calls.append(plan)
         return lv.x.harbor.HarborTrialOutcome(rewards={"reward": 1.0})
 
