@@ -106,7 +106,7 @@ def _trial_name(case_id: str, candidate_id: str | None) -> str:
     candidate = candidate_id or "seed"
     raw = f"{case_id}__{candidate}"
     safe = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in raw)
-    digest = hashlib.sha256(f"{case_id}\0{candidate}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(f"{case_id}\0{candidate}".encode()).hexdigest()
     suffix = f"__{digest[:_TRIAL_NAME_HASH_LEN]}"
     return f"{safe[: _TRIAL_NAME_MAX_LEN - len(suffix)]}{suffix}"
 
