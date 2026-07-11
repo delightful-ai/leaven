@@ -24,3 +24,15 @@ def test_terminal_bench_agent_uses_generic_leaven_codex_agent() -> None:
         workdir="/app",
     )
     assert isinstance(codex, lv.x.harbor.LeavenCodex)
+
+
+def test_terminal_bench_trial_name_preserves_long_candidate_identity() -> None:
+    """Regression: readable truncation cannot collapse distinct candidates."""
+    case_id = f"case-{'a' * 120}"
+    names = {
+        scenario._trial_name(case_id, f"child-{'x' * 120}-one"),
+        scenario._trial_name(case_id, f"child-{'x' * 120}-two"),
+    }
+
+    assert len(names) == 2
+    assert all(len(name) <= 96 for name in names)
