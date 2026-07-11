@@ -3,6 +3,7 @@
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -208,6 +209,20 @@ def _case() -> lv.InputCaseView:
     )
 
 
+def test_materialize_agent_kit_revalidates_skill_paths_before_writing(tmp_path: Path) -> None:
+    """Regression: skill-like objects cannot bypass AgentKit path validation."""
+    escape = tmp_path / "escape.md"
+    kit = SimpleNamespace(
+        system_prompt="be careful",
+        skills=[SimpleNamespace(path="../escape.md", content="pwn")],
+    )
+
+    with pytest.raises(ValueError, match="portable relative POSIX path"):
+        lv.x.harbor.materialize_agent_kit(kit, tmp_path / "target")
+
+    assert not escape.exists()
+
+
 @pytest.mark.asyncio
 async def test_agent_kit_claude_code_uses_repo_placement_by_default(tmp_path: Path) -> None:
     """Cutoff: Claude Code stages the kit in-repo because append flag quoting is unsafe."""
@@ -234,6 +249,40 @@ async def test_agent_kit_claude_code_uses_repo_placement_by_default(tmp_path: Pa
 
     assert calls, "fake trial seam must be used"
     assert lv.x.harbor.HarborTrialOutcome.decode(encoded).rewards["reward"] == 1.0
+
+
+@pytest.mark.asyncio
+async def test_agent_kit_trial_names_preserve_long_candidate_identity(tmp_path: Path) -> None:
+    """Regression: truncated Harbor trial dirs keep full case/candidate identity."""
+    trial_names: list[str] = []
+
+    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
+        trial_names.append(plan.trial_name)
+        return lv.x.harbor.HarborTrialOutcome(rewards={"reward": 1.0})
+
+    rollout = lv.x.harbor.rollout.agent_kit(
+        agent="codex",
+        trials_dir=tmp_path / "trials",
+        trial_runner=fake_trial,
+    )
+    case = lv.InputCaseView(
+        id=f"case-{'a' * 120}",
+        input={"harbor_task": {"path": "/harbor/task", "kind": "local"}},
+    )
+
+    await rollout.stage.func(  # type: ignore[union-attr,arg-type]
+        lv.AgentKitArtifact(system_prompt="one", candidate_id=f"child-{'x' * 120}-one"),
+        case,
+        None,
+    )
+    await rollout.stage.func(  # type: ignore[union-attr,arg-type]
+        lv.AgentKitArtifact(system_prompt="two", candidate_id=f"child-{'x' * 120}-two"),
+        case,
+        None,
+    )
+
+    assert len(set(trial_names)) == 2
+    assert all(len(name) <= 96 for name in trial_names)
 
 
 def test_agent_kit_claude_code_refuses_user_placement_until_harbor_quotes_it() -> None:

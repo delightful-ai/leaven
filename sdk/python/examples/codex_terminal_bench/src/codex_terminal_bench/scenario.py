@@ -13,6 +13,7 @@ gradient. Feedback carries the verifier output plus short excerpts of the
 internals — the TB2 canary requirement), which is what an agent kit can act on.
 """
 
+import hashlib
 import os
 import tempfile
 from pathlib import Path
@@ -44,6 +45,8 @@ CTRF_WEIGHT = 0.25
 
 LIVE_ENV = "LEAVEN_CODEX_LIVE"
 _RUNS_ROOT_ENV = "LEAVEN_CODEX_TB_TRIALS_DIR"
+_TRIAL_NAME_MAX_LEN = 96
+_TRIAL_NAME_HASH_LEN = 12
 
 
 def _trials_root() -> Path:
@@ -101,8 +104,11 @@ async def run(kit: lv.AgentKitArtifact, case: lv.InputCaseView, cx: lv.RolloutCo
 def _trial_name(case_id: str, candidate_id: str | None) -> str:
     """Build a unique trial dir name per (case, candidate) so trials never collide."""
     candidate = candidate_id or "seed"
-    safe = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in f"{case_id}__{candidate}")
-    return safe[:96]
+    raw = f"{case_id}__{candidate}"
+    safe = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in raw)
+    digest = hashlib.sha256(f"{case_id}\0{candidate}".encode("utf-8")).hexdigest()
+    suffix = f"__{digest[:_TRIAL_NAME_HASH_LEN]}"
+    return f"{safe[: _TRIAL_NAME_MAX_LEN - len(suffix)]}{suffix}"
 
 
 decode_outcome = HarborTrialOutcome.decode
