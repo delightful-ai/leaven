@@ -1,7 +1,7 @@
 """Tests for the AgentKitArtifact wire projection (lower and read back)."""
 
-from pydantic import ValidationError
 import pytest
+from pydantic import ValidationError
 
 from leaven._seam_optimize.artifact_projection import (
     AGENT_KIT_CANDIDATE_KEY,
