@@ -16,15 +16,18 @@ internals — the TB2 canary requirement), which is what an agent kit can act on
 import os
 import tempfile
 from pathlib import Path
+from typing import cast
 
 import leaven as lv
+import leaven.x.harbor.rewards as harbor_rewards
+from leaven.rubric import RegisteredReward
 from leaven.x.harbor import HarborTrialOutcome, trajectory_excerpt
 
 # Absolute imports (not relative): the optimize worker loads this module's file
 # standalone via `runpy.run_path`, where relative imports have no parent package.
 # The package is editable-installed, so absolute imports resolve.
 from codex_terminal_bench.kit import materialize_kit
-from codex_terminal_bench.trial import TrialOutcome, TrialPlan, run_trial
+from codex_terminal_bench.trial import REWARD_KEY, TrialOutcome, TrialPlan, run_trial
 from codex_terminal_bench.wire import RolloutOutcome
 
 # The case-input key naming the pinned Terminal-Bench-2 task this rollout runs.
@@ -112,11 +115,6 @@ def _encode_outcome(outcome: TrialOutcome) -> str:
     return outcome.encode()
 
 
-# ----- rubric: verifier reward (w=1) + CTRF fraction (w=0.25) ------------------
-verifier = lv.x.harbor.rewards.map_key("reward", weight=REWARD_WEIGHT)
-ctrf = lv.x.harbor.rewards.ctrf_fraction(weight=CTRF_WEIGHT)
-
-
 def _verifier_feedback(parsed: HarborTrialOutcome | RolloutOutcome) -> str:
     lines = [parsed.verifier_output.strip()]
     excerpt = trajectory_excerpt(parsed.trajectory_path)
@@ -129,6 +127,31 @@ def _verifier_feedback(parsed: HarborTrialOutcome | RolloutOutcome) -> str:
         "general working method."
     )
     return "\n".join(line for line in lines if line)
+
+
+# ----- rubric: verifier reward (w=1) + CTRF fraction (w=0.25) ------------------
+@lv.reward(weight=REWARD_WEIGHT, id="leaven.x.harbor.rewards.reward")
+async def verifier(
+    output: str,
+    case: lv.ScoringCaseView,
+    cx: lv.RubricContext,
+) -> lv.RewardValue:
+    """Score the task reward with verifier and trajectory feedback."""
+    _ = (case, cx)
+    outcome = decode_outcome(output)
+    if REWARD_KEY not in outcome.rewards:
+        missing = f"missing Harbor reward `{REWARD_KEY}`"
+        feedback = _verifier_feedback(outcome)
+        if feedback:
+            missing = f"{missing}\n{feedback}"
+        return lv.RewardValue(value=0.0, feedback=missing)
+    return lv.RewardValue(
+        value=outcome.rewards[REWARD_KEY],
+        feedback=_verifier_feedback(outcome),
+    )
+
+
+ctrf = cast(RegisteredReward, harbor_rewards.ctrf_fraction(weight=CTRF_WEIGHT))
 
 
 _trajectory_excerpt = trajectory_excerpt

@@ -2,8 +2,13 @@
 
 import json
 from pathlib import Path
+from typing import cast
 
-from codex_terminal_bench.scenario import _trajectory_excerpt, _verifier_feedback
+import leaven as lv
+import pytest
+from leaven.x.harbor import CtrfEvidence, TokenEvidence
+
+from codex_terminal_bench.scenario import _trajectory_excerpt, _verifier_feedback, verifier
 from codex_terminal_bench.trial import TrialOutcome
 from codex_terminal_bench.wire import RolloutOutcome
 
@@ -57,14 +62,46 @@ def test_verifier_feedback_includes_output_and_a_general_improvement_ask() -> No
     assert "Do not encode the task's specific answer" in feedback
 
 
+@pytest.mark.asyncio
+async def test_verifier_reward_feeds_verifier_and_trajectory_feedback(tmp_path: Path) -> None:
+    """Regression: GEPA reflection sees verifier output and safe trajectory excerpts."""
+    trajectory = tmp_path / "trajectory.json"
+    trajectory.write_text(
+        json.dumps(
+            {
+                "steps": [
+                    {
+                        "source": "agent",
+                        "message": "I will inspect the log file before writing the regex.",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    outcome = TrialOutcome(
+        rewards={"reward": 0.0},
+        ctrf=CtrfEvidence(passed=0, failed=5, total=5),
+        verifier_output="verifier reward: 0\nCTRF 0/5 tests passed",
+        trajectory_path=str(trajectory),
+    )
+    case = lv.ScoringCaseView(id="tb_regex_log", input={}, target=None)
+    cx = cast(lv.RubricContext, object())
+
+    reward = cast(lv.RewardValue, await verifier.func(outcome.encode(), case, cx))
+
+    assert reward.value == 0.0
+    assert "verifier reward: 0" in reward.feedback
+    assert "inspect the log file" in reward.feedback
+    assert "teach a general working method" in reward.feedback
+
+
 def test_trial_outcome_ctrf_fraction_is_zero_without_tests() -> None:
     """Law: an empty CTRF report scores a zero fraction, not a division error."""
     outcome = TrialOutcome(
-        reward=0.0,
-        ctrf_passed=0,
-        ctrf_total=0,
-        input_tokens=None,
-        output_tokens=None,
+        rewards={"reward": 0.0},
+        ctrf=CtrfEvidence(passed=0, failed=0, total=0),
+        tokens=TokenEvidence(input=None, output=None),
         cost_usd=None,
         trajectory_path=None,
         verifier_output="",
