@@ -18,6 +18,7 @@ import tempfile
 from pathlib import Path
 
 import leaven as lv
+import leaven.x.harbor.rewards as harbor_rewards
 from leaven.x.harbor import HarborTrialOutcome, trajectory_excerpt
 
 # Absolute imports (not relative): the optimize worker loads this module's file
@@ -148,7 +149,7 @@ async def verifier(
     )
 
 
-ctrf = lv.x.harbor.rewards.ctrf_fraction(weight=CTRF_WEIGHT)
+ctrf = harbor_rewards.ctrf_fraction(weight=CTRF_WEIGHT)
 
 
 _trajectory_excerpt = trajectory_excerpt
