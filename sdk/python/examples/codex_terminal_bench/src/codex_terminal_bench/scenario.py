@@ -16,9 +16,11 @@ internals — the TB2 canary requirement), which is what an agent kit can act on
 import os
 import tempfile
 from pathlib import Path
+from typing import cast
 
 import leaven as lv
 import leaven.x.harbor.rewards as harbor_rewards
+from leaven.rubric import RegisteredReward
 from leaven.x.harbor import HarborTrialOutcome, trajectory_excerpt
 
 # Absolute imports (not relative): the optimize worker loads this module's file
@@ -149,7 +151,7 @@ async def verifier(
     )
 
 
-ctrf = harbor_rewards.ctrf_fraction(weight=CTRF_WEIGHT)
+ctrf = cast(RegisteredReward, harbor_rewards.ctrf_fraction(weight=CTRF_WEIGHT))
 
 
 _trajectory_excerpt = trajectory_excerpt
