@@ -3,7 +3,10 @@
 import json
 from pathlib import Path
 
-from codex_terminal_bench.scenario import _trajectory_excerpt, _verifier_feedback
+import leaven as lv
+import pytest
+
+from codex_terminal_bench.scenario import _trajectory_excerpt, _verifier_feedback, verifier
 from codex_terminal_bench.trial import TrialOutcome
 from codex_terminal_bench.wire import RolloutOutcome
 
@@ -55,6 +58,40 @@ def test_verifier_feedback_includes_output_and_a_general_improvement_ask() -> No
     assert "teach a general working method" in feedback
     # The feedback asks for a general method, not the task's specific answer.
     assert "Do not encode the task's specific answer" in feedback
+
+
+@pytest.mark.asyncio
+async def test_verifier_reward_feeds_verifier_and_trajectory_feedback(tmp_path: Path) -> None:
+    """Regression: GEPA reflection sees verifier output and safe trajectory excerpts."""
+    trajectory = tmp_path / "trajectory.json"
+    trajectory.write_text(
+        json.dumps(
+            {
+                "steps": [
+                    {
+                        "source": "agent",
+                        "message": "I will inspect the log file before writing the regex.",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    outcome = TrialOutcome(
+        rewards={"reward": 0.0},
+        ctrf_passed=0,
+        ctrf_total=5,
+        verifier_output="verifier reward: 0\nCTRF 0/5 tests passed",
+        trajectory_path=str(trajectory),
+    )
+    case = lv.ScoringCaseView(id="tb_regex_log", input={}, target=None)
+
+    reward = await verifier.func(outcome.encode(), case, None)  # type: ignore[arg-type]
+
+    assert reward.value == 0.0
+    assert "verifier reward: 0" in reward.feedback
+    assert "inspect the log file" in reward.feedback
+    assert "teach a general working method" in reward.feedback
 
 
 def test_trial_outcome_ctrf_fraction_is_zero_without_tests() -> None:
