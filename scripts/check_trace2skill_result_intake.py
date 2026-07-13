@@ -8,6 +8,7 @@ import importlib.util
 import json
 import math
 import re
+import shlex
 import sys
 from pathlib import Path
 from typing import Any
@@ -569,11 +570,16 @@ def check_stage_command_policy(
     if case_range is None:
         return
     start, end = case_range
-    for fragment in (f"--start_idx {start}", f"--end_idx {end}"):
-        if fragment not in source_command:
-            errors.append(
-                f"{prefix} {stage_id} source_command must include dataset range fragment {fragment!r}"
-            )
+    for command_fragment in ("run_spreadsheetbench.py", "evaluate_with_official.py"):
+        segment = command_segment(source_command, command_fragment)
+        if segment is None:
+            continue
+        for flag, value in (("start_idx", start), ("end_idx", end)):
+            fragment = f"--{flag} {value}"
+            if str(value) not in command_flag_values(segment, flag):
+                errors.append(
+                    f"{prefix} {stage_id} source_command must include dataset range fragment {fragment!r}"
+                )
 
 
 def check_paper_protocol_identity(
@@ -591,17 +597,48 @@ def check_paper_protocol_identity(
 
 
 def command_flag_values(source_command: str, flag: str) -> list[str]:
-    return re.findall(
-        rf"(?<!\S)--{re.escape(flag)}(?:=|\s+)(?:['\"])?([^'\"\s;&|]+)",
-        source_command,
-    )
+    values: list[str] = []
+    tokens = command_tokens(source_command)
+    flag_token = f"--{flag}"
+    flag_prefix = f"{flag_token}="
+    for index, token in enumerate(tokens):
+        if token == flag_token and index + 1 < len(tokens):
+            values.append(tokens[index + 1])
+        elif token.startswith(flag_prefix):
+            values.append(token.removeprefix(flag_prefix))
+    return values
 
 
 def command_segment(source_command: str, fragment: str) -> str | None:
-    for segment in re.split(r"\s*(?:&&|;)\s*", source_command):
+    for segment in command_segments(source_command):
         if fragment in segment:
             return segment
     return None
+
+
+def command_segments(source_command: str) -> list[str]:
+    segments: list[list[str]] = []
+    current: list[str] = []
+    for token in command_tokens(source_command):
+        if token in {"&&", ";"}:
+            if current:
+                segments.append(current)
+                current = []
+            continue
+        current.append(token)
+    if current:
+        segments.append(current)
+    return [" ".join(segment) for segment in segments]
+
+
+def command_tokens(source_command: str) -> list[str]:
+    lexer = shlex.shlex(source_command, posix=True, punctuation_chars=";&|")
+    lexer.whitespace_split = True
+    lexer.commenters = "#"
+    try:
+        return list(lexer)
+    except ValueError:
+        return []
 
 
 def expected_invocation(fragment: str) -> str | None:
@@ -640,7 +677,10 @@ def check_paper_model_command_identity(
     source_command = record.get("source_command")
     if not isinstance(source_command, str) or not source_command:
         return
-    model_flags = command_flag_values(source_command, "model")
+    run_command = command_segment(source_command, "run_spreadsheetbench.py")
+    if run_command is None:
+        return
+    model_flags = command_flag_values(run_command, "model")
     if model_id not in model_flags:
         errors.append(f"{prefix} {proof} source_command must include --model {model_id!r}")
     for command_model_id in model_flags:
@@ -665,8 +705,12 @@ def check_paper_run_command_flags(
     if not isinstance(source_command, str) or not source_command:
         return
 
+    run_command = command_segment(source_command, "run_spreadsheetbench.py")
+    if run_command is None:
+        return
+
     seed = normalize_seed(record.get("seed"))
-    if seed is not None and str(seed) not in command_flag_values(source_command, "seeds"):
+    if seed is not None and str(seed) not in command_flag_values(run_command, "seeds"):
         errors.append(f"{prefix} {proof} source_command must include --seeds {seed}")
 
     runtime = record.get("runtime")
@@ -674,7 +718,7 @@ def check_paper_run_command_flags(
         return
     for flag, field in (("workers", "workers"), ("max_turns", "max_turns")):
         value = runtime.get(field)
-        if value is not None and str(value) not in command_flag_values(source_command, flag):
+        if value is not None and str(value) not in command_flag_values(run_command, flag):
             errors.append(f"{prefix} {proof} source_command must include --{flag} {value}")
 
     runtime_policy = stage.get("expected_runtime_policy")

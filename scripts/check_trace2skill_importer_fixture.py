@@ -1748,6 +1748,25 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "subset source-command range drift",
         )
 
+        def mutate_subset_to_comment_decoy_source_range(row: dict[str, Any]) -> None:
+            row["source_command"] = (
+                "python run_spreadsheetbench.py --model Qwen3.5-122B-A10B --workers 128 "
+                "--max_turns 100 --seeds 41 --start_idx 0 --end_idx 2 "
+                "&& python evaluate_with_official.py --start_idx 0 --end_idx 2 "
+                "# claimed approved range --start_idx 200 --end_idx 202"
+            )
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "subset-comment-decoy-source-range.jsonl",
+            mutate_subset_to_comment_decoy_source_range,
+            "G2 source_command must include dataset range fragment '--start_idx 200'",
+            errors,
+            "subset comment-decoy source-command range drift",
+        )
+
         def mutate_subset_to_wrong_source_model(row: dict[str, Any]) -> None:
             row["source_command"] = row["source_command"].replace(
                 "--model Qwen3.5-122B-A10B",
@@ -1763,6 +1782,26 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "paper-subset source_command must include --model 'Qwen3.5-122B-A10B'",
             errors,
             "subset source-command model drift",
+        )
+
+        def mutate_subset_to_comment_decoy_source_flags(row: dict[str, Any]) -> None:
+            row["source_command"] = (
+                "python run_spreadsheetbench.py --model fixture-model --workers 1 "
+                "--max_turns 99 --seeds 99 --start_idx 200 --end_idx 202 "
+                "&& python evaluate_with_official.py --start_idx 200 --end_idx 202 "
+                "# claimed paper flags --model Qwen3.5-122B-A10B --workers 128 "
+                "--max_turns 100 --seeds 41"
+            )
+
+        check_mutated_result_intake(
+            repo_root,
+            ara_root,
+            output,
+            tmp_path / "subset-comment-decoy-source-flags.jsonl",
+            mutate_subset_to_comment_decoy_source_flags,
+            "paper-subset source_command must include --model 'Qwen3.5-122B-A10B'",
+            errors,
+            "subset comment-decoy source-command flag drift",
         )
 
         def mutate_subset_to_wrong_source_seed(row: dict[str, Any]) -> None:
