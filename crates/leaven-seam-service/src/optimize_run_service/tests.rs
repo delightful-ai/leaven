@@ -1247,6 +1247,34 @@ fn optimize_run_refuses_population_size_one_naming_the_minimum_bound() {
 }
 
 #[test]
+fn optimize_run_refuses_duplicate_wire_case_ids_before_scoring() {
+    let pkg = package();
+    let runs_root = tempfile::tempdir().unwrap();
+    let service = service_with(
+        &pkg,
+        SeamStageConfig::CommandRunner {
+            argv: vec![loop_law_worker().display().to_string()],
+        },
+        SeamLmConfig::Mock {
+            responses: vec![reflection_response_with_marker()],
+        },
+        runs_root.path(),
+    );
+    let mut request = optimize_request("seed");
+    request["params"]["cases"][1]["case"] = json!("case_train_1");
+
+    let runtime = runtime(service, pkg);
+    let response = runtime.handle_value(&request);
+
+    assert!(response.is_error());
+    let message = response.value()["error"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("duplicate case id") && message.contains("case_train_1"),
+        "refusal must identify the duplicate wire case id: {message}"
+    );
+}
+
+#[test]
 fn optimize_run_unavailable_without_configured_stage_worker() {
     let pkg = package();
     let service = ConfiguredSeamService::from_package(

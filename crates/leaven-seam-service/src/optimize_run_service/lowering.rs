@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
 
 use leaven_artifact_git::GitPath;
@@ -83,8 +83,15 @@ pub(super) fn lower_request(
     let mut validation = Vec::new();
     let mut test = Vec::new();
     let mut cases_by_id = BTreeMap::new();
+    let mut wire_case_ids = BTreeSet::new();
 
     for (index, case) in document.cases().iter().enumerate() {
+        if !wire_case_ids.insert(case.case()) {
+            return Err(OptimizeRunHostError::lowering(format!(
+                "duplicate case id `{}`",
+                case.case()
+            )));
+        }
         let case_id = CaseId::from_index(index);
         let split = case.split().unwrap_or(OptimizeSplit::Train);
         let lowered = LoweredCase {

@@ -98,7 +98,7 @@ class OptimizeBuilder[A]:
         cases = self.environment.task.cases
         if not cases:
             raise ValueError("the task has no cases to optimize over")
-        return [
+        planned = [
             PlannedOptimizeCase(
                 case_id=_wire_case_id(case.id),
                 input=dict(case.input),
@@ -108,6 +108,18 @@ class OptimizeBuilder[A]:
             )
             for case in cases
         ]
+        seen_ids: set[str] = set()
+        duplicate_ids: set[str] = set()
+        for case in planned:
+            if case.case_id in seen_ids:
+                duplicate_ids.add(case.case_id)
+            seen_ids.add(case.case_id)
+        if duplicate_ids:
+            joined = ", ".join(repr(case_id) for case_id in sorted(duplicate_ids))
+            raise ValueError(
+                f"task case ids must be unique after wire projection; duplicate: {joined}"
+            )
+        return planned
 
     def _run_id(self) -> str:
         """Build a fresh run id for this invocation.
@@ -152,11 +164,10 @@ def optimize[A](
 def _wire_case_id(case_id: str) -> str:
     """Project a user case id into the wire CaseId pattern `^case_[A-Za-z0-9_.:-]+$`.
 
-    Hyphens are the only common id character outside the wire pattern's body, so
-    they map to underscores; the `case_` prefix is added when absent.
+    The wire pattern permits hyphens, so preserving them keeps source case
+    identities distinct from otherwise-similar underscore ids.
     """
-    body = case_id.replace("-", "_")
-    return body if body.startswith("case_") else f"case_{body}"
+    return case_id if case_id.startswith("case_") else f"case_{case_id}"
 
 
 def _slug(name: str) -> str:
