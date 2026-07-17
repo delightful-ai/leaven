@@ -493,12 +493,13 @@ leg. They prove active-schema `leaven.optimize_run.v1` validation for the one
 `create` effect carries) whose payload parses into a typed `ArtifactPayload`
 discriminated by `artifact_type` (a `prompt` template, or an `agent_kit`
 projection of a Git-backed AgentKit revision: a `system_prompt` slot plus
-path-validated `SkillFile` records mounted under the Codex `.agents/skills`
-mount). The `agent_kit` record is a projection of a Git-backed artifact, not the
-artifact itself: the host owns run-scoped repository construction and child-
-revision readback, and the seam enforces the AgentKit path law (no absolute,
-parent-traversal, current-directory, empty-component, backslash, or NUL skill
-paths) that the JSON Schema pattern cannot cleanly encode. A request also carries
+path-validated, path-unique `SkillFile` records mounted under the Codex
+`.agents/skills` mount). The `agent_kit` record is a projection of a Git-backed
+artifact, not the artifact itself: the host owns run-scoped repository
+construction and child-revision readback, and the seam enforces the AgentKit
+path law (no absolute, parent-traversal, current-directory, empty-component,
+backslash, NUL, or duplicate skill paths) that JSON Schema cannot cleanly
+encode. A request also carries
 a non-empty target-bearing case manifest, optimizer
 config (a finite `max_metric_calls`, optional population/minibatch sizes, and a
 typed objective parsing all four `instance`/`objective`/`hybrid`/`cartesian`
@@ -683,8 +684,8 @@ backpressure, or runtime watch support.
   missing case `target` field, a best candidate not present in the frontier, an
   empty frontier, non-finite/non-numeric scores, malformed `applied_proposals`
   receipts, an agent_kit projection missing `system_prompt`, and a skill path
-  that is absolute or carries parent traversal. It does not prove an optimizer
-  runtime, GEPA host, run/checkpoint
+  that is absolute, carries parent traversal, or duplicates another skill path.
+  It does not prove an optimizer runtime, GEPA host, run/checkpoint
   readback, or worker transport; configured service execution lands with the GEPA
   host slice of the active production goal.
 - `tests/acp_profile.rs` proves locked Leaven worker profile semantics for pinned

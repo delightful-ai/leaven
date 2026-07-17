@@ -218,6 +218,26 @@ fn optimize_run_rejects_agent_kit_skill_with_parent_traversal_path() {
 }
 
 #[test]
+fn optimize_run_rejects_duplicate_agent_kit_skill_paths() {
+    let package = package();
+
+    // Distinct skill records with the same path satisfy JSON Schema, but cannot
+    // both survive projection into the Git-backed file map.
+    let mut request = optimize_run_request();
+    request["seed"] = agent_kit_artifact();
+    request["seed"]["artifact"]["skills"][1]["path"] = json!("arithmetic/SKILL.md");
+    let error = package
+        .validate_optimize_run_request_document(&request)
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        PublicSeamError::InvalidOptimizeRun { message }
+            if message.contains("duplicate path `arithmetic/SKILL.md`")
+    ));
+}
+
+#[test]
 fn optimize_run_rejects_empty_case_manifest() {
     let package = package();
 

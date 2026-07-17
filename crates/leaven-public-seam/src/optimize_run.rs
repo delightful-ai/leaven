@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use serde_json::Value;
 
 use crate::PublicSeamError;
@@ -366,14 +368,22 @@ impl ArtifactPayload {
             .ok_or_else(|| invalid_optimize_run("agent_kit artifact must be an object"))?;
         let system_prompt =
             required_str(object.get("system_prompt"), "agent_kit.system_prompt")?.to_owned();
-        let skills = object
+        let skill_values = object
             .get("skills")
             .and_then(Value::as_array)
-            .ok_or_else(|| invalid_optimize_run("agent_kit artifact must carry a skills array"))?
-            .iter()
-            .enumerate()
-            .map(|(index, value)| SkillFile::from_schema_valid_value(value, index))
-            .collect::<Result<Vec<_>, _>>()?;
+            .ok_or_else(|| invalid_optimize_run("agent_kit artifact must carry a skills array"))?;
+        let mut paths = BTreeSet::new();
+        let mut skills = Vec::with_capacity(skill_values.len());
+        for (index, value) in skill_values.iter().enumerate() {
+            let skill = SkillFile::from_schema_valid_value(value, index)?;
+            if !paths.insert(skill.path.clone()) {
+                return Err(invalid_optimize_run(format!(
+                    "agent_kit skills carry duplicate path `{}` at index {index}",
+                    skill.path
+                )));
+            }
+            skills.push(skill);
+        }
         Ok(Self::AgentKit {
             system_prompt,
             skills,
