@@ -9,8 +9,6 @@ import json
 import subprocess
 import sys
 import tempfile
-from collections.abc import Iterator
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +22,6 @@ EXPECTED_METRICS = {
 APPROVAL_ARTIFACT = "docs/ara/trace2skill_spreadsheetbench/results/full_run_plan.md"
 ARA_DIR = "docs/ara/trace2skill_spreadsheetbench"
 FIXTURE = "scripts/fixtures/trace2skill_eval_official_results_sample.json"
-RESULT_FIXTURE_SCRATCH_PATTERNS = ("fixture_*.jsonl", "fixture_*.json")
 
 
 def repo_root_for(ara_root: Path) -> Path:
@@ -43,30 +40,6 @@ def import_result_intake_checker(repo_root: Path) -> Any:
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
-
-
-def result_fixture_scratch_paths(ara_root: Path) -> list[Path]:
-    results_dir = ara_root / "results"
-    if not results_dir.is_dir():
-        return []
-    paths: set[Path] = set()
-    for pattern in RESULT_FIXTURE_SCRATCH_PATTERNS:
-        paths.update(path for path in results_dir.glob(pattern) if path.is_file())
-    return sorted(paths)
-
-
-def remove_result_fixture_scratch(ara_root: Path) -> None:
-    for path in result_fixture_scratch_paths(ara_root):
-        path.unlink()
-
-
-@contextmanager
-def cleaned_result_fixture_scratch(ara_root: Path) -> Iterator[None]:
-    remove_result_fixture_scratch(ara_root)
-    try:
-        yield
-    finally:
-        remove_result_fixture_scratch(ara_root)
 
 
 def touch(repo_root: Path, path: Path, text: str) -> str:
@@ -334,25 +307,25 @@ def check_real_results_require_runnable_approval(
     tmp_path: Path,
     errors: list[str],
 ) -> None:
-    output = ara_root / "results/fixture_blocked_approval_import.jsonl"
-    if output.exists():
-        output.unlink()
+    output = ara_root / "results" / f"fixture_{tmp_path.name}_blocked_approval_import.jsonl"
     artifact_paths = prompt_artifact_paths(repo_root, tmp_path / "blocked_approval")
     eval_results = eval_results_artifact_path(repo_root, tmp_path / "blocked_approval")
-    result = run_importer(
-        repo_root,
-        importer_base_args(output, artifact_paths, eval_results),
-    )
-    if result.returncode == 0:
-        errors.append("blocked real-results import: importer unexpectedly succeeded")
-    elif "require a runnable approval packet" not in result.stderr:
-        errors.append(
-            "blocked real-results import: stderr did not contain runnable approval refusal; "
-            f"stderr was {result.stderr!r}"
+    try:
+        result = run_importer(
+            repo_root,
+            importer_base_args(output, artifact_paths, eval_results),
         )
-    if output.exists():
-        errors.append(f"blocked real-results import wrote unexpected file: {output}")
-        output.unlink()
+        if result.returncode == 0:
+            errors.append("blocked real-results import: importer unexpectedly succeeded")
+        elif "require a runnable approval packet" not in result.stderr:
+            errors.append(
+                "blocked real-results import: stderr did not contain runnable approval refusal; "
+                f"stderr was {result.stderr!r}"
+            )
+        if output.exists():
+            errors.append(f"blocked real-results import wrote unexpected file: {output}")
+    finally:
+        output.unlink(missing_ok=True)
 
 
 def check_mutated_result_intake(
@@ -991,7 +964,9 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
         write_jsonl(source_path, [source_heldout_row(repo_root, tmp_path, seed)])
         source_paths.append(source_path.relative_to(repo_root).as_posix())
 
-    prompt_manifest = repo_root / "docs/ara/trace2skill_spreadsheetbench/results/fixture_aggregate.prompt_render_manifest.json"
+    prompt_manifest = (
+        ara_root / "results" / f"fixture_{tmp_path.name}_aggregate.prompt_render_manifest.json"
+    )
     prompt_manifest.write_text('{"schema_version":"fixture.aggregate_prompt_manifest.v1"}\n', encoding="utf-8")
     prompt_manifest_rel = prompt_manifest.relative_to(repo_root).as_posix()
     blocked_source_outputs: list[Path] = []
@@ -1183,7 +1158,9 @@ def check_aggregate_result_intake(repo_root: Path, ara_root: Path, tmp_path: Pat
 
         blocked_source_paths: list[str] = []
         for seed in (41, 42, 43):
-            blocked_source_output = ara_root / "results" / f"fixture_blocked_source_seed_{seed}.jsonl"
+            blocked_source_output = (
+                ara_root / "results" / f"fixture_{tmp_path.name}_blocked_source_seed_{seed}.jsonl"
+            )
             write_jsonl(blocked_source_output, [source_heldout_row(repo_root, tmp_path, seed)])
             blocked_source_outputs.append(blocked_source_output)
             blocked_source_paths.append(blocked_source_output.relative_to(repo_root).as_posix())
@@ -1400,7 +1377,7 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
     target_dir.mkdir(exist_ok=True)
     check_runbook_stage(repo_root, ara_root, errors)
 
-    with cleaned_result_fixture_scratch(ara_root), tempfile.TemporaryDirectory(
+    with tempfile.TemporaryDirectory(
         prefix="trace2skill-importer-fixture-",
         dir=target_dir,
     ) as tmp:
@@ -1916,13 +1893,6 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "refusing paper-denominator-reproduction without --allow-paper-denominator-reproduction",
             errors,
             "missing paper-denominator allow flag",
-        )
-
-    remaining_scratch = result_fixture_scratch_paths(ara_root)
-    if remaining_scratch:
-        errors.append(
-            "importer fixture left result scratch files: "
-            + ", ".join(path.relative_to(repo_root).as_posix() for path in remaining_scratch)
         )
 
     return errors
