@@ -1,12 +1,14 @@
 """Deterministic tests for the optional Harbor adapter surface."""
 
 import json
+import runpy
 import sys
 from pathlib import Path
 
 import pytest
 
 import leaven as lv
+from leaven._seam_worker.loader import load_rubric_from_file
 
 
 def _write_harbor_task(root: Path) -> Path:
@@ -131,6 +133,31 @@ async def test_helper_rewards_report_missing_evidence() -> None:
     assert "missing Harbor reward `reward`" in missing.feedback
     assert empty_ctrf.value == 0.0
     assert "no CTRF total" in empty_ctrf.feedback
+
+
+def test_helper_reward_vector_survives_worker_reload(tmp_path: Path) -> None:
+    """Regression: worker reload preserves both dimensions from reward factories."""
+    scenario = tmp_path / "scenario.py"
+    scenario.write_text(
+        "\n".join(
+            [
+                "import leaven as lv",
+                'verifier = lv.x.harbor.rewards.map_key("reward", weight=1.0)',
+                "ctrf = lv.x.harbor.rewards.ctrf_fraction(weight=0.25)",
+                "rubric = lv.Rubric([verifier, ctrf])",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    rubric = runpy.run_path(str(scenario))["rubric"]
+    reward_names = [reward.func.__name__ for reward in rubric.rewards]
+
+    reloaded = load_rubric_from_file(scenario, reward_names=reward_names)
+
+    assert [reward.id for reward in reloaded.rewards] == [
+        "leaven.x.harbor.rewards.reward",
+        "leaven.x.harbor.rewards.ctrf_fraction",
+    ]
 
 
 def test_trajectory_excerpt_surfaces_only_agent_authored_steps(tmp_path: Path) -> None:
