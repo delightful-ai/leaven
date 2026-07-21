@@ -120,10 +120,7 @@ pub fn command_runner_result(
     })?;
     if !status.success() {
         return Err(PublicSeamError::InvalidPlan {
-            message: format!(
-                "configured stage runner `{program}` exited with {status}: {}",
-                stderr
-            ),
+            message: format!("configured stage runner `{program}` exited with {status}: {stderr}"),
         });
     }
     Ok(result)
@@ -224,10 +221,7 @@ fn read_stderr(mut stderr: impl Read) -> String {
     let mut captured = Vec::new();
     let mut buffer = [0_u8; 8 * 1024];
     let mut truncated = false;
-    loop {
-        let Ok(bytes_read) = stderr.read(&mut buffer) else {
-            break;
-        };
+    while let Ok(bytes_read) = stderr.read(&mut buffer) {
         if bytes_read == 0 {
             break;
         }
