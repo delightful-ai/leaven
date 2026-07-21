@@ -5,6 +5,8 @@ use leaven_public_seam::{LockedMethod, PublicSeamError};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+const STDERR_CAPTURE_LIMIT: usize = 64 * 1024;
+
 /// Configured runner-stage execution for public-seam service processes.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
@@ -88,22 +90,39 @@ pub fn command_runner_result(
         .ok_or_else(|| PublicSeamError::InvalidPlan {
             message: "configured stage runner stdout was not piped".to_owned(),
         })?;
-    let mut stderr = child.stderr.take();
-    stdin
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| PublicSeamError::InvalidPlan {
+            message: "configured stage runner stderr was not piped".to_owned(),
+        })?;
+    let stderr_drain = std::thread::spawn(move || read_stderr(stderr));
+    let interaction = stdin
         .write_all(&request_line)
         .and_then(|()| stdin.write_all(b"\n"))
         .map_err(|error| PublicSeamError::InvalidPlan {
             message: format!("failed to write stage.run request to `{program}`: {error}"),
-        })?;
-    let result = read_command_runner_messages(program, stdout, &mut stdin, effects)?;
-    let status = child.wait().map_err(|error| PublicSeamError::InvalidPlan {
+        })
+        .and_then(|()| read_command_runner_messages(program, stdout, &mut stdin, effects));
+    if interaction.is_err() {
+        let _ = child.kill();
+    }
+    drop(stdin);
+    let status = child.wait();
+    let stderr = stderr_drain.join();
+
+    let result = interaction?;
+    let status = status.map_err(|error| PublicSeamError::InvalidPlan {
         message: format!("failed waiting for configured stage runner `{program}`: {error}"),
+    })?;
+    let stderr = stderr.map_err(|_| PublicSeamError::InvalidPlan {
+        message: format!("failed collecting configured stage runner `{program}` stderr"),
     })?;
     if !status.success() {
         return Err(PublicSeamError::InvalidPlan {
             message: format!(
                 "configured stage runner `{program}` exited with {status}: {}",
-                read_stderr(&mut stderr)
+                stderr
             ),
         });
     }
@@ -201,10 +220,25 @@ fn write_json_line(
         })
 }
 
-fn read_stderr(stderr: &mut Option<impl Read>) -> String {
-    let mut text = String::new();
-    if let Some(stderr) = stderr {
-        let _ = stderr.read_to_string(&mut text);
+fn read_stderr(mut stderr: impl Read) -> String {
+    let mut captured = Vec::new();
+    let mut buffer = [0_u8; 8 * 1024];
+    let mut truncated = false;
+    loop {
+        let Ok(bytes_read) = stderr.read(&mut buffer) else {
+            break;
+        };
+        if bytes_read == 0 {
+            break;
+        }
+        let remaining = STDERR_CAPTURE_LIMIT.saturating_sub(captured.len());
+        let captured_bytes = bytes_read.min(remaining);
+        captured.extend_from_slice(&buffer[..captured_bytes]);
+        truncated |= captured_bytes < bytes_read;
+    }
+    let mut text = String::from_utf8_lossy(&captured).into_owned();
+    if truncated {
+        text.push_str("\n[stderr truncated]");
     }
     text.trim().to_owned()
 }
@@ -242,4 +276,56 @@ fn stage_run_text_result(stage_call_id: &str, text: &str, summary: &str) -> Valu
             "data_classes": ["candidate.output"]
         }
     })
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::PathBuf;
+
+    use leaven_public_seam::LockedMethod;
+    use serde_json::{Value, json};
+
+    use super::command_runner_result;
+
+    #[test]
+    fn command_runner_drains_stderr_while_waiting_for_result() {
+        let worker = noisy_worker();
+        let result = command_runner_result(
+            &[worker.display().to_string()],
+            &json!({"payload": {"stage_call_id": "sc_noisy"}}),
+            &mut |_method: LockedMethod, _params: &Value| {
+                panic!("noisy worker does not issue callbacks")
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result, json!({"worker": "completed"}));
+    }
+
+    fn noisy_worker() -> PathBuf {
+        let directory = tempfile::tempdir().unwrap().keep();
+        let path = directory.join("noisy-stage-worker");
+        std::fs::write(
+            &path,
+            r#"#!/usr/bin/env python3
+import json
+import sys
+
+json.loads(sys.stdin.readline())
+sys.stderr.write("x" * 1_000_000)
+sys.stderr.flush()
+print(json.dumps({
+    "jsonrpc": "2.0",
+    "id": "leaven-seam-service-stage-run",
+    "result": {"worker": "completed"},
+}))
+"#,
+        )
+        .unwrap();
+        let mut permissions = std::fs::metadata(&path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&path, permissions).unwrap();
+        path
+    }
 }
