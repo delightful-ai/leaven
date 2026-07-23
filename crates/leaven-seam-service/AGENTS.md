@@ -49,7 +49,9 @@ method unsupported.
   semantics and the standard library subprocess boundary; private helpers stay
   in this module. `command_runner_result` is the reusable subprocess
   stage-dispatch transport; the optimize.run host reuses it for runner and
-  scorer dispatch instead of duplicating the worker loop.
+  scorer dispatch instead of duplicating the worker loop. Keep worker stderr
+  draining concurrently with the stdout callback loop: a verbose worker must
+  not fill the stderr pipe and deadlock before it can return its stage result.
 - `optimize_run_service/`: the GEPA-over-seam host for `leaven/optimize.run`.
   It lowers the locked optimize-run request into the `leaven-run` builder, runs
   the real `leaven-gepa` loop, dispatches per-case runner and scorer stages to
