@@ -2,11 +2,12 @@
 
 import json
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
 import leaven as lv
+from leaven.x.harbor._kit_upload import upload_kit_tree
 
 
 def _write_harbor_task(root: Path) -> Path:
@@ -298,3 +299,60 @@ def test_import_leaven_does_not_import_harbor_dependency() -> None:
     # Touching the registry and rollout builder must not import Harbor.
     lv.x.harbor.agents.resolve("codex")
     assert "harbor" not in sys.modules
+
+
+@pytest.mark.asyncio
+async def test_repo_kit_upload_creates_skill_parents_before_docker_cp(
+    tmp_path: Path,
+) -> None:
+    """Regression: Harbor Docker upload_file is compose cp and needs nested parents.
+
+    Without mkdir, a safe kit skill at ``regex/SKILL.md`` fails while copying to
+    ``<workdir>/.agents/skills/regex/SKILL.md``, so live AgentKit trials never
+    receive the candidate skills and optimization scores empty failures.
+    """
+    kit_dir = tmp_path / "kit"
+    (kit_dir / "skills" / "regex").mkdir(parents=True)
+    (kit_dir / "AGENTS.md").write_text("use the regex skill", encoding="utf-8")
+    (kit_dir / "skills" / "regex" / "SKILL.md").write_text(
+        "match dates carefully", encoding="utf-8"
+    )
+
+    class DockerLikeEnvironment:
+        """Mimic Harbor 0.13.1 Docker upload_file: parents must already exist."""
+
+        def __init__(self) -> None:
+            self.existing_dirs = {"/app"}
+            self.ensured: list[list[str]] = []
+            self.uploads: list[tuple[str, str]] = []
+
+        async def ensure_dirs(
+            self, dirs: list[str], *, chmod: bool = True
+        ) -> None:
+            del chmod
+            self.ensured.append(list(dirs))
+            self.existing_dirs.update(dirs)
+
+        async def upload_file(self, source_path: Path | str, target_path: str) -> None:
+            parent = str(PurePosixPath(target_path).parent)
+            if parent not in self.existing_dirs:
+                raise RuntimeError(
+                    f"docker compose cp failed: no such directory: {parent}"
+                )
+            self.uploads.append((str(source_path), target_path))
+
+    environment = DockerLikeEnvironment()
+    await upload_kit_tree(
+        environment,
+        kit_dir=kit_dir,
+        workdir="/app",
+        prompt_file="AGENTS.md",
+        skills_subdir=".agents/skills",
+    )
+
+    assert environment.ensured
+    assert "/app/.agents/skills/regex" in environment.ensured[0]
+    assert environment.uploads == [
+        (str(kit_dir / "AGENTS.md"), "/app/AGENTS.md"),
+        (str(kit_dir / "skills" / "regex" / "SKILL.md"), "/app/.agents/skills/regex/SKILL.md"),
+    ]

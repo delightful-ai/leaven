@@ -82,7 +82,10 @@ execution until the engine creates those bound contexts during stage dispatch.
 placement. Claude Code uses repo placement by default: `CLAUDE.md` plus
 `.claude/skills` in the task workdir. Claude Code user placement is refused
 until Harbor quotes `--append-system-prompt` safely; the unquoted flag path can
-split multiword prompts and replace the real task instruction.
+split multiword prompts and replace the real task instruction. Repo-scope kit
+upload must `ensure_dirs` for nested skill parents before Harbor Docker
+`upload_file` (`docker compose cp` does not create them); see
+`leaven.x.harbor._kit_upload`.
 
 The binary is resolved via `LEAVEN_BIN`, else `target/{debug,release}/leaven`
 under the repo root (`LEAVEN_REPO_ROOT` override). Build it with
