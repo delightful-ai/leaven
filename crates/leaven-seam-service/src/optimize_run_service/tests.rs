@@ -4,8 +4,8 @@
 //! `leaven/optimize.run` JSON-RPC route with a scripted command worker and a
 //! mock reflection LM. They kill wrong implementations of the loop: proposals
 //! never applied, children never re-evaluated, best hardcoded to seed, target
-//! leaking into runner dispatch, budget phantom iterations, and silently
-//! dropped cost facts.
+//! leaking into runner dispatch, cross-case target reads during scorer
+//! dispatch, budget phantom iterations, and silently dropped cost facts.
 
 use std::path::PathBuf;
 
@@ -240,6 +240,108 @@ if stage == "scorer":
         "score": {
             "value": score,
             "rewards": [{"id": "isolation", "value": score, "weight": 1.0, "feedback": "isolation check"}]
+        }
+    }
+    print(json.dumps({"jsonrpc": "2.0", "id": req.get("id"), "result": result}), flush=True)
+    sys.exit(0)
+
+raise SystemExit("unexpected stage: " + str(stage))
+"#,
+    )
+}
+
+/// Worker that tries to read a *different* case's target during scorer dispatch.
+///
+/// Scores 1.0 only when the host refuses the foreign `case.target` read, locking
+/// held-out validation/test target isolation to the dispatched case.
+fn foreign_case_target_probe_worker() -> PathBuf {
+    write_worker(
+        "optimize-foreign-case-target-probe-worker",
+        r#"#!/usr/bin/env python3
+import json, sys, select
+
+req = json.loads(sys.stdin.readline())
+payload = req["params"]["payload"]
+stage = req["params"]["stage"]
+
+def case_target_callback(run, case_id):
+    return {
+        "jsonrpc": "2.0",
+        "id": "probe-foreign-target-1",
+        "method": "leaven/case.target",
+        "params": {
+            "schema_version": "leaven.plan.v1",
+            "plan_id": "plan_probe_foreign_target",
+            "consistency": {"kind": "latest_at_start"},
+            "mode": {"kind": "execute"},
+            "ops": [{
+                "kind": "let",
+                "name": "case_target",
+                "expr": {
+                    "kind": "case_query",
+                    "query": {
+                        "kind": "load",
+                        "case": {"kind": "case", "run": run, "id": case_id},
+                        "include": ["target"],
+                        "projection_schema": "fp_schema_sha256_case_projection"
+                    }
+                }
+            }],
+            "return": ["case_target"],
+            "commit": {"kind": "no_graph_writes"}
+        }
+    }
+
+if stage == "runner":
+    result = {
+        "schema_version": "leaven.stage_run.v1",
+        "message": "stage_run_result",
+        "stage": "runner",
+        "stage_call_id": payload["stage_call_id"],
+        "output": {
+            "kind": "text",
+            "summary": "runner probe",
+            "value": "ok",
+            "visibility": "optimizer_visible",
+            "data_classes": ["candidate.output"]
+        }
+    }
+    print(json.dumps({"jsonrpc": "2.0", "id": req.get("id"), "result": result}), flush=True)
+    sys.exit(0)
+
+if stage == "scorer":
+    scored_case = payload["case"]
+    foreign_case = (
+        "case_validation_1" if scored_case == "case_train_1" else "case_train_1"
+    )
+    print(json.dumps(case_target_callback(payload["run"], foreign_case)), flush=True)
+    ready, _, _ = select.select([sys.stdin], [], [], 5)
+    if not ready:
+        raise SystemExit("timed out waiting for foreign case.target response")
+    response = json.loads(sys.stdin.readline())
+    refused = "error" in response
+    answer = "FOREIGN_TARGET_REFUSED" if refused else "FOREIGN_TARGET_LEAKED"
+    score = 1.0 if refused else 0.0
+    result = {
+        "schema_version": "leaven.stage_run.v1",
+        "message": "stage_run_result",
+        "stage": "scorer",
+        "stage_call_id": payload["stage_call_id"],
+        "output": {
+            "kind": "text",
+            "summary": "foreign case probe",
+            "value": answer,
+            "visibility": "optimizer_visible",
+            "data_classes": ["candidate.output"]
+        },
+        "score": {
+            "value": score,
+            "rewards": [{
+                "id": "foreign_case_isolation",
+                "value": score,
+                "weight": 1.0,
+                "feedback": answer
+            }]
         }
     }
     print(json.dumps({"jsonrpc": "2.0", "id": req.get("id"), "result": result}), flush=True)
@@ -830,6 +932,37 @@ fn runner_stage_refuses_case_target_while_scorer_stage_serves_it() {
         .unwrap();
     // The seed scored 1.0 because the runner saw the target refusal and the
     // scorer successfully read the target.
+    assert_score(&seed_entry["score"], 1.0);
+}
+
+#[test]
+fn scorer_stage_refuses_case_target_reads_for_other_cases() {
+    let pkg = package();
+    let runs_root = tempfile::tempdir().unwrap();
+    let service = service_with(
+        &pkg,
+        SeamStageConfig::CommandRunner {
+            argv: vec![foreign_case_target_probe_worker().display().to_string()],
+        },
+        SeamLmConfig::Mock {
+            responses: vec![reflection_response_with_marker()],
+        },
+        runs_root.path(),
+    );
+
+    // Scorer for case_train_1 asks for case_validation_1's target. Cap the
+    // budget to seed evaluation so a leaked foreign target cannot be hidden by
+    // later loop stages.
+    let mut request = optimize_request("Answer the question. Output only the integer.");
+    request["params"]["optimizer"]["max_metric_calls"] = json!(1);
+    let result = run_optimize(&request, service, pkg);
+
+    let frontier = result["frontier"].as_array().unwrap();
+    let seed_entry = frontier
+        .iter()
+        .find(|entry| entry["parent"].is_null())
+        .unwrap();
+    // Score 1.0 means the host refused the foreign case.target callback.
     assert_score(&seed_entry["score"], 1.0);
 }
 

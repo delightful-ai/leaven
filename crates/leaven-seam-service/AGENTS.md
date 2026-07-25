@@ -106,9 +106,13 @@ The optimize.run host loop law is
 it proves a changed child is applied and re-evaluated onto the frontier, asserts
 the exact reference metric-call count (1 seed + 3 parent + 3 child + 1
 validation = 8), and validates the projected document. The companion target
-isolation law refuses `leaven/case.target` during runner dispatch and serves it
-with a receipt during scorer dispatch. When changing host lowering, worker
-dispatch, or projection, keep these laws killing the wrong implementation.
+isolation laws refuse `leaven/case.target` during runner dispatch, serve it with
+a receipt during scorer dispatch for the dispatched case only, and refuse
+cross-case `case.target` reads so held-out validation/test targets cannot leak
+while scoring another case
+(`scorer_stage_refuses_case_target_reads_for_other_cases`). When changing host
+lowering, worker dispatch, or projection, keep these laws killing the wrong
+implementation.
 
 The optimize.run loop runs under a tokio current-thread runtime so OpenAI-backed
 reflection has a reactor (`futures::executor::block_on` would panic with no

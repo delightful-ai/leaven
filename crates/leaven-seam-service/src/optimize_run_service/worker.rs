@@ -113,7 +113,7 @@ pub(super) async fn run_runner_stage(
         case.input(),
     );
 
-    let result = dispatch_stage(&dispatch, StageRole::Runner, &params)
+    let result = dispatch_stage(&dispatch, StageRole::Runner, &lowered.wire_case, &params)
         .map_err(|error| RunError::new(error.to_string()))?;
     let output_text =
         stage_output_text(&result).map_err(|error| RunError::new(error.to_string()))?;
@@ -127,10 +127,10 @@ pub(super) async fn run_runner_stage(
 ///
 /// The dispatched payload carries the runner output and a `target_handle` bound
 /// to the scored case. Nested `leaven/lm.complete` callbacks are serviced;
-/// `leaven/case.target` (and case.input/metadata) reads are served from the
-/// request case set with read receipts. The typed reward vector is lowered into
-/// the engine [`Score`], preserving per-reward values as metrics and feedback
-/// text into the channel GEPA's reflective dataset reads.
+/// `leaven/case.target` (and case.input/metadata) reads are served only for that
+/// scored case, with read receipts. The typed reward vector is lowered into the
+/// engine [`Score`], preserving per-reward values as metrics and feedback text
+/// into the channel GEPA's reflective dataset reads.
 ///
 /// The scorer is artifact-agnostic: it never inspects the candidate artifact,
 /// only the runner output and the scored case, so one implementation serves both
@@ -160,7 +160,7 @@ where
         &runner_text,
     );
 
-    let result = dispatch_stage(&dispatch, StageRole::Scorer, &params)
+    let result = dispatch_stage(&dispatch, StageRole::Scorer, &lowered.wire_case, &params)
         .map_err(|error| ScoreError::new(error.to_string()))?;
     let score = lower_score(&ctx, &result)?;
     Ok(score)
@@ -169,24 +169,29 @@ where
 fn dispatch_stage(
     dispatch: &WorkerDispatch,
     role: StageRole,
+    allowed_wire_case: &str,
     params: &Value,
 ) -> Result<Value, PublicSeamError> {
-    let mut effects = stage_effects(dispatch, role);
+    let mut effects = stage_effects(dispatch, role, allowed_wire_case);
     let result = command_runner_result(&dispatch.argv, params, &mut effects)?;
     Ok(result)
 }
 
-/// Builds the nested-callback handler scoped to the dispatched stage role.
+/// Builds the nested-callback handler scoped to the dispatched stage role and
+/// the case currently under evaluation.
 ///
 /// `leaven/lm.complete` is always serviced through the configured LM. Case
-/// reads are served from the request case set: `case.target` is refused during
-/// runner-stage dispatch (target isolation at the execution layer) and served
-/// with a read receipt during scorer-stage dispatch; `case.input` and
-/// `case.metadata` are served for both roles.
-fn stage_effects(
-    dispatch: &WorkerDispatch,
+/// reads are served only for `allowed_wire_case`: `case.target` is refused
+/// during runner-stage dispatch (target isolation at the execution layer) and
+/// served with a read receipt during scorer-stage dispatch; `case.input` and
+/// `case.metadata` are served for both roles. A worker that names any other
+/// case id is refused so held-out validation/test targets cannot be read while
+/// scoring a train case.
+fn stage_effects<'a>(
+    dispatch: &'a WorkerDispatch,
     role: StageRole,
-) -> impl FnMut(LockedMethod, &Value) -> Result<Value, PublicSeamError> + '_ {
+    allowed_wire_case: &'a str,
+) -> impl FnMut(LockedMethod, &Value) -> Result<Value, PublicSeamError> + 'a {
     move |method, params| {
         match method {
         LockedMethod::LmComplete => (dispatch.lm)(params),
@@ -195,10 +200,16 @@ fn stage_effects(
                 message: "leaven/case.target is refused during runner-stage dispatch; runner stages are target-free"
                     .to_owned(),
             }),
-            StageRole::Scorer => serve_case_read(dispatch, params, CaseReadField::Target),
+            StageRole::Scorer => {
+                serve_case_read(dispatch, params, CaseReadField::Target, allowed_wire_case)
+            }
         },
-        LockedMethod::CaseInput => serve_case_read(dispatch, params, CaseReadField::Input),
-        LockedMethod::CaseMetadata => serve_case_read(dispatch, params, CaseReadField::Metadata),
+        LockedMethod::CaseInput => {
+            serve_case_read(dispatch, params, CaseReadField::Input, allowed_wire_case)
+        }
+        LockedMethod::CaseMetadata => {
+            serve_case_read(dispatch, params, CaseReadField::Metadata, allowed_wire_case)
+        }
         other => Err(PublicSeamError::InvalidPlan {
             message: format!(
                 "optimize.run worker requested unsupported callback method `{}`",
@@ -246,8 +257,16 @@ fn serve_case_read(
     dispatch: &WorkerDispatch,
     params: &Value,
     field: CaseReadField,
+    allowed_wire_case: &str,
 ) -> Result<Value, PublicSeamError> {
     let wire_case = case_read_wire_id(params)?;
+    if wire_case != allowed_wire_case {
+        return Err(PublicSeamError::InvalidPlan {
+            message: format!(
+                "optimize.run worker requested case `{wire_case}` during stage for `{allowed_wire_case}`; case reads are scoped to the dispatched case"
+            ),
+        });
+    }
     let lowered = dispatch
         .cases_by_id
         .values()
