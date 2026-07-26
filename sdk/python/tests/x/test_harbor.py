@@ -86,6 +86,107 @@ def test_harbor_outcome_rejects_malformed_json_actionably() -> None:
         lv.x.harbor.HarborTrialOutcome.decode("{not json")
 
 
+def _write_ctrf(path: Path, *, passed: int, failed: int, failed_names: list[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tests = [
+        {"name": name, "status": "failed" if name in failed_names else "passed"}
+        for name in [*failed_names, *[f"pass_{index}" for index in range(passed)]]
+    ]
+    path.write_text(
+        json.dumps(
+            {
+                "results": {
+                    "summary": {
+                        "passed": passed,
+                        "failed": failed,
+                        "tests": passed + failed,
+                    },
+                    "tests": tests,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_outcome_aggregates_ctrf_from_harbor_multi_step_archives(tmp_path: Path) -> None:
+    """Regression: Harbor multi-step trials archive CTRF under steps/*/verifier."""
+    trial_dir = tmp_path / "multi-step-trial"
+    (trial_dir / "steps" / "create-file" / "verifier").mkdir(parents=True)
+    (trial_dir / "steps" / "append-content" / "verifier").mkdir(parents=True)
+    (trial_dir / "steps" / "append-content" / "agent").mkdir(parents=True)
+    _write_ctrf(
+        trial_dir / "steps" / "create-file" / "verifier" / "ctrf.json",
+        passed=1,
+        failed=1,
+        failed_names=["test_scaffold"],
+    )
+    _write_ctrf(
+        trial_dir / "steps" / "append-content" / "verifier" / "ctrf.json",
+        passed=2,
+        failed=0,
+        failed_names=[],
+    )
+    trajectory = trial_dir / "steps" / "append-content" / "agent" / "trajectory.json"
+    trajectory.write_text('{"steps":[]}', encoding="utf-8")
+    (trial_dir / "result.json").write_text(
+        json.dumps(
+            {
+                "step_results": [
+                    {"step_name": "create-file"},
+                    {"step_name": "append-content"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = type(
+        "_Result",
+        (),
+        {
+            "verifier_result": type("_Verifier", (), {"rewards": {"reward": 0.5}})(),
+            "exception_info": None,
+        },
+    )()
+
+    outcome = lv.x.harbor.rollout._outcome_from_result(result, trial_dir=trial_dir)
+
+    assert outcome.ctrf is not None
+    assert outcome.ctrf.passed == 3
+    assert outcome.ctrf.failed == 1
+    assert outcome.ctrf.total == 4
+    assert outcome.ctrf.failed_names == ["test_scaffold"]
+    assert outcome.trajectory_path == str(trajectory)
+    assert outcome.ctrf_fraction == pytest.approx(0.75)
+
+
+def test_outcome_prefers_root_ctrf_for_single_step_trials(tmp_path: Path) -> None:
+    """Law: ordinary Harbor single-step verifier/ctrf.json still wins when present."""
+    trial_dir = tmp_path / "single-step-trial"
+    _write_ctrf(
+        trial_dir / "verifier" / "ctrf.json",
+        passed=2,
+        failed=0,
+        failed_names=[],
+    )
+    # Decoy step archive must not double-count when the root report remains.
+    _write_ctrf(
+        trial_dir / "steps" / "only" / "verifier" / "ctrf.json",
+        passed=9,
+        failed=0,
+        failed_names=[],
+    )
+
+    result = type("_Result", (), {"verifier_result": None, "exception_info": None})()
+
+    outcome = lv.x.harbor.rollout._outcome_from_result(result, trial_dir=trial_dir)
+
+    assert outcome.ctrf is not None
+    assert outcome.ctrf.passed == 2
+    assert outcome.ctrf.total == 2
+
+
 @pytest.mark.asyncio
 async def test_helper_rewards_score_map_keys_and_ctrf_fraction() -> None:
     """Law: Harbor evidence is scored by ordinary Leaven reward helpers."""
@@ -213,15 +314,17 @@ async def test_agent_kit_claude_code_uses_repo_placement_by_default(tmp_path: Pa
     """Cutoff: Claude Code stages the kit in-repo because append flag quoting is unsafe."""
     calls: list[lv.x.harbor.rollout.HarborTrialPlan] = []
 
-    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
+    async def fake_trial(
+        plan: lv.x.harbor.rollout.HarborTrialPlan,
+    ) -> lv.x.harbor.HarborTrialOutcome:
         calls.append(plan)
         assert plan.agent == "claude-code"
         assert plan.placement == "repo"
         assert plan.api_key_env == "ANTHROPIC_API_KEY"
         assert (plan.staging_dir / "AGENTS.md").read_text(encoding="utf-8") == "be careful"
-        assert (
-            plan.staging_dir / "skills" / "regex" / "notes.md"
-        ).read_text(encoding="utf-8") == "test edge cases"
+        assert (plan.staging_dir / "skills" / "regex" / "notes.md").read_text(
+            encoding="utf-8"
+        ) == "test edge cases"
         return lv.x.harbor.HarborTrialOutcome(rewards={"reward": 1.0})
 
     rollout = lv.x.harbor.rollout.agent_kit(
@@ -247,7 +350,9 @@ async def test_agent_kit_codex_repo_placement_uses_configurable_workdir(tmp_path
     """Cutoff: Codex defaults to repo placement with an explicit workdir, never /app."""
     calls: list[lv.x.harbor.rollout.HarborTrialPlan] = []
 
-    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
+    async def fake_trial(
+        plan: lv.x.harbor.rollout.HarborTrialPlan,
+    ) -> lv.x.harbor.HarborTrialOutcome:
         calls.append(plan)
         return lv.x.harbor.HarborTrialOutcome(rewards={"reward": 0.0})
 
@@ -273,7 +378,9 @@ async def test_agent_kit_passes_extra_agent_env_for_live_auth(tmp_path: Path) ->
     calls: list[lv.x.harbor.rollout.HarborTrialPlan] = []
     oauth_env = {"CLAUDE_FORCE_OAUTH": "1", "CLAUDE_CODE_OAUTH_TOKEN": "token-test"}
 
-    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
+    async def fake_trial(
+        plan: lv.x.harbor.rollout.HarborTrialPlan,
+    ) -> lv.x.harbor.HarborTrialOutcome:
         calls.append(plan)
         return lv.x.harbor.HarborTrialOutcome(rewards={"reward": 1.0})
 
