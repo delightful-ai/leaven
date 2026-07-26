@@ -277,6 +277,11 @@ Decoder laws:
 - Malformed JSON raises an actionable adapter error.
 - Live rollout failures should preserve trial dir and exception detail when
   Harbor provides them.
+- Harbor multi-step trials relocate per-step verifier/agent outputs under
+  `steps/<name>/`. Outcome extraction must read root `verifier/ctrf.json` and
+  `agent/trajectory.json` when present, otherwise aggregate CTRF across
+  `steps/*/verifier/ctrf.json` and bind trajectory to the latest step archive.
+  Do not treat an empty root mount dir as "no CTRF".
 
 ## 8. Scoring Semantics
 

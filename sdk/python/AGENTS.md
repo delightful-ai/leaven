@@ -84,6 +84,12 @@ placement. Claude Code uses repo placement by default: `CLAUDE.md` plus
 until Harbor quotes `--append-system-prompt` safely; the unquoted flag path can
 split multiword prompts and replace the real task instruction.
 
+Harbor multi-step trials archive verifier/agent outputs under
+`steps/<name>/` and clean the empty root mount dirs. Rollout outcome
+extraction must therefore aggregate `steps/*/verifier/ctrf.json` (and resolve
+step ATIF trajectories) when root `verifier/ctrf.json` is absent; otherwise
+default `ctrf_fraction` rewards silently score every multi-step trial as 0.
+
 The binary is resolved via `LEAVEN_BIN`, else `target/{debug,release}/leaven`
 under the repo root (`LEAVEN_REPO_ROOT` override). Build it with
 `cargo build -p leaven-cli`. The repo-root walk uses the topology-contract marker

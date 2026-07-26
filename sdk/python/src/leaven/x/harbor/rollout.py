@@ -182,30 +182,112 @@ def _outcome_from_result(result: object, *, trial_dir: Path) -> HarborTrialOutco
     cost_usd = None
     if hasattr(result, "compute_token_cost_totals"):
         input_tokens, _cache, output_tokens, cost_usd = result.compute_token_cost_totals()
-    trajectory_path = trial_dir / "agent" / "trajectory.json"
     return HarborTrialOutcome(
         trial_dir=str(trial_dir),
         rewards=reward_map,
-        ctrf=_read_ctrf(trial_dir / "verifier" / "ctrf.json"),
+        ctrf=_trial_ctrf(trial_dir),
         verifier_output=_verifier_output(result, reward_map),
-        trajectory_path=str(trajectory_path) if trajectory_path.is_file() else None,
+        trajectory_path=_trial_trajectory_path(trial_dir),
         tokens=TokenEvidence(input=input_tokens, output=output_tokens),
         cost_usd=cost_usd,
         exception=_exception_message(result),
     )
 
 
+def _trial_ctrf(trial_dir: Path) -> CtrfEvidence | None:
+    """Load CTRF from the trial root, or aggregate Harbor multi-step archives.
+
+    Harbor `MultiStepTrial` relocates each step's verifier outputs into
+    `steps/<name>/verifier/` and then removes the empty root `verifier/` mount
+    dir. Reading only `verifier/ctrf.json` therefore drops all partial-credit
+    evidence for multi-step tasks.
+    """
+    root = _read_ctrf(trial_dir / "verifier" / "ctrf.json")
+    if root is not None:
+        return root
+    return _aggregate_step_ctrf(trial_dir)
+
+
+def _aggregate_step_ctrf(trial_dir: Path) -> CtrfEvidence | None:
+    passed = 0
+    failed = 0
+    total = 0
+    failed_names: list[str] = []
+    found = False
+    for step_name in _step_names(trial_dir):
+        evidence = _read_ctrf(trial_dir / "steps" / step_name / "verifier" / "ctrf.json")
+        if evidence is None:
+            continue
+        found = True
+        passed += evidence.passed
+        failed += evidence.failed
+        total += evidence.total
+        for name in evidence.failed_names:
+            if name not in failed_names:
+                failed_names.append(name)
+    if not found:
+        return None
+    return CtrfEvidence(
+        passed=passed,
+        failed=failed,
+        total=total,
+        failed_names=failed_names,
+    )
+
+
+def _trial_trajectory_path(trial_dir: Path) -> str | None:
+    """Prefer root ATIF, else the latest Harbor multi-step agent archive."""
+    root = trial_dir / "agent" / "trajectory.json"
+    if root.is_file():
+        return str(root)
+    last: Path | None = None
+    for step_name in _step_names(trial_dir):
+        candidate = trial_dir / "steps" / step_name / "agent" / "trajectory.json"
+        if candidate.is_file():
+            last = candidate
+    return str(last) if last is not None else None
+
+
+def _step_names(trial_dir: Path) -> list[str]:
+    result_path = trial_dir / "result.json"
+    if result_path.is_file():
+        try:
+            data = json.loads(result_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            data = None
+        if isinstance(data, dict):
+            names = [
+                str(step["step_name"])
+                for step in data.get("step_results") or []
+                if isinstance(step, dict) and isinstance(step.get("step_name"), str)
+            ]
+            if names:
+                return names
+    steps_dir = trial_dir / "steps"
+    if not steps_dir.is_dir():
+        return []
+    return sorted(path.name for path in steps_dir.iterdir() if path.is_dir())
+
+
 def _read_ctrf(path: Path) -> CtrfEvidence | None:
     if not path.is_file():
         return None
 
-    data = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
     results = data.get("results", {}) if isinstance(data, dict) else {}
     summary = results.get("summary", {}) if isinstance(results, dict) else {}
     tests = results.get("tests", []) if isinstance(results, dict) else []
-    passed = int(summary.get("passed") or 0)
-    failed = int(summary.get("failed") or 0)
-    total = int(summary.get("tests") or passed + failed)
+    if not isinstance(summary, dict) or not isinstance(tests, list):
+        return None
+    try:
+        passed = int(summary.get("passed") or 0)
+        failed = int(summary.get("failed") or 0)
+        total = int(summary.get("tests") or passed + failed)
+    except (TypeError, ValueError):
+        return None
     failed_names = [
         str(test.get("name") or "unnamed")
         for test in tests
