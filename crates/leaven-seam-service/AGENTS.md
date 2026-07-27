@@ -107,8 +107,13 @@ it proves a changed child is applied and re-evaluated onto the frontier, asserts
 the exact reference metric-call count (1 seed + 3 parent + 3 child + 1
 validation = 8), and validates the projected document. The companion target
 isolation law refuses `leaven/case.target` during runner dispatch and serves it
-with a receipt during scorer dispatch. When changing host lowering, worker
-dispatch, or projection, keep these laws killing the wrong implementation.
+with a receipt during scorer dispatch. Nested worker `leaven/stage.run` results
+are validated through `PublicSeamPackage::validate_stage_run_result_document`
+before runner/scorer lowering, and must match the dispatched stage kind and
+`stage_call_id`; `optimize_run_refuses_scorer_result_without_reward_vector` kills
+hosts that accept a bare `/score/value` without the locked reward vector. When
+changing host lowering, worker dispatch, or projection, keep these laws killing
+the wrong implementation.
 
 The optimize.run loop runs under a tokio current-thread runtime so OpenAI-backed
 reflection has a reactor (`futures::executor::block_on` would panic with no

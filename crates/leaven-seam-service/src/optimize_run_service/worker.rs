@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use leaven_kernel::{CaseId, Cost};
-use leaven_public_seam::{LockedMethod, PublicSeamError};
+use leaven_public_seam::{LockedMethod, PublicSeamError, PublicSeamPackage, StageRunKind};
 use leaven_run::{RunCase, RunError, RunOutput, Score, ScoreContext, ScoreError};
 use serde_json::{Value, json};
 
@@ -22,6 +22,22 @@ enum StageRole {
     Scorer,
 }
 
+impl StageRole {
+    const fn as_stage_kind(self) -> StageRunKind {
+        match self {
+            Self::Runner => StageRunKind::Runner,
+            Self::Scorer => StageRunKind::Scorer,
+        }
+    }
+
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Runner => "runner",
+            Self::Scorer => "scorer",
+        }
+    }
+}
+
 /// Shared host state the runner/scorer closures dispatch through.
 ///
 /// Cloned cheaply into each closure: the configured worker argv, the case set
@@ -33,6 +49,7 @@ enum StageRole {
 #[derive(Clone)]
 pub(super) struct WorkerDispatch {
     argv: Arc<Vec<String>>,
+    package: PublicSeamPackage,
     run_id: String,
     capability_fingerprint: String,
     cases_by_id: Arc<BTreeMap<CaseId, LoweredCase>>,
@@ -43,6 +60,7 @@ pub(super) struct WorkerDispatch {
 impl WorkerDispatch {
     pub(super) fn new(
         argv: Vec<String>,
+        package: PublicSeamPackage,
         run_id: &str,
         capability_fingerprint: String,
         cases_by_id: BTreeMap<CaseId, LoweredCase>,
@@ -50,6 +68,7 @@ impl WorkerDispatch {
     ) -> Self {
         Self {
             argv: Arc::new(argv),
+            package,
             run_id: sanitize::sanitize_with_prefix("run", run_id),
             capability_fingerprint,
             cases_by_id: Arc::new(cases_by_id),
@@ -64,11 +83,7 @@ impl WorkerDispatch {
             .lock()
             .expect("worker stage counter lock poisoned");
         *counter += 1;
-        let label = match role {
-            StageRole::Runner => "runner",
-            StageRole::Scorer => "scorer",
-        };
-        format!("sc_optimize_{label}_{counter}")
+        format!("sc_optimize_{}_{counter}", role.as_str())
     }
 
     fn lowered_case(&self, case_id: CaseId) -> Result<&LoweredCase, PublicSeamError> {
@@ -173,6 +188,38 @@ fn dispatch_stage(
 ) -> Result<Value, PublicSeamError> {
     let mut effects = stage_effects(dispatch, role);
     let result = command_runner_result(&dispatch.argv, params, &mut effects)?;
+    // Top-level `leaven/stage.run` responses are validated by the seam runtime
+    // before serialization. Nested optimize.run worker results take the same
+    // locked stage-run result schema before runner/scorer lowering, so a
+    // schema-invalid or wrong-call result cannot enter GEPA scores as a bare
+    // `/score/value` number.
+    let expected_call_id = params
+        .pointer("/payload/stage_call_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| PublicSeamError::InvalidStageRun {
+            message: "optimize.run stage payload missing stage_call_id".to_owned(),
+        })?;
+    let document = dispatch
+        .package
+        .validate_stage_run_result_document(&result)?;
+    if document.stage() != role.as_stage_kind() {
+        return Err(PublicSeamError::InvalidStageRun {
+            message: format!(
+                "optimize.run {} worker returned stage `{}` result",
+                role.as_str(),
+                document.stage().as_str()
+            ),
+        });
+    }
+    if document.stage_call_id() != expected_call_id {
+        return Err(PublicSeamError::InvalidStageRun {
+            message: format!(
+                "optimize.run {} worker returned stage_call_id `{}` for dispatched call `{expected_call_id}`",
+                role.as_str(),
+                document.stage_call_id()
+            ),
+        });
+    }
     Ok(result)
 }
 
