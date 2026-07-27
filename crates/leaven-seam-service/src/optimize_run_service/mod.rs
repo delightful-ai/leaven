@@ -91,6 +91,7 @@ fn execute(
 
     let dispatch = WorkerDispatch::new(
         argv,
+        service.package().clone(),
         &lowered.run_id,
         lowered.capability_fingerprint.clone(),
         lowered.cases_by_id.clone(),

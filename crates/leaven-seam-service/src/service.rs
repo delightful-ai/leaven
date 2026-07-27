@@ -98,6 +98,15 @@ impl ConfiguredSeamService {
     pub const fn config(&self) -> &SeamServiceConfig {
         &self.config
     }
+
+    /// Active public-seam package used by this configured service.
+    ///
+    /// The optimize.run host reuses this package to validate nested worker
+    /// `leaven/stage.run` results before lowering them into runner outputs or
+    /// GEPA scores.
+    pub(crate) const fn package(&self) -> &PublicSeamPackage {
+        &self.package
+    }
 }
 
 impl SeamService for ConfiguredSeamService {

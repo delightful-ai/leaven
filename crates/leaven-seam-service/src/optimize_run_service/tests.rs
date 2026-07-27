@@ -833,6 +833,100 @@ fn runner_stage_refuses_case_target_while_scorer_stage_serves_it() {
     assert_score(&seed_entry["score"], 1.0);
 }
 
+/// Scorer worker that returns a numeric `/score/value` without the locked
+/// reward-vector `rewards` array. `lower_score` would still accept this shape;
+/// the host must refuse it before GEPA records the score.
+fn score_without_rewards_worker() -> PathBuf {
+    write_worker(
+        "optimize-score-without-rewards-worker",
+        r#"#!/usr/bin/env python3
+import json, sys
+
+req = json.loads(sys.stdin.readline())
+payload = req["params"]["payload"]
+stage = req["params"]["stage"]
+
+if stage == "runner":
+    result = {
+        "schema_version": "leaven.stage_run.v1",
+        "message": "stage_run_result",
+        "stage": "runner",
+        "stage_call_id": payload["stage_call_id"],
+        "output": {
+            "kind": "text",
+            "summary": "runner answer",
+            "value": "42",
+            "visibility": "optimizer_visible",
+            "data_classes": ["candidate.output"]
+        }
+    }
+    print(json.dumps({"jsonrpc": "2.0", "id": req.get("id"), "result": result}), flush=True)
+    sys.exit(0)
+
+if stage == "scorer":
+    # Deliberately omit score.rewards while still providing score.value. The
+    # locked stage-run schema and StageScoreFact semantics require a reward
+    # vector; accepting this would let a bare scalar poison GEPA ranking.
+    result = {
+        "schema_version": "leaven.stage_run.v1",
+        "message": "stage_run_result",
+        "stage": "scorer",
+        "stage_call_id": payload["stage_call_id"],
+        "output": {
+            "kind": "text",
+            "summary": "scorer output",
+            "value": payload["output"]["value"],
+            "visibility": "optimizer_visible",
+            "data_classes": ["candidate.output"]
+        },
+        "score": {
+            "value": 1.0
+        }
+    }
+    print(json.dumps({"jsonrpc": "2.0", "id": req.get("id"), "result": result}), flush=True)
+    sys.exit(0)
+
+raise SystemExit("unexpected stage: " + str(stage))
+"#,
+    )
+}
+
+#[test]
+fn optimize_run_refuses_scorer_result_without_reward_vector() {
+    let pkg = package();
+    let runs_root = tempfile::tempdir().unwrap();
+    let service = service_with(
+        &pkg,
+        SeamStageConfig::CommandRunner {
+            argv: vec![score_without_rewards_worker().display().to_string()],
+        },
+        SeamLmConfig::Mock {
+            responses: vec![reflection_response_with_marker()],
+        },
+        runs_root.path(),
+    );
+
+    let mut request = optimize_request("Answer the question. Output only the integer.");
+    request["params"]["optimizer"]["max_metric_calls"] = json!(1);
+    let runtime = runtime(service, pkg);
+    let response = runtime.handle_value(&request);
+    assert!(
+        response.is_error(),
+        "optimize.run must refuse a scorer result missing rewards: {:?}",
+        response.value()
+    );
+    let message = response.value()["error"]["message"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(
+        message.contains("reward")
+            || message.contains("score")
+            || message.contains("stage run")
+            || message.contains("Invalid"),
+        "refusal must name the stage-run/score validation failure: {message}"
+    );
+}
+
 #[test]
 fn optimize_run_refuses_unsupported_objective_naming_instance() {
     let pkg = package();
