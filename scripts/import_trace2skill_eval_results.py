@@ -137,6 +137,78 @@ def expected_case_ids_for_range(ara_root: Path, case_range: str, case_count: int
     return case_ids
 
 
+def derive_result_metrics_from_test_cases(
+    result: dict[str, Any],
+    index: int,
+) -> tuple[int, int, float, float, bool]:
+    """Derive per-result metrics the way pinned evaluate_with_official.py does.
+
+    Official SpreadsheetBench evaluation sets passed_count/total_count/soft_score/
+    hard_score/success from ``test_cases[*].passed``. Importer validation must
+    recompute those fields so forged rollups cannot land as paper evidence.
+    """
+    prefix = f"results[{index}]"
+    test_cases = result.get("test_cases")
+    if not isinstance(test_cases, list) or not test_cases:
+        raise ValueError(f"{prefix}.test_cases must be a non-empty array")
+
+    passed_flags: list[bool] = []
+    for case_index, test_case in enumerate(test_cases, start=1):
+        if not isinstance(test_case, dict):
+            raise ValueError(f"{prefix}.test_cases[{case_index}] must be an object")
+        passed = test_case.get("passed")
+        if not isinstance(passed, bool):
+            raise ValueError(f"{prefix}.test_cases[{case_index}].passed must be a boolean")
+        passed_flags.append(passed)
+
+    derived_passed_count = sum(1 for passed in passed_flags if passed)
+    derived_total_count = len(passed_flags)
+    derived_soft_score = derived_passed_count / derived_total_count
+    derived_hard_score = 1.0 if derived_passed_count == derived_total_count else 0.0
+    derived_success = derived_hard_score == 1.0
+
+    reported_passed_count = require_int(result, "passed_count", prefix)
+    reported_total_count = require_int(result, "total_count", prefix)
+    reported_soft_score = require_number(result, "soft_score", prefix)
+    reported_hard_score = require_number(result, "hard_score", prefix)
+    reported_success = result.get("success")
+    if not isinstance(reported_success, bool):
+        raise ValueError(f"{prefix}.success must be a boolean")
+    if not 0 <= reported_soft_score <= 1:
+        raise ValueError(f"{prefix}.soft_score must be in 0..1")
+    if reported_hard_score not in {0.0, 1.0}:
+        raise ValueError(f"{prefix}.hard_score must be 0 or 1")
+
+    if reported_passed_count != derived_passed_count:
+        raise ValueError(
+            f"{prefix}.passed_count {reported_passed_count} does not match "
+            f"test_cases passed count {derived_passed_count}"
+        )
+    if reported_total_count != derived_total_count:
+        raise ValueError(
+            f"{prefix}.total_count {reported_total_count} does not match "
+            f"test_cases length {derived_total_count}"
+        )
+    if not close_enough(reported_soft_score, derived_soft_score):
+        raise ValueError(
+            f"{prefix}.soft_score does not match passed_count / total_count from test_cases"
+        )
+    if reported_hard_score != derived_hard_score:
+        raise ValueError(
+            f"{prefix}.hard_score does not match all-or-nothing test_cases outcome"
+        )
+    if reported_success != derived_success:
+        raise ValueError(f"{prefix}.success does not match hard_score == 1 from test_cases")
+
+    return (
+        derived_passed_count,
+        derived_total_count,
+        derived_soft_score,
+        derived_hard_score,
+        derived_success,
+    )
+
+
 def validate_eval_result(
     eval_result: dict[str, Any],
     expected_case_count: int,
@@ -182,13 +254,10 @@ def validate_eval_result(
         if not 0 <= value <= 1:
             raise ValueError(f"summary.{field} must be in 0..1")
 
-    if not close_enough(instance_accuracy, fully_correct / total_instances):
-        raise ValueError("summary.instance_accuracy does not match fully_correct_instances / total_instances")
-    if not close_enough(test_case_accuracy, passed_test_cases / total_test_cases):
-        raise ValueError("summary.test_case_accuracy does not match passed_test_cases / total_test_cases")
-
     soft_scores: list[float] = []
     hard_scores: list[float] = []
+    derived_passed_test_cases = 0
+    derived_total_test_cases = 0
     observed_case_ids: list[str] = []
     for index, result in enumerate(results, start=1):
         if not isinstance(result, dict):
@@ -197,14 +266,14 @@ def validate_eval_result(
         if not isinstance(instance_id, str) or not instance_id:
             raise ValueError(f"results[{index}].id must be a non-empty string")
         observed_case_ids.append(instance_id)
-        soft = require_number(result, "soft_score", f"results[{index}]")
-        hard = require_number(result, "hard_score", f"results[{index}]")
-        if not 0 <= soft <= 1:
-            raise ValueError(f"results[{index}].soft_score must be in 0..1")
-        if hard not in {0.0, 1.0}:
-            raise ValueError(f"results[{index}].hard_score must be 0 or 1")
+        passed_count, total_count, soft, hard, _success = derive_result_metrics_from_test_cases(
+            result,
+            index,
+        )
         soft_scores.append(soft)
         hard_scores.append(hard)
+        derived_passed_test_cases += passed_count
+        derived_total_test_cases += total_count
 
     if observed_case_ids != expected_case_ids:
         raise ValueError(
@@ -212,6 +281,26 @@ def validate_eval_result(
             f"expected {expected_case_ids!r}, got {observed_case_ids!r}"
         )
 
+    derived_fully_correct = sum(1 for hard in hard_scores if hard == 1.0)
+    if fully_correct != derived_fully_correct:
+        raise ValueError(
+            "summary.fully_correct_instances does not match count of results with hard_score == 1 "
+            f"from test_cases (expected {derived_fully_correct}, got {fully_correct})"
+        )
+    if total_test_cases != derived_total_test_cases:
+        raise ValueError(
+            "summary.total_test_cases does not match sum of result test_cases lengths "
+            f"(expected {derived_total_test_cases}, got {total_test_cases})"
+        )
+    if passed_test_cases != derived_passed_test_cases:
+        raise ValueError(
+            "summary.passed_test_cases does not match sum of passed test_cases "
+            f"(expected {derived_passed_test_cases}, got {passed_test_cases})"
+        )
+    if not close_enough(instance_accuracy, fully_correct / total_instances):
+        raise ValueError("summary.instance_accuracy does not match fully_correct_instances / total_instances")
+    if not close_enough(test_case_accuracy, passed_test_cases / total_test_cases):
+        raise ValueError("summary.test_case_accuracy does not match passed_test_cases / total_test_cases")
     if not close_enough(avg_soft_score, sum(soft_scores) / len(soft_scores)):
         raise ValueError("summary.avg_soft_score does not match result mean")
     if not close_enough(avg_hard_score, sum(hard_scores) / len(hard_scores)):
@@ -514,10 +603,13 @@ def main() -> int:
     records = build_records(args)
     validate_records_against_result_intake(args, records)
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(
-        "".join(json.dumps(record, sort_keys=True) + "\n" for record in records),
-        encoding="utf-8",
-    )
+    if args.output.exists():
+        raise ValueError(
+            f"refusing to overwrite existing output: {args.output} "
+            "(choose a new path to avoid destroying durable result rows)"
+        )
+    with args.output.open("x", encoding="utf-8") as handle:
+        handle.write("".join(json.dumps(record, sort_keys=True) + "\n" for record in records))
     print(f"wrote {len(records)} row(s) to {args.output}")
     return 0
 

@@ -1842,6 +1842,94 @@ def check_importer_fixture(repo_root: Path, ara_root: Path) -> list[str]:
             "missing eval result id",
         )
 
+        def forge_perfect_rollups_with_failed_tests(payload: dict[str, Any]) -> None:
+            payload["summary"] = {
+                "total_instances": 2,
+                "fully_correct_instances": 2,
+                "instance_accuracy": 1.0,
+                "total_test_cases": 4,
+                "passed_test_cases": 4,
+                "test_case_accuracy": 1.0,
+                "avg_soft_score": 1.0,
+                "avg_hard_score": 1.0,
+                "by_instruction_type": {},
+            }
+            for result in payload["results"]:
+                for test_case in result["test_cases"]:
+                    test_case["passed"] = False
+                result["success"] = True
+                result["passed_count"] = result["total_count"]
+                result["soft_score"] = 1.0
+                result["hard_score"] = 1
+
+        forged_eval_results = mutated_eval_results_artifact_path(
+            repo_root,
+            tmp_path / "forged_perfect_rollups",
+            forge_perfect_rollups_with_failed_tests,
+        )
+        expect_failure(
+            repo_root,
+            importer_base_args(
+                tmp_path / "forged-perfect-rollups.jsonl",
+                prompt_artifact_paths(repo_root, tmp_path / "forged_perfect_rollups"),
+                forged_eval_results,
+            ),
+            "does not match test_cases passed count",
+            errors,
+            "forged perfect rollups with failed test cases",
+        )
+
+        def forge_zero_hard_with_perfect_instance_accuracy(payload: dict[str, Any]) -> None:
+            for result in payload["results"]:
+                for test_case in result["test_cases"]:
+                    test_case["passed"] = False
+                result["success"] = False
+                result["passed_count"] = 0
+                result["soft_score"] = 0.0
+                result["hard_score"] = 0
+            payload["summary"] = {
+                "total_instances": 2,
+                "fully_correct_instances": 2,
+                "instance_accuracy": 1.0,
+                "total_test_cases": 4,
+                "passed_test_cases": 0,
+                "test_case_accuracy": 0.0,
+                "avg_soft_score": 0.0,
+                "avg_hard_score": 0.0,
+                "by_instruction_type": {},
+            }
+
+        contradictory_eval_results = mutated_eval_results_artifact_path(
+            repo_root,
+            tmp_path / "contradictory_instance_accuracy",
+            forge_zero_hard_with_perfect_instance_accuracy,
+        )
+        expect_failure(
+            repo_root,
+            importer_base_args(
+                tmp_path / "contradictory-instance-accuracy.jsonl",
+                prompt_artifact_paths(repo_root, tmp_path / "contradictory_instance_accuracy"),
+                contradictory_eval_results,
+            ),
+            "summary.fully_correct_instances does not match count of results with hard_score == 1",
+            errors,
+            "zero hard scores with forged instance accuracy",
+        )
+
+        preexisting_output = tmp_path / "preexisting-output.jsonl"
+        preexisting_output.write_text('{"schema_version":"keep-me"}\n', encoding="utf-8")
+        expect_failure(
+            repo_root,
+            importer_base_args(
+                preexisting_output,
+                prompt_artifact_paths(repo_root, tmp_path / "preexisting_output"),
+                eval_results,
+            ),
+            "refusing to overwrite existing output",
+            errors,
+            "refuse overwriting existing output",
+        )
+
         expect_failure(
             repo_root,
             importer_base_args(tmp_path / "missing-prompt.jsonl", eval_results=eval_results),
