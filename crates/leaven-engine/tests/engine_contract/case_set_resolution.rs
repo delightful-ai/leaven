@@ -32,6 +32,27 @@ fn partitions_and_explicit_cases_resolve_or_refuse_unknown_ids() {
 }
 
 #[test]
+fn partitions_containing_maps_cases_back_to_named_membership() {
+    let train = PartitionId::from("TRAIN");
+    let test = PartitionId::from("TEST");
+    let cases = CaseSet::new(vec!["a", "b", "c"])
+        .with_partition(train.clone(), vec![CaseId::new(0), CaseId::new(1)])
+        .with_partition(test.clone(), vec![CaseId::new(2)]);
+
+    assert_eq!(cases.partitions_containing(CaseId::new(0)), vec![train]);
+    assert_eq!(cases.partitions_containing(CaseId::new(2)), vec![test.clone()]);
+    assert_eq!(
+        cases.hidden_partitions_for_cases(&[CaseId::new(0), CaseId::new(2)], &[test.clone()]),
+        vec![test]
+    );
+    assert!(
+        cases
+            .hidden_partitions_for_cases(&[CaseId::new(0)], &[PartitionId::from("TEST")])
+            .is_empty()
+    );
+}
+
+#[test]
 fn get_returns_present_cases_and_none_for_unknown_ids() {
     let cases = CaseSet::new(vec!["a", "b", "c"]);
 

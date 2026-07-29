@@ -32,10 +32,11 @@ It does not execute evaluations. Evaluator traits, registries, trust checks, cas
   `Case::from_source_row` datasets. It does not parse Parquet/CSV/JSON files,
   hash row payload content, discover splits, or certify benchmark provenance.
 - Engine tests may construct `EvaluationSet` and `CaseSet` directly; do not move that execution machinery here.
-- `SplitUsePolicy::gepa_train_val_test` states intent; current engine trust
-  enforcement is not yet a complete lowering of that policy. Do not claim split
-  policy is enforced until hidden explicit-case and resolved-set tests prove it
-  at the engine boundary.
+- `SplitUsePolicy::gepa_train_val_test` states intent. Product builders must
+  lower at least optimizer-hidden `TEST` into engine `TrustPolicy`, and engine
+  trust must refuse resolved case IDs that belong to hidden partitions
+  (including `EvaluationSet::Cases`). Do not claim full split-use enforcement
+  until purpose/`SplitUsePolicy` coupling is also engine-readable.
 - `leaven-run` currently constructs `Dataset`, `DatasetSplits`, engine
   `CaseSet`, trust policy, final evaluation requests, and reports locally. If a
   second product builder or GEPA path starts copying that stack, stop and move

@@ -132,7 +132,10 @@ where
         .budget(budget)
         .trust_policy(
             TrustPolicy::default()
-                .hide_from_proposers([PartitionId::from("VALIDATION"), PartitionId::from("TEST")]),
+                .hide_from_proposers([PartitionId::from("VALIDATION"), PartitionId::from("TEST")])
+                // TEST stays final-report-only: product final evals use
+                // EvaluationPurpose::FinalTest, which trust still permits.
+                .hide_from_optimizers([PartitionId::from("TEST")]),
         )
         .evaluator(evaluator);
     if let Some(evaluation_cache) = prepared_store.evaluation_cache.as_ref() {

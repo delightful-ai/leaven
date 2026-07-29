@@ -2,8 +2,8 @@ use leaven_core::{
     AssessmentGranularity, EvaluationPurpose, EvaluationRequest, EvaluationSet, PairOrder,
     PartitionId,
 };
-use leaven_engine::{Actor, EvidenceVisibility, TrustPolicy};
-use leaven_kernel::{CandidateId, EvaluatorId, ProposerId, RendererId};
+use leaven_engine::{Actor, CaseSet, EvidenceVisibility, TrustPolicy};
+use leaven_kernel::{CandidateId, CaseId, EvaluatorId, ProposerId, RendererId};
 
 #[test]
 fn read_scopes_preserve_hidden_partitions_by_actor() {
@@ -45,7 +45,7 @@ fn hidden_partition_requests_are_rejected_for_optimizers_and_proposers() {
         .hide_from_proposers([secret.clone()])
         .hide_from_optimizers([secret.clone()])
         .hide_from_callbacks([secret.clone()]);
-    let request = independent(EvaluationSet::Partition(secret.clone()));
+    let request = independent(EvaluationSet::Partition(secret.clone()), EvaluationPurpose::Search);
 
     assert_hidden_partition_refusal(
         policy.check_evaluation_request(&Actor::Optimizer, &request),
@@ -104,37 +104,93 @@ fn nested_sets_that_reference_hidden_partitions_are_rejected() {
         ),
     ] {
         assert_hidden_partition_refusal(
-            policy.check_evaluation_request(&Actor::Optimizer, &independent(set)),
+            policy.check_evaluation_request(
+                &Actor::Optimizer,
+                &independent(set, EvaluationPurpose::Search),
+            ),
             &secret,
         );
     }
 }
 
 #[test]
-fn candidate_scoped_sets_do_not_expose_hidden_partitions() {
-    let policy = TrustPolicy::default().hide_from_optimizers([PartitionId::from("secret")]);
+fn final_test_purpose_may_reference_optimizer_hidden_partitions() {
+    let test = PartitionId::from("TEST");
+    let policy = TrustPolicy::default().hide_from_optimizers([test.clone()]);
+    let request = independent(
+        EvaluationSet::Partition(test),
+        EvaluationPurpose::FinalTest,
+    );
 
+    assert!(
+        policy
+            .check_evaluation_request(&Actor::Optimizer, &request)
+            .is_ok()
+    );
+}
+
+#[test]
+fn explicit_case_ids_in_hidden_partitions_are_rejected_after_resolution() {
+    let secret = PartitionId::from("secret");
+    let public = PartitionId::from("public");
+    let secret_case = CaseId::from_index(1);
+    let public_case = CaseId::from_index(0);
+    let case_set = CaseSet::new(vec!["public", "secret"])
+        .with_partition(public, vec![public_case])
+        .with_partition(secret.clone(), vec![secret_case]);
+    let policy = TrustPolicy::default().hide_from_optimizers([secret.clone()]);
+
+    // Expression-level check still cannot see Cases membership.
     assert!(
         policy
             .check_evaluation_request(
                 &Actor::Optimizer,
-                &independent(EvaluationSet::Cases(vec![leaven_kernel::CaseId::new(0)]))
+                &independent(
+                    EvaluationSet::Cases(vec![secret_case]),
+                    EvaluationPurpose::Search
+                )
+            )
+            .is_ok()
+    );
+
+    // Resolved membership closes the bypass.
+    assert_hidden_partition_refusal(
+        policy.check_resolved_cases(
+            &Actor::Optimizer,
+            EvaluationPurpose::Search,
+            &[secret_case],
+            &case_set,
+        ),
+        &secret,
+    );
+    assert!(
+        policy
+            .check_resolved_cases(
+                &Actor::Optimizer,
+                EvaluationPurpose::Search,
+                &[public_case],
+                &case_set
             )
             .is_ok()
     );
     assert!(
         policy
-            .check_evaluation_request(&Actor::Optimizer, &pairwise(EvaluationSet::Unscoped))
+            .check_resolved_cases(
+                &Actor::Optimizer,
+                EvaluationPurpose::FinalTest,
+                &[secret_case],
+                &case_set
+            )
             .is_ok()
     );
 }
 
-fn independent(set: EvaluationSet) -> EvaluationRequest {
+fn independent(set: EvaluationSet, purpose: EvaluationPurpose) -> EvaluationRequest {
     EvaluationRequest::Independent {
         candidates: vec![CandidateId::new()],
         set,
         granularity: AssessmentGranularity::Aggregate,
-        purpose: EvaluationPurpose::Search,
+        purpose,
     }
 }
 
@@ -158,4 +214,23 @@ fn assert_hidden_partition_refusal(
         panic!("expected hidden partition refusal");
     };
     assert_eq!(partitions, vec![expected.clone()]);
+}
+
+#[test]
+fn unscoped_and_public_case_sets_remain_allowed() {
+    let policy = TrustPolicy::default().hide_from_optimizers([PartitionId::from("secret")]);
+
+    assert!(
+        policy
+            .check_evaluation_request(
+                &Actor::Optimizer,
+                &independent(EvaluationSet::Unscoped, EvaluationPurpose::Search)
+            )
+            .is_ok()
+    );
+    assert!(
+        policy
+            .check_evaluation_request(&Actor::Optimizer, &pairwise(EvaluationSet::Unscoped))
+            .is_ok()
+    );
 }

@@ -2,8 +2,10 @@
 
 use std::collections::BTreeSet;
 
-use leaven_core::{EvaluationRequest, EvaluationSet, PartitionId};
-use leaven_kernel::{EvaluatorId, ProposerId, RendererId};
+use leaven_core::{EvaluationPurpose, EvaluationRequest, EvaluationSet, PartitionId};
+use leaven_kernel::{CaseId, EvaluatorId, ProposerId, RendererId};
+
+use crate::CaseSet;
 
 /// Read authority carried by graph views and stage contexts.
 ///
@@ -117,22 +119,24 @@ impl TrustPolicy {
     }
 
     /// Refuse an evaluation request that references partitions hidden from the actor.
+    ///
+    /// Expression-level checks catch `Partition` / `All` / composed sets. Explicit
+    /// `Cases` lists are checked after resolution via
+    /// [`Self::check_resolved_cases`]. `EvaluationPurpose::FinalTest` is allowed
+    /// so product final-report evaluations can read an otherwise optimizer-hidden
+    /// `TEST` partition after search completes.
     pub fn check_evaluation_request(
         &self,
         actor: &Actor,
         request: &EvaluationRequest,
     ) -> Result<(), TrustViolation> {
-        let hidden = match actor {
-            Actor::Optimizer => &self.hidden.optimizers,
-            Actor::Proposer(_) => &self.hidden.proposers,
-            Actor::Callback => &self.hidden.callbacks,
-            Actor::Evaluator(_) | Actor::Renderer(_) => return Ok(()),
+        if request_purpose(request) == EvaluationPurpose::FinalTest {
+            return Ok(());
+        }
+        let Some(hidden) = self.hidden_for(actor) else {
+            return Ok(());
         };
-        let set = match request {
-            EvaluationRequest::Independent { set, .. }
-            | EvaluationRequest::Pairwise { set, .. }
-            | EvaluationRequest::Listwise { set, .. } => set,
-        };
+        let set = request_set(request);
         let partitions = hidden_partitions_referenced(set, hidden);
         if partitions.is_empty() {
             Ok(())
@@ -142,6 +146,60 @@ impl TrustPolicy {
                 partitions,
             })
         }
+    }
+
+    /// Refuse resolved case IDs that belong to partitions hidden from the actor.
+    ///
+    /// This closes the `EvaluationSet::Cases` bypass: trust is enforced against
+    /// partition membership after resolution, not only against the unresolved
+    /// expression shape.
+    pub fn check_resolved_cases<C>(
+        &self,
+        actor: &Actor,
+        purpose: EvaluationPurpose,
+        case_ids: &[CaseId],
+        case_set: &CaseSet<C>,
+    ) -> Result<(), TrustViolation> {
+        if purpose == EvaluationPurpose::FinalTest {
+            return Ok(());
+        }
+        let Some(hidden) = self.hidden_for(actor) else {
+            return Ok(());
+        };
+        let partitions = case_set.hidden_partitions_for_cases(case_ids, hidden);
+        if partitions.is_empty() {
+            Ok(())
+        } else {
+            Err(TrustViolation::HiddenEvaluationPartitions {
+                actor: actor.clone(),
+                partitions,
+            })
+        }
+    }
+
+    fn hidden_for(&self, actor: &Actor) -> Option<&[PartitionId]> {
+        match actor {
+            Actor::Optimizer => Some(&self.hidden.optimizers),
+            Actor::Proposer(_) => Some(&self.hidden.proposers),
+            Actor::Callback => Some(&self.hidden.callbacks),
+            Actor::Evaluator(_) | Actor::Renderer(_) => None,
+        }
+    }
+}
+
+fn request_set(request: &EvaluationRequest) -> &EvaluationSet {
+    match request {
+        EvaluationRequest::Independent { set, .. }
+        | EvaluationRequest::Pairwise { set, .. }
+        | EvaluationRequest::Listwise { set, .. } => set,
+    }
+}
+
+fn request_purpose(request: &EvaluationRequest) -> EvaluationPurpose {
+    match request {
+        EvaluationRequest::Independent { purpose, .. }
+        | EvaluationRequest::Pairwise { purpose, .. }
+        | EvaluationRequest::Listwise { purpose, .. } => purpose.clone(),
     }
 }
 
