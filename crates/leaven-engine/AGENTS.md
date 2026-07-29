@@ -86,8 +86,8 @@ must not reach into graph storage to make progress.
 
 - when: changing evaluation-set visibility or split hiding
   do: prove the resolved data exposure, not just the syntax of `EvaluationSet`
-  preserve: validation/test hiding for optimizer and proposer search, including explicit case-id requests
-  avoid: relying on `EvaluationSet::Cases` as a bypass around hidden partitions; the audit marks unresolved-shape trust checks as incomplete
+  preserve: validation/test hiding for optimizer and proposer search, including explicit case-id requests; `EvaluationPurpose::FinalTest` remains the product escape hatch for post-search test reports
+  avoid: relying on `EvaluationSet::Cases` as a bypass around hidden partitions
   verify: run `cargo test -p leaven-engine --test engine_contract trust_policy`, `cargo test -p leaven-engine --test engine_contract case_set_resolution`, and `cargo test -p leaven-engine --test engine_contract context_services`
 
 - when: changing engine evaluation cache behavior
