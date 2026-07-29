@@ -25,8 +25,9 @@ around engine graph mutation or a home for optimizer strategy state.
 - The current lowering stack is local product glue: builder input vectors become
   `Dataset`/`DatasetSplits`, engine `CaseSet` partitions named `TRAIN`,
   `VALIDATION`, and `TEST`, a `ScoringEvaluator`, an `Engine` with
-  validation/test hidden from proposers, final baseline/best evaluations, and a
-  concrete `StandardRunSummary`.
+  validation/test hidden from proposers, `TEST` hidden from optimizers
+  (final-report `EvaluationPurpose::FinalTest` still permitted), final
+  baseline/best evaluations, and a concrete `StandardRunSummary`.
 
 ## Route Away
 - Graph records, checkpoint envelopes, budget ledgers, trust, cache,
@@ -223,7 +224,7 @@ persistence beyond the projected public-seam document.
 ## Decision Cards
 - when: extending `optimize(seed)` user ergonomics
   do: keep the public path in this crate and lower into engine/eval/store seams deliberately
-  preserve: required budget, durable-by-default local run storage, explicit ephemeral opt-out, hidden validation/test defaults, callback/store wiring, and result facades that do not expose raw `RunGraph`
+  preserve: required budget, durable-by-default local run storage, explicit ephemeral opt-out, hidden validation/test defaults for proposers, optimizer-hidden `TEST` with final-report `FinalTest` exemption, callback/store wiring, and result facades that do not expose raw `RunGraph`
   avoid: putting GEPA strategy knobs, engine graph shortcuts, provider clients, or dataset execution machinery into the builder just because P8 needs them
   verify: run `cargo test -p leaven-run --test optimize_builder`
 

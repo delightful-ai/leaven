@@ -72,18 +72,19 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
             granularity: AssessmentGranularity::PerCase,
             purpose: purpose.clone(),
         };
-        if let Err(error) = self
-            .trust
-            .check_evaluation_request(&crate::Actor::Optimizer, &full_request)
-        {
-            self.emit(RunEvent::Error {
-                stage: Some(StageId::custom("optimizer")),
-                error: leaven_kernel::ErrorRecord::from_error(ErrorKind::Trust, &error),
-                policy: ErrorPolicy::Continued,
-            });
-            return Err(RunContextError::TrustViolation(error));
-        }
-        let case_ids = self.resolve_evaluation_request(&full_request)?.case_ids;
+        let case_ids = match self.authorize_optimizer_evaluation(&full_request) {
+            Ok(resolved) => resolved.case_ids,
+            Err(error) => {
+                if let RunContextError::TrustViolation(trust) = &error {
+                    self.emit(RunEvent::Error {
+                        stage: Some(StageId::custom("optimizer")),
+                        error: leaven_kernel::ErrorRecord::from_error(ErrorKind::Trust, trust),
+                        policy: ErrorPolicy::Continued,
+                    });
+                }
+                return Err(error);
+            }
+        };
         let CasewiseCacheRows {
             mut rows,
             missing,

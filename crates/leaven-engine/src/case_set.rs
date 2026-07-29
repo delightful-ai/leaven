@@ -1,6 +1,6 @@
 //! Case-set storage and evaluation-set resolution.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use indexmap::IndexMap;
@@ -52,6 +52,33 @@ impl<C> CaseSet<C> {
     #[must_use]
     pub fn get(&self, case: CaseId) -> Option<&C> {
         self.cases.get(&case)
+    }
+
+    /// Returns every named partition that currently lists `case`.
+    #[must_use]
+    pub fn partitions_containing(&self, case: CaseId) -> Vec<PartitionId> {
+        self.partitions
+            .iter()
+            .filter_map(|(partition, ids)| ids.contains(&case).then(|| partition.clone()))
+            .collect()
+    }
+
+    /// Returns the hidden partitions that contain any of `case_ids`.
+    #[must_use]
+    pub fn hidden_partitions_for_cases(
+        &self,
+        case_ids: &[CaseId],
+        hidden: &[PartitionId],
+    ) -> Vec<PartitionId> {
+        let mut partitions = BTreeSet::new();
+        for case in case_ids {
+            for partition in self.partitions_containing(*case) {
+                if hidden.contains(&partition) {
+                    partitions.insert(partition);
+                }
+            }
+        }
+        partitions.into_iter().collect()
     }
 
     /// Resolves an evaluation-set expression against this case set.

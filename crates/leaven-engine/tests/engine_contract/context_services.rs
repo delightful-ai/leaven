@@ -1381,6 +1381,90 @@ fn hidden_partition_evaluation_request_records_trust_violation_without_mutation(
 }
 
 #[test]
+fn explicit_case_ids_in_hidden_partitions_are_refused_before_evaluator_dispatch() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let mut cache = leaven_engine::EvaluationCache::default();
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let secret = PartitionId::from("TEST");
+        let secret_case = leaven_kernel::CaseId::from_index(0);
+        let case_set =
+            CaseSet::new(vec!["held-out"]).with_partition(secret.clone(), vec![secret_case]);
+        let candidate = {
+            let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            seed_ctx.insert_seed(text_artifact("abc"), 0).unwrap()
+        };
+        let evaluator = CountingEvaluator::new(CachePolicy::Never);
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_cache(&mut cache)
+            .with_evidence_store(&store)
+            .with_trust_policy(TrustPolicy::default().hide_from_optimizers([secret]));
+
+        let err = ctx
+            .evaluate_with(
+                &evaluator,
+                EvaluationRequest::Independent {
+                    candidates: vec![candidate],
+                    set: EvaluationSet::Cases(vec![secret_case]),
+                    granularity: AssessmentGranularity::Aggregate,
+                    purpose: EvaluationPurpose::Search,
+                },
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            err,
+            leaven_engine::RunContextError::TrustViolation(
+                leaven_engine::TrustViolation::HiddenEvaluationPartitions { .. }
+            )
+        ));
+        assert_eq!(evaluator.calls(), 0);
+        assert_eq!(ctx.graph().evaluation_request_count(), 0);
+        assert_eq!(ctx.graph().assessment_count(), 0);
+    });
+}
+
+#[test]
+fn final_test_purpose_may_evaluate_optimizer_hidden_partition() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let mut cache = leaven_engine::EvaluationCache::default();
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let test = PartitionId::from("TEST");
+        let case_set = CaseSet::new(vec!["held-out"])
+            .with_partition(test.clone(), vec![leaven_kernel::CaseId::from_index(0)]);
+        let candidate = {
+            let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            seed_ctx.insert_seed(text_artifact("abc"), 0).unwrap()
+        };
+        let evaluator = CountingEvaluator::new(CachePolicy::Never);
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_cache(&mut cache)
+            .with_evidence_store(&store)
+            .with_trust_policy(TrustPolicy::default().hide_from_optimizers([test.clone()]));
+
+        let report = ctx
+            .evaluate_with(
+                &evaluator,
+                EvaluationRequest::Independent {
+                    candidates: vec![candidate],
+                    set: EvaluationSet::Partition(test),
+                    granularity: AssessmentGranularity::Aggregate,
+                    purpose: EvaluationPurpose::FinalTest,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(evaluator.calls(), 1);
+        assert_eq!(report.assessment_ids.len(), 1);
+    });
+}
+
+#[test]
 fn callbacks_receive_callback_read_scope() {
     block_on(async {
         let (mut graph, mut budget) = graph_and_budget();

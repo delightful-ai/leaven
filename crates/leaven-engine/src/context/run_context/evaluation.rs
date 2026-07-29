@@ -31,6 +31,30 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
             .map_err(Into::into)
     }
 
+    /// Authorize and resolve an optimizer-issued evaluation request.
+    ///
+    /// Checks the unresolved expression, resolves the set, then re-checks
+    /// partition membership for explicit case IDs and other resolved shapes.
+    pub(crate) fn authorize_optimizer_evaluation(
+        &self,
+        request: &EvaluationRequest,
+    ) -> Result<leaven_core::ResolvedEvaluationSet, RunContextError> {
+        self.trust
+            .check_evaluation_request(&Actor::Optimizer, request)
+            .map_err(RunContextError::TrustViolation)?;
+        let resolved_set = self.resolve_evaluation_request(request)?;
+        let case_set = self.case_set.ok_or(RunContextError::MissingCaseSet)?;
+        self.trust
+            .check_resolved_cases(
+                &Actor::Optimizer,
+                super::support::request_purpose(request),
+                &resolved_set.case_ids,
+                case_set,
+            )
+            .map_err(RunContextError::TrustViolation)?;
+        Ok(resolved_set)
+    }
+
     /// Resolve an optimizer-visible evaluation set without recording an
     /// evaluation request.
     ///
@@ -47,10 +71,7 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
             granularity: AssessmentGranularity::PerCase,
             purpose: EvaluationPurpose::Probe,
         };
-        self.trust
-            .check_evaluation_request(&Actor::Optimizer, &request)
-            .map_err(RunContextError::TrustViolation)?;
-        self.resolve_evaluation_request(&request)
+        self.authorize_optimizer_evaluation(&request)
     }
 
     /// Evaluate a request, store assessment evidence, and record durable events.
@@ -96,18 +117,19 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
         T: Evaluator<P>,
     {
         let evaluator_id = evaluator.id();
-        if let Err(error) = self
-            .trust
-            .check_evaluation_request(&crate::Actor::Optimizer, &request)
-        {
-            self.emit(RunEvent::Error {
-                stage: Some(StageId::custom("optimizer")),
-                error: ErrorRecord::from_error(ErrorKind::Trust, &error),
-                policy: ErrorPolicy::Continued,
-            });
-            return Err(RunContextError::TrustViolation(error));
-        }
-        let resolved_set = self.resolve_evaluation_request(&request)?;
+        let resolved_set = match self.authorize_optimizer_evaluation(&request) {
+            Ok(resolved_set) => resolved_set,
+            Err(error) => {
+                if let RunContextError::TrustViolation(trust) = &error {
+                    self.emit(RunEvent::Error {
+                        stage: Some(StageId::custom("optimizer")),
+                        error: ErrorRecord::from_error(ErrorKind::Trust, trust),
+                        policy: ErrorPolicy::Continued,
+                    });
+                }
+                return Err(error);
+            }
+        };
         let resolved_request = ResolvedEvaluationRequest {
             kind: super::support::resolved_kind(&request),
             set: resolved_set.clone(),
@@ -160,18 +182,19 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
         request: EvaluationRequest,
     ) -> Result<EvaluationReport, RunContextError> {
         let evaluator_id = evaluator.id();
-        if let Err(error) = self
-            .trust
-            .check_evaluation_request(&crate::Actor::Optimizer, &request)
-        {
-            self.emit(RunEvent::Error {
-                stage: Some(StageId::custom("optimizer")),
-                error: ErrorRecord::from_error(ErrorKind::Trust, &error),
-                policy: ErrorPolicy::Continued,
-            });
-            return Err(RunContextError::TrustViolation(error));
-        }
-        let resolved_set = self.resolve_evaluation_request(&request)?;
+        let resolved_set = match self.authorize_optimizer_evaluation(&request) {
+            Ok(resolved_set) => resolved_set,
+            Err(error) => {
+                if let RunContextError::TrustViolation(trust) = &error {
+                    self.emit(RunEvent::Error {
+                        stage: Some(StageId::custom("optimizer")),
+                        error: ErrorRecord::from_error(ErrorKind::Trust, trust),
+                        policy: ErrorPolicy::Continued,
+                    });
+                }
+                return Err(error);
+            }
+        };
         let resolved_request = ResolvedEvaluationRequest {
             kind: super::support::resolved_kind(&request),
             set: resolved_set.clone(),
@@ -387,18 +410,19 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
         evaluator_fingerprint: leaven_kernel::Fingerprint,
         request: EvaluationRequest,
     ) -> Result<EvaluationRequestId, RunContextError> {
-        if let Err(error) = self
-            .trust
-            .check_evaluation_request(&crate::Actor::Optimizer, &request)
-        {
-            self.emit(RunEvent::Error {
-                stage: Some(StageId::custom("optimizer")),
-                error: ErrorRecord::from_error(ErrorKind::Trust, &error),
-                policy: ErrorPolicy::Continued,
-            });
-            return Err(RunContextError::TrustViolation(error));
-        }
-        let resolved_set = self.resolve_evaluation_request(&request)?;
+        let resolved_set = match self.authorize_optimizer_evaluation(&request) {
+            Ok(resolved_set) => resolved_set,
+            Err(error) => {
+                if let RunContextError::TrustViolation(trust) = &error {
+                    self.emit(RunEvent::Error {
+                        stage: Some(StageId::custom("optimizer")),
+                        error: ErrorRecord::from_error(ErrorKind::Trust, trust),
+                        policy: ErrorPolicy::Continued,
+                    });
+                }
+                return Err(error);
+            }
+        };
         let candidate_count = super::support::candidate_count(&ResolvedEvaluationRequest {
             kind: super::support::resolved_kind(&request),
             set: resolved_set.clone(),
