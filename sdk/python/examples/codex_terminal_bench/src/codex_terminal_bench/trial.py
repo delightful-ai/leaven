@@ -141,7 +141,16 @@ def _fake_trial_outcome(plan: TrialPlan) -> TrialOutcome:
 def _outcome_from_result(result, *, trials_dir: Path, trial_name: str) -> TrialOutcome:
     trial_dir = trials_dir / trial_name
     reward = _verifier_reward(result)
-    ctrf_passed, ctrf_total, ctrf_summary = _ctrf_summary(trial_dir / "verifier" / "ctrf.json")
+    verifier = result.verifier_result
+    # Harbor never clears reused trial dirs. Only trust on-disk CTRF when this
+    # trial produced an in-memory verifier result; otherwise a failed attempt
+    # can inherit a prior evaluation's ctrf.json and poison kit rankings.
+    if verifier is None:
+        ctrf_passed, ctrf_total, ctrf_summary = 0, 0, "no CTRF report (verifier did not run)"
+        failed_names: list[str] = []
+    else:
+        ctrf_passed, ctrf_total, ctrf_summary = _ctrf_summary(trial_dir / "verifier" / "ctrf.json")
+        failed_names = _failed_test_names_from_path(trial_dir / "verifier" / "ctrf.json")
     input_tokens, _cache, output_tokens, cost_usd = result.compute_token_cost_totals()
     trajectory_path = trial_dir / "agent" / "trajectory.json"
     verifier_output = _verifier_output(result, reward=reward, ctrf_summary=ctrf_summary)
@@ -152,7 +161,7 @@ def _outcome_from_result(result, *, trials_dir: Path, trial_name: str) -> TrialO
             passed=ctrf_passed,
             failed=max(ctrf_total - ctrf_passed, 0),
             total=ctrf_total,
-            failed_names=_failed_test_names_from_path(trial_dir / "verifier" / "ctrf.json"),
+            failed_names=failed_names,
         ),
         tokens=TokenEvidence(input=input_tokens, output=output_tokens),
         cost_usd=cost_usd,

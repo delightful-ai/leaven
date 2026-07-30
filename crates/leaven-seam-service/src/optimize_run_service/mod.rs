@@ -40,7 +40,9 @@ use self::instrumentation::{
 use self::lowering::{LoweredRequest, lower_request};
 use self::problem::{SeamPromptArtifact, SeamPromptSurface};
 use self::projection::{ProjectionInputs, project_result};
-use self::worker::{LmHandler, WorkerDispatch, run_runner_stage, run_scorer_stage};
+use self::worker::{
+    LmHandler, WorkerDispatch, artifact_candidate_token, run_runner_stage, run_scorer_stage,
+};
 use crate::service::ConfiguredSeamService;
 
 /// Executes a validated `leaven/optimize.run` dispatch through the GEPA host.
@@ -288,7 +290,10 @@ async fn run_gepa_loop_async(
                 let candidate_payload = serde_json::json!({
                     "candidate_template": artifact.template(),
                 });
-                async move { run_runner_stage(dispatch, candidate_payload, case).await }
+                let candidate_token = artifact_candidate_token(&artifact);
+                async move {
+                    run_runner_stage(dispatch, candidate_payload, case, candidate_token).await
+                }
             },
         )
         .score(
