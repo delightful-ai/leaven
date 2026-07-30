@@ -290,6 +290,84 @@ async def test_agent_kit_passes_extra_agent_env_for_live_auth(tmp_path: Path) ->
     assert calls[0].agent_env == oauth_env
 
 
+@pytest.mark.asyncio
+async def test_agent_kit_trial_names_never_reuse_dirs_across_kit_revisions(
+    tmp_path: Path,
+) -> None:
+    """Regression: collapsed candidate ids must not share Harbor trial dirs.
+
+    Harbor mkdir(exist_ok) never clears leftovers. Reusing a trial name lets a
+    later failed evaluation read a prior verifier/ctrf.json and inflate
+    ctrf_fraction for a different kit revision.
+    """
+    calls: list[lv.x.harbor.rollout.HarborTrialPlan] = []
+
+    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
+        calls.append(plan)
+        return lv.x.harbor.HarborTrialOutcome(rewards={"reward": 0.0})
+
+    rollout = lv.x.harbor.rollout.agent_kit(
+        agent="codex",
+        trials_dir=tmp_path / "trials",
+        trial_runner=fake_trial,
+    )
+    seed = lv.AgentKitArtifact(
+        system_prompt="seed kit",
+        skills=[],
+        candidate_id="cand_optimize_case_one",
+    )
+    child = lv.AgentKitArtifact(
+        system_prompt="improved kit",
+        skills=[],
+        candidate_id="cand_optimize_case_one",
+    )
+    await rollout.stage.func(seed, _case(), None)  # type: ignore[union-attr,arg-type]
+    await rollout.stage.func(child, _case(), None)  # type: ignore[union-attr,arg-type]
+    await rollout.stage.func(seed, _case(), None)  # type: ignore[union-attr,arg-type]
+
+    names = [plan.trial_name for plan in calls]
+    assert len(names) == 3
+    assert len(set(names)) == 3
+    assert names[0] != names[1], "distinct kits must not share a trial directory"
+    assert names[0] != names[2], "same kit re-eval must still get a fresh trial directory"
+
+
+def test_outcome_from_result_ignores_leftover_ctrf_without_verifier(
+    tmp_path: Path,
+) -> None:
+    """Regression: failed trials must not inherit prior CTRF from a reused dir."""
+    trial_dir = tmp_path / "shared-trial"
+    verifier_dir = trial_dir / "verifier"
+    verifier_dir.mkdir(parents=True)
+    (verifier_dir / "ctrf.json").write_text(
+        json.dumps(
+            {
+                "results": {
+                    "summary": {"passed": 3, "failed": 0, "tests": 3},
+                    "tests": [{"name": "ok", "status": "passed"}],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class _FailedTrial:
+        verifier_result = None
+        exception_info = type("Exc", (), {"exception_message": "setup failed"})()
+
+        @staticmethod
+        def compute_token_cost_totals() -> tuple[None, None, None, None]:
+            return None, None, None, None
+
+    outcome = lv.x.harbor.rollout._outcome_from_result(  # noqa: SLF001
+        _FailedTrial(),
+        trial_dir=trial_dir,
+    )
+    assert outcome.rewards == {}
+    assert outcome.ctrf is None
+    assert outcome.exception == "setup failed"
+
+
 def test_import_leaven_does_not_import_harbor_dependency() -> None:
     """Boundary: core Leaven import exposes x.harbor without importing Harbor itself."""
     sys.modules.pop("harbor", None)

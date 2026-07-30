@@ -7,8 +7,10 @@ injected through the agent's real configuration surface (see
 an explicit `workdir` parameter, never a hardcoded `/app`.
 """
 
+import hashlib
 import json
 import os
+import secrets
 import tempfile
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -94,7 +96,7 @@ def agent_kit(
                 agent=adapter.key,
                 staging_dir=staging,
                 trials_dir=trials_root,
-                trial_name=_trial_name(case.id, kit.candidate_id),
+                trial_name=_trial_name(case.id, kit.candidate_id, kit=kit),
                 task_path=task_path,
                 model=resolved_model,
                 placement=resolved_placement,
@@ -121,10 +123,36 @@ def _task_path_from_case(case: lv.InputCaseView, *, task_key: str) -> str:
     raise TypeError(f"case input must carry `{task_key}` as a task path or local Harbor ref")
 
 
-def _trial_name(case_id: str, candidate_id: str | None) -> str:
+def _trial_name(
+    case_id: str,
+    candidate_id: str | None,
+    *,
+    kit: lv.AgentKitArtifact | None = None,
+) -> str:
+    """Build a Harbor trial dir name that never reuses leftover evidence.
+
+    Harbor ``TrialPaths.mkdir`` uses ``exist_ok=True`` and never clears an
+    existing trial directory. Reusing a name lets a later failed evaluation
+    read a prior ``verifier/ctrf.json`` and poison GEPA rankings via
+    ``ctrf_fraction``.
+
+    Seam ``optimize.run`` currently collapses worker candidate refs to a
+    per-case label, so ``candidate_id`` alone does not separate seed vs child
+    kits. Hash kit content when available, and always append a per-invocation
+    nonce so same-kit re-evaluations still get a fresh directory.
+    """
     candidate = candidate_id or "seed"
-    safe = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in f"{case_id}__{candidate}")
-    return safe[:96]
+    identity = f"{case_id}\0{candidate}"
+    if kit is not None:
+        identity = f"{identity}\0{kit.system_prompt}"
+        for skill in kit.skills:
+            identity = f"{identity}\0{skill.path}\0{skill.content}"
+    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:10]
+    nonce = secrets.token_hex(4)
+    prefix = "".join(
+        ch if ch.isalnum() or ch in "-_" else "_" for ch in f"{case_id}__{candidate}"
+    )[:72]
+    return f"{prefix}_{digest}_{nonce}"
 
 
 async def _run_live_harbor_trial(plan: HarborTrialPlan) -> HarborTrialOutcome:
@@ -183,10 +211,16 @@ def _outcome_from_result(result: object, *, trial_dir: Path) -> HarborTrialOutco
     if hasattr(result, "compute_token_cost_totals"):
         input_tokens, _cache, output_tokens, cost_usd = result.compute_token_cost_totals()
     trajectory_path = trial_dir / "agent" / "trajectory.json"
+    # Only trust on-disk CTRF when this trial produced an in-memory verifier
+    # result. Harbor never clears reused trial dirs, so a failed attempt must
+    # not inherit a prior evaluation's ``verifier/ctrf.json``.
+    ctrf = (
+        _read_ctrf(trial_dir / "verifier" / "ctrf.json") if verifier is not None else None
+    )
     return HarborTrialOutcome(
         trial_dir=str(trial_dir),
         rewards=reward_map,
-        ctrf=_read_ctrf(trial_dir / "verifier" / "ctrf.json"),
+        ctrf=ctrf,
         verifier_output=_verifier_output(result, reward_map),
         trajectory_path=str(trajectory_path) if trajectory_path.is_file() else None,
         tokens=TokenEvidence(input=input_tokens, output=output_tokens),

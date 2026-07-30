@@ -13,7 +13,9 @@ gradient. Feedback carries the verifier output plus short excerpts of the
 internals — the TB2 canary requirement), which is what an agent kit can act on.
 """
 
+import hashlib
 import os
+import secrets
 import tempfile
 from pathlib import Path
 
@@ -85,7 +87,7 @@ async def run(kit: lv.AgentKitArtifact, case: lv.InputCaseView, cx: lv.RolloutCo
     trials_root.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="leaven-codex-kit-", dir=trials_root) as kit_tmp:
         kit_dir = materialize_kit(kit, Path(kit_tmp) / "kit")
-        trial_name = _trial_name(case.id, kit.candidate_id)
+        trial_name = _trial_name(case.id, kit.candidate_id, kit=kit)
         outcome = await run_trial(
             TrialPlan(
                 agent_kit_dir=kit_dir,
@@ -98,11 +100,31 @@ async def run(kit: lv.AgentKitArtifact, case: lv.InputCaseView, cx: lv.RolloutCo
     return _encode_outcome(outcome)
 
 
-def _trial_name(case_id: str, candidate_id: str | None) -> str:
-    """Build a unique trial dir name per (case, candidate) so trials never collide."""
+def _trial_name(
+    case_id: str,
+    candidate_id: str | None,
+    *,
+    kit: lv.AgentKitArtifact | None = None,
+) -> str:
+    """Build a Harbor trial dir name that never reuses leftover evidence.
+
+    Harbor never clears an existing trial directory on reuse. Colliding names
+    let a later failed evaluation inherit a prior CTRF file. Hash kit content
+    when available (seam optimize collapses candidate refs per case) and always
+    append a per-invocation nonce.
+    """
     candidate = candidate_id or "seed"
-    safe = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in f"{case_id}__{candidate}")
-    return safe[:96]
+    identity = f"{case_id}\0{candidate}"
+    if kit is not None:
+        identity = f"{identity}\0{kit.system_prompt}"
+        for skill in kit.skills:
+            identity = f"{identity}\0{skill.path}\0{skill.content}"
+    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:10]
+    nonce = secrets.token_hex(4)
+    prefix = "".join(
+        ch if ch.isalnum() or ch in "-_" else "_" for ch in f"{case_id}__{candidate}"
+    )[:72]
+    return f"{prefix}_{digest}_{nonce}"
 
 
 decode_outcome = HarborTrialOutcome.decode

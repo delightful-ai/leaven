@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
+use leaven_core::Artifact;
 use leaven_kernel::{CaseId, Cost};
 use leaven_public_seam::{LockedMethod, PublicSeamError};
 use leaven_run::{RunCase, RunError, RunOutput, Score, ScoreContext, ScoreError};
@@ -93,10 +94,17 @@ impl WorkerDispatch {
 /// artifact-specific (a prompt template versus a flat kit-revision file map),
 /// while the dispatch transport, target isolation, and effect accounting here
 /// are shared across artifact types.
+///
+/// `candidate_token` must uniquely identify the candidate artifact under
+/// evaluation (typically its content identity). Worker-facing Harbor rollouts
+/// stamp this onto `AgentKitArtifact.candidate_id` for trial-directory naming;
+/// collapsing it to a per-case label reuses Harbor trial dirs across GEPA
+/// revisions and can inherit leftover CTRF evidence.
 pub(super) async fn run_runner_stage(
     dispatch: WorkerDispatch,
     candidate_payload: Value,
     case: RunCase<Value>,
+    candidate_token: String,
 ) -> Result<RunOutput<Value>, RunError> {
     let case_id = case.id();
     let lowered = dispatch
@@ -111,6 +119,7 @@ pub(super) async fn run_runner_stage(
         candidate_payload,
         &lowered,
         case.input(),
+        &candidate_token,
     );
 
     let result = dispatch_stage(&dispatch, StageRole::Runner, &params)
@@ -140,7 +149,7 @@ pub(super) async fn run_scorer_stage<A>(
     ctx: ScoreContext<A, Value, Value, Value>,
 ) -> Result<Score, ScoreError>
 where
-    A: leaven_core::Artifact,
+    A: Artifact,
 {
     let case_id = ctx.case.id();
     let lowered = dispatch
@@ -152,12 +161,14 @@ where
         other => other.to_string(),
     };
     let stage_call_id = dispatch.next_stage_call_id(StageRole::Scorer);
+    let candidate_token = artifact_candidate_token(&ctx.artifact);
     let params = scorer_stage_params(
         &dispatch.run_id,
         &stage_call_id,
         &dispatch.capability_fingerprint,
         &lowered,
         &runner_text,
+        &candidate_token,
     );
 
     let result = dispatch_stage(&dispatch, StageRole::Scorer, &params)
@@ -326,6 +337,7 @@ fn runner_stage_params(
     candidate_payload: Value,
     lowered: &LoweredCase,
     case_input: &Value,
+    candidate_token: &str,
 ) -> Value {
     // `case_input` carries the target-free material the worker needs: the
     // projected candidate material (a `candidate_template` for prompts or a
@@ -350,7 +362,7 @@ fn runner_stage_params(
             "role": "runner",
             "run": run_id,
             "stage_call_id": stage_call_id,
-            "candidate": candidate_ref(lowered),
+            "candidate": candidate_ref(lowered, candidate_token),
             "case": lowered.wire_case,
             "case_input": payload_case_input,
             "target_forbidden": true,
@@ -365,6 +377,7 @@ fn scorer_stage_params(
     capability_fingerprint: &str,
     lowered: &LoweredCase,
     runner_text: &str,
+    candidate_token: &str,
 ) -> Value {
     json!({
         "schema_version": "leaven.stage_run.v1",
@@ -376,7 +389,7 @@ fn scorer_stage_params(
             "run": run_id,
             "stage_call_id": stage_call_id,
             "evaluation_request_id": format!("evalreq_optimize_{}", sanitize::sanitize_token(&lowered.wire_case)),
-            "candidate": candidate_ref(lowered),
+            "candidate": candidate_ref(lowered, candidate_token),
             "case": lowered.wire_case,
             "output": {
                 "kind": "text",
@@ -391,14 +404,26 @@ fn scorer_stage_params(
     })
 }
 
-fn candidate_ref(lowered: &LoweredCase) -> String {
-    // The candidate ref names the candidate under evaluation. The host owns
-    // candidate identity through the run graph; the worker only needs a
-    // schema-valid opaque ref, so a stable per-case candidate label is enough
-    // for stateless rollout dispatch.
+/// Opaque worker-facing candidate label derived from artifact content identity.
+///
+/// Distinct GEPA revisions must not collapse to the same wire candidate ref:
+/// Harbor rollouts use that ref for trial-directory naming, and Harbor never
+/// clears reused trial directories.
+pub(super) fn artifact_candidate_token<A: Artifact>(artifact: &A) -> String {
+    match artifact.identity() {
+        leaven_core::ArtifactIdentity::Content(content_id) => content_id.to_string(),
+        leaven_core::ArtifactIdentity::External(label) => label,
+    }
+}
+
+fn candidate_ref(lowered: &LoweredCase, candidate_token: &str) -> String {
+    // Bind the worker-facing candidate ref to both the case and the artifact
+    // identity under evaluation. A per-case-only label reuses Harbor trial
+    // directories across kit/prompt revisions and can inherit leftover CTRF.
     format!(
-        "cand_optimize_{}",
-        sanitize::sanitize_token(&lowered.wire_case)
+        "cand_optimize_{}_{}",
+        sanitize::sanitize_token(&lowered.wire_case),
+        sanitize::sanitize_token(candidate_token)
     )
 }
 
@@ -526,4 +551,36 @@ fn u64_to_f64(value: u64) -> f64 {
     // Cost amounts tolerate the f64 rounding for values beyond 2^53; usd_micro
     // counters in practice stay far below that bound.
     value as f64
+}
+
+#[cfg(test)]
+mod candidate_ref_tests {
+    use super::{artifact_candidate_token, candidate_ref};
+    use crate::optimize_run_service::lowering::LoweredCase;
+    use crate::optimize_run_service::problem::SeamPromptArtifact;
+    use serde_json::json;
+
+    fn lowered_case() -> LoweredCase {
+        LoweredCase {
+            wire_case: "case_train".to_owned(),
+            input: json!({"q": "1"}),
+            target: json!("answer"),
+            metadata: None,
+        }
+    }
+
+    #[test]
+    fn distinct_prompt_artifacts_get_distinct_worker_candidate_refs() {
+        let lowered = lowered_case();
+        let seed = SeamPromptArtifact::new("seed template");
+        let child = SeamPromptArtifact::new("child template with {question}");
+        let seed_ref = candidate_ref(&lowered, &artifact_candidate_token(&seed));
+        let child_ref = candidate_ref(&lowered, &artifact_candidate_token(&child));
+        assert_ne!(
+            seed_ref, child_ref,
+            "GEPA revisions must not collapse to one Harbor trial candidate label"
+        );
+        assert!(seed_ref.starts_with("cand_optimize_case_train_"));
+        assert!(child_ref.starts_with("cand_optimize_case_train_"));
+    }
 }

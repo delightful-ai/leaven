@@ -32,7 +32,9 @@ use serde_json::{Value, json};
 
 use super::super::error::OptimizeRunHostError;
 use super::super::lowering::LoweredRequest;
-use super::super::worker::{WorkerDispatch, run_runner_stage, run_scorer_stage};
+use super::super::worker::{
+    WorkerDispatch, artifact_candidate_token, run_runner_stage, run_scorer_stage,
+};
 use super::instrumentation::{KitArtifactSnapshot, KitArtifacts, kit_repo_key};
 use super::projection::{kit_parts_from_files, kit_wire_artifact};
 
@@ -143,10 +145,11 @@ where
                 // Project the current candidate revision into a flat
                 // `candidate_agent_kit` wire artifact the worker reads.
                 let candidate_payload = candidate_kit_payload(&artifact, &stores, &repo);
+                let candidate_token = artifact_candidate_token(&artifact);
                 async move {
                     let candidate_payload = candidate_payload
                         .map_err(|error| leaven_run::RunError::new(error.to_string()))?;
-                    run_runner_stage(dispatch, candidate_payload, case).await
+                    run_runner_stage(dispatch, candidate_payload, case, candidate_token).await
                 }
             },
         )
