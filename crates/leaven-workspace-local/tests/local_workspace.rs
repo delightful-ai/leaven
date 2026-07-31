@@ -361,6 +361,83 @@ fn local_workspace_can_toggle_executable_permissions_off_again() {
     });
 }
 
+#[cfg(unix)]
+#[test]
+fn local_workspace_rejects_symlink_escapes() {
+    use std::os::unix::fs::{PermissionsExt, symlink};
+
+    futures::executor::block_on(async {
+        let parent = temp_parent("local-symlink-escape");
+        let outside = temp_parent("local-symlink-outside");
+        let factory = LocalWorkspaceFactory::new(&parent);
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mount = workspace.local_mount().unwrap().to_path_buf();
+        std::fs::write(outside.join("secret.txt"), b"secret").unwrap();
+        std::fs::write(outside.join("tool.sh"), b"#!/bin/sh\nexit 0\n").unwrap();
+        symlink(&outside, mount.join("escape")).unwrap();
+        symlink(outside.join("tool.sh"), mount.join("tool.sh")).unwrap();
+
+        let mut view = workspace.view();
+        let write_error = view
+            .write_file(&WorkspacePath::new("escape/created.txt").unwrap(), b"pwned")
+            .unwrap_err();
+        assert_symlink_error(write_error);
+        assert!(!outside.join("created.txt").exists());
+
+        assert_symlink_error(
+            view.read_file(&WorkspacePath::new("escape/secret.txt").unwrap())
+                .unwrap_err(),
+        );
+        assert_symlink_error(
+            view.list_files(&WorkspacePath::new("escape").unwrap())
+                .unwrap_err(),
+        );
+        assert_symlink_error(view.list_files(&WorkspacePath::root()).unwrap_err());
+
+        let mode_before = std::fs::metadata(outside.join("tool.sh"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_symlink_error(
+            view.set_executable(&WorkspacePath::new("tool.sh").unwrap(), true)
+                .unwrap_err(),
+        );
+        assert_eq!(
+            std::fs::metadata(outside.join("tool.sh"))
+                .unwrap()
+                .permissions()
+                .mode(),
+            mode_before
+        );
+        assert_symlink_error(
+            view.is_executable(&WorkspacePath::new("tool.sh").unwrap())
+                .unwrap_err(),
+        );
+
+        assert_symlink_error(
+            view.run_command(Command {
+                program: "sh".to_owned(),
+                args: vec![
+                    "-c".to_owned(),
+                    "printf escaped > command-created.txt".to_owned(),
+                ],
+                cwd: Some(WorkspacePath::new("escape").unwrap()),
+                env: BTreeMap::new(),
+                stdin: CommandStdin::Empty,
+                limits: CommandLimits::default(),
+                user: None,
+            })
+            .unwrap_err(),
+        );
+        assert!(!outside.join("command-created.txt").exists());
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+        remove_dir(&parent);
+        remove_dir(&outside);
+    });
+}
+
 #[test]
 fn local_workspace_lists_recursive_files_from_root_and_subdir() {
     futures::executor::block_on(async {
@@ -448,6 +525,18 @@ fn local_workspace_write_reports_directory_creation_failure() {
         workspace.cleanup().await.unwrap();
         remove_dir(&parent);
     });
+}
+
+fn assert_symlink_error(error: leaven_workspace::WorkspaceError) {
+    match error {
+        leaven_workspace::WorkspaceError::Io(message) => {
+            assert!(
+                message.contains("symlink"),
+                "unexpected io error: {message}"
+            );
+        }
+        other => panic!("unexpected workspace error: {other:?}"),
+    }
 }
 
 fn temp_parent(label: &str) -> std::path::PathBuf {
