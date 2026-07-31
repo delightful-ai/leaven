@@ -268,6 +268,63 @@ fn trace2skill_json_patch_skill_edits_ignore_preexisting_dangling_reference_link
 }
 
 #[test]
+fn trace2skill_json_patch_reference_only_create_ignores_unrelated_dangling_links() {
+    let skill = SkillName::new("xlsx").unwrap();
+    let mut entries = BTreeMap::new();
+    entries.insert(
+        SkillPath::skill_md(),
+        SkillFile::text(
+            "---\n\
+             name: xlsx\n\
+             description: spreadsheet\n\
+             ---\n\
+             # Skill\n\
+             \n\
+             ## Important Requirements\n\
+             - Read references/row-safety.md before deleting rows.\n\
+             - Read references/missing.md when the legacy note is restored.\n",
+        ),
+    );
+    let parent =
+        SkillBank::from_folders([SkillFolder::from_entries(skill.clone(), entries).unwrap()])
+            .unwrap();
+    let payload = fenced_json_patch(&json!({
+        "reasoning": "The row-safety guidance link already exists.",
+        "edits": [
+            {
+                "file": "references/row-safety.md",
+                "op": "create",
+                "content": "# Row Safety\n\nDelete rows from bottom to top.\n"
+            }
+        ],
+        "changelog_entries": []
+    }));
+
+    let lowered = lower_trace2skill_json_patch(Trace2SkillPatchLoweringInput {
+        parent: &parent,
+        skill: &skill,
+        payload: &payload,
+        support_count: 2,
+    })
+    .unwrap();
+
+    assert_eq!(lowered.plan.edits().len(), 2);
+    let application = apply_trace2skill_json_patch(Trace2SkillPatchLoweringInput {
+        parent: &parent,
+        skill: &skill,
+        payload: &payload,
+        support_count: 2,
+    })
+    .unwrap();
+    let child = application.child().get(&skill).unwrap();
+    assert!(
+        child
+            .file(&SkillPath::new("references/row-safety.md").unwrap())
+            .is_some()
+    );
+}
+
+#[test]
 fn trace2skill_json_patch_requires_translated_exact_section_targets() {
     let (parent, skill) = spreadsheet_skill_bank();
     let payload = fenced_json_patch(&json!({

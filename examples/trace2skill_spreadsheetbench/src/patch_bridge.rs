@@ -142,7 +142,11 @@ pub fn lower_trace2skill_json_patch(
                     skill_md_before.permissions(),
                 ),
             )
-            .with_reference_links_from_text(&skill_md_after),
+            .with_reference_links(skill_md_reference_links_for_edit(
+                skill_file_text(skill_md_before, &SkillPath::skill_md())?,
+                &skill_md_after,
+                &touched_reference_paths,
+            )),
         );
     }
     let parsed = SkillParsedPatchDocument::new(operations).validate_against(input.parent)?;
