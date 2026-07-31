@@ -293,6 +293,7 @@ impl SkillPatchPlan {
         let mut linked_references: BTreeMap<(SkillName, SkillReferencePath), Vec<usize>> =
             BTreeMap::new();
         for (index, edit) in edits.iter().enumerate() {
+            validate_deserialized_edit_fields(index, edit)?;
             if edit.support.count == 0 {
                 return Err(SkillPatchPlanError::EmptySupportAt { edit_index: index });
             }
@@ -405,6 +406,39 @@ impl SkillPatchPlan {
     }
 }
 
+fn validate_deserialized_edit_fields(
+    edit_index: usize,
+    edit: &SkillPatchPlanEdit,
+) -> Result<(), SkillPatchPlanError> {
+    if SkillName::new(edit.target.skill().as_str()).is_err() {
+        return Err(SkillPatchPlanError::InvalidSkillName {
+            edit_index,
+            skill: edit.target.skill().clone(),
+        });
+    }
+    if SkillPath::new(edit.target.path().as_str()).is_err() {
+        return Err(SkillPatchPlanError::InvalidTargetPath {
+            edit_index,
+            target: edit.target.clone(),
+        });
+    }
+    if let SkillPatchEditKind::Modify {
+        range: SkillPatchRange::Lines(range),
+    } = edit.kind
+    {
+        SkillLineRange::new(range.start(), range.end())?;
+    }
+    for reference in &edit.reference_links {
+        if SkillPath::new(reference.path().as_str()).is_err() {
+            return Err(SkillPatchPlanError::InvalidReferencePath {
+                path: reference.path().clone(),
+            });
+        }
+        SkillReferencePath::new(reference.path().clone())?;
+    }
+    Ok(())
+}
+
 /// Validation failure for a skill patch plan.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SkillPatchPlanError {
@@ -428,6 +462,20 @@ pub enum SkillPatchPlanError {
     InvalidReferencePath {
         /// Invalid reference path.
         path: SkillPath,
+    },
+    /// Deserialized target skill names must still satisfy skill-name rules.
+    InvalidSkillName {
+        /// Zero-based edit index.
+        edit_index: usize,
+        /// Invalid skill name.
+        skill: SkillName,
+    },
+    /// Deserialized target paths must still satisfy skill-path rules.
+    InvalidTargetPath {
+        /// Zero-based edit index.
+        edit_index: usize,
+        /// Invalid file target.
+        target: SkillPatchFileRef,
     },
     /// The target skill does not exist in the parent bank.
     MissingSkill {
@@ -517,6 +565,14 @@ impl fmt::Display for SkillPatchPlanError {
                     "skill reference path must match references/*.md, got {path}"
                 )
             }
+            Self::InvalidSkillName { edit_index, skill } => write!(
+                f,
+                "skill patch edit {edit_index} targets invalid skill name {skill}"
+            ),
+            Self::InvalidTargetPath { edit_index, target } => write!(
+                f,
+                "skill patch edit {edit_index} targets invalid skill path {target}"
+            ),
             Self::MissingSkill { edit_index, skill } => write!(
                 f,
                 "skill patch edit {edit_index} targets missing skill {skill}"
