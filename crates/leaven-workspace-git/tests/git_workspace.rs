@@ -107,17 +107,53 @@ fn git_workspace_lists_symlinks_without_following_them() {
             .expect("git workspace has local mount")
             .to_path_buf();
         std::os::unix::fs::symlink(outside.path(), mount.join("linked-dir")).unwrap();
+        std::os::unix::fs::symlink(
+            outside.path().join("outside.txt"),
+            mount.join("linked-file"),
+        )
+        .unwrap();
         std::os::unix::fs::symlink("missing-target", mount.join("dangling-link")).unwrap();
 
-        let files = workspace
-            .slot(WorkspacePath::root())
-            .unwrap()
-            .list_files(&WorkspacePath::root())
-            .unwrap();
+        let mut slot = workspace.slot(WorkspacePath::root()).unwrap();
+        let files = slot.list_files(&WorkspacePath::root()).unwrap();
 
         assert!(files.contains(&WorkspacePath::new("linked-dir").unwrap()));
+        assert!(files.contains(&WorkspacePath::new("linked-file").unwrap()));
         assert!(files.contains(&WorkspacePath::new("dangling-link").unwrap()));
         assert!(!files.contains(&WorkspacePath::new("linked-dir/outside.txt").unwrap()));
+        assert!(matches!(
+            slot.read_file(&WorkspacePath::new("linked-file").unwrap())
+                .unwrap_err(),
+            leaven_workspace::WorkspaceError::Io(_)
+        ));
+        assert!(matches!(
+            slot.write_file(&WorkspacePath::new("linked-file").unwrap(), b"changed")
+                .unwrap_err(),
+            leaven_workspace::WorkspaceError::Io(_)
+        ));
+        assert_eq!(
+            fs::read(outside.path().join("outside.txt")).unwrap(),
+            b"outside\n"
+        );
+        assert!(matches!(
+            slot.view_mut()
+                .set_executable(&WorkspacePath::new("linked-file").unwrap(), true)
+                .unwrap_err(),
+            leaven_workspace::WorkspaceError::Io(_)
+        ));
+        assert!(matches!(
+            slot.view()
+                .is_executable(&WorkspacePath::new("linked-file").unwrap())
+                .unwrap_err(),
+            leaven_workspace::WorkspaceError::Io(_)
+        ));
+        let mut command = Command::new("true");
+        command.cwd = Some(WorkspacePath::new("linked-dir").unwrap());
+        assert!(matches!(
+            slot.run_command(command).unwrap_err(),
+            leaven_workspace::WorkspaceError::Io(_)
+        ));
+        drop(slot);
         workspace.cleanup().await.unwrap();
     });
 }

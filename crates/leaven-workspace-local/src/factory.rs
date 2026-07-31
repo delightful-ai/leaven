@@ -42,13 +42,20 @@ impl Default for LocalWorkspaceFactory {
 }
 
 impl WorkspaceFactory for LocalWorkspaceFactory {
-    async fn allocate(&self, _config: WorkspaceConfig) -> Result<Workspace, FactoryError> {
-        let root = self.root.join(format!("leaven-{}", RunId::new()));
-        std::fs::create_dir_all(&root).map_err(|err| FactoryError::Allocate(err.to_string()))?;
-        Ok(Workspace::new(
-            root.clone(),
-            Box::new(LocalWorkspaceBackend { root }),
-        ))
+    fn allocate(
+        &self,
+        _config: WorkspaceConfig,
+    ) -> impl std::future::Future<Output = Result<Workspace, FactoryError>> + Send + '_ {
+        let result = (|| {
+            let root = self.root.join(format!("leaven-{}", RunId::new()));
+            std::fs::create_dir_all(&root)
+                .map_err(|err| FactoryError::Allocate(err.to_string()))?;
+            Ok(Workspace::new(
+                root.clone(),
+                Box::new(LocalWorkspaceBackend { root }),
+            ))
+        })();
+        std::future::ready(result)
     }
 }
 
@@ -58,7 +65,7 @@ struct LocalWorkspaceBackend {
 
 impl WorkspaceBackend for LocalWorkspaceBackend {
     fn write_file(&mut self, path: &WorkspacePath, bytes: &[u8]) -> Result<(), WorkspaceError> {
-        let path = self.host_path(path);
+        let path = self.checked_host_path(path)?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|err| WorkspaceError::Io(err.to_string()))?;
         }
@@ -66,11 +73,12 @@ impl WorkspaceBackend for LocalWorkspaceBackend {
     }
 
     fn read_file(&mut self, path: &WorkspacePath) -> Result<Vec<u8>, WorkspaceError> {
-        std::fs::read(self.host_path(path)).map_err(|err| WorkspaceError::Io(err.to_string()))
+        std::fs::read(self.checked_host_path(path)?)
+            .map_err(|err| WorkspaceError::Io(err.to_string()))
     }
 
     fn list_files(&mut self, path: &WorkspacePath) -> Result<Vec<WorkspacePath>, WorkspaceError> {
-        let root = self.host_path(path);
+        let root = self.checked_host_path(path)?;
         let mut files = Vec::new();
         collect_files(&root, path.clone(), &mut files)?;
         files.sort();
@@ -82,11 +90,11 @@ impl WorkspaceBackend for LocalWorkspaceBackend {
         path: &WorkspacePath,
         executable: bool,
     ) -> Result<(), WorkspaceError> {
-        set_host_executable(&self.host_path(path), executable)
+        set_host_executable(&self.checked_host_path(path)?, executable)
     }
 
     fn is_executable(&mut self, path: &WorkspacePath) -> Result<bool, WorkspaceError> {
-        is_host_executable(&self.host_path(path))
+        is_host_executable(&self.checked_host_path(path)?)
     }
 
     fn run_command(&mut self, command: Command) -> Result<CommandOutput, WorkspaceError> {
@@ -96,10 +104,10 @@ impl WorkspaceBackend for LocalWorkspaceBackend {
             });
         }
 
-        let cwd = command
-            .cwd
-            .as_ref()
-            .map_or_else(|| self.root.clone(), |path| self.host_path(path));
+        let cwd = command.cwd.as_ref().map_or_else(
+            || Ok(self.root.clone()),
+            |path| self.checked_host_path(path),
+        )?;
 
         let start = Instant::now();
         let mut process = std::process::Command::new(&command.program);
@@ -204,8 +212,27 @@ fn wait_for_output(
 }
 
 impl LocalWorkspaceBackend {
-    fn host_path(&self, path: &WorkspacePath) -> PathBuf {
-        self.root.join(path.to_host_relative())
+    fn checked_host_path(&self, path: &WorkspacePath) -> Result<PathBuf, WorkspaceError> {
+        let mut host_path = self.root.clone();
+        for component in path.to_host_relative().components() {
+            host_path.push(component.as_os_str());
+            reject_symlink_component(&host_path, path)?;
+        }
+        Ok(host_path)
+    }
+}
+
+fn reject_symlink_component(
+    host_path: &Path,
+    workspace_path: &WorkspacePath,
+) -> Result<(), WorkspaceError> {
+    match std::fs::symlink_metadata(host_path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(WorkspaceError::Io(format!(
+            "workspace path `{workspace_path}` resolves through a symlink"
+        ))),
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(WorkspaceError::Io(error.to_string())),
     }
 }
 
@@ -215,9 +242,13 @@ fn collect_files(
     files: &mut Vec<WorkspacePath>,
 ) -> Result<(), WorkspaceError> {
     let metadata =
-        std::fs::metadata(host_path).map_err(|err| WorkspaceError::Io(err.to_string()))?;
-    if metadata.is_file() {
+        std::fs::symlink_metadata(host_path).map_err(|err| WorkspaceError::Io(err.to_string()))?;
+    let file_type = metadata.file_type();
+    if file_type.is_file() || file_type.is_symlink() {
         files.push(workspace_path);
+        return Ok(());
+    }
+    if !file_type.is_dir() {
         return Ok(());
     }
     for entry in std::fs::read_dir(host_path).map_err(|err| WorkspaceError::Io(err.to_string()))? {
