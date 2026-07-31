@@ -10,7 +10,7 @@ use parking_lot::Mutex;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-use crate::atomic::write_atomic;
+use crate::atomic::{write_atomic, write_atomic_exclusive};
 
 /// File-backed evidence store for serializable evidence values.
 ///
@@ -18,6 +18,10 @@ use crate::atomic::write_atomic;
 /// increasing decimal strings. Reopening an existing store resumes at
 /// `max(existing_key) + 1`, so long-running examples can append evidence after
 /// process restart without overwriting earlier records.
+///
+/// Key files are claimed with an exclusive create before the durable write, so
+/// two store handles that open the same empty root cannot overwrite each
+/// other's payloads when they both allocate key `0`.
 pub struct FileEvidenceStore<E> {
     name: String,
     root: PathBuf,
@@ -242,23 +246,45 @@ where
     E: Evidence + Clone + Serialize + DeserializeOwned,
 {
     fn put(&self, evidence: E) -> Result<EvidenceRef, StoreError> {
-        let mut guard = self.next_key.lock();
-        let key = guard.to_string();
-        let path = evidence_path(&self.root, &key)?;
         let bytes = serde_json::to_vec_pretty(&evidence)
             .map_err(|err| StoreError::Serialization(err.to_string()))?;
-        write_atomic(&path, bytes, "put")?;
-        *guard += 1;
-        Ok(EvidenceRef {
-            store: self.name.clone(),
-            key,
-        })
+        let mut guard = self.next_key.lock();
+        loop {
+            let key = guard.to_string();
+            let path = evidence_path(&self.root, &key)?;
+            match write_atomic_exclusive(&path, &bytes, "put") {
+                Ok(()) => {
+                    *guard += 1;
+                    return Ok(EvidenceRef {
+                        store: self.name.clone(),
+                        key,
+                    });
+                }
+                Err(err) if is_exclusive_key_collision(&err) => {
+                    // Another handle claimed this key first; advance and retry.
+                    *guard += 1;
+                }
+                Err(err) => return Err(err),
+            }
+        }
     }
 
     fn get(&self, reference: &EvidenceRef) -> Result<E, StoreError> {
         let bytes = self.get_json_bytes(reference)?;
         serde_json::from_slice(&bytes).map_err(|err| StoreError::Serialization(err.to_string()))
     }
+}
+
+fn is_exclusive_key_collision(err: &StoreError) -> bool {
+    matches!(
+        err,
+        StoreError::OperationFailed {
+            operation: "put",
+            retryable: Some(true),
+            reason,
+            ..
+        } if reason.contains("evidence key already exists")
+    )
 }
 
 fn next_key(root: &Path) -> Result<u64, StoreError> {
