@@ -22,6 +22,38 @@ pub fn write_atomic(
     result
 }
 
+/// Atomically writes `bytes` to `path`, refusing to replace an existing file.
+///
+/// Evidence keys are allocated by scanning the store root, so two processes can
+/// choose the same next key. Plain rename would silently overwrite the first
+/// payload; this helper claims the destination with `create_new` before the
+/// durable rename so a colliding writer must pick another key.
+pub fn write_atomic_exclusive(
+    path: &Path,
+    bytes: impl AsRef<[u8]>,
+    operation: &'static str,
+) -> Result<(), StoreError> {
+    match OpenOptions::new().write(true).create_new(true).open(path) {
+        Ok(claim) => drop(claim),
+        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+            return Err(StoreError::OperationFailed {
+                store: path.display().to_string(),
+                operation,
+                reason: format!("evidence key already exists at {}", path.display()),
+                retryable: Some(true),
+            });
+        }
+        Err(err) => return Err(operation_failed(operation, path, &err)),
+    }
+    match write_atomic(path, bytes, operation) {
+        Ok(()) => Ok(()),
+        Err(err) => {
+            let _ = fs::remove_file(path);
+            Err(err)
+        }
+    }
+}
+
 fn write_temp_then_rename(
     temp: &Path,
     path: &Path,
@@ -75,9 +107,11 @@ fn operation_failed(operation: &'static str, path: &Path, err: &std::io::Error) 
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use leaven_store::StoreError;
 
-    use super::write_atomic;
+    use super::{write_atomic, write_atomic_exclusive};
 
     #[test]
     fn write_atomic_rejects_paths_without_file_names() {
@@ -92,5 +126,30 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn write_atomic_exclusive_refuses_existing_destination() {
+        let root = std::env::temp_dir().join(format!(
+            "leaven-store-file-atomic-exclusive-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("0.json");
+        fs::write(&path, br#"{"message":"first"}"#).unwrap();
+
+        let error = write_atomic_exclusive(&path, br#"{"message":"second"}"#, "put")
+            .expect_err("exclusive write must refuse an existing evidence key");
+
+        assert!(matches!(
+            error,
+            StoreError::OperationFailed {
+                operation: "put",
+                retryable: Some(true),
+                ..
+            }
+        ));
+        assert_eq!(fs::read_to_string(&path).unwrap(), r#"{"message":"first"}"#);
+        let _ = fs::remove_dir_all(&root);
     }
 }

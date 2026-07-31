@@ -47,6 +47,34 @@ fn file_evidence_round_trips_and_reopens_without_overwrite() {
 }
 
 #[test]
+fn file_evidence_concurrent_handles_do_not_overwrite_each_other() {
+    // Regression: two FileEvidenceStore handles that open the same empty root
+    // both snapshotted next_key=0 and renamed over `<root>/0.json`, so the
+    // second put silently replaced the first durable evidence payload while
+    // both refs still claimed key "0".
+    let root = temp_root("evidence-concurrent");
+    let left = FileEvidenceStore::<TestEvidence>::open("evidence", &root).unwrap();
+    let right = FileEvidenceStore::<TestEvidence>::open("evidence", &root).unwrap();
+
+    let first = left
+        .put(TestEvidence {
+            message: "left".to_owned(),
+        })
+        .unwrap();
+    let second = right
+        .put(TestEvidence {
+            message: "right".to_owned(),
+        })
+        .unwrap();
+
+    assert_ne!(first.key, second.key);
+    assert_eq!(left.get(&first).unwrap().message, "left");
+    assert_eq!(right.get(&second).unwrap().message, "right");
+    assert_eq!(right.get(&first).unwrap().message, "left");
+    assert_eq!(left.get(&second).unwrap().message, "right");
+}
+
+#[test]
 fn file_evidence_open_reports_directory_creation_failure() {
     let root = temp_root("evidence-open-file");
     let file_path = root.join("not-a-directory");

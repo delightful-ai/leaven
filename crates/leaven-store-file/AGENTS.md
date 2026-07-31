@@ -25,7 +25,9 @@ choose product defaults, or define engine checkpoint schemas.
   names in refs; default `FileStore::open` uses `"file"` for blob refs.
 - Use `FileEvidenceStore<E>` when the evidence schema is caller-owned and
   serializable; keys are decimal JSON files and reopen resumes after the
-  highest numeric key.
+  highest numeric key. Evidence puts claim the destination with an exclusive
+  create before rename so two handles that open the same empty root cannot
+  overwrite each other's payloads.
 - Use `FileCheckpointStore` for opaque bytes and `FileJsonCheckpointStore<T>`
   only as a typed convenience over a caller-owned checkpoint schema.
 - Keep key validation local: evidence keys are non-empty ASCII digits, blob keys
