@@ -271,9 +271,11 @@ where
             })?;
     }
     let final_inputs = final_evaluation_inputs(search.seed, best, &builder);
-    if final_inputs.has_any_split() {
-        engine.set_budget_limit(Budget::unlimited());
-    }
+    // Final reports intentionally run after metric-call search stop. Search
+    // already installed `search_ledger_budget` (metric_calls cleared; USD and
+    // other non-metric ceilings kept). Do not call `Budget::unlimited()` here:
+    // that would drop monetary caps and let final train/validation/test
+    // evaluations overspend a declared `usd_micro` ceiling.
 
     let final_evaluations = match run_final_evaluations(
         &mut engine,

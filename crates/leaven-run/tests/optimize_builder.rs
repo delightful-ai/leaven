@@ -19,7 +19,7 @@ use leaven_engine::{
 };
 use leaven_eval::Case;
 use leaven_evidence::CaseAssessmentEvidence;
-use leaven_kernel::{Budget, CandidateId, CaseId, EvaluatorId, Fingerprint, RunId};
+use leaven_kernel::{Budget, CandidateId, CaseId, Cost, EvaluatorId, Fingerprint, RunId};
 use leaven_run::{
     CachePolicy, EvaluationCacheBackend, EvaluationCacheBypassReason, OptimizationStopReason,
     OptimizeBuilder, OptimizeError, OptimizeStore, ResumeCompatibilityError, RunCase,
@@ -1507,6 +1507,38 @@ fn run_builder_runs_final_reports_after_metric_budget_stop() {
     assert_eq!(result.summary().baseline_test_score, Some(44.0));
     assert_eq!(result.summary().test_score, Some(44.0));
     cleanup_result_storage(&result.summary().storage);
+}
+
+#[test]
+fn run_builder_preserves_usd_ceiling_during_final_reports_after_metric_stop() {
+    // Seed search spends 1_000_000 usd_micro under a 1_500_000 ceiling and stops
+    // on metric_calls. Final reports must not clear the USD axis: the next
+    // report evaluation's 1_000_000 charge would push past the ceiling.
+    let budget = Budget::metric_calls(1)
+        .with_axis_limit("usd_micro", 1_500_000.0)
+        .expect("finite usd ceiling");
+    let error = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .validation_inputs(vec![TextCase(3)])
+            .runner(|artifact, case| async move {
+                Ok(text_runner(&artifact, &case)
+                    .with_cost(Cost::custom("usd_micro", 1_000_000.0).expect("finite usd cost")))
+            })
+            .score(text_score)
+            .using(ContinueAfterSeedEvaluation::default())
+            .budget(budget)
+            .evaluation_parallelism(NonZeroUsize::new(1).unwrap())
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .expect_err("final reports must refuse when they would exceed the USD ceiling");
+
+    let message = error.to_string();
+    assert!(
+        message.contains("final evaluation failed") || message.contains("budget"),
+        "USD ceiling refusal should surface through final evaluation budget enforcement, got: {message}"
+    );
 }
 
 #[test]
