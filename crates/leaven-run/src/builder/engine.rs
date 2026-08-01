@@ -276,6 +276,11 @@ where
     // other non-metric ceilings kept). Do not call `Budget::unlimited()` here:
     // that would drop monetary caps and let final train/validation/test
     // evaluations overspend a declared `usd_micro` ceiling.
+    debug_assert!(
+        !final_inputs.has_any_split()
+            || engine.budget().snapshot().limit.metric_calls.is_none(),
+        "search ledger must clear metric_calls before final reports so metric stop does not block reporting"
+    );
 
     let final_evaluations = match run_final_evaluations(
         &mut engine,
