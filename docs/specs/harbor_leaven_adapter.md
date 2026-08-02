@@ -152,12 +152,12 @@ Case shape:
 
 ```python
 lv.Case(
-    id="harbor_<stable_task_slug>_<split>",
+    id="harbor_<content_fp12>_<stable_task_slug>_<split>",
     input={"harbor_task": {"path": "...", "kind": "local"}},
     target=None,
     metadata={
         "source": "harbor",
-        "task_name": "...",
+        "task_name": "...",  # `[task].name`, else top-level `name`, else dir name
         "task_path": "...",
         "task_checksum": "...",
     },
@@ -171,7 +171,10 @@ Laws:
 - Runner-visible case input may name the Harbor task path/ref.
 - Runner-visible case input must not include `solution/`, hidden tests, or
   verifier-private content.
-- Case id is stable for a stable task path/content/split.
+- Case id is stable for a stable task path/content/split. The content
+  fingerprint is part of the id so distinct packages that share a directory
+  basename (or omit a top-level `name` while using Harbor's `[task].name`)
+  cannot collapse onto one optimize case or Harbor trial directory.
 - Temporary trial directory names must not affect case identity.
 - Supplying the same task on train and validation splits is valid and matches
   the existing n=1 Terminal-Bench pattern.
