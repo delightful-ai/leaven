@@ -33,6 +33,7 @@ def test_local_harbor_task_package_maps_to_target_free_leaven_task(tmp_path: Pat
     assert task.metadata["task_path"] == str(task_dir)
     case = task.cases[0]
     assert case.id == lv.x.harbor.case_from_task_dir(task_dir, split="train").id
+    assert case.metadata["task_checksum"][:12] in case.id
     assert case.target is None
     assert case.split == "train"
     assert case.input == {"harbor_task": {"path": str(task_dir), "kind": "local"}}
@@ -40,6 +41,43 @@ def test_local_harbor_task_package_maps_to_target_free_leaven_task(tmp_path: Pat
     assert "SECRET-SOLUTION" not in serialized_input
     assert "PRIVATE VERIFIER" not in serialized_input
     assert case.metadata["task_checksum"]
+
+
+def test_distinct_harbor_tasks_with_same_basename_get_distinct_case_ids(
+    tmp_path: Path,
+) -> None:
+    """Regression: real Harbor `[task].name` packages must not share case ids.
+
+    Harbor stores the package name under `[task].name`, not top-level `name`.
+    Two packages that share a directory basename previously both became
+    `harbor_<dirname>_<split>`, so multi-case optimize reused one Harbor trial
+    directory and mixed verifier/CTRF evidence across tasks.
+    """
+    first = tmp_path / "benchA" / "regex-log"
+    second = tmp_path / "benchB" / "regex-log"
+    first.mkdir(parents=True)
+    second.mkdir(parents=True)
+    first.joinpath("task.toml").write_text(
+        'version = "1.0"\n\n[task]\nname = "org/task-a"\n',
+        encoding="utf-8",
+    )
+    second.joinpath("task.toml").write_text(
+        'version = "1.0"\n\n[task]\nname = "org/task-b"\n',
+        encoding="utf-8",
+    )
+    first.joinpath("instruction.md").write_text("solve A", encoding="utf-8")
+    second.joinpath("instruction.md").write_text("solve B", encoding="utf-8")
+
+    case_a = lv.x.harbor.case_from_task_dir(first, split="train")
+    case_b = lv.x.harbor.case_from_task_dir(second, split="train")
+
+    assert case_a.metadata["task_name"] == "org/task-a"
+    assert case_b.metadata["task_name"] == "org/task-b"
+    assert case_a.id != case_b.id
+    assert "org_task_a" in case_a.id
+    assert "org_task_b" in case_b.id
+    assert case_a.metadata["task_checksum"][:12] in case_a.id
+    assert case_b.metadata["task_checksum"][:12] in case_b.id
 
 
 def test_harbor_outcome_round_trips_structured_evidence() -> None:
