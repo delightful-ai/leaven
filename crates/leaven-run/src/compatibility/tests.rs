@@ -121,10 +121,10 @@ fn case_content_fingerprint_separates_adjacent_json_field_boundaries() {
     let right = [Case::targeted(CaseId::from_index(0), 1_i32, 23_i32)];
     let empty: [Case<i32, i32>; 0] = [];
 
-    let left_fp = case_content_fingerprint(&left, &empty, &empty)
-        .expect("left case content fingerprint");
-    let right_fp = case_content_fingerprint(&right, &empty, &empty)
-        .expect("right case content fingerprint");
+    let left_fp =
+        case_content_fingerprint(&left, &empty, &empty).expect("left case content fingerprint");
+    let right_fp =
+        case_content_fingerprint(&right, &empty, &empty).expect("right case content fingerprint");
 
     assert_ne!(
         left_fp, right_fp,
