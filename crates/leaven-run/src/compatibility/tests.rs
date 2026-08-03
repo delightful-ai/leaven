@@ -113,6 +113,64 @@ fn optimize_problem_shape_is_not_a_placeholder_identity() {
 }
 
 #[test]
+fn case_content_fingerprint_separates_adjacent_json_field_boundaries() {
+    use leaven_eval::Case;
+    use leaven_kernel::CaseId;
+
+    let left = [Case::targeted(CaseId::from_index(0), 12_i32, 3_i32)];
+    let right = [Case::targeted(CaseId::from_index(0), 1_i32, 23_i32)];
+    let empty: [Case<i32, i32>; 0] = [];
+
+    let left_fp = case_content_fingerprint(&left, &empty, &empty)
+        .expect("left case content fingerprint");
+    let right_fp = case_content_fingerprint(&right, &empty, &empty)
+        .expect("right case content fingerprint");
+
+    assert_ne!(
+        left_fp, right_fp,
+        "distinct numeric input/target pairs must not share a case-content fingerprint"
+    );
+    assert_ne!(
+        unframed_case_content_fingerprint(&left, &empty, &empty).expect("left unframed"),
+        left_fp,
+        "length-framed fingerprint must differ from the legacy unframed stream"
+    );
+    assert_eq!(
+        unframed_case_content_fingerprint(&left, &empty, &empty).expect("left unframed"),
+        unframed_case_content_fingerprint(&right, &empty, &empty).expect("right unframed"),
+        "regression oracle: unframed JSON concatenation still collides for 12/3 vs 1/23"
+    );
+}
+
+fn unframed_case_content_fingerprint<I, T>(
+    train: &[leaven_eval::Case<I, T>],
+    validation: &[leaven_eval::Case<I, T>],
+    test: &[leaven_eval::Case<I, T>],
+) -> Result<Fingerprint, serde_json::Error>
+where
+    I: Serialize,
+    T: Serialize,
+{
+    let mut fingerprint = FingerprintBuilder::new();
+    fingerprint.update(b"leaven-run.case-content.v1");
+    for (split, cases) in [
+        (b"TRAIN".as_slice(), train),
+        (b"VALIDATION".as_slice(), validation),
+        (b"TEST".as_slice(), test),
+    ] {
+        fingerprint.update(split);
+        fingerprint.update(cases.len().to_le_bytes());
+        for case in cases {
+            fingerprint.update(case.id.0.to_le_bytes());
+            fingerprint.update(serde_json::to_vec(&case.input)?);
+            fingerprint.update(serde_json::to_vec(&case.target)?);
+            fingerprint.update(serde_json::to_vec(&case.metadata)?);
+        }
+    }
+    Ok(fingerprint.finish())
+}
+
+#[test]
 fn atomic_manifest_write_rejects_paths_without_file_names() {
     let error = write_atomic(Path::new(""), b"manifest")
         .expect_err("compatibility manifest writes require a file path");

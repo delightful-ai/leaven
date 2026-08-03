@@ -273,6 +273,10 @@ pub enum ResumeCompatibilityError {
 }
 
 /// Stable content fingerprint for case ids, split roles, inputs, targets, and scorer metadata.
+///
+/// Each serialized JSON field is length-prefixed before hashing so adjacent
+/// field boundaries cannot collide (for example numeric `input=12, target=3`
+/// versus `input=1, target=23`).
 pub fn case_content_fingerprint<I, T>(
     train: &[Case<I, T>],
     validation: &[Case<I, T>],
@@ -283,7 +287,7 @@ where
     T: Serialize,
 {
     let mut fingerprint = FingerprintBuilder::new();
-    fingerprint.update(b"leaven-run.case-content.v1");
+    fingerprint.update(b"leaven-run.case-content.v2");
     update_cases(&mut fingerprint, b"TRAIN", train)?;
     update_cases(&mut fingerprint, b"VALIDATION", validation)?;
     update_cases(&mut fingerprint, b"TEST", test)?;
@@ -303,10 +307,23 @@ where
     fingerprint.update(cases.len().to_le_bytes());
     for case in cases {
         fingerprint.update(case.id.0.to_le_bytes());
-        fingerprint.update(serde_json::to_vec(&case.input)?);
-        fingerprint.update(serde_json::to_vec(&case.target)?);
-        fingerprint.update(serde_json::to_vec(&case.metadata)?);
+        feed_json_field(fingerprint, &case.input)?;
+        feed_json_field(fingerprint, &case.target)?;
+        feed_json_field(fingerprint, &case.metadata)?;
     }
+    Ok(())
+}
+
+fn feed_json_field<T>(
+    fingerprint: &mut FingerprintBuilder,
+    value: &T,
+) -> Result<(), serde_json::Error>
+where
+    T: Serialize,
+{
+    let bytes = serde_json::to_vec(value)?;
+    fingerprint.update((bytes.len() as u64).to_le_bytes());
+    fingerprint.update(bytes);
     Ok(())
 }
 
