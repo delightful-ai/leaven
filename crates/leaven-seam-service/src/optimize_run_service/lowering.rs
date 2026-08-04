@@ -249,7 +249,12 @@ mod tests {
     use super::{case_metadata_from_wire, lower_request};
 
     fn validate_request(value: serde_json::Value) -> leaven_public_seam::OptimizeRunRequestDocument {
-        let package = PublicSeamPackage::load_active().expect("active public-seam package loads");
+        let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(std::path::Path::parent)
+            .expect("crate lives under workspace crates/");
+        let package = PublicSeamPackage::active_from_repo(repo_root)
+            .expect("active public-seam package loads");
         package
             .validate_optimize_run_request_document(&value)
             .expect("optimize.run request validates")
