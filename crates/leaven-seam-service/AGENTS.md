@@ -58,9 +58,12 @@ method unsupported.
   plus GEPA frontier into the locked `leaven.optimize_run.v1` result document.
   It owns lowering, worker composition, and projection only. GEPA search policy
   stays in `leaven-gepa`, wire law stays in `leaven-public-seam`, and graph
-  mutation stays behind `RunContext` through the `leaven-run` builder. Two
-  artifact types are executable: `prompt` (LM reflection) and `agent_kit`
-  (Git-backed agentic reflection). The `instance` objective is the executable
+  mutation stays behind `RunContext` through the `leaven-run` builder. Wire case
+  metadata is scorer-visible through capability-gated `case.metadata` callbacks
+  and must also project into durable `Case` envelopes so
+  `case_content_fingerprint` / resume-cache identity changes when that metadata
+  changes. Two artifact types are executable: `prompt` (LM reflection) and
+  `agent_kit` (Git-backed agentic reflection). The `instance` objective is the executable
   objective; every other config value is refused with a message naming what is
   supported. The artifact type fixes the reflection kind: `prompt` requires `lm`
   reflection and refuses `agentic` naming `lm`; `agent_kit` requires `agentic`
