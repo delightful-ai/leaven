@@ -3,7 +3,7 @@ use std::num::NonZeroUsize;
 
 use leaven_artifact_git::GitPath;
 use leaven_eval::Case;
-use leaven_kernel::CaseId;
+use leaven_kernel::{CaseId, MetadataBag, MetadataValue};
 use leaven_public_seam::{
     ArtifactPayload, ArtifactRecord, OptimizeObjective, OptimizeReflection,
     OptimizeRunRequestDocument, OptimizeSplit, OptimizerConfig,
@@ -93,7 +93,12 @@ pub(super) fn lower_request(
             target: case.target().clone(),
             metadata: case.metadata().cloned(),
         };
-        let envelope = Case::new(case_id, lowered.input.clone(), Some(lowered.target.clone()));
+        // Wire metadata is scorer-visible through case.metadata callbacks. It
+        // must also land on the durable Case envelope so resume/cache identity
+        // (`case_content_fingerprint` / `case_set_version`) changes when
+        // metadata that can affect scoring changes.
+        let envelope = Case::new(case_id, lowered.input.clone(), Some(lowered.target.clone()))
+            .with_metadata(case_metadata_from_wire(lowered.metadata.as_ref()));
         match split {
             OptimizeSplit::Train => train.push(envelope),
             OptimizeSplit::Validation => validation.push(envelope),
@@ -209,4 +214,138 @@ fn lower_population_size(
 /// reference minibatch.
 fn lower_minibatch_size(minibatch_size: Option<u64>) -> Option<NonZeroUsize> {
     minibatch_size.and_then(|size| NonZeroUsize::new(usize::try_from(size).unwrap_or(usize::MAX)))
+}
+
+/// Projects wire case metadata into the durable [`MetadataBag`] carried by
+/// [`Case`] envelopes.
+///
+/// Each object field becomes a [`MetadataValue::Json`] entry so arbitrary wire
+/// JSON shapes remain distinguishable under serde-based content fingerprints.
+fn case_metadata_from_wire(metadata: Option<&Value>) -> MetadataBag {
+    let Some(value) = metadata else {
+        return MetadataBag::new();
+    };
+    let mut bag = MetadataBag::new();
+    match value {
+        Value::Object(fields) => {
+            for (key, entry) in fields {
+                bag.insert(key.as_str(), MetadataValue::Json(entry.clone()));
+            }
+        }
+        other => {
+            // The optimize-run wire schema requires an object MetadataBag; keep
+            // unexpected shapes instead of dropping them from identity.
+            bag.insert("wire", MetadataValue::Json(other.clone()));
+        }
+    }
+    bag
+}
+
+#[cfg(test)]
+mod tests {
+    use leaven_public_seam::PublicSeamPackage;
+    use serde_json::json;
+
+    use super::{case_metadata_from_wire, lower_request};
+
+    fn validate_request(value: serde_json::Value) -> leaven_public_seam::OptimizeRunRequestDocument {
+        let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(std::path::Path::parent)
+            .expect("crate lives under workspace crates/");
+        let package = PublicSeamPackage::active_from_repo(repo_root)
+            .expect("active public-seam package loads");
+        package
+            .validate_optimize_run_request_document(&value)
+            .expect("optimize.run request validates")
+    }
+
+    fn request_with_metadata(metadata: serde_json::Value) -> serde_json::Value {
+        json!({
+            "schema_version": "leaven.optimize_run.v1",
+            "message": "optimize_run_request",
+            "run_id": "run_metadata_identity",
+            "seed": {
+                "artifact_type": "prompt",
+                "artifact_schema": "fp_schema_sha256_prompt",
+                "artifact": {"template": "answer {question}"}
+            },
+            "cases": [{
+                "case": "case_train_1",
+                "input": {"question": "what is six times seven"},
+                "target": {"answer": "42"},
+                "metadata": metadata,
+                "split": "train"
+            }],
+            "optimizer": {
+                "max_metric_calls": 8,
+                "objective": "instance"
+            },
+            "reflection": {"kind": "lm", "model": "mock"},
+            "capability_fingerprint": "fp_cap_sha256_optimize"
+        })
+    }
+
+    #[test]
+    fn lower_request_projects_wire_metadata_into_case_envelopes() {
+        let document = validate_request(request_with_metadata(json!({
+            "answer_key": "alpha",
+            "difficulty": 2
+        })));
+        let lowered = lower_request(&document).expect("lower succeeds");
+        let case = &lowered.train[0];
+        assert!(
+            !case.metadata.is_empty(),
+            "wire metadata must reach Case envelopes"
+        );
+        assert_eq!(
+            case.metadata
+                .get(&"answer_key".into())
+                .map(|value| match value {
+                    leaven_kernel::MetadataValue::Json(json) => json.as_str(),
+                    _ => None,
+                }),
+            Some(Some("alpha"))
+        );
+        assert_eq!(
+            lowered.cases_by_id[&case.id].metadata.as_ref(),
+            Some(&json!({"answer_key": "alpha", "difficulty": 2}))
+        );
+    }
+
+    #[test]
+    fn lowered_case_metadata_changes_case_envelope_identity_bytes() {
+        // case_content_fingerprint / case_set_version serde the Case metadata
+        // bag. Distinct scorer-visible wire metadata must therefore produce
+        // distinct envelope bytes even when input/target/split are unchanged.
+        let first = lower_request(&validate_request(request_with_metadata(json!({
+            "answer_key": "alpha"
+        }))))
+        .expect("lower succeeds");
+        let second = lower_request(&validate_request(request_with_metadata(json!({
+            "answer_key": "beta"
+        }))))
+        .expect("lower succeeds");
+
+        let first_bytes =
+            serde_json::to_vec(&first.train[0].metadata).expect("serialize first metadata");
+        let second_bytes =
+            serde_json::to_vec(&second.train[0].metadata).expect("serialize second metadata");
+        assert_ne!(
+            first_bytes, second_bytes,
+            "scorer-visible metadata must change durable case identity bytes"
+        );
+    }
+
+    #[test]
+    fn case_metadata_from_wire_preserves_object_fields() {
+        let bag = case_metadata_from_wire(Some(&json!({"route": "hard"})));
+        assert_eq!(bag.len(), 1);
+        match bag.get(&"route".into()) {
+            Some(leaven_kernel::MetadataValue::Json(value)) => {
+                assert_eq!(value, &json!("hard"));
+            }
+            other => panic!("expected Json metadata, got {other:?}"),
+        }
+    }
 }
