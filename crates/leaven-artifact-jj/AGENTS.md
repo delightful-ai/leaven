@@ -23,8 +23,9 @@ operation needs an owning error surface.
 
 ## Verification
 - `cargo test -p leaven-artifact-jj --test materializable` proves current file
-  snapshot materialization, content/cache identity, patch readback, absent patch
-  handling, and invalid UTF-8 refusal.
+  snapshot materialization, content/cache identity (including path/length
+  boundary separation for `content_id`), patch readback, absent patch handling,
+  and invalid UTF-8 refusal.
 - Operation-log, conflict, and surface behavior need deterministic JJ fixture
   tests plus
   `cargo test -p leaven --test topology_contract` if dependencies or facade

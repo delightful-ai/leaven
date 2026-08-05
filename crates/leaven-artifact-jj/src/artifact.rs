@@ -71,10 +71,14 @@ impl MaterializableArtifact for JjArtifact {
 
 fn content_id(artifact: &JjArtifact) -> ContentId {
     let mut builder = FingerprintBuilder::new();
-    builder.update(b"leaven.artifact-jj.v1");
+    // v2 length-prefixes each path so path bytes cannot collide with the
+    // little-endian content-length field of a neighboring entry.
+    builder.update(b"leaven.artifact-jj.v2");
     for (path, bytes) in artifact.files() {
+        let path_bytes = path.as_str().as_bytes();
         builder
-            .update(path.as_str().as_bytes())
+            .update((path_bytes.len() as u64).to_le_bytes())
+            .update(path_bytes)
             .update((bytes.len() as u64).to_le_bytes())
             .update(bytes);
     }

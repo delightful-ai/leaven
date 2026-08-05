@@ -102,3 +102,34 @@ fn crate_root_does_not_export_empty_jj_reservation_names() {
         );
     }
 }
+
+#[test]
+fn jj_content_id_separates_path_and_content_length_boundaries() {
+    // Without path length framing, path bytes can absorb a neighboring
+    // little-endian content-length field:
+    //   A: path = "x" || u64le(8), content = []
+    //   B: path = "x", content = [0; 8]
+    let mut path_a = String::from("x");
+    path_a.push_str(std::str::from_utf8(&(8u64).to_le_bytes()).unwrap());
+    let a_path = WorkspacePath::new(&path_a).expect("NUL-bearing path parses today");
+    let b_path = WorkspacePath::new("x").unwrap();
+
+    let mut a_files = BTreeMap::new();
+    a_files.insert(a_path, Vec::new());
+    let mut b_files = BTreeMap::new();
+    b_files.insert(b_path, vec![0u8; 8]);
+
+    let a = JjArtifact::new(a_files);
+    let b = JjArtifact::new(b_files);
+    assert_ne!(a.files(), b.files(), "file maps must be distinct inputs");
+    assert_ne!(
+        a.identity(),
+        b.identity(),
+        "distinct JJ file maps must not share ArtifactIdentity"
+    );
+    assert_ne!(
+        a.cache_identity(),
+        b.cache_identity(),
+        "distinct JJ file maps must not share CacheIdentity"
+    );
+}
