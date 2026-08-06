@@ -196,6 +196,8 @@ Codex:       system_prompt -> $CODEX_HOME/AGENTS.md (appended global context)
 
 ```text
 Claude Code: <workdir>/CLAUDE.md + <workdir>/.claude/skills/<n>/SKILL.md
+             (portable AgentKit paths such as regex/notes.md are projected into
+             <n>/SKILL.md packages; Claude Code ignores non-package skill files)
 Codex:       <workdir>/AGENTS.md + <workdir>/.agents/skills/<path>
 ```
 

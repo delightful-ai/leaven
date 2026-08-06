@@ -80,8 +80,13 @@ execution until the engine creates those bound contexts during stage dispatch.
 `lv.x.harbor.rollout.agent_kit(...)` can run a materialized
 `AgentKitArtifact` through Harbor agents. Codex supports repo and user
 placement. Claude Code uses repo placement by default: `CLAUDE.md` plus
-`.claude/skills` in the task workdir. Claude Code user placement is refused
-until Harbor quotes `--append-system-prompt` safely; the unquoted flag path can
+`.claude/skills/<n>/SKILL.md` packages in the task workdir. Portable AgentKit
+skill paths (for example `regex/notes.md`) are projected into that Claude
+package shape; a path-preserving copy would be silently ignored by Claude Code.
+Repo-scope kit upload must `ensure_dirs` for nested skill parents before Harbor
+Docker `upload_file` (`docker compose cp` does not create them); see
+`leaven.x.harbor._kit_upload`. Claude Code user placement is refused until
+Harbor quotes `--append-system-prompt` safely; the unquoted flag path can
 split multiword prompts and replace the real task instruction.
 
 The binary is resolved via `LEAVEN_BIN`, else `target/{debug,release}/leaven`
