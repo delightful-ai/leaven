@@ -2,11 +2,13 @@
 
 import json
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
 import leaven as lv
+from leaven.x.harbor._kit_upload import upload_kit_tree
+from leaven.x.harbor._types import HarborAdapterError
 
 
 def _write_harbor_task(root: Path) -> Path:
@@ -179,6 +181,7 @@ def test_agents_registry_describes_each_supported_agent() -> None:
     assert codex.api_key_env == "OPENAI_API_KEY"
     assert codex.repo_prompt_file == "AGENTS.md"
     assert codex.repo_skills_subdir == ".agents/skills"
+    assert codex.repo_skills_layout == "portable"
 
     claude = lv.x.harbor.agents.resolve("claude-code")
     assert claude.default_placement == "repo"
@@ -186,6 +189,7 @@ def test_agents_registry_describes_each_supported_agent() -> None:
     assert claude.api_key_env == "ANTHROPIC_API_KEY"
     assert claude.repo_prompt_file == "CLAUDE.md"
     assert claude.repo_skills_subdir == ".claude/skills"
+    assert claude.repo_skills_layout == "claude_packages"
 
 
 def test_unknown_agent_is_rejected_actionably() -> None:
@@ -213,15 +217,17 @@ async def test_agent_kit_claude_code_uses_repo_placement_by_default(tmp_path: Pa
     """Cutoff: Claude Code stages the kit in-repo because append flag quoting is unsafe."""
     calls: list[lv.x.harbor.rollout.HarborTrialPlan] = []
 
-    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
+    async def fake_trial(
+        plan: lv.x.harbor.rollout.HarborTrialPlan,
+    ) -> lv.x.harbor.HarborTrialOutcome:
         calls.append(plan)
         assert plan.agent == "claude-code"
         assert plan.placement == "repo"
         assert plan.api_key_env == "ANTHROPIC_API_KEY"
         assert (plan.staging_dir / "AGENTS.md").read_text(encoding="utf-8") == "be careful"
-        assert (
-            plan.staging_dir / "skills" / "regex" / "notes.md"
-        ).read_text(encoding="utf-8") == "test edge cases"
+        assert (plan.staging_dir / "skills" / "regex" / "notes.md").read_text(
+            encoding="utf-8"
+        ) == "test edge cases"
         return lv.x.harbor.HarborTrialOutcome(rewards={"reward": 1.0})
 
     rollout = lv.x.harbor.rollout.agent_kit(
@@ -247,7 +253,9 @@ async def test_agent_kit_codex_repo_placement_uses_configurable_workdir(tmp_path
     """Cutoff: Codex defaults to repo placement with an explicit workdir, never /app."""
     calls: list[lv.x.harbor.rollout.HarborTrialPlan] = []
 
-    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
+    async def fake_trial(
+        plan: lv.x.harbor.rollout.HarborTrialPlan,
+    ) -> lv.x.harbor.HarborTrialOutcome:
         calls.append(plan)
         return lv.x.harbor.HarborTrialOutcome(rewards={"reward": 0.0})
 
@@ -273,7 +281,9 @@ async def test_agent_kit_passes_extra_agent_env_for_live_auth(tmp_path: Path) ->
     calls: list[lv.x.harbor.rollout.HarborTrialPlan] = []
     oauth_env = {"CLAUDE_FORCE_OAUTH": "1", "CLAUDE_CODE_OAUTH_TOKEN": "token-test"}
 
-    async def fake_trial(plan: lv.x.harbor.rollout.HarborTrialPlan) -> lv.x.harbor.HarborTrialOutcome:
+    async def fake_trial(
+        plan: lv.x.harbor.rollout.HarborTrialPlan,
+    ) -> lv.x.harbor.HarborTrialOutcome:
         calls.append(plan)
         return lv.x.harbor.HarborTrialOutcome(rewards={"reward": 1.0})
 
@@ -298,3 +308,148 @@ def test_import_leaven_does_not_import_harbor_dependency() -> None:
     # Touching the registry and rollout builder must not import Harbor.
     lv.x.harbor.agents.resolve("codex")
     assert "harbor" not in sys.modules
+
+
+class _DockerLikeEnvironment:
+    """Mimic Harbor 0.13.1 Docker upload_file: parents must already exist."""
+
+    def __init__(self) -> None:
+        self.existing_dirs = {"/app"}
+        self.ensured: list[list[str]] = []
+        self.uploads: list[tuple[str, str]] = []
+        self.uploaded_text: dict[str, str] = {}
+
+    async def ensure_dirs(self, dirs: list[str], *, chmod: bool = True) -> None:
+        del chmod
+        self.ensured.append(list(dirs))
+        self.existing_dirs.update(dirs)
+
+    async def upload_file(self, source_path: Path | str, target_path: str) -> None:
+        parent = str(PurePosixPath(target_path).parent)
+        if parent not in self.existing_dirs:
+            raise RuntimeError(f"docker compose cp failed: no such directory: {parent}")
+        source = Path(source_path)
+        self.uploads.append((str(source), target_path))
+        self.uploaded_text[target_path] = source.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_repo_kit_upload_creates_skill_parents_before_docker_cp(
+    tmp_path: Path,
+) -> None:
+    """Regression: Harbor Docker upload_file is compose cp and needs nested parents."""
+    kit_dir = tmp_path / "kit"
+    (kit_dir / "skills" / "regex").mkdir(parents=True)
+    (kit_dir / "AGENTS.md").write_text("use the regex skill", encoding="utf-8")
+    (kit_dir / "skills" / "regex" / "SKILL.md").write_text(
+        "match dates carefully", encoding="utf-8"
+    )
+
+    environment = _DockerLikeEnvironment()
+    await upload_kit_tree(
+        environment,
+        kit_dir=kit_dir,
+        workdir="/app",
+        prompt_file="AGENTS.md",
+        skills_subdir=".agents/skills",
+    )
+
+    assert environment.ensured
+    assert "/app/.agents/skills/regex" in environment.ensured[0]
+    assert environment.uploads == [
+        (str(kit_dir / "AGENTS.md"), "/app/AGENTS.md"),
+        (
+            str(kit_dir / "skills" / "regex" / "SKILL.md"),
+            "/app/.agents/skills/regex/SKILL.md",
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_claude_repo_upload_projects_portable_skills_into_skill_packages(
+    tmp_path: Path,
+) -> None:
+    """Regression: Claude Code only discovers `.claude/skills/<n>/SKILL.md` packages.
+
+    Copying a portable AgentKit path such as `regex/notes.md` into
+    `.claude/skills/regex/notes.md` is silently ignored, so GEPA evolves skill
+    bodies the Claude Code agent never loads.
+    """
+    kit_dir = tmp_path / "kit"
+    (kit_dir / "skills" / "regex").mkdir(parents=True)
+    (kit_dir / "AGENTS.md").write_text("be careful", encoding="utf-8")
+    (kit_dir / "skills" / "regex" / "notes.md").write_text("test edge cases", encoding="utf-8")
+
+    environment = _DockerLikeEnvironment()
+    await upload_kit_tree(
+        environment,
+        kit_dir=kit_dir,
+        workdir="/app",
+        prompt_file="CLAUDE.md",
+        skills_subdir=".claude/skills",
+        skills_layout="claude_packages",
+    )
+
+    skill_target = "/app/.claude/skills/regex-notes/SKILL.md"
+    assert environment.uploads[0] == (str(kit_dir / "AGENTS.md"), "/app/CLAUDE.md")
+    assert environment.uploads[1][1] == skill_target
+    assert "/app/.claude/skills/regex-notes" in environment.ensured[0]
+    uploaded = environment.uploaded_text[skill_target]
+    assert uploaded.startswith("---\nname: regex-notes\n")
+    assert "description: Leaven AgentKit skill (regex/notes.md)." in uploaded
+    assert uploaded.endswith("test edge cases")
+
+
+@pytest.mark.asyncio
+async def test_claude_repo_upload_preserves_existing_skill_md_packages(
+    tmp_path: Path,
+) -> None:
+    """Law: kits that already use `<n>/SKILL.md` keep their package layout."""
+    kit_dir = tmp_path / "kit"
+    (kit_dir / "skills" / "regex").mkdir(parents=True)
+    (kit_dir / "AGENTS.md").write_text("be careful", encoding="utf-8")
+    (kit_dir / "skills" / "regex" / "SKILL.md").write_text(
+        "---\nname: regex\ndescription: parse logs\n---\n\nmatch dates",
+        encoding="utf-8",
+    )
+
+    environment = _DockerLikeEnvironment()
+    await upload_kit_tree(
+        environment,
+        kit_dir=kit_dir,
+        workdir="/app",
+        prompt_file="CLAUDE.md",
+        skills_subdir=".claude/skills",
+        skills_layout="claude_packages",
+    )
+
+    assert environment.uploads == [
+        (str(kit_dir / "AGENTS.md"), "/app/CLAUDE.md"),
+        (
+            str(kit_dir / "skills" / "regex" / "SKILL.md"),
+            "/app/.claude/skills/regex/SKILL.md",
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_claude_repo_upload_refuses_projected_skill_name_collisions(
+    tmp_path: Path,
+) -> None:
+    """Boundary: colliding Claude package names fail before a silent overwrite."""
+    kit_dir = tmp_path / "kit"
+    (kit_dir / "skills").mkdir(parents=True)
+    (kit_dir / "AGENTS.md").write_text("be careful", encoding="utf-8")
+    (kit_dir / "skills" / "regex-notes.md").write_text("a", encoding="utf-8")
+    (kit_dir / "skills" / "regex").mkdir()
+    (kit_dir / "skills" / "regex" / "notes.md").write_text("b", encoding="utf-8")
+
+    with pytest.raises(HarborAdapterError, match="collides"):
+        await upload_kit_tree(
+            _DockerLikeEnvironment(),
+            kit_dir=kit_dir,
+            workdir="/app",
+            prompt_file="CLAUDE.md",
+            skills_subdir=".claude/skills",
+            skills_layout="claude_packages",
+        )

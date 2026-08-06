@@ -8,7 +8,8 @@ skills) into a Harbor `AgentConfig` for a chosen `placement`:
   and takes skills via ``AgentConfig.skills`` (``$HOME/.agents/skills``).
 - ``placement="repo"`` materializes the kit into the task ``workdir``: Codex reads
   ``<workdir>/AGENTS.md`` + ``<workdir>/.agents/skills`` (scanned cwd→repo root),
-  Claude Code reads ``<workdir>/CLAUDE.md`` + ``<workdir>/.claude/skills``.
+  Claude Code reads ``<workdir>/CLAUDE.md`` + ``<workdir>/.claude/skills/<n>/SKILL.md``
+  (portable AgentKit skill files are projected into Claude skill packages).
 
 Claude Code user placement is refused until Harbor quotes
 ``--append-system-prompt`` values safely; otherwise multiword prompts are split
@@ -41,6 +42,7 @@ class HarborAgentAdapter:
     leaven_import_path: str
     repo_prompt_file: str
     repo_skills_subdir: str
+    repo_skills_layout: str  # "portable" | "claude_packages"
     default_model: str
     api_key_env: str
     user_prompt_mode: str  # "unsupported_append_flag" | "codex_home"
@@ -73,6 +75,7 @@ class HarborAgentAdapter:
                     "workdir": workdir,
                     "kit_prompt_file": self.repo_prompt_file,
                     "kit_skills_subdir": self.repo_skills_subdir,
+                    "kit_skills_layout": self.repo_skills_layout,
                 },
                 env=env,
             )
@@ -102,6 +105,7 @@ AGENTS: dict[str, HarborAgentAdapter] = {
         leaven_import_path=CODEX_IMPORT_PATH,
         repo_prompt_file="AGENTS.md",
         repo_skills_subdir=".agents/skills",
+        repo_skills_layout="portable",
         default_model="openai/gpt-5.4-mini",
         api_key_env="OPENAI_API_KEY",
         user_prompt_mode="codex_home",
@@ -113,6 +117,7 @@ AGENTS: dict[str, HarborAgentAdapter] = {
         leaven_import_path=CLAUDE_CODE_IMPORT_PATH,
         repo_prompt_file="CLAUDE.md",
         repo_skills_subdir=".claude/skills",
+        repo_skills_layout="claude_packages",
         default_model="anthropic/claude-sonnet-4-6",
         api_key_env="ANTHROPIC_API_KEY",
         user_prompt_mode="unsupported_append_flag",

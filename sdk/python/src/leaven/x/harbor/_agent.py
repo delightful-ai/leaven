@@ -4,7 +4,9 @@ These cover the cases that need agent-side behavior beyond a plain
 ``AgentConfig``:
 
 - repo-scope (any agent): upload the staged kit's prompt file and skills into the
-  task working directory before the agent runs.
+  task working directory before the agent runs (creating nested skill parents
+  first — Harbor Docker ``upload_file`` does not). Claude Code projects portable
+  AgentKit skill files into ``.claude/skills/<n>/SKILL.md`` packages.
 - Codex user-scope: write the kit's system prompt to ``$CODEX_HOME/AGENTS.md``
   (read as global, workdir-independent appended context).
 
@@ -12,38 +14,15 @@ Claude Code user-scope is deliberately disabled in ``agents.py`` until Harbor
 quotes ``--append-system-prompt`` safely.
 """
 
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from harbor.agents.installed.claude_code import ClaudeCode
 from harbor.agents.installed.codex import Codex
 from harbor.environments.base import BaseEnvironment
 from harbor.models.agent.context import AgentContext
 
-from leaven.x.harbor._kit import KIT_PROMPT_FILE, KIT_SKILLS_DIR
-
-
-async def _upload_kit_tree(
-    environment: BaseEnvironment,
-    *,
-    kit_dir: Path,
-    workdir: str,
-    prompt_file: str,
-    skills_subdir: str,
-) -> None:
-    """Upload a staged kit into ``<workdir>`` as the agent's project surface."""
-    root = PurePosixPath(workdir)
-    prompt = kit_dir / KIT_PROMPT_FILE
-    if prompt.is_file():
-        await environment.upload_file(prompt, (root / prompt_file).as_posix())
-    skills_root = kit_dir / KIT_SKILLS_DIR
-    if not skills_root.is_dir():
-        return
-    for skill_file in sorted(skills_root.rglob("*")):
-        if not skill_file.is_file():
-            continue
-        relative = skill_file.relative_to(skills_root)
-        target = root / skills_subdir / PurePosixPath(relative.as_posix())
-        await environment.upload_file(skill_file, target.as_posix())
+from leaven.x.harbor._kit import KIT_PROMPT_FILE
+from leaven.x.harbor._kit_upload import SkillsLayout, upload_kit_tree
 
 
 class _LeavenKitMixin:
@@ -56,16 +35,23 @@ class _LeavenKitMixin:
         self._workdir = str(kwargs.pop("workdir", "/app"))
         self._kit_prompt_file = str(kwargs.pop("kit_prompt_file", "AGENTS.md"))
         self._kit_skills_subdir = str(kwargs.pop("kit_skills_subdir", ".agents/skills"))
+        layout = str(kwargs.pop("kit_skills_layout", "portable"))
+        if layout not in {"portable", "claude_packages"}:
+            raise ValueError(
+                f"kit_skills_layout must be 'portable' or 'claude_packages', got {layout!r}"
+            )
+        self._kit_skills_layout: SkillsLayout = layout  # type: ignore[assignment]
 
     async def _upload_repo_kit(self, environment: BaseEnvironment) -> None:
         if self._agent_kit_dir is None:
             return
-        await _upload_kit_tree(
+        await upload_kit_tree(
             environment,
             kit_dir=self._agent_kit_dir,
             workdir=self._workdir,
             prompt_file=self._kit_prompt_file,
             skills_subdir=self._kit_skills_subdir,
+            skills_layout=self._kit_skills_layout,
         )
 
 
@@ -113,7 +99,7 @@ class LeavenClaudeCode(_LeavenKitMixin, ClaudeCode):
     """A Harbor Claude Code agent that injects a repo-scope Leaven AgentKit.
 
     This subclass exists for ``placement="repo"``, which materializes the kit as
-    ``<workdir>/CLAUDE.md`` and project skills.
+    ``<workdir>/CLAUDE.md`` and project skills under ``.claude/skills/<n>/SKILL.md``.
     """
 
     def __init__(
