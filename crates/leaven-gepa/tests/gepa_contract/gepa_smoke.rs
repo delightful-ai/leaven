@@ -2809,8 +2809,8 @@ fn padded_minibatch_duplicate_cases_keep_multiplicity_in_acceptance() {
 
         let children = engine.view().candidate_tree().children(seed);
         assert_eq!(children.len(), 1, "child is still proposed");
-        let attempt = gepa
-            .report()
+        let report = gepa.report();
+        let attempt = report
             .proposal_attempts
             .first()
             .expect("screened proposal attempt");
