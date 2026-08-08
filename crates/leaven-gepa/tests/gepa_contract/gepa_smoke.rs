@@ -2756,6 +2756,89 @@ fn strict_equal_score_child_is_rejected_without_full_validation_or_admission() {
 }
 
 #[test]
+fn padded_minibatch_duplicate_cases_keep_multiplicity_in_acceptance() {
+    // Regression: EpochShuffled pads with duplicate case ids when
+    // train_len % minibatch_size != 0. CasewiseEvidence dedupes those rows, so
+    // averaging after canonicalization flips StrictImprovement vs upstream's
+    // padded-list aggregate.
+    //
+    // Minibatch [0, 1, 0]; parent scores (1.0, 0.0); child scores (0.6, 0.6):
+    //   unique-case mean: parent 0.5 < child 0.6 → wrongly accept
+    //   padded mean:      parent 2/3 > child 0.6 → correctly reject
+    block_on(async {
+        let case_set = CaseSet::new(vec![(), (), ()])
+            .with_partition(
+                leaven_core::PartitionId::from("TRAIN"),
+                vec![
+                    leaven_kernel::CaseId::new(0),
+                    leaven_kernel::CaseId::new(1),
+                ],
+            )
+            .with_partition(
+                leaven_core::PartitionId::from("VALIDATION"),
+                vec![leaven_kernel::CaseId::new(2)],
+            );
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
+        let mut engine = Engine::<SamplingProblem>::builder()
+            .evaluator(PaddedMinibatchScoreEvaluator)
+            .build();
+        let seed = engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            improved_reflector(),
+        )
+        .reflective_dataset(OneReflectiveExample)
+        .batch_sampler(FixedCasesBatchSampler {
+            cases: vec![
+                leaven_kernel::CaseId::new(0),
+                leaven_kernel::CaseId::new(1),
+                leaven_kernel::CaseId::new(0),
+            ],
+        })
+        .validation_policy(FullValidation)
+        .skip_perfect_score(false)
+        .max_iterations(1);
+
+        engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        let children = engine.view().candidate_tree().children(seed);
+        assert_eq!(children.len(), 1, "child is still proposed");
+        let report = gepa.report();
+        let attempt = report
+            .proposal_attempts
+            .first()
+            .expect("screened proposal attempt");
+        assert_eq!(
+            attempt.parent_cases.len(),
+            3,
+            "screening must retain padded duplicate case rows"
+        );
+        assert!(
+            (attempt.parent_score - (2.0 / 3.0)).abs() < 1e-9,
+            "parent padded average must weight case 0 twice; got {}",
+            attempt.parent_score
+        );
+        assert!(
+            (attempt.child_score.expect("child screened") - 0.6).abs() < 1e-9,
+            "child padded average must stay 0.6; got {:?}",
+            attempt.child_score
+        );
+        assert_eq!(
+            attempt.accepted,
+            Some(false),
+            "padded multiplicity must reject the child that unique-case averaging would accept"
+        );
+        assert_eq!(attempt.admitted_index, None);
+    });
+}
+
+#[test]
 fn default_parent_selection_samples_validation_frontier_frequency() {
     block_on(async {
         let case_set = CaseSet::new(vec![(), (), (), ()])
@@ -3746,6 +3829,89 @@ fn resume_reflection_gepa() -> Gepa<
     .batch_sampler(EpochShuffled::new(1).with_seed(7))
     .validation_policy(FullValidation)
     .max_iterations(2)
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+struct FixedCasesBatchSampler {
+    cases: Vec<leaven_kernel::CaseId>,
+}
+
+impl BatchSampler for FixedCasesBatchSampler {
+    fn sample_train(
+        &mut self,
+        _train_partition: &leaven_core::PartitionId,
+        _train_cases: &[leaven_kernel::CaseId],
+    ) -> Result<EvaluationSet, leaven_gepa::validation::BatchSamplingError> {
+        Ok(EvaluationSet::Cases(self.cases.clone()))
+    }
+}
+
+impl CheckpointBatchSampler for FixedCasesBatchSampler {
+    type State = Vec<leaven_kernel::CaseId>;
+
+    fn checkpoint_state(&self) -> Self::State {
+        self.cases.clone()
+    }
+
+    fn restore_state(&mut self, state: Self::State) {
+        self.cases = state;
+    }
+}
+
+/// Case 0 scores 1.0 for draft / 0.6 for improved; case 1 scores 0.0 / 0.6.
+struct PaddedMinibatchScoreEvaluator;
+
+impl Evaluator<SamplingProblem> for PaddedMinibatchScoreEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([21; 32])
+    }
+
+    fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
+        CachePolicy::Never
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        ctx: EvaluationContext<'_, SamplingProblem>,
+    ) -> Result<Metered<Vec<Assessment<SamplingProblem>>>, EvaluationError> {
+        let set = leaven_kernel::EvaluationSetId::from_uuid(request.set.id.as_uuid());
+        let ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message(
+                "expected independent request".to_owned(),
+            ));
+        };
+        let mut assessments = Vec::new();
+        for candidate in candidates {
+            let artifact = ctx.graph().artifact(candidate).expect("candidate artifact");
+            let improved = artifact
+                .0
+                .get("answer")
+                .is_some_and(|value| value.starts_with("improved"));
+            for case in request.set.case_ids.iter().copied() {
+                let score = match (improved, case.0) {
+                    (false, 0) => 1.0,
+                    (false, _) => 0.0,
+                    (true, _) => 0.6,
+                };
+                assessments.push(Assessment::Independent {
+                    candidate,
+                    target: AssessmentTarget::Case { set, case },
+                    evidence: ScalarEvidence::new(score).unwrap(),
+                    cost: Cost::metric_calls(1),
+                    metadata: MetadataBag::new(),
+                });
+            }
+        }
+        Ok(Metered::new(
+            assessments,
+            Cost::metric_calls(request.set.case_ids.len() as u64),
+        ))
+    }
 }
 
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
