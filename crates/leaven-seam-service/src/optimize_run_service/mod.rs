@@ -233,6 +233,11 @@ async fn run_gepa_loop_async(
     let train_minibatch_size = lowered.train_minibatch_size;
     let max_cost_usd_micro = lowered.max_cost_usd_micro;
 
+    let runner_fingerprint = dispatch.role_fingerprint("optimize_run.runner");
+    let scorer_fingerprint = dispatch.role_fingerprint("optimize_run.scorer");
+    let reflector_fingerprint =
+        reflector_runtime_fingerprint(&reflection_lm, &reflection_model);
+
     let scorer_dispatch = dispatch.clone();
     let runner_dispatch = dispatch;
 
@@ -297,8 +302,9 @@ async fn run_gepa_loop_async(
                 async move { run_scorer_stage(dispatch, ctx).await }
             },
         )
-        .runner_fingerprint(worker_runtime_fingerprint("optimize_run.runner"))
-        .scorer_fingerprint(worker_runtime_fingerprint("optimize_run.scorer"))
+        .runner_fingerprint(runner_fingerprint)
+        .scorer_fingerprint(scorer_fingerprint)
+        .lm_role_fingerprint("gepa_reflector", reflector_fingerprint)
         .evaluation_parallelism(sequential())
         .on_event(CandidateArtifactSnapshot::new(artifacts))
         .using(gepa)
@@ -360,15 +366,149 @@ pub(in crate::optimize_run_service) fn u64_to_f64(value: u64) -> f64 {
 }
 
 /// Stable durable behavior fingerprint for the worker-backed runner/scorer
-/// closures. Worker closures are not introspectable, so durable runs require an
-/// explicit declared fingerprint per role.
+/// closures.
+///
+/// Worker closures are not introspectable, so durable runs require an explicit
+/// declared fingerprint per role. The fingerprint must include the configured
+/// CommandRunner argv and request capability fingerprint: those are the host-
+/// known knobs that change effective runner/scorer behavior. Each variable-
+/// length field is length-prefixed so adjacent argv tokens cannot collide
+/// across boundaries (for example `["ab","c"]` vs `["a","bc"]`).
 pub(in crate::optimize_run_service) fn worker_runtime_fingerprint(
     role: &str,
+    argv: &[String],
+    capability_fingerprint: &str,
 ) -> leaven_kernel::Fingerprint {
     let mut builder = leaven_kernel::FingerprintBuilder::new();
-    builder.update(b"leaven-seam-service.optimize_run.worker.v1");
-    builder.update(role.as_bytes());
+    builder.update(b"leaven-seam-service.optimize_run.worker.v2");
+    update_length_prefixed(&mut builder, role.as_bytes());
+    builder.update((argv.len() as u64).to_le_bytes());
+    for arg in argv {
+        update_length_prefixed(&mut builder, arg.as_bytes());
+    }
+    update_length_prefixed(&mut builder, capability_fingerprint.as_bytes());
     builder.finish()
+}
+
+/// Durable LM-role fingerprint for prompt-path GEPA reflection.
+///
+/// GEPA's optimizer compatibility fingerprint hashes reflector type names, not
+/// the concrete model string or provider config. Declaring this role keeps
+/// resume from continuing under a different reflection LM/model.
+pub(in crate::optimize_run_service) fn reflector_runtime_fingerprint(
+    reflection_lm: &crate::lm::ConfiguredLmRuntime,
+    reflection_model: &str,
+) -> leaven_kernel::Fingerprint {
+    use leaven_lm::Lm;
+
+    let mut builder = leaven_kernel::FingerprintBuilder::new();
+    builder.update(b"leaven-seam-service.optimize_run.reflector.v1");
+    builder.update(reflection_lm.fingerprint().0);
+    update_length_prefixed(&mut builder, reflection_model.as_bytes());
+    builder.finish()
+}
+
+/// Durable LM-role fingerprint for agentic kit-path reflection.
+pub(in crate::optimize_run_service) fn agent_runtime_fingerprint(
+    agent_runtime: &impl leaven_agent::AgentRuntime,
+) -> leaven_kernel::Fingerprint {
+    let mut builder = leaven_kernel::FingerprintBuilder::new();
+    builder.update(b"leaven-seam-service.optimize_run.agent_runtime.v1");
+    builder.update(agent_runtime.fingerprint().0);
+    builder.finish()
+}
+
+fn update_length_prefixed(builder: &mut leaven_kernel::FingerprintBuilder, bytes: &[u8]) {
+    builder
+        .update((bytes.len() as u64).to_le_bytes())
+        .update(bytes);
+}
+
+#[cfg(test)]
+mod fingerprint_tests {
+    use super::{
+        reflector_runtime_fingerprint, update_length_prefixed, worker_runtime_fingerprint,
+    };
+    use crate::lm::{MockLmResponseConfig, SeamLmConfig};
+
+    #[test]
+    fn worker_runtime_fingerprint_includes_argv_and_capability() {
+        let base = worker_runtime_fingerprint(
+            "optimize_run.runner",
+            &["worker-a".to_owned()],
+            "fp_cap_a",
+        );
+        let other_argv = worker_runtime_fingerprint(
+            "optimize_run.runner",
+            &["worker-b".to_owned()],
+            "fp_cap_a",
+        );
+        let other_capability = worker_runtime_fingerprint(
+            "optimize_run.runner",
+            &["worker-a".to_owned()],
+            "fp_cap_b",
+        );
+        let other_role = worker_runtime_fingerprint(
+            "optimize_run.scorer",
+            &["worker-a".to_owned()],
+            "fp_cap_a",
+        );
+
+        assert_ne!(base, other_argv);
+        assert_ne!(base, other_capability);
+        assert_ne!(base, other_role);
+    }
+
+    #[test]
+    fn worker_runtime_fingerprint_length_prefixes_argv_tokens() {
+        let left = worker_runtime_fingerprint(
+            "optimize_run.runner",
+            &["ab".to_owned(), "c".to_owned()],
+            "fp_cap",
+        );
+        let right = worker_runtime_fingerprint(
+            "optimize_run.runner",
+            &["a".to_owned(), "bc".to_owned()],
+            "fp_cap",
+        );
+
+        assert_ne!(
+            left, right,
+            "adjacent argv tokens must not collide across field boundaries"
+        );
+    }
+
+    #[test]
+    fn reflector_runtime_fingerprint_includes_model_and_provider() {
+        let mock_a = SeamLmConfig::Mock {
+            responses: vec![MockLmResponseConfig {
+                text: "edit-a".to_owned(),
+                ..MockLmResponseConfig::default()
+            }],
+        }
+        .to_lm_runtime()
+        .expect("mock lm builds");
+        let mock_b = SeamLmConfig::Mock {
+            responses: vec![MockLmResponseConfig {
+                text: "edit-b".to_owned(),
+                ..MockLmResponseConfig::default()
+            }],
+        }
+        .to_lm_runtime()
+        .expect("mock lm builds");
+
+        let model_a = reflector_runtime_fingerprint(&mock_a, "model-a");
+        let model_b = reflector_runtime_fingerprint(&mock_a, "model-b");
+        let provider_b = reflector_runtime_fingerprint(&mock_b, "model-a");
+
+        assert_ne!(model_a, model_b);
+        assert_ne!(model_a, provider_b);
+
+        // Keep the length-prefix helper exercised for empty fields too.
+        let mut builder = leaven_kernel::FingerprintBuilder::new();
+        update_length_prefixed(&mut builder, b"");
+        let _ = builder.finish();
+    }
 }
 
 /// Target-free reflective projection of a case input.

@@ -101,6 +101,10 @@ where
     let report_slot: Arc<Mutex<Option<GepaReport>>> = Arc::new(Mutex::new(None));
     let report_sink = report_slot.clone();
     let artifacts = KitArtifacts::new();
+    // Capture durable identities before values move into the GEPA/run closures.
+    let runner_fingerprint = dispatch.role_fingerprint("optimize_run.kit.runner");
+    let scorer_fingerprint = dispatch.role_fingerprint("optimize_run.kit.scorer");
+    let agent_fingerprint = super::super::agent_runtime_fingerprint(&agent_runtime);
     let reflector = build_reflector(&seed, agent_runtime);
 
     let mut gepa = Gepa::builder()
@@ -156,12 +160,9 @@ where
                 async move { run_scorer_stage(dispatch, ctx).await }
             },
         )
-        .runner_fingerprint(super::super::worker_runtime_fingerprint(
-            "optimize_run.kit.runner",
-        ))
-        .scorer_fingerprint(super::super::worker_runtime_fingerprint(
-            "optimize_run.kit.scorer",
-        ))
+        .runner_fingerprint(runner_fingerprint)
+        .scorer_fingerprint(scorer_fingerprint)
+        .lm_role_fingerprint("gepa_agentic_reflector", agent_fingerprint)
         .evaluation_parallelism(super::super::sequential())
         .on_event(KitArtifactSnapshot::new(artifacts.clone()))
         .using(gepa)
