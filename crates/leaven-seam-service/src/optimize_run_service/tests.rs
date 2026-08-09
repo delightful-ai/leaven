@@ -1306,6 +1306,86 @@ fn small_budget_stops_the_loop_with_best_seed_and_truthful_metric_calls() {
 }
 
 #[test]
+fn optimize_run_persists_argv_aware_runner_and_reflector_fingerprints() {
+    // Claim: durable compatibility.json must declare runner/scorer identities
+    // derived from CommandRunner argv + capability_fingerprint, and a
+    // gepa_reflector LM role derived from the configured LM + model. A
+    // constant role-only fingerprint would silently accept resume under a
+    // different worker binary.
+    let pkg = package();
+    let runs_root = tempfile::tempdir().unwrap();
+    let argv = vec![loop_law_worker().display().to_string()];
+    let lm = SeamLmConfig::Mock {
+        responses: vec![reflection_response_with_marker()],
+    };
+    let service = service_with(
+        &pkg,
+        SeamStageConfig::CommandRunner {
+            argv: argv.clone(),
+        },
+        lm.clone(),
+        runs_root.path(),
+    );
+    let mut request = optimize_request("Answer the question. Output only the integer.");
+    request["params"]["optimizer"]["max_metric_calls"] = json!(1);
+    let _ = run_optimize(&request, service, pkg);
+
+    let manifest_path = runs_root
+        .path()
+        .join("run_optimize_loop")
+        .join("compatibility.json");
+    let manifest: Value =
+        serde_json::from_slice(&std::fs::read(&manifest_path).expect("compatibility.json")).unwrap();
+
+    let expected_runner = super::worker_runtime_fingerprint(
+        "optimize_run.runner",
+        &argv,
+        "fp_cap_sha256_optimize",
+    );
+    let expected_scorer = super::worker_runtime_fingerprint(
+        "optimize_run.scorer",
+        &argv,
+        "fp_cap_sha256_optimize",
+    );
+    let reflection_lm = lm.to_lm_runtime().expect("mock lm builds");
+    let expected_reflector = super::reflector_runtime_fingerprint(&reflection_lm, "mock");
+
+    assert_eq!(
+        serde_json::from_value::<leaven_kernel::Fingerprint>(
+            manifest["runner"]["fingerprint"].clone()
+        )
+        .unwrap(),
+        expected_runner,
+        "runner fingerprint must include configured worker argv"
+    );
+    assert_eq!(
+        serde_json::from_value::<leaven_kernel::Fingerprint>(
+            manifest["scorer"]["fingerprint"].clone()
+        )
+        .unwrap(),
+        expected_scorer,
+        "scorer fingerprint must include configured worker argv"
+    );
+    assert_eq!(
+        serde_json::from_value::<leaven_kernel::Fingerprint>(
+            manifest["lm_roles"]["gepa_reflector"]["fingerprint"].clone()
+        )
+        .unwrap(),
+        expected_reflector,
+        "prompt path must declare gepa_reflector LM-role identity"
+    );
+    assert_ne!(
+        expected_runner,
+        super::worker_runtime_fingerprint(
+            "optimize_run.runner",
+            &["other-worker".to_owned()],
+            "fp_cap_sha256_optimize",
+        ),
+        "sanity: distinct argv must not share the declared fingerprint"
+    );
+}
+
+#[test]
 fn worker_effect_cost_aggregates_into_result_cost_totals() {
     let pkg = package();
     let runs_root = tempfile::tempdir().unwrap();
