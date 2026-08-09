@@ -74,7 +74,12 @@ method unsupported.
   `instance`. The
   `applied_proposals` receipts are opaque service-issued `wrec_` ids bound 1:1
   to the run's durable candidate-apply records; they name graph truth, not
-  inline writes.
+  inline writes. Durable runner/scorer fingerprints must include the configured
+  CommandRunner argv and request `capability_fingerprint` (length-prefixed);
+  prompt reflection declares an LM-role fingerprint over the configured LM plus
+  reflection model, and kit reflection declares one over the agent runtime.
+  Constant role-only fingerprints are forbidden because they let resume and the
+  evaluation cache treat distinct workers/capabilities as identical.
 - `optimize_run_service/agent_kit/`: the Git-backed AgentKit optimization path.
   It owns the `agent_kit` wire-record-to-Git-file projection (mapping the wire
   `{system_prompt, skills}` projection onto a `manifest.toml` /

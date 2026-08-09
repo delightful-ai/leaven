@@ -1,13 +1,14 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use leaven_kernel::{CaseId, Cost};
+use leaven_kernel::{CaseId, Cost, Fingerprint};
 use leaven_public_seam::{LockedMethod, PublicSeamError};
 use leaven_run::{RunCase, RunError, RunOutput, Score, ScoreContext, ScoreError};
 use serde_json::{Value, json};
 
 use super::lowering::LoweredCase;
 use super::sanitize;
+use super::worker_runtime_fingerprint;
 use crate::stage::command_runner_result;
 
 /// Services a worker's nested `leaven/lm.complete` plan-IR callback.
@@ -56,6 +57,15 @@ impl WorkerDispatch {
             lm,
             stage_counter: Arc::new(Mutex::new(0)),
         }
+    }
+
+    /// Declared durable fingerprint for a worker-backed runner/scorer role.
+    ///
+    /// Hashes this dispatch's configured CommandRunner argv and request
+    /// capability fingerprint so resume/eval-cache refuse when the effective
+    /// worker binary or capability grant changes.
+    pub(super) fn role_fingerprint(&self, role: &str) -> Fingerprint {
+        worker_runtime_fingerprint(role, self.argv.as_slice(), &self.capability_fingerprint)
     }
 
     fn next_stage_call_id(&self, role: StageRole) -> String {
