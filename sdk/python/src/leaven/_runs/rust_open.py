@@ -56,12 +56,21 @@ def optimized_from_rust_readback(
     assessment_rows: list[Assessment] | None = None,
 ) -> Optimized[PromptArtifact]:
     """Project Rust-owned graph readback into the public Optimized handle."""
+    purpose_by_assessment = {
+        assessment.id: assessment.purpose
+        for assessment in readback.graph.assessments
+        if assessment.purpose is not None
+    }
     frontier = [
         Candidate[PromptArtifact](
             id=candidate.id,
             artifact=_artifact_from_readback(candidate.artifact),
             parent_id=candidate.parent_id,
-            summary_score=_summary_score(candidate.id, assessment_rows),
+            summary_score=_summary_score(
+                candidate.id,
+                assessment_rows,
+                purpose_by_assessment=purpose_by_assessment,
+            ),
         )
         for candidate in readback.graph.candidates
     ]
@@ -131,15 +140,47 @@ def _artifact_from_readback(value: JsonValue) -> PromptArtifact:
         raise TypeError("Rust run readback artifact is not a PromptArtifact payload") from error
 
 
-def _summary_score(candidate_id: str, assessment_rows: list[Assessment] | None) -> float | None:
+_VALIDATION_PURPOSES = frozenset({"Validation", "Selection"})
+_VALIDATION_SPLITS = frozenset({"validation", "val"})
+
+
+def _summary_score(
+    candidate_id: str,
+    assessment_rows: list[Assessment] | None,
+    *,
+    purpose_by_assessment: dict[str, str] | None = None,
+) -> float | None:
+    """Aggregate held-out validation scores for one candidate.
+
+    GEPA records train minibatch screening under Search/SeedBaseline purposes
+    alongside Validation rows. Averaging every assessment would dilute the
+    public validation-set ``summary_score`` on ``lv.runs.open``.
+    """
     rows = [
-        assessment.score.value
+        assessment
         for assessment in assessment_rows or []
         if assessment.candidate_id == candidate_id
     ]
     if not rows:
         return None
-    return sum(rows) / len(rows)
+    purposes = purpose_by_assessment or {}
+    validation_rows = [
+        assessment
+        for assessment in rows
+        if _is_validation_assessment(assessment, purposes.get(assessment.receipt.receipt_id))
+    ]
+    if not validation_rows:
+        return None
+    return sum(assessment.score.value for assessment in validation_rows) / len(validation_rows)
+
+
+def _is_validation_assessment(assessment: Assessment, purpose: str | None) -> bool:
+    if purpose in _VALIDATION_PURPOSES:
+        return True
+    if purpose is not None:
+        return False
+    split = assessment.case.split
+    return split is not None and split in _VALIDATION_SPLITS
 
 
 def _replayability() -> Replayability:

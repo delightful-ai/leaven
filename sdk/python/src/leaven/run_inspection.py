@@ -119,6 +119,7 @@ class AssessmentReadback(BaseModel):
     target: JsonValue
     evidence: EvidenceReadbackRef
     metadata: JsonValue
+    purpose: str | None = None
     created_at: str
 
 

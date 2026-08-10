@@ -39,6 +39,11 @@ provider protocols, or become the public inspection namespace.
   decode the Rust serde shape for SDK inspection, but it must not define new
   Rust evidence semantics or synthesize reward-vector rows that Rust did not
   persist.
+- `rust_open.py`: projects Rust checkpoint/graph readback into
+  `Optimized[PromptArtifact]`. Candidate `summary_score` is the mean of
+  held-out validation assessments only (`Validation`/`Selection` purposes, or
+  legacy `validation`/`val` split labels). GEPA train screening rows
+  (`Search`/`SeedBaseline`) must not dilute the public validation aggregate.
 - `rust_export.py`: private subprocess bridge to Rust-owned checkpoint/graph
   inspection, run-blob byte exports, and evidence byte exports.
 - `store.py`: deterministic Rust-checkpoint run-directory listing.
