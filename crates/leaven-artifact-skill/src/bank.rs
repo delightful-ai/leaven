@@ -267,10 +267,14 @@ impl Artifact for SkillBank {
 impl ContentAddressed for SkillBank {
     fn content_id(&self) -> ContentId {
         let mut hasher = blake3::Hasher::new();
-        feed(&mut hasher, b"leaven.skill-bank.v1");
+        // v2 tags each skill/file record so a skill name cannot be reinterpreted
+        // as a file path (or the reverse) across length-prefixed field boundaries.
+        feed(&mut hasher, b"leaven.skill-bank.v2");
         for (name, folder) in &self.folders {
+            feed(&mut hasher, b"skill");
             feed(&mut hasher, name.as_str().as_bytes());
             for (path, file) in folder.entries() {
+                feed(&mut hasher, b"file");
                 feed(&mut hasher, path.as_str().as_bytes());
                 feed(&mut hasher, &[u8::from(file.permissions().executable)]);
                 feed(&mut hasher, file.bytes());

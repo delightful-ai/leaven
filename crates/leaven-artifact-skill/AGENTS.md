@@ -42,6 +42,11 @@ It models skills as artifacts and edit surfaces. It does not run agents, materia
   comparisons across different tokenizer ids.
 
 ## Local Bait
+- `SkillBank` content/cache identity must keep skill records distinct from file
+  records. Length-prefixing path/perm/bytes alone is not enough: without
+  `skill`/`file` tags, a skill name can be reread as a file path beside an
+  executable permission byte and collide with another valid bank. Keep the
+  tagged `leaven.skill-bank.v2` feed; do not revert to an untagged field stream.
 - A `SkillBankChange::WriteFile` is artifact mutation, not filesystem execution. Workspace side effects belong behind workspace/agentic adapters.
 - `SkillCard` is a derived view over validated manifests. `SkillRouteRegistry`
   can deliberately own route pool/key membership as an overlay over a bank.
@@ -61,6 +66,6 @@ It models skills as artifacts and edit surfaces. It does not run agents, materia
   artifact family.
 
 ## Proof Anchors
-- `cargo test -p leaven-artifact-skill --test skill_artifact` proves skill name/path validation, `SKILL.md` parsing, manifest-derived skill cards, route registry pool/key overlays, folder/bank invariants, rollback, rename semantics, content identity including permissions, and all five skill surfaces.
+- `cargo test -p leaven-artifact-skill --test skill_artifact` proves skill name/path validation, `SKILL.md` parsing, manifest-derived skill cards, route registry pool/key overlays, folder/bank invariants, rollback, rename semantics, content identity including permissions and skill/file boundary separation, and all five skill surfaces.
 - `cargo test -p leaven-artifact-skill --test skill_token_profile` proves tokenizer-agnostic description/body/direct-reference token accounting, non-UTF-8 reference refusal, before/after deltas, and tokenizer-id mismatch refusal.
 - `cargo test -p leaven --test topology_contract` proves this crate stays an artifact/surface crate and Codex app-server protocol types remain leaf-only.

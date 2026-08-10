@@ -152,6 +152,12 @@ pub struct AssessmentReadback {
     pub evidence: EvidenceReadbackRef,
     /// Assessment metadata exactly as stored in the graph snapshot.
     pub metadata: Value,
+    /// Evaluation purpose joined from the owning evaluation request, when present.
+    ///
+    /// External-language reopen uses this to keep `summary_score` on held-out
+    /// validation rows instead of averaging GEPA train screening assessments.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub purpose: Option<String>,
     /// Timestamp recorded by the run graph.
     pub created_at: String,
 }
@@ -532,24 +538,69 @@ fn proposal_batch_readback(batch: &Value) -> Option<ProposalBatchReadback> {
 }
 
 fn assessment_readbacks(graph: &Value) -> Vec<AssessmentReadback> {
+    let purposes = evaluation_request_purposes(graph);
     graph
         .get("assessments")
         .and_then(Value::as_array)
         .map(|assessments| {
             assessments
                 .iter()
-                .filter_map(assessment_readback)
+                .filter_map(|assessment| assessment_readback(assessment, &purposes))
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default()
 }
 
-fn assessment_readback(assessment: &Value) -> Option<AssessmentReadback> {
+fn evaluation_request_purposes(graph: &Value) -> std::collections::BTreeMap<String, String> {
+    let mut purposes = std::collections::BTreeMap::new();
+    let Some(requests) = graph
+        .get("evaluation_requests")
+        .and_then(Value::as_array)
+    else {
+        return purposes;
+    };
+    for request in requests {
+        let Some(id) = request.get("id").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(purpose) = request
+            .get("request")
+            .and_then(evaluation_request_purpose)
+        else {
+            continue;
+        };
+        purposes.insert(id.to_owned(), purpose.to_owned());
+    }
+    purposes
+}
+
+fn evaluation_request_purpose(request: &Value) -> Option<&str> {
+    for kind in ["Independent", "Pairwise", "Listwise"] {
+        let Some(body) = request.get(kind) else {
+            continue;
+        };
+        let purpose = body.get("purpose")?;
+        if let Some(name) = purpose.as_str() {
+            return Some(name);
+        }
+        if let Some(name) = purpose.get("Custom").and_then(Value::as_str) {
+            return Some(name);
+        }
+    }
+    None
+}
+
+fn assessment_readback(
+    assessment: &Value,
+    purposes: &std::collections::BTreeMap<String, String>,
+) -> Option<AssessmentReadback> {
     let target = assessment.get("target")?;
     let (target_kind, candidate_ids) = assessment_target_candidates(target)?;
+    let request_id = assessment.get("request_id")?.as_str()?.to_owned();
+    let purpose = purposes.get(&request_id).cloned();
     Some(AssessmentReadback {
         id: assessment.get("id")?.as_str()?.to_owned(),
-        request_id: assessment.get("request_id")?.as_str()?.to_owned(),
+        request_id,
         evaluator: assessment.get("evaluator")?.as_str()?.to_owned(),
         target_kind,
         candidate_ids,
@@ -563,6 +614,7 @@ fn assessment_readback(assessment: &Value) -> Option<AssessmentReadback> {
             key: assessment.get("evidence")?.get("key")?.as_str()?.to_owned(),
         },
         metadata: assessment.get("metadata").cloned().unwrap_or(Value::Null),
+        purpose,
         created_at: assessment.get("created_at")?.as_str()?.to_owned(),
     })
 }
@@ -719,6 +771,10 @@ mod tests {
         );
         assert_eq!(export.graph.assessments[0].evidence.key, "0");
         assert_eq!(export.graph.assessments[0].metadata["split"], "validation");
+        assert_eq!(
+            export.graph.assessments[0].purpose.as_deref(),
+            Some("Validation")
+        );
         assert_eq!(export.graph.event_count, 3);
         assert_eq!(export.cost.lm_calls, 2);
         assert_eq!(export.cost.prompt_tokens, 7);
@@ -856,7 +912,18 @@ mod tests {
             "proposal_batches":[{"id":"pb_child","proposal_ids":["prop_child"]}],
             "proposals":[{"id":"prop_child","effect":{"Change":{"target":"cand_seed","change":{}}}}],
             "apply_attempts":[{}],
-            "evaluation_requests":[{}],
+            "evaluation_requests":[{
+                "id":"eval_req_child",
+                "evaluator":"evaluator/exact",
+                "request":{
+                    "Independent":{
+                        "candidates":["cand_child"],
+                        "set":"Unscoped",
+                        "granularity":"PerCase",
+                        "purpose":"Validation"
+                    }
+                }
+            }],
             "assessments":[
                 {
                     "id":"assessment_child",

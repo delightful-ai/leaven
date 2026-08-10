@@ -8,14 +8,18 @@ from pathlib import Path
 import pytest
 
 from leaven import PromptArtifact, runs
+from leaven._receipts import WriteReceipt
 from leaven._runs import optimized_from_rust_readback
 from leaven._runs.rust_export import (
     load_rust_blob_readback,
     load_rust_evidence_readback,
     load_rust_run_readback,
 )
-from leaven.evidence import EvidencePublicPayload
+from leaven.assessment import Assessment
+from leaven.case import Case
+from leaven.evidence import EvidenceEnvelope, EvidencePublicPayload
 from leaven.run_inspection import RustRunReadback
+from leaven.score import Score
 from tests.support.rust_evidence import rust_case_assessment_evidence_bytes
 
 
@@ -288,6 +292,90 @@ def test_optimized_from_rust_readback_uses_graph_candidates() -> None:
         "run.cost",
         "run.inspection",
     ]
+
+
+def test_summary_score_ignores_train_screening_assessments() -> None:
+    """Regression: reopen must not dilute validation scores with GEPA train rows."""
+
+    readback = load_rust_run_readback_fixture()
+    data = readback.model_dump(mode="json", by_alias=True)
+    data["graph"]["assessments"] = [
+        {
+            "id": "assessment_train_a",
+            "request_id": "eval_req_search",
+            "evaluator": "evaluator/exact",
+            "target_kind": "independent",
+            "candidate_ids": ["cand_child"],
+            "target": {"Independent": {"candidate": "cand_child", "target": "Unscoped"}},
+            "evidence": {"store": "leaven-run", "key": "train-a"},
+            "metadata": {},
+            "purpose": "Search",
+            "created_at": "2026-06-04T00:00:01Z",
+        },
+        {
+            "id": "assessment_train_b",
+            "request_id": "eval_req_search",
+            "evaluator": "evaluator/exact",
+            "target_kind": "independent",
+            "candidate_ids": ["cand_child"],
+            "target": {"Independent": {"candidate": "cand_child", "target": "Unscoped"}},
+            "evidence": {"store": "leaven-run", "key": "train-b"},
+            "metadata": {},
+            "purpose": "Search",
+            "created_at": "2026-06-04T00:00:01Z",
+        },
+        {
+            "id": "assessment_val",
+            "request_id": "eval_req_validation",
+            "evaluator": "evaluator/exact",
+            "target_kind": "independent",
+            "candidate_ids": ["cand_child"],
+            "target": {"Independent": {"candidate": "cand_child", "target": "Unscoped"}},
+            "evidence": {"store": "leaven-run", "key": "val"},
+            "metadata": {},
+            "purpose": "Validation",
+            "created_at": "2026-06-04T00:00:02Z",
+        },
+    ]
+    readback = RustRunReadback.model_validate(data)
+    evidence = EvidenceEnvelope.public_only(
+        payload=EvidencePublicPayload(summary="ok", output="ok", metrics={}),
+        data_classes=["public"],
+    )
+    rows = [
+        Assessment(
+            case=Case(id="train-a", input={}),
+            candidate_id="cand_child",
+            score=Score(value=0.0, feedback="train miss"),
+            evidence=evidence,
+            receipt=WriteReceipt(receipt_id="assessment_train_a"),
+            replayability="boundary_managed",
+        ),
+        Assessment(
+            case=Case(id="train-b", input={}),
+            candidate_id="cand_child",
+            score=Score(value=0.0, feedback="train miss"),
+            evidence=evidence,
+            receipt=WriteReceipt(receipt_id="assessment_train_b"),
+            replayability="boundary_managed",
+        ),
+        Assessment(
+            case=Case(id="val-1", input={}),
+            candidate_id="cand_child",
+            score=Score(value=1.0, feedback="val hit"),
+            evidence=evidence,
+            receipt=WriteReceipt(receipt_id="assessment_val"),
+            replayability="boundary_managed",
+        ),
+    ]
+
+    result = optimized_from_rust_readback(
+        readback,
+        run_dir="/tmp/run",
+        assessment_rows=rows,
+    )
+
+    assert result.best.summary_score == 1.0
 
 
 def test_optimized_from_rust_readback_rejects_unknown_artifact_shape() -> None:
@@ -615,6 +703,7 @@ def load_rust_run_readback_fixture() -> RustRunReadback:
                             "key": "0",
                         },
                         "metadata": {"split": "validation"},
+                        "purpose": "Validation",
                         "created_at": "2026-06-04T00:00:02Z",
                     }
                 ],
