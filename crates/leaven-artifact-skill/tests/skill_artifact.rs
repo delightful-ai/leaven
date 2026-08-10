@@ -688,6 +688,91 @@ fn content_id_is_stable_for_content_and_changes_when_permissions_change() {
 }
 
 #[test]
+fn content_id_separates_skill_boundaries_from_file_records() {
+    // Two valid banks that shared one length-prefixed atom stream under v1:
+    // skill-name `x` could be reread as path `x` with executable=true (perm
+    // byte 0x01) when the next atom was also a one-byte `\x01` path/body pair.
+    let skill_b = skill_name("b");
+    let skill_x = skill_name("x");
+    let skill_md = SkillPath::skill_md();
+    let path_ab = skill_path("ab");
+    let path_x = skill_path("x");
+    let path_soh = SkillPath::new("\u{1}").unwrap();
+
+    let body_b = SkillFile::text(
+        "---\nname: b\ndescription: Use when probing content identity collisions.\n---\nbody-b3\n",
+    );
+    let body_x = SkillFile::text(
+        "---\nname: x\ndescription: Use when probing content identity collisions.\n---\nbody-x1\n",
+    );
+    let empty_exec = SkillFile::with_permissions(
+        Vec::new(),
+        SkillFilePermissions { executable: true },
+    );
+    let soh_body = SkillFile::with_permissions(
+        vec![0x01],
+        SkillFilePermissions { executable: true },
+    );
+    let x_as_body = SkillFile::with_permissions(
+        b"x".to_vec(),
+        SkillFilePermissions { executable: true },
+    );
+    let z_exec = SkillFile::with_permissions(
+        b"z".to_vec(),
+        SkillFilePermissions { executable: true },
+    );
+
+    let bank_with_file_named_x = SkillBank::from_folders([
+        SkillFolder::from_entries(
+            skill_b.clone(),
+            BTreeMap::from([
+                (skill_md.clone(), body_b.clone()),
+                (path_ab.clone(), empty_exec.clone()),
+                (path_x, soh_body),
+            ]),
+        )
+        .unwrap(),
+        SkillFolder::from_entries(
+            skill_x.clone(),
+            BTreeMap::from([
+                (skill_md.clone(), body_x.clone()),
+                (path_ab.clone(), z_exec.clone()),
+            ]),
+        )
+        .unwrap(),
+    ])
+    .unwrap();
+
+    let bank_with_soh_file_in_x = SkillBank::from_folders([
+        SkillFolder::from_entries(
+            skill_b,
+            BTreeMap::from([(skill_md.clone(), body_b), (path_ab.clone(), empty_exec)]),
+        )
+        .unwrap(),
+        SkillFolder::from_entries(
+            skill_x,
+            BTreeMap::from([
+                (path_soh, x_as_body),
+                (skill_md, body_x),
+                (path_ab, z_exec),
+            ]),
+        )
+        .unwrap(),
+    ])
+    .unwrap();
+
+    assert_ne!(bank_with_file_named_x, bank_with_soh_file_in_x);
+    assert_ne!(
+        bank_with_file_named_x.content_id(),
+        bank_with_soh_file_in_x.content_id()
+    );
+    assert_ne!(
+        bank_with_file_named_x.cache_identity(),
+        bank_with_soh_file_in_x.cache_identity()
+    );
+}
+
+#[test]
 fn skill_file_into_bytes_consumes_without_changing_content() {
     assert_eq!(SkillFile::text("payload").into_bytes(), b"payload");
 }
