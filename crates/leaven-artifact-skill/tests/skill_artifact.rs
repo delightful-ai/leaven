@@ -4,11 +4,11 @@ use std::str::FromStr;
 use leaven_artifact_skill::{
     ParsedSkillMd, SkillBank, SkillBankChange, SkillBankError, SkillBody, SkillBodyEdit,
     SkillBodyPartId, SkillBodySurface, SkillCard, SkillDescription, SkillFile, SkillFileEdit,
-    SkillFilePartId, SkillFileSurface, SkillFolder, SkillFolderEdit, SkillFolderSurface,
-    SkillManifestEdit, SkillManifestPartId, SkillManifestSurface, SkillMetadataValue, SkillName,
-    SkillNameError, SkillParseError, SkillPath, SkillPathError, SkillReferenceEdit,
-    SkillReferencePartId, SkillReferenceSurface, SkillRouteKey, SkillRoutePool, SkillRouteRegistry,
-    SkillRouteRegistryError, SkillRouteSpec,
+    SkillFilePartId, SkillFilePermissions, SkillFileSurface, SkillFolder, SkillFolderEdit,
+    SkillFolderSurface, SkillManifestEdit, SkillManifestPartId, SkillManifestSurface,
+    SkillMetadataValue, SkillName, SkillNameError, SkillParseError, SkillPath, SkillPathError,
+    SkillReferenceEdit, SkillReferencePartId, SkillReferenceSurface, SkillRouteKey, SkillRoutePool,
+    SkillRouteRegistry, SkillRouteRegistryError, SkillRouteSpec,
 };
 use leaven_core::{Artifact, ContentAddressed};
 use leaven_surface::EditSurface;
@@ -705,22 +705,14 @@ fn content_id_separates_skill_boundaries_from_file_records() {
     let body_x = SkillFile::text(
         "---\nname: x\ndescription: Use when probing content identity collisions.\n---\nbody-x1\n",
     );
-    let empty_exec = SkillFile::with_permissions(
-        Vec::new(),
-        SkillFilePermissions { executable: true },
-    );
-    let soh_body = SkillFile::with_permissions(
-        vec![0x01],
-        SkillFilePermissions { executable: true },
-    );
-    let x_as_body = SkillFile::with_permissions(
-        b"x".to_vec(),
-        SkillFilePermissions { executable: true },
-    );
-    let z_exec = SkillFile::with_permissions(
-        b"z".to_vec(),
-        SkillFilePermissions { executable: true },
-    );
+    let empty_exec =
+        SkillFile::with_permissions(Vec::new(), SkillFilePermissions { executable: true });
+    let soh_body =
+        SkillFile::with_permissions(vec![0x01], SkillFilePermissions { executable: true });
+    let x_as_body =
+        SkillFile::with_permissions(b"x".to_vec(), SkillFilePermissions { executable: true });
+    let z_exec =
+        SkillFile::with_permissions(b"z".to_vec(), SkillFilePermissions { executable: true });
 
     let bank_with_file_named_x = SkillBank::from_folders([
         SkillFolder::from_entries(
@@ -751,11 +743,7 @@ fn content_id_separates_skill_boundaries_from_file_records() {
         .unwrap(),
         SkillFolder::from_entries(
             skill_x,
-            BTreeMap::from([
-                (path_soh, x_as_body),
-                (skill_md, body_x),
-                (path_ab, z_exec),
-            ]),
+            BTreeMap::from([(path_soh, x_as_body), (skill_md, body_x), (path_ab, z_exec)]),
         )
         .unwrap(),
     ])
