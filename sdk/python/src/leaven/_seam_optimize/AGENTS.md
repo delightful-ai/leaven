@@ -7,7 +7,7 @@ stages back to the configured Python worker over `leaven/stage.run`.
 
 It may lower the public Python composition (seed, environment, optimizer,
 runtime) into the typed `OptimizeRunRequestDocument`, configure the
-`SeamServiceConfig` (worker argv plus rubric reward names, runtime LM provider,
+`SeamServiceConfig` (worker argv plus rubric reward ids, runtime LM provider,
 runs root), refuse GEPA knobs with no V1 optimize route, and return the typed
 `OptimizeRunResultDocument`. It must not own optimizer strategy, the GEPA loop,
 graph mutation, capability policy, provider adapters, worker protocol
@@ -26,7 +26,7 @@ implementation, or the result-to-`Optimized` projection (that lives in
 - `leaven._seam` config, the `leaven/optimize.run` wire records, and the one-shot
   process client (`SeamClient.optimize_run`).
 - `leaven._seam_worker` command-target construction (runner stage argv plus the
-  rubric reward names the worker rebuilds the scorer rubric from).
+  rubric reward ids the worker rebuilds the scorer rubric from).
 - No legacy bridge-demo dependency: `leaven._serve` has been removed and must not
   return. The old `run_prompt_mechanics` per-case `stage.run` path plus its
   receipt/score/status projections were deleted in the optimize.run cutover; do

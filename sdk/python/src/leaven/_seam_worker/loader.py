@@ -36,28 +36,39 @@ def load_stage_from_file(
     )
 
 
-def load_rubric_from_file(module_file: Path, *, reward_names: list[str]) -> Rubric:
+def load_rubric_from_file(module_file: Path, *, reward_ids: list[str]) -> Rubric:
     """Execute a stage file and rebuild the rubric from the requested rewards.
 
     The optimize host dispatches scorer stages to the same worker argv as runner
     stages, so the worker reloads the module and collects the rubric's
-    `@lv.reward` functions by function name (stable across the `__main__` /
-    worker-reload module rename), in the order the driver recorded them. A
-    missing reward is a hard error rather than a silently smaller rubric.
+    `@lv.reward` registrations by stable `RegisteredReward.id` (not
+    `func.__name__`, which collides across imports and factory wrappers), in the
+    order the driver recorded them. A missing reward is a hard error rather than
+    a silently smaller rubric. Distinct rewards that share an id refuse reload
+    instead of silently overwriting each other.
     """
     namespace = runpy.run_path(str(module_file), run_name=_run_name(module_file))
-    by_name: dict[str, RegisteredReward] = {}
+    by_id: dict[str, RegisteredReward] = {}
     for value in namespace.values():
-        if isinstance(value, RegisteredReward):
-            by_name[value.func.__name__] = value
-    rewards: list[RegisteredReward] = []
-    for name in reward_names:
-        if name not in by_name:
-            available = sorted(by_name)
-            raise LookupError(
-                f"reward {name!r} not found in {module_file}; available rewards: {available}"
+        if not isinstance(value, RegisteredReward):
+            continue
+        existing = by_id.get(value.id)
+        if existing is not None and existing is not value:
+            raise ValueError(
+                f"duplicate reward id {value.id!r} in {module_file}; "
+                "worker reload keys rewards by id, so colliding ids would "
+                "silently replace a dimension of the rubric vector"
             )
-        rewards.append(by_name[name])
+        by_id[value.id] = value
+    rewards: list[RegisteredReward] = []
+    for reward_id in reward_ids:
+        if reward_id not in by_id:
+            available = sorted(by_id)
+            raise LookupError(
+                f"reward {reward_id!r} not found in {module_file}; "
+                f"available rewards: {available}"
+            )
+        rewards.append(by_id[reward_id])
     if not rewards:
         raise ValueError("scorer worker requires at least one rubric reward")
     return Rubric(rewards)

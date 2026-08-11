@@ -79,7 +79,7 @@ async def run_optimization(
     """Drive one real optimization through `leaven/optimize.run`."""
     if not rubric.rewards:
         raise ValueError("the environment rubric must contain at least one reward")
-    reward_names = tuple(_reward_name(reward) for reward in rubric.rewards)
+    reward_ids = tuple(_reward_id(reward) for reward in rubric.rewards)
     projection = project_seed(seed)
     lm_model = _lm_model(runtime)
     agent_config = _agent_config(optimizer, reflection_kind=projection.reflection_kind)
@@ -93,7 +93,7 @@ async def run_optimization(
             lm=_lm_config(runtime),
             agent=agent_config,
             stage=CommandRunnerStageConfig(
-                argv=worker_argv_for_stage(runner, lm_model=lm_model, reward_names=reward_names)
+                argv=worker_argv_for_stage(runner, lm_model=lm_model, reward_ids=reward_ids)
             ),
             optimize_runs_root=runs_root,
         )
@@ -435,12 +435,17 @@ def _lm_config(runtime: Runtime) -> MockLmRuntimeConfig | OpenAiLmRuntimeConfig:
     )
 
 
-def _reward_name(reward: RegisteredReward) -> str:
-    """Return the reward's function name (stable across the worker module reload)."""
+def _reward_id(reward: RegisteredReward) -> str:
+    """Return the reward id used to reload the rubric in the worker process.
+
+    Ids are the durable reward identity. Function `__name__` collides when
+    imports or factory wrappers share a body name, which silently collapsed
+    multi-reward vectors on worker reload.
+    """
     func = reward.func
     if not isinstance(func, FunctionType):
         raise TypeError("rubric rewards require function-backed reward objects")
-    return func.__name__
+    return reward.id
 
 
 def _lm_model(runtime: Runtime) -> str:

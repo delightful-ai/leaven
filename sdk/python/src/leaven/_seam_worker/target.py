@@ -14,21 +14,20 @@ class StageWorkerTarget:
     """How a subprocess worker re-loads a registered stage.
 
     The same worker argv serves both runner and scorer stage dispatch, so it
-    carries the runner stage identity plus the rubric reward function names the
-    worker rebuilds the rubric from when the optimize host dispatches a scorer
-    stage.
+    carries the runner stage identity plus the rubric reward ids the worker
+    rebuilds the rubric from when the optimize host dispatches a scorer stage.
     """
 
     stage_id: str
     stage_name: str
     module_file: Path
-    reward_names: tuple[str, ...] = ()
+    reward_ids: tuple[str, ...] = ()
 
     def argv(self, *, lm_model: str = "mock") -> tuple[str, ...]:
         """Return the command used by `CommandRunnerStageConfig`."""
         reward_args: tuple[str, ...] = ()
-        for reward_name in self.reward_names:
-            reward_args = (*reward_args, "--rubric-reward", reward_name)
+        for reward_id in self.reward_ids:
+            reward_args = (*reward_args, "--rubric-reward", reward_id)
         return (
             sys.executable,
             "-m",
@@ -54,13 +53,12 @@ def worker_argv_for_stage[O](
     stage: _StageLike[O],
     *,
     lm_model: str = "mock",
-    reward_names: tuple[str, ...] = (),
+    reward_ids: tuple[str, ...] = (),
 ) -> tuple[str, ...]:
     """Build worker argv for a `RegisteredStage` without importing it here.
 
-    `reward_names` carries the rubric reward function names the worker rebuilds
-    the rubric from when the optimize host dispatches a scorer stage to the same
-    argv.
+    `reward_ids` carries the rubric reward ids the worker rebuilds the rubric
+    from when the optimize host dispatches a scorer stage to the same argv.
     """
     if not isinstance(stage.func, FunctionType):
         raise TypeError("stage workers require function-backed registered stages")
@@ -68,7 +66,7 @@ def worker_argv_for_stage[O](
         stage_id=stage.id,
         stage_name=stage.func.__name__,
         module_file=_module_file(stage),
-        reward_names=reward_names,
+        reward_ids=reward_ids,
     )
     return target.argv(lm_model=lm_model)
 
