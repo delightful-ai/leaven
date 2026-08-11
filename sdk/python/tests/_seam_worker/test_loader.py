@@ -1,11 +1,14 @@
 """Tests for worker module reload of stages and rubrics."""
 
 from pathlib import Path
+from types import FunctionType
 
 import pytest
 
+import leaven as lv
 from leaven._seam_worker.loader import load_rubric_from_file
 from leaven._seam_worker.target import worker_argv_for_stage
+from leaven.decorators import RegisteredStage
 
 
 def test_load_rubric_preserves_same_function_name_rewards(tmp_path: Path) -> None:
@@ -47,7 +50,11 @@ def test_load_rubric_preserves_same_function_name_rewards(tmp_path: Path) -> Non
 
     assert [reward.id for reward in reloaded.rewards] == reward_ids
     assert [reward.weight for reward in reloaded.rewards] == [1.0, 0.5]
-    assert [reward.func.__name__ for reward in reloaded.rewards] == ["score", "score"]
+    func_names: list[str] = []
+    for reward in reloaded.rewards:
+        assert isinstance(reward.func, FunctionType)
+        func_names.append(reward.func.__name__)
+    assert func_names == ["score", "score"]
 
     # Old name-keyed argv cannot recover either dimension once ids are required.
     with pytest.raises(LookupError, match="reward 'score' not found"):
@@ -80,27 +87,21 @@ def test_load_rubric_refuses_duplicate_reward_ids(tmp_path: Path) -> None:
         load_rubric_from_file(scenario, reward_ids=["shared"])
 
 
-def test_worker_argv_passes_reward_ids(tmp_path: Path) -> None:
+def test_worker_argv_passes_reward_ids() -> None:
     """Driver→worker argv must carry RegisteredReward.id values."""
-    module = tmp_path / "runner_mod.py"
-    module.write_text(
-        "\n".join(
-            [
-                "import leaven as lv",
-                "",
-                "@lv.runner",
-                "async def solve(prompt, case, cx):",
-                "    _ = (prompt, case, cx)",
-                "    return 'ok'",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    namespace: dict[str, object] = {}
-    exec(module.read_text(encoding="utf-8"), namespace)
-    runner = namespace["solve"]
+
+    @lv.runner
+    async def solve(
+        prompt: lv.PromptArtifact,
+        case: lv.InputCaseView,
+        cx: lv.RolloutContext,
+    ) -> str:
+        _ = (prompt, case, cx)
+        return "ok"
+
+    assert isinstance(solve, RegisteredStage)
     argv = worker_argv_for_stage(
-        runner,  # type: ignore[arg-type]
+        solve,
         lm_model="mock",
         reward_ids=("metrics.strict.exact_match", "metrics.lenient.exact_match"),
     )
