@@ -41,7 +41,7 @@ async def _run(args: argparse.Namespace, params: StageRunRequest) -> StageRunRes
     and proposer dispatch load the registered stage by id.
     """
     if params.stage == "scorer":
-        rubric = load_rubric_from_file(args.module_file, reward_names=list(args.rubric_reward))
+        rubric = load_rubric_from_file(args.module_file, reward_ids=list(args.rubric_reward))
         return await run_scorer_stage(rubric, params, lm_model=args.lm_model)
     stage = load_stage_from_file(
         args.module_file,
