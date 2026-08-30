@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::{Duration, Instant};
@@ -178,21 +178,30 @@ fn wait_for_output(
             .wait_with_output()
             .map_err(|err| WorkspaceError::Command(err.to_string()));
     };
+    // Timeout polling must drain stdout/stderr while the child is still
+    // running. A piped child that writes more than the OS pipe buffer
+    // otherwise blocks on write, `try_wait` never observes an exit, and the
+    // command times out even though it would have finished immediately.
+    let stdout = spawn_output_drain(child.stdout.take());
+    let stderr = spawn_output_drain(child.stderr.take());
 
     loop {
-        if child
+        if let Some(status) = child
             .try_wait()
             .map_err(|err| WorkspaceError::Command(err.to_string()))?
-            .is_some()
         {
-            return child
-                .wait_with_output()
-                .map_err(|err| WorkspaceError::Command(err.to_string()));
+            return Ok(std::process::Output {
+                status,
+                stdout: join_output_drain(stdout)?,
+                stderr: join_output_drain(stderr)?,
+            });
         }
 
         if start.elapsed() >= timeout {
             let _ = child.kill();
             let _ = child.wait();
+            let _ = stdout.join();
+            let _ = stderr.join();
             return Err(WorkspaceError::CommandTimedOut {
                 program: program.to_owned(),
                 timeout,
@@ -201,6 +210,30 @@ fn wait_for_output(
 
         std::thread::sleep(Duration::from_millis(5));
     }
+}
+
+fn spawn_output_drain<R>(
+    reader: Option<R>,
+) -> std::thread::JoinHandle<Result<Vec<u8>, std::io::Error>>
+where
+    R: Read + Send + 'static,
+{
+    std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        if let Some(mut reader) = reader {
+            reader.read_to_end(&mut bytes)?;
+        }
+        Ok(bytes)
+    })
+}
+
+fn join_output_drain(
+    handle: std::thread::JoinHandle<Result<Vec<u8>, std::io::Error>>,
+) -> Result<Vec<u8>, WorkspaceError> {
+    handle
+        .join()
+        .map_err(|_| WorkspaceError::Command("output drain thread panicked".to_owned()))?
+        .map_err(|err| WorkspaceError::Command(err.to_string()))
 }
 
 impl LocalWorkspaceBackend {

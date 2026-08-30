@@ -341,6 +341,45 @@ fn local_workspace_times_out_commands_without_hanging() {
 }
 
 #[test]
+fn local_workspace_timeout_drains_child_output() {
+    futures::executor::block_on(async {
+        let parent = temp_parent("local-command-timeout-drain");
+        let factory = LocalWorkspaceFactory::new(&parent);
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mut view = workspace.view();
+        let output = view
+            .run_command(Command {
+                program: "sh".to_owned(),
+                args: vec![
+                    "-c".to_owned(),
+                    "i=0; while [ $i -lt 20000 ]; do printf xxxxxxxxxx; i=$((i + 1)); done; printf done >&2"
+                        .to_owned(),
+                ],
+                cwd: None,
+                env: BTreeMap::new(),
+                stdin: CommandStdin::Empty,
+                output_files: Vec::new(),
+                limits: CommandLimits {
+                    timeout: Some(Duration::from_secs(5)),
+                    max_stdout_bytes: None,
+                    max_stderr_bytes: None,
+                    max_output_file_bytes: None,
+                },
+                user: None,
+            })
+            .unwrap();
+
+        assert_eq!(output.status.code, Some(0));
+        assert_eq!(output.stdout.bytes.len(), 200_000);
+        assert_eq!(output.stderr.bytes, b"done");
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+        remove_dir(&parent);
+    });
+}
+
+#[test]
 fn local_workspace_can_toggle_executable_permissions_off_again() {
     futures::executor::block_on(async {
         let parent = temp_parent("local-executable-toggle");
