@@ -12,19 +12,20 @@ path, command, factory, or cleanup contracts.
   the process temp directory or an explicit parent.
 - `LocalWorkspaceBackend`: maps `WorkspacePath` to a path under the allocated
   root, implements recursive file listing, read/write, executable toggles, local
-  command execution, output truncation, timeout enforcement, and explicit
-  cleanup.
+  command execution, output truncation, timeout enforcement with stdout/stderr
+  drain threads, and explicit cleanup.
 - `tests/local_workspace.rs`: the local backend contract for mount visibility,
   unique roots, default temp parent, cleanup tolerance, command cwd/env/stdin,
-  truncation, timeout, user refusal, executable toggles, recursive listing, and
-  filesystem error mapping.
+  truncation, timeout, timeout-path output drain, user refusal, executable
+  toggles, recursive listing, and filesystem error mapping.
 
 ## Local Helper Stack
 - Use `LocalWorkspaceFactory::new(parent)` in tests that need deterministic
   cleanup roots; use `Default`/`temp()` only when the exact parent is irrelevant.
 - Commands run through the host process with cwd scoped under the allocated
   root, explicit env/stdin, independent stdout/stderr truncation, and timeout
-  polling.
+  polling that drain-threads piped stdout/stderr so a verbose child cannot
+  fill the OS pipe and false-timeout.
 - File listing returns recursive workspace-relative files sorted by
   `WorkspacePath`; do not expose host path order.
 - Executable-bit helpers are Unix-backed here and explicit unsupported behavior
@@ -42,7 +43,8 @@ path, command, factory, or cleanup contracts.
 
 ## Decision Cards
 - when: changing command execution
-  do: prove cwd, env, stdin, output truncation, timeout, and user-refusal
+  do: prove cwd, env, stdin, output truncation, timeout, timeout-path pipe
+    drain for output larger than the OS pipe buffer, and user-refusal
     behavior together
   preserve: local backend honesty about trusted host execution
   avoid: weakening the neutral `Command` contract to match a local-only shortcut
@@ -71,8 +73,8 @@ path, command, factory, or cleanup contracts.
 ## Proof Anchors
 - `cargo test -p leaven-workspace-local --test local_workspace` proves the
   concrete local backend: allocation roots, mount visibility, cleanup,
-  command cwd/env/stdin/limits, user refusal, executable bits, recursive lists,
-  and IO error mapping.
+  command cwd/env/stdin/limits, timeout-path stdout/stderr drain, user
+  refusal, executable bits, recursive lists, and IO error mapping.
 - `cargo test -p leaven-workspace --test workspace_view` proves the neutral
   behavior this backend is implementing: scoped paths, optional mounts,
   unsupported-operation semantics, and cleanup error preservation.
