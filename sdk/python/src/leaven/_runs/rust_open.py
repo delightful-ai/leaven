@@ -56,12 +56,13 @@ def optimized_from_rust_readback(
     assessment_rows: list[Assessment] | None = None,
 ) -> Optimized[PromptArtifact]:
     """Project Rust-owned graph readback into the public Optimized handle."""
+    purposes = _purposes_by_assessment(readback)
     frontier = [
         Candidate[PromptArtifact](
             id=candidate.id,
             artifact=_artifact_from_readback(candidate.artifact),
             parent_id=candidate.parent_id,
-            summary_score=_summary_score(candidate.id, assessment_rows),
+            summary_score=_summary_score(candidate.id, assessment_rows, purposes),
         )
         for candidate in readback.graph.candidates
     ]
@@ -131,15 +132,51 @@ def _artifact_from_readback(value: JsonValue) -> PromptArtifact:
         raise TypeError("Rust run readback artifact is not a PromptArtifact payload") from error
 
 
-def _summary_score(candidate_id: str, assessment_rows: list[Assessment] | None) -> float | None:
+_VALIDATION_PURPOSES = frozenset({"Validation", "Selection"})
+_VALIDATION_SPLITS = frozenset({"validation", "val"})
+
+
+def _purposes_by_assessment(readback: RustRunReadback) -> dict[str, str | None]:
+    return {assessment.id: assessment.purpose for assessment in readback.graph.assessments}
+
+
+def _summary_score(
+    candidate_id: str,
+    assessment_rows: list[Assessment] | None,
+    purposes_by_assessment: dict[str, str | None],
+) -> float | None:
+    """Aggregate the validation-set score for one candidate.
+
+    Rows whose joined purpose is ``Validation`` or ``Selection`` count.
+    When a row has no purpose, a legacy ``validation`` or ``val`` split label
+    counts. Search, seed-baseline, and other untagged rows do not. Returns
+    None when no validation row is identifiable, including when every row is
+    untagged, so train screening cannot dilute the reported score.
+    """
     rows = [
-        assessment.score.value
+        assessment
         for assessment in assessment_rows or []
         if assessment.candidate_id == candidate_id
     ]
     if not rows:
         return None
-    return sum(rows) / len(rows)
+    validation_scores: list[float] = []
+    saw_classifier = False
+    for assessment in rows:
+        purpose = purposes_by_assessment.get(assessment.receipt.receipt_id)
+        if purpose is not None:
+            saw_classifier = True
+            if purpose in _VALIDATION_PURPOSES:
+                validation_scores.append(assessment.score.value)
+            continue
+        split = assessment.case.split
+        if split is not None:
+            saw_classifier = True
+            if split in _VALIDATION_SPLITS:
+                validation_scores.append(assessment.score.value)
+    if not saw_classifier or not validation_scores:
+        return None
+    return sum(validation_scores) / len(validation_scores)
 
 
 def _replayability() -> Replayability:

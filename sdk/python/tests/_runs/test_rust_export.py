@@ -8,14 +8,18 @@ from pathlib import Path
 import pytest
 
 from leaven import PromptArtifact, runs
+from leaven._receipts import WriteReceipt
 from leaven._runs import optimized_from_rust_readback
 from leaven._runs.rust_export import (
     load_rust_blob_readback,
     load_rust_evidence_readback,
     load_rust_run_readback,
 )
-from leaven.evidence import EvidencePublicPayload
+from leaven.assessment import Assessment
+from leaven.case import Case
+from leaven.evidence import EvidenceEnvelope, EvidencePublicPayload
 from leaven.run_inspection import RustRunReadback
+from leaven.score import Score
 from tests.support.rust_evidence import rust_case_assessment_evidence_bytes
 
 
@@ -288,6 +292,79 @@ def test_optimized_from_rust_readback_uses_graph_candidates() -> None:
         "run.cost",
         "run.inspection",
     ]
+
+
+def test_summary_score_ignores_train_screening_assessments() -> None:
+    """Validation summary must not average GEPA train-screening rows."""
+
+    readback = load_rust_run_readback_fixture()
+    data = readback.model_dump(mode="json")
+    data["graph"]["candidates"].append(
+        {
+            "id": "cand_untagged",
+            "parent_id": None,
+            "artifact": {"template": "untagged"},
+        }
+    )
+    data["graph"]["assessments"] = [
+        _readback_assessment("assessment_search", "Search"),
+        _readback_assessment("assessment_validation", "Validation"),
+        _readback_assessment("assessment_seed_train", None),
+        _readback_assessment("assessment_seed_validation", None),
+        _readback_assessment("assessment_untagged", None),
+    ]
+    readback = RustRunReadback.model_validate(data)
+    rows = [
+        _score_row("assessment_search", "cand_child", 0.0, split=None),
+        _score_row("assessment_validation", "cand_child", 1.0, split=None),
+        _score_row("assessment_seed_train", "cand_seed", 0.0, split="train"),
+        _score_row("assessment_seed_validation", "cand_seed", 1.0, split="validation"),
+        _score_row("assessment_untagged", "cand_untagged", 0.5, split=None),
+    ]
+
+    result = optimized_from_rust_readback(readback, run_dir="/tmp/run", assessment_rows=rows)
+    by_id = {candidate.id: candidate.summary_score for candidate in result.frontier}
+
+    assert by_id["cand_child"] == 1.0
+    assert by_id["cand_seed"] == 1.0
+    assert by_id["cand_untagged"] is None
+
+
+def _readback_assessment(assessment_id: str, purpose: str | None) -> dict[str, object]:
+    assessment: dict[str, object] = {
+        "id": assessment_id,
+        "request_id": f"req_{assessment_id}",
+        "evaluator": "evaluator/exact",
+        "target_kind": "independent",
+        "candidate_ids": ["cand_child"],
+        "target": {"Independent": {"candidate": "cand_child", "target": "Unscoped"}},
+        "evidence": {"store": "leaven-run", "key": "0"},
+        "metadata": {},
+        "created_at": "2026-06-04T00:00:02Z",
+    }
+    if purpose is not None:
+        assessment["purpose"] = purpose
+    return assessment
+
+
+def _score_row(
+    assessment_id: str,
+    candidate_id: str,
+    score: float,
+    *,
+    split: str | None,
+) -> Assessment:
+    return Assessment(
+        case=Case(id=assessment_id, input={}, split=split),
+        candidate_id=candidate_id,
+        score=Score(value=score),
+        evidence=EvidenceEnvelope.public_only(
+            payload=EvidencePublicPayload(summary="score"),
+            data_classes=["public"],
+        ),
+        receipt=WriteReceipt(receipt_id=assessment_id),
+        replayability="boundary_managed",
+    )
 
 
 def test_optimized_from_rust_readback_rejects_unknown_artifact_shape() -> None:
