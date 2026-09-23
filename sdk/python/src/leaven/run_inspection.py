@@ -113,6 +113,13 @@ class AssessmentReadback(BaseModel):
 
     id: str
     request_id: str
+    purpose: str | None = None
+    """Evaluation purpose joined from the graph request.
+
+    Absent when the checkpoint export has no matching evaluation request.
+    Train screening and validation are different purposes; a missing purpose
+    is not a validation row.
+    """
     evaluator: str
     target_kind: Literal["independent", "pairwise", "listwise"]
     candidate_ids: list[str]

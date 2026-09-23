@@ -43,3 +43,11 @@ provider protocols, or become the public inspection namespace.
   inspection, run-blob byte exports, and evidence byte exports.
 - `store.py`: deterministic Rust-checkpoint run-directory listing.
 - `__init__.py`: private map-only re-export.
+
+## Local invariant
+
+`open_rust_optimized` candidate `summary_score` is a validation-set aggregate.
+Joined evaluation purposes `Validation` and `Selection` count. A row with no
+purpose counts only when its split label is `validation` or `val`. Train
+screening rows and untagged rows do not dilute that score; if no validation
+row is identifiable the score is `None`.

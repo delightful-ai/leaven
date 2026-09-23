@@ -140,6 +140,14 @@ pub struct AssessmentReadback {
     pub id: String,
     /// Evaluation request that produced this assessment.
     pub request_id: String,
+    /// Evaluation purpose joined from that request.
+    ///
+    /// Absent when the graph snapshot has no matching evaluation request.
+    /// Train screening and held-out validation are different purposes on the
+    /// same candidate; callers that aggregate a validation score must not
+    /// treat a missing purpose as permission to average every row.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub purpose: Option<String>,
     /// Evaluator that produced this assessment.
     pub evaluator: String,
     /// Shape of the assessment target.
@@ -538,18 +546,20 @@ fn assessment_readbacks(graph: &Value) -> Vec<AssessmentReadback> {
         .map(|assessments| {
             assessments
                 .iter()
-                .filter_map(assessment_readback)
+                .filter_map(|assessment| assessment_readback(graph, assessment))
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default()
 }
 
-fn assessment_readback(assessment: &Value) -> Option<AssessmentReadback> {
+fn assessment_readback(graph: &Value, assessment: &Value) -> Option<AssessmentReadback> {
     let target = assessment.get("target")?;
     let (target_kind, candidate_ids) = assessment_target_candidates(target)?;
+    let request_id = assessment.get("request_id")?.as_str()?.to_owned();
     Some(AssessmentReadback {
         id: assessment.get("id")?.as_str()?.to_owned(),
-        request_id: assessment.get("request_id")?.as_str()?.to_owned(),
+        purpose: evaluation_purpose(graph, &request_id),
+        request_id,
         evaluator: assessment.get("evaluator")?.as_str()?.to_owned(),
         target_kind,
         candidate_ids,
@@ -596,6 +606,33 @@ fn assessment_target_candidates(target: &Value) -> Option<(String, Vec<String>)>
         return Some(("listwise".to_owned(), candidates));
     }
     None
+}
+
+fn evaluation_purpose(graph: &Value, request_id: &str) -> Option<String> {
+    let request = graph
+        .get("evaluation_requests")?
+        .as_array()?
+        .iter()
+        .find(|request| request.get("id").and_then(Value::as_str) == Some(request_id))?;
+    request_purpose_label(request.get("request")?)
+}
+
+fn request_purpose_label(request: &Value) -> Option<String> {
+    for shape in ["Independent", "Pairwise", "Listwise"] {
+        if let Some(purpose) = request.get(shape).and_then(|body| body.get("purpose")) {
+            return purpose_label(purpose);
+        }
+    }
+    None
+}
+
+fn purpose_label(purpose: &Value) -> Option<String> {
+    if let Some(label) = purpose.as_str() {
+        return Some(label.to_owned());
+    }
+    purpose
+        .as_object()
+        .and_then(|object| object.keys().next().cloned())
 }
 
 fn array_len(value: &Value, field: &str) -> usize {
@@ -711,6 +748,7 @@ mod tests {
         assert_eq!(export.graph.assessments.len(), 1);
         assert_eq!(export.graph.assessments[0].id, "assessment_child");
         assert_eq!(export.graph.assessments[0].request_id, "eval_req_child");
+        assert_eq!(export.graph.assessments[0].purpose, None);
         assert_eq!(export.graph.assessments[0].evaluator, "evaluator/exact");
         assert_eq!(export.graph.assessments[0].target_kind, "independent");
         assert_eq!(
@@ -724,6 +762,121 @@ mod tests {
         assert_eq!(export.cost.prompt_tokens, 7);
         assert_eq!(export.cost.completion_tokens, 11);
         assert_eq!(export.cost.lm_tokens(), 18);
+    }
+
+    #[test]
+    fn export_local_run_inspection_joins_evaluation_purpose_onto_assessments() {
+        let graph_json = br#"{
+            "evaluation_requests":[
+                {
+                    "id":"eval_search",
+                    "request":{"Independent":{"purpose":"Search"}}
+                },
+                {
+                    "id":"eval_validation",
+                    "request":{"Independent":{"purpose":"Validation"}}
+                },
+                {
+                    "id":"eval_pairwise",
+                    "request":{"Pairwise":{"purpose":"Selection"}}
+                },
+                {
+                    "id":"eval_custom",
+                    "request":{"Listwise":{"purpose":{"Custom":"probe"}}}
+                }
+            ],
+            "assessments":[
+                {
+                    "id":"assessment_search",
+                    "request_id":"eval_search",
+                    "evaluator":"evaluator/exact",
+                    "target":{"Independent":{"candidate":"cand_child","target":"Unscoped"}},
+                    "evidence":{"store":"leaven-run","key":"0"},
+                    "metadata":{},
+                    "created_at":"2026-06-04T00:00:02Z"
+                },
+                {
+                    "id":"assessment_validation",
+                    "request_id":"eval_validation",
+                    "evaluator":"evaluator/exact",
+                    "target":{"Independent":{"candidate":"cand_child","target":"Unscoped"}},
+                    "evidence":{"store":"leaven-run","key":"1"},
+                    "metadata":{},
+                    "created_at":"2026-06-04T00:00:03Z"
+                },
+                {
+                    "id":"assessment_selection",
+                    "request_id":"eval_pairwise",
+                    "evaluator":"evaluator/exact",
+                    "target":{"Pairwise":{"left":"cand_seed","right":"cand_child","target":"Unscoped"}},
+                    "evidence":{"store":"leaven-run","key":"2"},
+                    "metadata":{},
+                    "created_at":"2026-06-04T00:00:04Z"
+                },
+                {
+                    "id":"assessment_custom",
+                    "request_id":"eval_custom",
+                    "evaluator":"evaluator/exact",
+                    "target":{"Listwise":{"candidates":["cand_child"],"target":"Unscoped"}},
+                    "evidence":{"store":"leaven-run","key":"3"},
+                    "metadata":{},
+                    "created_at":"2026-06-04T00:00:05Z"
+                },
+                {
+                    "id":"assessment_unjoined",
+                    "request_id":"eval_missing",
+                    "evaluator":"evaluator/exact",
+                    "target":{"Independent":{"candidate":"cand_child","target":"Unscoped"}},
+                    "evidence":{"store":"leaven-run","key":"4"},
+                    "metadata":{},
+                    "created_at":"2026-06-04T00:00:06Z"
+                }
+            ]
+        }"#;
+        let run_dir = test_run_dir("purpose-join");
+        let store = FileStore::open(&run_dir).unwrap();
+        let graph_blob = BlobStore::put(
+            &store,
+            BlobWrite {
+                bytes: Bytes::from_static(graph_json),
+                content_type: Some("application/json".to_owned()),
+            },
+        )
+        .unwrap();
+        let checkpoint = RunCheckpoint::new(
+            leaven_kernel::RunId::new(),
+            now(),
+            GraphSnapshotRef {
+                schema: Fingerprint::from_bytes([7; 32]),
+                format: StateFormat::Json,
+                bytes: graph_blob,
+            },
+            BudgetSnapshot::default(),
+        );
+        let checkpoint_bytes = serde_json::to_vec(&checkpoint).unwrap();
+        let checkpoint_id =
+            CheckpointStore::put(&store, CheckpointBytes(Bytes::from(checkpoint_bytes))).unwrap();
+        CheckpointStore::mark_latest(&store, checkpoint_id).unwrap();
+
+        let export = export_local_run_inspection(&run_dir).unwrap();
+        let purposes: Vec<_> = export
+            .graph
+            .assessments
+            .iter()
+            .map(|assessment| assessment.purpose.as_deref())
+            .collect();
+
+        assert_eq!(
+            purposes,
+            vec![
+                Some("Search"),
+                Some("Validation"),
+                Some("Selection"),
+                Some("Custom"),
+                None
+            ]
+        );
+        std::fs::remove_dir_all(run_dir).unwrap();
     }
 
     #[test]
