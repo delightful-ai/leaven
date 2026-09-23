@@ -298,7 +298,7 @@ def test_summary_score_ignores_train_screening_assessments() -> None:
     """Validation summary must not average GEPA train-screening rows."""
 
     readback = load_rust_run_readback_fixture()
-    data = readback.model_dump(mode="json")
+    data = readback.model_dump(mode="json", by_alias=True)
     data["graph"]["candidates"].append(
         {
             "id": "cand_untagged",
