@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use leaven_kernel::{Cost, Fingerprint, Metered};
 use leaven_lm::{
-    Lm, LmContinuation, LmError, LmId, LmRequest, LmResponse, Message, Messages, ModelName,
+    Lm, LmContinuation, LmError, LmId, LmRequest, LmResponse, LmTool, Message, Messages, ModelName,
     ProviderName, TokenUsage,
 };
 use leaven_lm_cache::{
@@ -521,6 +521,40 @@ async fn cache_backend_failures_are_lifted_to_lm_errors() {
 
     let codec = LmCacheError::codec("bad key");
     assert_eq!(codec.to_string(), "lm cache codec failed: bad key");
+}
+
+#[tokio::test]
+async fn read_write_policy_does_not_reuse_a_response_across_different_tools() {
+    let inner = CountingLm::new();
+    let lm = CachedLm::read_write(inner.clone(), InMemoryLmCache::default());
+    let plain = request();
+    let with_lookup = plain.clone().with_tools([lookup_tool()]);
+    let with_other_schema = plain.clone().with_tools([LmTool {
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {"q": {"type": "string"}}
+        }),
+        ..lookup_tool()
+    }]);
+
+    lm.complete(plain).await.unwrap();
+    lm.complete(with_lookup).await.unwrap();
+    lm.complete(with_other_schema).await.unwrap();
+
+    assert_eq!(
+        inner.calls(),
+        3,
+        "tool definitions change provider behavior and must miss the response cache"
+    );
+}
+
+fn lookup_tool() -> LmTool {
+    LmTool {
+        name: "lookup".to_owned(),
+        description: Some("look up case-local facts".to_owned()),
+        input_schema: serde_json::json!({"type": "object"}),
+        requires_capability_action: Some("case.read".to_owned()),
+    }
 }
 
 #[test]
