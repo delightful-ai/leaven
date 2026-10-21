@@ -15,8 +15,10 @@ pub struct LmCacheKey {
 impl LmCacheKey {
     /// Builds a response-cache key for a provider/request pair.
     ///
-    /// Provider continuation tokens are intentionally excluded; canonical
-    /// messages are the request truth for text-only LM calls.
+    /// Provider continuation tokens are intentionally excluded. Canonical
+    /// messages, sampling, output mode, provider hints, and tool definitions
+    /// are the request truth: two calls that differ only by `LmRequest::tools`
+    /// must not reuse a response.
     #[must_use]
     pub fn for_request(provider: Fingerprint, request: &LmRequest) -> Self {
         Self::try_for_request(provider, request).expect("lm cache key material serializes")
@@ -39,6 +41,7 @@ impl LmCacheKey {
             messages: &'a leaven_lm::Messages,
             sampling: &'a leaven_lm::SamplingOptions,
             output: &'a leaven_lm::OutputMode,
+            tools: &'a [leaven_lm::LmTool],
             provider_hints: &'a leaven_lm::ProviderHints,
         }
 
@@ -49,6 +52,7 @@ impl LmCacheKey {
             messages: &request.messages,
             sampling: &request.sampling,
             output: &request.output,
+            tools: &request.tools,
             provider_hints: &request.provider_hints,
         };
         let bytes = serde_json::to_vec(&material)

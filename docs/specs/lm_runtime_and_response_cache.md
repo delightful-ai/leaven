@@ -103,9 +103,11 @@ Trait laws:
 ```rust
 pub struct LmRequest {
     pub model: ModelName,
+    pub model_role: Option<ModelRole>,
     pub messages: Messages,
     pub sampling: SamplingOptions,
     pub output: OutputMode,
+    pub tools: Vec<LmTool>,
     pub continuation: Option<LmContinuation>,
     pub provider_hints: ProviderHints,
 }
@@ -120,9 +122,11 @@ Required invariants:
    Providers may use it when safe and may ignore it when it would duplicate or
    lose context.
 3. Cache identity ignores provider continuation tokens. Two requests with the
-   same model, messages, sampling, output mode, provider hints, and provider
-   fingerprint must share a response-cache key even if one carries an OpenAI
-   `previous_response_id` and another does not.
+   same model, model role, messages, sampling, output mode, tool definitions,
+   provider hints, and provider fingerprint must share a response-cache key
+   even if one carries an OpenAI `previous_response_id` and another does not.
+   Tool definitions are semantic request input: a different tool name,
+   description, argument schema, or capability action is a different key.
 4. `provider_hints` may carry transport hints such as OpenAI
    `prompt_cache_key`. Since hints can affect provider behavior or routing, the
    response-cache key includes them unless a later typed hint explicitly declares

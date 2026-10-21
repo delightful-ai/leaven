@@ -9,7 +9,10 @@ evaluation cache.
 ## Map
 - `LmCachePolicy` decides read/write behavior around an inner LM call.
 - `LmCacheKey` is built from provider fingerprint plus canonical `LmRequest`
-  content: model, messages, sampling, output mode, and provider hints.
+  content: model, model role, messages, sampling, output mode, tool
+  definitions, and provider hints. Tool name, description, argument schema,
+  and capability action are all key material; a cache hit must not return a
+  response produced for a different tool list.
 - `LmContinuation` is intentionally not key material. This is only safe because
   `LmRequest.messages` remains the canonical full conversation.
 - `LmCacheEntry` stores the provider-neutral response and original usage; a
