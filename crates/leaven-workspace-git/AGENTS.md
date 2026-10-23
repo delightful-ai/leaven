@@ -22,7 +22,8 @@ admission semantics.
 
 ## Verification
 - `cargo test -p leaven-workspace-git` proves local clone, checkout,
-  command execution, local mount exposure, capture/readback, restore, branch/tag
-  deletion, and cleanup over a fixture Git repo.
+  command execution, large stdin copied to stdout under a timeout, local mount
+  exposure, capture/readback, restore, branch/tag deletion, and cleanup over a
+  fixture Git repo.
 - Run `cargo test -p leaven --test topology_contract` if artifact or store
   dependencies are introduced.

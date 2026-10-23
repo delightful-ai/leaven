@@ -16,15 +16,17 @@ path, command, factory, or cleanup contracts.
   cleanup.
 - `tests/local_workspace.rs`: the local backend contract for mount visibility,
   unique roots, default temp parent, cleanup tolerance, command cwd/env/stdin,
-  truncation, timeout, user refusal, executable toggles, recursive listing, and
-  filesystem error mapping.
+  large stdin copied back to stdout, truncation, timeout, user refusal,
+  executable toggles, recursive listing, and filesystem error mapping.
 
 ## Local Helper Stack
 - Use `LocalWorkspaceFactory::new(parent)` in tests that need deterministic
   cleanup roots; use `Default`/`temp()` only when the exact parent is irrelevant.
 - Commands run through the host process with cwd scoped under the allocated
   root, explicit env/stdin, independent stdout/stderr truncation, and timeout
-  polling.
+  polling. Stdout and stderr are drained before stdin is written, so a child
+  that copies a large stdin to stdout cannot fill the pipe and stall the
+  parent ahead of the timeout.
 - File listing returns recursive workspace-relative files sorted by
   `WorkspacePath`; do not expose host path order.
 - Executable-bit helpers are Unix-backed here and explicit unsupported behavior
@@ -42,8 +44,8 @@ path, command, factory, or cleanup contracts.
 
 ## Decision Cards
 - when: changing command execution
-  do: prove cwd, env, stdin, output truncation, timeout, and user-refusal
-    behavior together
+  do: prove cwd, env, stdin, large stdin copied to stdout, output truncation,
+    timeout, and user-refusal behavior together
   preserve: local backend honesty about trusted host execution
   avoid: weakening the neutral `Command` contract to match a local-only shortcut
   verify: run `cargo test -p leaven-workspace-local --test local_workspace`
@@ -71,8 +73,8 @@ path, command, factory, or cleanup contracts.
 ## Proof Anchors
 - `cargo test -p leaven-workspace-local --test local_workspace` proves the
   concrete local backend: allocation roots, mount visibility, cleanup,
-  command cwd/env/stdin/limits, user refusal, executable bits, recursive lists,
-  and IO error mapping.
+  command cwd/env/stdin/limits, large stdin copied to stdout under a timeout,
+  user refusal, executable bits, recursive lists, and IO error mapping.
 - `cargo test -p leaven-workspace --test workspace_view` proves the neutral
   behavior this backend is implementing: scoped paths, optional mounts,
   unsupported-operation semantics, and cleanup error preservation.
