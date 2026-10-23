@@ -161,6 +161,45 @@ fn local_workspace_passes_env_and_stdin_to_commands() {
 }
 
 #[test]
+fn local_workspace_copies_large_stdin_without_deadlocking() {
+    futures::executor::block_on(async {
+        let parent = temp_parent("local-command-large-stdin");
+        let factory = LocalWorkspaceFactory::new(&parent);
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mut view = workspace.view();
+        let payload = vec![b'x'; 200_000];
+
+        let output = view
+            .run_command(Command {
+                program: "cat".to_owned(),
+                args: Vec::new(),
+                cwd: None,
+                env: BTreeMap::new(),
+                stdin: CommandStdin::Bytes(payload.clone()),
+                output_files: Vec::new(),
+                limits: CommandLimits {
+                    timeout: Some(Duration::from_secs(5)),
+                    max_stdout_bytes: None,
+                    max_stderr_bytes: None,
+                    max_output_file_bytes: None,
+                },
+                user: None,
+            })
+            .unwrap();
+
+        assert_eq!(output.status.code, Some(0));
+        assert_eq!(output.stdout.bytes, payload);
+        assert!(!output.stdout.truncated);
+        assert_eq!(output.stderr.bytes, b"");
+        assert!(output.duration < Duration::from_secs(5));
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+        remove_dir(&parent);
+    });
+}
+
+#[test]
 fn local_workspace_truncates_stdout_and_stderr_independently() {
     futures::executor::block_on(async {
         let parent = temp_parent("local-command-truncate");

@@ -2,7 +2,7 @@ use std::fs;
 use std::time::Duration;
 
 use futures::executor::block_on;
-use leaven_workspace::{Command, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
+use leaven_workspace::{Command, CommandStdin, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
 use leaven_workspace_git::{GitCheckout, GitWorkspaceFactory};
 
 #[path = "support/git.rs"]
@@ -88,6 +88,28 @@ fn git_workspace_timeout_drains_child_output() {
         assert_eq!(output.status.code, Some(0));
         assert_eq!(output.stdout.bytes.len(), 200_000);
         assert_eq!(output.stderr.bytes, b"done");
+        drop(slot);
+        workspace.cleanup().await.unwrap();
+    });
+}
+
+#[test]
+fn git_workspace_copies_large_stdin_without_deadlocking() {
+    block_on(async {
+        let source = workspace_fixture_repo();
+        let factory = GitWorkspaceFactory::local(source.path());
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mut slot = workspace.slot(WorkspacePath::root()).unwrap();
+        let payload = vec![b'x'; 200_000];
+        let mut command = Command::new("cat");
+        command.stdin = CommandStdin::Bytes(payload.clone());
+        command.limits.timeout = Some(Duration::from_secs(5));
+
+        let output = slot.run_command(command).unwrap();
+
+        assert_eq!(output.status.code, Some(0));
+        assert_eq!(output.stdout.bytes, payload);
+        assert!(output.duration < Duration::from_secs(5));
         drop(slot);
         workspace.cleanup().await.unwrap();
     });
